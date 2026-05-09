@@ -90,7 +90,7 @@
     },
     "tooltips": {
         "takeover": "Bind the current dashboard session to this sandbox and obtain control. If another controller exists, control is transferred.",
-        "console": "Open a shell console without changing the sandbox lease."
+        "console": "Open a shell console without changing the sandbox occupancy."
     },
     "destroyConfirm": {
         "title": "Destroy sandbox?",
@@ -110,7 +110,7 @@
         "createUnexpectedStatus": "Sandbox creation ended with status: {status}.",
         "defaultSet": "Default sandbox updated.",
         "configSaved": "Sandbox configuration saved.",
-        "released": "Lease released.",
+        "released": "Sandbox occupancy released.",
         "takeover": "Current session now controls this sandbox.",
         "destroyed": "Sandbox destroyed.",
         "screenshot": "Screenshot captured."

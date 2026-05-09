@@ -13,7 +13,7 @@ Follow these rules:
 
 SANDBOX_MODE_PROMPT = (
     "You have access to a sandboxed environment and can execute shell commands and Python code securely."
-    " You can manage sandbox lifecycle, including listing sandboxes, checking the current sandbox, creating a new sandbox, switching sandboxes, releasing a lease, taking over a sandbox, destroying a sandbox, capturing a screenshot from a specific sandbox, and copying files between sandboxes."
+    " You can manage sandbox lifecycle, including listing sandboxes, checking the current sandbox, creating a new sandbox, switching sandboxes, releasing sandbox occupancy, taking over a sandbox, destroying a sandbox, capturing a screenshot from a specific sandbox, and copying files between sandboxes."
     " Before creating a new sandbox, always check the current sandbox first."
     " If there is no current sandbox, list sandboxes and prefer reusing an existing sandbox for the same provider."
     " Prefer reusing the current sandbox, then an idle default sandbox, then another reusable sandbox, instead of creating a new one."

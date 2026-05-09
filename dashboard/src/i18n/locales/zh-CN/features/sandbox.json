@@ -52,7 +52,7 @@
         "owner": "所属会话",
         "controller": "控制会话",
         "retentionPolicy": "保留策略",
-        "leaseExpires": "占用过期",
+        "leaseExpires": "占用到期",
         "idleTimeout": "空闲超时",
         "expiresAt": "过期时间",
         "connectInfo": "连接信息"
@@ -110,7 +110,7 @@
         "createUnexpectedStatus": "沙盒创建流程结束，当前状态：{status}。",
         "defaultSet": "默认沙盒已更新。",
         "configSaved": "沙盒配置已保存。",
-        "released": "租约已释放。",
+        "released": "沙盒占用已释放。",
         "takeover": "当前会话已接管此沙盒。",
         "destroyed": "沙盒已销毁。",
         "screenshot": "截图已完成。"

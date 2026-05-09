@@ -142,7 +142,7 @@ class SwitchSandboxTool(FunctionTool):
 class ReleaseSandboxTool(FunctionTool):
     name: str = "astrbot_release_sandbox"
     description: str = (
-        "Release the control lease for the current sandbox or a specified sandbox."
+        "Release the current sandbox occupancy for this session or for a specified sandbox."
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -174,7 +174,7 @@ class ReleaseSandboxTool(FunctionTool):
 @dataclass
 class TakeoverSandboxTool(FunctionTool):
     name: str = "astrbot_takeover_sandbox"
-    description: str = "Force takeover of a sandbox lease by sandbox_id. Admin only."
+    description: str = "Force takeover of sandbox occupancy by sandbox_id. Admin only."
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
