@@ -226,9 +226,9 @@ Note that `default` is only applied when creating a new config file or when a fi
 
 ## Building a Sandbox Runtime Plugin
 
-Starting from the generic sandbox architecture, concrete runtimes such as `CUA`, `Shipyard`, `Shipyard Neo`, or `Boxlite` should be implemented as **separate plugins**, not hard-coded in AstrBot Core.
+A sandbox runtime plugin teaches AstrBot how to start and connect to a sandbox service. The plugin usually contains a provider, a booter/client, a config schema, and optional tools for features such as screenshots or browser control.
 
-Recommended structure:
+Start with this structure:
 
 ```text
 data/plugins/<plugin_name>/
@@ -240,17 +240,17 @@ data/plugins/<plugin_name>/
   tools/
 ```
 
-Typical responsibilities are split like this:
+Use the files like this:
 
-- `main.py`: plugin entrypoint, provider registration, and optional extra tool registration.
-- `provider.py`: sandbox provider implementation.
-- `booters/`: runtime-specific sandbox client / booter implementation.
-- `tools/`: optional runtime-specific tools, such as screenshot, mouse, keyboard, browser, or lifecycle helpers.
-- `_conf_schema.json`: provider-specific configuration shown in WebUI.
+- `main.py`: register the provider, and register any extra tools.
+- `provider.py`: adapt your runtime to AstrBot's sandbox provider methods.
+- `booters/`: put the client code that starts, connects to, and shuts down the sandbox.
+- `tools/`: add optional runtime tools such as screenshot, mouse, keyboard, browser, or lifecycle helpers.
+- `_conf_schema.json`: define the settings shown in WebUI.
 
-### 1. Register the sandbox provider
+### 1. Register the provider
 
-In your plugin entrypoint, register and unregister the provider through the generic sandbox APIs exposed by core:
+In `main.py`, create your provider and register it when the plugin loads. Pass the plugin config into the provider so `provider.py` can read values from `_conf_schema.json`.
 
 ```python
 from astrbot.api.star import Context, Star, register
@@ -274,11 +274,11 @@ class DemoSandboxPlugin(Star):
         unregister_sandbox_provider(self.provider.provider_id, force=True)
 ```
 
-Use a stable plugin name, directory name, and metadata `name`, ideally all aligned.
+Use a stable name for the plugin directory, `metadata.yaml`, and `@register(...)`. Keeping them aligned makes the generated config file easy to find.
 
-### 2. Implement the provider contract
+### 2. Implement `provider.py`
 
-Your provider should implement the generic sandbox protocol from core (`astrbot.core.computer.sandbox_provider.SandboxProvider`). In practice, that means defining:
+AstrBot calls the provider whenever it needs to create, reuse, rename, or destroy a sandbox. Implement these fields and methods:
 
 - `provider_id`
 - `capabilities`
@@ -290,7 +290,7 @@ Your provider should implement the generic sandbox protocol from core (`astrbot.
 - `create_booter(context, session_id, sandbox_id, config)`
 - `destroy_booter(booter, record)`
 
-Example skeleton:
+This is a minimal provider skeleton:
 
 ```python
 class MySandboxProvider:
@@ -329,14 +329,9 @@ class MySandboxProvider:
         await booter.shutdown()
 ```
 
-### 3. Put runtime-specific config in `_conf_schema.json`
+### 3. Add runtime config
 
-Core only keeps the generic selector:
-
-- `provider_settings.computer_use_runtime`
-- `provider_settings.sandbox.booter`
-
-All runtime-specific config belongs to the plugin schema, for example:
+Create `_conf_schema.json` for values that users should edit in WebUI, such as API endpoints, access tokens, profiles, image names, or timeouts.
 
 ```json
 {
@@ -355,33 +350,29 @@ All runtime-specific config belongs to the plugin schema, for example:
 }
 ```
 
-That schema will be stored under `data/config/<plugin_name>_config.json` and passed to the plugin constructor as `config`.
+AstrBot stores the saved values in `data/config/<plugin_name>_config.json` and passes them to the plugin constructor as `config`.
 
-If your provider needs session-level or legacy overrides from `provider_settings.sandbox`, read them in `build_create_config()` as overrides on top of the plugin config. Do not add runtime-specific fields to core config metadata.
+If your provider still supports older values under `provider_settings.sandbox`, read them in `build_create_config()` as overrides on top of the plugin config. New provider settings should normally live in `_conf_schema.json`.
 
-### 4. Expose optional runtime tools through `tool_names`
+### 4. Add optional tools
 
-If your runtime adds extra tools beyond the generic shell/python/filesystem stack, register them in the plugin and list their names in `tool_names`.
+If your runtime exposes extra abilities, register those tools in the plugin and list the tool names in `provider.tool_names`.
 
-Typical examples:
+Common examples:
 
 - screenshot tools
 - mouse / keyboard tools
 - browser tools
 - runtime-specific lifecycle helpers
 
-Core uses `tool_names` to mount those tools automatically in sandbox mode, so avoid hard-coding provider names in core.
+AstrBot uses `tool_names` when mounting tools in sandbox mode. Make sure the names match the tools you register in `main.py`.
 
-### 5. Keep runtime code out of core
+### 5. Try it locally
 
-When building a sandbox plugin:
+After adding the plugin under `data/plugins/<plugin_name>/`, start AstrBot and check these items:
 
-- Put concrete runtime SDK imports in the plugin repo.
-- Put provider-specific defaults and config schema in the plugin repo.
-- Put runtime-specific tools in the plugin repo.
-- Keep AstrBot Core limited to generic sandbox registration, lifecycle, persistence, and dashboard/API surfaces.
-
-If you are unsure whether something belongs in core or a plugin, the rule of thumb is:
-
-- generic behavior -> core
-- concrete runtime behavior -> plugin
+- The plugin loads without import errors.
+- The WebUI config page shows fields from `_conf_schema.json`.
+- The sandbox runtime selector includes your `provider_id`.
+- Creating a sandbox calls `create_booter()`.
+- Stopping or unloading the plugin calls `terminate()` and unregisters the provider.
