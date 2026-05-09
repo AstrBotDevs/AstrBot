@@ -42,7 +42,7 @@ export default {
     return {
       autoScroll: true,
       isFullscreen: false,
-      flushMode: false,
+      flushMode: localStorage.getItem('console_flush_mode') === 'true',
       logColorAnsiMap: {
         '\u001b[1;34m': 'color: #6cb6d9; font-weight: bold;',
         '\u001b[1;36m': 'color: #72c4cc; font-weight: bold;',
@@ -92,6 +92,9 @@ export default {
         this.refreshDisplay();
       },
       deep: true
+    },
+    flushMode(val) {
+      localStorage.setItem('console_flush_mode', val);
     }
   },
   async mounted() {
