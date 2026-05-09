@@ -17,7 +17,9 @@ class SandboxProvider(Protocol):
     Optional attributes (core uses ``getattr`` with safe fallbacks):
         provider_api_version: Provider API compatibility version. Defaults to "1.0".
         system_prompt: Extra system prompt injected when this provider is active.
-        plugin_config: Plugin-specific configuration dict.
+        plugin_config: Plugin-specific configuration dict.  Implementations are
+            encouraged to accept this as an ``__init__`` parameter so the
+            provider is fully initialized at construction time.
         auto_sync_skills: If ``False``, core will skip automatic skill sync after
             booting a sandbox for this provider. Defaults to ``True``.
     """
