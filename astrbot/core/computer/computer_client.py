@@ -138,9 +138,7 @@ def _cleanup_provider_sandboxes_sync(provider_id: str) -> None:
                 loop = asyncio.get_running_loop()
                 provider = sandbox_manager.providers.get(provider_id)
                 if provider is not None:
-                    loop.create_task(
-                        _safe_destroy_booter(provider, booter, record)
-                    )
+                    loop.create_task(_safe_destroy_booter(provider, booter, record))
             except RuntimeError:
                 pass  # no running event loop
     try:
