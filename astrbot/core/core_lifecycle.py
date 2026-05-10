@@ -243,6 +243,10 @@ class AstrBotCoreLifecycle:
         # 扫描、注册插件、实例化插件类
         await self.plugin_manager.reload()
 
+        await computer_client.sandbox_manager.restore_persistent_sandboxes(
+            self.star_context
+        )
+
         # 根据配置实例化各个 Provider
         self._default_chat_provider_warning_emitted = False
         await self.provider_manager.initialize()

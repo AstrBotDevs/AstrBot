@@ -315,7 +315,7 @@ async def test_manager_switches_releases_takes_over_and_destroys(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_manager_switch_preserves_other_sandboxes_owned_by_same_session(tmp_path):
+async def test_manager_switch_releases_previous_sandbox_owned_by_same_session(tmp_path):
     manager, _provider = _manager(tmp_path)
     first = await manager.create_sandbox(None, "session-a", "generic", "First")
     second = await manager.create_sandbox(None, "session-a", "generic", "Second")
@@ -327,14 +327,53 @@ async def test_manager_switch_preserves_other_sandboxes_owned_by_same_session(tm
     first_record = manager.registry.get_sandbox(first["sandbox_id"])
     second_record = manager.registry.get_sandbox(second["sandbox_id"])
     assert switched["sandbox_id"] == second["sandbox_id"]
-    assert first_record["controller_session_id"] == "session-a"
-    assert first_record["lease_expires_at"] > time.time()
+    assert first_record["controller_session_id"] is None
+    assert first_record["lease_expires_at"] is None
     assert second_record["controller_session_id"] == "session-a"
     assert second_record["lease_expires_at"] > time.time()
     assert (
         manager.get_current_sandbox("session-a")["current_sandbox_id"]
         == second["sandbox_id"]
     )
+
+
+@pytest.mark.asyncio
+async def test_manager_create_releases_previous_sandbox_owned_by_same_session(tmp_path):
+    manager, _provider = _manager(tmp_path)
+
+    first = await manager.create_sandbox(None, "session-a", "generic", "First")
+    second = await manager.create_sandbox(None, "session-a", "generic", "Second")
+
+    first_record = manager.registry.get_sandbox(first["sandbox_id"])
+    second_record = manager.registry.get_sandbox(second["sandbox_id"])
+    assert first_record["controller_session_id"] is None
+    assert first_record["lease_expires_at"] is None
+    assert second_record["controller_session_id"] == "session-a"
+    assert second_record["lease_expires_at"] > time.time()
+    assert (
+        manager.get_current_sandbox("session-a")["current_sandbox_id"]
+        == second["sandbox_id"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_manager_takeover_releases_previous_sandbox_owned_by_same_session(
+    tmp_path,
+):
+    manager, _provider = _manager(tmp_path)
+
+    first = await manager.create_sandbox(None, "session-a", "generic", "First")
+    second = await manager.create_sandbox(None, "session-b", "generic", "Second")
+
+    taken = await manager.takeover_sandbox("session-a", second["sandbox_id"])
+
+    first_record = manager.registry.get_sandbox(first["sandbox_id"])
+    second_record = manager.registry.get_sandbox(second["sandbox_id"])
+    assert taken["sandbox_id"] == second["sandbox_id"]
+    assert first_record["controller_session_id"] is None
+    assert first_record["lease_expires_at"] is None
+    assert second_record["controller_session_id"] == "session-a"
+    assert second_record["lease_expires_at"] > time.time()
 
 
 @pytest.mark.asyncio
@@ -515,6 +554,30 @@ async def test_manager_revives_persistent_sandbox_for_tool_access(tmp_path):
 
     assert isinstance(booter, FakeBooter)
     assert len(provider.created) == 1
+
+
+@pytest.mark.asyncio
+async def test_manager_restores_persistent_sandboxes_on_startup(tmp_path):
+    manager, provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    await manager.restore_persistent_sandboxes(object())
+
+    assert "generic-1" in manager.session_booter
+    assert len(provider.created) == 1
+    assert manager.registry.get_sandbox("generic-1")["status"] == "running"
 
 
 @pytest.mark.asyncio

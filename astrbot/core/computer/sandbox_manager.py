@@ -552,8 +552,7 @@ class SandboxManager:
         sandbox_id = sandbox["sandbox_id"]
         if not self.acquire_lease(sandbox_id, session_id):
             raise RuntimeError(f"Sandbox {sandbox_id} is busy")
-        self.registry.set_current_sandbox_id(session_id, sandbox_id)
-        await self.save_registry_async()
+        await self._set_current_sandbox_after_lease(session_id, sandbox_id, sandbox)
         provider = self.get_provider(sandbox.get("provider", ""))
         # Reset idle cleanup after lease acquisition.  The uncontrolled
         # creation path already schedules cleanup, but a slow skill-sync or
@@ -745,6 +744,11 @@ class SandboxManager:
     async def _set_current_sandbox_after_lease(
         self, session_id: str, sandbox_id: str, record: dict
     ) -> dict:
+        previous_sandbox_id = self.registry.get_current_sandbox_id(session_id)
+        if previous_sandbox_id and previous_sandbox_id != sandbox_id:
+            previous = self.registry.get_sandbox(previous_sandbox_id)
+            if previous and previous.get("controller_session_id") == session_id:
+                self.registry.release_lease(previous_sandbox_id)
         self.registry.set_current_sandbox_id(session_id, sandbox_id)
         self.registry.touch_sandbox(sandbox_id)
         await self.save_registry_async()
@@ -811,8 +815,9 @@ class SandboxManager:
             )
             or record
         )
-        self.registry.set_current_sandbox_id(session_id, sandbox_id)
-        self.save_registry()
+        updated = await self._set_current_sandbox_after_lease(
+            session_id, sandbox_id, updated
+        )
         provider = self.get_provider(record.get("provider", ""))
         await self._invoke_sandbox_created_hook(provider, sandbox_id)
         return updated
@@ -925,6 +930,32 @@ class SandboxManager:
         for sandbox_id in list(self.idle_state):
             self.clear_idle_state(sandbox_id)
         await self.save_registry_async()
+
+    async def restore_persistent_sandboxes(self, context: Context) -> None:
+        for record in self.registry.list_sandboxes():
+            sandbox_id = record["sandbox_id"]
+            if not record.get("managed"):
+                continue
+            if record.get("retention_policy") != "persistent":
+                continue
+            if record.get("status") not in {
+                SandboxStatus.RUNNING,
+                SandboxStatus.UNKNOWN,
+            }:
+                continue
+            try:
+                await self._revive_persistent_booter_if_needed(
+                    record,
+                    sandbox_id,
+                    str(record.get("owner_session_id") or "dashboard"),
+                    context,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Computer] Failed to restore persistent sandbox %s: %s",
+                    sandbox_id,
+                    exc,
+                )
 
     async def cleanup_managed_sandboxes(self) -> None:
         for sandbox_id in list(self.pending_boot_tasks):
