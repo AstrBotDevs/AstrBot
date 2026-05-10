@@ -29,6 +29,7 @@ class SandboxRegistry:
             storage_path = Path(get_astrbot_data_path()) / "sandbox_registry.json"
         self.storage_path = Path(storage_path)
         self._payload = _default_registry_payload()
+        self._save_lock = asyncio.Lock()
 
     @property
     def default_sandbox_id(self) -> str | None:
@@ -352,5 +353,6 @@ class SandboxRegistry:
         self._write_payload(deepcopy(self._payload))
 
     async def save_async(self) -> None:
-        payload = deepcopy(self._payload)
-        await asyncio.to_thread(self._write_payload, payload)
+        async with self._save_lock:
+            payload = deepcopy(self._payload)
+            await asyncio.to_thread(self._write_payload, payload)

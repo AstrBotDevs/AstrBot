@@ -410,6 +410,7 @@ class TestComputerClient:
         with pytest.raises(ValueError) as exc_info:
             await computer_client.get_booter(mock_context, "test-session-id")
         assert "Unknown booter type" in str(exc_info.value)
+        assert "Install and enable a sandbox provider plugin" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_get_booter_empty_sandbox_provider_hint(self):

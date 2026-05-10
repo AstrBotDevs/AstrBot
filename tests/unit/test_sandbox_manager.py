@@ -663,6 +663,31 @@ async def test_manager_reconcile_on_startup_removes_stale_persistent_records(
 
 
 @pytest.mark.asyncio
+async def test_manager_reconcile_on_startup_removes_persistent_records_for_missing_provider(
+    tmp_path,
+):
+    manager, _provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="missing-1",
+        sandbox_name="Persistent",
+        booter_type="missing",
+        provider="missing",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    manager.registry.save()
+    await manager.reconcile_on_startup()
+
+    assert manager.registry.get_sandbox("missing-1") is None
+
+
+@pytest.mark.asyncio
 async def test_manager_reconcile_on_startup_keeps_valid_persistent_records(
     tmp_path,
 ):
@@ -814,6 +839,31 @@ def test_manager_update_sandbox_config_rejects_persistent_for_missing_provider(
             expires_at=None,
             retention_policy="persistent",
         )
+
+
+def test_manager_save_registry_propagates_write_failures(tmp_path):
+    manager, _provider = _manager(tmp_path)
+
+    def fail_save():
+        raise OSError("disk full")
+
+    manager.registry.save = fail_save
+
+    with pytest.raises(OSError, match="disk full"):
+        manager.save_registry()
+
+
+@pytest.mark.asyncio
+async def test_manager_save_registry_async_propagates_write_failures(tmp_path):
+    manager, _provider = _manager(tmp_path)
+
+    async def fail_save_async():
+        raise OSError("disk full")
+
+    manager.registry.save_async = fail_save_async
+
+    with pytest.raises(OSError, match="disk full"):
+        await manager.save_registry_async()
 
 
 @pytest.mark.asyncio

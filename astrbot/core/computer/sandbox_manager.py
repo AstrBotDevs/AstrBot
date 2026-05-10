@@ -61,12 +61,14 @@ class SandboxManager:
             self.registry.save()
         except Exception as exc:
             logger.warning("[Computer] Failed to save sandbox registry: %s", exc)
+            raise
 
     async def save_registry_async(self) -> None:
         try:
             await self.registry.save_async()
         except Exception as exc:
             logger.warning("[Computer] Failed to save sandbox registry: %s", exc)
+            raise
 
     def _sandbox_boot_lock(self, sandbox_id: str) -> asyncio.Lock:
         lock = self.boot_locks.get(sandbox_id)
@@ -953,10 +955,18 @@ class SandboxManager:
         for record in list(self.registry.list_sandboxes()):
             if record.get("retention_policy") != "persistent":
                 continue
-            provider = None
             try:
                 provider = self.get_provider(record.get("provider", ""))
             except RuntimeError:
+                sandbox_id = record["sandbox_id"]
+                logger.info(
+                    "[Computer] Provider for persistent sandbox %s is unavailable; removing registry record",
+                    sandbox_id,
+                )
+                self.session_booter.pop(sandbox_id, None)
+                self.clear_idle_state(sandbox_id)
+                self.registry.delete_sandbox(sandbox_id)
+                self.drop_boot_lock(sandbox_id)
                 continue
             if not getattr(provider, "supports_persistent_reconnect", False):
                 continue

@@ -24,6 +24,7 @@ from astrbot.core.astr_main_agent_resources import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
+    SANDBOX_GUI_PROMPT,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
@@ -1011,6 +1012,9 @@ def _apply_sandbox_tools(
 
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
     provider_system_prompt = (provider_info or {}).get("system_prompt", "").strip()
+    provider_capabilities = set((provider_info or {}).get("capabilities") or [])
+    if provider_capabilities.intersection({"gui", "screenshot", "mouse", "keyboard"}):
+        req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_GUI_PROMPT}\n"
     if provider_system_prompt:
         req.system_prompt = f"{req.system_prompt or ''}\n{provider_system_prompt}\n"
 

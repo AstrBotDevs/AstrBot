@@ -31,6 +31,28 @@ def _current_provider_id(context: ContextWrapper[AstrAgentContext]) -> str:
     return str(sandbox_cfg.get("booter", "")).strip()
 
 
+def _is_admin(context: ContextWrapper[AstrAgentContext]) -> bool:
+    return context.context.event.role == "admin"
+
+
+def _visible_to_session(record: dict, session_id: str) -> bool:
+    return (
+        record.get("owner_session_id") == session_id
+        or record.get("controller_session_id") == session_id
+    )
+
+
+def _sandbox_access_denied(
+    context: ContextWrapper[AstrAgentContext], record: dict | None
+) -> str | None:
+    if record is None or _is_admin(context):
+        return None
+    session_id = context.context.event.unified_msg_origin
+    if _visible_to_session(record, session_id):
+        return None
+    return "error: Permission denied. This sandbox belongs to another session."
+
+
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
 @dataclass
 class ListSandboxesTool(FunctionTool):
@@ -41,8 +63,15 @@ class ListSandboxesTool(FunctionTool):
     )
 
     async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
-        del context
-        return _dump({"sandboxes": sandbox_manager.list_sandboxes()})
+        session_id = context.context.event.unified_msg_origin
+        sandboxes = sandbox_manager.list_sandboxes()
+        if not _is_admin(context):
+            sandboxes = [
+                record
+                for record in sandboxes
+                if _visible_to_session(record, session_id)
+            ]
+        return _dump({"sandboxes": sandboxes})
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
@@ -127,6 +156,9 @@ class SwitchSandboxTool(FunctionTool):
         self, context: ContextWrapper[AstrAgentContext], sandbox_id: str
     ) -> ToolExecResult:
         session_id = context.context.event.unified_msg_origin
+        record = sandbox_manager.registry.get_sandbox(sandbox_id)
+        if permission_error := _sandbox_access_denied(context, record):
+            return permission_error
         try:
             sandbox = await sandbox_manager.switch_current_sandbox_checked(
                 session_id, sandbox_id, context=context.context.context

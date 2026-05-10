@@ -611,7 +611,9 @@ async def get_booter(
             session_id,
             booter_type,
         )
-    raise ValueError(f"Unknown booter type: {booter_type}")
+    raise ValueError(
+        f"Unknown booter type: {booter_type}. Install and enable a sandbox provider plugin, then select it in provider_settings.sandbox.booter."
+    )
 
 
 async def sync_skills_to_active_sandboxes() -> None:

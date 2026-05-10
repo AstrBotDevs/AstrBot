@@ -18,3 +18,7 @@ def test_sandbox_provider_protocol_exposes_generic_runtime_contract():
     assert "context" in hints
     assert hints["session_id"] is str
     assert hints["sandbox_id"] is str
+
+
+def test_sandbox_provider_protocol_has_no_default_existence_probe():
+    assert "check_persistent_sandbox_exists" not in SandboxProvider.__dict__

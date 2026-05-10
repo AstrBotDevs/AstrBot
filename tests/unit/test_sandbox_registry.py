@@ -1,3 +1,4 @@
+import asyncio
 import json
 import threading
 from pathlib import Path
@@ -166,6 +167,37 @@ async def test_registry_save_async_runs_save_in_worker_thread(tmp_path):
 
     assert save_thread_id is not None
     assert save_thread_id != main_thread_id
+
+
+@pytest.mark.asyncio
+async def test_registry_save_async_serializes_writes(tmp_path):
+    registry = _registry(tmp_path)
+    active_writes = 0
+    max_active_writes = 0
+    release_first_write = None
+    first_write_started = asyncio.Event()
+
+    def fake_write_payload(payload):
+        nonlocal active_writes, max_active_writes, release_first_write
+        active_writes += 1
+        max_active_writes = max(max_active_writes, active_writes)
+        if release_first_write is None:
+            release_first_write = threading.Event()
+            first_write_started.set()
+            assert release_first_write.wait(timeout=1)
+        active_writes -= 1
+
+    registry._write_payload = fake_write_payload
+
+    first = asyncio.create_task(registry.save_async())
+    await first_write_started.wait()
+    second = asyncio.create_task(registry.save_async())
+    await asyncio.sleep(0.05)
+
+    assert max_active_writes == 1
+    release_first_write.set()
+    await first
+    await second
 
 
 def test_registry_write_payload_replaces_temp_file_atomically(tmp_path, monkeypatch):

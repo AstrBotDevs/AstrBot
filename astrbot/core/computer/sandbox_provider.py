@@ -51,14 +51,6 @@ class SandboxProvider(Protocol):
 
     async def destroy_booter(self, booter: ComputerBooter, record: dict) -> None: ...
 
-    async def check_persistent_sandbox_exists(self, record: dict) -> bool:
-        """Return True if the persistent sandbox referenced by record still exists.
-
-        Core calls this during startup reconciliation for persistent sandboxes.
-        If this returns False, core will remove the stale registry record.
-        """
-        return True
-
     # Optional lifecycle hooks -- core checks ``hasattr`` before invoking.
 
     async def on_sandbox_created(self, record: dict) -> None:

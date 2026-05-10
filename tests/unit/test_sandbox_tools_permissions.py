@@ -5,7 +5,9 @@ import pytest
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.tools.computer_tools.sandbox import (
     CopyFileBetweenSandboxesTool,
+    ListSandboxesTool,
     ScreenshotSandboxTool,
+    SwitchSandboxTool,
 )
 
 
@@ -28,6 +30,17 @@ def _context():
     )
 
 
+def _member_context_without_admin_requirement():
+    plugin_context = SimpleNamespace(
+        get_config=lambda umo=None: {
+            "provider_settings": {"computer_use_require_admin": False}
+        }
+    )
+    return ContextWrapper(
+        context=SimpleNamespace(event=FakeEvent(), context=plugin_context)
+    )
+
+
 @pytest.mark.asyncio
 async def test_screenshot_sandbox_tool_requires_admin_permission():
     result = await ScreenshotSandboxTool().call(_context(), "sandbox-1")
@@ -43,6 +56,69 @@ async def test_copy_file_between_sandboxes_tool_requires_admin_permission():
         "/tmp/source.txt",
         "target-1",
         "/tmp/target.txt",
+    )
+
+    assert "Permission denied" in str(result)
+
+
+@pytest.mark.asyncio
+async def test_member_list_sandboxes_filters_to_owned_or_current_sandboxes(
+    monkeypatch,
+):
+    class FakeManager:
+        def list_sandboxes(self):
+            return [
+                {
+                    "sandbox_id": "owned",
+                    "owner_session_id": "session-a",
+                    "controller_session_id": None,
+                },
+                {
+                    "sandbox_id": "current",
+                    "owner_session_id": "session-b",
+                    "controller_session_id": "session-a",
+                },
+                {
+                    "sandbox_id": "other-idle",
+                    "owner_session_id": "session-b",
+                    "controller_session_id": None,
+                },
+            ]
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+    )
+
+    result = await ListSandboxesTool().call(_member_context_without_admin_requirement())
+
+    assert "owned" in str(result)
+    assert "current" in str(result)
+    assert "other-idle" not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_member_switch_sandbox_rejects_other_session_sandbox(monkeypatch):
+    class FakeManager:
+        def registry_get(self):
+            return None
+
+        registry = SimpleNamespace(
+            get_sandbox=lambda sandbox_id: {
+                "sandbox_id": sandbox_id,
+                "owner_session_id": "session-b",
+                "controller_session_id": None,
+            }
+        )
+
+        async def switch_current_sandbox_checked(self, *args, **kwargs):
+            raise AssertionError("switch must not be called for another user's sandbox")
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+    )
+
+    result = await SwitchSandboxTool().call(
+        _member_context_without_admin_requirement(), "other-idle"
     )
 
     assert "Permission denied" in str(result)

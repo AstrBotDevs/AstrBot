@@ -1665,7 +1665,7 @@ class TestApplySandboxTools:
         module._apply_sandbox_tools(config, req)
 
         assert "sandboxed environment" in req.system_prompt
-        assert "send screenshots to the user to show progress" in req.system_prompt
+        assert "send screenshots to the user to show progress" not in req.system_prompt
 
     def test_apply_sandbox_tools_preserves_existing_toolset(self, mock_context):
         """Test that existing tools are preserved when adding sandbox tools."""
@@ -1719,6 +1719,25 @@ class TestApplySandboxTools:
         assert "list sandboxes and prefer reusing" in req.system_prompt
         assert "idle default sandbox" in req.system_prompt
         assert "fresh or separate environment" in req.system_prompt
+        assert "send screenshots to the user to show progress" not in req.system_prompt
+
+    def test_apply_sandbox_tools_adds_gui_prompt_only_for_gui_provider(
+        self, mock_context
+    ):
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={"booter": "gui-provider"},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt=None)
+
+        with patch(
+            "astrbot.core.computer.computer_client.get_sandbox_provider_info",
+            return_value={"tool_names": [], "capabilities": ["gui"]},
+        ):
+            module._apply_sandbox_tools(config, req)
+
         assert "send screenshots to the user to show progress" in req.system_prompt
         assert "especially after each meaningful GUI step" in req.system_prompt
 
