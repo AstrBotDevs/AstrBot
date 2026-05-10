@@ -63,6 +63,7 @@ class SubAgentSession:
     )  # 后台subagent结果存储: {agent_name: {task_id: SubAgentExecutionResult}}
     # 任务计数器: {agent_name: next_task_id}
     background_task_counters: dict = field(default_factory=dict)
+    last_activity_at: float = field(default_factory=time.time)  # 最后活跃时间戳
 
 
 class SubAgentManager:
@@ -92,6 +93,7 @@ class SubAgentManager:
         "astrbot_execute_shell",
         "astrbot_execute_python",
     }
+    _session_timeout_seconds = 1800 # 会话存活时间。若有会话的subagent闲置时间超过该值，自动清理
 
     _HEADER_TEMPLATE = f"""# Sub-Agent Orchestration
 You can manage sub-agents with isolated instructions, tools and skills. Maximum {_max_subagent_count} subagents.
@@ -242,6 +244,9 @@ Create sub-agents ONLY when:
         # 清理后若没有subagent，清理整个session
         if not session.subagents and not session.protected_agents:
             cls._sessions.pop(session_id, None)
+
+        # 每轮结束时顺便清理全局过期会话
+        cls.cleanup_expired_sessions()
 
         return {"status": "cleaned", "cleaned_agents": cleaned}
 
@@ -711,15 +716,58 @@ Create sub-agents ONLY when:
         if agent_name in session.subagents:
             session.subagent_status[agent_name] = status
 
+    # for read-only operations
     @classmethod
     def get_session(cls, session_id: str) -> SubAgentSession | None:
         return cls._sessions.get(session_id, None)
 
+    # ensure the existence of a session before writing operations
     @classmethod
     def _get_or_create_session(cls, session_id: str) -> SubAgentSession:
         if session_id not in cls._sessions:
             cls._sessions[session_id] = SubAgentSession(session_id=session_id)
+        else:
+            cls._sessions[session_id].last_activity_at = time.time()
         return cls._sessions[session_id]
+
+    @classmethod
+    def _touch_session(cls, session_id: str) -> None:
+        """更新会话的最后活跃时间"""
+        session = cls._sessions.get(session_id)
+        if session:
+            session.last_activity_at = time.time()
+
+    @classmethod
+    def cleanup_expired_sessions(cls) -> dict:
+        """清理超过超时时间未活跃的会话，防止内存泄漏
+
+        Returns:
+            dict: 包含被清理的会话ID列表和数量
+        """
+        now = time.time()
+        expired_session_ids = [
+            sid
+            for sid, session in cls._sessions.items()
+            if now - session.last_activity_at > cls._session_timeout_seconds
+        ]
+        cleaned_agents_count = 0
+        for sid in expired_session_ids:
+            session = cls._sessions.get(sid)
+            if session:
+                agent_names = list(session.subagents.keys())
+                cleaned_agents_count += len(agent_names)
+                cls._sessions.pop(sid, None)
+                logger.info(
+                    "[SubAgent:Timeout] Session %s expired (inactive for >%.0f minutes). Cleaned %d subagents.",
+                    sid,
+                    cls._session_timeout_seconds / 60,
+                    len(agent_names),
+                )
+        return {
+            "cleaned_sessions": expired_session_ids,
+            "cleaned_count": len(expired_session_ids),
+            "cleaned_agents_count": cleaned_agents_count,
+        }
 
     @classmethod
     async def create_subagent(
@@ -856,8 +904,11 @@ Create sub-agents ONLY when:
 
     @classmethod
     def remove_subagent(cls, session_id: str, agent_name: str) -> str:
+        cls._touch_session(session_id)
         session = cls.get_session(session_id)
-        if session.subagent_status[agent_name] == "RUNNING":
+        if not session:
+            return f"__SUBAGENT_REMOVE_FAILED__: Session {session_id} does not exist."
+        if session.subagent_status.get(agent_name) == "RUNNING":
             return f"__SUBAGENT_REMOVE_FAILED__: {agent_name} is still RUNNING. Waiting for finish first."
 
         def _remove_by_name(name):
@@ -873,8 +924,8 @@ Create sub-agents ONLY when:
         if agent_name == "all":
             if "RUNNING" in session.subagent_status.values():
                 removed = 0
-                for subagent_name in session.subagents.keys():
-                    if session.subagent_status[subagent_name] == "RUNNING":
+                for subagent_name in list(session.subagents.keys()):
+                    if session.subagent_status.get(subagent_name) == "RUNNING":
                         continue
                     _remove_by_name(subagent_name)
                     removed += 1
