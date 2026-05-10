@@ -358,6 +358,7 @@ class SandboxManager:
                     await self.save_registry_async()
                     raise
                 setattr(client, "sandbox_id", target_sandbox_id)
+                setattr(client, "provider_id", provider_id)
                 self.session_booter[target_sandbox_id] = client
                 break
         else:
@@ -481,6 +482,7 @@ class SandboxManager:
                 await self.save_registry_async()
                 raise
             setattr(client, "sandbox_id", sandbox_id)
+            setattr(client, "provider_id", provider_id)
             self.session_booter[sandbox_id] = client
             await self._finalize_created_booter(
                 provider, sandbox_id, session_id=None, idle_timeout=idle_timeout
@@ -577,6 +579,7 @@ class SandboxManager:
                     return
 
                 setattr(client, "sandbox_id", sandbox_id)
+                setattr(client, "provider_id", provider.provider_id)
                 self.session_booter[sandbox_id] = client
                 await self._finalize_created_booter(
                     provider, sandbox_id, session_id=None, idle_timeout=idle_timeout
@@ -760,6 +763,7 @@ class SandboxManager:
                         await self.save_registry_async()
                     raise
                 setattr(client, "sandbox_id", sandbox_id)
+                setattr(client, "provider_id", provider.provider_id)
                 self.session_booter[sandbox_id] = client
                 await self._finalize_created_booter(
                     provider,

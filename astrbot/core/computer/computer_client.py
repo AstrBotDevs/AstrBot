@@ -170,21 +170,47 @@ async def cleanup_sandbox_provider(provider_id: str) -> None:
     provider = sandbox_manager.providers.get(provider_id)
     removed = 0
     preserved = 0
+    handled_sandbox_ids: set[str] = set()
+
+    def _pop_live_booter(sandbox_id: str):
+        booter = sandbox_manager.session_booter.pop(sandbox_id, None)
+        sandbox_manager.clear_idle_state(sandbox_id)
+        sandbox_manager.drop_boot_lock(sandbox_id)
+        return booter
+
     for record in list(sandbox_manager.registry.list_sandboxes()):
         if not record.get("managed") or record.get("provider") != provider_id:
             continue
         sandbox_id = record["sandbox_id"]
-        booter = sandbox_manager.session_booter.pop(sandbox_id, None)
-        sandbox_manager.clear_idle_state(sandbox_id)
-        sandbox_manager.drop_boot_lock(sandbox_id)
+        handled_sandbox_ids.add(sandbox_id)
+        booter = _pop_live_booter(sandbox_id)
         if record.get("retention_policy") == "persistent":
             preserved += 1
-            if booter is not None and provider is not None:
-                await _safe_destroy_booter(provider, booter, record)
             continue
         if booter is not None and provider is not None:
             await _safe_destroy_booter(provider, booter, record)
         sandbox_manager.registry.delete_sandbox(sandbox_id)
+        removed += 1
+
+    for sandbox_id, booter in list(sandbox_manager.session_booter.items()):
+        booter_provider = getattr(booter, "provider_id", None)
+        if str(booter_provider or "") != provider_id:
+            continue
+        if sandbox_id in handled_sandbox_ids:
+            continue
+        record = sandbox_manager.registry.get_sandbox(sandbox_id) or {
+            "sandbox_id": sandbox_id,
+            "provider": provider_id,
+            "managed": True,
+            "retention_policy": "temporary",
+        }
+        sandbox_manager.session_booter.pop(sandbox_id, None)
+        sandbox_manager.clear_idle_state(sandbox_id)
+        sandbox_manager.drop_boot_lock(sandbox_id)
+        if provider is not None:
+            await _safe_destroy_booter(provider, booter, record)
+        if sandbox_manager.registry.get_sandbox(sandbox_id) is not None:
+            sandbox_manager.registry.delete_sandbox(sandbox_id)
         removed += 1
     try:
         await sandbox_manager.save_registry_async()

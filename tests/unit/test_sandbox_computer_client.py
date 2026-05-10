@@ -452,7 +452,7 @@ async def test_cleanup_registered_sandbox_manager(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_cleanup_sandbox_provider_destroys_temporary_and_preserves_persistent(
+async def test_cleanup_sandbox_provider_destroys_temporary_and_preserves_persistent_records(
     monkeypatch, tmp_path
 ):
     from astrbot.core.computer import computer_client
@@ -498,7 +498,9 @@ async def test_cleanup_sandbox_provider_destroys_temporary_and_preserves_persist
         status="running",
     )
     temp_booter = FakeBooter()
+    temp_booter.provider_id = provider.provider_id
     persistent_booter = FakeBooter()
+    persistent_booter.provider_id = provider.provider_id
     manager.session_booter[temporary["sandbox_id"]] = temp_booter
     manager.session_booter[persistent["sandbox_id"]] = persistent_booter
 
@@ -506,7 +508,39 @@ async def test_cleanup_sandbox_provider_destroys_temporary_and_preserves_persist
 
     assert manager.registry.get_sandbox("generic-temp") is None
     assert manager.registry.get_sandbox("generic-persistent") is not None
-    assert set(destroyed) == {"generic-temp", "generic-persistent"}
+    assert destroyed == ["generic-temp"]
+
+
+@pytest.mark.asyncio
+async def test_cleanup_sandbox_provider_cleans_live_booter_without_registry_record(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeProvider()
+    destroyed = []
+
+    async def fake_destroy_booter(booter, record):
+        destroyed.append(record["sandbox_id"])
+        await booter.shutdown()
+
+    provider.destroy_booter = fake_destroy_booter
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={provider.provider_id: provider},
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    booter = FakeBooter()
+    booter.provider_id = provider.provider_id
+    manager.session_booter["generic-orphan"] = booter
+
+    await computer_client.cleanup_sandbox_provider("generic")
+
+    assert destroyed == ["generic-orphan"]
+    assert manager.session_booter == {}
 
 
 @pytest.mark.asyncio
