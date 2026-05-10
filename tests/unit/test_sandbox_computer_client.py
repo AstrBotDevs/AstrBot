@@ -392,7 +392,7 @@ async def test_unregister_provider_force_closes_persistent_booters(
     assert record is not None
     assert record["retention_policy"] == "persistent"
     assert "generic-1" not in manager.session_booter
-    assert closed == ["shutdown"]
+    assert closed == []
 
 
 def test_list_sandbox_providers_is_sorted(monkeypatch, tmp_path):

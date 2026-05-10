@@ -130,15 +130,9 @@ def _cleanup_provider_sandboxes_sync(provider_id: str) -> None:
             continue
         sandbox_id = record["sandbox_id"]
         if record.get("retention_policy") == "persistent":
-            booter = sandbox_manager.session_booter.pop(sandbox_id, None)
+            sandbox_manager.session_booter.pop(sandbox_id, None)
             sandbox_manager.clear_idle_state(sandbox_id)
             sandbox_manager.drop_boot_lock(sandbox_id)
-            if booter is not None:
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(_safe_shutdown_booter(booter, record))
-                except RuntimeError:
-                    pass  # no running event loop
             continue
         booter = sandbox_manager.session_booter.pop(sandbox_id, None)
         sandbox_manager.clear_idle_state(sandbox_id)
@@ -225,6 +219,12 @@ async def cleanup_sandbox_provider(provider_id: str) -> None:
         removed,
         preserved,
     )
+
+
+def detach_sandbox_provider(provider_id: str) -> None:
+    """Remove a provider and its registered tools without touching sandboxes."""
+    _unregister_provider_tools(provider_id)
+    sandbox_manager.providers.pop(provider_id, None)
 
 
 async def _safe_destroy_booter(
