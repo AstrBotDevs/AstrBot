@@ -55,4 +55,8 @@ class InitialLoader:
         except asyncio.CancelledError:
             logger.info("🌈 正在关闭 AstrBot...")
         finally:
-            await core_lifecycle.stop()
+            stop_task = asyncio.create_task(core_lifecycle.stop())
+            try:
+                await asyncio.shield(stop_task)
+            except asyncio.CancelledError:
+                await stop_task

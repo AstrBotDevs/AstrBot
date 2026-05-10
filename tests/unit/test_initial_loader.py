@@ -79,3 +79,42 @@ async def test_initial_loader_stops_core_when_runtime_task_is_cancelled(monkeypa
     await loader.start()
 
     assert calls == ["initialize", "start", "stop"]
+
+
+@pytest.mark.asyncio
+async def test_initial_loader_stops_core_even_if_current_task_is_cancelled(monkeypatch):
+    from astrbot.core import initial_loader
+
+    calls = []
+
+    class FakeCoreLifecycle:
+        def __init__(self, log_broker, db):
+            self.dashboard_shutdown_event = asyncio.Event()
+
+        async def initialize(self):
+            calls.append("initialize")
+
+        async def start(self):
+            calls.append("start")
+            asyncio.current_task().cancel()
+            raise asyncio.CancelledError
+
+        async def stop(self):
+            await asyncio.sleep(0)
+            calls.append("stop")
+
+    class FakeDashboard:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self):
+            return None
+
+    monkeypatch.setattr(initial_loader, "AstrBotCoreLifecycle", FakeCoreLifecycle)
+    monkeypatch.setattr(initial_loader, "AstrBotDashboard", FakeDashboard)
+
+    loader = initial_loader.InitialLoader(SimpleNamespace(), SimpleNamespace())
+
+    await loader.start()
+
+    assert calls == ["initialize", "start", "stop"]
