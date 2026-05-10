@@ -305,7 +305,10 @@ class SandboxRegistry:
 
     def reconcile_startup(self) -> None:
         self._payload["session_current"] = {}
-        for record in self._payload["sandboxes"].values():
+        for sandbox_id, record in list(self._payload["sandboxes"].items()):
+            if record.get("retention_policy") != "persistent":
+                self.delete_sandbox(sandbox_id)
+                continue
             record["controller_session_id"] = None
             record["controller_user_id"] = None
             record["lease_expires_at"] = None

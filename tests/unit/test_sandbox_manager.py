@@ -923,6 +923,27 @@ async def test_manager_reconcile_on_startup_keeps_valid_persistent_records(
     assert len(provider.created) == 0
 
 
+def test_manager_reconcile_on_startup_drops_temporary_records(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Temporary",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Temporary"},
+        status="running",
+        retention_policy="temporary",
+    )
+
+    manager.registry.save()
+    manager.registry.reconcile_startup()
+
+    assert manager.registry.get_sandbox("generic-1") is None
+
+
 @pytest.mark.asyncio
 async def test_manager_idle_cleanup_removes_temporary_sandbox(tmp_path):
     provider = FakeProvider()
@@ -940,13 +961,14 @@ async def test_manager_idle_cleanup_removes_temporary_sandbox(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_manager_cleanup_preserves_persistent_sandbox_records(
+async def test_manager_cleanup_destroys_temporary_sandboxes_and_keeps_persistent_records(
     tmp_path,
 ):
     manager, provider = _manager(tmp_path)
-    created = await manager.create_sandbox(None, "session-a", "generic")
+    temporary = await manager.create_sandbox(None, "session-a", "generic")
+    persistent = await manager.create_sandbox(None, "session-b", "generic")
     manager.update_sandbox_config(
-        created["sandbox_id"],
+        persistent["sandbox_id"],
         idle_timeout=None,
         expires_at=None,
         retention_policy="persistent",
@@ -954,8 +976,10 @@ async def test_manager_cleanup_preserves_persistent_sandbox_records(
 
     await manager.cleanup_managed_sandboxes()
 
-    assert manager.registry.get_sandbox(created["sandbox_id"])["status"] == "running"
-    assert provider.destroyed == []
+    assert manager.registry.get_sandbox(temporary["sandbox_id"]) is None
+    assert manager.registry.get_sandbox(persistent["sandbox_id"])["status"] == "running"
+    assert len(provider.destroyed) == 1
+    assert provider.destroyed[0][1] == temporary["sandbox_id"]
 
 
 def test_manager_update_sandbox_config_rejects_duplicate_name(tmp_path):
