@@ -1646,6 +1646,7 @@ class TestApplySandboxTools:
         assert "astrbot_list_sandboxes" in tool_names
         assert "astrbot_get_current_sandbox" in tool_names
         assert "astrbot_switch_sandbox" in tool_names
+        assert "astrbot_keep_sandbox_alive" in tool_names
         assert "astrbot_release_sandbox" in tool_names
         assert "astrbot_takeover_sandbox" in tool_names
         assert "astrbot_destroy_sandbox" in tool_names
@@ -1793,6 +1794,7 @@ class TestApplySandboxTools:
         assert "astrbot_get_current_sandbox" in tools
         assert "astrbot_switch_sandbox" in tools
         assert "astrbot_release_sandbox" in tools
+        assert "astrbot_keep_sandbox_alive" in tools
         assert "astrbot_takeover_sandbox" in tools
         assert "astrbot_destroy_sandbox" in tools
         assert "astrbot_screenshot_sandbox" in tools

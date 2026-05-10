@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import math
 import time
 import uuid
 from dataclasses import dataclass
@@ -221,6 +222,25 @@ class SandboxManager:
         await self.save_registry_async()
         return sandbox_id
 
+    def _find_idle_provider_sandbox_id(
+        self, provider_id: str, *, exclude: set[str] | None = None
+    ) -> str | None:
+        excluded = exclude or set()
+        for record in self.registry.list_sandboxes():
+            sandbox_id = record.get("sandbox_id")
+            if not sandbox_id or sandbox_id in excluded:
+                continue
+            if not record.get("managed") or record.get("provider") != provider_id:
+                continue
+            if record.get("status") != SandboxStatus.RUNNING:
+                continue
+            if record.get("controller_session_id"):
+                continue
+            if sandbox_id not in self.session_booter:
+                continue
+            return sandbox_id
+        return None
+
     async def get_or_create_booter(
         self, context: Context, session_id: str, provider_id: str
     ) -> ComputerBooter:
@@ -284,10 +304,17 @@ class SandboxManager:
             await self.save_registry_async()
 
         if self.sandbox_controlled_by_other_session(target_sandbox_id, session_id):
-            target_sandbox_id = await self._upsert_new_sandbox_record(
-                context, session_id, provider_id, create_config
+            reusable_sandbox_id = self._find_idle_provider_sandbox_id(
+                provider_id, exclude={target_sandbox_id}
             )
-            created_target_record = True
+            if reusable_sandbox_id is not None:
+                target_sandbox_id = reusable_sandbox_id
+                created_target_record = False
+            else:
+                target_sandbox_id = await self._upsert_new_sandbox_record(
+                    context, session_id, provider_id, create_config
+                )
+                created_target_record = True
 
         for _attempt in range(MAX_SANDBOX_LEASE_ATTEMPTS):
             async with self._sandbox_boot_lock(target_sandbox_id):
@@ -832,6 +859,50 @@ class SandboxManager:
                 self.registry.set_current_sandbox_id(controller_session_id, None)
         self.save_registry()
         return released
+
+    async def renew_current_sandbox_lease(
+        self, session_id: str, ttl_seconds: int | float | None = None
+    ) -> dict:
+        sandbox_id = self.registry.get_current_sandbox_id(session_id)
+        if sandbox_id is None:
+            raise RuntimeError("No current sandbox")
+        record = self.registry.get_sandbox(sandbox_id)
+        if record is None or not record.get("managed"):
+            raise RuntimeError(f"Sandbox {sandbox_id} not found")
+        status = record.get("status")
+        if status == SandboxStatus.CREATING:
+            raise RuntimeError(f"Sandbox {sandbox_id} is still being created")
+        if status == SandboxStatus.STOPPING:
+            raise RuntimeError(f"Sandbox {sandbox_id} is being destroyed")
+        if status == SandboxStatus.STOPPED:
+            raise RuntimeError(f"Sandbox {sandbox_id} has been destroyed")
+        if status == SandboxStatus.ERROR:
+            raise RuntimeError(
+                f"Sandbox {sandbox_id} encountered an error during creation"
+            )
+        if status != SandboxStatus.RUNNING:
+            raise RuntimeError(f"Sandbox {sandbox_id} is not running")
+        booter = self.session_booter.get(sandbox_id)
+        if booter is None:
+            raise RuntimeError(f"Sandbox {sandbox_id} is not running")
+        if not await self.booter_available(booter):
+            self.session_booter.pop(sandbox_id, None)
+            self.registry.update_sandbox_status(sandbox_id, SandboxStatus.UNKNOWN)
+            await self.save_registry_async()
+            raise RuntimeError(f"Sandbox {sandbox_id} is not running")
+        controller_session_id = record.get("controller_session_id")
+        if controller_session_id and controller_session_id != session_id:
+            raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
+        ttl = SANDBOX_LEASE_SECONDS if ttl_seconds is None else float(ttl_seconds)
+        if not math.isfinite(ttl):
+            raise RuntimeError("ttl_seconds must be finite")
+        if ttl <= 0:
+            raise RuntimeError("ttl_seconds must be positive")
+        if not self.acquire_lease(sandbox_id, session_id, ttl=ttl):
+            raise RuntimeError(f"Sandbox {sandbox_id} is busy")
+        self.registry.touch_sandbox(sandbox_id)
+        self.save_registry()
+        return self.registry.get_sandbox(sandbox_id) or record
 
     async def takeover_sandbox(self, session_id: str, sandbox_id: str) -> dict:
         record = self.registry.get_sandbox(sandbox_id)

@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -6,6 +7,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.tools.computer_tools.sandbox import (
     CopyFileBetweenSandboxesTool,
     DestroySandboxTool,
+    KeepAliveSandboxTool,
     ListSandboxesTool,
     ScreenshotSandboxTool,
     SwitchSandboxTool,
@@ -109,6 +111,8 @@ async def test_member_list_sandboxes_includes_all_sandboxes_with_status(
                     "sandbox_name": "Other Idle",
                     "owner_session_id": "session-b",
                     "owner_user_id": "user-b",
+                    "created_by_session_id": "session-b",
+                    "created_by_user_id": "user-b",
                     "controller_session_id": None,
                     "connect_info": {"secret": "idle-secret"},
                     "status": "running",
@@ -118,6 +122,8 @@ async def test_member_list_sandboxes_includes_all_sandboxes_with_status(
                     "sandbox_name": "Other Busy",
                     "owner_session_id": "session-c",
                     "owner_user_id": "user-c",
+                    "created_by_session_id": "session-c",
+                    "created_by_user_id": "user-c",
                     "controller_session_id": "session-c",
                     "controller_user_id": "user-c",
                     "connect_info": {"secret": "busy-secret"},
@@ -130,6 +136,8 @@ async def test_member_list_sandboxes_includes_all_sandboxes_with_status(
     )
 
     result = await ListSandboxesTool().call(_member_context_without_admin_requirement())
+    payload = json.loads(str(result))
+    by_id = {item["sandbox_id"]: item for item in payload["sandboxes"]}
 
     assert "owned" in str(result)
     assert "current" in str(result)
@@ -138,8 +146,13 @@ async def test_member_list_sandboxes_includes_all_sandboxes_with_status(
     assert "idle-secret" not in str(result)
     assert "busy-secret" not in str(result)
     assert "session-c" not in str(result)
-    assert '"status": "occupied"' in str(result)
-    assert '"can_switch": false' in str(result)
+    assert "user-c" not in str(result)
+    assert "session-b" not in str(result)
+    assert "user-b" not in str(result)
+    assert by_id["other-idle"]["access"]["status"] == "idle"
+    assert by_id["other-idle"]["access"]["can_switch"] is True
+    assert by_id["other-busy"]["access"]["status"] == "occupied"
+    assert by_id["other-busy"]["access"]["can_switch"] is False
 
 
 @pytest.mark.asyncio
@@ -207,7 +220,9 @@ async def test_member_switch_sandbox_allows_idle_dashboard_sandbox(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_member_switch_sandbox_rejects_idle_other_user_sandbox(monkeypatch):
+async def test_member_switch_sandbox_allows_idle_sandbox_from_any_session(monkeypatch):
+    called = []
+
     class FakeManager:
         registry = SimpleNamespace(
             get_sandbox=lambda sandbox_id: {
@@ -218,8 +233,11 @@ async def test_member_switch_sandbox_rejects_idle_other_user_sandbox(monkeypatch
             }
         )
 
-        async def switch_current_sandbox_checked(self, *args, **kwargs):
-            raise AssertionError("switch must not be called for another user's sandbox")
+        async def switch_current_sandbox_checked(
+            self, session_id, sandbox_id, **kwargs
+        ):
+            called.append((session_id, sandbox_id, kwargs))
+            return {"sandbox_id": sandbox_id}
 
     monkeypatch.setattr(
         "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
@@ -229,7 +247,8 @@ async def test_member_switch_sandbox_rejects_idle_other_user_sandbox(monkeypatch
         _member_context_without_admin_requirement(), "other-idle"
     )
 
-    assert "Permission denied" in str(result)
+    assert "other-idle" in str(result)
+    assert called
 
 
 @pytest.mark.asyncio
@@ -258,3 +277,24 @@ async def test_member_switch_sandbox_rejects_other_session_sandbox(monkeypatch):
     )
 
     assert "Permission denied" in str(result)
+
+
+@pytest.mark.asyncio
+async def test_keep_alive_sandbox_tool_renews_current_sandbox(monkeypatch):
+    calls = []
+
+    class FakeManager:
+        async def renew_current_sandbox_lease(self, session_id, ttl_seconds=None):
+            calls.append((session_id, ttl_seconds))
+            return {"sandbox_id": "sandbox-1", "lease_expires_at": 123.0}
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+    )
+
+    result = await KeepAliveSandboxTool().call(
+        _member_context_without_admin_requirement(), ttl_seconds=3600
+    )
+
+    assert "sandbox-1" in str(result)
+    assert calls == [("session-a", 3600)]

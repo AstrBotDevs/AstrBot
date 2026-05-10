@@ -36,18 +36,11 @@ def _is_admin(context: ContextWrapper[AstrAgentContext]) -> bool:
 
 
 def _visible_to_session(record: dict, session_id: str) -> bool:
-    return (
-        record.get("owner_session_id") == session_id
-        or record.get("controller_session_id") == session_id
-        or _is_idle_dashboard_sandbox(record)
-    )
+    return record.get("controller_session_id") == session_id or _is_idle_sandbox(record)
 
 
-def _is_idle_dashboard_sandbox(record: dict) -> bool:
-    return bool(
-        not record.get("controller_session_id")
-        and record.get("owner_session_id") == "dashboard"
-    )
+def _is_idle_sandbox(record: dict) -> bool:
+    return not bool(record.get("controller_session_id"))
 
 
 def _sandbox_status_for_session(record: dict, session_id: str) -> str:
@@ -68,10 +61,11 @@ def _redact_sandbox_for_session(record: dict, session_id: str, *, admin: bool) -
         "can_switch": _visible_to_session(record, session_id),
         "occupied": bool(record.get("controller_session_id")),
     }
-    if record.get("owner_session_id") != session_id:
-        visible.pop("connect_info", None)
-        visible["owner_session_id"] = None
-        visible["owner_user_id"] = None
+    visible.pop("connect_info", None)
+    visible["owner_session_id"] = None
+    visible["owner_user_id"] = None
+    visible["created_by_session_id"] = None
+    visible["created_by_user_id"] = None
     if record.get("controller_session_id") != session_id:
         visible["controller_session_id"] = None
         visible["controller_user_id"] = None
@@ -207,7 +201,7 @@ class SwitchSandboxTool(FunctionTool):
 @dataclass
 class ReleaseSandboxTool(FunctionTool):
     name: str = "astrbot_release_sandbox"
-    description: str = "Release the current sandbox occupancy for this session or for a specified sandbox."
+    description: str = "End this session's control of the current sandbox or a specified sandbox so other sessions can reuse it. Use this when the task is done or the user asks to release the sandbox."
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -231,6 +225,42 @@ class ReleaseSandboxTool(FunctionTool):
         except Exception as e:
             detail = str(e) or type(e).__name__
             return f"Error releasing sandbox: {detail}"
+        return _dump({"sandbox": sandbox})
+
+
+@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
+@dataclass
+class KeepAliveSandboxTool(FunctionTool):
+    name: str = "astrbot_keep_sandbox_alive"
+    description: str = (
+        "Extend this session's current sandbox occupancy. Use this before a long-running task so the sandbox is not released and reused by another session. "
+        "Call astrbot_release_sandbox when the task is done."
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "ttl_seconds": {
+                    "type": "number",
+                    "description": "Optional lease duration in seconds. Defaults to the normal sandbox lease timeout.",
+                }
+            },
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        ttl_seconds: int | float | None = None,
+    ) -> ToolExecResult:
+        session_id = context.context.event.unified_msg_origin
+        try:
+            sandbox = await sandbox_manager.renew_current_sandbox_lease(
+                session_id, ttl_seconds=ttl_seconds
+            )
+        except Exception as e:
+            detail = str(e) or type(e).__name__
+            return f"Error keeping sandbox alive: {detail}"
         return _dump({"sandbox": sandbox})
 
 

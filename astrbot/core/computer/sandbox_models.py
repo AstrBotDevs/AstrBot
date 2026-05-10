@@ -31,6 +31,8 @@ class SandboxRecord:
     is_default: bool = False
     owner_user_id: str | None = None
     owner_session_id: str | None = None
+    created_by_user_id: str | None = None
+    created_by_session_id: str | None = None
     controller_user_id: str | None = None
     controller_session_id: str | None = None
     lease_expires_at: float | None = None
@@ -67,6 +69,10 @@ class SandboxRecord:
             is_default=bool(data.get("is_default", False)),
             owner_user_id=data.get("owner_user_id"),
             owner_session_id=data.get("owner_session_id"),
+            created_by_user_id=data.get("created_by_user_id")
+            or data.get("owner_user_id"),
+            created_by_session_id=data.get("created_by_session_id")
+            or data.get("owner_session_id"),
             controller_user_id=data.get("controller_user_id"),
             controller_session_id=data.get("controller_session_id"),
             lease_expires_at=data.get("lease_expires_at"),
@@ -97,6 +103,8 @@ class SandboxRecord:
             "is_default": self.is_default,
             "owner_user_id": self.owner_user_id,
             "owner_session_id": self.owner_session_id,
+            "created_by_user_id": self.created_by_user_id,
+            "created_by_session_id": self.created_by_session_id,
             "controller_user_id": self.controller_user_id,
             "controller_session_id": self.controller_session_id,
             "lease_expires_at": self.lease_expires_at,

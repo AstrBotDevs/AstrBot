@@ -323,6 +323,26 @@ async def test_manager_creates_new_sandbox_when_default_busy(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_manager_reuses_idle_provider_sandbox_when_default_busy(tmp_path):
+    manager, provider = _manager(tmp_path)
+
+    default = await manager.create_sandbox(None, "session-a", "generic", "Default")
+    idle = await manager.create_sandbox(None, "session-b", "generic", "Reusable")
+    manager.release_current_sandbox("session-b", idle["sandbox_id"])
+
+    booter = await manager.get_or_create_booter(None, "session-c", "generic")
+
+    current_id = manager.get_current_sandbox("session-c")["current_sandbox_id"]
+    assert current_id == idle["sandbox_id"]
+    assert booter is manager.session_booter[idle["sandbox_id"]]
+    assert len(provider.created) == 2
+    assert (
+        manager.registry.get_sandbox(default["sandbox_id"])["controller_session_id"]
+        == "session-a"
+    )
+
+
+@pytest.mark.asyncio
 async def test_manager_creates_new_sandbox_when_current_binding_is_busy(tmp_path):
     manager, provider = _manager(tmp_path)
 
@@ -476,6 +496,74 @@ async def test_manager_force_releases_other_session_lease(tmp_path):
     assert released["controller_session_id"] is None
     assert released["lease_expires_at"] is None
     assert manager.get_current_sandbox("session-b")["current_sandbox_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_manager_renews_current_sandbox_lease_with_requested_ttl(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+
+    renewed = await manager.renew_current_sandbox_lease("session-a", ttl_seconds=7200)
+
+    assert renewed["sandbox_id"] == created["sandbox_id"]
+    assert renewed["controller_session_id"] == "session-a"
+    assert renewed["lease_expires_at"] > time.time() + 7190
+
+
+@pytest.mark.asyncio
+async def test_manager_renew_current_sandbox_rejects_missing_current(tmp_path):
+    manager, _provider = _manager(tmp_path)
+
+    with pytest.raises(RuntimeError, match="No current sandbox"):
+        await manager.renew_current_sandbox_lease("session-a")
+
+
+@pytest.mark.asyncio
+async def test_manager_renew_current_sandbox_rejects_non_positive_ttl(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    await manager.create_sandbox(None, "session-a", "generic", "Named")
+
+    with pytest.raises(RuntimeError, match="ttl_seconds must be positive"):
+        await manager.renew_current_sandbox_lease("session-a", ttl_seconds=0)
+
+
+@pytest.mark.asyncio
+async def test_manager_renew_current_sandbox_rejects_non_finite_ttl(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    await manager.create_sandbox(None, "session-a", "generic", "Named")
+
+    with pytest.raises(RuntimeError, match="ttl_seconds must be finite"):
+        await manager.renew_current_sandbox_lease("session-a", ttl_seconds=float("inf"))
+
+
+@pytest.mark.asyncio
+async def test_manager_renew_current_sandbox_rejects_non_running_sandbox(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    manager.session_booter.pop(created["sandbox_id"])
+    manager.registry.update_sandbox_status(created["sandbox_id"], "error")
+
+    with pytest.raises(RuntimeError, match="encountered an error"):
+        await manager.renew_current_sandbox_lease("session-a")
+
+    assert (
+        manager.get_current_sandbox("session-a")["current_sandbox_id"]
+        == created["sandbox_id"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_manager_renew_current_sandbox_rejects_unavailable_booter(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    booter = manager.session_booter[created["sandbox_id"]]
+    booter.available_result = False
+
+    with pytest.raises(RuntimeError, match="is not running"):
+        await manager.renew_current_sandbox_lease("session-a")
+
+    assert created["sandbox_id"] not in manager.session_booter
+    assert manager.registry.get_sandbox(created["sandbox_id"])["status"] == "unknown"
 
 
 @pytest.mark.asyncio

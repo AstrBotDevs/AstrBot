@@ -26,6 +26,28 @@ def test_sandbox_record_round_trips_generic_capabilities_sorted():
     assert payload["capabilities"] == ["filesystem", "keyboard", "shell", "shell"]
 
 
+def test_sandbox_record_aliases_owner_fields_to_created_by_fields():
+    record = SandboxRecord.from_dict(
+        {
+            "sandbox_id": "sandbox-1",
+            "sandbox_name": "General Sandbox",
+            "booter_type": "generic-provider",
+            "provider": "generic-provider",
+            "managed": True,
+            "created_by_astrbot": True,
+            "owner_user_id": "legacy-user",
+            "owner_session_id": "legacy-session",
+        }
+    )
+
+    payload = record.to_dict()
+
+    assert payload["created_by_user_id"] == "legacy-user"
+    assert payload["created_by_session_id"] == "legacy-session"
+    assert payload["owner_user_id"] == "legacy-user"
+    assert payload["owner_session_id"] == "legacy-session"
+
+
 def test_sandbox_record_validates_required_strings():
     with pytest.raises(ValueError, match="sandbox_id"):
         SandboxRecord.from_dict(

@@ -45,6 +45,7 @@ from astrbot.core.tools.computer_tools import (
     FileWriteTool,
     GetCurrentSandboxTool,
     GrepTool,
+    KeepAliveSandboxTool,
     ListSandboxesTool,
     LocalPythonTool,
     PythonTool,
@@ -214,6 +215,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             get_current_sandbox_tool = tool_mgr.get_builtin_tool(GetCurrentSandboxTool)
             create_sandbox_tool = tool_mgr.get_builtin_tool(CreateSandboxTool)
             switch_sandbox_tool = tool_mgr.get_builtin_tool(SwitchSandboxTool)
+            keep_alive_sandbox_tool = tool_mgr.get_builtin_tool(KeepAliveSandboxTool)
             release_sandbox_tool = tool_mgr.get_builtin_tool(ReleaseSandboxTool)
             takeover_sandbox_tool = tool_mgr.get_builtin_tool(TakeoverSandboxTool)
             destroy_sandbox_tool = tool_mgr.get_builtin_tool(DestroySandboxTool)
@@ -234,6 +236,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 get_current_sandbox_tool.name: get_current_sandbox_tool,
                 create_sandbox_tool.name: create_sandbox_tool,
                 switch_sandbox_tool.name: switch_sandbox_tool,
+                keep_alive_sandbox_tool.name: keep_alive_sandbox_tool,
                 release_sandbox_tool.name: release_sandbox_tool,
                 takeover_sandbox_tool.name: takeover_sandbox_tool,
                 destroy_sandbox_tool.name: destroy_sandbox_tool,

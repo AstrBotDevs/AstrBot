@@ -122,6 +122,8 @@ class SandboxRegistry:
                 "created_by_astrbot": created_by_astrbot,
                 "owner_user_id": owner_user_id,
                 "owner_session_id": owner_session_id,
+                "created_by_user_id": owner_user_id,
+                "created_by_session_id": owner_session_id,
                 "connect_info": deepcopy(connect_info),
             }
         )
