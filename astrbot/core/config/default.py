@@ -130,8 +130,8 @@ DEFAULT_CONFIG = {
         ),
         "llm_compress_keep_recent": 6,
         "llm_compress_provider_id": "",
-        "max_context_length": -1,
-        "dequeue_context_length": 1,
+        "max_context_length": 30,
+        "dequeue_context_length": 10,
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
@@ -217,7 +217,8 @@ DEFAULT_CONFIG = {
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
-        "group_message_max_cnt": 300,
+        "group_message_max_cnt": 50,
+        "group_icl_token_budget": 4000,
         "image_caption": False,
         "image_caption_provider_id": "",
         "active_reply": {
@@ -2862,6 +2863,9 @@ CONFIG_METADATA_2 = {
                     "group_message_max_cnt": {
                         "type": "int",
                     },
+                    "group_icl_token_budget": {
+                        "type": "int",
+                    },
                     "image_caption": {
                         "type": "bool",
                     },
@@ -4078,6 +4082,11 @@ CONFIG_METADATA_3 = {
                     "provider_ltm_settings.group_message_max_cnt": {
                         "description": "最大消息数量",
                         "type": "int",
+                    },
+                    "provider_ltm_settings.group_icl_token_budget": {
+                        "description": "群聊上下文 Token 预算",
+                        "type": "int",
+                        "hint": "每次 LLM 请求注入的群聊上下文近似 token 上限。降低该值可减少费用并降低缓存失效影响。",
                     },
                     "provider_ltm_settings.image_caption": {
                         "description": "自动理解图片",

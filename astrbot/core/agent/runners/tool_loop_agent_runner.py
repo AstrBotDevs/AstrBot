@@ -110,6 +110,8 @@ ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     TOOL_RESULT_MAX_ESTIMATED_TOKENS = 27_500
     TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS = 7000
+    REQUEST_WARN_ESTIMATED_INPUT_TOKENS = 16_000
+    REQUEST_WARN_IMAGE_COUNT = 1
     EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
     EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 1
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
@@ -175,6 +177,43 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         """Read persona-level custom error message from event extras when available."""
         event = getattr(self.run_context.context, "event", None)
         return extract_persona_custom_error_message_from_event(event)
+
+    @staticmethod
+    def _count_image_parts(messages: list[Message]) -> int:
+        count = 0
+        for message in messages:
+            if isinstance(message.content, list):
+                count += sum(
+                    1 for part in message.content if isinstance(part, ImageURLPart)
+                )
+        return count
+
+    def _log_request_cost_preflight(self) -> None:
+        estimated_input_tokens = EstimateTokenCounter().count_tokens(
+            self.run_context.messages
+        )
+        image_count = self._count_image_parts(self.run_context.messages)
+        logger.debug(
+            "LLM request preflight. provider=%s, model=%s, estimated_input_tokens=%s, image_count=%s",
+            self.provider.provider_config.get("id", ""),
+            self.provider.get_model(),
+            estimated_input_tokens,
+            image_count,
+        )
+        if estimated_input_tokens >= self.REQUEST_WARN_ESTIMATED_INPUT_TOKENS:
+            logger.warning(
+                "LLM request has high estimated input tokens. provider=%s, model=%s, estimated_input_tokens=%s",
+                self.provider.provider_config.get("id", ""),
+                self.provider.get_model(),
+                estimated_input_tokens,
+            )
+        if image_count > self.REQUEST_WARN_IMAGE_COUNT:
+            logger.warning(
+                "LLM request contains multiple images. provider=%s, model=%s, image_count=%s",
+                self.provider.provider_config.get("id", ""),
+                self.provider.get_model(),
+                image_count,
+            )
 
     async def _complete_with_assistant_response(self, llm_resp: LLMResponse) -> None:
         """Finalize the current step as a plain assistant response with no tool calls."""
@@ -711,6 +750,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.run_context.messages, trusted_token_usage=token_usage
         )
         self._simple_print_message_role("[AftCompact]")
+        self._log_request_cost_preflight()
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
