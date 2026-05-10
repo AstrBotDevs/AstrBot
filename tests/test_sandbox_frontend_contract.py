@@ -105,6 +105,11 @@ def test_sandbox_management_page_loads_provider_options_from_api():
     assert "const providerOptions = [" not in content
     assert "axios.get('/api/sandbox/providers'" in content
     assert "providerOptions.value = providers.map(" in content
+    assert "defaultProviderId" in content
+    assert (
+        "providerOptions.value.find((option) => option.value === defaultProviderId)"
+        in content
+    )
 
 
 def test_sandbox_management_page_does_not_show_legacy_provider_hint():

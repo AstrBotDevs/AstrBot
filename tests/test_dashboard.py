@@ -274,6 +274,44 @@ async def test_sandbox_dashboard_lists_generic_providers(
             "system_prompt": "",
         }
     ]
+    assert data["data"]["default_provider_id"] == ""
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_provider_list_includes_configured_default(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(registry=SandboxRegistry(), providers={})
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    monkeypatch.setattr(computer_client, "sandbox_registry", manager.registry)
+    computer_client.register_sandbox_provider(provider)
+    monkeypatch.setattr(
+        core_lifecycle_td.star_context,
+        "get_config",
+        lambda umo=None: {
+            "provider_settings": {
+                "sandbox": {"booter": provider.provider_id},
+            }
+        },
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/sandbox/providers", headers=authenticated_header
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["default_provider_id"] == provider.provider_id
 
 
 @pytest.mark.asyncio

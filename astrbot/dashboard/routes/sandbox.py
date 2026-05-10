@@ -38,9 +38,21 @@ class SandboxRoute(Route):
 
     async def list_providers(self):
         try:
+            config = self.core_lifecycle.star_context.get_config(umo=self._session_id())
+            sandbox_config = config.get("provider_settings", {}).get("sandbox", {})
+            default_provider_id = ""
+            if isinstance(sandbox_config, dict):
+                configured_provider_id = str(sandbox_config.get("booter") or "").strip()
+                if computer_client.get_sandbox_provider_info(configured_provider_id):
+                    default_provider_id = configured_provider_id
             return jsonify(
                 Response()
-                .ok(data={"providers": computer_client.list_sandbox_providers()})
+                .ok(
+                    data={
+                        "providers": computer_client.list_sandbox_providers(),
+                        "default_provider_id": default_provider_id,
+                    }
+                )
                 .__dict__
             )
         except Exception as e:

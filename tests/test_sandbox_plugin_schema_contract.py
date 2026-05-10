@@ -21,6 +21,32 @@ def _load_schema(plugin_name: str) -> dict:
     return json.loads(schema_path.read_text(encoding="utf-8"))
 
 
+def _read_plugin_file(plugin_name: str, filename: str) -> str:
+    path = ROOT / "data/plugins" / plugin_name / filename
+    if not path.is_file():
+        pytest.skip(f"sandbox plugin file is not present: {path}")
+    return path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("plugin_name", "description"),
+    [
+        ("astrbot_sandbox_cua", "为 AstrBot 提供 CUA 沙盒运行时。"),
+        ("astrbot_sandbox_boxlite", "为 AstrBot 提供 Boxlite 本地沙盒运行时。"),
+        ("astrbot_sandbox_shipyard", "为 AstrBot 提供 Shipyard 沙盒运行时。"),
+        ("astrbot_sandbox_shipyard_neo", "为 AstrBot 提供 Shipyard Neo 沙盒运行时。"),
+    ],
+)
+def test_sandbox_plugin_metadata_is_localized(plugin_name: str, description: str):
+    metadata = _read_plugin_file(plugin_name, "metadata.yaml")
+    main_py = _read_plugin_file(plugin_name, "main.py")
+
+    assert f"desc: {description}" in metadata
+    assert f'"{description}"' in main_py
+    assert "sandbox runtime provider for AstrBot" not in metadata
+    assert "sandbox runtime provider for AstrBot" not in main_py
+
+
 def test_cua_schema_defaults_match_documented_hints():
     schema = _load_schema("astrbot_sandbox_cua")
 

@@ -581,13 +581,15 @@ async function loadProviders() {
     }
 
     const providers = (res.data.data?.providers || []) as SandboxProviderInfo[]
+    const defaultProviderId = String(res.data.data?.default_provider_id || '').trim()
     providerOptions.value = providers.map((provider) => ({
       title: provider.provider_id,
       value: provider.provider_id,
     }))
 
     if (!providerOptions.value.some((option) => option.value === createProvider.value)) {
-      createProvider.value = providerOptions.value[0]?.value || ''
+      const defaultOption = providerOptions.value.find((option) => option.value === defaultProviderId)
+      createProvider.value = defaultOption?.value || providerOptions.value[0]?.value || ''
     }
   } catch {
     providerOptions.value = []
