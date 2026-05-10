@@ -48,3 +48,20 @@ def test_minimax_tts_keeps_custom_timber_weight():
     assert provider.timber_weight == [
         {"voice_id": "Chinese (Mandarin)_BashfulGirl", "weight": 3},
     ]
+
+
+def test_minimax_tts_accepts_parsed_timber_weight():
+    provider = ProviderMiniMaxTTSAPI(
+        _provider_config(
+            **{
+                "minimax-timber-weight": [
+                    {"voice_id": "Chinese (Mandarin)_BashfulGirl", "weight": 3},
+                ],
+            },
+        ),
+        {},
+    )
+
+    assert provider.timber_weight == [
+        {"voice_id": "Chinese (Mandarin)_BashfulGirl", "weight": 3},
+    ]
