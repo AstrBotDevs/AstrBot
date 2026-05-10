@@ -405,7 +405,25 @@ async def test_execute_handoff_appends_agent_skills_prompt(
         results.append(result)
 
     assert len(results) == 1
-    assert captured["system_prompt"] == "subagent-instructions\nSKILL PROMPT\n"
+    assert captured["system_prompt"] == "subagent-instructions\n\nSKILL PROMPT"
+
+
+def test_build_handoff_system_prompt_omits_empty_parts(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_build_handoff_skills_prompt",
+        classmethod(lambda cls, skill_names, runtime: "SKILL PROMPT\n"),
+    )
+
+    prompt = FunctionToolExecutor._build_handoff_system_prompt(
+        "  ",
+        ["web-search-skill"],
+        "local",
+    )
+
+    assert prompt == "SKILL PROMPT"
 
 
 @pytest.mark.asyncio

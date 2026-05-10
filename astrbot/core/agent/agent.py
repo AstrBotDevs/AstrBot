@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Generic
 
 from .hooks import BaseAgentRunHooks
@@ -11,6 +11,6 @@ class Agent(Generic[TContext]):
     name: str
     instructions: str | None = None
     tools: list[str | FunctionTool] | None = None
-    skills: list[str] | None = field(default_factory=list)
+    skills: list[str] | None = None
     run_hooks: BaseAgentRunHooks[TContext] | None = None
     begin_dialogs: list[Any] | None = None
