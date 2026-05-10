@@ -228,8 +228,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         fallback_providers: list[Provider] | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
-        # external abort signal for SubAgent control (does not affect main agent)
-        external_abort_signal: asyncio.Event | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -279,12 +277,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.agent_hooks = agent_hooks
         self.run_context = run_context
         self._aborted = False
-        # Use external abort signal if provided (for SubAgent), otherwise create new one
-        self._abort_signal = (
-            external_abort_signal
-            if external_abort_signal is not None
-            else asyncio.Event()
-        )
+        self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
         self._last_tool_name: str | None = None
@@ -1365,17 +1358,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._abort_signal.set()
 
     def _is_stop_requested(self) -> bool:
-        # Check if abort signal is set
         return self._abort_signal.is_set()
-
-    def is_abort_signal_set(self) -> bool:
-        """检查 abort_signal 是否已被设置（用于外部控制）"""
-        return self._abort_signal.is_set()
-
-    def reset_abort_signal(self) -> None:
-        """重置 abort_signal（用于复用 runner）"""
-        self._abort_signal.clear()
-        self._aborted = False
 
     def was_aborted(self) -> bool:
         return self._aborted
@@ -1386,35 +1369,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _finalize_aborted_step(
         self,
         llm_resp: LLMResponse | None = None,
-        manual_stop: bool = False,
     ) -> AgentResponse:
-        """终结被中断的步骤
-
-        Args:
-            llm_resp: LLM响应对象
-            manual_stop: 是否是主Agent手动停止SubAgent（True时使用不同的消息提示）
-        """
-        if manual_stop:
-            logger.info("SubAgent execution was manually stopped by main agent.")
-        else:
-            logger.info("Agent execution was requested to stop by user.")
+        logger.info("Agent execution was requested to stop by user.")
 
         if llm_resp is None:
             llm_resp = LLMResponse(role="assistant", completion_text="")
 
-        # 根据停止类型选择不同的消息
         if llm_resp.role != "assistant":
-            if manual_stop:
-                # SubAgent被主Agent手动停止，使用更简洁的消息
-                interruption_msg = (
-                    "[SYSTEM: SubAgent was manually stopped by main agent. "
-                    "Partial output before interruption is preserved.]"
-                )
-            else:
-                interruption_msg = self.USER_INTERRUPTION_MESSAGE
             llm_resp = LLMResponse(
                 role="assistant",
-                completion_text=interruption_msg,
+                completion_text=self.USER_INTERRUPTION_MESSAGE,
             )
 
         self.final_llm_resp = llm_resp
