@@ -21,6 +21,7 @@ from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
 from astrbot.core.computer.sandbox_tool_binding import (
+    resolve_effective_sandbox_provider_id,
     resolve_sandbox_provider_bindings,
     tool_matches_sandbox_provider,
 )
@@ -289,8 +290,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
         sandbox_cfg = provider_settings.get("sandbox", {})
-        current_provider = (
+        configured_provider = (
             sandbox_cfg.get("booter") if isinstance(sandbox_cfg, dict) else None
+        )
+        current_provider = resolve_effective_sandbox_provider_id(
+            event.unified_msg_origin,
+            configured_provider,
         )
         tool_mgr = (
             ctx.get_llm_tool_manager()
@@ -300,7 +305,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
             tool_mgr,
-            provider_settings.get("sandbox", {}).get("booter"),
+            current_provider,
         )
 
         # Keep persona semantics aligned with the main agent: tools=None means

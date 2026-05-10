@@ -787,6 +787,63 @@ class TestEnsurePersonaAndSkills:
         assert "astrbot_cua_screenshot" in req.func_tool.names()
 
     @pytest.mark.asyncio
+    async def test_ensure_persona_prefers_bound_sandbox_provider_over_config(
+        self, monkeypatch, mock_event, mock_context
+    ):
+        module = ama
+        cua_tool = FunctionTool(
+            name="astrbot_cua_screenshot",
+            parameters={"type": "object", "properties": {}},
+            description="CUA screenshot",
+        )
+        cua_tool.sandbox_provider_id = "cua"
+        boxlite_tool = FunctionTool(
+            name="boxlite_tool",
+            parameters={"type": "object", "properties": {}},
+            description="BoxLite tool",
+        )
+        boxlite_tool.sandbox_provider_id = "boxlite"
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet([cua_tool, boxlite_tool])
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
+
+        from astrbot.core.computer.computer_client import sandbox_manager
+
+        monkeypatch.setattr(
+            sandbox_manager.registry,
+            "get_current_sandbox_id",
+            lambda session_id: "boxlite-1"
+            if session_id == mock_event.unified_msg_origin
+            else None,
+        )
+        monkeypatch.setattr(
+            sandbox_manager.registry,
+            "get_sandbox",
+            lambda sandbox_id: {"sandbox_id": sandbox_id, "provider": "boxlite"}
+            if sandbox_id == "boxlite-1"
+            else None,
+        )
+
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(
+            req,
+            {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "cua"},
+            },
+            mock_context,
+            mock_event,
+        )
+
+        assert req.func_tool is not None
+        assert "boxlite_tool" in req.func_tool.names()
+        assert "astrbot_cua_screenshot" not in req.func_tool.names()
+
+    @pytest.mark.asyncio
     async def test_handoff_all_tools_filters_other_sandbox_provider_tools(
         self, mock_event, mock_context
     ):

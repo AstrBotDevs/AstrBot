@@ -6,6 +6,7 @@ import pytest
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
+from astrbot.core.provider.register import llm_tools
 
 
 class _DummyEvent:
@@ -222,6 +223,94 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
 
     assert len(results) == 1
     assert captured["image_urls"] == ["https://example.com/raw.png"]
+
+
+@pytest.mark.asyncio
+async def test_build_handoff_toolset_prefers_current_sandbox_provider(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.agent.tool import FunctionTool
+    from astrbot.core.computer.computer_client import sandbox_manager
+
+    cua_tool = FunctionTool(
+        name="astrbot_cua_screenshot",
+        parameters={"type": "object", "properties": {}},
+        description="CUA screenshot",
+    )
+    cua_tool.sandbox_provider_id = "cua"
+    boxlite_tool = FunctionTool(
+        name="boxlite_tool",
+        parameters={"type": "object", "properties": {}},
+        description="BoxLite tool",
+    )
+    boxlite_tool.sandbox_provider_id = "boxlite"
+    generic_tool = FunctionTool(
+        name="generic_tool",
+        parameters={"type": "object", "properties": {}},
+        description="generic",
+    )
+
+    previous_tools = list(llm_tools.func_list)
+    previous_providers = dict(sandbox_manager.providers)
+    FunctionToolExecutor._runtime_computer_tools_cache.clear()
+    llm_tools.func_list = [cua_tool, generic_tool]
+    sandbox_manager.providers = {
+        "cua": SimpleNamespace(
+            provider_id="cua",
+            capabilities=set(),
+            tool_names={"astrbot_cua_screenshot"},
+        ),
+        "boxlite": SimpleNamespace(
+            provider_id="boxlite",
+            capabilities=set(),
+            tool_names={"boxlite_tool"},
+        ),
+    }
+
+    tool_mgr = SimpleNamespace(
+        get_builtin_tool=lambda cls, **kwargs: cls(**kwargs),
+        get_func=lambda name: {
+            "astrbot_cua_screenshot": cua_tool,
+            "boxlite_tool": boxlite_tool,
+            "generic_tool": generic_tool,
+        }.get(name),
+    )
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "cua"},
+            }
+        },
+        get_llm_tool_manager=lambda: tool_mgr,
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+    monkeypatch.setattr(
+        sandbox_manager.registry,
+        "get_current_sandbox_id",
+        lambda session_id: "boxlite-1"
+        if session_id == event.unified_msg_origin
+        else None,
+    )
+    monkeypatch.setattr(
+        sandbox_manager.registry,
+        "get_sandbox",
+        lambda sandbox_id: {"sandbox_id": sandbox_id, "provider": "boxlite"}
+        if sandbox_id == "boxlite-1"
+        else None,
+    )
+
+    try:
+        toolset = FunctionToolExecutor._build_handoff_toolset(run_context, None)
+        assert toolset is not None
+        assert "boxlite_tool" in toolset.names()
+        assert "astrbot_cua_screenshot" not in toolset.names()
+    finally:
+        llm_tools.func_list = previous_tools
+        sandbox_manager.providers = previous_providers
+        FunctionToolExecutor._runtime_computer_tools_cache.clear()
 
 
 @pytest.mark.asyncio

@@ -29,7 +29,10 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
-from astrbot.core.computer.sandbox_tool_binding import tool_matches_sandbox_provider
+from astrbot.core.computer.sandbox_tool_binding import (
+    resolve_effective_sandbox_provider_id,
+    tool_matches_sandbox_provider,
+)
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
@@ -407,17 +410,28 @@ def _filter_skills_for_current_config(
     return filtered
 
 
-def _tool_matches_current_sandbox_provider(tool: FunctionTool, cfg: dict) -> bool:
-    runtime = str(cfg.get("computer_use_runtime", "local"))
+def _configured_sandbox_provider_id(cfg: dict) -> str | None:
     sandbox_cfg = cfg.get("sandbox", {})
-    current_provider = sandbox_cfg.get("booter") if isinstance(sandbox_cfg, dict) else None
+    return sandbox_cfg.get("booter") if isinstance(sandbox_cfg, dict) else None
+
+
+def _tool_matches_current_sandbox_provider(
+    tool: FunctionTool, cfg: dict, session_id: str
+) -> bool:
+    runtime = str(cfg.get("computer_use_runtime", "local"))
+    current_provider = resolve_effective_sandbox_provider_id(
+        session_id,
+        _configured_sandbox_provider_id(cfg),
+    )
     return tool_matches_sandbox_provider(tool, runtime, current_provider)
 
 
-def _filter_tools_for_current_config(toolset: ToolSet, cfg: dict) -> ToolSet:
+def _filter_tools_for_current_config(
+    toolset: ToolSet, cfg: dict, session_id: str
+) -> ToolSet:
     filtered = ToolSet()
     for tool in toolset:
-        if _tool_matches_current_sandbox_provider(tool, cfg):
+        if _tool_matches_current_sandbox_provider(tool, cfg, session_id):
             filtered.add_tool(tool)
     return filtered
 
@@ -450,6 +464,7 @@ async def _ensure_persona_and_skills(
 
     if req.system_prompt is None:
         req.system_prompt = ""
+    session_id = event.unified_msg_origin
 
     if persona:
         # Inject persona system prompt
@@ -486,7 +501,7 @@ async def _ensure_persona_and_skills(
     # inject toolset in the persona
     if (persona and persona.get("tools") is None) or not persona:
         persona_toolset = tmgr.get_full_tool_set()
-        persona_toolset = _filter_tools_for_current_config(persona_toolset, cfg)
+        persona_toolset = _filter_tools_for_current_config(persona_toolset, cfg, session_id)
         for tool in list(persona_toolset):
             if not tool.active:
                 persona_toolset.remove_tool(tool.name)
@@ -498,7 +513,7 @@ async def _ensure_persona_and_skills(
                 if (
                     tool
                     and tool.active
-                    and _tool_matches_current_sandbox_provider(tool, cfg)
+                    and _tool_matches_current_sandbox_provider(tool, cfg, session_id)
                 ):
                     persona_toolset.add_tool(tool)
     if not req.func_tool:
@@ -537,7 +552,9 @@ async def _ensure_persona_and_skills(
                             tool.name
                             for tool in tmgr.func_list
                             if not isinstance(tool, HandoffTool)
-                            and _tool_matches_current_sandbox_provider(tool, cfg)
+                            and _tool_matches_current_sandbox_provider(
+                                tool, cfg, session_id
+                            )
                         ]
                     )
                     continue
