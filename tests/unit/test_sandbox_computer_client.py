@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 import pytest
@@ -328,6 +329,51 @@ def test_unregister_provider_force_preserves_persistent_sandboxes(
     assert record["retention_policy"] == "persistent"
     assert computer_client.get_sandbox_provider_info("generic") is None
     assert "generic-1" not in manager.session_booter
+
+
+@pytest.mark.asyncio
+async def test_unregister_provider_force_closes_persistent_booters(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    closed = []
+
+    class PersistentBooter:
+        async def shutdown(self):
+            closed.append("shutdown")
+
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={},
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    computer_client.register_sandbox_provider(FakeProvider())
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Generic 1",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        retention_policy="persistent",
+        status="running",
+    )
+    manager.session_booter["generic-1"] = PersistentBooter()
+
+    computer_client.unregister_sandbox_provider("generic", force=True)
+    await asyncio.sleep(0)
+
+    record = manager.registry.get_sandbox("generic-1")
+    assert record is not None
+    assert record["retention_policy"] == "persistent"
+    assert "generic-1" not in manager.session_booter
+    assert closed == ["shutdown"]
 
 
 def test_list_sandbox_providers_is_sorted(monkeypatch, tmp_path):

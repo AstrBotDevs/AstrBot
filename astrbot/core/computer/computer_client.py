@@ -129,9 +129,15 @@ def _cleanup_provider_sandboxes_sync(provider_id: str) -> None:
             continue
         sandbox_id = record["sandbox_id"]
         if record.get("retention_policy") == "persistent":
-            sandbox_manager.session_booter.pop(sandbox_id, None)
+            booter = sandbox_manager.session_booter.pop(sandbox_id, None)
             sandbox_manager.clear_idle_state(sandbox_id)
             sandbox_manager.drop_boot_lock(sandbox_id)
+            if booter is not None:
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(_safe_shutdown_booter(booter, record))
+                except RuntimeError:
+                    pass  # no running event loop
             continue
         booter = sandbox_manager.session_booter.pop(sandbox_id, None)
         sandbox_manager.clear_idle_state(sandbox_id)
@@ -166,6 +172,17 @@ async def _safe_destroy_booter(
     except Exception as exc:
         logger.warning(
             "Background destroy_booter failed for sandbox %s: %s",
+            record.get("sandbox_id"),
+            exc,
+        )
+
+
+async def _safe_shutdown_booter(booter: ComputerBooter, record: dict) -> None:
+    try:
+        await booter.shutdown()
+    except Exception as exc:
+        logger.warning(
+            "Background shutdown failed for sandbox %s: %s",
             record.get("sandbox_id"),
             exc,
         )
