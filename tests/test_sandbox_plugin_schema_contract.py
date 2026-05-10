@@ -61,6 +61,18 @@ def test_shipyard_neo_schema_is_localized_and_has_defaults():
     assert schema["shipyard_neo_ttl"]["default"] == 3600
 
 
+def test_shipyard_neo_plugin_does_not_duplicate_builtin_tool_registration():
+    _require_plugin_files(
+        "data/plugins/astrbot_sandbox_shipyard_neo/main.py",
+        "data/plugins/astrbot_sandbox_shipyard_neo/tools/shipyard_neo/browser.py",
+    )
+    content = (ROOT / "data/plugins/astrbot_sandbox_shipyard_neo/main.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "tools=[" not in content
+
+
 def test_cua_provider_falls_back_to_local_mode_without_api_key(monkeypatch):
     _require_plugin_files("data/plugins/astrbot_sandbox_cua/provider.py")
     from data.plugins.astrbot_sandbox_cua.provider import CuaSandboxProvider

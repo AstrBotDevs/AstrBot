@@ -277,6 +277,30 @@ async def test_sandbox_dashboard_lists_generic_providers(
 
 
 @pytest.mark.asyncio
+async def test_sandbox_dashboard_provider_list_omits_disabled_plugins(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    manager = SandboxManager(registry=SandboxRegistry(), providers={})
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/sandbox/providers", headers=authenticated_header
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["providers"] == []
+
+
+@pytest.mark.asyncio
 async def test_config_metadata_includes_registered_sandbox_providers(
     app: Quart,
     authenticated_header: dict,

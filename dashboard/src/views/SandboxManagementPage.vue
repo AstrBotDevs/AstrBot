@@ -180,16 +180,16 @@
       <v-card>
         <v-card-title>{{ tm('create.title') }}</v-card-title>
         <v-card-text>
-          <v-select v-model="createProvider" :items="providerOptions" :label="tm('fields.provider')" variant="outlined" />
+          <v-select v-model="createProvider" :items="providerOptions" :label="tm('fields.provider')" variant="outlined" :disabled="!hasProviderOptions" />
           <v-text-field v-model="createName" :label="tm('create.name')" variant="outlined" />
-          <v-alert v-if="createProvider !== 'cua'" type="info" variant="tonal" density="compact">
+          <v-alert v-if="hasProviderOptions && createProvider !== 'cua'" type="info" variant="tonal" density="compact">
             {{ tm('create.providerHint') }}
           </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="createDialog = false">{{ tm('actions.cancel') }}</v-btn>
-          <v-btn color="primary" :loading="creatingRequestPending" :disabled="createProvider !== 'cua' || creatingRequestPending" @click="createSandbox">
+          <v-btn color="primary" :loading="creatingRequestPending" :disabled="!hasProviderOptions || creatingRequestPending" @click="createSandbox">
             {{ tm('actions.create') }}
           </v-btn>
         </v-card-actions>
@@ -314,6 +314,15 @@ type LoadSandboxesResult = {
   error?: string
 }
 
+type ProviderOption = {
+  title: string
+  value: string
+}
+
+type SandboxProviderInfo = {
+  provider_id: string
+}
+
 type SandboxAction =
   | 'setDefault'
   | 'configure'
@@ -348,7 +357,7 @@ const configIdleTimeout = ref<number | null>(null)
 const configExpiresAt = ref('')
 const configSandboxName = ref('')
 const createName = ref('')
-const createProvider = ref('cua')
+const createProvider = ref('')
 const createPollingTimers = ref<Record<string, ReturnType<typeof setTimeout>>>({})
 const createGeneration = ref(0)
 const pendingCreateSandboxes = ref<Record<string, { placeholder: SandboxRecord; attempts: number; refreshFailures: number }>>({})
@@ -370,11 +379,8 @@ const consoleBodyRef = ref<HTMLElement | null>(null)
 let consoleEntryId = 0
 const snackbar = ref({ show: false, message: '', color: 'success' })
 
-const providerOptions = [
-  { title: 'CUA', value: 'cua' },
-  { title: 'Shipyard Neo', value: 'shipyard_neo' },
-  { title: 'Shipyard', value: 'shipyard' }
-]
+const providerOptions = ref<ProviderOption[]>([])
+const hasProviderOptions = computed(() => providerOptions.value.length > 0)
 
 const headers = computed(() => [
   { title: tm('headers.sandbox'), key: 'identity', sortable: false, width: '22%' },
@@ -562,6 +568,30 @@ async function loadSandboxes(options: { silent?: boolean } = {}): Promise<LoadSa
   }
 }
 
+async function loadProviders() {
+  try {
+    const res = await axios.get('/api/sandbox/providers', { params: { _t: Date.now() } })
+    if (res.data.status !== 'ok') {
+      providerOptions.value = []
+      createProvider.value = ''
+      return
+    }
+
+    const providers = (res.data.data?.providers || []) as SandboxProviderInfo[]
+    providerOptions.value = providers.map((provider) => ({
+      title: provider.provider_id,
+      value: provider.provider_id,
+    }))
+
+    if (!providerOptions.value.some((option) => option.value === createProvider.value)) {
+      createProvider.value = providerOptions.value[0]?.value || ''
+    }
+  } catch {
+    providerOptions.value = []
+    createProvider.value = ''
+  }
+}
+
 function sandboxApiPath(item: SandboxRecord | string, suffix = '') {
   const sandboxId = typeof item === 'string' ? item : item.sandbox_id
   return `/api/sandbox/${encodeURIComponent(sandboxId)}${suffix}`
@@ -725,6 +755,10 @@ function startCreatePolling(sandboxId: string, placeholder: SandboxRecord) {
 
 async function createSandbox() {
   const providerId = createProvider.value
+  if (!providerId) {
+    toast(tm('messages.operationFailed'), 'error')
+    return
+  }
   const sandboxName = createName.value || undefined
 
   creatingRequestPending.value = true
@@ -983,7 +1017,10 @@ async function scrollConsoleToBottom() {
   if (body) body.scrollTop = body.scrollHeight
 }
 
-onMounted(loadSandboxes)
+onMounted(async () => {
+  await loadProviders()
+  await loadSandboxes()
+})
 
 onUnmounted(() => {
   stopCreatePolling()

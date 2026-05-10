@@ -85,7 +85,7 @@ def test_sandbox_management_page_keeps_create_button_available_while_other_sandb
     assert 'prepend-icon="mdi-plus" @click="createDialog = true"' in content
     assert 'prepend-icon="mdi-plus" :disabled="creatingRequestPending"' not in content
     assert ':disabled="createFlowActive"' not in content
-    assert ":disabled=\"createProvider !== 'cua' || creatingRequestPending\"" in content
+    assert ':disabled="!hasProviderOptions || creatingRequestPending"' in content
 
 
 def test_sandbox_management_page_tracks_multiple_pending_creates_instead_of_single_id():
@@ -95,6 +95,16 @@ def test_sandbox_management_page_tracks_multiple_pending_creates_instead_of_sing
 
     assert "pendingCreateSandboxes" in content
     assert "pendingCreateSandboxId" not in content
+
+
+def test_sandbox_management_page_loads_provider_options_from_api():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "const providerOptions = [" not in content
+    assert "axios.get('/api/sandbox/providers'" in content
+    assert "providerOptions.value = providers.map(" in content
 
 
 def test_sandbox_management_page_does_not_allow_configure_while_creating():
