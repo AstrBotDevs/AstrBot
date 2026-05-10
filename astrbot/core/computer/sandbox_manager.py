@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from astrbot.api import logger
 from astrbot.core.computer.booters.base import ComputerBooter
-from astrbot.core.computer.sandbox_models import SandboxStatus
+from astrbot.core.computer.sandbox_models import SandboxRecord, SandboxStatus
 from astrbot.core.computer.sandbox_provider import SandboxProvider
 from astrbot.core.computer.sandbox_registry import SandboxRegistry
 from astrbot.core.star.context import Context
@@ -125,7 +125,6 @@ class SandboxManager:
         return {
             "sandbox_id": sandbox_id,
             "sandbox_name": sandbox_name,
-            "booter_type": provider_id,
             "provider": provider_id,
             "managed": True,
             "created_by_astrbot": True,
@@ -613,6 +612,7 @@ class SandboxManager:
     def list_sandboxes(self) -> list[dict]:
         records = []
         for record in self.registry.list_sandboxes():
+            record = SandboxRecord.from_dict(record).to_dict()
             if not record.get("managed"):
                 continue
             provider = self.providers.get(record.get("provider"))

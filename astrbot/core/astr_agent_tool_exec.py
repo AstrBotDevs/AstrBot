@@ -22,6 +22,7 @@ from astrbot.core.astr_main_agent_resources import (
 )
 from astrbot.core.computer.sandbox_tool_binding import (
     resolve_sandbox_provider_bindings,
+    tool_matches_sandbox_provider,
 )
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
@@ -287,6 +288,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
+        sandbox_cfg = provider_settings.get("sandbox", {})
+        current_provider = (
+            sandbox_cfg.get("booter") if isinstance(sandbox_cfg, dict) else None
+        )
         tool_mgr = (
             ctx.get_llm_tool_manager()
             if hasattr(ctx, "get_llm_tool_manager")
@@ -305,7 +310,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             for registered_tool in llm_tools.func_list:
                 if isinstance(registered_tool, HandoffTool):
                     continue
-                if registered_tool.active:
+                if registered_tool.active and tool_matches_sandbox_provider(
+                    registered_tool, runtime, current_provider
+                ):
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)

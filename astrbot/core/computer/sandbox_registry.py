@@ -90,7 +90,6 @@ class SandboxRegistry:
         *,
         sandbox_id: str,
         sandbox_name: str,
-        booter_type: str,
         provider: str,
         managed: bool,
         created_by_astrbot: bool,
@@ -116,7 +115,6 @@ class SandboxRegistry:
             {
                 "sandbox_id": sandbox_id,
                 "sandbox_name": sandbox_name,
-                "booter_type": booter_type,
                 "provider": provider,
                 "managed": managed,
                 "created_by_astrbot": created_by_astrbot,

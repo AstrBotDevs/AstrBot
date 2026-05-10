@@ -75,6 +75,7 @@ def register_sandbox_provider(
     if tools:
         registered: list[FunctionTool] = []
         for tool in tools:
+            tool.sandbox_provider_id = provider.provider_id
             llm_tools.func_list.append(tool)
             registered.append(tool)
         _provider_tools[provider.provider_id] = registered
@@ -623,23 +624,23 @@ async def get_booter(
             )
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
-    booter_type = sandbox_cfg.get("booter", "")
-    if not str(booter_type).strip():
+    provider_id = str(sandbox_cfg.get("booter", "")).strip()
+    if not provider_id:
         raise ValueError(
-            "Sandbox booter is not configured. Install and enable a sandbox provider plugin, then select it in provider_settings.sandbox.booter."
+            "Sandbox provider is not configured. Install and enable a sandbox provider plugin, then select it in provider_settings.sandbox.booter."
         )
 
     logger.info(
-        f"[Computer] Initializing booter: type={booter_type}, session={session_id}"
+        f"[Computer] Initializing sandbox provider: provider={provider_id}, session={session_id}"
     )
-    if booter_type in sandbox_manager.providers:
+    if provider_id in sandbox_manager.providers:
         return await sandbox_manager.get_or_create_booter(
             context,
             session_id,
-            booter_type,
+            provider_id,
         )
     raise ValueError(
-        f"Unknown booter type: {booter_type}. Install and enable a sandbox provider plugin, then select it in provider_settings.sandbox.booter."
+        f"Unknown sandbox provider: {provider_id}. Install and enable a sandbox provider plugin, then select it in provider_settings.sandbox.booter."
     )
 
 

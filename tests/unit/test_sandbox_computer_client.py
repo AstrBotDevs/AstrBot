@@ -93,6 +93,29 @@ async def test_registered_generic_provider_handles_booter(monkeypatch, tmp_path)
     ]
 
 
+def test_register_sandbox_provider_tags_provider_tools(monkeypatch, tmp_path):
+    from astrbot.core.agent.tool import FunctionTool
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={},
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    monkeypatch.setattr(computer_client, "sandbox_registry", manager.registry)
+    tool = FunctionTool(
+        name="generic_tool",
+        parameters={"type": "object", "properties": {}},
+        description="generic",
+    )
+
+    computer_client.register_sandbox_provider(FakeProvider(), tools=[tool])
+
+    assert tool.sandbox_provider_id == "generic"
+
+
 @pytest.mark.asyncio
 async def test_get_booter_prefers_current_sandbox_over_configured_provider(
     monkeypatch, tmp_path
@@ -253,7 +276,6 @@ def test_unregister_provider_rejects_active_managed_sandboxes(monkeypatch, tmp_p
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Generic 1",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -280,7 +302,6 @@ def test_unregister_provider_allows_force(monkeypatch, tmp_path):
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Generic 1",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -310,7 +331,6 @@ def test_unregister_provider_force_preserves_persistent_sandboxes(
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Generic 1",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -354,7 +374,6 @@ async def test_unregister_provider_force_closes_persistent_booters(
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Generic 1",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,

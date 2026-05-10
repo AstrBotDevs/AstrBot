@@ -385,7 +385,6 @@ async def test_sandbox_dashboard_lists_managed_sandboxes(
     manager.registry.upsert_sandbox(
         sandbox_id="sandbox-1",
         sandbox_name="Sandbox 1",
-        booter_type=provider.provider_id,
         provider=provider.provider_id,
         managed=True,
         created_by_astrbot=True,
@@ -462,7 +461,6 @@ async def test_sandbox_dashboard_create_rejects_duplicate_name(
     manager.registry.upsert_sandbox(
         sandbox_id="sandbox-1",
         sandbox_name="Named",
-        booter_type=provider.provider_id,
         provider=provider.provider_id,
         managed=True,
         created_by_astrbot=True,
@@ -504,7 +502,6 @@ async def test_sandbox_dashboard_sets_default_sandbox(
         manager.registry.upsert_sandbox(
             sandbox_id=sandbox_id,
             sandbox_name=sandbox_id,
-            booter_type=provider.provider_id,
             provider=provider.provider_id,
             managed=True,
             created_by_astrbot=True,
@@ -543,7 +540,6 @@ async def test_sandbox_dashboard_force_releases_busy_sandbox(
     manager.registry.upsert_sandbox(
         sandbox_id="sandbox-1",
         sandbox_name="Sandbox 1",
-        booter_type=provider.provider_id,
         provider=provider.provider_id,
         managed=True,
         created_by_astrbot=True,
@@ -601,7 +597,6 @@ async def test_sandbox_dashboard_runs_shell_in_managed_sandbox(
     manager.registry.upsert_sandbox(
         sandbox_id="sandbox-1",
         sandbox_name="Sandbox 1",
-        booter_type=provider.provider_id,
         provider=provider.provider_id,
         managed=True,
         created_by_astrbot=True,
@@ -659,7 +654,6 @@ async def test_sandbox_dashboard_shell_bypasses_lease_for_admin_access(
     manager.registry.upsert_sandbox(
         sandbox_id="sandbox-1",
         sandbox_name="Sandbox 1",
-        booter_type=provider.provider_id,
         provider=provider.provider_id,
         managed=True,
         created_by_astrbot=True,
@@ -712,7 +706,6 @@ async def test_sandbox_dashboard_captures_managed_sandbox_screenshot(
     manager.registry.upsert_sandbox(
         sandbox_id="sandbox-1",
         sandbox_name="Sandbox 1",
-        booter_type=provider.provider_id,
         provider=provider.provider_id,
         managed=True,
         created_by_astrbot=True,
@@ -767,7 +760,6 @@ async def test_sandbox_dashboard_screenshot_bypasses_lease_for_monitoring(
     manager.registry.upsert_sandbox(
         sandbox_id="sandbox-1",
         sandbox_name="Sandbox 1",
-        booter_type=provider.provider_id,
         provider=provider.provider_id,
         managed=True,
         created_by_astrbot=True,

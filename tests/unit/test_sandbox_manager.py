@@ -126,7 +126,6 @@ def test_manager_list_sandboxes_preserves_persisted_tool_names_without_provider(
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Generic",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -141,6 +140,42 @@ def test_manager_list_sandboxes_preserves_persisted_tool_names_without_provider(
     sandboxes = manager.list_sandboxes()
 
     assert sandboxes[0]["tool_names"] == ["persisted_tool"]
+
+
+def test_manager_list_sandboxes_does_not_emit_legacy_booter_type(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Generic"},
+    )
+
+    sandboxes = manager.list_sandboxes()
+
+    assert sandboxes[0]["provider"] == "generic"
+    assert "booter_type" not in sandboxes[0]
+
+
+def test_manager_list_sandboxes_migrates_legacy_booter_type_to_provider(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    manager.registry._payload["sandboxes"]["legacy-1"] = {
+        "sandbox_id": "legacy-1",
+        "sandbox_name": "Legacy",
+        "booter_type": "generic",
+        "managed": True,
+        "created_by_astrbot": True,
+        "connect_info": {"name": "Legacy"},
+    }
+
+    sandboxes = manager.list_sandboxes()
+
+    assert sandboxes[0]["provider"] == "generic"
+    assert "booter_type" not in sandboxes[0]
 
 
 @pytest.mark.asyncio
@@ -581,7 +616,6 @@ async def test_manager_revives_persistent_sandbox_for_observer_access(tmp_path):
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Persistent",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -607,7 +641,6 @@ async def test_manager_revives_persistent_sandbox_for_switch_access(tmp_path):
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Persistent",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -660,7 +693,6 @@ async def test_manager_does_not_revive_persistent_sandbox_without_provider_suppo
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Persistent",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -686,7 +718,6 @@ async def test_manager_persistent_reconnect_failure_restores_previous_status(tmp
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Persistent",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -720,7 +751,6 @@ async def test_manager_persistent_health_failure_marks_unknown_for_retry(tmp_pat
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Persistent",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -747,7 +777,6 @@ async def test_manager_revives_persistent_sandbox_for_tool_access(tmp_path):
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Persistent",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -774,7 +803,6 @@ async def test_manager_restores_persistent_sandboxes_on_startup(tmp_path):
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Persistent",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -802,7 +830,6 @@ async def test_manager_reconcile_on_startup_removes_stale_persistent_records(
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Persistent",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -828,7 +855,6 @@ async def test_manager_reconcile_on_startup_keeps_persistent_records_for_missing
     manager.registry.upsert_sandbox(
         sandbox_id="missing-1",
         sandbox_name="Persistent",
-        booter_type="missing",
         provider="missing",
         managed=True,
         created_by_astrbot=True,
@@ -853,7 +879,6 @@ async def test_manager_takeover_rejects_non_running_sandbox(tmp_path):
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Broken",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -879,7 +904,6 @@ async def test_manager_reconcile_on_startup_keeps_valid_persistent_records(
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Persistent",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -939,7 +963,6 @@ def test_manager_update_sandbox_config_rejects_duplicate_name(tmp_path):
     first = manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="First",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -950,7 +973,6 @@ def test_manager_update_sandbox_config_rejects_duplicate_name(tmp_path):
     second = manager.registry.upsert_sandbox(
         sandbox_id="generic-2",
         sandbox_name="Second",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -977,7 +999,6 @@ def test_manager_update_sandbox_config_rejects_persistent_for_unsupported_provid
     created = manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="First",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -1005,7 +1026,6 @@ def test_manager_update_sandbox_config_rejects_persistent_for_missing_provider(
     created = manager.registry.upsert_sandbox(
         sandbox_id="missing-1",
         sandbox_name="Missing",
-        booter_type="missing",
         provider="missing",
         managed=True,
         created_by_astrbot=True,

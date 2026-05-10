@@ -715,6 +715,138 @@ class TestEnsurePersonaAndSkills:
         assert req.func_tool is not None
 
     @pytest.mark.asyncio
+    async def test_ensure_persona_filters_other_sandbox_provider_tools(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        cua_tool = FunctionTool(
+            name="astrbot_cua_screenshot",
+            parameters={"type": "object", "properties": {}},
+            description="CUA screenshot",
+        )
+        cua_tool.sandbox_provider_id = "cua"
+        generic_tool = FunctionTool(
+            name="regular_tool",
+            parameters={"type": "object", "properties": {}},
+            description="regular",
+        )
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet([cua_tool, generic_tool])
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
+
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(
+            req,
+            {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "shipyard_neo"},
+            },
+            mock_context,
+            mock_event,
+        )
+
+        assert req.func_tool is not None
+        assert "regular_tool" in req.func_tool.names()
+        assert "astrbot_cua_screenshot" not in req.func_tool.names()
+
+    @pytest.mark.asyncio
+    async def test_ensure_persona_keeps_current_sandbox_provider_tools(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        cua_tool = FunctionTool(
+            name="astrbot_cua_screenshot",
+            parameters={"type": "object", "properties": {}},
+            description="CUA screenshot",
+        )
+        cua_tool.sandbox_provider_id = "cua"
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet([cua_tool])
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
+
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(
+            req,
+            {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "cua"},
+            },
+            mock_context,
+            mock_event,
+        )
+
+        assert req.func_tool is not None
+        assert "astrbot_cua_screenshot" in req.func_tool.names()
+
+    @pytest.mark.asyncio
+    async def test_handoff_all_tools_filters_other_sandbox_provider_tools(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        cua_tool = FunctionTool(
+            name="astrbot_cua_screenshot",
+            parameters={"type": "object", "properties": {}},
+            description="CUA screenshot",
+        )
+        cua_tool.sandbox_provider_id = "cua"
+        generic_tool = FunctionTool(
+            name="regular_tool",
+            parameters={"type": "object", "properties": {}},
+            description="regular",
+        )
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.func_list = [cua_tool, generic_tool]
+        tmgr.get_full_tool_set.return_value = ToolSet([cua_tool, generic_tool])
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
+        mock_context.persona_manager.get_persona_v3_by_id = MagicMock(
+            return_value={"name": "default", "tools": None}
+        )
+        handoff = MagicMock()
+        handoff.name = "transfer_to_planner"
+        mock_context.subagent_orchestrator = MagicMock(handoffs=[handoff])
+        mock_context.get_config.return_value = {
+            "subagent_orchestrator": {
+                "main_enable": True,
+                "remove_main_duplicate_tools": True,
+                "agents": [
+                    {
+                        "name": "planner",
+                        "enabled": True,
+                        "persona_id": "default",
+                    }
+                ],
+            }
+        }
+
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(
+            req,
+            {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "shipyard_neo"},
+            },
+            mock_context,
+            mock_event,
+        )
+
+        assert req.func_tool is not None
+        assert "transfer_to_planner" in req.func_tool.names()
+        assert "regular_tool" not in req.func_tool.names()
+        assert "astrbot_cua_screenshot" not in req.func_tool.names()
+
+    @pytest.mark.asyncio
     async def test_subagent_dedupe_uses_default_persona_tools(
         self, mock_event, mock_context
     ):

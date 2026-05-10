@@ -15,7 +15,7 @@ from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
-from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
@@ -29,6 +29,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
+from astrbot.core.computer.sandbox_tool_binding import tool_matches_sandbox_provider
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
@@ -406,6 +407,21 @@ def _filter_skills_for_current_config(
     return filtered
 
 
+def _tool_matches_current_sandbox_provider(tool: FunctionTool, cfg: dict) -> bool:
+    runtime = str(cfg.get("computer_use_runtime", "local"))
+    sandbox_cfg = cfg.get("sandbox", {})
+    current_provider = sandbox_cfg.get("booter") if isinstance(sandbox_cfg, dict) else None
+    return tool_matches_sandbox_provider(tool, runtime, current_provider)
+
+
+def _filter_tools_for_current_config(toolset: ToolSet, cfg: dict) -> ToolSet:
+    filtered = ToolSet()
+    for tool in toolset:
+        if _tool_matches_current_sandbox_provider(tool, cfg):
+            filtered.add_tool(tool)
+    return filtered
+
+
 async def _ensure_persona_and_skills(
     req: ProviderRequest,
     cfg: dict,
@@ -470,6 +486,7 @@ async def _ensure_persona_and_skills(
     # inject toolset in the persona
     if (persona and persona.get("tools") is None) or not persona:
         persona_toolset = tmgr.get_full_tool_set()
+        persona_toolset = _filter_tools_for_current_config(persona_toolset, cfg)
         for tool in list(persona_toolset):
             if not tool.active:
                 persona_toolset.remove_tool(tool.name)
@@ -478,7 +495,11 @@ async def _ensure_persona_and_skills(
         if persona["tools"]:
             for tool_name in persona["tools"]:
                 tool = tmgr.get_func(tool_name)
-                if tool and tool.active:
+                if (
+                    tool
+                    and tool.active
+                    and _tool_matches_current_sandbox_provider(tool, cfg)
+                ):
                     persona_toolset.add_tool(tool)
     if not req.func_tool:
         req.func_tool = persona_toolset
@@ -500,13 +521,15 @@ async def _ensure_persona_and_skills(
                 if a.get("enabled", True) is False:
                     continue
                 persona_tools = None
+                persona_tools_configured = False
                 pid = a.get("persona_id")
                 if pid:
                     persona = plugin_context.persona_manager.get_persona_v3_by_id(pid)
                     if persona is not None:
                         persona_tools = persona.get("tools")
+                        persona_tools_configured = "tools" in persona
                 tools = a.get("tools", [])
-                if persona_tools is not None:
+                if persona_tools_configured:
                     tools = persona_tools
                 if tools is None:
                     assigned_tools.update(
@@ -514,6 +537,7 @@ async def _ensure_persona_and_skills(
                             tool.name
                             for tool in tmgr.func_list
                             if not isinstance(tool, HandoffTool)
+                            and _tool_matches_current_sandbox_provider(tool, cfg)
                         ]
                     )
                     continue

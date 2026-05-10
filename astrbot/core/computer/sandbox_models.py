@@ -24,7 +24,6 @@ class SandboxStatus(str, Enum):
 class SandboxRecord:
     sandbox_id: str
     sandbox_name: str
-    booter_type: str
     provider: str
     managed: bool
     created_by_astrbot: bool
@@ -58,12 +57,17 @@ class SandboxRecord:
         return value
 
     @classmethod
+    def _required_provider(cls, data: dict[str, Any]) -> str:
+        if "provider" in data:
+            return cls._required_string(data, "provider")
+        return cls._required_string(data, "booter_type")
+
+    @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SandboxRecord:
         return cls(
             sandbox_id=cls._required_string(data, "sandbox_id"),
             sandbox_name=cls._required_string(data, "sandbox_name"),
-            booter_type=cls._required_string(data, "booter_type"),
-            provider=cls._required_string(data, "provider"),
+            provider=cls._required_provider(data),
             managed=bool(data["managed"]),
             created_by_astrbot=bool(data["created_by_astrbot"]),
             is_default=bool(data.get("is_default", False)),
@@ -96,7 +100,6 @@ class SandboxRecord:
         return {
             "sandbox_id": self.sandbox_id,
             "sandbox_name": self.sandbox_name,
-            "booter_type": self.booter_type,
             "provider": self.provider,
             "managed": self.managed,
             "created_by_astrbot": self.created_by_astrbot,

@@ -16,7 +16,6 @@ def _upsert(registry, sandbox_id="generic-1", provider="generic"):
     return registry.upsert_sandbox(
         sandbox_id=sandbox_id,
         sandbox_name=f"Sandbox {sandbox_id}",
-        booter_type=provider,
         provider=provider,
         managed=True,
         created_by_astrbot=True,
@@ -114,7 +113,6 @@ def test_registry_reconcile_startup_marks_creating_as_error(tmp_path):
     registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Sandbox generic-1",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,
@@ -134,7 +132,6 @@ def test_registry_reconcile_startup_marks_persistent_running_unknown(tmp_path):
     registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Sandbox generic-1",
-        booter_type="generic",
         provider="generic",
         managed=True,
         created_by_astrbot=True,

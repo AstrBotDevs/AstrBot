@@ -57,7 +57,6 @@
             <template #item.provider="{ item }">
               <div class="d-flex flex-column ga-1 py-2">
                 <v-chip size="small" color="primary" variant="tonal" class="provider-chip">{{ item.provider || tm('labels.unknown') }}</v-chip>
-                <span class="text-caption text-medium-emphasis">{{ item.booter_type || tm('labels.unknown') }}</span>
               </div>
             </template>
 
@@ -110,7 +109,6 @@
         <v-divider class="mb-4" />
         <v-list density="compact">
           <v-list-item :title="tm('fields.provider')" :subtitle="selectedSandboxRecord.provider" />
-          <v-list-item :title="tm('fields.booterType')" :subtitle="selectedSandboxRecord.booter_type" />
           <v-list-item :title="tm('fields.status')" :subtitle="statusLabel(selectedSandboxRecord)" />
           <v-list-item :title="tm('fields.owner')" :subtitle="selectedSandboxRecord.owner_session_id || '-'" />
           <v-list-item :title="tm('fields.controller')" :subtitle="selectedSandboxRecord.controller_session_id || '-'" />
@@ -288,7 +286,6 @@ import { useModuleI18n } from '@/i18n/composables'
 type SandboxRecord = {
   sandbox_id: string
   sandbox_name?: string
-  booter_type?: string
   provider?: string
   managed?: boolean
   created_by_astrbot?: boolean
@@ -387,7 +384,7 @@ const headers = computed(() => [
   { title: tm('headers.actions'), key: 'actions', sortable: false, align: 'end' as const, width: 520 }
 ])
 
-const providerCount = computed(() => new Set(sandboxes.value.map((item) => item.provider || item.booter_type || 'unknown')).size)
+const providerCount = computed(() => new Set(sandboxes.value.map((item) => item.provider || 'unknown')).size)
 const busyCount = computed(() => sandboxes.value.filter((item) => !!item.controller_session_id).length)
 const defaultCount = computed(() => sandboxes.value.filter((item) => item.is_default).length)
 const canSaveConfig = computed(() => configSandboxName.value.trim().length > 0)

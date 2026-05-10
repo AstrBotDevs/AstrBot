@@ -173,6 +173,15 @@ def test_sandbox_management_page_surfaces_unknown_status_key():
     assert "tm('labels.unknownStatus', { status: key })" in content
 
 
+def test_sandbox_management_page_does_not_render_legacy_booter_type():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "booter_type" not in content
+    assert "showBooterTypeCaption" not in content
+
+
 def test_sandbox_i18n_uses_status_and_idle_labels():
     zh = (ROOT / "dashboard/src/i18n/locales/zh-CN/features/sandbox.json").read_text(
         encoding="utf-8"

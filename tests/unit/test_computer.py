@@ -392,7 +392,7 @@ class TestComputerClient:
 
     @pytest.mark.asyncio
     async def test_get_booter_unknown_type(self):
-        """Test get_booter with unknown booter type raises ValueError."""
+        """Test get_booter with unknown sandbox provider raises ValueError."""
         from astrbot.core.computer import computer_client
 
         mock_context = MagicMock()
@@ -409,7 +409,7 @@ class TestComputerClient:
 
         with pytest.raises(ValueError) as exc_info:
             await computer_client.get_booter(mock_context, "test-session-id")
-        assert "Unknown booter type" in str(exc_info.value)
+        assert "Unknown sandbox provider" in str(exc_info.value)
         assert "Install and enable a sandbox provider plugin" in str(exc_info.value)
 
     @pytest.mark.asyncio
@@ -431,7 +431,7 @@ class TestComputerClient:
 
         with pytest.raises(ValueError) as exc_info:
             await computer_client.get_booter(mock_context, "test-session-id")
-        assert "Sandbox booter is not configured" in str(exc_info.value)
+        assert "Sandbox provider is not configured" in str(exc_info.value)
 
 
 class TestSyncSkillsToSandbox:

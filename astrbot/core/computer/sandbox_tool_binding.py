@@ -21,3 +21,13 @@ def resolve_sandbox_provider_bindings(
         if tool and getattr(tool, "active", True):
             tools.append(tool)
     return provider_info, tools
+
+
+def tool_matches_sandbox_provider(tool: Any, runtime: str, provider_id: str | None) -> bool:
+    tool_provider = getattr(tool, "sandbox_provider_id", None)
+    if not tool_provider:
+        return True
+    if runtime != "sandbox":
+        return False
+    normalized_provider_id = "" if provider_id is None else str(provider_id).lower()
+    return str(tool_provider).lower() == normalized_provider_id
