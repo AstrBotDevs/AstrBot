@@ -43,7 +43,9 @@ def resolve_effective_sandbox_provider_id(
     return fallback_provider_id or None
 
 
-def tool_matches_sandbox_provider(tool: Any, runtime: str, provider_id: str | None) -> bool:
+def tool_matches_sandbox_provider(
+    tool: Any, runtime: str, provider_id: str | None
+) -> bool:
     tool_provider = getattr(tool, "sandbox_provider_id", None)
     if not tool_provider:
         return True

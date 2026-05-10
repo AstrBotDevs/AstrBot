@@ -169,62 +169,6 @@
         "sandbox": {
           "booter": {
             "description": "Sandbox Environment Driver"
-          },
-          "shipyard_neo_endpoint": {
-            "description": "Shipyard Neo API Endpoint",
-            "hint": "API address for the Bay / Shipyard Neo service."
-          },
-          "shipyard_neo_access_token": {
-            "description": "Shipyard Neo Access Token",
-            "hint": "Bay API Key (sk-bay-...). Leave empty for auto-discovery from credentials.json."
-          },
-          "shipyard_neo_profile": {
-            "description": "Shipyard Neo Profile",
-            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default."
-          },
-          "shipyard_neo_ttl": {
-            "description": "Shipyard Neo Sandbox TTL",
-            "hint": "Sandbox time-to-live in seconds. Default is 3600."
-          },
-          "cua_image": {
-            "description": "CUA Image",
-            "hint": "CUA sandbox image or OS type. Defaults to linux. Supported values depend on the installed CUA SDK."
-          },
-          "cua_os_type": {
-            "description": "CUA OS Type",
-            "hint": "CUA sandbox operating system type. Defaults to linux."
-          },
-          "cua_ttl": {
-            "description": "CUA Sandbox TTL",
-            "hint": "CUA sandbox time-to-live in seconds. Default is 3600."
-          },
-          "cua_telemetry_enabled": {
-            "description": "CUA Telemetry",
-            "hint": "Allow the CUA SDK to send telemetry data. Disabled by default."
-          },
-          "cua_local": {
-            "description": "CUA Local Sandbox",
-            "hint": "Prefer a local CUA sandbox. Enabled by default to avoid requiring CUA_API_KEY for cloud sandboxes. Disable this to use CUA cloud sandboxes."
-          },
-          "cua_api_key": {
-            "description": "CUA API Key",
-            "hint": "CUA cloud sandbox API key. Required only when local sandbox is disabled. You can also provide it via the CUA_API_KEY environment variable."
-          },
-          "shipyard_endpoint": {
-            "description": "Shipyard API Endpoint",
-            "hint": "API address for the Shipyard service."
-          },
-          "shipyard_access_token": {
-            "description": "Shipyard Access Token",
-            "hint": "Access token for accessing Shipyard service."
-          },
-          "shipyard_ttl": {
-            "description": "Shipyard Session TTL",
-            "hint": "Session time-to-live in seconds. Default is 3600."
-          },
-          "shipyard_max_sessions": {
-            "description": "Shipyard Max Sessions",
-            "hint": "Maximum number of Shipyard sessions a single instance can handle. Default is 10."
           }
         }
       }

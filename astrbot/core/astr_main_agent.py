@@ -501,7 +501,9 @@ async def _ensure_persona_and_skills(
     # inject toolset in the persona
     if (persona and persona.get("tools") is None) or not persona:
         persona_toolset = tmgr.get_full_tool_set()
-        persona_toolset = _filter_tools_for_current_config(persona_toolset, cfg, session_id)
+        persona_toolset = _filter_tools_for_current_config(
+            persona_toolset, cfg, session_id
+        )
         for tool in list(persona_toolset):
             if not tool.active:
                 persona_toolset.remove_tool(tool.name)

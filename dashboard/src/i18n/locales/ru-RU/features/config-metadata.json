@@ -169,62 +169,6 @@
                 "sandbox": {
                     "booter": {
                         "description": "Драйвер среды песочницы"
-                    },
-                    "shipyard_neo_endpoint": {
-                        "description": "Эндпоинт Shipyard Neo API",
-                        "hint": "Адрес Bay API, по умолчанию http://127.0.0.1:8114."
-                    },
-                    "shipyard_neo_access_token": {
-                        "description": "Токен доступа Shipyard Neo",
-                        "hint": "Ключ Bay API (sk-bay-...). Оставьте пустым для автопоиска в credentials.json."
-                    },
-                    "shipyard_neo_profile": {
-                        "description": "Профиль Shipyard Neo",
-                        "hint": "Профиль песочницы, например, python-default."
-                    },
-                    "shipyard_neo_ttl": {
-                        "description": "TTL песочницы Shipyard Neo",
-                        "hint": "Время жизни песочницы в секундах."
-                    },
-                    "cua_image": {
-                        "description": "Образ CUA",
-                        "hint": "Образ или тип ОС песочницы CUA. По умолчанию linux. Поддерживаемые значения зависят от установленного CUA SDK."
-                    },
-                    "cua_os_type": {
-                        "description": "Тип ОС CUA",
-                        "hint": "Тип операционной системы песочницы CUA. По умолчанию linux."
-                    },
-                    "cua_idle_timeout": {
-                        "description": "Таймаут простоя CUA",
-                        "hint": "Таймаут простоя сессии песочницы CUA в секундах. Если значение больше 0, AstrBot автоматически завершит неактивную песочницу CUA после указанного времени бездействия; 0 отключает автоочистку."
-                    },
-                    "cua_telemetry_enabled": {
-                        "description": "Телеметрия CUA",
-                        "hint": "Разрешить CUA SDK отправлять телеметрию. По умолчанию выключено."
-                    },
-                    "cua_local": {
-                        "description": "Локальная песочница CUA",
-                        "hint": "Предпочитать локальную песочницу CUA. Включено по умолчанию, чтобы не требовать CUA_API_KEY для облачных песочниц. Отключите для использования облачных песочниц CUA."
-                    },
-                    "cua_api_key": {
-                        "description": "CUA API Key",
-                        "hint": "API key для облачной песочницы CUA. Требуется только если локальная песочница отключена. Также можно передать через переменную окружения CUA_API_KEY."
-                    },
-                    "shipyard_endpoint": {
-                        "description": "Эндпоинт Shipyard API",
-                        "hint": "Адрес API для доступа к сервису Shipyard."
-                    },
-                    "shipyard_access_token": {
-                        "description": "Токен доступа Shipyard",
-                        "hint": "Токен доступа для работы с сервисом Shipyard."
-                    },
-                    "shipyard_ttl": {
-                        "description": "TTL сессии Shipyard",
-                        "hint": "Время жизни сессии в секундах."
-                    },
-                    "shipyard_max_sessions": {
-                        "description": "Макс. количество сессий Shipyard",
-                        "hint": "Максимальное количество сессий Shipyard, которое может поддерживать экземпляр."
                     }
                 }
             }

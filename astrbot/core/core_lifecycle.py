@@ -296,11 +296,12 @@ class AstrBotCoreLifecycle:
 
     async def _restore_persistent_sandboxes_background(self) -> None:
         try:
-            restored, deleted = (
-                await computer_client.sandbox_manager.restore_persistent_sandboxes(
-                    self.star_context,
-                    per_sandbox_timeout=30.0,
-                )
+            (
+                restored,
+                deleted,
+            ) = await computer_client.sandbox_manager.restore_persistent_sandboxes(
+                self.star_context,
+                per_sandbox_timeout=30.0,
             )
             logger.info(
                 "Persistent sandbox restore finished: restored=%d deleted=%d",
