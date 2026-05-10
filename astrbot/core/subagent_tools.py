@@ -18,7 +18,6 @@ from astrbot.core.subagent_manager import (
     SubAgentConfig,
     SubAgentManager,
 )
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
 @dataclass
@@ -132,12 +131,13 @@ class CreateSubAgentTool(FunctionTool):
 
         if not name:
             return "Error: subagent name required"
-        # 验证名称格式：只允许英文字母、数字和下划线，长度限制
-        if not re.match(r"^[a-zA-Z][a-zA-Z0-9_]{0,31}$", name):
+        # 验证名称格式：只允许英文字母、数字和下划线，长度限制；避免Windows保留名
+        SAFE_IDENTIFIER = re.compile(
+            r"^(?!^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$)[a-zA-Z][a-zA-Z0-9_]{0,32}$",
+            re.IGNORECASE,
+        )
+        if not bool(SAFE_IDENTIFIER.match(name)):
             return "Error: SubAgent name must start with letter, contain only letters/numbers/underscores, max 32 characters"
-
-        if name.startswith("__") and name.endswith("__"):
-            return "Error: SubAgent name cannot start and end with double underscores"
 
         system_prompt = kwargs.get("system_prompt", "")
         tools = kwargs.get("tools", {})
@@ -145,9 +145,8 @@ class CreateSubAgentTool(FunctionTool):
         workdir = kwargs.get("workdir")
 
         session_id = context.context.event.unified_msg_origin
-        # 工作路径如果非法，回退到该session的默认工作路径
-        if workdir is None or (not self._check_path_safety(workdir)):
-            workdir = get_astrbot_temp_path()
+        if not self._check_path_safety(workdir):
+            workdir = None
         config = SubAgentConfig(
             name=name,
             system_prompt=system_prompt,

@@ -7,15 +7,18 @@ dynamically created subagents at runtime.
 
 from __future__ import annotations
 
+import os.path
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.astr_main_agent_resources import LLM_SAFETY_MODE_SYSTEM_PROMPT
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
 
 
 @dataclass
@@ -109,7 +112,7 @@ Create sub-agents ONLY when:
     )
     _CREATE_GUIDE_PROMPT = f"""## Workflow: Plan → Create → Delegate → Collect → Cleanup
 ### 1. Create Sub-agent
-**Name**: 3 to 32 characters (letters, numbers, or underscores), starting with a letter.
+**Name**: 1 to 32 characters (letters, numbers, or underscores), starting with a letter.
 **Required fields:**
 | Field | Description |
 |-------|-------------|
@@ -602,15 +605,26 @@ Create sub-agents ONLY when:
     def _build_workdir_prompt(cls, session_id: str, agent_name: str = None) -> str:
         """为subagent注入工作目录信息"""
         session = cls.get_session(session_id)
+        normalized_umo = (
+            re.sub(r"[^A-Za-z0-9._-]+", "_", session_id.strip()) or "unknown"
+        )
+
         if not session:
             return ""
         try:
             workdir = session.subagents[agent_name].workdir
             if workdir is None:
-                workdir = get_astrbot_temp_path()
-        except Exception:
-            workdir = get_astrbot_temp_path()
+                workdir = (
+                    Path(get_astrbot_workspaces_path()) / normalized_umo / agent_name
+                ).resolve(strict=False)
 
+        except Exception:
+            workdir = (
+                Path(get_astrbot_workspaces_path()) / normalized_umo / agent_name
+            ).resolve(strict=False)
+
+        if not os.path.exists(workdir):
+            os.mkdir(workdir)
         workdir_prompt = (
             "# Working Directory\n"
             + f"Your working directory is `{workdir}`. Unless specified by the user, all generated files are saved by default in this directory.\n"
