@@ -140,6 +140,25 @@ def test_sandbox_management_page_splits_running_into_busy_and_available_labels()
     assert "return hasController(item) ? 'busy' : 'available'" in content
 
 
+def test_sandbox_management_page_confirms_dangerous_console_commands():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "function isDangerousConsoleCommand" in content
+    assert "window.confirm(tm('console.dangerConfirm'" in content
+    assert "rm\\s+(?:-" in content
+    assert "(?:--\\s+)?" in content
+
+
+def test_sandbox_management_page_surfaces_unknown_status_key():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "tm('labels.unknownStatus', { status: key })" in content
+
+
 def test_sandbox_i18n_uses_status_and_idle_labels():
     zh = (ROOT / "dashboard/src/i18n/locales/zh-CN/features/sandbox.json").read_text(
         encoding="utf-8"
@@ -150,5 +169,9 @@ def test_sandbox_i18n_uses_status_and_idle_labels():
 
     assert '"status": "状态"' in zh
     assert '"available": "空闲"' in zh
+    assert '"unknownStatus": "未知状态：{status}"' in zh
     assert '"status": "Status"' in en
     assert '"available": "Idle"' in en
+    assert '"unknownStatus": "Unknown status: {status}"' in en
+    assert '"dangerConfirm"' in zh
+    assert '"dangerConfirm"' in en

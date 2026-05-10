@@ -399,6 +399,12 @@ const selectedSandboxRecord = computed(() => {
 const CREATE_POLL_INTERVAL_MS = 2000
 const CREATE_POLL_MAX_ATTEMPTS = 60
 const CREATE_POLL_MAX_REFRESH_FAILURES = 3
+const DANGEROUS_CONSOLE_COMMAND_PATTERNS = [
+  /(^|[;&|]\s*)rm\s+(?:-[\w-]*r[\w-]*f[\w-]*|-[\w-]*f[\w-]*r[\w-]*)\s+(?:--\s+)?(?:\/(?:\S*)?|~(?:\S*)?|\$HOME(?:\S*)?)(?:\s|$)/i,
+  /(^|[;&|]\s*)mkfs(?:\.[\w-]+)?\s+/,
+  /(^|[;&|]\s*)dd\s+[^\n]*(?:of=\/dev\/|of=\/)/,
+  /(^|[;&|]\s*):\(\)\s*\{\s*:\|:\s*&\s*\}\s*;/,
+]
 
 function toast(message: string, color: 'success' | 'error' | 'warning' = 'success') {
   snackbar.value = { show: true, message, color }
@@ -437,7 +443,7 @@ function statusLabel(item?: SandboxRecord | string | null) {
     stopped: tm('labels.stopped'),
     unknown: tm('labels.unknown'),
   }
-  return labels[key] || key
+  return labels[key] || tm('labels.unknownStatus', { status: key })
 }
 
 function statusColor(item?: SandboxRecord | string | null) {
@@ -881,6 +887,7 @@ async function screenshotSandbox(item: SandboxRecord) {
 async function runConsoleCommand() {
   if (consoleRunning.value || !consoleSandbox.value || !consoleCommand.value.trim()) return
   const command = consoleCommand.value.trim()
+  if (isDangerousConsoleCommand(command) && !window.confirm(tm('console.dangerConfirm', { command }))) return
   const cwd = consoleCwd.value
   const sandboxId = consoleSandbox.value.sandbox_id
   const entry: ConsoleHistoryEntry = {
@@ -932,6 +939,11 @@ async function runConsoleCommand() {
     await nextTick()
     focusConsoleInput()
   }
+}
+
+function isDangerousConsoleCommand(command: string) {
+  const normalized = command.trim()
+  return DANGEROUS_CONSOLE_COMMAND_PATTERNS.some((pattern) => pattern.test(normalized))
 }
 
 function quoteForShell(value: string) {

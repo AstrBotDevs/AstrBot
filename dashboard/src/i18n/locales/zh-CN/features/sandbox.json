@@ -36,7 +36,8 @@
         "running": "运行中",
         "error": "异常",
         "stopping": "销毁中",
-        "stopped": "已停止"
+        "stopped": "已停止",
+        "unknownStatus": "未知状态：{status}"
     },
     "headers": {
         "sandbox": "沙盒",
@@ -77,7 +78,8 @@
         "run": "执行命令",
         "output": "执行结果",
         "empty": "尚未执行命令。",
-        "running": "执行中..."
+        "running": "执行中...",
+        "dangerConfirm": "该命令可能破坏沙盒数据：{command}\n确定继续执行吗？"
     },
     "config": {
         "title": "沙盒配置",

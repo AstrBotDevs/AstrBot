@@ -61,6 +61,10 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
+    _runtime_computer_tools_cache: dict[
+        tuple[int, str, str], dict[str, FunctionTool]
+    ] = {}
+
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
@@ -201,6 +205,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         booter: str | None = None,
     ) -> dict[str, FunctionTool]:
         booter = "" if booter is None else str(booter).lower()
+        cache_key = (id(tool_mgr), runtime, booter)
+        if cache_key in cls._runtime_computer_tools_cache:
+            return cls._runtime_computer_tools_cache[cache_key]
         if runtime == "sandbox":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
             list_sandboxes_tool = tool_mgr.get_builtin_tool(ListSandboxesTool)
@@ -245,6 +252,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             )
             for provider_tool in provider_tools:
                 tools[provider_tool.name] = provider_tool
+            cls._runtime_computer_tools_cache[cache_key] = tools
             return tools
         if runtime == "local":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
@@ -253,7 +261,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
             edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
             grep_tool = tool_mgr.get_builtin_tool(GrepTool)
-            return {
+            tools = {
                 shell_tool.name: shell_tool,
                 python_tool.name: python_tool,
                 read_tool.name: read_tool,
@@ -261,6 +269,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 edit_tool.name: edit_tool,
                 grep_tool.name: grep_tool,
             }
+            cls._runtime_computer_tools_cache[cache_key] = tools
+            return tools
         return {}
 
     @classmethod

@@ -1797,3 +1797,30 @@ class TestApplySandboxTools:
         assert "astrbot_destroy_sandbox" in tools
         assert "astrbot_screenshot_sandbox" in tools
         assert "astrbot_copy_file_between_sandboxes" in tools
+
+    def test_runtime_computer_tools_are_cached_per_runtime_and_booter(self):
+        tool_mgr = MagicMock()
+
+        def get_builtin_tool(cls, **kwargs):
+            del kwargs
+            return cls()
+
+        tool_mgr.get_builtin_tool.side_effect = get_builtin_tool
+        tool_mgr.get_func.side_effect = lambda name: None
+        ama.FunctionToolExecutor._runtime_computer_tools_cache.clear()
+
+        with patch(
+            "astrbot.core.computer.computer_client.get_sandbox_provider_info",
+            return_value={"tool_names": []},
+        ) as provider_info:
+            first = ama.FunctionToolExecutor._get_runtime_computer_tools(
+                "sandbox", tool_mgr, "cua"
+            )
+            call_count = tool_mgr.get_builtin_tool.call_count
+            second = ama.FunctionToolExecutor._get_runtime_computer_tools(
+                "sandbox", tool_mgr, "cua"
+            )
+
+        assert first is second
+        assert tool_mgr.get_builtin_tool.call_count == call_count
+        provider_info.assert_called_once()
