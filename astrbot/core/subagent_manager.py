@@ -629,7 +629,6 @@ Create sub-agents ONLY when:
             "# Working Directory\n"
             + f"Your working directory is `{workdir}`. Unless specified by the user, all generated files are saved by default in this directory.\n"
         )
-
         return workdir_prompt
 
     @classmethod
@@ -661,8 +660,8 @@ Create sub-agents ONLY when:
             "## Safety\n"
             f"{LLM_SAFETY_MODE_SYSTEM_PROMPT}"
             "## Output Guidelines\n"
-            "- If output exceeds 2000 chars, save to file. Summarize in your response and provide the file path.\n"
-            "- Mark all generated code/documents with your name and timestamp.\n"
+            "- If output is long, save it to file. Summarize in your response and provide the file path.\n"
+            "- Mark all generated code/documents with your name and timestamp (if given).\n"
         )
 
     @classmethod
