@@ -305,11 +305,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         skill_names: list[str] | None,
         runtime: str,
     ) -> str:
-        system_prompt = instructions or ""
         skills_prompt = cls._build_handoff_skills_prompt(skill_names, runtime)
-        if skills_prompt:
-            system_prompt += f"\n{skills_prompt}\n"
-        return system_prompt
+        parts = [
+            part.strip()
+            for part in (instructions, skills_prompt)
+            if isinstance(part, str) and part.strip()
+        ]
+        return "\n\n".join(parts)
 
     @classmethod
     def _build_handoff_skills_prompt(
