@@ -15,6 +15,9 @@ class FakeProvider:
     tool_names = {"generic_tool"}
     system_prompt = "Use provider-specific sandbox rules."
 
+    def __init__(self):
+        self.created = []
+
     def build_create_config(self, context, session_id):
         return {}
 
@@ -28,6 +31,7 @@ class FakeProvider:
         return 0
 
     async def create_booter(self, context, session_id, sandbox_id, config):
+        self.created.append((session_id, sandbox_id, config))
         return FakeBooter()
 
     async def destroy_booter(self, booter, record):
@@ -37,6 +41,14 @@ class FakeProvider:
 class OtherFakeProvider(FakeProvider):
     provider_id = "other"
     capabilities = {"filesystem", "python"}
+
+    async def create_booter(self, context, session_id, sandbox_id, config):
+        self.created.append((session_id, sandbox_id, config))
+        return OtherFakeBooter()
+
+
+class OtherFakeBooter(FakeBooter):
+    pass
 
 
 class FakeContext:
@@ -76,6 +88,31 @@ async def test_registered_generic_provider_handles_booter(monkeypatch, tmp_path)
             "system_prompt": "Use provider-specific sandbox rules.",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_booter_prefers_current_sandbox_over_configured_provider(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    generic = FakeProvider()
+    other = OtherFakeProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={generic.provider_id: generic, other.provider_id: other},
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    monkeypatch.setattr(computer_client, "sandbox_registry", manager.registry)
+    current = await manager.create_sandbox(None, "session-a", "other")
+
+    booter = await computer_client.get_booter(FakeContext(), "session-a")
+
+    assert isinstance(booter, OtherFakeBooter)
+    assert manager.registry.get_current_sandbox_id("session-a") == current["sandbox_id"]
+    assert len(generic.created) == 0
 
 
 def test_computer_client_does_not_expose_legacy_session_cache():

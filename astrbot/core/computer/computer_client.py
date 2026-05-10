@@ -594,6 +594,17 @@ async def get_booter(
     elif runtime == "none":
         raise RuntimeError("Sandbox runtime is disabled by configuration.")
 
+    current_sandbox_id = sandbox_manager.registry.get_current_sandbox_id(session_id)
+    if current_sandbox_id:
+        current_record = sandbox_manager.registry.get_sandbox(current_sandbox_id)
+        if current_record and current_record.get("managed"):
+            return await sandbox_manager.get_observer_booter_by_id(
+                current_sandbox_id,
+                session_id,
+                require_lease=True,
+                context=context,
+            )
+
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
     booter_type = sandbox_cfg.get("booter", "")
     if not str(booter_type).strip():
