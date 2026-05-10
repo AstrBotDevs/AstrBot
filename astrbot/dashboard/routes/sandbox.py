@@ -9,6 +9,10 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from .route import Response, Route, RouteContext
 
 
+def _is_sandbox_name_conflict(error: Exception) -> bool:
+    return isinstance(error, RuntimeError) and str(error).startswith("Sandbox name ")
+
+
 class SandboxRoute(Route):
     def __init__(
         self,
@@ -106,6 +110,14 @@ class SandboxRoute(Route):
                 sandbox_name=data.get("sandbox_name"),
             )
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
+        except RuntimeError as e:
+            if _is_sandbox_name_conflict(e):
+                logger.warning(str(e))
+                return jsonify(Response().error(str(e)).__dict__)
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to create sandbox: {e!s}").__dict__
+            )
         except Exception as e:
             logger.error(traceback.format_exc())
             return jsonify(

@@ -454,6 +454,11 @@ async def test_sandbox_dashboard_create_rejects_duplicate_name(
         registry=SandboxRegistry(), providers={provider.provider_id: provider}
     )
     monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    logged_errors = []
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.sandbox.logger.error",
+        lambda *args, **kwargs: logged_errors.append((args, kwargs)),
+    )
     manager.registry.upsert_sandbox(
         sandbox_id="sandbox-1",
         sandbox_name="Named",
@@ -476,10 +481,8 @@ async def test_sandbox_dashboard_create_rejects_duplicate_name(
 
     assert response.status_code == 200
     assert data["status"] == "error"
-    assert (
-        data["message"]
-        == "Failed to create sandbox: Sandbox name 'Named' already exists"
-    )
+    assert data["message"] == "Sandbox name 'Named' already exists"
+    assert logged_errors == []
 
 
 @pytest.mark.asyncio

@@ -68,14 +68,7 @@ class ListSandboxesTool(FunctionTool):
     )
 
     async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
-        session_id = context.context.event.unified_msg_origin
         sandboxes = sandbox_manager.list_sandboxes()
-        if not _is_admin(context):
-            sandboxes = [
-                record
-                for record in sandboxes
-                if _visible_to_session(record, session_id)
-            ]
         return _dump({"sandboxes": sandboxes})
 
 

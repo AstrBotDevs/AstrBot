@@ -62,7 +62,7 @@ async def test_copy_file_between_sandboxes_tool_requires_admin_permission():
 
 
 @pytest.mark.asyncio
-async def test_member_list_sandboxes_filters_to_owned_or_current_sandboxes(
+async def test_member_list_sandboxes_includes_all_sandboxes_with_status(
     monkeypatch,
 ):
     class FakeManager:
@@ -82,6 +82,13 @@ async def test_member_list_sandboxes_filters_to_owned_or_current_sandboxes(
                     "sandbox_id": "other-idle",
                     "owner_session_id": "session-b",
                     "controller_session_id": None,
+                    "status": "running",
+                },
+                {
+                    "sandbox_id": "other-busy",
+                    "owner_session_id": "session-c",
+                    "controller_session_id": "session-c",
+                    "status": "running",
                 },
             ]
 
@@ -93,36 +100,9 @@ async def test_member_list_sandboxes_filters_to_owned_or_current_sandboxes(
 
     assert "owned" in str(result)
     assert "current" in str(result)
-    assert "other-idle" not in str(result)
-
-
-@pytest.mark.asyncio
-async def test_member_list_sandboxes_includes_idle_default_sandbox(monkeypatch):
-    class FakeManager:
-        def list_sandboxes(self):
-            return [
-                {
-                    "sandbox_id": "default-idle",
-                    "owner_session_id": "dashboard",
-                    "controller_session_id": None,
-                    "is_default": True,
-                },
-                {
-                    "sandbox_id": "ordinary-idle",
-                    "owner_session_id": "dashboard",
-                    "controller_session_id": None,
-                    "is_default": False,
-                },
-            ]
-
-    monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
-    )
-
-    result = await ListSandboxesTool().call(_member_context_without_admin_requirement())
-
-    assert "default-idle" in str(result)
-    assert "ordinary-idle" not in str(result)
+    assert "other-idle" in str(result)
+    assert "other-busy" in str(result)
+    assert "session-c" in str(result)
 
 
 @pytest.mark.asyncio
@@ -167,7 +147,7 @@ async def test_member_switch_sandbox_rejects_other_session_sandbox(monkeypatch):
             get_sandbox=lambda sandbox_id: {
                 "sandbox_id": sandbox_id,
                 "owner_session_id": "session-b",
-                "controller_session_id": None,
+                "controller_session_id": "session-b",
             }
         )
 
