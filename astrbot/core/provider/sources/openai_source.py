@@ -901,7 +901,7 @@ class ProviderOpenAIOfficial(Provider):
                             args = {}
                     else:
                         args = tool_call.function.arguments
-                    # Some Claude API may return None for tools with no parameters
+                    # Some API may return None for tools with no parameters
                     if args is None:
                         args = {}
                     args_ls.append(args)
