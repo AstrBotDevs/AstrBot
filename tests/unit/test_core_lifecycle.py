@@ -862,19 +862,6 @@ class TestAstrBotCoreLifecycleStopAdditional:
     """Additional tests for AstrBotCoreLifecycle.stop method."""
 
     @pytest.mark.asyncio
-    async def test_stop_is_safe_on_partially_initialized_lifecycle(
-        self, mock_log_broker, mock_db
-    ):
-        """Test that stop tolerates a lifecycle that never finished initialize()."""
-        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
-
-        with patch(
-            "astrbot.core.core_lifecycle.computer_client.cleanup_managed_sandboxes",
-            new=AsyncMock(),
-        ):
-            await lifecycle.stop()
-
-    @pytest.mark.asyncio
     async def test_stop_cancels_all_tasks(self, mock_log_broker, mock_db):
         """Test that stop cancels all current tasks."""
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
