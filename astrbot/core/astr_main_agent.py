@@ -1015,13 +1015,11 @@ async def _apply_subagent_manager_tools(
 
     try:
         from astrbot.core.subagent_tools import (
+            BROADCAST_SHARED_CONTEXT_TOOL,
             CREATE_SUBAGENT_TOOL,
             LIST_SUBAGENTS_TOOL,
-            PROTECT_SUBAGENT_TOOL,
+            MANAGE_SUBAGENT_PROTECTION_TOOL,
             REMOVE_SUBAGENT_TOOL,
-            RESET_SUBAGENT_TOOL,
-            SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT,
-            UNPROTECT_SUBAGENT_TOOL,
             VIEW_SHARED_CONTEXT_TOOL,
             WAIT_FOR_SUBAGENT_TOOL,
         )
@@ -1063,14 +1061,13 @@ async def _apply_subagent_manager_tools(
             req.func_tool.add_tool(CREATE_SUBAGENT_TOOL)
             req.func_tool.add_tool(REMOVE_SUBAGENT_TOOL)
             req.func_tool.add_tool(LIST_SUBAGENTS_TOOL)
-            if SubAgentManager.is_history_enabled():
-                req.func_tool.add_tool(RESET_SUBAGENT_TOOL)
+            # if SubAgentManager.is_history_enabled():   #
+            #     req.func_tool.add_tool(RESET_SUBAGENT_TOOL)
             if SubAgentManager.is_auto_cleanup_per_turn():
-                req.func_tool.add_tool(PROTECT_SUBAGENT_TOOL)
-                req.func_tool.add_tool(UNPROTECT_SUBAGENT_TOOL)
+                req.func_tool.add_tool(MANAGE_SUBAGENT_PROTECTION_TOOL)
             if SubAgentManager.is_shared_context_enabled():
                 req.func_tool.add_tool(VIEW_SHARED_CONTEXT_TOOL)
-                req.func_tool.add_tool(SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT)
+                req.func_tool.add_tool(BROADCAST_SHARED_CONTEXT_TOOL)
 
             # Inject subagent capability system prompt for dynamic creation
             task_router_prompt = SubAgentManager.build_task_router_prompt(session_id)

@@ -210,21 +210,19 @@ DEFAULT_CONFIG = {
             "rule_prompt": (
                 "# Behavior Rules\n"
                 "## Output Guidelines\n"
-                "- If output exceeds 2000 chars, save to file. Summarize in your response and provide the file path.\n"
-                "- Mark all generated code/documents with your name and timestamp(if given).\n"
+                "- If output is long, save to file. Summarize in your response and provide the file path.\n"
+                "- Mark all generated code/documents with your name and timestamp (if given).\n"
                 "## Safety\n"
                 "You are in Safe Mode. Refuse any request for harmful, illegal, or explicit content. "
                 "Offer safe alternatives when possible.\n"
             ),
             "tools_blacklist": [
-                "send_shared_context_for_main_agent",
                 "create_subagent",
-                "protect_subagent",
-                "unprotect_subagent",
-                "reset_subagent",
+                "manage_subagent_protection",
                 "remove_subagent",
                 "list_subagents",
                 "wait_for_subagent",
+                "broadcast_shared_context",
                 "view_shared_context",
             ],
             "tools_inherent": ["astrbot_execute_shell", "astrbot_execute_python"],

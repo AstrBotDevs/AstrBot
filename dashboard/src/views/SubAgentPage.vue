@@ -771,11 +771,9 @@ function toast(message: string, color: 'success' | 'error' | 'warning' = 'succes
 }
 
 const DEFAULT_BLACKLIST = [
-  'send_shared_context_for_main_agent',
+  'broadcast_shared_context',
   'create_subagent',
-  'protect_subagent',
-  'unprotect_subagent',
-  'reset_subagent',
+  'manage_subagent_protection',
   'remove_subagent',
   'list_subagents',
   'wait_for_subagent',

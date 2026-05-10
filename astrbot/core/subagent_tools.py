@@ -230,61 +230,42 @@ class ListSubagentsTool(FunctionTool):
 
 
 @dataclass
-class ProtectSubagentTool(FunctionTool):
-    """Tool to protect a subagent from auto cleanup"""
+class ManageSubagentProtectionTool(FunctionTool):
+    """Tool to protect or unprotect a subagent from auto cleanup"""
 
-    name: str = "protect_subagent"
-    description: str = "Protect a subagent from automatic cleanup. Use this to prevent important subagents from being removed."
+    name: str = "manage_subagent_protection"
+    description: str = "Protect or unprotect a subagent from automatic cleanup. Use this to prevent important subagents from being removed, or to allow them to be auto cleaned."
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "name": {"type": "string", "description": "Subagent name to protect"},
+                "name": {"type": "string", "description": "Subagent name to manage"},
+                "protected": {
+                    "type": "boolean",
+                    "description": "Whether to protect (true) or unprotect (false) the subagent",
+                },
             },
-            "required": ["name"],
+            "required": ["name", "protected"],
         }
     )
 
     async def call(self, context, **kwargs) -> str:
         name = kwargs.get("name", "")
+        protected = kwargs.get("protected", True)
         if not name:
             return "Error: name required"
         session_id = context.context.event.unified_msg_origin
         session = SubAgentManager._get_or_create_session(session_id)
         if name not in session.subagents:
             return f"Error: Subagent {name} not found. Available subagents: {session.subagents.keys()}"
-        SubAgentManager.protect_subagent(session_id, name)
-        return f"Subagent {name} is now protected from auto cleanup"
-
-
-@dataclass
-class UnprotectSubagentTool(FunctionTool):
-    """Tool to remove protection from a subagent"""
-
-    name: str = "unprotect_subagent"
-    description: str = "Remove protection from a subagent. It can then be auto cleaned."
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "Subagent name to unprotect"},
-            },
-            "required": ["name"],
-        }
-    )
-
-    async def call(self, context, **kwargs) -> str:
-        name = kwargs.get("name", "")
-        if not name:
-            return "Error: name required"
-        session_id = context.context.event.unified_msg_origin
-        session = SubAgentManager.get_session(session_id)
-        if not session:
-            return "Error: No session found"
-        if name in session.protected_agents:
-            session.protected_agents.discard(name)
-            return f"Subagent {name} is no longer protected"
-        return f"Subagent {name} was not protected"
+        if protected:
+            SubAgentManager.protect_subagent(session_id, name)
+            return f"Subagent {name} is now protected from auto cleanup"
+        else:
+            if name in session.protected_agents:
+                session.protected_agents.discard(name)
+                return f"Subagent {name} is no longer protected"
+            return f"Subagent {name} was not protected"
 
 
 @dataclass
@@ -292,7 +273,7 @@ class ResetSubAgentTool(FunctionTool):
     """Tool to reset a subagent"""
 
     name: str = "reset_subagent"
-    description: str = "Reset an existing subagent. This will clean the dialog history of the subagent."
+    description: str = "Reset an existing subagent. This will clean the dialog history of the subagent. Used before assigning a new task to an existing subagent."
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -317,12 +298,13 @@ class ResetSubAgentTool(FunctionTool):
 
 # Shared Context Tools
 @dataclass
-class SendSharedContextToolForMainAgent(FunctionTool):
+class BroadCastSharedContextTool(FunctionTool):
     """Tool to send a message to the shared context (visible to all agents)"""
 
-    name: str = "send_shared_context_for_main_agent"
-    description: str = """Send a message to the shared context that will be visible to all subagents and the main agent. You are the main agent, use this to share global information.
-Types: 'message' (to other agents), 'system' (global announcements)."""
+    name: str = "broadcast_shared_context"
+    description: str = (
+        """Send a message to one or all subagents when they are running."""
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -364,9 +346,9 @@ class SendSharedContextTool(FunctionTool):
     """Tool to send a message to the shared context (visible to all agents)"""
 
     name: str = "send_shared_context"
-    description: str = """Send a message to the shared context that will be visible to all subagents.
-Use this to share information, status updates, or coordinate with other agents.
-If you want to send a result to the main agent, do not use this tool, just return the results directly.
+    description: str = """Send a message to the shared context that will be visible to other subagents.
+Use this to share information, status updates, or coordinate with other subagents.
+Not used for informing the main agent, return the results directly instead.
 """
     parameters: dict = field(
         default_factory=lambda: {
@@ -570,9 +552,8 @@ CREATE_SUBAGENT_TOOL = CreateSubAgentTool()
 REMOVE_SUBAGENT_TOOL = RemoveSubagentTool()
 LIST_SUBAGENTS_TOOL = ListSubagentsTool()
 RESET_SUBAGENT_TOOL = ResetSubAgentTool()
-PROTECT_SUBAGENT_TOOL = ProtectSubagentTool()
-UNPROTECT_SUBAGENT_TOOL = UnprotectSubagentTool()
+MANAGE_SUBAGENT_PROTECTION_TOOL = ManageSubagentProtectionTool()
 SEND_SHARED_CONTEXT_TOOL = SendSharedContextTool()
-SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT = SendSharedContextToolForMainAgent()
+BROADCAST_SHARED_CONTEXT_TOOL = BroadCastSharedContextTool()
 VIEW_SHARED_CONTEXT_TOOL = ViewSharedContextTool()
 WAIT_FOR_SUBAGENT_TOOL = WaitForSubagentTool()

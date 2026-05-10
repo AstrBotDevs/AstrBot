@@ -79,11 +79,9 @@ class SubAgentManager:
     _time_prompt_enabled: bool = True  # 是否启用时间prompt注入
     _timezone: str | None = None  # 时区设置
     _tools_blacklist: set[str] = {
-        "send_shared_context_for_main_agent",
+        "broadcast_shared_context",
         "create_subagent",
-        "protect_subagent",
-        "unprotect_subagent",
-        "reset_subagent",
+        "manage_subagent_protection",
         "remove_subagent",
         "list_subagents",
         "wait_for_subagent",
@@ -93,7 +91,9 @@ class SubAgentManager:
         "astrbot_execute_shell",
         "astrbot_execute_python",
     }
-    _session_timeout_seconds = 1800 # 会话存活时间。若有会话的subagent闲置时间超过该值，自动清理
+    _session_timeout_seconds = (
+        1800  # 会话存活时间。若有会话的subagent闲置时间超过该值，自动清理
+    )
 
     _HEADER_TEMPLATE = f"""# Sub-Agent Orchestration
 You can manage sub-agents with isolated instructions, tools and skills. Maximum {_max_subagent_count} subagents.
@@ -103,7 +103,7 @@ Create sub-agents ONLY when:
 - Task has ≥2 independent workstreams with clear inputs/outputs
 - Context exceeds your effective processing window"""
     _SUBAGENT_AUTOCLEAN_PROMPT = (
-        "- Sub-agents auto-destroy per turn; use `protect_subagent(name)` for multi-turn stateful tasks"
+        "- Sub-agents auto-destroy per turn; use `manage_subagent_protection(name, protected=true/false)` for multi-turn stateful tasks"
         if _auto_cleanup_per_turn
         else ""
     )
@@ -176,7 +176,7 @@ Create sub-agents ONLY when:
             cls._tools_inherent = set(tools_inherent)
         if tools_blacklist is None:
             cls._tools_blacklist = {
-                "send_shared_context_for_main_agent",
+                "broadcast_shared_context",
                 "create_subagent",
                 "protect_subagent",
                 "unprotect_subagent",
@@ -613,8 +613,7 @@ Create sub-agents ONLY when:
 
         workdir_prompt = (
             "# Working Directory\n"
-            + f"Your working directory is `{workdir}`. All generated files MUST save in the directory.\n"
-            + "Any files outside this directory are PROHIBITED from being modified, deleted, or added.\n"
+            + f"Your working directory is `{workdir}`. Unless specified by the user, all generated files are saved by default in this directory.\n"
         )
 
         return workdir_prompt
