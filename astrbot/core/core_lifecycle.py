@@ -60,6 +60,12 @@ class AstrBotCoreLifecycle:
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
+        self.provider_manager: ProviderManager | None = None
+        self.platform_manager: PlatformManager | None = None
+        self.kb_manager: KnowledgeBaseManager | None = None
+        self.plugin_manager: PluginManager | None = None
+        self.dashboard_shutdown_event = asyncio.Event()
+        self.curr_tasks: list[asyncio.Task] = []
         self._default_chat_provider_warning_emitted = False
         self._persistent_restore_task: asyncio.Task | None = None
 
@@ -398,15 +404,17 @@ class AstrBotCoreLifecycle:
 
     async def stop(self) -> None:
         """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
-        if self.temp_dir_cleaner:
-            await self.temp_dir_cleaner.stop()
+        temp_dir_cleaner = getattr(self, "temp_dir_cleaner", None)
+        if temp_dir_cleaner:
+            await temp_dir_cleaner.stop()
 
         # 请求停止所有正在运行的异步任务
-        for task in self.curr_tasks:
+        for task in getattr(self, "curr_tasks", []):
             task.cancel()
 
-        if self.cron_manager:
-            await self.cron_manager.shutdown()
+        cron_manager = getattr(self, "cron_manager", None)
+        if cron_manager:
+            await cron_manager.shutdown()
 
         persistent_restore_task = getattr(self, "_persistent_restore_task", None)
         if persistent_restore_task is not None:
@@ -426,22 +434,35 @@ class AstrBotCoreLifecycle:
                 exc_info=True,
             )
 
-        for plugin in self.plugin_manager.context.get_all_stars():
-            try:
-                await self.plugin_manager._terminate_plugin(plugin)
-            except Exception as e:
-                logger.warning(traceback.format_exc())
-                logger.warning(
-                    f"插件 {plugin.name} 未被正常终止 {e!s}, 可能会导致资源泄露等问题。",
-                )
+        plugin_manager = getattr(self, "plugin_manager", None)
+        if plugin_manager and getattr(plugin_manager, "context", None):
+            for plugin in plugin_manager.context.get_all_stars():
+                try:
+                    await plugin_manager._terminate_plugin(plugin)
+                except Exception as e:
+                    logger.warning(traceback.format_exc())
+                    logger.warning(
+                        f"插件 {plugin.name} 未被正常终止 {e!s}, 可能会导致资源泄露等问题。",
+                    )
 
-        await self.provider_manager.terminate()
-        await self.platform_manager.terminate()
-        await self.kb_manager.terminate()
-        self.dashboard_shutdown_event.set()
+        provider_manager = getattr(self, "provider_manager", None)
+        if provider_manager:
+            await provider_manager.terminate()
+
+        platform_manager = getattr(self, "platform_manager", None)
+        if platform_manager:
+            await platform_manager.terminate()
+
+        kb_manager = getattr(self, "kb_manager", None)
+        if kb_manager:
+            await kb_manager.terminate()
+
+        dashboard_shutdown_event = getattr(self, "dashboard_shutdown_event", None)
+        if dashboard_shutdown_event:
+            dashboard_shutdown_event.set()
 
         # 再次遍历curr_tasks等待每个任务真正结束
-        for task in self.curr_tasks:
+        for task in getattr(self, "curr_tasks", []):
             try:
                 await task
             except asyncio.CancelledError:
