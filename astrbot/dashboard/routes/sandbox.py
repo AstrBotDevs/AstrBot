@@ -104,7 +104,9 @@ class SandboxRoute(Route):
         try:
             sandbox = (
                 await computer_client.sandbox_manager.switch_current_sandbox_checked(
-                    self._session_id(), sandbox_id
+                    self._session_id(),
+                    sandbox_id,
+                    context=self.core_lifecycle.star_context,
                 )
             )
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)

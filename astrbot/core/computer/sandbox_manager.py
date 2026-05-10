@@ -640,12 +640,91 @@ class SandboxManager:
         self.save_registry()
         return updated or record
 
+    async def _revive_persistent_booter_if_needed(
+        self,
+        record: dict,
+        sandbox_id: str,
+        session_id: str | None,
+        context: Context | None,
+    ) -> dict:
+        if (
+            context is None
+            or record.get("retention_policy") != "persistent"
+            or record.get("status")
+            not in {SandboxStatus.RUNNING, SandboxStatus.UNKNOWN}
+        ):
+            return record
+
+        provider = self.get_provider(record.get("provider", ""))
+        if not getattr(provider, "supports_persistent_reconnect", False):
+            return record
+
+        create_session_id = str(
+            record.get("owner_session_id") or session_id or "dashboard"
+        )
+        create_config = provider.build_create_config(context, create_session_id)
+        connect_info = record.get("connect_info") or {}
+        create_config = {
+            **create_config,
+            "persistent_name": str(
+                connect_info.get("persistent_name") or sandbox_id
+            ).strip(),
+            "resume": True,
+        }
+        existing_runtime_id = connect_info.get("sandbox_id")
+        if existing_runtime_id:
+            create_config["sandbox_id"] = existing_runtime_id
+
+        async with self._sandbox_boot_lock(sandbox_id):
+            current = self.registry.get_sandbox(sandbox_id)
+            booter = self.session_booter.get(sandbox_id)
+            if (
+                booter is None
+                and current is not None
+                and current.get("status")
+                in {
+                    SandboxStatus.RUNNING,
+                    SandboxStatus.UNKNOWN,
+                }
+            ):
+                previous_status = current.get("status") or SandboxStatus.UNKNOWN
+                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.CREATING)
+                await self.save_registry_async()
+                try:
+                    client = await provider.create_booter(
+                        context,
+                        create_session_id,
+                        sandbox_id,
+                        create_config,
+                    )
+                except Exception:
+                    latest = self.registry.get_sandbox(sandbox_id)
+                    if (
+                        latest is not None
+                        and latest.get("status") == SandboxStatus.CREATING
+                    ):
+                        self.registry.update_sandbox_status(sandbox_id, previous_status)
+                        await self.save_registry_async()
+                    raise
+                setattr(client, "sandbox_id", sandbox_id)
+                self.session_booter[sandbox_id] = client
+                await self._finalize_created_booter(
+                    provider,
+                    sandbox_id,
+                    session_id=None,
+                    idle_timeout=provider.get_idle_timeout(context, create_session_id),
+                )
+            return self.registry.get_sandbox(sandbox_id) or record
+
     async def switch_current_sandbox_checked(
-        self, session_id: str, sandbox_id: str
+        self, session_id: str, sandbox_id: str, context: Context | None = None
     ) -> dict:
         record = self.registry.get_sandbox(sandbox_id)
         if record is None or not record.get("managed"):
             raise RuntimeError(f"Sandbox {sandbox_id} not found")
+        record = await self._revive_persistent_booter_if_needed(
+            record, sandbox_id, session_id, context
+        )
         booter = self.session_booter.get(sandbox_id)
         if booter is None:
             raise RuntimeError(f"Sandbox {sandbox_id} is not running")
@@ -666,11 +745,6 @@ class SandboxManager:
     async def _set_current_sandbox_after_lease(
         self, session_id: str, sandbox_id: str, record: dict
     ) -> dict:
-        previous_sandbox_id = self.registry.get_current_sandbox_id(session_id)
-        if previous_sandbox_id and previous_sandbox_id != sandbox_id:
-            previous = self.registry.get_sandbox(previous_sandbox_id)
-            if previous and previous.get("controller_session_id") == session_id:
-                self.registry.release_lease(previous_sandbox_id)
         self.registry.set_current_sandbox_id(session_id, sandbox_id)
         self.registry.touch_sandbox(sandbox_id)
         await self.save_registry_async()
@@ -808,81 +882,10 @@ class SandboxManager:
         if controlled_by_other and require_lease:
             raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
         booter = self.session_booter.get(sandbox_id)
-        if (
-            booter is None
-            and context is not None
-            and record.get("retention_policy") == "persistent"
-        ):
-            status = record.get("status")
-            if status in {
-                SandboxStatus.RUNNING,
-                SandboxStatus.UNKNOWN,
-            }:
-                provider = self.get_provider(record.get("provider", ""))
-                if getattr(provider, "supports_persistent_reconnect", False):
-                    create_session_id = str(
-                        record.get("owner_session_id") or session_id or "dashboard"
-                    )
-                    create_config = provider.build_create_config(
-                        context, create_session_id
-                    )
-                    create_config = {
-                        **create_config,
-                        "persistent_name": str(
-                            (record.get("connect_info") or {}).get("persistent_name")
-                            or sandbox_id
-                        ).strip(),
-                        "resume": True,
-                    }
-                    async with self._sandbox_boot_lock(sandbox_id):
-                        current = self.registry.get_sandbox(sandbox_id)
-                        booter = self.session_booter.get(sandbox_id)
-                        if (
-                            booter is None
-                            and current is not None
-                            and current.get("status")
-                            in {
-                                SandboxStatus.RUNNING,
-                                SandboxStatus.UNKNOWN,
-                            }
-                        ):
-                            previous_status = (
-                                current.get("status") or SandboxStatus.UNKNOWN
-                            )
-                            self.registry.update_sandbox_status(
-                                sandbox_id, SandboxStatus.CREATING
-                            )
-                            await self.save_registry_async()
-                            try:
-                                client = await provider.create_booter(
-                                    context,
-                                    create_session_id,
-                                    sandbox_id,
-                                    create_config,
-                                )
-                            except Exception:
-                                latest = self.registry.get_sandbox(sandbox_id)
-                                if (
-                                    latest is not None
-                                    and latest.get("status") == SandboxStatus.CREATING
-                                ):
-                                    self.registry.update_sandbox_status(
-                                        sandbox_id, previous_status
-                                    )
-                                    await self.save_registry_async()
-                                raise
-                            setattr(client, "sandbox_id", sandbox_id)
-                            self.session_booter[sandbox_id] = client
-                            await self._finalize_created_booter(
-                                provider,
-                                sandbox_id,
-                                session_id=None,
-                                idle_timeout=provider.get_idle_timeout(
-                                    context, create_session_id
-                                ),
-                            )
-                        booter = self.session_booter.get(sandbox_id)
-                        record = self.registry.get_sandbox(sandbox_id) or record
+        record = await self._revive_persistent_booter_if_needed(
+            record, sandbox_id, session_id, context
+        )
+        booter = self.session_booter.get(sandbox_id)
         status = record.get("status")
         if booter is None:
             if status == SandboxStatus.CREATING:

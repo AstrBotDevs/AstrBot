@@ -315,6 +315,29 @@ async def test_manager_switches_releases_takes_over_and_destroys(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_manager_switch_preserves_other_sandboxes_owned_by_same_session(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    first = await manager.create_sandbox(None, "session-a", "generic", "First")
+    second = await manager.create_sandbox(None, "session-a", "generic", "Second")
+
+    switched = await manager.switch_current_sandbox_checked(
+        "session-a", second["sandbox_id"]
+    )
+
+    first_record = manager.registry.get_sandbox(first["sandbox_id"])
+    second_record = manager.registry.get_sandbox(second["sandbox_id"])
+    assert switched["sandbox_id"] == second["sandbox_id"]
+    assert first_record["controller_session_id"] == "session-a"
+    assert first_record["lease_expires_at"] > time.time()
+    assert second_record["controller_session_id"] == "session-a"
+    assert second_record["lease_expires_at"] > time.time()
+    assert (
+        manager.get_current_sandbox("session-a")["current_sandbox_id"]
+        == second["sandbox_id"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_manager_force_releases_other_session_lease(tmp_path):
     manager, _provider = _manager(tmp_path)
     created = await manager.create_sandbox(None, "session-a", "generic", "Named")
@@ -360,6 +383,32 @@ async def test_manager_revives_persistent_sandbox_for_observer_access(tmp_path):
     )
 
     assert isinstance(booter, FakeBooter)
+    assert len(provider.created) == 1
+    assert manager.registry.get_sandbox("generic-1")["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_manager_revives_persistent_sandbox_for_switch_access(tmp_path):
+    manager, provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    switched = await manager.switch_current_sandbox_checked(
+        "session-a", "generic-1", context=object()
+    )
+
+    assert switched["sandbox_id"] == "generic-1"
     assert len(provider.created) == 1
     assert manager.registry.get_sandbox("generic-1")["status"] == "running"
 

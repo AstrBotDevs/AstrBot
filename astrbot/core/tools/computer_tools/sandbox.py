@@ -129,7 +129,7 @@ class SwitchSandboxTool(FunctionTool):
         session_id = context.context.event.unified_msg_origin
         try:
             sandbox = await sandbox_manager.switch_current_sandbox_checked(
-                session_id, sandbox_id
+                session_id, sandbox_id, context=context.context.context
             )
         except Exception as e:
             detail = str(e) or type(e).__name__

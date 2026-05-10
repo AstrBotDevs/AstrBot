@@ -107,6 +107,14 @@ def test_sandbox_management_page_loads_provider_options_from_api():
     assert "providerOptions.value = providers.map(" in content
 
 
+def test_sandbox_management_page_does_not_show_legacy_provider_hint():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "tm('create.providerHint')" not in content
+
+
 def test_sandbox_management_page_does_not_allow_configure_while_creating():
     content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
         encoding="utf-8"

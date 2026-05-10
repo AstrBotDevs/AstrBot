@@ -177,14 +177,11 @@
     </v-dialog>
 
     <v-dialog v-model="createDialog" max-width="520">
-      <v-card>
+        <v-card>
         <v-card-title>{{ tm('create.title') }}</v-card-title>
         <v-card-text>
           <v-select v-model="createProvider" :items="providerOptions" :label="tm('fields.provider')" variant="outlined" :disabled="!hasProviderOptions" />
           <v-text-field v-model="createName" :label="tm('create.name')" variant="outlined" />
-          <v-alert v-if="hasProviderOptions && createProvider !== 'cua'" type="info" variant="tonal" density="compact">
-            {{ tm('create.providerHint') }}
-          </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
