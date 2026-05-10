@@ -826,6 +826,14 @@ class SandboxManager:
                     create_config = provider.build_create_config(
                         context, create_session_id
                     )
+                    create_config = {
+                        **create_config,
+                        "persistent_name": str(
+                            (record.get("connect_info") or {}).get("persistent_name")
+                            or sandbox_id
+                        ).strip(),
+                        "resume": True,
+                    }
                     async with self._sandbox_boot_lock(sandbox_id):
                         current = self.registry.get_sandbox(sandbox_id)
                         booter = self.session_booter.get(sandbox_id)
