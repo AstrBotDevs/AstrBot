@@ -28,6 +28,10 @@ class BoolAvailableBooter:
     available = True
 
 
+class BaseDefaultAvailableBooter:
+    pass
+
+
 class UnavailablePropertyBooter:
     available = False
 
@@ -584,6 +588,41 @@ async def test_manager_persistent_reconnect_failure_restores_previous_status(tmp
 
     assert manager.registry.get_sandbox("generic-1")["status"] == "running"
     assert manager.session_booter == {}
+
+
+@pytest.mark.asyncio
+async def test_manager_treats_base_available_stub_as_available(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    assert await manager.booter_available(BaseDefaultAvailableBooter()) is True
+
+
+@pytest.mark.asyncio
+async def test_manager_persistent_health_failure_marks_unknown_for_retry(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    booter = FakeBooter()
+    booter.available_result = False
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+    manager.session_booter["generic-1"] = booter
+
+    with pytest.raises(RuntimeError, match="booter health check failed"):
+        await manager.get_observer_booter_by_id(
+            "generic-1", "dashboard", require_lease=False, context=object()
+        )
+
+    assert manager.registry.get_sandbox("generic-1")["status"] == "unknown"
+    assert "generic-1" not in manager.session_booter
 
 
 @pytest.mark.asyncio

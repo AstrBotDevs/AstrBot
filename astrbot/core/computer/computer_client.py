@@ -22,7 +22,6 @@ from .sandbox_registry import SandboxRegistry
 local_booter: LocalBooter | None = None
 sandbox_registry = SandboxRegistry()
 sandbox_manager = SandboxManager(registry=sandbox_registry, providers={})
-sandbox_registry.load()
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
 
 # Tracks tools registered per provider so core can remove them on unregister.

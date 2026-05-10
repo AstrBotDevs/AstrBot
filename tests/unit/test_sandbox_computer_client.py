@@ -127,7 +127,7 @@ def test_register_provider_rejects_duplicate_by_default(monkeypatch, tmp_path):
         computer_client.register_sandbox_provider(FakeProvider())
 
 
-def test_computer_client_loads_registry_on_import(monkeypatch):
+def test_computer_client_does_not_load_registry_on_import(monkeypatch):
     import importlib
 
     import astrbot.core.computer.sandbox_registry as sandbox_registry_module
@@ -147,7 +147,7 @@ def test_computer_client_loads_registry_on_import(monkeypatch):
 
     importlib.reload(computer_client_module)
 
-    assert loads
+    assert loads == []
 
 
 def test_register_provider_can_replace_when_requested(monkeypatch, tmp_path):

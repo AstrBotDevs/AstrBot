@@ -171,6 +171,9 @@ def test_sandbox_i18n_uses_status_and_idle_labels():
     en = (ROOT / "dashboard/src/i18n/locales/en-US/features/sandbox.json").read_text(
         encoding="utf-8"
     )
+    ru = (ROOT / "dashboard/src/i18n/locales/ru-RU/features/sandbox.json").read_text(
+        encoding="utf-8"
+    )
 
     assert '"status": "状态"' in zh
     assert '"available": "空闲"' in zh
@@ -180,3 +183,5 @@ def test_sandbox_i18n_uses_status_and_idle_labels():
     assert '"unknownStatus": "Unknown status: {status}"' in en
     assert '"dangerConfirm"' in zh
     assert '"dangerConfirm"' in en
+    assert '"unknownStatus"' in ru
+    assert '"dangerConfirm"' in ru

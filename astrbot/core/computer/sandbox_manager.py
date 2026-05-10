@@ -160,9 +160,13 @@ class SandboxManager:
         available = getattr(booter, "available", None)
         if available is None:
             return True
+        if getattr(available, "__isabstractmethod__", False):
+            return True
         result = available() if callable(available) else available
         if inspect.isawaitable(result):
             result = await result
+        if result is None:
+            return True
         return bool(result)
 
     def acquire_lease(
@@ -924,7 +928,12 @@ class SandboxManager:
             raise RuntimeError(f"Sandbox {sandbox_id} is not running")
         if not await self.booter_available(booter):
             self.session_booter.pop(sandbox_id, None)
-            self.registry.update_sandbox_status(sandbox_id, SandboxStatus.ERROR)
+            next_status = (
+                SandboxStatus.UNKNOWN
+                if record.get("retention_policy") == "persistent"
+                else SandboxStatus.ERROR
+            )
+            self.registry.update_sandbox_status(sandbox_id, next_status)
             await self.save_registry_async()
             raise RuntimeError(
                 f"Sandbox {sandbox_id} is unavailable (booter health check failed)"

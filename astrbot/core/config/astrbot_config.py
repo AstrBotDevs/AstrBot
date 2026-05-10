@@ -10,6 +10,24 @@ from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 logger = logging.getLogger("astrbot")
 
+LEGACY_SANDBOX_PROVIDER_CONFIG_KEYS = {
+    "cua_api_key",
+    "cua_idle_timeout",
+    "cua_image",
+    "cua_local",
+    "cua_os_type",
+    "cua_telemetry_enabled",
+    "cua_ttl",
+    "shipyard_access_token",
+    "shipyard_endpoint",
+    "shipyard_max_sessions",
+    "shipyard_neo_access_token",
+    "shipyard_neo_endpoint",
+    "shipyard_neo_profile",
+    "shipyard_neo_ttl",
+    "shipyard_ttl",
+}
+
 
 class RateLimitStrategy(enum.Enum):
     STALL = "stall"
@@ -59,6 +77,7 @@ class AstrBotConfig(dict):
 
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
+        has_new |= self._remove_legacy_sandbox_provider_config_keys(conf)
         self.update(conf)
         if has_new:
             self.save_config()
@@ -91,6 +110,22 @@ class AstrBotConfig(dict):
         _parse_schema(schema, conf)
 
         return conf
+
+    def _remove_legacy_sandbox_provider_config_keys(self, conf: dict) -> bool:
+        sandbox_cfg = (
+            conf.get("provider_settings", {}).get("sandbox", {})
+            if isinstance(conf.get("provider_settings"), dict)
+            else {}
+        )
+        if not isinstance(sandbox_cfg, dict):
+            return False
+        removed = False
+        for key in LEGACY_SANDBOX_PROVIDER_CONFIG_KEYS:
+            if key in sandbox_cfg:
+                sandbox_cfg.pop(key, None)
+                logger.info("Config key removed: provider_settings.sandbox.%s", key)
+                removed = True
+        return removed
 
     def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
         """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""

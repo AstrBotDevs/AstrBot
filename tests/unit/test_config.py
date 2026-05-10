@@ -264,6 +264,31 @@ class TestConfigValidation:
 
         assert "unknown_key" not in config
 
+    def test_remove_legacy_sandbox_provider_config_keys(self, temp_config_path):
+        default_config = {
+            "provider_settings": {
+                "sandbox": {"booter": ""},
+            },
+        }
+        existing_config = {
+            "provider_settings": {
+                "sandbox": {
+                    "booter": "boxlite",
+                    "cua_image": "linux",
+                    "shipyard_neo_endpoint": "http://localhost:8000",
+                    "shipyard_access_token": "token",
+                },
+            },
+        }
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump(existing_config, f)
+
+        config = AstrBotConfig(
+            config_path=temp_config_path, default_config=default_config
+        )
+
+        assert config["provider_settings"]["sandbox"] == {"booter": "boxlite"}
+
     def test_nested_config_validation(self, temp_config_path):
         """Test validation of nested config structures."""
         default_config = {

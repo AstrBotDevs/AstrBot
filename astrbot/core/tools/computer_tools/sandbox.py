@@ -39,7 +39,12 @@ def _visible_to_session(record: dict, session_id: str) -> bool:
     return (
         record.get("owner_session_id") == session_id
         or record.get("controller_session_id") == session_id
+        or _is_idle_default_sandbox(record)
     )
+
+
+def _is_idle_default_sandbox(record: dict) -> bool:
+    return bool(record.get("is_default") and not record.get("controller_session_id"))
 
 
 def _sandbox_access_denied(

@@ -36,7 +36,8 @@
         "running": "Running",
         "error": "Error",
         "stopping": "Stopping",
-        "stopped": "Stopped"
+        "stopped": "Stopped",
+        "unknownStatus": "Unknown status: {status}"
     },
     "headers": {
         "sandbox": "Sandbox",
@@ -77,7 +78,8 @@
         "run": "Run command",
         "output": "Command output",
         "empty": "No commands executed yet.",
-        "running": "Running..."
+        "running": "Running...",
+        "dangerConfirm": "This command may destroy sandbox data: {command}\nContinue?"
     },
     "config": {
         "title": "Sandbox configuration",
