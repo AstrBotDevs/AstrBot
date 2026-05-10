@@ -41,6 +41,7 @@ class SandboxRecord:
     status: SandboxStatus = SandboxStatus.RUNNING
     connect_info: dict[str, Any] = field(default_factory=dict)
     capabilities: list[str] = field(default_factory=list)
+    tool_names: list[str] = field(default_factory=list)
     labels: dict[str, Any] = field(default_factory=dict)
     notes: str | None = None
 
@@ -80,6 +81,7 @@ class SandboxRecord:
             capabilities=sorted(
                 str(item) for item in data.get("capabilities", []) if item
             ),
+            tool_names=sorted(str(item) for item in data.get("tool_names", []) if item),
             labels=dict(data.get("labels") or {}),
             notes=data.get("notes"),
         )
@@ -105,6 +107,7 @@ class SandboxRecord:
             "status": self.status.value,
             "connect_info": dict(self.connect_info),
             "capabilities": list(self.capabilities),
+            "tool_names": list(self.tool_names),
             "labels": dict(self.labels),
             "notes": self.notes,
         }

@@ -87,6 +87,11 @@ class FailingReconnectProvider(FakeProvider):
         raise RuntimeError("boot failed")
 
 
+class AlwaysBusyManager(SandboxManager):
+    def acquire_lease(self, sandbox_id: str, session_id: str, *, ttl=None):
+        return False
+
+
 class MissingPersistentProvider(FakeProvider):
     async def check_persistent_sandbox_exists(self, record):
         return False
@@ -106,6 +111,30 @@ def _manager(tmp_path, provider=None):
     return manager, provider
 
 
+def test_manager_list_sandboxes_preserves_persisted_tool_names_without_provider(
+    tmp_path,
+):
+    manager, _provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Generic",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Generic"},
+        capabilities={"shell"},
+        tool_names={"persisted_tool"},
+    )
+    manager.providers.clear()
+
+    sandboxes = manager.list_sandboxes()
+
+    assert sandboxes[0]["tool_names"] == ["persisted_tool"]
+
+
 @pytest.mark.asyncio
 async def test_manager_creates_default_sandbox_and_reuses_available_booter(tmp_path):
     manager, provider = _manager(tmp_path)
@@ -120,6 +149,22 @@ async def test_manager_creates_default_sandbox_and_reuses_available_booter(tmp_p
     assert sandboxes[0]["provider"] == "generic"
     assert sandboxes[0]["capabilities"] == sorted(provider.capabilities)
     assert sandboxes[0]["tool_names"] == sorted(provider.tool_names)
+
+
+@pytest.mark.asyncio
+async def test_manager_get_or_create_booter_stops_after_repeated_lease_failures(
+    tmp_path,
+):
+    provider = FakeProvider()
+    manager = AlwaysBusyManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={provider.provider_id: provider},
+    )
+
+    with pytest.raises(RuntimeError, match="Could not acquire sandbox lease"):
+        await manager.get_or_create_booter(None, "session-a", "generic")
+
+    assert len(manager.registry.list_sandboxes()) <= 4
 
 
 @pytest.mark.asyncio
@@ -743,3 +788,55 @@ def test_manager_update_sandbox_config_rejects_persistent_for_unsupported_provid
             expires_at=None,
             retention_policy="persistent",
         )
+
+
+def test_manager_update_sandbox_config_rejects_persistent_for_missing_provider(
+    tmp_path,
+):
+    manager, _provider = _manager(tmp_path)
+    created = manager.registry.upsert_sandbox(
+        sandbox_id="missing-1",
+        sandbox_name="Missing",
+        booter_type="missing",
+        provider="missing",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Missing"},
+    )
+
+    with pytest.raises(RuntimeError, match="Provider missing is not available"):
+        manager.update_sandbox_config(
+            created["sandbox_id"],
+            sandbox_name=created["sandbox_name"],
+            idle_timeout=None,
+            expires_at=None,
+            retention_policy="persistent",
+        )
+
+
+@pytest.mark.asyncio
+async def test_manager_observer_access_does_not_refresh_idle_timer_for_unclaimed_sandbox(
+    tmp_path,
+):
+    provider = FakeProvider()
+    provider.idle_timeout = 30
+    manager, _provider = _manager(tmp_path, provider)
+    created = await manager.create_sandbox(None, "session-a", "generic")
+    manager.release_current_sandbox("session-a", created["sandbox_id"])
+    first_state = manager.idle_state[created["sandbox_id"]]
+    first_last_used_at = manager.registry.get_sandbox(created["sandbox_id"])[
+        "last_used_at"
+    ]
+
+    await manager.get_observer_booter_by_id(
+        created["sandbox_id"], "dashboard", require_lease=False
+    )
+
+    second_state = manager.idle_state[created["sandbox_id"]]
+    second_last_used_at = manager.registry.get_sandbox(created["sandbox_id"])[
+        "last_used_at"
+    ]
+    assert second_state is first_state
+    assert second_last_used_at == first_last_used_at

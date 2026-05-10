@@ -14,6 +14,7 @@ from astrbot.core.computer.sandbox_registry import SandboxRegistry
 from astrbot.core.star.context import Context
 
 SANDBOX_LEASE_SECONDS = 300
+MAX_SANDBOX_LEASE_ATTEMPTS = 3
 
 
 @dataclass(slots=True)
@@ -130,6 +131,9 @@ class SandboxManager:
             "connect_info": connect_info,
             "capabilities": sorted(
                 getattr(self.get_provider(provider_id), "capabilities", set())
+            ),
+            "tool_names": sorted(
+                getattr(self.get_provider(provider_id), "tool_names", set())
             ),
             "is_default": is_default,
             "idle_timeout": idle_timeout,
@@ -274,7 +278,7 @@ class SandboxManager:
             )
             created_target_record = True
 
-        while True:
+        for _attempt in range(MAX_SANDBOX_LEASE_ATTEMPTS):
             async with self._sandbox_boot_lock(target_sandbox_id):
                 if target_sandbox_id in self.session_booter and not self.acquire_lease(
                     target_sandbox_id, session_id
@@ -319,6 +323,10 @@ class SandboxManager:
                 setattr(client, "sandbox_id", target_sandbox_id)
                 self.session_booter[target_sandbox_id] = client
                 break
+        else:
+            raise RuntimeError(
+                "Could not acquire sandbox lease after multiple attempts"
+            )
 
         await self._finalize_created_booter(
             provider,
@@ -570,13 +578,18 @@ class SandboxManager:
             if not record.get("managed"):
                 continue
             provider = self.providers.get(record.get("provider"))
-            record["capabilities"] = sorted(
-                getattr(provider, "capabilities", set()) if provider else []
+            updated = dict(record)
+            updated["capabilities"] = sorted(
+                getattr(provider, "capabilities", record.get("capabilities", []))
+                if provider
+                else record.get("capabilities", [])
             )
-            record["tool_names"] = sorted(
-                getattr(provider, "tool_names", set()) if provider else []
+            updated["tool_names"] = sorted(
+                getattr(provider, "tool_names", record.get("tool_names", []))
+                if provider
+                else record.get("tool_names", [])
             )
-            records.append(record)
+            records.append(updated)
         return records
 
     def set_default_sandbox(self, sandbox_id: str) -> dict:
@@ -599,9 +612,12 @@ class SandboxManager:
         record = self.registry.get_sandbox(sandbox_id)
         if record is None or not record.get("managed"):
             raise RuntimeError(f"Sandbox {sandbox_id} not found")
-        provider = self.providers.get(record.get("provider", ""))
+        provider_id = record.get("provider", "")
+        provider = self.providers.get(provider_id)
         if retention_policy not in {"temporary", "persistent"}:
             raise RuntimeError("retention_policy must be temporary or persistent")
+        if retention_policy == "persistent" and provider is None:
+            raise RuntimeError(f"Provider {provider_id} is not available")
         if (
             retention_policy == "persistent"
             and provider is not None
@@ -914,7 +930,7 @@ class SandboxManager:
         # Only touch lifecycle when the caller actually holds the lease (or
         # the sandbox is unclaimed).  Pure observer access must not reset
         # idle timers for sandboxes controlled by other sessions.
-        if not controlled_by_other:
+        if session_id and record.get("controller_session_id") == session_id:
             self.registry.touch_sandbox(sandbox_id)
             await self.save_registry_async()
             idle_timeout = record.get("idle_timeout") or 0

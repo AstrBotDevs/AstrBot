@@ -252,6 +252,10 @@ class ScreenshotSandboxTool(FunctionTool):
         sandbox_id: str,
         send_to_user: bool = False,
     ) -> ToolExecResult:
+        if permission_error := check_admin_permission(
+            context, "Sandbox screenshot capture"
+        ):
+            return permission_error
         try:
             booter = await sandbox_manager.get_observer_booter_by_id(
                 sandbox_id,
@@ -318,6 +322,10 @@ class CopyFileBetweenSandboxesTool(FunctionTool):
         target_sandbox_id: str,
         target_path: str,
     ) -> ToolExecResult:
+        if permission_error := check_admin_permission(
+            context, "Copying files between sandboxes"
+        ):
+            return permission_error
         try:
             session_id = context.context.event.unified_msg_origin
             source = await sandbox_manager.get_observer_booter_by_id(

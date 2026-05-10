@@ -19,8 +19,7 @@ from .sandbox_manager import SandboxManager
 from .sandbox_provider import SandboxProvider
 from .sandbox_registry import SandboxRegistry
 
-session_booter: dict[str, ComputerBooter] = {}
-local_booter: ComputerBooter | None = None
+local_booter: LocalBooter | None = None
 sandbox_registry = SandboxRegistry()
 sandbox_manager = SandboxManager(registry=sandbox_registry, providers={})
 sandbox_registry.load()
@@ -598,6 +597,10 @@ async def get_booter(
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
     booter_type = sandbox_cfg.get("booter", "")
+    if not str(booter_type).strip():
+        raise ValueError(
+            "Sandbox booter is not configured. Install and enable a sandbox provider plugin, then select it in provider_settings.sandbox.booter."
+        )
 
     logger.info(
         f"[Computer] Initializing booter: type={booter_type}, session={session_id}"

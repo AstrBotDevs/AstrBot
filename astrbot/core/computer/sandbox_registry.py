@@ -107,6 +107,7 @@ class SandboxRegistry:
         lease_expires_at: float | None | object = _UNSET,
         labels: dict[str, Any] | None | object = _UNSET,
         capabilities: list[str] | set[str] | None | object = _UNSET,
+        tool_names: list[str] | set[str] | None | object = _UNSET,
         notes: str | None | object = _UNSET,
     ) -> dict[str, Any]:
         record = self._payload["sandboxes"].get(sandbox_id, {})
@@ -135,6 +136,7 @@ class SandboxRegistry:
             "is_default": False,
             "labels": {},
             "capabilities": [],
+            "tool_names": [],
             "notes": None,
         }
         updates = {
@@ -151,6 +153,7 @@ class SandboxRegistry:
             "capabilities": sorted(capabilities)
             if capabilities is not _UNSET
             else _UNSET,
+            "tool_names": sorted(tool_names) if tool_names is not _UNSET else _UNSET,
             "notes": notes,
         }
         for field_name, default_value in defaults.items():

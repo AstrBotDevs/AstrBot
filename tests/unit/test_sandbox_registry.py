@@ -23,6 +23,7 @@ def _upsert(registry, sandbox_id="generic-1", provider="generic"):
         owner_session_id="session-1",
         connect_info={"name": sandbox_id},
         capabilities={"shell", "python", "filesystem"},
+        tool_names={"generic_tool"},
     )
 
 
@@ -33,6 +34,7 @@ def test_registry_upserts_lists_and_deletes_sandboxes(tmp_path):
 
     assert record["sandbox_id"] == "generic-1"
     assert record["capabilities"] == ["filesystem", "python", "shell"]
+    assert record["tool_names"] == ["generic_tool"]
     assert registry.get_sandbox("generic-1")["sandbox_name"] == "Sandbox generic-1"
     assert [item["sandbox_id"] for item in registry.list_sandboxes()] == ["generic-1"]
 

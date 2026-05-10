@@ -395,8 +395,6 @@ class TestComputerClient:
         """Test get_booter with unknown booter type raises ValueError."""
         from astrbot.core.computer import computer_client
 
-        computer_client.session_booter.clear()
-
         mock_context = MagicMock()
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
@@ -412,6 +410,27 @@ class TestComputerClient:
         with pytest.raises(ValueError) as exc_info:
             await computer_client.get_booter(mock_context, "test-session-id")
         assert "Unknown booter type" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_get_booter_empty_sandbox_provider_hint(self):
+        """Test get_booter with empty sandbox booter gives actionable error."""
+        from astrbot.core.computer import computer_client
+
+        mock_context = MagicMock()
+        mock_config = MagicMock()
+        mock_config.get = lambda key, default=None: {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {
+                    "booter": "",
+                },
+            }
+        }.get(key, default)
+        mock_context.get_config = MagicMock(return_value=mock_config)
+
+        with pytest.raises(ValueError) as exc_info:
+            await computer_client.get_booter(mock_context, "test-session-id")
+        assert "Sandbox booter is not configured" in str(exc_info.value)
 
 
 class TestSyncSkillsToSandbox:
