@@ -99,7 +99,10 @@ class LongTermMemory:
                 low = mid + 1
             else:
                 high = mid - 1
-        return f"{marker}{best}"
+        result = f"{marker}{best}"
+        while result and self._estimate_text_tokens(result) > token_budget:
+            result = result[:-1]
+        return result
 
     def _build_chats_context(
         self,
@@ -133,6 +136,9 @@ class LongTermMemory:
             total_tokens += (
                 self._estimate_text_tokens(omitted_notice) + separator_tokens
             )
+        if total_tokens > token_budget:
+            chats_str = self._trim_text_to_token_budget(chats_str, token_budget)
+            total_tokens = self._estimate_text_tokens(chats_str)
         return chats_str, omitted, total_tokens
 
     async def remove_session(self, event: AstrMessageEvent) -> int:
@@ -204,6 +210,11 @@ class LongTermMemory:
                     parts.append(f" {comp.text}")
                 elif isinstance(comp, Image):
                     if cfg["image_caption"]:
+                        logger.warning(
+                            "Group ICL image caption is enabled. Each group image may trigger an extra multimodal request. umo=%s, provider=%s",
+                            event.unified_msg_origin,
+                            cfg["image_caption_provider_id"],
+                        )
                         try:
                             url = comp.url if comp.url else comp.file
                             if not url:
@@ -255,18 +266,16 @@ class LongTermMemory:
             )
             req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
         else:
-            req.system_prompt += (
-                "\nYou may receive recent group chat context in the current user message. "
-                "Use it only as background for this request.\n"
-            )
             req.extra_user_content_parts.append(
                 TextPart(
                     text=(
+                        "Use the following recent group chat context only as background "
+                        "for this request.\n"
                         "[Group Chat Context]\n"
                         "Recent group chat messages, newest messages are kept when truncated:\n"
                         f"{chats_str}"
                     )
-                )
+                ).mark_as_temp()
             )
 
     async def after_req_llm(
