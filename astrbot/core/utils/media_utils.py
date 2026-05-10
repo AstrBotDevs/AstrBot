@@ -178,7 +178,24 @@ async def convert_audio_format(
 
     args = ["ffmpeg", "-y", "-i", audio_path]
     if output_format == "amr":
-        args.extend(["-ac", "1", "-ar", "8000", "-ab", "12.2k"])
+        args.extend(
+            [
+                "-ac",
+                "1",
+                "-ar",
+                "8000",
+                "-ab",
+                "12.2k",
+                "-af",
+                (
+                    "highpass=f=310:poles=2,"
+                    "lowpass=f=3720:poles=2,"
+                    "equalizer=f=3150:width_type=h:width=1000:g=7.5,"
+                    "loudnorm=I=-18.5:TP=-1.5:LRA=6,"
+                    "aresample=8000"
+                ),
+            ]
+        )
     elif output_format == "ogg":
         args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
     elif output_format == "opus":
