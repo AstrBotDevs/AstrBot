@@ -6,8 +6,10 @@ import pytest
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.tools.computer_tools.sandbox import (
     CopyFileBetweenSandboxesTool,
+    CreateSandboxTool,
     DestroySandboxTool,
     KeepAliveSandboxTool,
+    ListSandboxProvidersTool,
     ListSandboxesTool,
     ScreenshotSandboxTool,
     SwitchSandboxTool,
@@ -38,6 +40,21 @@ def _member_context_without_admin_requirement():
     plugin_context = SimpleNamespace(
         get_config=lambda umo=None: {
             "provider_settings": {"computer_use_require_admin": False}
+        }
+    )
+    return ContextWrapper(
+        context=SimpleNamespace(event=FakeEvent(), context=plugin_context)
+    )
+
+
+def _sandbox_context(default_provider: str = "generic"):
+    plugin_context = SimpleNamespace(
+        get_config=lambda umo=None: {
+            "provider_settings": {
+                "computer_use_require_admin": False,
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": default_provider},
+            }
         }
     )
     return ContextWrapper(
@@ -153,6 +170,85 @@ async def test_member_list_sandboxes_includes_all_sandboxes_with_status(
     assert by_id["other-idle"]["access"]["can_switch"] is True
     assert by_id["other-busy"]["access"]["status"] == "occupied"
     assert by_id["other-busy"]["access"]["can_switch"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_sandbox_providers_tool_exposes_loaded_provider_capabilities(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.sandbox.list_sandbox_providers",
+        lambda: [
+            {
+                "provider_id": "generic",
+                "capabilities": ["shell"],
+                "tool_names": ["generic_tool"],
+                "system_prompt": "",
+            }
+        ],
+    )
+
+    result = await ListSandboxProvidersTool().call(_sandbox_context())
+    payload = json.loads(str(result))
+
+    assert payload["providers"] == [
+        {
+            "provider_id": "generic",
+            "capabilities": ["shell"],
+            "tool_names": ["generic_tool"],
+            "system_prompt": "",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_tool_defaults_to_configured_provider(monkeypatch):
+    calls = []
+
+    class FakeManager:
+        providers = {"generic": object(), "other": object()}
+
+        async def create_sandbox(
+            self, plugin_context, session_id, provider_id, *, sandbox_name=None
+        ):
+            calls.append((plugin_context, session_id, provider_id, sandbox_name))
+            return {"sandbox_id": "generic-1", "provider": provider_id}
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+    )
+
+    result = await CreateSandboxTool().call(_sandbox_context(), sandbox_name="Fresh")
+    payload = json.loads(str(result))
+
+    assert payload["sandbox"]["provider"] == "generic"
+    assert calls[0][2:] == ("generic", "Fresh")
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_tool_accepts_explicit_provider_id(monkeypatch):
+    calls = []
+
+    class FakeManager:
+        providers = {"generic": object(), "other": object()}
+
+        async def create_sandbox(
+            self, plugin_context, session_id, provider_id, *, sandbox_name=None
+        ):
+            calls.append((plugin_context, session_id, provider_id, sandbox_name))
+            return {"sandbox_id": "other-1", "provider": provider_id}
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+    )
+
+    result = await CreateSandboxTool().call(
+        _sandbox_context(), sandbox_name="Fresh", provider_id="other"
+    )
+    payload = json.loads(str(result))
+
+    assert payload["sandbox"]["provider"] == "other"
+    assert calls[0][2:] == ("other", "Fresh")
 
 
 @pytest.mark.asyncio

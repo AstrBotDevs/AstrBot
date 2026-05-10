@@ -305,6 +305,7 @@ async def test_build_handoff_toolset_prefers_current_sandbox_provider(
     try:
         toolset = FunctionToolExecutor._build_handoff_toolset(run_context, None)
         assert toolset is not None
+        assert "astrbot_list_sandbox_providers" in toolset.names()
         assert "boxlite_tool" in toolset.names()
         assert "astrbot_cua_screenshot" not in toolset.names()
     finally:

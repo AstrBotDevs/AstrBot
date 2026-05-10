@@ -7,7 +7,10 @@ from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.computer.computer_client import sandbox_manager
+from astrbot.core.computer.computer_client import (
+    list_sandbox_providers,
+    sandbox_manager,
+)
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -104,6 +107,23 @@ class ListSandboxesTool(FunctionTool):
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
 @dataclass
+class ListSandboxProvidersTool(FunctionTool):
+    name: str = "astrbot_list_sandbox_providers"
+    description: str = (
+        "List currently loaded sandbox providers and their capabilities. "
+        "Use this before choosing a provider or creating a sandbox for a different runtime."
+    )
+    parameters: dict = field(
+        default_factory=lambda: {"type": "object", "properties": {}}
+    )
+
+    async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
+        del context
+        return _dump({"providers": list_sandbox_providers()})
+
+
+@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
+@dataclass
 class GetCurrentSandboxTool(FunctionTool):
     name: str = "astrbot_get_current_sandbox"
     description: str = "Get the current sandbox bound to this session. Use this before creating a new sandbox so you can reuse the current one when possible."
@@ -123,7 +143,8 @@ class CreateSandboxTool(FunctionTool):
     description: str = (
         "Create a new managed sandbox for the current sandbox provider and switch the current session to it. "
         "This is a last resort: first check the current sandbox, then list sandboxes and prefer reusing the current sandbox, an idle default sandbox, or another reusable sandbox. "
-        "Use this when the user explicitly wants a fresh sandbox or a separate environment, or when no existing sandbox can be reused safely."
+        "Use this when the user explicitly wants a fresh sandbox or a separate environment, or when no existing sandbox can be reused safely. "
+        "If you need a different runtime, list sandbox providers first and pass provider_id explicitly."
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -132,7 +153,14 @@ class CreateSandboxTool(FunctionTool):
                 "sandbox_name": {
                     "type": "string",
                     "description": "Optional human-readable sandbox name.",
-                }
+                },
+                "provider_id": {
+                    "type": "string",
+                    "description": (
+                        "Optional sandbox provider ID. Defaults to the current active "
+                        "provider if omitted."
+                    ),
+                },
             },
         }
     )
@@ -141,15 +169,27 @@ class CreateSandboxTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         sandbox_name: str = "",
+        provider_id: str = "",
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Creating sandbox"):
             return permission_error
 
         plugin_context = context.context.context
         session_id = context.context.event.unified_msg_origin
-        provider_id = _current_provider_id(context)
+        requested_provider_id = str(provider_id).strip().lower()
+        if requested_provider_id:
+            provider_id = requested_provider_id
+        else:
+            provider_id = _current_provider_id(context)
         if not provider_id:
             return "Error creating sandbox: sandbox booter is not configured."
+        if provider_id not in sandbox_manager.providers:
+            providers = list_sandbox_providers()
+            available = ", ".join(p["provider_id"] for p in providers) or "none"
+            return (
+                f"Error creating sandbox: sandbox provider '{provider_id}' is not "
+                f"available. Available providers: {available}."
+            )
 
         try:
             sandbox = await sandbox_manager.create_sandbox(

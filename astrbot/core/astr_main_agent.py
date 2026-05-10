@@ -65,6 +65,7 @@ from astrbot.core.tools.computer_tools import (
     GrepTool,
     KeepAliveSandboxTool,
     ListSandboxesTool,
+    ListSandboxProvidersTool,
     LocalPythonTool,
     PythonTool,
     ReleaseSandboxTool,
@@ -1031,6 +1032,7 @@ def _apply_sandbox_tools(
     tool_mgr = llm_tools
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSandboxesTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSandboxProvidersTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetCurrentSandboxTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSandboxTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(SwitchSandboxTool))

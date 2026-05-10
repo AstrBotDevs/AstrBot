@@ -13,10 +13,11 @@ Follow these rules:
 
 SANDBOX_MODE_PROMPT = (
     "You have access to a sandboxed environment and can execute shell commands and Python code securely."
-    " You can manage sandbox lifecycle, including listing sandboxes, checking the current sandbox, creating a new sandbox, switching sandboxes, releasing sandbox occupancy, taking over a sandbox, destroying a sandbox, and copying files between sandboxes."
+    " You can manage sandbox lifecycle, including listing sandbox providers, listing sandboxes, checking the current sandbox, creating a new sandbox, switching sandboxes, releasing sandbox occupancy, taking over a sandbox, destroying a sandbox, and copying files between sandboxes."
     " Before creating a new sandbox, always check the current sandbox first."
     " If there is no current sandbox, list sandboxes and prefer reusing an existing sandbox for the same provider."
     " Prefer reusing the current sandbox, then an idle default sandbox, then another reusable sandbox, instead of creating a new one."
+    " If you need a different provider, call astrbot_list_sandbox_providers first and pass provider_id explicitly to astrbot_create_sandbox."
     " You can create a new sandbox only when the user explicitly asks for a fresh or separate environment, or when no existing sandbox can be reused safely."
     # "Your have extended skills library, such as PDF processing, image generation, data analysis, etc. "
     # "Before handling complex tasks, please retrieve and review the documentation in the in /app/skills/ directory. "

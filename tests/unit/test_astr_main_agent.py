@@ -1832,6 +1832,7 @@ class TestApplySandboxTools:
         assert "astrbot_upload_file" in tool_names
         assert "astrbot_download_file" in tool_names
         assert "astrbot_create_sandbox" in tool_names
+        assert "astrbot_list_sandbox_providers" in tool_names
         assert "astrbot_list_sandboxes" in tool_names
         assert "astrbot_get_current_sandbox" in tool_names
         assert "astrbot_switch_sandbox" in tool_names
@@ -1906,6 +1907,7 @@ class TestApplySandboxTools:
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt
         assert "check the current sandbox first" in req.system_prompt
+        assert "listing sandbox providers" in req.system_prompt
         assert "list sandboxes and prefer reusing" in req.system_prompt
         assert "idle default sandbox" in req.system_prompt
         assert "fresh or separate environment" in req.system_prompt
@@ -1979,6 +1981,7 @@ class TestApplySandboxTools:
             )
 
         assert "astrbot_create_sandbox" in tools
+        assert "astrbot_list_sandbox_providers" in tools
         assert "astrbot_list_sandboxes" in tools
         assert "astrbot_get_current_sandbox" in tools
         assert "astrbot_switch_sandbox" in tools
