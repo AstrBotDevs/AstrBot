@@ -126,7 +126,7 @@ def test_registry_reconcile_startup_marks_creating_as_error(tmp_path):
     assert registry.get_sandbox("generic-1")["status"] == "error"
 
 
-def test_registry_reconcile_startup_keeps_persistent_running_state(tmp_path):
+def test_registry_reconcile_startup_marks_persistent_running_unknown(tmp_path):
     registry = _registry(tmp_path)
     registry.upsert_sandbox(
         sandbox_id="generic-1",
@@ -144,7 +144,7 @@ def test_registry_reconcile_startup_keeps_persistent_running_state(tmp_path):
 
     registry.reconcile_startup()
 
-    assert registry.get_sandbox("generic-1")["status"] == "running"
+    assert registry.get_sandbox("generic-1")["status"] == "unknown"
 
 
 @pytest.mark.asyncio

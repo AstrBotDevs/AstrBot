@@ -349,6 +349,10 @@ class TestAstrBotCoreLifecycleSandboxRestore:
                 new_callable=AsyncMock,
             ),
             patch(
+                "astrbot.core.core_lifecycle.computer_client.sandbox_manager.reconcile_on_startup",
+                new_callable=AsyncMock,
+            ),
+            patch(
                 "astrbot.core.core_lifecycle.computer_client.sandbox_manager.restore_persistent_sandboxes",
                 restore_persistent,
             ),

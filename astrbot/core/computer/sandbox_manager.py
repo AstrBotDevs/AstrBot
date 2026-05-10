@@ -929,6 +929,44 @@ class SandboxManager:
         self.session_booter.clear()
         for sandbox_id in list(self.idle_state):
             self.clear_idle_state(sandbox_id)
+
+        # Validate persistent sandbox records against provider reality.
+        # If a provider reports that its persistent sandbox no longer exists
+        # externally, remove the stale registry record so the dashboard does
+        # not show ghost entries.
+        for record in list(self.registry.list_sandboxes()):
+            if record.get("retention_policy") != "persistent":
+                continue
+            provider = None
+            try:
+                provider = self.get_provider(record.get("provider", ""))
+            except RuntimeError:
+                continue
+            if not getattr(provider, "supports_persistent_reconnect", False):
+                continue
+            check_exists = getattr(provider, "check_persistent_sandbox_exists", None)
+            if check_exists is None:
+                continue
+            try:
+                exists = await check_exists(record)
+            except Exception as exc:
+                logger.warning(
+                    "[Computer] Failed to check persistent sandbox %s existence: %s",
+                    record.get("sandbox_id"),
+                    exc,
+                )
+                continue
+            if not exists:
+                sandbox_id = record["sandbox_id"]
+                logger.info(
+                    "[Computer] Persistent sandbox %s no longer exists externally; removing registry record",
+                    sandbox_id,
+                )
+                self.session_booter.pop(sandbox_id, None)
+                self.clear_idle_state(sandbox_id)
+                self.registry.delete_sandbox(sandbox_id)
+                self.drop_boot_lock(sandbox_id)
+
         await self.save_registry_async()
 
     async def restore_persistent_sandboxes(self, context: Context) -> None:

@@ -243,6 +243,17 @@ class AstrBotCoreLifecycle:
         # 扫描、注册插件、实例化插件类
         await self.plugin_manager.reload()
 
+        # Reconcile sandbox registry on startup to clear stale state and
+        # remove persistent records whose underlying resources no longer exist.
+        try:
+            await computer_client.sandbox_manager.reconcile_on_startup()
+        except Exception as e:
+            logger.warning(
+                "Sandbox startup reconciliation failed: %s",
+                e,
+                exc_info=True,
+            )
+
         await computer_client.sandbox_manager.restore_persistent_sandboxes(
             self.star_context
         )
