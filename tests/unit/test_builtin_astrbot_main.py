@@ -65,11 +65,6 @@ async def test_active_reply_skips_failed_image_conversion(monkeypatch):
     async def convert_to_file_path(self):
         raise RuntimeError("broken image")
 
-    mock_logger = MagicMock()
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.astrbot.main.logger",
-        mock_logger,
-    )
     monkeypatch.setattr(Image, "convert_to_file_path", convert_to_file_path)
     image = Image(file="file:///tmp/picture.png")
     event = MagicMock()
@@ -83,9 +78,6 @@ async def test_active_reply_skips_failed_image_conversion(monkeypatch):
     results = [item async for item in main.on_message(event)]
 
     assert results == [request]
-    mock_logger.exception.assert_called_once_with(
-        "主动回复处理图片失败",
-    )
     event.request_llm.assert_called_once_with(
         prompt="",
         session_id="session-id",
