@@ -46,7 +46,10 @@ def test_sandbox_management_page_replaces_console_history_after_command_updates(
         encoding="utf-8"
     )
 
-    assert "consoleHistory.value = [...consoleHistory.value]" in content or "await nextTick()" in content
+    assert (
+        "consoleHistory.value = [...consoleHistory.value]" in content
+        or "await nextTick()" in content
+    )
 
 
 def test_sandbox_management_page_release_is_not_limited_to_dashboard_controller():
@@ -66,6 +69,32 @@ def test_sandbox_management_page_refreshes_list_after_immediate_create_success()
 
     assert "const placeholder = { ...created, status: 'creating' as const }" in content
     assert "upsertSandboxRecord(placeholder)" in content
+    assert (
+        "const index = sandboxes.value.findIndex((item) => item.sandbox_id === record.sandbox_id)"
+        in content
+    )
+    assert "next[index] = record" in content
+    assert "sandboxes.value = next" in content
+
+
+def test_sandbox_management_page_keeps_create_button_available_while_other_sandboxes_are_creating():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'prepend-icon="mdi-plus" @click="createDialog = true"' in content
+    assert 'prepend-icon="mdi-plus" :disabled="creatingRequestPending"' not in content
+    assert ':disabled="createFlowActive"' not in content
+    assert ":disabled=\"createProvider !== 'cua' || creatingRequestPending\"" in content
+
+
+def test_sandbox_management_page_tracks_multiple_pending_creates_instead_of_single_id():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "pendingCreateSandboxes" in content
+    assert "pendingCreateSandboxId" not in content
 
 
 def test_sandbox_management_page_does_not_allow_configure_while_creating():

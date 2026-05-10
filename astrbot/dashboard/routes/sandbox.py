@@ -163,7 +163,10 @@ class SandboxRoute(Route):
             # Dashboard shell access is an administrative operation; it does
             # not need a lease so admins can operate any sandbox at any time.
             booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
-                sandbox_id, self._session_id(), require_lease=False
+                sandbox_id,
+                self._session_id(),
+                require_lease=False,
+                context=self.core_lifecycle.star_context,
             )
             shell = getattr(booter, "shell", None)
             if shell is None:
@@ -190,7 +193,10 @@ class SandboxRoute(Route):
             # Dashboard screenshot is a read-only observer operation; it does
             # not need a lease and must not reset the sandbox idle timer.
             booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
-                sandbox_id, self._session_id(), require_lease=False
+                sandbox_id,
+                self._session_id(),
+                require_lease=False,
+                context=self.core_lifecycle.star_context,
             )
             gui = getattr(booter, "gui", None)
             if gui is None:

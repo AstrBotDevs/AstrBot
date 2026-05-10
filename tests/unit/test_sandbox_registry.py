@@ -126,6 +126,27 @@ def test_registry_reconcile_startup_marks_creating_as_error(tmp_path):
     assert registry.get_sandbox("generic-1")["status"] == "error"
 
 
+def test_registry_reconcile_startup_keeps_persistent_running_state(tmp_path):
+    registry = _registry(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Sandbox generic-1",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-1",
+        owner_session_id="session-1",
+        connect_info={"name": "generic-1"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    registry.reconcile_startup()
+
+    assert registry.get_sandbox("generic-1")["status"] == "running"
+
+
 @pytest.mark.asyncio
 async def test_registry_save_async_runs_save_in_worker_thread(tmp_path):
     registry = _registry(tmp_path)

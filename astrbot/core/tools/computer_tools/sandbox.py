@@ -141,9 +141,7 @@ class SwitchSandboxTool(FunctionTool):
 @dataclass
 class ReleaseSandboxTool(FunctionTool):
     name: str = "astrbot_release_sandbox"
-    description: str = (
-        "Release the current sandbox occupancy for this session or for a specified sandbox."
-    )
+    description: str = "Release the current sandbox occupancy for this session or for a specified sandbox."
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -256,7 +254,9 @@ class ScreenshotSandboxTool(FunctionTool):
     ) -> ToolExecResult:
         try:
             booter = await sandbox_manager.get_observer_booter_by_id(
-                sandbox_id, context.context.event.unified_msg_origin
+                sandbox_id,
+                context.context.event.unified_msg_origin,
+                context=context.context.context,
             )
             gui = getattr(booter, "gui", None)
             if gui is None:
@@ -321,10 +321,10 @@ class CopyFileBetweenSandboxesTool(FunctionTool):
         try:
             session_id = context.context.event.unified_msg_origin
             source = await sandbox_manager.get_observer_booter_by_id(
-                source_sandbox_id, session_id
+                source_sandbox_id, session_id, context=context.context.context
             )
             target = await sandbox_manager.get_observer_booter_by_id(
-                target_sandbox_id, session_id
+                target_sandbox_id, session_id, context=context.context.context
             )
             temp_dir = Path(get_astrbot_temp_path()) / "sandbox_copy"
             temp_dir.mkdir(parents=True, exist_ok=True)

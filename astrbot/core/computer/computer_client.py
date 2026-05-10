@@ -129,6 +129,11 @@ def _cleanup_provider_sandboxes_sync(provider_id: str) -> None:
         if not record.get("managed") or record.get("provider") != provider_id:
             continue
         sandbox_id = record["sandbox_id"]
+        if record.get("retention_policy") == "persistent":
+            sandbox_manager.session_booter.pop(sandbox_id, None)
+            sandbox_manager.clear_idle_state(sandbox_id)
+            sandbox_manager.drop_boot_lock(sandbox_id)
+            continue
         booter = sandbox_manager.session_booter.pop(sandbox_id, None)
         sandbox_manager.clear_idle_state(sandbox_id)
         sandbox_manager.registry.delete_sandbox(sandbox_id)

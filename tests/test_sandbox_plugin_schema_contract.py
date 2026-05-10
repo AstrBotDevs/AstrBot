@@ -86,6 +86,26 @@ def test_cua_provider_falls_back_to_local_mode_without_api_key(monkeypatch):
     assert config["api_key"] == ""
 
 
+def test_cua_provider_connect_info_tracks_persistent_runtime_name():
+    _require_plugin_files("data/plugins/astrbot_sandbox_cua/provider.py")
+    from data.plugins.astrbot_sandbox_cua.provider import CuaSandboxProvider
+
+    provider = CuaSandboxProvider()
+
+    info = provider.build_connect_info(
+        "Named",
+        {
+            "local": True,
+            "image": "linux",
+            "os_type": "linux",
+            "persistent_name": "cua-persistent-1",
+        },
+    )
+
+    assert info["name"] == "Named"
+    assert info["persistent_name"] == "cua-persistent-1"
+
+
 def test_existing_plugin_config_keeps_saved_values_when_schema_defaults_change(
     tmp_path,
 ):

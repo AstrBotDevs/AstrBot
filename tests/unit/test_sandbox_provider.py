@@ -12,6 +12,7 @@ def test_sandbox_provider_protocol_exposes_generic_runtime_contract():
     assert protocol_hints["plugin_config"] == dict[str, Any] | None
     assert protocol_hints["provider_api_version"] is str
     assert protocol_hints["auto_sync_skills"] is bool
+    assert protocol_hints["supports_persistent_reconnect"] is bool
 
     hints = get_type_hints(SandboxProvider.create_booter)
     assert "context" in hints

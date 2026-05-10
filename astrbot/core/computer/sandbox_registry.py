@@ -306,7 +306,8 @@ class SandboxRegistry:
             record["controller_user_id"] = None
             record["lease_expires_at"] = None
             if record.get("status") == "running":
-                record["status"] = "unknown"
+                if record.get("retention_policy") != "persistent":
+                    record["status"] = "unknown"
             elif record.get("status") == "creating":
                 record["status"] = "error"
 

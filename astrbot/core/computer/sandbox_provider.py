@@ -31,6 +31,7 @@ class SandboxProvider(Protocol):
     plugin_config: dict[str, Any] | None = None
     provider_api_version: str = "1.0"
     auto_sync_skills: bool = True
+    supports_persistent_reconnect: bool = False
 
     def build_create_config(self, context: Context, session_id: str) -> dict: ...
 

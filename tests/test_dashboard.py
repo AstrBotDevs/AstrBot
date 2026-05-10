@@ -378,6 +378,49 @@ async def test_sandbox_dashboard_create_does_not_auto_occupy_sandbox(
 
 
 @pytest.mark.asyncio
+async def test_sandbox_dashboard_create_rejects_duplicate_name(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Named",
+        booter_type=provider.provider_id,
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Named"},
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox?session_id=dashboard",
+        json={"provider_id": provider.provider_id, "sandbox_name": "Named"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert (
+        data["message"]
+        == "Failed to create sandbox: Sandbox name 'Named' already exists"
+    )
+
+
+@pytest.mark.asyncio
 async def test_sandbox_dashboard_sets_default_sandbox(
     app: Quart,
     authenticated_header: dict,

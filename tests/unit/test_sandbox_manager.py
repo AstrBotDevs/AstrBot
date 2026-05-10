@@ -36,6 +36,7 @@ class FakeProvider:
     provider_id = "generic"
     capabilities = {"shell", "python", "filesystem", "screenshot", "mouse", "keyboard"}
     tool_names = {"astrbot_generic_screenshot"}
+    supports_persistent_reconnect = True
 
     def __init__(self):
         self.created = []
@@ -81,6 +82,11 @@ class DeferredBootProvider(FakeProvider):
         return await super().create_booter(context, session_id, sandbox_id, config)
 
 
+class FailingReconnectProvider(FakeProvider):
+    async def create_booter(self, context, session_id, sandbox_id, config):
+        raise RuntimeError("boot failed")
+
+
 def _manager(tmp_path, provider=None):
     provider = provider or FakeProvider()
     manager = SandboxManager(
@@ -107,7 +113,9 @@ async def test_manager_creates_default_sandbox_and_reuses_available_booter(tmp_p
 
 
 @pytest.mark.asyncio
-async def test_create_sandbox_uncontrolled_returns_authoritative_registry_state(tmp_path):
+async def test_create_sandbox_uncontrolled_returns_authoritative_registry_state(
+    tmp_path,
+):
     manager, _provider = _manager(tmp_path)
 
     sandbox = await manager.create_sandbox_uncontrolled(None, "session-a", "generic")
@@ -117,7 +125,32 @@ async def test_create_sandbox_uncontrolled_returns_authoritative_registry_state(
 
 
 @pytest.mark.asyncio
-async def test_create_sandbox_uncontrolled_deferred_returns_creating_then_running(tmp_path):
+async def test_create_sandbox_uncontrolled_rejects_duplicate_name(tmp_path):
+    manager, _provider = _manager(tmp_path)
+
+    await manager.create_sandbox_uncontrolled(None, "session-a", "generic", "Named")
+
+    with pytest.raises(RuntimeError, match="Sandbox name 'Named' already exists"):
+        await manager.create_sandbox_uncontrolled(None, "session-a", "generic", "Named")
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_blank_name_falls_back_to_sandbox_id(
+    tmp_path,
+):
+    manager, _provider = _manager(tmp_path)
+
+    sandbox = await manager.create_sandbox_uncontrolled(
+        None, "session-a", "generic", "   "
+    )
+
+    assert sandbox["sandbox_name"] == sandbox["sandbox_id"]
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_deferred_returns_creating_then_running(
+    tmp_path,
+):
     provider = DeferredBootProvider()
     manager, _provider = _manager(tmp_path, provider)
 
@@ -140,6 +173,21 @@ async def test_create_sandbox_uncontrolled_deferred_returns_creating_then_runnin
 
     assert manager.registry.get_sandbox(sandbox["sandbox_id"])["status"] == "running"
     assert sandbox["sandbox_id"] in manager.session_booter
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_deferred_rejects_duplicate_name(tmp_path):
+    provider = DeferredBootProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    await manager.create_sandbox_uncontrolled_deferred(
+        None, "session-a", "generic", "Named"
+    )
+
+    with pytest.raises(RuntimeError, match="Sandbox name 'Named' already exists"):
+        await manager.create_sandbox_uncontrolled_deferred(
+            None, "session-a", "generic", "Named"
+        )
 
 
 @pytest.mark.asyncio
@@ -194,9 +242,10 @@ async def test_create_sandbox_sets_current_sandbox_after_lease(tmp_path):
     sandbox = await manager.create_sandbox(None, "session-a", "generic")
 
     assert sandbox["status"] == "running"
-    assert manager.get_current_sandbox("session-a")["current_sandbox_id"] == sandbox[
-        "sandbox_id"
-    ]
+    assert (
+        manager.get_current_sandbox("session-a")["current_sandbox_id"]
+        == sandbox["sandbox_id"]
+    )
 
 
 @pytest.mark.asyncio
@@ -290,6 +339,136 @@ async def test_manager_blocks_observer_booter_access_from_other_session(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_manager_revives_persistent_sandbox_for_observer_access(tmp_path):
+    manager, provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    booter = await manager.get_observer_booter_by_id(
+        "generic-1", "dashboard", require_lease=False, context=object()
+    )
+
+    assert isinstance(booter, FakeBooter)
+    assert len(provider.created) == 1
+    assert manager.registry.get_sandbox("generic-1")["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_manager_does_not_revive_destroyed_persistent_sandbox(tmp_path):
+    manager, provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    manager.update_sandbox_config(
+        created["sandbox_id"],
+        idle_timeout=None,
+        expires_at=None,
+        retention_policy="persistent",
+    )
+
+    await manager.destroy_sandbox("session-a", created["sandbox_id"])
+
+    with pytest.raises(RuntimeError, match="has been destroyed"):
+        await manager.get_observer_booter_by_id(
+            created["sandbox_id"],
+            "dashboard",
+            require_lease=False,
+            context=object(),
+        )
+
+    assert len(provider.created) == 1
+
+
+@pytest.mark.asyncio
+async def test_manager_does_not_revive_persistent_sandbox_without_provider_support(
+    tmp_path,
+):
+    manager, provider = _manager(tmp_path)
+    provider.supports_persistent_reconnect = False
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    with pytest.raises(RuntimeError, match="Sandbox generic-1 is not running"):
+        await manager.get_observer_booter_by_id(
+            "generic-1", "dashboard", require_lease=False, context=object()
+        )
+
+    assert provider.created == []
+
+
+@pytest.mark.asyncio
+async def test_manager_persistent_reconnect_failure_restores_previous_status(tmp_path):
+    provider = FailingReconnectProvider()
+    manager, _provider = _manager(tmp_path, provider)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    with pytest.raises(RuntimeError, match="boot failed"):
+        await manager.get_observer_booter_by_id(
+            "generic-1", "dashboard", require_lease=False, context=object()
+        )
+
+    assert manager.registry.get_sandbox("generic-1")["status"] == "running"
+    assert manager.session_booter == {}
+
+
+@pytest.mark.asyncio
+async def test_manager_revives_persistent_sandbox_for_tool_access(tmp_path):
+    manager, provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    booter = await manager.get_observer_booter_by_id(
+        "generic-1", "session-a", require_lease=False, context=object()
+    )
+
+    assert isinstance(booter, FakeBooter)
+    assert len(provider.created) == 1
+
+
+@pytest.mark.asyncio
 async def test_manager_idle_cleanup_removes_temporary_sandbox(tmp_path):
     provider = FakeProvider()
     provider.idle_timeout = 0.01
@@ -306,7 +485,9 @@ async def test_manager_idle_cleanup_removes_temporary_sandbox(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_manager_cleanup_preserves_persistent_sandbox_records(tmp_path):
+async def test_manager_cleanup_preserves_persistent_sandbox_records(
+    tmp_path,
+):
     manager, provider = _manager(tmp_path)
     created = await manager.create_sandbox(None, "session-a", "generic")
     manager.update_sandbox_config(
@@ -320,3 +501,67 @@ async def test_manager_cleanup_preserves_persistent_sandbox_records(tmp_path):
 
     assert manager.registry.get_sandbox(created["sandbox_id"])["status"] == "running"
     assert provider.destroyed == []
+
+
+def test_manager_update_sandbox_config_rejects_duplicate_name(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    first = manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="First",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "First"},
+    )
+    second = manager.registry.upsert_sandbox(
+        sandbox_id="generic-2",
+        sandbox_name="Second",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Second"},
+    )
+
+    with pytest.raises(RuntimeError, match="Sandbox name 'First' already exists"):
+        manager.update_sandbox_config(
+            second["sandbox_id"],
+            sandbox_name=first["sandbox_name"],
+            idle_timeout=None,
+            expires_at=None,
+            retention_policy="temporary",
+        )
+
+
+def test_manager_update_sandbox_config_rejects_persistent_for_unsupported_provider(
+    tmp_path,
+):
+    manager, provider = _manager(tmp_path)
+    provider.supports_persistent_reconnect = False
+    created = manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="First",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "First"},
+    )
+
+    with pytest.raises(
+        RuntimeError, match="Provider generic does not support persistent sandboxes"
+    ):
+        manager.update_sandbox_config(
+            created["sandbox_id"],
+            sandbox_name=created["sandbox_name"],
+            idle_timeout=None,
+            expires_at=None,
+            retention_policy="persistent",
+        )

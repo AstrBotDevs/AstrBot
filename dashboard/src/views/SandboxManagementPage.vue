@@ -7,7 +7,7 @@
           <div class="text-body-2 text-medium-emphasis mt-1">{{ tm('subtitle') }}</div>
         </div>
         <div class="toolbar-actions">
-          <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" :disabled="createFlowActive" @click="createDialog = true">
+          <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="createDialog = true">
             {{ tm('actions.create') }}
           </v-btn>
           <v-btn variant="tonal" prepend-icon="mdi-refresh" :loading="loading" @click="loadSandboxes">
@@ -189,7 +189,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="createDialog = false">{{ tm('actions.cancel') }}</v-btn>
-          <v-btn color="primary" :loading="creatingRequestPending" :disabled="createProvider !== 'cua' || createFlowActive" @click="createSandbox">
+          <v-btn color="primary" :loading="creatingRequestPending" :disabled="createProvider !== 'cua' || creatingRequestPending" @click="createSandbox">
             {{ tm('actions.create') }}
           </v-btn>
         </v-card-actions>
@@ -349,9 +349,9 @@ const configExpiresAt = ref('')
 const configSandboxName = ref('')
 const createName = ref('')
 const createProvider = ref('cua')
-const createPollingTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+const createPollingTimers = ref<Record<string, ReturnType<typeof setTimeout>>>({})
 const createGeneration = ref(0)
-const pendingCreateSandboxId = ref<string | null>(null)
+const pendingCreateSandboxes = ref<Record<string, { placeholder: SandboxRecord; attempts: number; refreshFailures: number }>>({})
 const screenshotDialog = ref(false)
 const screenshotDataUrl = ref('')
 const destroyDialog = ref(false)
@@ -388,7 +388,6 @@ const providerCount = computed(() => new Set(sandboxes.value.map((item) => item.
 const busyCount = computed(() => sandboxes.value.filter((item) => !!item.controller_session_id).length)
 const defaultCount = computed(() => sandboxes.value.filter((item) => item.is_default).length)
 const canSaveConfig = computed(() => configSandboxName.value.trim().length > 0)
-const createFlowActive = computed(() => creatingRequestPending.value || !!pendingCreateSandboxId.value)
 const selectedSandboxRecord = computed(() => {
   if (!selectedSandboxId.value) return null
   return sandboxes.value.find((item) => item.sandbox_id === selectedSandboxId.value) || null
@@ -477,8 +476,31 @@ function canUseAction(item: SandboxRecord, action: SandboxAction) {
 }
 
 function upsertSandboxRecord(record: SandboxRecord) {
-  const others = sandboxes.value.filter((item) => item.sandbox_id !== record.sandbox_id)
-  sandboxes.value = [record, ...others]
+  const index = sandboxes.value.findIndex((item) => item.sandbox_id === record.sandbox_id)
+  if (index === -1) {
+    sandboxes.value = [...sandboxes.value, record]
+    return
+  }
+
+  const next = [...sandboxes.value]
+  next[index] = record
+  sandboxes.value = next
+}
+
+function setPendingCreateSandbox(
+  sandboxId: string,
+  pending: { placeholder: SandboxRecord; attempts: number; refreshFailures: number }
+) {
+  pendingCreateSandboxes.value = {
+    ...pendingCreateSandboxes.value,
+    [sandboxId]: pending
+  }
+}
+
+function removePendingCreateSandbox(sandboxId: string) {
+  const next = { ...pendingCreateSandboxes.value }
+  delete next[sandboxId]
+  pendingCreateSandboxes.value = next
 }
 
 function formatTime(value?: number | null) {
@@ -573,17 +595,28 @@ async function sandboxAction(
   return null
 }
 
-function stopCreatePolling() {
-  if (createPollingTimer.value) {
-    clearTimeout(createPollingTimer.value)
-    createPollingTimer.value = null
+function clearCreatePollingTimer(sandboxId: string) {
+  const timer = createPollingTimers.value[sandboxId]
+  if (timer) {
+    clearTimeout(timer)
+    const next = { ...createPollingTimers.value }
+    delete next[sandboxId]
+    createPollingTimers.value = next
   }
-  createGeneration.value++
-  pendingCreateSandboxId.value = null
 }
 
-function finishCreatePolling(record?: SandboxRecord) {
-  stopCreatePolling()
+function stopCreatePolling() {
+  for (const timer of Object.values(createPollingTimers.value)) {
+    clearTimeout(timer)
+  }
+  createPollingTimers.value = {}
+  createGeneration.value++
+  pendingCreateSandboxes.value = {}
+}
+
+function finishCreatePolling(sandboxId: string, record?: SandboxRecord) {
+  clearCreatePollingTimer(sandboxId)
+  removePendingCreateSandbox(sandboxId)
   if (!record) return
 
   if (record.status === 'running') {
@@ -604,61 +637,90 @@ function finishCreatePolling(record?: SandboxRecord) {
 }
 
 function startCreatePolling(sandboxId: string, placeholder: SandboxRecord) {
-  stopCreatePolling()
-  pendingCreateSandboxId.value = sandboxId
+  setPendingCreateSandbox(sandboxId, {
+    placeholder,
+    attempts: 0,
+    refreshFailures: 0
+  })
   upsertSandboxRecord(placeholder)
-  const currentGen = ++createGeneration.value
-  let attempts = 0
-  let refreshFailures = 0
+  const currentGen = createGeneration.value
 
-  const poll = async () => {
+  const poll = async (trackedSandboxId: string) => {
     if (currentGen !== createGeneration.value) return
 
-    attempts++
+    const pending = pendingCreateSandboxes.value[trackedSandboxId]
+    if (!pending) return
+
+    setPendingCreateSandbox(trackedSandboxId, {
+      ...pending,
+      attempts: pending.attempts + 1
+    })
     const result = await loadSandboxes({ silent: true })
 
     if (currentGen !== createGeneration.value) return
 
+    const latestPending = pendingCreateSandboxes.value[trackedSandboxId]
+    if (!latestPending) return
+
     if (!result.ok) {
-      refreshFailures++
-      if (refreshFailures >= CREATE_POLL_MAX_REFRESH_FAILURES || attempts >= CREATE_POLL_MAX_ATTEMPTS) {
-        stopCreatePolling()
+      const refreshFailures = latestPending.refreshFailures + 1
+      setPendingCreateSandbox(trackedSandboxId, {
+        ...latestPending,
+        refreshFailures
+      })
+      if (refreshFailures >= CREATE_POLL_MAX_REFRESH_FAILURES || latestPending.attempts >= CREATE_POLL_MAX_ATTEMPTS) {
+        finishCreatePolling(trackedSandboxId)
         toast(tm('messages.createRefreshUnstable'), 'warning')
         return
       }
-      createPollingTimer.value = setTimeout(poll, CREATE_POLL_INTERVAL_MS)
+      createPollingTimers.value = {
+        ...createPollingTimers.value,
+        [trackedSandboxId]: setTimeout(() => void poll(trackedSandboxId), CREATE_POLL_INTERVAL_MS)
+      }
       return
     }
 
-    refreshFailures = 0
-    const record = result.records.find((item) => item.sandbox_id === sandboxId)
+    setPendingCreateSandbox(trackedSandboxId, {
+      ...latestPending,
+      refreshFailures: 0
+    })
+    const record = result.records.find((item) => item.sandbox_id === trackedSandboxId)
 
     if (!record) {
-      upsertSandboxRecord(placeholder)
-      if (attempts >= CREATE_POLL_MAX_ATTEMPTS) {
-        stopCreatePolling()
-        toast(tm('messages.createNotVisible', { sandboxId }), 'warning')
+      upsertSandboxRecord(latestPending.placeholder)
+      if (latestPending.attempts >= CREATE_POLL_MAX_ATTEMPTS) {
+        finishCreatePolling(trackedSandboxId)
+        toast(tm('messages.createNotVisible', { sandboxId: trackedSandboxId }), 'warning')
         return
       }
-      createPollingTimer.value = setTimeout(poll, CREATE_POLL_INTERVAL_MS)
+      createPollingTimers.value = {
+        ...createPollingTimers.value,
+        [trackedSandboxId]: setTimeout(() => void poll(trackedSandboxId), CREATE_POLL_INTERVAL_MS)
+      }
       return
     }
 
     if (isCreatePendingStatus(record.status)) {
       upsertSandboxRecord(record)
-      if (attempts >= CREATE_POLL_MAX_ATTEMPTS) {
-        stopCreatePolling()
-        toast(tm('messages.createTimedOut', { sandboxId }), 'warning')
+      if (latestPending.attempts >= CREATE_POLL_MAX_ATTEMPTS) {
+        finishCreatePolling(trackedSandboxId)
+        toast(tm('messages.createTimedOut', { sandboxId: trackedSandboxId }), 'warning')
         return
       }
-      createPollingTimer.value = setTimeout(poll, CREATE_POLL_INTERVAL_MS)
+      createPollingTimers.value = {
+        ...createPollingTimers.value,
+        [trackedSandboxId]: setTimeout(() => void poll(trackedSandboxId), CREATE_POLL_INTERVAL_MS)
+      }
       return
     }
 
-    finishCreatePolling(record)
+    finishCreatePolling(trackedSandboxId, record)
   }
 
-  createPollingTimer.value = setTimeout(poll, CREATE_POLL_INTERVAL_MS)
+  createPollingTimers.value = {
+    ...createPollingTimers.value,
+    [sandboxId]: setTimeout(() => void poll(sandboxId), CREATE_POLL_INTERVAL_MS)
+  }
 }
 
 async function createSandbox() {
