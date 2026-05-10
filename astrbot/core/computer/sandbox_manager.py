@@ -985,10 +985,7 @@ class SandboxManager:
             finally:
                 self.session_booter.pop(sandbox_id, None)
         self.clear_idle_state(sandbox_id)
-        if record.get("retention_policy") == "persistent":
-            self.registry.update_sandbox_status(sandbox_id, SandboxStatus.STOPPED)
-        else:
-            self.registry.delete_sandbox(sandbox_id)
+        self.registry.delete_sandbox(sandbox_id)
         self.drop_boot_lock(sandbox_id)
         await self.save_registry_async()
 
@@ -1121,7 +1118,14 @@ class SandboxManager:
 
         await self.save_registry_async()
 
-    async def restore_persistent_sandboxes(self, context: Context) -> None:
+    async def restore_persistent_sandboxes(
+        self,
+        context: Context,
+        *,
+        per_sandbox_timeout: float | None = None,
+    ) -> tuple[int, int]:
+        restored = 0
+        deleted = 0
         for record in self.registry.list_sandboxes():
             sandbox_id = record["sandbox_id"]
             if not record.get("managed"):
@@ -1134,11 +1138,27 @@ class SandboxManager:
             }:
                 continue
             try:
-                await self._revive_persistent_booter_if_needed(
-                    record,
+                restore_coro = self._revive_persistent_booter_if_needed(
+                    record=record,
+                    sandbox_id=sandbox_id,
+                    session_id=str(record.get("owner_session_id") or "dashboard"),
+                    context=context,
+                )
+                if per_sandbox_timeout is None:
+                    await restore_coro
+                else:
+                    await asyncio.wait_for(restore_coro, timeout=per_sandbox_timeout)
+                restored += 1
+            except asyncio.TimeoutError:
+                self.session_booter.pop(sandbox_id, None)
+                self.clear_idle_state(sandbox_id)
+                self.registry.delete_sandbox(sandbox_id)
+                self.drop_boot_lock(sandbox_id)
+                await self.save_registry_async()
+                deleted += 1
+                logger.warning(
+                    "[Computer] Persistent sandbox restore timed out; removed stale record: %s",
                     sandbox_id,
-                    str(record.get("owner_session_id") or "dashboard"),
-                    context,
                 )
             except Exception as exc:
                 logger.warning(
@@ -1146,6 +1166,7 @@ class SandboxManager:
                     sandbox_id,
                     exc,
                 )
+        return restored, deleted
 
     async def cleanup_managed_sandboxes(self) -> None:
         for sandbox_id in list(self.pending_boot_tasks):

@@ -334,6 +334,24 @@ async def test_destroy_sandbox_cancels_deferred_boot_task(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_destroy_persistent_sandbox_removes_record(tmp_path):
+    manager, provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    manager.update_sandbox_config(
+        created["sandbox_id"],
+        idle_timeout=None,
+        expires_at=None,
+        retention_policy="persistent",
+    )
+
+    destroyed = await manager.destroy_sandbox("session-a", created["sandbox_id"])
+
+    assert destroyed["sandbox_id"] == created["sandbox_id"]
+    assert manager.registry.get_sandbox(created["sandbox_id"]) is None
+    assert provider.destroyed[0][1] == created["sandbox_id"]
+
+
+@pytest.mark.asyncio
 async def test_create_sandbox_sets_current_sandbox_after_lease(tmp_path):
     manager, _provider = _manager(tmp_path)
 
@@ -673,7 +691,7 @@ async def test_manager_does_not_revive_destroyed_persistent_sandbox(tmp_path):
 
     await manager.destroy_sandbox("session-a", created["sandbox_id"])
 
-    with pytest.raises(RuntimeError, match="has been destroyed"):
+    with pytest.raises(RuntimeError, match="not found"):
         await manager.get_observer_booter_by_id(
             created["sandbox_id"],
             "dashboard",
@@ -921,6 +939,39 @@ async def test_manager_reconcile_on_startup_keeps_valid_persistent_records(
     assert record is not None
     assert record["status"] == "unknown"
     assert len(provider.created) == 0
+
+
+@pytest.mark.asyncio
+async def test_manager_restore_persistent_sandboxes_times_out_and_deletes_record(
+    tmp_path,
+):
+    provider = FailingReconnectProvider()
+    manager, _provider = _manager(tmp_path, provider)
+    restore_started = asyncio.Event()
+
+    async def slow_create_booter(context, session_id, sandbox_id, config):
+        restore_started.set()
+        await asyncio.sleep(1)
+        return await FakeProvider().create_booter(context, session_id, sandbox_id, config)
+
+    provider.create_booter = slow_create_booter
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    await manager.restore_persistent_sandboxes(object(), per_sandbox_timeout=0.01)
+
+    assert restore_started.is_set()
+    assert manager.registry.get_sandbox("generic-1") is None
 
 
 def test_manager_reconcile_on_startup_drops_temporary_records(tmp_path):

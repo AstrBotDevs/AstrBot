@@ -61,6 +61,7 @@ class AstrBotCoreLifecycle:
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
         self._default_chat_provider_warning_emitted = False
+        self._persistent_restore_task: asyncio.Task | None = None
 
         # 设置代理
         proxy_config = self.astrbot_config.get("http_proxy", "")
@@ -254,8 +255,9 @@ class AstrBotCoreLifecycle:
                 exc_info=True,
             )
 
-        await computer_client.sandbox_manager.restore_persistent_sandboxes(
-            self.star_context
+        self._persistent_restore_task = asyncio.create_task(
+            self._restore_persistent_sandboxes_background(),
+            name="persistent-sandbox-restore",
         )
 
         # 根据配置实例化各个 Provider
@@ -291,6 +293,28 @@ class AstrBotCoreLifecycle:
         self.dashboard_shutdown_event = asyncio.Event()
 
         asyncio.create_task(update_llm_metadata())
+
+    async def _restore_persistent_sandboxes_background(self) -> None:
+        try:
+            restored, deleted = (
+                await computer_client.sandbox_manager.restore_persistent_sandboxes(
+                    self.star_context,
+                    per_sandbox_timeout=30.0,
+                )
+            )
+            logger.info(
+                "Persistent sandbox restore finished: restored=%d deleted=%d",
+                restored,
+                deleted,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(
+                "Persistent sandbox restore failed: %s",
+                e,
+                exc_info=True,
+            )
 
     def _load(self) -> None:
         """加载事件总线和任务并初始化."""
@@ -383,6 +407,15 @@ class AstrBotCoreLifecycle:
 
         if self.cron_manager:
             await self.cron_manager.shutdown()
+
+        persistent_restore_task = getattr(self, "_persistent_restore_task", None)
+        if persistent_restore_task is not None:
+            persistent_restore_task.cancel()
+            try:
+                await persistent_restore_task
+            except asyncio.CancelledError:
+                pass
+            self._persistent_restore_task = None
 
         try:
             await computer_client.cleanup_managed_sandboxes()

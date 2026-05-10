@@ -588,6 +588,7 @@ async def test_core_lifecycle_stop_cleans_up_temporary_managed_sandboxes(monkeyp
     lifecycle.platform_manager.terminate = platform_terminate
     lifecycle.kb_manager.terminate = kb_terminate
     lifecycle.plugin_manager._terminate_plugin = terminate_plugin
+    lifecycle._persistent_restore_task = None
 
     await AstrBotCoreLifecycle.stop(lifecycle)
 

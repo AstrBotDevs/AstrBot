@@ -261,7 +261,7 @@ class TestAstrBotCoreLifecycleErrorHandling:
 
 class TestAstrBotCoreLifecycleSandboxRestore:
     @pytest.mark.asyncio
-    async def test_initialize_restores_persistent_sandboxes(
+    async def test_initialize_restores_persistent_sandboxes_in_background(
         self, mock_log_broker, mock_db, mock_astrbot_config
     ):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
@@ -286,7 +286,13 @@ class TestAstrBotCoreLifecycleSandboxRestore:
         mock_pipeline_scheduler = MagicMock(initialize=AsyncMock())
         mock_astrbot_updator = MagicMock()
         mock_event_bus = MagicMock()
-        restore_persistent = AsyncMock()
+        restore_started = asyncio.Event()
+        restore_finished = asyncio.Event()
+
+        async def restore_persistent(_context, **_kwargs):
+            restore_started.set()
+            await restore_finished.wait()
+            return 1, 0
 
         with (
             patch("astrbot.core.core_lifecycle.astrbot_config", mock_astrbot_config),
@@ -357,9 +363,14 @@ class TestAstrBotCoreLifecycleSandboxRestore:
                 restore_persistent,
             ),
         ):
-            await lifecycle.initialize()
+            init_task = asyncio.create_task(lifecycle.initialize())
+            await asyncio.wait_for(restore_started.wait(), timeout=1)
+            await asyncio.wait_for(init_task, timeout=1)
+            assert not restore_finished.is_set()
+            restore_finished.set()
+            await asyncio.wait_for(asyncio.sleep(0), timeout=1)
 
-        restore_persistent.assert_awaited_once_with(mock_star_context)
+        assert restore_started.is_set()
 
 
 class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
