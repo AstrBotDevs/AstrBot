@@ -165,6 +165,42 @@ def _cleanup_provider_sandboxes_sync(provider_id: str) -> None:
     )
 
 
+async def cleanup_sandbox_provider(provider_id: str) -> None:
+    """Destroy all sandboxes owned by a provider before unregistering it."""
+    provider = sandbox_manager.providers.get(provider_id)
+    removed = 0
+    preserved = 0
+    for record in list(sandbox_manager.registry.list_sandboxes()):
+        if not record.get("managed") or record.get("provider") != provider_id:
+            continue
+        sandbox_id = record["sandbox_id"]
+        booter = sandbox_manager.session_booter.pop(sandbox_id, None)
+        sandbox_manager.clear_idle_state(sandbox_id)
+        sandbox_manager.drop_boot_lock(sandbox_id)
+        if record.get("retention_policy") == "persistent":
+            preserved += 1
+            if booter is not None and provider is not None:
+                await _safe_destroy_booter(provider, booter, record)
+            continue
+        if booter is not None and provider is not None:
+            await _safe_destroy_booter(provider, booter, record)
+        sandbox_manager.registry.delete_sandbox(sandbox_id)
+        removed += 1
+    try:
+        await sandbox_manager.save_registry_async()
+    except Exception as exc:
+        logger.warning(
+            "[Computer] Failed to save registry after provider cleanup: %s",
+            exc,
+        )
+    logger.info(
+        "Provider sandbox cleanup completed: provider=%s removed_temporary=%d preserved_persistent=%d",
+        provider_id,
+        removed,
+        preserved,
+    )
+
+
 async def _safe_destroy_booter(
     provider: SandboxProvider, booter: ComputerBooter, record: dict
 ) -> None:
