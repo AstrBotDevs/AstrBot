@@ -196,9 +196,9 @@
             "description": "CUA 操作系统类型",
             "hint": "CUA 沙箱操作系统类型，默认 linux。"
           },
-          "cua_ttl": {
-            "description": "CUA Sandbox 存活时间(秒)",
-            "hint": "CUA 沙箱生存时间（秒）。当前作为会话配置保存，具体生效取决于 CUA SDK。"
+          "cua_idle_timeout": {
+            "description": "CUA 空闲超时(秒)",
+            "hint": "CUA 沙箱空闲超时时间（秒）。大于 0 时，AstrBot 会在会话空闲达到该时长后主动关闭 CUA 沙箱；0 表示禁用。"
           },
           "cua_telemetry_enabled": {
             "description": "CUA 遥测",

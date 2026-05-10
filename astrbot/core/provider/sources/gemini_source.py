@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal, cast
 from urllib.parse import urlparse
 
+import httpx
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -75,6 +76,8 @@ class ProviderGoogleGenAI(Provider):
         if self.api_base and self.api_base.endswith("/"):
             self.api_base = self.api_base[:-1]
 
+        self._http_client: httpx.AsyncClient | None = None
+        self._stale_http_clients: list[httpx.AsyncClient] = []
         self._init_client()
         self.set_model(provider_config.get("model", "unknown"))
         self._init_safety_settings()
@@ -86,9 +89,29 @@ class ProviderGoogleGenAI(Provider):
             base_url=self.api_base,
             timeout=self.timeout * 1000,  # 毫秒
         )
+
+        # 强制使用 httpx 作为异步 HTTP 后端，避免 aiohttp 响应类型兼容问题 (#7564)
+        # httpx.AsyncClient 的 timeout 单位为秒（与 HttpOptions 的毫秒不同）
+        async_client_kwargs: dict = {
+            "base_url": self.api_base,
+            "timeout": self.timeout,
+        }
         if proxy:
-            http_options.async_client_args = {"proxy": proxy}
-            logger.info(f"[Gemini] 使用代理: {proxy}")
+            async_client_kwargs["proxy"] = proxy
+            async_client_kwargs["trust_env"] = False
+            logger.info("[Gemini] 使用代理")
+        else:
+            async_client_kwargs["trust_env"] = True
+
+        # Track the previous client so it can be closed in terminate() instead
+        # of leaking when _init_client is called again (e.g. via set_key).
+        # Only the most recent stale client is kept to avoid unbounded growth.
+        if self._http_client is not None:
+            self._stale_http_clients = [self._http_client]
+
+        self._http_client = httpx.AsyncClient(**async_client_kwargs)
+        http_options.httpx_async_client = self._http_client
+
         self.client = genai.Client(
             api_key=self.chosen_api_key,
             http_options=http_options,
@@ -1067,6 +1090,30 @@ class ProviderGoogleGenAI(Provider):
             image_bs64 = base64.b64encode(f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
 
+    async def _close_httpx_client(self, client: httpx.AsyncClient | None) -> None:
+        """Safely close an httpx.AsyncClient, swallowing errors for idempotency."""
+        if client is None:
+            return
+        try:
+            await client.aclose()
+        except Exception as e:
+            # Idempotent: ignore errors from already-closed or broken clients,
+            # but log at debug to aid diagnosing unexpected shutdown issues.
+            logger.debug(f"[Gemini] Ignored error while closing httpx client: {e}")
+
     async def terminate(self) -> None:
-        if self.client:
-            await self.client.aclose()
+        # Close the active Gemini client (external httpx client is managed
+        # separately so genai.Client.aclose skips it).
+        if self.client is not None:
+            try:
+                await self.client.aclose()
+            except Exception:
+                pass
+            self.client = None
+
+        # Close all tracked httpx clients (stale + current).
+        for client in self._stale_http_clients:
+            await self._close_httpx_client(client)
+        self._stale_http_clients.clear()
+        await self._close_httpx_client(self._http_client)
+        self._http_client = None
