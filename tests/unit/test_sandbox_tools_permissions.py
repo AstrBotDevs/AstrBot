@@ -138,6 +138,38 @@ async def test_member_switch_sandbox_allows_idle_default_sandbox(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_member_switch_sandbox_allows_idle_non_default_sandbox(monkeypatch):
+    called = []
+
+    class FakeManager:
+        registry = SimpleNamespace(
+            get_sandbox=lambda sandbox_id: {
+                "sandbox_id": sandbox_id,
+                "owner_session_id": "dashboard",
+                "controller_session_id": None,
+                "is_default": False,
+            }
+        )
+
+        async def switch_current_sandbox_checked(
+            self, session_id, sandbox_id, **kwargs
+        ):
+            called.append((session_id, sandbox_id, kwargs))
+            return {"sandbox_id": sandbox_id}
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+    )
+
+    result = await SwitchSandboxTool().call(
+        _member_context_without_admin_requirement(), "ordinary-idle"
+    )
+
+    assert "ordinary-idle" in str(result)
+    assert called
+
+
+@pytest.mark.asyncio
 async def test_member_switch_sandbox_rejects_other_session_sandbox(monkeypatch):
     class FakeManager:
         def registry_get(self):
