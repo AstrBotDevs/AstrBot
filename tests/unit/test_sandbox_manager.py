@@ -71,6 +71,10 @@ class FakeProvider:
         await booter.shutdown()
 
 
+class OtherFakeProvider(FakeProvider):
+    provider_id = "other"
+
+
 class DeferredBootProvider(FakeProvider):
     def __init__(self):
         super().__init__()
@@ -413,6 +417,30 @@ async def test_manager_create_releases_previous_sandbox_owned_by_same_session(tm
         manager.get_current_sandbox("session-a")["current_sandbox_id"]
         == second["sandbox_id"]
     )
+
+
+@pytest.mark.asyncio
+async def test_manager_get_or_create_releases_previous_cross_provider_sandbox(tmp_path):
+    first_provider = FakeProvider()
+    second_provider = OtherFakeProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={
+            first_provider.provider_id: first_provider,
+            second_provider.provider_id: second_provider,
+        },
+    )
+
+    first = await manager.create_sandbox(None, "session-a", "generic", "First")
+    await manager.get_or_create_booter(None, "session-a", "other")
+
+    first_record = manager.registry.get_sandbox(first["sandbox_id"])
+    current_id = manager.get_current_sandbox("session-a")["current_sandbox_id"]
+    current_record = manager.registry.get_sandbox(current_id)
+    assert first_record["controller_session_id"] is None
+    assert first_record["lease_expires_at"] is None
+    assert current_record["provider"] == "other"
+    assert current_record["controller_session_id"] == "session-a"
 
 
 @pytest.mark.asyncio

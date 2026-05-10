@@ -233,6 +233,11 @@ class SandboxManager:
         if current_sandbox_id and (
             current_record is None or current_record.get("provider") != provider_id
         ):
+            if (
+                current_record
+                and current_record.get("controller_session_id") == session_id
+            ):
+                self.registry.release_lease(current_sandbox_id)
             self.registry.set_current_sandbox_id(session_id, None)
             await self.save_registry_async()
             current_sandbox_id = None
