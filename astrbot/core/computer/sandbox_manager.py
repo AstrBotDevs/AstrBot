@@ -738,7 +738,11 @@ class SandboxManager:
                     provider,
                     sandbox_id,
                     session_id=None,
-                    idle_timeout=provider.get_idle_timeout(context, create_session_id),
+                    idle_timeout=(
+                        0
+                        if record.get("retention_policy") == "persistent"
+                        else provider.get_idle_timeout(context, create_session_id)
+                    ),
                 )
             return self.registry.get_sandbox(sandbox_id) or record
 
@@ -833,6 +837,35 @@ class SandboxManager:
         record = self.registry.get_sandbox(sandbox_id)
         if record is None or not record.get("managed"):
             raise RuntimeError(f"Sandbox {sandbox_id} not found")
+        record = await self._revive_persistent_booter_if_needed(
+            record, sandbox_id, session_id, None
+        )
+        booter = self.session_booter.get(sandbox_id)
+        status = record.get("status")
+        if booter is None:
+            if status == SandboxStatus.CREATING:
+                raise RuntimeError(f"Sandbox {sandbox_id} is still being created")
+            if status == SandboxStatus.STOPPING:
+                raise RuntimeError(f"Sandbox {sandbox_id} is being destroyed")
+            if status == SandboxStatus.STOPPED:
+                raise RuntimeError(f"Sandbox {sandbox_id} has been destroyed")
+            if status == SandboxStatus.ERROR:
+                raise RuntimeError(
+                    f"Sandbox {sandbox_id} encountered an error during creation"
+                )
+            raise RuntimeError(f"Sandbox {sandbox_id} is not running")
+        if not await self.booter_available(booter):
+            self.session_booter.pop(sandbox_id, None)
+            next_status = (
+                SandboxStatus.UNKNOWN
+                if record.get("retention_policy") == "persistent"
+                else SandboxStatus.ERROR
+            )
+            self.registry.update_sandbox_status(sandbox_id, next_status)
+            await self.save_registry_async()
+            raise RuntimeError(
+                f"Sandbox {sandbox_id} is unavailable (booter health check failed)"
+            )
         updated = (
             self.registry.takeover_lease(
                 sandbox_id=sandbox_id,
@@ -943,6 +976,10 @@ class SandboxManager:
             raise RuntimeError(
                 f"Sandbox {sandbox_id} is unavailable (booter health check failed)"
             )
+        if require_lease and session_id:
+            if not self.acquire_lease(sandbox_id, session_id):
+                raise RuntimeError(f"Sandbox {sandbox_id} is busy")
+            record = self.registry.get_sandbox(sandbox_id) or record
         # Only touch lifecycle when the caller actually holds the lease (or
         # the sandbox is unclaimed).  Pure observer access must not reset
         # idle timers for sandboxes controlled by other sessions.
@@ -974,12 +1011,12 @@ class SandboxManager:
             except RuntimeError:
                 sandbox_id = record["sandbox_id"]
                 logger.info(
-                    "[Computer] Provider for persistent sandbox %s is unavailable; removing registry record",
+                    "[Computer] Provider for persistent sandbox %s is unavailable; keeping registry record",
                     sandbox_id,
                 )
                 self.session_booter.pop(sandbox_id, None)
                 self.clear_idle_state(sandbox_id)
-                self.registry.delete_sandbox(sandbox_id)
+                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.UNKNOWN)
                 self.drop_boot_lock(sandbox_id)
                 continue
             if not getattr(provider, "supports_persistent_reconnect", False):
@@ -1119,6 +1156,11 @@ class SandboxManager:
                         )
                         continue
                 booter = self.session_booter.get(sandbox_id)
+                if record.get("retention_policy") == "persistent":
+                    self.session_booter.pop(sandbox_id, None)
+                    self.registry.update_sandbox_status(sandbox_id, "stopped")
+                    await self.save_registry_async()
+                    return
                 if booter is not None:
                     try:
                         provider = self.get_provider(record.get("provider", ""))

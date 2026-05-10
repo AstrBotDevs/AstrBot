@@ -480,7 +480,7 @@ function canUseAction(item: SandboxRecord, action: SandboxAction) {
     case 'screenshot':
       return status === 'running' && hasCapability(item, 'screenshot')
     case 'destroy':
-      return status !== 'stopping'
+      return status !== 'stopping' && !item.controller_session_id
   }
 }
 

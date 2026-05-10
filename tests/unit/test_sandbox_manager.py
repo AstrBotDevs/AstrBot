@@ -680,7 +680,9 @@ async def test_manager_revives_persistent_sandbox_for_tool_access(tmp_path):
 
 @pytest.mark.asyncio
 async def test_manager_restores_persistent_sandboxes_on_startup(tmp_path):
-    manager, provider = _manager(tmp_path)
+    provider = FakeProvider()
+    provider.idle_timeout = 0.01
+    manager, provider = _manager(tmp_path, provider)
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
         sandbox_name="Persistent",
@@ -700,6 +702,7 @@ async def test_manager_restores_persistent_sandboxes_on_startup(tmp_path):
     assert "generic-1" in manager.session_booter
     assert len(provider.created) == 1
     assert manager.registry.get_sandbox("generic-1")["status"] == "running"
+    assert "generic-1" not in manager.idle_state
 
 
 @pytest.mark.asyncio
@@ -730,7 +733,7 @@ async def test_manager_reconcile_on_startup_removes_stale_persistent_records(
 
 
 @pytest.mark.asyncio
-async def test_manager_reconcile_on_startup_removes_persistent_records_for_missing_provider(
+async def test_manager_reconcile_on_startup_keeps_persistent_records_for_missing_provider(
     tmp_path,
 ):
     manager, _provider = _manager(tmp_path)
@@ -751,7 +754,32 @@ async def test_manager_reconcile_on_startup_removes_persistent_records_for_missi
     manager.registry.save()
     await manager.reconcile_on_startup()
 
-    assert manager.registry.get_sandbox("missing-1") is None
+    record = manager.registry.get_sandbox("missing-1")
+    assert record is not None
+    assert record["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_manager_takeover_rejects_non_running_sandbox(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Broken",
+        booter_type="generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Broken"},
+        status="error",
+    )
+
+    with pytest.raises(RuntimeError, match="encountered an error"):
+        await manager.takeover_sandbox("session-b", "generic-1")
+
+    record = manager.registry.get_sandbox("generic-1")
+    assert record["controller_session_id"] is None
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..registry import builtin_tool
-from .util import check_admin_permission
+from .util import check_admin_permission, check_strict_admin_permission
 
 _SANDBOX_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": "sandbox",
@@ -39,12 +39,43 @@ def _visible_to_session(record: dict, session_id: str) -> bool:
     return (
         record.get("owner_session_id") == session_id
         or record.get("controller_session_id") == session_id
-        or _is_idle_sandbox(record)
+        or _is_idle_dashboard_sandbox(record)
     )
 
 
-def _is_idle_sandbox(record: dict) -> bool:
-    return not bool(record.get("controller_session_id"))
+def _is_idle_dashboard_sandbox(record: dict) -> bool:
+    return bool(
+        not record.get("controller_session_id")
+        and record.get("owner_session_id") == "dashboard"
+    )
+
+
+def _sandbox_status_for_session(record: dict, session_id: str) -> str:
+    controller_session_id = record.get("controller_session_id")
+    if controller_session_id == session_id:
+        return "current"
+    if controller_session_id:
+        return "occupied"
+    return "idle"
+
+
+def _redact_sandbox_for_session(record: dict, session_id: str, *, admin: bool) -> dict:
+    if admin:
+        return record
+    visible = dict(record)
+    visible["access"] = {
+        "status": _sandbox_status_for_session(record, session_id),
+        "can_switch": _visible_to_session(record, session_id),
+        "occupied": bool(record.get("controller_session_id")),
+    }
+    if record.get("owner_session_id") != session_id:
+        visible.pop("connect_info", None)
+        visible["owner_session_id"] = None
+        visible["owner_user_id"] = None
+    if record.get("controller_session_id") != session_id:
+        visible["controller_session_id"] = None
+        visible["controller_user_id"] = None
+    return visible
 
 
 def _sandbox_access_denied(
@@ -68,7 +99,12 @@ class ListSandboxesTool(FunctionTool):
     )
 
     async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
+        session_id = context.context.event.unified_msg_origin
         sandboxes = sandbox_manager.list_sandboxes()
+        sandboxes = [
+            _redact_sandbox_for_session(record, session_id, admin=_is_admin(context))
+            for record in sandboxes
+        ]
         return _dump({"sandboxes": sandboxes})
 
 
@@ -216,7 +252,9 @@ class TakeoverSandboxTool(FunctionTool):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], sandbox_id: str
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(context, "Taking over sandbox"):
+        if permission_error := check_strict_admin_permission(
+            context, "Taking over sandbox"
+        ):
             return permission_error
         session_id = context.context.event.unified_msg_origin
         try:
@@ -245,7 +283,9 @@ class DestroySandboxTool(FunctionTool):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], sandbox_id: str
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(context, "Destroying sandbox"):
+        if permission_error := check_strict_admin_permission(
+            context, "Destroying sandbox"
+        ):
             return permission_error
         session_id = context.context.event.unified_msg_origin
         try:
@@ -282,7 +322,7 @@ class ScreenshotSandboxTool(FunctionTool):
         sandbox_id: str,
         send_to_user: bool = False,
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(
+        if permission_error := check_strict_admin_permission(
             context, "Sandbox screenshot capture"
         ):
             return permission_error
@@ -352,7 +392,7 @@ class CopyFileBetweenSandboxesTool(FunctionTool):
         target_sandbox_id: str,
         target_path: str,
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(
+        if permission_error := check_strict_admin_permission(
             context, "Copying files between sandboxes"
         ):
             return permission_error
