@@ -565,13 +565,19 @@ export default {
       }
 
       const previousConfig = this.parseConfigSnapshot(this.lastSavedConfigSnapshot);
-      const shouldRestart = this.isSystemConfig && this.shouldRestartAfterSystemConfigSave(
+      const localShouldRestart = this.isSystemConfig && this.shouldRestartAfterSystemConfigSave(
         previousConfig,
         postData.config
       );
 
       return axios.post('/api/config/astrbot/update', postData).then((res) => {
         if (res.data.status === "ok") {
+          const responseData = res.data.data || {};
+          const shouldRestart = this.isSystemConfig && (
+            typeof responseData.requires_restart === 'boolean'
+              ? responseData.requires_restart
+              : localShouldRestart
+          );
           this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
           this.save_message = res.data.message || this.messages.saveSuccess;
           this.save_message_snack = true;
