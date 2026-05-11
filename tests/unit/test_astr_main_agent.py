@@ -1957,6 +1957,34 @@ class TestApplySandboxTools:
         assert "[Provider Rules]" in req.system_prompt
         assert "Use relative sandbox paths." in req.system_prompt
 
+    def test_apply_sandbox_tools_prefers_current_sandbox_provider(self, mock_context):
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={"booter": "cua"},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
+        req.session_id = "session-a"
+
+        def provider_info(provider_id):
+            return {
+                "tool_names": [],
+                "system_prompt": f"[{provider_id} provider]",
+            }
+
+        with patch(
+            "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
+            return_value="boxlite",
+        ), patch(
+            "astrbot.core.computer.computer_client.get_sandbox_provider_info",
+            side_effect=provider_info,
+        ):
+            module._apply_sandbox_tools(config, req)
+
+        assert "[boxlite provider]" in req.system_prompt
+        assert "[cua provider]" not in req.system_prompt
+
     def test_handoff_runtime_computer_tools_include_sandbox_lifecycle_tools(self):
         tool_mgr = MagicMock()
 
