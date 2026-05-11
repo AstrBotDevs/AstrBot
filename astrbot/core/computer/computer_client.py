@@ -108,6 +108,9 @@ def _unregister_provider_tools(provider_id: str) -> None:
     registered = _provider_tools.pop(provider_id, [])
     for tool in registered:
         llm_tools.remove_func(tool.name)
+    from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+
+    FunctionToolExecutor.clear_runtime_computer_tools_cache(provider_id)
     if registered:
         logger.info(
             "Unregistered %d tool(s) for sandbox provider %s",
@@ -153,6 +156,9 @@ def _cleanup_provider_sandboxes_sync(provider_id: str) -> None:
             "[Computer] Failed to save registry after force-unregister: %s",
             exc,
         )
+    from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+
+    FunctionToolExecutor.clear_runtime_computer_tools_cache(provider_id)
     logger.info(
         "Force-unregistered sandbox provider %s: sandboxes cleaned up",
         provider_id,

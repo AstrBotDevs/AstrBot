@@ -251,7 +251,7 @@ class SandboxManager:
                 continue
             if record.get("status") != SandboxStatus.RUNNING:
                 continue
-            if record.get("controller_session_id"):
+            if self.sandbox_has_active_lease(sandbox_id):
                 continue
             if sandbox_id not in self.session_booter:
                 continue

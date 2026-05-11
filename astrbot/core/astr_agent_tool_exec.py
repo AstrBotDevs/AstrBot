@@ -71,6 +71,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ] = {}
 
     @classmethod
+    def clear_runtime_computer_tools_cache(cls, provider_id: str | None = None) -> None:
+        if provider_id is None:
+            cls._runtime_computer_tools_cache.clear()
+            return
+
+        normalized_provider_id = str(provider_id).strip().lower()
+        if not normalized_provider_id:
+            return
+
+        keys_to_remove = [
+            key
+            for key in cls._runtime_computer_tools_cache
+            if key[2] == normalized_provider_id
+        ]
+        for key in keys_to_remove:
+            cls._runtime_computer_tools_cache.pop(key, None)
+
+    @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
             return []
