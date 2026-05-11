@@ -154,6 +154,7 @@ async def core_lifecycle_td(tmp_path_factory):
         core_lifecycle.astrbot_config["dashboard"]["password"] = (
             hash_dashboard_password(dashboard_password)
         )
+        core_lifecycle.astrbot_config["dashboard"]["password_change_required"] = False
     object.__setattr__(
         core_lifecycle,
         "_dashboard_plain_password",
@@ -272,6 +273,52 @@ async def test_auth_login_secure_cookie_override(
     assert jwt_cookie_header
     assert "Secure" in jwt_cookie_header
     assert "SameSite=Strict" in jwt_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_generated_password_requires_password_change_until_changed(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    changed_password = "AstrbotChanged123"
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"] = True
+
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["change_pwd_hint"] is True
+
+        response = await test_client.post(
+            "/api/auth/account/edit",
+            json={
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "new_password": changed_password,
+                "confirm_password": changed_password,
+                "new_username": core_lifecycle_td.astrbot_config["dashboard"][
+                    "username"
+                ],
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert (
+            core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"]
+            is False
+        )
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
 
 
 @pytest.mark.asyncio

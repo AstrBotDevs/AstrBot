@@ -68,19 +68,30 @@ class AstrBotConfig(dict):
             and isinstance(conf["dashboard"], dict)
             and not conf["dashboard"].get("password")
         ):
-            generated_password = generate_dashboard_password()
-            conf["dashboard"]["password"] = hash_dashboard_password(generated_password)
-            object.__setattr__(
-                self,
-                "_generated_dashboard_password",
-                generated_password,
-            )
+            self._reset_generated_dashboard_password(conf)
+            conf["dashboard"]["password_change_required"] = True
+            has_new = True
+        elif (
+            "dashboard" in conf
+            and isinstance(conf["dashboard"], dict)
+            and conf["dashboard"].get("password_change_required", False)
+        ):
+            self._reset_generated_dashboard_password(conf)
             has_new = True
         self.update(conf)
         if has_new:
             self.save_config()
 
         self.update(conf)
+
+    def _reset_generated_dashboard_password(self, conf: dict) -> None:
+        generated_password = generate_dashboard_password()
+        conf["dashboard"]["password"] = hash_dashboard_password(generated_password)
+        object.__setattr__(
+            self,
+            "_generated_dashboard_password",
+            generated_password,
+        )
 
     def _config_schema_to_default_config(self, schema: dict) -> dict:
         """将 Schema 转换成 Config"""

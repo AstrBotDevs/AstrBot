@@ -211,9 +211,45 @@ class TestAstrBotConfigLoad:
             config["dashboard"]["password"],
             generated_password,
         )
+        assert config["dashboard"]["password_change_required"] is True
         assert not verify_dashboard_password(
             config["dashboard"]["password"],
             DEFAULT_DASHBOARD_PASSWORD,
+        )
+
+    def test_generated_dashboard_password_rotates_until_changed(self, temp_config_path):
+        """Test that the generated password is shown again after restart until changed."""
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+                "password_change_required": False,
+            },
+        }
+
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+        first_password = getattr(config, "_generated_dashboard_password", None)
+        assert isinstance(first_password, str)
+
+        reloaded_config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+        second_password = getattr(
+            reloaded_config, "_generated_dashboard_password", None
+        )
+
+        assert isinstance(second_password, str)
+        assert second_password != first_password
+        assert reloaded_config["dashboard"]["password_change_required"] is True
+        assert verify_dashboard_password(
+            reloaded_config["dashboard"]["password"], second_password
+        )
+        assert not verify_dashboard_password(
+            reloaded_config["dashboard"]["password"], first_password
         )
 
     def test_legacy_md5_password_requires_plain_password(self):

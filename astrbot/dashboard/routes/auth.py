@@ -51,6 +51,9 @@ class AuthRoute(Route):
         if login_verified:
             change_pwd_hint = False
             legacy_pwd_hint = is_legacy_dashboard_password(password)
+            password_change_required = bool(
+                self.config["dashboard"].get("password_change_required", False)
+            )
             if (
                 username == "astrbot"
                 and is_default_dashboard_password(password)
@@ -59,6 +62,8 @@ class AuthRoute(Route):
                 change_pwd_hint = True
                 legacy_pwd_hint = True
                 logger.warning("为了保证安全，请尽快修改默认密码。")
+            if password_change_required and not DEMO_MODE:
+                change_pwd_hint = True
             token = self.generate_jwt(username)
             if legacy_pwd_hint:
                 self.config["dashboard"]["password"] = hash_dashboard_password(
@@ -123,6 +128,7 @@ class AuthRoute(Route):
             except ValueError as e:
                 return Response().error(str(e)).__dict__
             self.config["dashboard"]["password"] = hash_dashboard_password(new_pwd)
+            self.config["dashboard"]["password_change_required"] = False
         if new_username:
             self.config["dashboard"]["username"] = new_username
 

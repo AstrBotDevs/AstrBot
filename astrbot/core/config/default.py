@@ -245,6 +245,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "username": "astrbot",
         "password": "",
+        "password_change_required": False,
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,

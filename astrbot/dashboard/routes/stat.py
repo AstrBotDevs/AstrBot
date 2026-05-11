@@ -78,11 +78,14 @@ class StatRoute(Route):
     def is_default_cred(self):
         username = self.config["dashboard"]["username"]
         password = self.config["dashboard"]["password"]
+        password_change_required = bool(
+            self.config["dashboard"].get("password_change_required", False)
+        )
         return (
             username == "astrbot"
             and is_default_dashboard_password(password)
-            and not DEMO_MODE
-        )
+            or password_change_required
+        ) and not DEMO_MODE
 
     async def get_version(self):
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)

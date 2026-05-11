@@ -59,6 +59,7 @@ async def core_lifecycle_td(tmp_path_factory):
         core_lifecycle.astrbot_config["dashboard"]["password"] = (
             hash_dashboard_password(dashboard_password)
         )
+        core_lifecycle.astrbot_config["dashboard"]["password_change_required"] = False
     object.__setattr__(
         core_lifecycle,
         "_dashboard_plain_password",
