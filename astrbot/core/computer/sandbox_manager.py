@@ -291,6 +291,12 @@ class SandboxManager:
             current_record = None
         if current_sandbox_id and current_record:
             status = current_record.get("status")
+            if status == SandboxStatus.CREATING:
+                pending_boot_task = self.pending_boot_tasks.get(current_sandbox_id)
+                if pending_boot_task is not None:
+                    await asyncio.shield(pending_boot_task)
+                    current_record = self.registry.get_sandbox(current_sandbox_id)
+                    status = current_record.get("status") if current_record else None
             if status in {
                 SandboxStatus.CREATING,
                 SandboxStatus.STOPPING,

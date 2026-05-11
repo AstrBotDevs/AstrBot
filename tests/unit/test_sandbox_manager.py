@@ -429,6 +429,52 @@ async def test_create_sandbox_uncontrolled_deferred_uses_fresh_record_for_cleanu
 
 
 @pytest.mark.asyncio
+async def test_manager_waits_for_current_creating_sandbox_instead_of_creating_another_one(
+    tmp_path,
+):
+    class CountingDeferredBootProvider(DeferredBootProvider):
+        def __init__(self):
+            super().__init__()
+            self.create_calls = 0
+            self.second_create_started = asyncio.Event()
+
+        async def create_booter(self, context, session_id, sandbox_id, config):
+            self.create_calls += 1
+            if self.create_calls == 2:
+                self.second_create_started.set()
+            return await super().create_booter(context, session_id, sandbox_id, config)
+
+    provider = CountingDeferredBootProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    created = await manager.create_sandbox_uncontrolled_deferred(
+        None, "session-a", "generic", "Named"
+    )
+    await asyncio.wait_for(provider.boot_started.wait(), timeout=1)
+    manager.registry.set_current_sandbox_id("session-a", created["sandbox_id"])
+
+    get_booter_task = asyncio.create_task(
+        manager.get_or_create_booter(None, "session-a", "generic")
+    )
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(get_booter_task, timeout=0.1)
+
+    assert len(manager.registry.list_sandboxes()) == 1
+    assert provider.create_calls == 1
+    assert created["sandbox_id"] in manager.pending_boot_tasks
+
+    provider.allow_boot.set()
+    for _ in range(20):
+        if created["sandbox_id"] in manager.session_booter:
+            break
+        await asyncio.sleep(0)
+    booter = await manager.get_or_create_booter(None, "session-a", "generic")
+
+    assert booter is manager.session_booter[created["sandbox_id"]]
+    assert len(provider.created) == 1
+
+
+@pytest.mark.asyncio
 async def test_create_sandbox_rolls_back_when_lease_acquisition_fails(tmp_path):
     provider = FakeProvider()
     manager = AlwaysBusyManager(
