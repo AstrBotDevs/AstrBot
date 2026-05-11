@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 from astrbot.core import logger
 from astrbot.core.message.components import Image, Plain, Record
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.utils.media_utils import ensure_wav
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
@@ -63,6 +64,21 @@ class PreProcessStage(Stage):
                             component.url = url.replace(from_, to_, 1)
                             logger.debug(f"路径映射: {url} -> {component.url}")
                     message_chain[idx] = component
+
+        # In here, we convert all Record components to wav format and update the file path.
+        message_chain = event.get_messages()
+        for idx, component in enumerate(message_chain):
+            if isinstance(component, Record):
+                try:
+                    original_path = await component.convert_to_file_path()
+                    record_path = await ensure_wav(original_path)
+                    if record_path != original_path:
+                        event.track_temporary_local_file(record_path)
+                    component.file = record_path
+                    component.path = record_path
+                    message_chain[idx] = component
+                except Exception as e:
+                    logger.warning(f"Voice processing failed: {e}")
 
         # STT
         if self.stt_settings.get("enable", False):

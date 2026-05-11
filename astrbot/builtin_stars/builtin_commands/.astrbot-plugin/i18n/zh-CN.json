@@ -1,0 +1,6 @@
+{
+  "metadata": {
+    "display_name": "内置指令",
+    "desc": "AstrBot 自带插件，提供 /reset、/help、/sid 等内置指令。"
+  }
+}

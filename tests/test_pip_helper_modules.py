@@ -226,8 +226,11 @@ def test_plan_missing_requirements_install_returns_none_when_missing_names_canno
 
     monkeypatch.setattr(
         requirements_utils,
-        "find_missing_requirements_from_lines",
-        lambda lines: {"botocore"},
+        "classify_missing_requirements_from_lines",
+        lambda lines: requirements_utils.MissingRequirementsAnalysis(
+            missing_names=frozenset({"botocore"}),
+            version_mismatch_names=frozenset(),
+        ),
     )
 
     plan = requirements_utils.plan_missing_requirements_install(str(requirements_path))
@@ -236,6 +239,29 @@ def test_plan_missing_requirements_install_returns_none_when_missing_names_canno
     assert plan.missing_names == frozenset({"botocore"})
     assert plan.install_lines == ()
     assert plan.fallback_reason == "unmapped missing requirement names"
+
+
+def test_classify_missing_requirements_from_lines_tracks_missing_and_version_mismatches(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        requirements_utils,
+        "collect_installed_distribution_versions",
+        lambda paths: {"boto3": "1.0"},
+    )
+    monkeypatch.setattr(
+        requirements_utils,
+        "get_requirement_check_paths",
+        lambda: ["/tmp/site-packages"],
+    )
+
+    analysis = requirements_utils.classify_missing_requirements_from_lines(
+        ["boto3>=2.0", "botocore"]
+    )
+
+    assert analysis is not None
+    assert analysis.missing_names == frozenset({"boto3", "botocore"})
+    assert analysis.version_mismatch_names == frozenset({"boto3"})
 
 
 def test_plan_missing_requirements_install_loads_requirement_lines_once(
@@ -272,6 +298,31 @@ def test_plan_missing_requirements_install_loads_requirement_lines_once(
     assert plan.missing_names == frozenset({"boto3", "botocore"})
     assert plan.install_lines == ("boto3", "botocore")
     assert calls == [str(requirements_path)]
+
+
+def test_plan_missing_requirements_install_tracks_version_mismatches(
+    monkeypatch, tmp_path
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("boto3>=2.0\nbotocore\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        requirements_utils,
+        "collect_installed_distribution_versions",
+        lambda paths: {"boto3": "1.0"},
+    )
+    monkeypatch.setattr(
+        requirements_utils,
+        "get_requirement_check_paths",
+        lambda: ["/tmp/site-packages"],
+    )
+
+    plan = requirements_utils.plan_missing_requirements_install(str(requirements_path))
+
+    assert plan is not None
+    assert plan.missing_names == frozenset({"boto3", "botocore"})
+    assert plan.version_mismatch_names == frozenset({"boto3"})
+    assert plan.install_lines == ("boto3>=2.0", "botocore")
 
 
 def test_build_missing_requirements_install_lines_logs_why_option_lines_fall_back(

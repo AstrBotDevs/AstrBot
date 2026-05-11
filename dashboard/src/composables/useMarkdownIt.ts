@@ -1,8 +1,6 @@
 import MarkdownIt from 'markdown-it'
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github-dark.css'
 
-// Shared markdown-it instance with highlight.js code highlighting.
+// Shared markdown-it instance for MOD Manager markdown panels.
 // Used by PluginWelcomePanel and PluginOverviewPanel.
 // We use markdown-it directly (instead of markstream-vue's MarkdownRender)
 // to preserve raw HTML inline layout — markstream-vue wraps each node
@@ -23,16 +21,13 @@ md.renderer.rules.table_close = () => '</table></div>'
 md.renderer.rules.fence = (tokens, idx) => {
   const token = tokens[idx]
   const lang = token.info.trim() || ''
+  const langClass = lang.replace(/[^\w-]/g, '')
   const code = token.content
-
-  const highlighted =
-    lang && hljs.getLanguage(lang)
-      ? hljs.highlight(code, { language: lang }).value
-      : md.utils.escapeHtml(code)
+  const highlighted = md.utils.escapeHtml(code)
 
   return `<div class="code-block-wrapper">
-    ${lang ? `<span class="code-lang-label">${lang}</span>` : ''}
-    <pre class="hljs"><code class="language-${lang}">${highlighted}</code></pre>
+    ${lang ? `<span class="code-lang-label">${md.utils.escapeHtml(lang)}</span>` : ''}
+    <pre class="hljs"><code class="language-${langClass}">${highlighted}</code></pre>
   </div>`
 }
 

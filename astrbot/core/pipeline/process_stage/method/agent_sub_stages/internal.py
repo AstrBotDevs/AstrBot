@@ -6,14 +6,19 @@ from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot.core import db_helper, logger
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import (
+    CheckpointData,
+    CheckpointMessageSegment,
+    Message,
+    dump_messages_with_checkpoints,
+)
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
 )
-from astrbot.core.message.components import File, Image
+from astrbot.core.message.components import File, Image, Record, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -66,6 +71,10 @@ class InternalAgentSubStage(Stage):
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
+        self.buffer_intermediate_messages: bool = settings.get(
+            "buffer_intermediate_messages",
+            False,
+        )
         self.show_reasoning = settings.get("display_reasoning_text", False)
         self.sanitize_context_by_modalities: bool = settings.get(
             "sanitize_context_by_modalities",
@@ -98,6 +107,9 @@ class InternalAgentSubStage(Stage):
         )
         if self.dequeue_context_length <= 0:
             self.dequeue_context_length = 1
+        self.fallback_max_context_tokens: int = settings.get(
+            "fallback_max_context_tokens", 128000
+        )
 
         self.llm_safety_mode = settings.get("llm_safety_mode", True)
         self.safety_mode_strategy = settings.get(
@@ -127,6 +139,7 @@ class InternalAgentSubStage(Stage):
             llm_compress_provider_id=self.llm_compress_provider_id,
             max_context_length=self.max_context_length,
             dequeue_context_length=self.dequeue_context_length,
+            fallback_max_context_tokens=self.fallback_max_context_tokens,
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,
@@ -153,7 +166,8 @@ class InternalAgentSubStage(Stage):
             has_provider_request = event.get_extra("provider_request") is not None
             has_valid_message = bool(event.message_str and event.message_str.strip())
             has_media_content = any(
-                isinstance(comp, Image | File) for comp in event.message_obj.message
+                isinstance(comp, (Image, File, Record, Video))
+                for comp in event.message_obj.message
             )
 
             if (
@@ -279,6 +293,7 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
+                                    buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
                         )
@@ -309,6 +324,7 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
+                                    buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
                         )
@@ -339,6 +355,7 @@ class InternalAgentSubStage(Stage):
                             self.show_tool_call_result,
                             stream_to_general,
                             show_reasoning=self.show_reasoning,
+                            buffer_intermediate_messages=self.buffer_intermediate_messages,
                         ):
                             yield
 
@@ -436,7 +453,7 @@ class InternalAgentSubStage(Stage):
             logger.debug("LLM 响应为空，不保存记录。")
             return
 
-        message_to_save = []
+        messages_to_save: list[Message] = []
         skipped_initial_system = False
         for message in all_messages:
             if message.role == "system" and not skipped_initial_system:
@@ -444,7 +461,16 @@ class InternalAgentSubStage(Stage):
                 continue
             if message.role in ["assistant", "user"] and message._no_save:
                 continue
-            message_to_save.append(message.model_dump())
+            messages_to_save.append(message)
+
+        checkpoint_id = event.get_extra("llm_checkpoint_id")
+        message_to_save = dump_messages_with_checkpoints(messages_to_save)
+        if isinstance(checkpoint_id, str) and checkpoint_id:
+            message_to_save.append(
+                CheckpointMessageSegment(
+                    content=CheckpointData(id=checkpoint_id),
+                ).model_dump()
+            )
 
         # if user_aborted:
         #     message_to_save.append(

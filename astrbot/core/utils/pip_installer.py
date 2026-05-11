@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 
 from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
 from astrbot.core.utils.core_constraints import CoreConstraintsProvider
+from astrbot.core.utils.desktop_core_lock import get_desktop_core_lock_modules
 from astrbot.core.utils.requirements_utils import (
     canonicalize_distribution_name as _canonicalize_distribution_name,
 )
@@ -811,6 +812,12 @@ def _ensure_plugin_dependencies_preferred(
     if not candidate_modules:
         return
 
+    locked_modules = get_desktop_core_lock_modules()
+    if locked_modules:
+        candidate_modules = candidate_modules.difference(locked_modules)
+    if not candidate_modules:
+        return
+
     _ensure_preferred_modules(candidate_modules, target_site_packages)
 
 
@@ -982,6 +989,7 @@ class PipInstaller:
         package_name: str | None = None,
         requirements_path: str | None = None,
         mirror: str | None = None,
+        allow_target_upgrade: bool = True,
     ) -> None:
         args, requested_requirements = self._build_pip_args(
             package_name, requirements_path, mirror
@@ -995,15 +1003,17 @@ class PipInstaller:
             target_site_packages = get_astrbot_site_packages_path()
             os.makedirs(target_site_packages, exist_ok=True)
             _prepend_sys_path(target_site_packages)
-            args.extend(
-                [
-                    "--target",
-                    target_site_packages,
-                    "--upgrade",
-                    "--upgrade-strategy",
-                    "only-if-needed",
-                ]
-            )
+            # `allow_target_upgrade` only matters for packaged desktop installs that
+            # write into the shared `data/site-packages` target directory.
+            args.extend(["--target", target_site_packages])
+            if allow_target_upgrade:
+                args.extend(
+                    [
+                        "--upgrade",
+                        "--upgrade-strategy",
+                        "only-if-needed",
+                    ]
+                )
 
         with self._core_constraints.constraints_file() as constraints_file_path:
             if constraints_file_path:

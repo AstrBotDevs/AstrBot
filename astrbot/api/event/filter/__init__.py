@@ -14,6 +14,8 @@ from astrbot.core.star.register import register_command_group as command_group
 from astrbot.core.star.register import register_custom_filter as custom_filter
 from astrbot.core.star.register import register_event_message_type as event_message_type
 from astrbot.core.star.register import register_llm_tool as llm_tool
+from astrbot.core.star.register import register_on_agent_begin as on_agent_begin
+from astrbot.core.star.register import register_on_agent_done as on_agent_done
 from astrbot.core.star.register import register_on_astrbot_loaded as on_astrbot_loaded
 from astrbot.core.star.register import (
     register_on_decorating_result as on_decorating_result,
@@ -51,6 +53,8 @@ __all__ = [
     "custom_filter",
     "event_message_type",
     "llm_tool",
+    "on_agent_begin",
+    "on_agent_done",
     "on_astrbot_loaded",
     "on_decorating_result",
     "on_llm_request",

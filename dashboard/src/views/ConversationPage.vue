@@ -94,7 +94,21 @@
 
                         <template v-slot:item.title="{ item }">
                             <div class="conversation-title-cell">
-                                <span class="conversation-title-text">{{ item.title || tm('status.noTitle') }}</span>
+                                <div class="conversation-title-row">
+                                    <span class="conversation-title-text">{{ item.title || tm('status.noTitle') }}</span>
+                                    <v-btn
+                                        icon
+                                        variant="plain"
+                                        size="x-small"
+                                        density="compact"
+                                        :ripple="false"
+                                        class="conversation-inline-edit"
+                                        @click.stop="editConversation(item)"
+                                        :disabled="loading"
+                                    >
+                                        <v-icon size="14">mdi-pencil</v-icon>
+                                    </v-btn>
+                                </div>
                                 <span class="conversation-title-meta">{{ item.cid || tm('status.unknown') }}</span>
                             </div>
                         </template>
@@ -140,10 +154,6 @@
                                 <v-btn icon variant="plain" size="x-small" class="action-button"
                                     @click="viewConversation(item)" :disabled="loading">
                                     <v-icon>mdi-eye</v-icon>
-                                </v-btn>
-                                <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="editConversation(item)" :disabled="loading">
-                                    <v-icon>mdi-pencil</v-icon>
                                 </v-btn>
                                 <v-btn icon color="error" variant="plain" size="x-small" class="action-button"
                                     @click="confirmDeleteConversation(item)" :disabled="loading">
@@ -369,6 +379,7 @@ import {
     askForConfirmation as askForConfirmationDialog,
     useConfirmDialog
 } from '@/utils/confirmDialog';
+import { copyToClipboard } from '@/utils/clipboard';
 
 export default {
     name: 'ConversationPage',
@@ -528,28 +539,54 @@ export default {
 
         // 将对话历史转换为 MessageList 组件期望的格式
         formattedMessages() {
-            return this.conversationHistory.map(msg => {
-                console.log('处理消息:', msg.role, msg.content);
-                
-                // 将消息内容转换为 MessagePart[] 格式
-                const messageParts = this.convertContentToMessageParts(msg.content);
-                
-                if (msg.role === 'user') {
-                    return {
-                        content: {
-                            type: 'user',
-                            message: messageParts
-                        }
-                    };
-                } else {
-                    return {
-                        content: {
-                            type: 'bot',
-                            message: messageParts
-                        }
-                    };
+            // 按 tool_call_id 索引 tool 角色消息的执行结果
+            const toolResultsById = {};
+            for (const msg of this.conversationHistory) {
+                if (msg.role === 'tool' && msg.tool_call_id) {
+                    toolResultsById[msg.tool_call_id] = msg.content;
                 }
-            });
+            }
+
+            return this.conversationHistory
+                // tool / system 等非聊天角色不直接渲染为气泡，避免大文本走 markdown 路径卡死页面
+                .filter(msg => msg.role === 'user' || msg.role === 'assistant')
+                .map(msg => {
+                    console.log('处理消息:', msg.role, msg.content);
+
+                    const messageParts = this.convertContentToMessageParts(msg.content)
+                        // 丢弃 convertContentToMessageParts 兜底插入的空 plain，避免 assistant 仅有工具调用时渲染空气泡
+                        .filter(part => part.type !== 'plain' || (part.text && part.text.trim()));
+
+                    // 把 OpenAI 风格的 assistant.tool_calls 转成 MessageList 已支持的 tool_call part
+                    if (msg.role === 'assistant' && Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
+                        const toolCalls = msg.tool_calls.map(tc => {
+                            const fn = tc.function || {};
+                            return {
+                                id: tc.id,
+                                name: fn.name || tc.name,
+                                args: fn.arguments ?? tc.arguments,
+                                result: toolResultsById[tc.id],
+                                // 历史回放无真实耗时数据：
+                                // ts: 0  → ToolCallCard.toolCallDuration 在 startTime<=0 时早退，跳过时长显示
+                                // finished_ts: 1 → MessageList.toolCallStatusText 视为已完成（避免误显示"运行中"）
+                                ts: 0,
+                                finished_ts: 1,
+                            };
+                        });
+                        messageParts.push({ type: 'tool_call', tool_calls: toolCalls });
+                    }
+
+                    const finalParts = messageParts.length
+                        ? messageParts
+                        : [{ type: 'plain', text: '' }];
+
+                    return {
+                        content: {
+                            type: msg.role === 'user' ? 'user' : 'bot',
+                            message: finalParts,
+                        }
+                    };
+                });
         }
     },
 
@@ -628,10 +665,10 @@ export default {
         },
 
         async copyUmoSource(item) {
-            try {
-                await navigator.clipboard.writeText(this.formatUmoSource(item));
+            const ok = await copyToClipboard(this.formatUmoSource(item));
+            if (ok) {
                 this.showSuccessMessage(this.tm('messages.copySuccess'));
-            } catch (error) {
+            } else {
                 this.showErrorMessage(this.tm('messages.copyError'));
             }
         },
@@ -1162,6 +1199,18 @@ export default {
     background-color: #f9f9f9;
 }
 
+/* 让 ToolCallCard 内部的 args/result 自然展开，由外层容器统一滚动，避免双滚动条 */
+.conversation-messages-container .detail-json,
+.conversation-messages-container .detail-result {
+    max-height: none;
+    overflow: visible;
+}
+
+/* 历史回放无真实状态数据，隐藏 IPython 工具的"已完成"标签，与其它工具卡片保持一致 */
+.conversation-messages-container .tool-call-inline-status {
+    display: none;
+}
+
 /* 暗色模式下的聊天消息容器 */
 .v-theme--dark .conversation-messages-container {
     background-color: #1e1e1e;
@@ -1188,12 +1237,27 @@ export default {
     max-width: 145px;
 }
 
+.conversation-title-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+
 .conversation-title-text {
     display: inline-block;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.conversation-inline-edit {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    flex-shrink: 0;
 }
 
 .conversation-title-meta {

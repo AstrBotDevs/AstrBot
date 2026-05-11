@@ -2,23 +2,28 @@ import asyncio
 import copy
 import io
 import os
+import re
+import shutil
 import sys
 import uuid
 import zipfile
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import pytest
 import pytest_asyncio
-from quart import Quart
+from quart import Quart, jsonify
 from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.star.star import star_registry
+from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.pip_installer import PipInstallError
+from astrbot.dashboard.routes.auth import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
@@ -26,6 +31,107 @@ from tests.fixtures.helpers import (
     create_mock_updater_install,
     create_mock_updater_update,
 )
+
+PLUGIN_PAGE_DEMO_NAME = "astrbot_plugin_page_demo"
+PLUGIN_PAGE_DEMO_PAGE_NAME = "bridge-demo"
+
+
+def _strip_query(url: str) -> str:
+    parsed = urlsplit(url)
+    return urlunsplit(("", "", parsed.path, "", parsed.fragment))
+
+
+@pytest.fixture
+def registered_plugin_page(core_lifecycle_td: AstrBotCoreLifecycle, monkeypatch):
+    plugin_root = (
+        Path(core_lifecycle_td.plugin_manager.plugin_store_path) / PLUGIN_PAGE_DEMO_NAME
+    )
+    page_root = plugin_root / "pages" / PLUGIN_PAGE_DEMO_PAGE_NAME
+    i18n_root = plugin_root / ".astrbot-plugin" / "i18n"
+    shared_root = page_root / "shared"
+    images_root = page_root / "images"
+    shared_root.mkdir(parents=True, exist_ok=True)
+    images_root.mkdir(parents=True, exist_ok=True)
+    i18n_root.mkdir(parents=True, exist_ok=True)
+
+    (page_root / "index.html").write_text(
+        """
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Plugin Page Demo</title>
+    <link rel="stylesheet" href="shared/base.css" />
+  </head>
+  <body>
+    <h1>Single plugin Page with internal navigation</h1>
+    <div id="app"></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
+""".strip(),
+        encoding="utf-8",
+    )
+    (page_root / "app.js").write_text(
+        """
+import React from "react";
+import "./shared/common.js";
+
+function renderTabs() {
+  return ["dashboard", "settings"];
+}
+
+window.renderTabs = renderTabs;
+""".strip(),
+        encoding="utf-8",
+    )
+    (shared_root / "common.js").write_text(
+        "window.__pluginCommonLoaded = true;\n", encoding="utf-8"
+    )
+    (shared_root / "base.css").write_text(
+        'body { background-image: url("../images/logo.svg"); }\n',
+        encoding="utf-8",
+    )
+    (images_root / "logo.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n',
+        encoding="utf-8",
+    )
+    (i18n_root / "zh-CN.json").write_text(
+        """
+{
+  "metadata": {
+    "display_name": "插件页面演示"
+  },
+  "pages": {
+    "bridge-demo": {
+      "title": "Bridge 演示页"
+    }
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    plugin = StarMetadata(
+        name=PLUGIN_PAGE_DEMO_NAME,
+        author="AstrBot Test",
+        desc="Plugin Page demo",
+        version="1.0.0",
+        display_name="Plugin Page Demo",
+        root_dir_name=PLUGIN_PAGE_DEMO_NAME,
+        activated=True,
+    )
+
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager.context,
+        "get_all_stars",
+        lambda: [plugin],
+    )
+
+    try:
+        yield plugin
+    finally:
+        shutil.rmtree(plugin_root, ignore_errors=True)
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -76,8 +182,14 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
 
 
 @pytest.mark.asyncio
-async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
+async def test_auth_login(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
     """Tests the login functionality with both wrong and correct credentials."""
+    monkeypatch.setitem(app.config, "DASHBOARD_JWT_COOKIE_SECURE", False)
+
     test_client = app.test_client()
     response = await test_client.post(
         "/api/auth/login",
@@ -95,6 +207,400 @@ async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     )
     data = await response.get_json()
     assert data["status"] == "ok" and "token" in data["data"]
+    set_cookie_headers = response.headers.getlist("Set-Cookie")
+    jwt_cookie_header = next(
+        (value for value in set_cookie_headers if DASHBOARD_JWT_COOKIE_NAME in value),
+        "",
+    )
+    assert jwt_cookie_header
+    assert "HttpOnly" in jwt_cookie_header
+    assert "SameSite=Strict" in jwt_cookie_header
+    assert "Secure" not in jwt_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_auth_login_secure_cookie_override(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setitem(app.config, "DASHBOARD_JWT_COOKIE_SECURE", True)
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/auth/login",
+        json={
+            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+        },
+    )
+    assert response.status_code == 200
+
+    set_cookie_headers = response.headers.getlist("Set-Cookie")
+    jwt_cookie_header = next(
+        (value for value in set_cookie_headers if DASHBOARD_JWT_COOKIE_NAME in value),
+        "",
+    )
+    assert jwt_cookie_header
+    assert "Secure" in jwt_cookie_header
+    assert "SameSite=Strict" in jwt_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_plugin_web_api_supports_dynamic_route(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    authenticated_header: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls = []
+
+    async def group_detail(name: str):
+        calls.append(name)
+        return jsonify({"name": name})
+
+    monkeypatch.setattr(
+        core_lifecycle_td.star_context,
+        "registered_web_apis",
+        [
+            (
+                f"/{PLUGIN_PAGE_DEMO_NAME}/groups/<name>",
+                group_detail,
+                ["GET"],
+                "Group detail",
+            ),
+        ],
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plug/{PLUGIN_PAGE_DEMO_NAME}/groups/example",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data == {"name": "example"}
+    assert calls == ["example"]
+
+
+def test_plugin_page_content_path_escapes_plugin_name():
+    assert (
+        PluginRoute._build_plugin_page_content_path("plugin with space", "main page")
+        == "/api/plugin/page/content/plugin%20with%20space/main%20page/"
+    )
+    assert (
+        PluginRoute._build_plugin_page_content_path(
+            "plugin with space", "main page", "assets/main file.js"
+        )
+        == "/api/plugin/page/content/plugin%20with%20space/main%20page/assets/main%20file.js"
+    )
+
+
+@pytest.mark.asyncio
+async def test_plugin_get_excludes_scanned_pages(
+    app: Quart,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.get("/api/plugin/get", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+    plugin = next(
+        item for item in data["data"] if item["name"] == PLUGIN_PAGE_DEMO_NAME
+    )
+    assert plugin["activated"] is True
+    assert "page" not in plugin
+    assert "pages" not in plugin
+
+
+@pytest.mark.asyncio
+async def test_plugin_detail_includes_scanned_page_component(
+    app: Quart,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plugin/detail?name={PLUGIN_PAGE_DEMO_NAME}",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+    page_components = [
+        component
+        for component in data["data"]["components"]
+        if component["type"] == "page"
+    ]
+    assert page_components == [
+        {
+            "type": "page",
+            "name": PLUGIN_PAGE_DEMO_PAGE_NAME,
+            "title": PLUGIN_PAGE_DEMO_PAGE_NAME,
+            "page_name": PLUGIN_PAGE_DEMO_PAGE_NAME,
+            "i18n_key": f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}",
+            "description": "Plugin Page entry",
+            "plugin_name": PLUGIN_PAGE_DEMO_NAME,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_entry_returns_signed_content_path(
+    app: Quart,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["name"] == PLUGIN_PAGE_DEMO_PAGE_NAME
+    assert data["data"]["title"] == PLUGIN_PAGE_DEMO_PAGE_NAME
+    assert data["data"]["i18n_key"] == f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}"
+    assert data["data"]["content_path"].startswith(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    )
+    assert "asset_token=" in data["data"]["content_path"]
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_content_requires_auth(
+    app: Quart,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    )
+    assert response.status_code == 401
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_content_supports_cookie_auth(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    login_response = await test_client.post(
+        "/api/auth/login",
+        json={
+            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+        },
+    )
+    assert login_response.status_code == 200
+
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    )
+    assert response.status_code == 200
+    content = (await response.get_data()).decode("utf-8")
+    assert "Single plugin Page with internal navigation" in content
+    assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
+    assert response.headers["Cache-Control"] == "no-store"
+    assert "frame-ancestors 'self'" in response.headers["Content-Security-Policy"]
+    assert "asset_token=" in content
+
+    asset_url_match = re.search(
+        r'src="([^"]+/app\.js[^"]*)"',
+        content,
+    )
+    assert asset_url_match is not None
+    asset_response = await test_client.get(asset_url_match.group(1))
+    assert asset_response.status_code == 200
+    asset_content = (await asset_response.get_data()).decode("utf-8")
+    assert "renderTabs" in asset_content
+    assert 'from "react"' in asset_content
+    assert (
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/shared/common.js"
+        in asset_content
+    )
+    assert "asset_token=" in asset_content
+
+    bridge_url_match = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        content,
+    )
+    assert bridge_url_match is not None
+    bridge_response = await test_client.get(bridge_url_match.group(1))
+    assert bridge_response.status_code == 200
+    bridge_content = (await bridge_response.get_data()).decode("utf-8")
+    assert "AstrBotPluginPage" in bridge_content
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_content_issues_scoped_asset_token(
+    app: Quart,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    authorized_client = app.test_client()
+    response = await authorized_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    html_text = (await response.get_data()).decode("utf-8")
+
+    app_js_url = re.search(
+        r'src="([^"]+/app\.js[^"]*)"',
+        html_text,
+    )
+    bridge_sdk_url = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        html_text,
+    )
+    css_url = re.search(
+        r'href="([^"]+/base\.css[^"]*)"',
+        html_text,
+    )
+    assert app_js_url is not None
+    assert bridge_sdk_url is not None
+    assert css_url is not None
+    assert "asset_token=" in app_js_url.group(1)
+    assert "asset_token=" in bridge_sdk_url.group(1)
+    assert "asset_token=" in css_url.group(1)
+
+    query = parse_qs(urlsplit(app_js_url.group(1)).query)
+    asset_token = query.get("asset_token", [""])[0]
+    assert asset_token
+
+    anonymous_client = app.test_client()
+    app_js_response = await anonymous_client.get(app_js_url.group(1))
+    assert app_js_response.status_code == 200
+    bridge_response = await anonymous_client.get(bridge_sdk_url.group(1))
+    assert bridge_response.status_code == 200
+    bridge_js = (await bridge_response.get_data()).decode("utf-8")
+    assert "window.AstrBotPluginPage?.__setInitialContext" in bridge_js
+    assert '"locale": "zh-CN"' in bridge_js
+    assert '"displayName": "插件页面演示"' in bridge_js
+    assert '"pageTitle": "Bridge 演示页"' in bridge_js
+    css_response = await anonymous_client.get(css_url.group(1))
+    assert css_response.status_code == 200
+
+    out_of_scope_response = await anonymous_client.get(
+        f"/api/plugin/get?asset_token={asset_token}"
+    )
+    assert out_of_scope_response.status_code == 401
+
+    cross_plugin_response = await anonymous_client.get(
+        f"/api/plugin/page/content/another_plugin/{PLUGIN_PAGE_DEMO_PAGE_NAME}/app.js?asset_token={asset_token}"
+    )
+    assert cross_plugin_response.status_code == 401
+
+    cross_page_response = await anonymous_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/another-page/app.js?asset_token={asset_token}"
+    )
+    assert cross_page_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_assets_require_dashboard_auth(
+    app: Quart,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    authorized_client = app.test_client()
+    response = await authorized_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    html_text = (await response.get_data()).decode("utf-8")
+
+    app_js_url = re.search(
+        r'src="([^"]+/app\.js[^"]*)"',
+        html_text,
+    )
+    bridge_sdk_url = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        html_text,
+    )
+    assert app_js_url is not None
+    assert bridge_sdk_url is not None
+
+    anonymous_client = app.test_client()
+    app_js_response = await anonymous_client.get(_strip_query(app_js_url.group(1)))
+    assert app_js_response.status_code == 401
+    bridge_response = await anonymous_client.get(_strip_query(bridge_sdk_url.group(1)))
+    assert bridge_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_content_blocks_path_traversal(
+    app: Quart,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/..%2Fmain.py",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_logout_clears_cookie_for_plugin_page(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/auth/login",
+        json={
+            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+        },
+    )
+    assert response.status_code == 200
+
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    )
+    assert response.status_code == 200
+    html_text = (await response.get_data()).decode("utf-8")
+    asset_url_match = re.search(r'src="([^"]+/app\.js[^"]*)"', html_text)
+    assert asset_url_match is not None
+
+    logout_response = await test_client.post("/api/auth/logout")
+    assert logout_response.status_code == 200
+    clear_cookie_header = next(
+        (
+            value
+            for value in logout_response.headers.getlist("Set-Cookie")
+            if DASHBOARD_JWT_COOKIE_NAME in value
+        ),
+        "",
+    )
+    assert clear_cookie_header
+    assert f"{DASHBOARD_JWT_COOKIE_NAME}=;" in clear_cookie_header
+    assert "Max-Age=0" in clear_cookie_header
+    assert "SameSite=Strict" in clear_cookie_header
+
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    )
+    assert response.status_code == 401
+    asset_response = await test_client.get(_strip_query(asset_url_match.group(1)))
+    assert asset_response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -124,6 +630,12 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
     async def fake_serve(app, config, shutdown_trigger):
         return config
 
+    def capture(messages):
+        def append(message, *args):
+            messages.append(message % args if args else message)
+
+        return append
+
     try:
         core_lifecycle_td.astrbot_config["dashboard"]["ssl"] = {
             "enable": True,
@@ -134,21 +646,22 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
         monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
         monkeypatch.setattr(
             "astrbot.dashboard.server.logger.warning",
-            lambda message: warning_messages.append(message),
+            capture(warning_messages),
         )
         monkeypatch.setattr(
             "astrbot.dashboard.server.logger.info",
-            lambda message: info_messages.append(message),
+            capture(info_messages),
         )
 
         config = await server.run()
 
         assert getattr(config, "certfile", None) is None
         assert getattr(config, "keyfile", None) is None
-        assert any("cert_file 和 key_file" in message for message in warning_messages)
         assert any(
-            "正在启动 WebUI, 监听地址: http://" in message for message in info_messages
+            "cert_file or key_file is missing" in message
+            for message in warning_messages
         )
+        assert any("Starting WebUI at http://" in message for message in info_messages)
     finally:
         core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
 
@@ -322,6 +835,7 @@ async def test_plugins(
     assert data["status"] == "ok"
     for plugin in data["data"]:
         assert "installed_at" in plugin
+        assert "components" not in plugin
         installed_at = plugin["installed_at"]
         if installed_at is None:
             continue
@@ -379,9 +893,21 @@ async def test_plugins(
         data = await response.get_json()
         assert data["status"] == "ok"
         assert len(data["data"]) == 1
+        assert "components" not in data["data"][0]
         installed_at = data["data"][0]["installed_at"]
         assert installed_at is not None
         datetime.fromisoformat(installed_at)
+
+        response = await test_client.get(
+            f"/api/plugin/detail?name={test_plugin_name}",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["name"] == test_plugin_name
+        assert "components" in data["data"]
+        assert isinstance(data["data"]["components"], list)
 
         # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)
@@ -500,7 +1026,7 @@ async def test_t2i_set_active_template_syncs_all_configs(
             "/api/t2i/templates/create",
             json={
                 "name": template_name,
-                "content": "<html><body>{{ content }}</body></html>",
+                "content": "<html><body>{{ text }}</body></html>",
             },
             headers=authenticated_header,
         )
@@ -567,7 +1093,7 @@ async def test_t2i_reset_default_template_syncs_all_configs(
             "/api/t2i/templates/create",
             json={
                 "name": template_name,
-                "content": "<html><body>{{ content }} reset</body></html>",
+                "content": "<html><body>{{ text }} reset</body></html>",
             },
             headers=authenticated_header,
         )
@@ -640,7 +1166,7 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
             "/api/t2i/templates/create",
             json={
                 "name": template_name,
-                "content": "<html><body>{{ content }} v1</body></html>",
+                "content": "<html><body>{{ text }} v1</body></html>",
             },
             headers=authenticated_header,
         )
@@ -661,7 +1187,7 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
 
         response = await test_client.put(
             f"/api/t2i/templates/{template_name}",
-            json={"content": "<html><body>{{ content }} v2</body></html>"},
+            json={"content": "<html><body>{{ text }} v2</body></html>"},
             headers=authenticated_header,
         )
         assert response.status_code == 200
@@ -1205,3 +1731,102 @@ async def test_batch_upload_skills_partial_success(
     assert data["data"]["failed"] == [
         {"filename": "bad_skill.zip", "error": "install failed"}
     ]
+
+
+@pytest.mark.asyncio
+async def test_skill_file_browser_and_editor_security(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+    tmp_path,
+):
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    skills_root = tmp_path / "skills"
+    skill_dir = skills_root / "demo_skill"
+    skill_dir.mkdir(parents=True)
+    skill_md = skill_dir / "SKILL.md"
+    skill_md.write_text(
+        "---\ndescription: Demo skill\n---\n# Demo\n",
+        encoding="utf-8",
+    )
+    (skill_dir / "notes.txt").write_text("notes", encoding="utf-8")
+    (skill_dir / "large.md").write_text("x" * (512 * 1024 + 1), encoding="utf-8")
+    (skill_dir / "binary.md").write_bytes(b"\xff\xfe\x00")
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("outside", encoding="utf-8")
+    if hasattr(os, "symlink"):
+        os.symlink(outside_file, skill_dir / "outside-link.txt")
+
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
+        lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+
+    test_client = app.test_client()
+
+    list_response = await test_client.get(
+        "/api/skills/files?name=demo_skill",
+        headers=authenticated_header,
+    )
+    list_data = await list_response.get_json()
+    assert list_data["status"] == "ok"
+    listed_paths = {item["path"] for item in list_data["data"]["entries"]}
+    assert "SKILL.md" in listed_paths
+    assert "outside-link.txt" not in listed_paths
+
+    read_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=SKILL.md",
+        headers=authenticated_header,
+    )
+    read_data = await read_response.get_json()
+    assert read_data["status"] == "ok"
+    assert "# Demo" in read_data["data"]["content"]
+
+    update_response = await test_client.post(
+        "/api/skills/file",
+        json={
+            "name": "demo_skill",
+            "path": "SKILL.md",
+            "content": "# Updated\n",
+        },
+        headers=authenticated_header,
+    )
+    update_data = await update_response.get_json()
+    assert update_data["status"] == "ok"
+    assert skill_md.read_text(encoding="utf-8") == "# Updated\n"
+
+    traversal_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=../outside.txt",
+        headers=authenticated_header,
+    )
+    traversal_data = await traversal_response.get_json()
+    assert traversal_data["status"] == "error"
+
+    symlink_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=outside-link.txt",
+        headers=authenticated_header,
+    )
+    symlink_data = await symlink_response.get_json()
+    assert symlink_data["status"] == "error"
+
+    large_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=large.md",
+        headers=authenticated_header,
+    )
+    large_data = await large_response.get_json()
+    assert large_data["status"] == "error"
+    assert large_data["message"] == "File is too large"
+
+    binary_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=binary.md",
+        headers=authenticated_header,
+    )
+    binary_data = await binary_response.get_json()
+    assert binary_data["status"] == "error"
+    assert binary_data["message"] == "File is not valid UTF-8 text"
