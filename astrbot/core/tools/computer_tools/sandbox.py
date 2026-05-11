@@ -7,10 +7,7 @@ from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.computer.computer_client import (
-    list_sandbox_providers,
-    sandbox_manager,
-)
+from astrbot.core.computer import computer_client
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -24,6 +21,10 @@ _SANDBOX_RUNTIME_TOOL_CONFIG = {
 
 def _dump(data) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
+
+
+def _sandbox_manager():
+    return computer_client.sandbox_manager
 
 
 def _current_provider_id(context: ContextWrapper[AstrAgentContext]) -> str:
@@ -97,7 +98,7 @@ class ListSandboxesTool(FunctionTool):
 
     async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
         session_id = context.context.event.unified_msg_origin
-        sandboxes = sandbox_manager.list_sandboxes()
+        sandboxes = _sandbox_manager().list_sandboxes()
         sandboxes = [
             _redact_sandbox_for_session(record, session_id, admin=_is_admin(context))
             for record in sandboxes
@@ -119,7 +120,7 @@ class ListSandboxProvidersTool(FunctionTool):
 
     async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
         del context
-        return _dump({"providers": list_sandbox_providers()})
+        return _dump({"providers": computer_client.list_sandbox_providers()})
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
@@ -133,7 +134,7 @@ class GetCurrentSandboxTool(FunctionTool):
 
     async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
         session_id = context.context.event.unified_msg_origin
-        return _dump(sandbox_manager.get_current_sandbox(session_id))
+        return _dump(_sandbox_manager().get_current_sandbox(session_id))
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
@@ -183,8 +184,9 @@ class CreateSandboxTool(FunctionTool):
             provider_id = _current_provider_id(context)
         if not provider_id:
             return "Error creating sandbox: sandbox booter is not configured."
-        if provider_id not in sandbox_manager.providers:
-            providers = list_sandbox_providers()
+        manager = _sandbox_manager()
+        if provider_id not in manager.providers:
+            providers = computer_client.list_sandbox_providers()
             available = ", ".join(p["provider_id"] for p in providers) or "none"
             return (
                 f"Error creating sandbox: sandbox provider '{provider_id}' is not "
@@ -192,7 +194,7 @@ class CreateSandboxTool(FunctionTool):
             )
 
         try:
-            sandbox = await sandbox_manager.create_sandbox(
+            sandbox = await manager.create_sandbox(
                 plugin_context,
                 session_id,
                 provider_id,
@@ -224,11 +226,12 @@ class SwitchSandboxTool(FunctionTool):
         self, context: ContextWrapper[AstrAgentContext], sandbox_id: str
     ) -> ToolExecResult:
         session_id = context.context.event.unified_msg_origin
-        record = sandbox_manager.registry.get_sandbox(sandbox_id)
+        manager = _sandbox_manager()
+        record = manager.registry.get_sandbox(sandbox_id)
         if permission_error := _sandbox_access_denied(context, record):
             return permission_error
         try:
-            sandbox = await sandbox_manager.switch_current_sandbox_checked(
+            sandbox = await manager.switch_current_sandbox_checked(
                 session_id, sandbox_id, context=context.context.context
             )
         except Exception as e:
@@ -259,7 +262,7 @@ class ReleaseSandboxTool(FunctionTool):
     ) -> ToolExecResult:
         session_id = context.context.event.unified_msg_origin
         try:
-            sandbox = sandbox_manager.release_current_sandbox(
+            sandbox = _sandbox_manager().release_current_sandbox(
                 session_id, sandbox_id.strip() or None
             )
         except Exception as e:
@@ -295,7 +298,7 @@ class KeepAliveSandboxTool(FunctionTool):
     ) -> ToolExecResult:
         session_id = context.context.event.unified_msg_origin
         try:
-            sandbox = await sandbox_manager.renew_current_sandbox_lease(
+            sandbox = await _sandbox_manager().renew_current_sandbox_lease(
                 session_id, ttl_seconds=ttl_seconds
             )
         except Exception as e:
@@ -328,7 +331,7 @@ class TakeoverSandboxTool(FunctionTool):
             return permission_error
         session_id = context.context.event.unified_msg_origin
         try:
-            sandbox = await sandbox_manager.takeover_sandbox(session_id, sandbox_id)
+            sandbox = await _sandbox_manager().takeover_sandbox(session_id, sandbox_id)
         except Exception as e:
             detail = str(e) or type(e).__name__
             return f"Error taking over sandbox: {detail}"
@@ -359,7 +362,7 @@ class DestroySandboxTool(FunctionTool):
             return permission_error
         session_id = context.context.event.unified_msg_origin
         try:
-            sandbox = await sandbox_manager.destroy_sandbox(session_id, sandbox_id)
+            sandbox = await _sandbox_manager().destroy_sandbox(session_id, sandbox_id)
         except Exception as e:
             detail = str(e) or type(e).__name__
             return f"Error destroying sandbox: {detail}"
@@ -397,7 +400,7 @@ class ScreenshotSandboxTool(FunctionTool):
         ):
             return permission_error
         try:
-            booter = await sandbox_manager.get_observer_booter_by_id(
+            booter = await _sandbox_manager().get_observer_booter_by_id(
                 sandbox_id,
                 context.context.event.unified_msg_origin,
                 context=context.context.context,
@@ -467,11 +470,12 @@ class CopyFileBetweenSandboxesTool(FunctionTool):
         ):
             return permission_error
         try:
+            manager = _sandbox_manager()
             session_id = context.context.event.unified_msg_origin
-            source = await sandbox_manager.get_observer_booter_by_id(
+            source = await manager.get_observer_booter_by_id(
                 source_sandbox_id, session_id, context=context.context.context
             )
-            target = await sandbox_manager.get_observer_booter_by_id(
+            target = await manager.get_observer_booter_by_id(
                 target_sandbox_id, session_id, context=context.context.context
             )
             temp_dir = Path(get_astrbot_temp_path()) / "sandbox_copy"

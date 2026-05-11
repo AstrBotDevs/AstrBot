@@ -9,8 +9,8 @@ from astrbot.core.tools.computer_tools.sandbox import (
     CreateSandboxTool,
     DestroySandboxTool,
     KeepAliveSandboxTool,
-    ListSandboxProvidersTool,
     ListSandboxesTool,
+    ListSandboxProvidersTool,
     ScreenshotSandboxTool,
     SwitchSandboxTool,
     TakeoverSandboxTool,
@@ -149,7 +149,7 @@ async def test_member_list_sandboxes_includes_all_sandboxes_with_status(
             ]
 
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
     result = await ListSandboxesTool().call(_member_context_without_admin_requirement())
@@ -173,11 +173,26 @@ async def test_member_list_sandboxes_includes_all_sandboxes_with_status(
 
 
 @pytest.mark.asyncio
+async def test_sandbox_tools_use_current_computer_client_manager(monkeypatch):
+    from astrbot.core.computer import computer_client
+
+    class FakeManager:
+        def list_sandboxes(self):
+            return [{"sandbox_id": "dynamic-manager", "controller_session_id": None}]
+
+    monkeypatch.setattr(computer_client, "sandbox_manager", FakeManager())
+
+    result = await ListSandboxesTool().call(_member_context_without_admin_requirement())
+
+    assert "dynamic-manager" in str(result)
+
+
+@pytest.mark.asyncio
 async def test_list_sandbox_providers_tool_exposes_loaded_provider_capabilities(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.sandbox.list_sandbox_providers",
+        "astrbot.core.computer.computer_client.list_sandbox_providers",
         lambda: [
             {
                 "provider_id": "generic",
@@ -215,7 +230,7 @@ async def test_create_sandbox_tool_defaults_to_configured_provider(monkeypatch):
             return {"sandbox_id": "generic-1", "provider": provider_id}
 
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
     result = await CreateSandboxTool().call(_sandbox_context(), sandbox_name="Fresh")
@@ -239,7 +254,7 @@ async def test_create_sandbox_tool_accepts_explicit_provider_id(monkeypatch):
             return {"sandbox_id": "other-1", "provider": provider_id}
 
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
     result = await CreateSandboxTool().call(
@@ -272,7 +287,7 @@ async def test_member_switch_sandbox_allows_idle_default_sandbox(monkeypatch):
             return {"sandbox_id": sandbox_id}
 
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
     result = await SwitchSandboxTool().call(
@@ -304,7 +319,7 @@ async def test_member_switch_sandbox_allows_idle_dashboard_sandbox(monkeypatch):
             return {"sandbox_id": sandbox_id}
 
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
     result = await SwitchSandboxTool().call(
@@ -336,7 +351,7 @@ async def test_member_switch_sandbox_allows_idle_sandbox_from_any_session(monkey
             return {"sandbox_id": sandbox_id}
 
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
     result = await SwitchSandboxTool().call(
@@ -365,7 +380,7 @@ async def test_member_switch_sandbox_rejects_other_session_sandbox(monkeypatch):
             raise AssertionError("switch must not be called for another user's sandbox")
 
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
     result = await SwitchSandboxTool().call(
@@ -385,7 +400,7 @@ async def test_keep_alive_sandbox_tool_renews_current_sandbox(monkeypatch):
             return {"sandbox_id": "sandbox-1", "lease_expires_at": 123.0}
 
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.sandbox.sandbox_manager", FakeManager()
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
     result = await KeepAliveSandboxTool().call(

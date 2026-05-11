@@ -42,13 +42,15 @@
     "headers": {
         "sandbox": "沙盒",
         "provider": "Provider",
+        "capabilities": "能力",
         "status": "状态",
         "lastUsed": "最后使用",
         "actions": "操作"
     },
     "fields": {
         "provider": "Provider",
-        "booterType": "Booter 类型",
+        "capabilities": "能力",
+        "toolNames": "工具",
         "status": "状态",
         "owner": "所属会话",
         "controller": "控制会话",

@@ -28,6 +28,14 @@ LEGACY_SANDBOX_PROVIDER_CONFIG_KEYS = {
     "shipyard_ttl",
 }
 
+LEGACY_SANDBOX_RUNTIME_IDS = {
+    "bay",
+    "boxlite",
+    "cua",
+    "shipyard",
+    "shipyard_neo",
+}
+
 
 class RateLimitStrategy(enum.Enum):
     STALL = "stall"
@@ -78,6 +86,7 @@ class AstrBotConfig(dict):
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
         has_new |= self._remove_legacy_sandbox_provider_config_keys(conf)
+        has_new |= self._migrate_legacy_sandbox_runtime(conf)
         self.update(conf)
         if has_new:
             self.save_config()
@@ -126,6 +135,30 @@ class AstrBotConfig(dict):
                 logger.info("Config key removed: provider_settings.sandbox.%s", key)
                 removed = True
         return removed
+
+    def _migrate_legacy_sandbox_runtime(self, conf: dict) -> bool:
+        provider_settings = conf.get("provider_settings")
+        if not isinstance(provider_settings, dict):
+            return False
+
+        runtime = provider_settings.get("computer_use_runtime")
+        if runtime not in LEGACY_SANDBOX_RUNTIME_IDS:
+            return False
+
+        sandbox_cfg = provider_settings.get("sandbox")
+        if not isinstance(sandbox_cfg, dict):
+            sandbox_cfg = {}
+            provider_settings["sandbox"] = sandbox_cfg
+
+        if not sandbox_cfg.get("booter"):
+            sandbox_cfg["booter"] = runtime
+            logger.info(
+                "Config key migrated: provider_settings.computer_use_runtime %s -> sandbox",
+                runtime,
+            )
+
+        provider_settings["computer_use_runtime"] = "sandbox"
+        return True
 
     def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
         """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""

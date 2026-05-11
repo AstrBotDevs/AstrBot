@@ -42,13 +42,15 @@
     "headers": {
         "sandbox": "Sandbox",
         "provider": "Provider",
+        "capabilities": "Capabilities",
         "status": "Status",
         "lastUsed": "Last used",
         "actions": "Actions"
     },
     "fields": {
         "provider": "Provider",
-        "booterType": "Booter type",
+        "capabilities": "Capabilities",
+        "toolNames": "Tools",
         "status": "Status",
         "owner": "Owner session",
         "controller": "Controller session",

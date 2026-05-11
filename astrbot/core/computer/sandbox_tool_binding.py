@@ -1,17 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 
 def resolve_sandbox_provider_bindings(
     provider_id: str | None,
     tool_mgr: Any,
+    provider_info_lookup: Callable[[str], dict | None],
 ) -> tuple[dict | None, list[Any]]:
     """Return provider metadata and active provider tools for sandbox mode."""
-    from astrbot.core.computer.computer_client import get_sandbox_provider_info
-
-    normalized_provider_id = "" if provider_id is None else str(provider_id).lower()
-    provider_info = get_sandbox_provider_info(normalized_provider_id)
+    normalized_provider_id = _normalize_provider_id(provider_id)
+    provider_info = provider_info_lookup(normalized_provider_id)
     if not provider_info:
         return None, []
 
@@ -26,21 +26,13 @@ def resolve_sandbox_provider_bindings(
 def resolve_effective_sandbox_provider_id(
     session_id: str,
     fallback_provider_id: str | None,
+    current_provider_lookup: Callable[[str], str | None],
 ) -> str | None:
-    from astrbot.core.computer.computer_client import sandbox_manager
+    provider_id = _normalize_provider_id(current_provider_lookup(session_id))
+    if provider_id:
+        return provider_id
 
-    current_sandbox_id = sandbox_manager.registry.get_current_sandbox_id(session_id)
-    if current_sandbox_id:
-        current_record = sandbox_manager.registry.get_sandbox(current_sandbox_id)
-        if current_record:
-            provider_id = current_record.get("provider")
-            if provider_id:
-                return str(provider_id)
-
-    if fallback_provider_id is None:
-        return None
-    fallback_provider_id = str(fallback_provider_id).strip()
-    return fallback_provider_id or None
+    return _normalize_provider_id(fallback_provider_id)
 
 
 def tool_matches_sandbox_provider(
@@ -51,5 +43,9 @@ def tool_matches_sandbox_provider(
         return True
     if runtime != "sandbox":
         return False
-    normalized_provider_id = "" if provider_id is None else str(provider_id).lower()
+    normalized_provider_id = _normalize_provider_id(provider_id)
     return str(tool_provider).lower() == normalized_provider_id
+
+
+def _normalize_provider_id(provider_id: str | None) -> str:
+    return "" if provider_id is None else str(provider_id).strip().lower()

@@ -82,6 +82,29 @@ class TestAstrBotConfigLoad:
         assert config.platform_settings["unique_session"] is True
         assert config.provider_settings["enable"] is False
 
+    def test_init_migrates_legacy_computer_runtime(self, temp_config_path):
+        """Legacy runtime values are migrated to sandbox + booter."""
+        existing_config = {
+            "config_version": 2,
+            "provider_settings": {
+                "computer_use_runtime": "cua",
+                "sandbox": {},
+            },
+        }
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump(existing_config, f)
+
+        config = AstrBotConfig(config_path=temp_config_path)
+
+        assert config.provider_settings["computer_use_runtime"] == "sandbox"
+        assert config.provider_settings["sandbox"]["booter"] == "cua"
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            saved_config = json.load(f)
+
+        assert saved_config["provider_settings"]["computer_use_runtime"] == "sandbox"
+        assert saved_config["provider_settings"]["sandbox"]["booter"] == "cua"
+
     def test_first_deploy_flag(self, temp_config_path, minimal_default_config):
         """Test first_deploy flag is set for new config."""
         config = AstrBotConfig(

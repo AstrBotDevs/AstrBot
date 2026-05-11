@@ -404,6 +404,9 @@ async def test_sandbox_dashboard_lists_managed_sandboxes(
         "filesystem",
         "shell",
     ]
+    assert data["data"]["sandboxes"][0]["tool_names"] == [
+        "dashboard_generic_tool",
+    ]
 
 
 @pytest.mark.asyncio

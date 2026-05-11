@@ -60,14 +60,29 @@
               </div>
             </template>
 
+            <template #item.capabilities="{ item }">
+              <div class="capability-tags py-2">
+                <v-chip
+                  v-for="capability in item.capabilities || []"
+                  :key="`${item.sandbox_id}-${capability}`"
+                  size="x-small"
+                  color="secondary"
+                  variant="tonal"
+                >
+                  {{ capability }}
+                </v-chip>
+                <span v-if="!item.capabilities?.length" class="text-caption text-medium-emphasis">-</span>
+              </div>
+            </template>
+
             <template #item.status="{ item }">
               <div class="py-2">
                 <v-chip size="small" :color="statusColor(item)" variant="tonal">
                   {{ statusLabel(item) }}
+                  <v-tooltip v-if="item.controller_session_id" activator="parent" location="top">
+                    {{ item.controller_session_id }}
+                  </v-tooltip>
                 </v-chip>
-                <div v-if="item.controller_session_id" class="text-caption text-medium-emphasis mt-1">
-                  {{ item.controller_session_id }}
-                </div>
               </div>
             </template>
 
@@ -109,6 +124,16 @@
         <v-divider class="mb-4" />
         <v-list density="compact">
           <v-list-item :title="tm('fields.provider')" :subtitle="selectedSandboxRecord.provider" />
+          <v-list-item
+            v-if="selectedSandboxRecord.capabilities?.length"
+            :title="tm('fields.capabilities')"
+            :subtitle="selectedSandboxRecord.capabilities.join(', ')"
+          />
+          <v-list-item
+            v-if="selectedSandboxRecord.tool_names?.length"
+            :title="tm('fields.toolNames')"
+            :subtitle="selectedSandboxRecord.tool_names.join(', ')"
+          />
           <v-list-item :title="tm('fields.status')" :subtitle="statusLabel(selectedSandboxRecord)" />
           <v-list-item :title="tm('fields.owner')" :subtitle="selectedSandboxRecord.owner_session_id || '-'" />
           <v-list-item :title="tm('fields.controller')" :subtitle="selectedSandboxRecord.controller_session_id || '-'" />
@@ -300,6 +325,7 @@ type SandboxRecord = {
   status?: string
   connect_info?: Record<string, unknown>
   capabilities?: string[]
+  tool_names?: string[]
 }
 
 type LoadSandboxesResult = {
@@ -378,9 +404,10 @@ const hasProviderOptions = computed(() => providerOptions.value.length > 0)
 
 const headers = computed(() => [
   { title: tm('headers.sandbox'), key: 'identity', sortable: false, width: '22%' },
-  { title: tm('headers.provider'), key: 'provider', sortable: false, width: '14%' },
+  { title: tm('headers.provider'), key: 'provider', sortable: false, width: '12%' },
+  { title: tm('headers.capabilities'), key: 'capabilities', sortable: false, width: '18%' },
   { title: tm('headers.status'), key: 'status', sortable: false, width: '12%' },
-  { title: tm('headers.lastUsed'), key: 'last_used', sortable: false, width: '18%' },
+  { title: tm('headers.lastUsed'), key: 'last_used', sortable: false, width: '14%' },
   { title: tm('headers.actions'), key: 'actions', sortable: false, align: 'end' as const, width: 520 }
 ])
 
@@ -853,20 +880,28 @@ function openDestroyConfirm(item: SandboxRecord) {
 }
 
 async function confirmDestroySandbox() {
-  if (!destroySandboxTarget.value) return
+  const target = destroySandboxTarget.value
+  if (!target) return
   destroying.value = true
   try {
-    const data = await sandboxAction(
-      'delete',
-      sandboxApiPath(destroySandboxTarget.value),
-      undefined,
-      tm('messages.destroyed'),
-      { params: { session_id: 'dashboard' } }
-    )
-    if (data) {
+    const res = await axios.delete(sandboxApiPath(target), {
+      params: { session_id: 'dashboard', _t: Date.now() }
+    })
+    if (res.data.status === 'ok') {
+      const sandbox = res.data.data?.sandbox as SandboxRecord | undefined
+      if (sandbox?.sandbox_id) {
+        upsertSandboxRecord(sandbox)
+      }
       destroyDialog.value = false
       destroySandboxTarget.value = null
+      void loadSandboxes({ silent: true })
+    } else {
+      toast(res.data.message || tm('messages.operationFailed'), 'error')
+      await loadSandboxes({ silent: true })
     }
+  } catch (e: any) {
+    toast(e?.response?.data?.message || tm('messages.operationFailed'), 'error')
+    await loadSandboxes({ silent: true })
   } finally {
     destroying.value = false
   }
@@ -1004,8 +1039,13 @@ function isTransientProgressLine(value: string) {
 }
 
 function displayConsoleCwd(cwd: string) {
-  if (cwd === '/home/cua') return '~'
-  if (cwd.startsWith('/home/cua/')) return `~${cwd.slice('/home/cua'.length)}`
+  if (cwd === '/workspace') return '~'
+  if (cwd.startsWith('/workspace/')) return `~${cwd.slice('/workspace'.length)}`
+  const homeMatch = cwd.match(/^\/home\/[^/]+(.*)$/)
+  if (homeMatch) {
+    const suffix = homeMatch[1] || ''
+    return suffix ? `~${suffix}` : '~'
+  }
   return cwd
 }
 
@@ -1099,6 +1139,14 @@ onUnmounted(() => {
   align-self: flex-start;
   width: fit-content;
   min-width: 0;
+}
+
+.capability-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 280px;
+  min-width: 180px;
 }
 
 .connect-info {

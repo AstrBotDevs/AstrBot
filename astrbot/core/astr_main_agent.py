@@ -29,6 +29,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
+from astrbot.core.computer import computer_client
 from astrbot.core.computer.sandbox_tool_binding import (
     resolve_effective_sandbox_provider_id,
     tool_matches_sandbox_provider,
@@ -423,6 +424,7 @@ def _tool_matches_current_sandbox_provider(
     current_provider = resolve_effective_sandbox_provider_id(
         session_id,
         _configured_sandbox_provider_id(cfg),
+        computer_client.get_current_sandbox_provider_id,
     )
     return tool_matches_sandbox_provider(tool, runtime, current_provider)
 
@@ -1027,7 +1029,12 @@ def _apply_sandbox_tools(
         req.func_tool = ToolSet()
     if req.system_prompt is None:
         req.system_prompt = ""
-    booter = config.sandbox_cfg.get("booter", "")
+    configured_booter = config.sandbox_cfg.get("booter", "")
+    current_provider = resolve_effective_sandbox_provider_id(
+        req.session_id,
+        configured_booter,
+        computer_client.get_current_sandbox_provider_id,
+    )
 
     tool_mgr = llm_tools
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
@@ -1053,7 +1060,11 @@ def _apply_sandbox_tools(
         resolve_sandbox_provider_bindings,
     )
 
-    provider_info, provider_tools = resolve_sandbox_provider_bindings(booter, tool_mgr)
+    provider_info, provider_tools = resolve_sandbox_provider_bindings(
+        current_provider,
+        tool_mgr,
+        computer_client.get_sandbox_provider_info,
+    )
     for tool in provider_tools:
         req.func_tool.add_tool(tool)
 

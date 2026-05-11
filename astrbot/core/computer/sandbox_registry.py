@@ -12,15 +12,25 @@ from astrbot.core.computer.sandbox_models import SandboxRecord
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 _UNSET = object()
+_SCHEMA_VERSION = 1
 
 
 def _default_registry_payload() -> dict[str, Any]:
     return {
+        "schema_version": _SCHEMA_VERSION,
         "default_sandbox_id": None,
         "default_sandbox_ids": {},
         "sandboxes": {},
         "session_current": {},
     }
+
+
+def _coerce_schema_version(value: Any) -> int:
+    try:
+        version = int(value)
+    except (TypeError, ValueError):
+        return _SCHEMA_VERSION
+    return version if version > 0 else _SCHEMA_VERSION
 
 
 class SandboxRegistry:
@@ -246,7 +256,7 @@ class SandboxRegistry:
         record = self._payload["sandboxes"].get(sandbox_id)
         if record is None:
             return None
-        record["status"] = status
+        record["status"] = getattr(status, "value", status)
         return deepcopy(record)
 
     def acquire_lease(
@@ -316,6 +326,28 @@ class SandboxRegistry:
                 record["status"] = "unknown"
             elif record.get("status") == "creating":
                 record["status"] = "error"
+        self._prune_default_references()
+
+    def _prune_default_references(self) -> None:
+        sandboxes = self._payload["sandboxes"]
+        default_sandbox_id = self._payload.get("default_sandbox_id")
+        if default_sandbox_id not in sandboxes:
+            self._payload["default_sandbox_id"] = None
+        default_sandbox_ids = self._payload.get("default_sandbox_ids") or {}
+        valid_default_sandbox_ids = {
+            provider: sandbox_id
+            for provider, sandbox_id in default_sandbox_ids.items()
+            if sandbox_id in sandboxes
+            and sandboxes[sandbox_id].get("provider") == provider
+        }
+        self._payload["default_sandbox_ids"] = valid_default_sandbox_ids
+        for record in sandboxes.values():
+            record["is_default"] = False
+        if self._payload["default_sandbox_id"]:
+            sandboxes[self._payload["default_sandbox_id"]]["is_default"] = True
+        for sandbox_id in valid_default_sandbox_ids.values():
+            if sandbox_id in sandboxes:
+                sandboxes[sandbox_id]["is_default"] = True
 
     def load(self) -> None:
         if not self.storage_path.exists():
@@ -327,8 +359,18 @@ class SandboxRegistry:
             logger.warning("Failed to load sandbox registry: %s", exc)
             self._payload = _default_registry_payload()
             return
+        if not isinstance(payload, dict):
+            logger.warning("Failed to load sandbox registry: payload is not an object")
+            self._payload = _default_registry_payload()
+            return
         self._payload = _default_registry_payload()
+        self._payload["schema_version"] = _coerce_schema_version(
+            payload.get("schema_version")
+        )
         self._payload.update({key: payload.get(key) for key in self._payload})
+        self._payload["schema_version"] = _coerce_schema_version(
+            self._payload.get("schema_version")
+        )
         self._payload["default_sandbox_ids"] = dict(
             self._payload.get("default_sandbox_ids") or {}
         )

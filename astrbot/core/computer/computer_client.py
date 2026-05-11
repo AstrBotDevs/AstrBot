@@ -258,6 +258,17 @@ def get_sandbox_provider_info(provider_id: str) -> dict | None:
     return _sandbox_provider_info(provider_id, provider)
 
 
+def get_current_sandbox_provider_id(session_id: str) -> str | None:
+    current_sandbox_id = sandbox_manager.registry.get_current_sandbox_id(session_id)
+    if not current_sandbox_id:
+        return None
+    current_record = sandbox_manager.registry.get_sandbox(current_sandbox_id)
+    if current_record is None:
+        return None
+    provider_id = str(current_record.get("provider") or "").strip()
+    return provider_id or None
+
+
 def list_sandbox_providers() -> list[dict]:
     return [
         _sandbox_provider_info(provider_id, provider)

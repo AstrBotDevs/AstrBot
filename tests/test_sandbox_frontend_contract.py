@@ -146,12 +146,35 @@ def test_sandbox_management_page_does_not_toast_running_after_create():
     assert "toast(tm('messages.createReady'))" not in content
 
 
+def test_sandbox_management_page_destroy_uses_backend_status_not_optimistic_status():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "const res = await axios.delete(sandboxApiPath(target)" in content
+    assert "upsertSandboxRecord({ ...target, status: 'stopping' })" not in content
+    assert "const sandbox = res.data.data?.sandbox as SandboxRecord | undefined" in content
+    assert "upsertSandboxRecord(sandbox)" in content
+    assert "void loadSandboxes({ silent: true })" in content
+    assert "destroyQueued" not in content
+
+
 def test_sandbox_management_page_splits_running_into_busy_and_available_labels():
     content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
         encoding="utf-8"
     )
 
     assert "return hasController(item) ? 'busy' : 'available'" in content
+
+
+def test_sandbox_management_page_shows_controller_session_in_status_tooltip():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'v-tooltip v-if="item.controller_session_id" activator="parent"' in content
+    assert "{{ item.controller_session_id }}" in content
+    assert 'class="text-caption text-medium-emphasis mt-1"' not in content
 
 
 def test_sandbox_management_page_confirms_dangerous_console_commands():
@@ -163,6 +186,17 @@ def test_sandbox_management_page_confirms_dangerous_console_commands():
     assert "window.confirm(tm('console.dangerConfirm'" in content
     assert "rm\\s+(?:-" in content
     assert "(?:--\\s+)?" in content
+
+
+def test_sandbox_management_page_displays_console_cwd_relative_to_sandbox_home():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "if (cwd === '/workspace') return '~'" in content
+    assert "if (cwd.startsWith('/workspace/')) return `~${cwd.slice('/workspace'.length)}`" in content
+    assert "cwd.match(/^\\/home\\/[^/]+(.*)$/)" in content
+    assert "return suffix ? `~${suffix}` : '~'" in content
 
 
 def test_sandbox_management_page_surfaces_unknown_status_key():
@@ -180,6 +214,17 @@ def test_sandbox_management_page_does_not_render_legacy_booter_type():
 
     assert "booter_type" not in content
     assert "showBooterTypeCaption" not in content
+    assert "provider-summary" not in content
+
+
+def test_sandbox_management_page_has_dedicated_capabilities_column():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "key: 'capabilities'" in content
+    assert 'v-for="capability in item.capabilities || []"' in content
+    assert "tm('headers.capabilities')" in content
 
 
 def test_sandbox_i18n_uses_status_and_idle_labels():

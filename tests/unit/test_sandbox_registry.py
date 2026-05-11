@@ -84,6 +84,20 @@ def test_registry_acquires_releases_and_takes_over_leases(tmp_path):
     assert taken["controller_session_id"] == "session-c"
 
 
+def test_registry_normalizes_sandbox_status_enum_values(tmp_path):
+    from astrbot.core.computer.sandbox_models import SandboxStatus
+
+    registry = _registry(tmp_path)
+    _upsert(registry)
+
+    updated = registry.update_sandbox_status("generic-1", SandboxStatus.UNKNOWN)
+
+    assert updated["status"] == "unknown"
+    assert type(updated["status"]) is str
+    assert registry.get_sandbox("generic-1")["status"] == "unknown"
+    assert type(registry.get_sandbox("generic-1")["status"]) is str
+
+
 def test_registry_saves_loads_and_reconciles_runtime_state(tmp_path):
     registry = _registry(tmp_path)
     _upsert(registry)
@@ -103,7 +117,47 @@ def test_registry_saves_loads_and_reconciles_runtime_state(tmp_path):
     assert loaded.get_current_sandbox_id("session-a") is None
 
     payload = json.loads((tmp_path / "sandbox_registry.json").read_text())
+    assert payload["schema_version"] == 1
     assert "sandboxes" in payload
+
+
+def test_registry_loads_legacy_payload_without_schema_version(tmp_path):
+    legacy_payload = {
+        "default_sandbox_id": None,
+        "default_sandbox_ids": {},
+        "sandboxes": {
+            "generic-1": {
+                "sandbox_id": "generic-1",
+                "sandbox_name": "Legacy",
+                "provider": "generic",
+                "managed": True,
+                "created_by_astrbot": True,
+                "owner_user_id": "user-1",
+                "owner_session_id": "session-1",
+                "connect_info": {"name": "Legacy"},
+            }
+        },
+        "session_current": {},
+    }
+    path = tmp_path / "sandbox_registry.json"
+    path.write_text(json.dumps(legacy_payload), encoding="utf-8")
+
+    registry = _registry(tmp_path)
+    registry.load()
+
+    assert registry._payload["schema_version"] == 1
+    assert registry.get_sandbox("generic-1")["sandbox_name"] == "Legacy"
+
+
+def test_registry_loads_non_object_payload_as_empty_registry(tmp_path):
+    path = tmp_path / "sandbox_registry.json"
+    path.write_text("[]", encoding="utf-8")
+
+    registry = _registry(tmp_path)
+    registry.load()
+
+    assert registry._payload["schema_version"] == 1
+    assert registry.list_sandboxes() == []
 
 
 def test_registry_reconcile_startup_deletes_non_persistent_creating_records(tmp_path):
@@ -143,6 +197,53 @@ def test_registry_reconcile_startup_marks_persistent_running_unknown(tmp_path):
     registry.reconcile_startup()
 
     assert registry.get_sandbox("generic-1")["status"] == "unknown"
+
+
+def test_registry_reconcile_startup_clears_stale_default_references(tmp_path):
+    registry = _registry(tmp_path)
+    registry._payload["default_sandbox_id"] = "missing-1"
+    registry._payload["default_sandbox_ids"] = {"generic": "missing-1"}
+    registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Sandbox generic-1",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-1",
+        owner_session_id="session-1",
+        connect_info={"name": "generic-1"},
+        retention_policy="persistent",
+        status="running",
+    )
+
+    registry.reconcile_startup()
+
+    assert registry.default_sandbox_id is None
+    assert registry.get_default_sandbox_id("generic") is None
+    assert registry._payload["default_sandbox_ids"] == {}
+
+
+def test_registry_reconcile_startup_clears_stale_is_default_flags(tmp_path):
+    registry = _registry(tmp_path)
+    record = registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Sandbox generic-1",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-1",
+        owner_session_id="session-1",
+        connect_info={"name": "generic-1"},
+        retention_policy="persistent",
+        status="running",
+    )
+    registry._payload["default_sandbox_id"] = "missing-1"
+    registry._payload["default_sandbox_ids"] = {}
+    registry._payload["sandboxes"][record["sandbox_id"]]["is_default"] = True
+
+    registry.reconcile_startup()
+
+    assert registry.get_sandbox("generic-1")["is_default"] is False
 
 
 @pytest.mark.asyncio

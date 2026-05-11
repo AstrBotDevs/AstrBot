@@ -258,7 +258,7 @@ class SandboxRoute(Route):
 
     async def destroy_sandbox(self, sandbox_id: str):
         try:
-            sandbox = await computer_client.sandbox_manager.destroy_sandbox(
+            sandbox = await computer_client.sandbox_manager.destroy_sandbox_deferred(
                 self._session_id(), sandbox_id
             )
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)

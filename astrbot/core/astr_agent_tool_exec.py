@@ -20,6 +20,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
+from astrbot.core.computer import computer_client
 from astrbot.core.computer.sandbox_tool_binding import (
     resolve_effective_sandbox_provider_id,
     resolve_sandbox_provider_bindings,
@@ -258,7 +259,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 grep_tool.name: grep_tool,
             }
             _provider_info, provider_tools = resolve_sandbox_provider_bindings(
-                booter, tool_mgr
+                booter,
+                tool_mgr,
+                computer_client.get_sandbox_provider_info,
             )
             for provider_tool in provider_tools:
                 tools[provider_tool.name] = provider_tool
@@ -301,6 +304,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         current_provider = resolve_effective_sandbox_provider_id(
             event.unified_msg_origin,
             configured_provider,
+            computer_client.get_current_sandbox_provider_id,
         )
         tool_mgr = (
             ctx.get_llm_tool_manager()
