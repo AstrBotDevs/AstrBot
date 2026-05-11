@@ -1387,4 +1387,81 @@ class ProviderOpenAIOfficial(Provider):
     "OpenAI API Responses 提供商适配器",
 )
 class ProviderOpenAIResponses(ProviderOpenAIOfficial):
-    pass
+    async def _prepare_responses_payload(
+        self,
+        prompt: str | None = None,
+        image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
+        contexts: list[dict] | list[Message] | None = None,
+        system_prompt: str | None = None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
+        model: str | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
+        **kwargs,
+    ) -> dict:
+        payloads, _ = await self._prepare_chat_payload(
+            prompt=prompt,
+            image_urls=image_urls,
+            audio_urls=audio_urls,
+            contexts=contexts,
+            system_prompt=system_prompt,
+            tool_calls_result=tool_calls_result,
+            model=model,
+            extra_user_content_parts=extra_user_content_parts,
+            **kwargs,
+        )
+
+        responses_input = []
+        for message in payloads["messages"]:
+            content = message.get("content")
+            if isinstance(content, list):
+                responses_content = []
+                for part in content:
+                    if not isinstance(part, dict):
+                        responses_content.append(
+                            {"type": "input_text", "text": str(part)}
+                        )
+                        continue
+                    if part.get("type") == "image_url":
+                        image_url = part.get("image_url")
+                        if isinstance(image_url, dict):
+                            image_payload = {
+                                "type": "input_image",
+                                "image_url": image_url.get("url", ""),
+                            }
+                            if image_url.get("detail") is not None:
+                                image_payload["detail"] = image_url["detail"]
+                            responses_content.append(image_payload)
+                        continue
+                    if part.get("type") == "text":
+                        responses_content.append(
+                            {"type": "input_text", "text": part.get("text", "")}
+                        )
+                        continue
+                    responses_content.append(part)
+            elif content is None:
+                responses_content = []
+            else:
+                responses_content = [{"type": "input_text", "text": str(content)}]
+
+            responses_input.append(
+                {
+                    "role": message.get("role", "user"),
+                    "content": responses_content,
+                }
+            )
+
+        response_payload = {
+            "model": payloads["model"],
+            "input": responses_input,
+        }
+
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = (
+            custom_extra_body.copy() if isinstance(custom_extra_body, dict) else {}
+        )
+        if "reasoning" in extra_body:
+            response_payload["reasoning"] = extra_body.pop("reasoning")
+        response_payload["extra_body"] = extra_body
+
+        return response_payload

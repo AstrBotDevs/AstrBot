@@ -82,6 +82,68 @@ async def test_openai_responses_provider_uses_configured_model():
 
 
 @pytest.mark.asyncio
+async def test_responses_payload_converts_text_and_image_input_blocks(monkeypatch):
+    provider = _make_responses_provider()
+    try:
+
+        async def fake_resolve_image_part(image_url: str, *, image_detail=None):
+            assert image_url == "https://example.com/a.png"
+            assert image_detail is None
+            return {
+                "type": "image_url",
+                "image_url": {"url": "https://example.com/a.png"},
+            }
+
+        monkeypatch.setattr(provider, "_resolve_image_part", fake_resolve_image_part)
+
+        payload = await provider._prepare_responses_payload(
+            prompt="look",
+            image_urls=["https://example.com/a.png"],
+            system_prompt="system",
+            model="gpt-5.5",
+        )
+
+        assert payload["model"] == "gpt-5.5"
+        assert payload["input"] == [
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": "system"}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "look"},
+                    {
+                        "type": "input_image",
+                        "image_url": "https://example.com/a.png",
+                    },
+                ],
+            },
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_payload_splits_reasoning_from_extra_body():
+    provider = _make_responses_provider(
+        {
+            "custom_extra_body": {
+                "reasoning": {"effort": "high"},
+                "metadata": {"session": "test"},
+            }
+        }
+    )
+    try:
+        payload = await provider._prepare_responses_payload(prompt="hello")
+
+        assert payload["reasoning"] == {"effort": "high"}
+        assert payload["extra_body"] == {"metadata": {"session": "test"}}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_handle_api_error_content_moderated_removes_images():
     provider = _make_provider(
         {"image_moderation_error_patterns": ["file:content-moderated"]}
