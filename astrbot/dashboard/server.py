@@ -241,15 +241,21 @@ class AstrBotDashboard:
             await self.db.touch_api_key(api_key.key_id)
             return None
 
-        allowed_endpoints = [
+        allowed_exact_endpoints = {
             "/api/auth/login",
             "/api/auth/logout",
+            "/api/auth/setup-status",
+            "/api/auth/setup",
+        }
+        allowed_endpoint_prefixes = [
             "/api/file",
             "/api/platform/webhook",
             "/api/stat/start-time",
             "/api/backup/download",  # 备份下载使用 URL 参数传递 token
         ]
-        if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
+        if request.path in allowed_exact_endpoints or any(
+            request.path.startswith(prefix) for prefix in allowed_endpoint_prefixes
+        ):
             return None
         is_plugin_page_path = PluginPageAuth.is_protected_path(request.path)
         token = self._extract_dashboard_jwt()

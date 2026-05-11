@@ -60,6 +60,11 @@ class AstrBotConfig(dict):
             if conf_str.startswith("\ufeff"):
                 conf_str = conf_str[1:]
             conf = json.loads(conf_str)
+        dashboard_conf = conf.get("dashboard")
+        dashboard_password_change_required_missing = (
+            isinstance(dashboard_conf, dict)
+            and "password_change_required" not in dashboard_conf
+        )
 
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
@@ -77,6 +82,15 @@ class AstrBotConfig(dict):
             and conf["dashboard"].get("password_change_required", False)
         ):
             self._reset_generated_dashboard_password(conf)
+            has_new = True
+        elif (
+            "dashboard" in conf
+            and isinstance(conf["dashboard"], dict)
+            and dashboard_password_change_required_missing
+            and conf["dashboard"].get("username") == "astrbot"
+        ):
+            self._reset_generated_dashboard_password(conf)
+            conf["dashboard"]["password_change_required"] = True
             has_new = True
         self.update(conf)
         if has_new:

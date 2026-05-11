@@ -1,8 +1,9 @@
 import asyncio
 import datetime
+import os
 
 import jwt
-from quart import current_app, jsonify, make_response, request
+from quart import current_app, g, jsonify, make_response, request
 
 from astrbot import logger
 from astrbot.core import DEMO_MODE
@@ -18,6 +19,9 @@ from .route import Response, Route, RouteContext
 
 DASHBOARD_JWT_COOKIE_NAME = "astrbot_dashboard_jwt"
 DASHBOARD_JWT_COOKIE_MAX_AGE = 7 * 24 * 60 * 60
+SKIP_DEFAULT_PASSWORD_AUTH_ENV = "ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH"
+SKIP_DEFAULT_PASSWORD_AUTH_ENV_LEGACY = "DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH"
+LOCAL_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 class AuthRoute(Route):
@@ -26,9 +30,80 @@ class AuthRoute(Route):
         self.routes = {
             "/auth/login": ("POST", self.login),
             "/auth/logout": ("POST", self.logout),
+            "/auth/setup-status": ("GET", self.setup_status),
+            "/auth/setup": ("POST", self.setup),
+            "/auth/setup-authenticated": ("POST", self.setup_authenticated),
             "/auth/account/edit": ("POST", self.edit_account),
         }
         self.register_routes()
+
+    async def setup_status(self):
+        return (
+            Response()
+            .ok(
+                {
+                    "setup_required": self._is_setup_required(),
+                    "skip_default_password_auth": self._can_skip_default_password_auth(),
+                }
+            )
+            .__dict__
+        )
+
+    async def setup(self):
+        if not self._can_skip_default_password_auth():
+            return Response().error("Setup without password is not enabled").__dict__
+        if not self._is_setup_required():
+            return Response().error("Setup is not required").__dict__
+
+        return await self._complete_setup()
+
+    async def setup_authenticated(self):
+        if not self._is_setup_required():
+            return Response().error("Setup is not required").__dict__
+        if not isinstance(getattr(g, "username", None), str):
+            return Response().error("未授权").__dict__
+
+        return await self._complete_setup()
+
+    async def _complete_setup(self):
+        post_data = await request.json
+        if not isinstance(post_data, dict):
+            return Response().error("Invalid request payload").__dict__
+
+        new_username = post_data.get("username")
+        new_password = post_data.get("password")
+        confirm_password = post_data.get("confirm_password")
+        if not isinstance(new_username, str) or len(new_username.strip()) < 3:
+            return Response().error("用户名长度至少3位").__dict__
+        if not isinstance(new_password, str):
+            return Response().error("新密码无效").__dict__
+        if not isinstance(confirm_password, str) or confirm_password != new_password:
+            return Response().error("两次输入的新密码不一致").__dict__
+
+        try:
+            validate_dashboard_password(new_password)
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+
+        username = new_username.strip()
+        self.config["dashboard"]["username"] = username
+        self.config["dashboard"]["password"] = hash_dashboard_password(new_password)
+        self.config["dashboard"]["password_change_required"] = False
+        self.config.save_config()
+
+        token = self.generate_jwt(username)
+        payload = Response().ok(
+            {
+                "token": token,
+                "username": username,
+                "change_pwd_hint": False,
+                "legacy_pwd_hint": False,
+            },
+            "Setup completed successfully",
+        )
+        response = await make_response(jsonify(payload.__dict__))
+        self._set_dashboard_jwt_cookie(response, token)
+        return response
 
     async def login(self):
         username = self.config["dashboard"]["username"]
@@ -147,6 +222,40 @@ class AuthRoute(Route):
             raise ValueError("JWT secret is not set in the cmd_config.")
         token = jwt.encode(payload, jwt_token, algorithm="HS256")
         return token
+
+    def _is_setup_required(self) -> bool:
+        if DEMO_MODE:
+            return False
+
+        dashboard_config = self.config["dashboard"]
+        password_change_required = bool(
+            dashboard_config.get("password_change_required", False)
+        )
+        if password_change_required:
+            return True
+
+        return dashboard_config.get(
+            "username"
+        ) == "astrbot" and is_default_dashboard_password(
+            dashboard_config.get("password", "")
+        )
+
+    def _can_skip_default_password_auth(self) -> bool:
+        if not self._env_flag_enabled(SKIP_DEFAULT_PASSWORD_AUTH_ENV):
+            return False
+        host = (
+            os.environ.get("DASHBOARD_HOST")
+            or os.environ.get("ASTRBOT_DASHBOARD_HOST")
+            or self.config["dashboard"].get("host", "")
+        )
+        return str(host).strip().lower() in LOCAL_DASHBOARD_HOSTS
+
+    @staticmethod
+    def _env_flag_enabled(name: str) -> bool:
+        value = os.environ.get(name)
+        if value is None and name == SKIP_DEFAULT_PASSWORD_AUTH_ENV:
+            value = os.environ.get(SKIP_DEFAULT_PASSWORD_AUTH_ENV_LEGACY)
+        return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
     @staticmethod
     def _use_secure_dashboard_jwt_cookie() -> bool:

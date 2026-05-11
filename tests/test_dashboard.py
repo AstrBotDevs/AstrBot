@@ -22,7 +22,10 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
-from astrbot.core.utils.auth_password import hash_dashboard_password
+from astrbot.core.utils.auth_password import (
+    hash_dashboard_password,
+    verify_dashboard_password,
+)
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.dashboard.routes.auth import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.routes.plugin import PluginRoute
@@ -317,6 +320,144 @@ async def test_generated_password_requires_password_change_until_changed(
             core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"]
             is False
         )
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+
+
+@pytest.mark.asyncio
+async def test_local_setup_can_skip_default_password_auth(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    setup_password = "AstrbotSetup123"
+    setup_username = "astrbot-admin"
+
+    try:
+        monkeypatch.setenv("ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH", "true")
+        core_lifecycle_td.astrbot_config["dashboard"]["host"] = "127.0.0.1"
+        core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"] = True
+
+        response = await test_client.get("/api/auth/setup-status")
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["setup_required"] is True
+        assert data["data"]["skip_default_password_auth"] is True
+
+        response = await test_client.post(
+            "/api/auth/setup",
+            json={
+                "username": setup_username,
+                "password": setup_password,
+                "confirm_password": setup_password,
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["username"] == setup_username
+        assert data["data"]["token"]
+        assert (
+            core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"]
+            is False
+        )
+        assert (
+            core_lifecycle_td.astrbot_config["dashboard"]["username"] == setup_username
+        )
+        assert verify_dashboard_password(
+            core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            setup_password,
+        )
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+
+
+@pytest.mark.asyncio
+async def test_authenticated_default_password_login_can_complete_setup(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    setup_password = "AstrbotSetup123"
+    setup_username = "astrbot-admin"
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"] = True
+
+        login_response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+        )
+        login_data = await login_response.get_json()
+        assert login_data["status"] == "ok"
+        assert login_data["data"]["change_pwd_hint"] is True
+        token = login_data["data"]["token"]
+
+        response = await test_client.post(
+            "/api/auth/setup-authenticated",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "username": setup_username,
+                "password": setup_password,
+                "confirm_password": setup_password,
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["username"] == setup_username
+        assert (
+            core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"]
+            is False
+        )
+        assert verify_dashboard_password(
+            core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            setup_password,
+        )
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+
+
+@pytest.mark.asyncio
+async def test_setup_skip_requires_local_host(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+
+    try:
+        monkeypatch.setenv("ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH", "true")
+        core_lifecycle_td.astrbot_config["dashboard"]["host"] = "0.0.0.0"
+        core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"] = True
+
+        response = await test_client.get("/api/auth/setup-status")
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["setup_required"] is True
+        assert data["data"]["skip_default_password_auth"] is False
+
+        response = await test_client.post(
+            "/api/auth/setup",
+            json={
+                "username": "astrbot-admin",
+                "password": "AstrbotSetup123",
+                "confirm_password": "AstrbotSetup123",
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "error"
     finally:
         core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
 
