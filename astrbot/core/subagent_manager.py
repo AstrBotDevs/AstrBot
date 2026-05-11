@@ -547,7 +547,10 @@ Create sub-agents ONLY when:
             for msg in system_msgs:
                 if cls._timezone:
                     import zoneinfo
-                    ts = datetime.fromtimestamp(msg["timestamp"], tz=zoneinfo.ZoneInfo(cls._timezone)).strftime("%H:%M:%S")
+
+                    ts = datetime.fromtimestamp(
+                        msg["timestamp"], tz=zoneinfo.ZoneInfo(cls._timezone)
+                    ).strftime("%H:%M:%S")
                 else:
                     ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
                 content_text = msg["content"]
