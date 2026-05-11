@@ -719,19 +719,19 @@ class TestEnsurePersonaAndSkills:
         self, mock_event, mock_context
     ):
         module = ama
-        cua_tool = FunctionTool(
-            name="astrbot_cua_screenshot",
+        provider_tool = FunctionTool(
+            name="provider_a_screenshot",
             parameters={"type": "object", "properties": {}},
-            description="CUA screenshot",
+            description="provider screenshot",
         )
-        cua_tool.sandbox_provider_id = "cua"
+        provider_tool.sandbox_provider_id = "provider_a"
         generic_tool = FunctionTool(
             name="regular_tool",
             parameters={"type": "object", "properties": {}},
             description="regular",
         )
         tmgr = mock_context.get_llm_tool_manager.return_value
-        tmgr.get_full_tool_set.return_value = ToolSet([cua_tool, generic_tool])
+        tmgr.get_full_tool_set.return_value = ToolSet([provider_tool, generic_tool])
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=(None, None, None, False)
         )
@@ -743,7 +743,7 @@ class TestEnsurePersonaAndSkills:
             req,
             {
                 "computer_use_runtime": "sandbox",
-                "sandbox": {"booter": "shipyard_neo"},
+                "sandbox": {"booter": "provider_b"},
             },
             mock_context,
             mock_event,
@@ -751,21 +751,21 @@ class TestEnsurePersonaAndSkills:
 
         assert req.func_tool is not None
         assert "regular_tool" in req.func_tool.names()
-        assert "astrbot_cua_screenshot" not in req.func_tool.names()
+        assert "provider_a_screenshot" not in req.func_tool.names()
 
     @pytest.mark.asyncio
     async def test_ensure_persona_keeps_current_sandbox_provider_tools(
         self, mock_event, mock_context
     ):
         module = ama
-        cua_tool = FunctionTool(
-            name="astrbot_cua_screenshot",
+        provider_tool = FunctionTool(
+            name="provider_a_screenshot",
             parameters={"type": "object", "properties": {}},
-            description="CUA screenshot",
+            description="provider screenshot",
         )
-        cua_tool.sandbox_provider_id = "cua"
+        provider_tool.sandbox_provider_id = "provider_a"
         tmgr = mock_context.get_llm_tool_manager.return_value
-        tmgr.get_full_tool_set.return_value = ToolSet([cua_tool])
+        tmgr.get_full_tool_set.return_value = ToolSet([provider_tool])
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=(None, None, None, False)
         )
@@ -777,34 +777,36 @@ class TestEnsurePersonaAndSkills:
             req,
             {
                 "computer_use_runtime": "sandbox",
-                "sandbox": {"booter": "cua"},
+                "sandbox": {"booter": "provider_a"},
             },
             mock_context,
             mock_event,
         )
 
         assert req.func_tool is not None
-        assert "astrbot_cua_screenshot" in req.func_tool.names()
+        assert "provider_a_screenshot" in req.func_tool.names()
 
     @pytest.mark.asyncio
     async def test_ensure_persona_prefers_bound_sandbox_provider_over_config(
         self, monkeypatch, mock_event, mock_context
     ):
         module = ama
-        cua_tool = FunctionTool(
-            name="astrbot_cua_screenshot",
+        provider_a_tool = FunctionTool(
+            name="provider_a_screenshot",
             parameters={"type": "object", "properties": {}},
-            description="CUA screenshot",
+            description="Provider A screenshot",
         )
-        cua_tool.sandbox_provider_id = "cua"
-        boxlite_tool = FunctionTool(
-            name="boxlite_tool",
+        provider_a_tool.sandbox_provider_id = "provider_a"
+        provider_b_tool = FunctionTool(
+            name="provider_b_tool",
             parameters={"type": "object", "properties": {}},
-            description="BoxLite tool",
+            description="Provider B tool",
         )
-        boxlite_tool.sandbox_provider_id = "boxlite"
+        provider_b_tool.sandbox_provider_id = "provider_b"
         tmgr = mock_context.get_llm_tool_manager.return_value
-        tmgr.get_full_tool_set.return_value = ToolSet([cua_tool, boxlite_tool])
+        tmgr.get_full_tool_set.return_value = ToolSet(
+            [provider_a_tool, provider_b_tool]
+        )
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=(None, None, None, False)
         )
@@ -814,16 +816,18 @@ class TestEnsurePersonaAndSkills:
         monkeypatch.setattr(
             sandbox_manager.registry,
             "get_current_sandbox_id",
-            lambda session_id: "boxlite-1"
-            if session_id == mock_event.unified_msg_origin
-            else None,
+            lambda session_id: (
+                "provider-b-1" if session_id == mock_event.unified_msg_origin else None
+            ),
         )
         monkeypatch.setattr(
             sandbox_manager.registry,
             "get_sandbox",
-            lambda sandbox_id: {"sandbox_id": sandbox_id, "provider": "boxlite"}
-            if sandbox_id == "boxlite-1"
-            else None,
+            lambda sandbox_id: (
+                {"sandbox_id": sandbox_id, "provider": "provider_b"}
+                if sandbox_id == "provider-b-1"
+                else None
+            ),
         )
 
         req = ProviderRequest()
@@ -833,35 +837,35 @@ class TestEnsurePersonaAndSkills:
             req,
             {
                 "computer_use_runtime": "sandbox",
-                "sandbox": {"booter": "cua"},
+                "sandbox": {"booter": "provider_a"},
             },
             mock_context,
             mock_event,
         )
 
         assert req.func_tool is not None
-        assert "boxlite_tool" in req.func_tool.names()
-        assert "astrbot_cua_screenshot" not in req.func_tool.names()
+        assert "provider_b_tool" in req.func_tool.names()
+        assert "provider_a_screenshot" not in req.func_tool.names()
 
     @pytest.mark.asyncio
     async def test_handoff_all_tools_filters_other_sandbox_provider_tools(
         self, mock_event, mock_context
     ):
         module = ama
-        cua_tool = FunctionTool(
-            name="astrbot_cua_screenshot",
+        provider_tool = FunctionTool(
+            name="provider_a_screenshot",
             parameters={"type": "object", "properties": {}},
-            description="CUA screenshot",
+            description="provider screenshot",
         )
-        cua_tool.sandbox_provider_id = "cua"
+        provider_tool.sandbox_provider_id = "provider_a"
         generic_tool = FunctionTool(
             name="regular_tool",
             parameters={"type": "object", "properties": {}},
             description="regular",
         )
         tmgr = mock_context.get_llm_tool_manager.return_value
-        tmgr.func_list = [cua_tool, generic_tool]
-        tmgr.get_full_tool_set.return_value = ToolSet([cua_tool, generic_tool])
+        tmgr.func_list = [provider_tool, generic_tool]
+        tmgr.get_full_tool_set.return_value = ToolSet([provider_tool, generic_tool])
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=(None, None, None, False)
         )
@@ -892,7 +896,7 @@ class TestEnsurePersonaAndSkills:
             req,
             {
                 "computer_use_runtime": "sandbox",
-                "sandbox": {"booter": "shipyard_neo"},
+                "sandbox": {"booter": "provider_b"},
             },
             mock_context,
             mock_event,
@@ -901,7 +905,7 @@ class TestEnsurePersonaAndSkills:
         assert req.func_tool is not None
         assert "transfer_to_planner" in req.func_tool.names()
         assert "regular_tool" not in req.func_tool.names()
-        assert "astrbot_cua_screenshot" not in req.func_tool.names()
+        assert "provider_a_screenshot" not in req.func_tool.names()
 
     @pytest.mark.asyncio
     async def test_subagent_dedupe_uses_default_persona_tools(
@@ -1962,7 +1966,7 @@ class TestApplySandboxTools:
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="sandbox",
-            sandbox_cfg={"booter": "cua"},
+            sandbox_cfg={"booter": "provider_a"},
         )
         req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
         req.session_id = "session-a"
@@ -1973,17 +1977,20 @@ class TestApplySandboxTools:
                 "system_prompt": f"[{provider_id} provider]",
             }
 
-        with patch(
-            "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
-            return_value="boxlite",
-        ), patch(
-            "astrbot.core.computer.computer_client.get_sandbox_provider_info",
-            side_effect=provider_info,
+        with (
+            patch(
+                "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
+                return_value="provider_b",
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.get_sandbox_provider_info",
+                side_effect=provider_info,
+            ),
         ):
             module._apply_sandbox_tools(config, req)
 
-        assert "[boxlite provider]" in req.system_prompt
-        assert "[cua provider]" not in req.system_prompt
+        assert "[provider_b provider]" in req.system_prompt
+        assert "[provider_a provider]" not in req.system_prompt
 
     def test_handoff_runtime_computer_tools_include_sandbox_lifecycle_tools(self):
         tool_mgr = MagicMock()
@@ -2005,7 +2012,7 @@ class TestApplySandboxTools:
             return_value={"tool_names": []},
         ):
             tools = ama.FunctionToolExecutor._get_runtime_computer_tools(
-                "sandbox", tool_mgr, "cua"
+                "sandbox", tool_mgr, "provider_a"
             )
 
         assert "astrbot_create_sandbox" in tools
@@ -2036,11 +2043,11 @@ class TestApplySandboxTools:
             return_value={"tool_names": []},
         ) as provider_info:
             first = ama.FunctionToolExecutor._get_runtime_computer_tools(
-                "sandbox", tool_mgr, "cua"
+                "sandbox", tool_mgr, "provider_a"
             )
             call_count = tool_mgr.get_builtin_tool.call_count
             second = ama.FunctionToolExecutor._get_runtime_computer_tools(
-                "sandbox", tool_mgr, "cua"
+                "sandbox", tool_mgr, "provider_a"
             )
 
         assert first is second

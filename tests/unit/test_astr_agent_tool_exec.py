@@ -232,18 +232,18 @@ async def test_build_handoff_toolset_prefers_current_sandbox_provider(
     from astrbot.core.agent.tool import FunctionTool
     from astrbot.core.computer.computer_client import sandbox_manager
 
-    cua_tool = FunctionTool(
-        name="astrbot_cua_screenshot",
+    provider_a_tool = FunctionTool(
+        name="provider_a_screenshot",
         parameters={"type": "object", "properties": {}},
-        description="CUA screenshot",
+        description="Provider A screenshot",
     )
-    cua_tool.sandbox_provider_id = "cua"
-    boxlite_tool = FunctionTool(
-        name="boxlite_tool",
+    provider_a_tool.sandbox_provider_id = "provider_a"
+    provider_b_tool = FunctionTool(
+        name="provider_b_tool",
         parameters={"type": "object", "properties": {}},
-        description="BoxLite tool",
+        description="Provider B tool",
     )
-    boxlite_tool.sandbox_provider_id = "boxlite"
+    provider_b_tool.sandbox_provider_id = "provider_b"
     generic_tool = FunctionTool(
         name="generic_tool",
         parameters={"type": "object", "properties": {}},
@@ -253,25 +253,25 @@ async def test_build_handoff_toolset_prefers_current_sandbox_provider(
     previous_tools = list(llm_tools.func_list)
     previous_providers = dict(sandbox_manager.providers)
     FunctionToolExecutor._runtime_computer_tools_cache.clear()
-    llm_tools.func_list = [cua_tool, generic_tool]
+    llm_tools.func_list = [provider_a_tool, generic_tool]
     sandbox_manager.providers = {
-        "cua": SimpleNamespace(
-            provider_id="cua",
+        "provider_a": SimpleNamespace(
+            provider_id="provider_a",
             capabilities=set(),
-            tool_names={"astrbot_cua_screenshot"},
+            tool_names={"provider_a_screenshot"},
         ),
-        "boxlite": SimpleNamespace(
-            provider_id="boxlite",
+        "provider_b": SimpleNamespace(
+            provider_id="provider_b",
             capabilities=set(),
-            tool_names={"boxlite_tool"},
+            tool_names={"provider_b_tool"},
         ),
     }
 
     tool_mgr = SimpleNamespace(
         get_builtin_tool=lambda cls, **kwargs: cls(**kwargs),
         get_func=lambda name: {
-            "astrbot_cua_screenshot": cua_tool,
-            "boxlite_tool": boxlite_tool,
+            "provider_a_screenshot": provider_a_tool,
+            "provider_b_tool": provider_b_tool,
             "generic_tool": generic_tool,
         }.get(name),
     )
@@ -279,7 +279,7 @@ async def test_build_handoff_toolset_prefers_current_sandbox_provider(
         get_config=lambda **_kwargs: {
             "provider_settings": {
                 "computer_use_runtime": "sandbox",
-                "sandbox": {"booter": "cua"},
+                "sandbox": {"booter": "provider_a"},
             }
         },
         get_llm_tool_manager=lambda: tool_mgr,
@@ -290,24 +290,26 @@ async def test_build_handoff_toolset_prefers_current_sandbox_provider(
     monkeypatch.setattr(
         sandbox_manager.registry,
         "get_current_sandbox_id",
-        lambda session_id: "boxlite-1"
-        if session_id == event.unified_msg_origin
-        else None,
+        lambda session_id: (
+            "provider-b-1" if session_id == event.unified_msg_origin else None
+        ),
     )
     monkeypatch.setattr(
         sandbox_manager.registry,
         "get_sandbox",
-        lambda sandbox_id: {"sandbox_id": sandbox_id, "provider": "boxlite"}
-        if sandbox_id == "boxlite-1"
-        else None,
+        lambda sandbox_id: (
+            {"sandbox_id": sandbox_id, "provider": "provider_b"}
+            if sandbox_id == "provider-b-1"
+            else None
+        ),
     )
 
     try:
         toolset = FunctionToolExecutor._build_handoff_toolset(run_context, None)
         assert toolset is not None
         assert "astrbot_list_sandbox_providers" in toolset.names()
-        assert "boxlite_tool" in toolset.names()
-        assert "astrbot_cua_screenshot" not in toolset.names()
+        assert "provider_b_tool" in toolset.names()
+        assert "provider_a_screenshot" not in toolset.names()
     finally:
         llm_tools.func_list = previous_tools
         sandbox_manager.providers = previous_providers

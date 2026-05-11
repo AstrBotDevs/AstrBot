@@ -296,7 +296,7 @@ class TestConfigValidation:
         existing_config = {
             "provider_settings": {
                 "sandbox": {
-                    "booter": "boxlite",
+                    "booter": "generic_provider",
                     "cua_image": "linux",
                     "shipyard_neo_endpoint": "http://localhost:8000",
                     "shipyard_access_token": "token",
@@ -310,7 +310,7 @@ class TestConfigValidation:
             config_path=temp_config_path, default_config=default_config
         )
 
-        assert config["provider_settings"]["sandbox"] == {"booter": "boxlite"}
+        assert config["provider_settings"]["sandbox"] == {"booter": "generic_provider"}
 
     def test_nested_config_validation(self, temp_config_path):
         """Test validation of nested config structures."""

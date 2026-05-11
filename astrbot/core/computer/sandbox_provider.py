@@ -10,7 +10,7 @@ class SandboxProvider(Protocol):
     """Protocol for plugin-provided sandbox runtime providers.
 
     Required attributes:
-        provider_id: Unique provider identifier (e.g. "cua", "shipyard_neo").
+        provider_id: Unique provider identifier (e.g. "browser", "python_sandbox").
         capabilities: Set of capability strings (e.g. {"shell", "python", "gui"}).
         tool_names: Set of tool names this provider contributes to the LLM.
 
