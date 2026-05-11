@@ -65,13 +65,14 @@ class ApiKeyRoute(Route):
     async def list_api_keys(self):
         keys = await self.db.list_api_keys()
         return (
-            Response().ok(data=[self._serialize_api_key(key) for key in keys]).__dict__
+            Response().ok(data=[self._serialize_api_key(key) for key in keys]).to_json()
         )
 
     async def create_api_key(self):
         post_data = await request.json or {}
 
         name = str(post_data.get("name", "")).strip() or "Untitled API Key"
+        normalized_scopes: list[str]
         scopes = post_data.get("scopes")
         if scopes is None:
             normalized_scopes = list(ALL_OPEN_API_SCOPES)
@@ -83,9 +84,11 @@ class ApiKeyRoute(Route):
             ]
             normalized_scopes = list(dict.fromkeys(normalized_scopes))
             if not normalized_scopes:
-                return Response().error("At least one valid scope is required").__dict__
+                return (
+                    Response().error("At least one valid scope is required").to_json()
+                )
         else:
-            return Response().error("Invalid scopes").__dict__
+            return Response().error("Invalid scopes").to_json()
 
         expires_at = None
         expires_in_days = post_data.get("expires_in_days")
@@ -93,13 +96,13 @@ class ApiKeyRoute(Route):
             try:
                 expires_in_days_int = int(expires_in_days)
             except (TypeError, ValueError):
-                return Response().error("expires_in_days must be an integer").__dict__
+                return Response().error("expires_in_days must be an integer").to_json()
             if expires_in_days_int <= 0:
                 return (
-                    Response().error("expires_in_days must be greater than 0").__dict__
+                    Response().error("expires_in_days must be greater than 0").to_json()
                 )
             expires_at = datetime.now(timezone.utc) + timedelta(
-                days=expires_in_days_int
+                days=expires_in_days_int,
             )
 
         raw_key = f"abk_{secrets.token_urlsafe(32)}"
@@ -111,33 +114,33 @@ class ApiKeyRoute(Route):
             name=name,
             key_hash=key_hash,
             key_prefix=key_prefix,
-            scopes=normalized_scopes,  # type: ignore
+            scopes=normalized_scopes,
             created_by=created_by,
             expires_at=expires_at,
         )
 
         payload = self._serialize_api_key(api_key)
         payload["api_key"] = raw_key
-        return Response().ok(data=payload).__dict__
+        return Response().ok(data=payload).to_json()
 
     async def revoke_api_key(self):
         post_data = await request.json or {}
         key_id = post_data.get("key_id")
         if not key_id:
-            return Response().error("Missing key: key_id").__dict__
+            return Response().error("Missing key: key_id").to_json()
 
         success = await self.db.revoke_api_key(key_id)
         if not success:
-            return Response().error("API key not found").__dict__
-        return Response().ok().__dict__
+            return Response().error("API key not found").to_json()
+        return Response().ok().to_json()
 
     async def delete_api_key(self):
         post_data = await request.json or {}
         key_id = post_data.get("key_id")
         if not key_id:
-            return Response().error("Missing key: key_id").__dict__
+            return Response().error("Missing key: key_id").to_json()
 
         success = await self.db.delete_api_key(key_id)
         if not success:
-            return Response().error("API key not found").__dict__
-        return Response().ok().__dict__
+            return Response().error("API key not found").to_json()
+        return Response().ok().to_json()

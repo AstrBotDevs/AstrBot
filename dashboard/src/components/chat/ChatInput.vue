@@ -17,7 +17,6 @@
         boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
         backgroundColor: isDark ? '#2d2d2d' : 'transparent',
         position: 'relative',
-        transition: 'min-height 0.2s ease, padding 0.2s ease',
       }"
     >
       <!-- 拖拽上传遮罩 -->
@@ -47,67 +46,6 @@
           />
         </div>
       </transition>
-
-      <transition name="attachments">
-        <div class="attachments-preview" v-if="hasStagedAttachments">
-          <div
-            v-for="(img, index) in stagedImagesUrl"
-            :key="'img-' + index"
-            class="attachment-card image-preview"
-          >
-            <img :src="img" class="preview-image" alt="attachment preview" />
-            <v-btn
-              @click="$emit('removeImage', index)"
-              class="remove-attachment-btn"
-              icon="mdi-close"
-              size="x-small"
-              color="error"
-              variant="tonal"
-            />
-          </div>
-
-          <div v-if="stagedAudioUrl" class="attachment-card audio-preview">
-            <div class="attachment-icon attachment-icon--audio">
-              <v-icon icon="mdi-microphone" size="24"></v-icon>
-            </div>
-            <span class="attachment-name">{{ tm("voice.recording") }}</span>
-            <v-btn
-              @click="$emit('removeAudio')"
-              class="remove-attachment-btn"
-              icon="mdi-close"
-              size="x-small"
-              color="error"
-              variant="tonal"
-            />
-          </div>
-
-          <div
-            v-for="(file, index) in stagedFiles"
-            :key="'file-' + index"
-            class="attachment-card file-preview"
-          >
-            <div
-              class="attachment-icon"
-              :style="{ color: filePresentation(file).color }"
-            >
-              <v-icon :icon="filePresentation(file).icon" size="24"></v-icon>
-              <span class="attachment-ext">{{
-                filePresentation(file).label
-              }}</span>
-            </div>
-            <span class="attachment-name">{{ file.original_name }}</span>
-            <v-btn
-              @click="$emit('removeFile', index)"
-              class="remove-attachment-btn"
-              icon="mdi-close"
-              size="x-small"
-              color="error"
-              variant="tonal"
-            />
-          </div>
-        </div>
-      </transition>
-
       <textarea
         ref="inputField"
         v-model="localPrompt"
@@ -136,7 +74,6 @@
           font-family: inherit;
           font-size: 16px;
           background-color: var(--v-theme-surface);
-          transition: height 0.16s ease;
         "
       ></textarea>
       <div
@@ -296,6 +233,66 @@
         </div>
       </div>
     </div>
+
+    <!-- 附件预览区 -->
+    <div
+      class="attachments-preview"
+      v-if="
+        stagedImagesUrl.length > 0 ||
+        stagedAudioUrl ||
+        (stagedFiles && stagedFiles.length > 0)
+      "
+    >
+      <div
+        v-for="(img, index) in stagedImagesUrl"
+        :key="'img-' + index"
+        class="image-preview"
+      >
+        <img :src="img" class="preview-image" />
+        <v-btn
+          @click="$emit('removeImage', index)"
+          class="remove-attachment-btn"
+          icon="mdi-close"
+          size="small"
+          color="error"
+          variant="text"
+        />
+      </div>
+
+      <div v-if="stagedAudioUrl" class="audio-preview">
+        <v-chip color="primary" variant="tonal" class="audio-chip">
+          <v-icon start icon="mdi-microphone" size="small"></v-icon>
+          {{ tm("voice.recording") }}
+        </v-chip>
+        <v-btn
+          @click="$emit('removeAudio')"
+          class="remove-attachment-btn"
+          icon="mdi-close"
+          size="small"
+          color="error"
+          variant="text"
+        />
+      </div>
+
+      <div
+        v-for="(file, index) in stagedFiles"
+        :key="'file-' + index"
+        class="file-preview"
+      >
+        <v-chip color="primary" variant="tonal" class="file-chip">
+          <v-icon start icon="mdi-file-document-outline" size="small"></v-icon>
+          <span class="file-name-preview">{{ file.original_name }}</span>
+        </v-chip>
+        <v-btn
+          @click="$emit('removeFile', index)"
+          class="remove-attachment-btn"
+          icon="mdi-close"
+          size="small"
+          color="error"
+          variant="text"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -383,9 +380,9 @@ const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
 );
 const showProviderSelector = ref(true);
 const isReplyClosing = ref(false);
-const isDragging = ref(false);
 const isComposing = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
+const isDragging = ref(false);
 let dragLeaveTimeout: number | null = null;
 
 const localPrompt = computed({
@@ -407,14 +404,6 @@ const canSend = computed(() => {
   );
 });
 
-const hasStagedAttachments = computed(() => {
-  return (
-    props.stagedImagesUrl.length > 0 ||
-    props.stagedAudioUrl ||
-    (props.stagedFiles && props.stagedFiles.length > 0)
-  );
-});
-
 const fileTypeStyles: Record<
   string,
   { color: string; icon: string; label: string }
@@ -422,38 +411,18 @@ const fileTypeStyles: Record<
   pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
   txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
   md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
-  markdown: {
-    color: "#1976d2",
-    icon: "mdi-language-markdown-outline",
-    label: "MD",
-  },
   doc: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOC" },
   docx: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOCX" },
   xls: { color: "#217346", icon: "mdi-file-excel-box", label: "XLS" },
   xlsx: { color: "#217346", icon: "mdi-file-excel-box", label: "XLSX" },
   csv: { color: "#217346", icon: "mdi-file-delimited-outline", label: "CSV" },
-  ppt: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPT" },
-  pptx: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPTX" },
   zip: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "ZIP" },
-  rar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "RAR" },
-  "7z": { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "7Z" },
-  tar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "TAR" },
-  gz: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "GZ" },
-  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
-  yaml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YAML" },
-  yml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YML" },
+  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
   js: { color: "#b8860b", icon: "mdi-language-javascript", label: "JS" },
   ts: { color: "#3178c6", icon: "mdi-language-typescript", label: "TS" },
   html: { color: "#e34c26", icon: "mdi-language-html5", label: "HTML" },
   css: { color: "#264de4", icon: "mdi-language-css3", label: "CSS" },
-  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
-  java: { color: "#b07219", icon: "mdi-language-java", label: "JAVA" },
-  mp3: { color: "#00897b", icon: "mdi-file-music-outline", label: "MP3" },
-  wav: { color: "#00897b", icon: "mdi-file-music-outline", label: "WAV" },
-  flac: { color: "#00897b", icon: "mdi-file-music-outline", label: "FLAC" },
-  mp4: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MP4" },
-  mov: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MOV" },
-  webm: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "WEBM" },
+  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
 };
 
 function fileExtension(file: StagedFileInfo) {
@@ -659,10 +628,10 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  clearCompositionState();
   if (inputField.value) {
     inputField.value.removeEventListener("paste", handlePaste);
   }
-  clearCompositionState();
   document.removeEventListener("keyup", handleKeyUp);
 });
 
@@ -898,89 +867,45 @@ defineExpose({
 
 .attachments-preview {
   display: flex;
-  gap: 10px;
-  margin: 10px 12px 0;
-  padding: 2px 2px 4px;
-  flex-wrap: nowrap;
-  align-items: center;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  max-height: 72px;
+  gap: 8px;
+  margin-top: 8px;
+  max-width: 900px;
+  margin: 8px auto 0;
+  flex-wrap: wrap;
 }
 
-.attachment-card {
+.image-preview,
+.audio-preview,
+.file-preview {
   position: relative;
   display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  width: 220px;
-  height: 64px;
-  flex: 0 0 auto;
-  min-width: 0;
-  padding: 8px 34px 8px 10px;
-  overflow: hidden;
-  color: rgb(var(--v-theme-on-surface));
-  background: rgba(var(--v-theme-on-surface), 0.04);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  border-radius: 12px;
-}
-
-.image-preview {
-  width: 64px;
-  flex-basis: 64px;
-  padding: 0;
-  background: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .preview-image {
-  width: 100%;
-  height: 100%;
+  width: 60px;
+  height: 60px;
   object-fit: cover;
-  border-radius: 11px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.attachment-icon {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  flex-shrink: 0;
-  min-width: 34px;
+.audio-chip,
+.file-chip {
+  height: 36px;
+  border-radius: 18px;
 }
 
-.attachment-icon--audio {
-  color: #00897b;
-}
-
-.attachment-ext {
-  max-width: 58px;
+.file-name-preview {
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 12px;
-}
-
-.attachment-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  line-height: 18px;
 }
 
 .remove-attachment-btn {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px !important;
-  height: 22px !important;
-  min-width: 22px !important;
+  top: -8px;
+  right: -8px;
   opacity: 0.8;
   transition: opacity 0.2s;
 }
@@ -991,27 +916,6 @@ defineExpose({
 
 .fade-in {
   animation: fadeIn 0.3s ease-in-out;
-}
-
-.attachments-enter-active,
-.attachments-leave-active {
-  overflow: hidden;
-  transition:
-    max-height 0.2s ease,
-    margin 0.2s ease,
-    padding 0.2s ease,
-    opacity 0.16s ease,
-    transform 0.2s ease;
-}
-
-.attachments-enter-from,
-.attachments-leave-to {
-  max-height: 0;
-  margin-top: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  opacity: 0;
-  transform: translateY(6px);
 }
 
 @keyframes fadeIn {
@@ -1051,21 +955,6 @@ defineExpose({
     font-size: 16px !important;
     line-height: 20px !important;
     padding: 8px 14px 7px !important;
-  }
-
-  .attachments-preview {
-    margin: 8px 10px 0;
-    gap: 8px;
-  }
-
-  .attachment-card {
-    width: min(220px, calc(100vw - 28px));
-    height: 58px;
-  }
-
-  .image-preview {
-    width: 58px;
-    flex-basis: 58px;
   }
 }
 </style>

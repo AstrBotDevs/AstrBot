@@ -1,4 +1,9 @@
-const INVALID_ERROR_STRINGS = new Set(["[object Object]", "undefined", "null", ""]);
+const INVALID_ERROR_STRINGS = new Set([
+  "[object Object]",
+  "undefined",
+  "null",
+  "",
+]);
 
 const pickResponseMessage = (responseData) => {
   if (typeof responseData === "string") {
@@ -31,8 +36,7 @@ export const resolveErrorMessage = (err, fallbackMessage = "") => {
     (typeof err?.response?.statusText === "string"
       ? err.response.statusText.trim()
       : "");
-  const fromError =
-    typeof err?.message === "string" ? err.message.trim() : "";
+  const fromError = typeof err?.message === "string" ? err.message.trim() : "";
 
   let fromString = "";
   if (typeof err?.toString === "function") {

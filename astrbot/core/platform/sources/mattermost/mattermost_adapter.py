@@ -41,7 +41,7 @@ class MattermostPlatformAdapter(Platform):
         self.base_url = str(platform_config.get("mattermost_url", "")).rstrip("/")
         self.bot_token = str(platform_config.get("mattermost_bot_token", "")).strip()
         self.reconnect_delay = float(
-            platform_config.get("mattermost_reconnect_delay", 5.0)
+            platform_config.get("mattermost_reconnect_delay", 5.0),
         )
 
         if not self.base_url:
@@ -53,7 +53,7 @@ class MattermostPlatformAdapter(Platform):
         self.metadata = PlatformMetadata(
             name="mattermost",
             description="Mattermost 平台适配器",
-            id=cast(str, self.config.get("id", "mattermost")),
+            id=cast("str", self.config.get("id", "mattermost")),
             support_streaming_message=False,
         )
         self.bot_self_id = ""
@@ -112,7 +112,7 @@ class MattermostPlatformAdapter(Platform):
                     "seq": 1,
                     "action": "authentication_challenge",
                     "data": {"token": self.bot_token},
-                }
+                },
             )
 
             async for message in ws:
@@ -229,7 +229,7 @@ class MattermostPlatformAdapter(Platform):
                 temp_paths,
             ) = await self.client.parse_post_attachments(file_ids)
             abm.message.extend(attachment_components)
-            setattr(abm, "temporary_file_paths", temp_paths)
+            abm.temporary_file_paths = temp_paths
 
         abm.message_str = self._build_message_str(
             abm.message,

@@ -1,4 +1,4 @@
-from ..message import Message
+from astrbot.core.agent.message import Message
 
 
 class ContextTruncator:
@@ -20,6 +20,7 @@ class ContextTruncator:
 
         Returns:
             tuple: (system_messages, non_system_messages)
+
         """
         first_non_system = 0
         for i, msg in enumerate(messages):
@@ -34,19 +35,44 @@ class ContextTruncator:
         truncated: list[Message],
         original_messages: list[Message],
     ) -> list[Message]:
-        """Ensure the result always contains the first user message right after
-        system messages. This is required by many LLM APIs (e.g. Zhipu) that
-        mandate a ``user`` message immediately following the ``system`` message.
+        """Ensure the result always contains a `user` message immediately after
+        system messages, as required by some LLM APIs.
+
+        Optimization strategy:
+        - If `truncated` already begins with a `user` message, return it as-is.
+        - If a `user` message exists later in `truncated`, move that message to
+          be the first non-system message while preserving the relative order of
+          the remaining truncated messages (without mutating the original list).
+        - Otherwise, fall back to the first `user` message from
+          `original_messages`.
+        This reduces unnecessary duplication and ensures the required ordering.
         """
         if truncated and truncated[0].role == "user":
             return system_messages + truncated
 
-        # Locate the first user message from the *original* list.
+        # If a user message exists inside the truncated list, promote it to the front.
+        index_in_truncated = next(
+            (i for i, m in enumerate(truncated) if m.role == "user"),
+            None,
+        )
+        if index_in_truncated is not None:
+            # Build a new truncated list that places the found user message first,
+            # preserving the order of the other messages and avoiding in-place mutation.
+            user_msg = truncated[index_in_truncated]
+            new_truncated = [
+                user_msg,
+                *truncated[:index_in_truncated],
+                *truncated[index_in_truncated + 1 :],
+            ]
+            return system_messages + new_truncated
+
+        # Fallback: find the first user message in the original messages.
         first_user = next((m for m in original_messages if m.role == "user"), None)
         if first_user is None:
+            # No user messages at all; return system messages + whatever was truncated.
             return system_messages + truncated
 
-        return system_messages + [first_user] + truncated
+        return [*system_messages, first_user, *truncated]
 
     def fix_messages(self, messages: list[Message]) -> list[Message]:
         """Fix the message list to ensure the validity of tool call and tool response pairing.
@@ -103,8 +129,7 @@ class ContextTruncator:
         keep_most_recent_turns: int,
         drop_turns: int = 1,
     ) -> list[Message]:
-        """
-        Turn-based truncation strategy, which drops the oldest turns while keeping the most recent N turns.
+        """Turn-based truncation strategy, which drops the oldest turns while keeping the most recent N turns.
         A turn consists of a user message and an assistant message.
         This method ensures that the truncated context list conforms to OpenAI's context format.
 
@@ -115,6 +140,7 @@ class ContextTruncator:
 
         Returns:
             The truncated list of messages.
+
         """
         if keep_most_recent_turns == -1:
             return messages
@@ -139,7 +165,9 @@ class ContextTruncator:
             truncated_contexts = truncated_contexts[index:]
 
         result = self._ensure_user_message(
-            system_messages, truncated_contexts, messages
+            system_messages,
+            truncated_contexts,
+            messages,
         )
         return self.fix_messages(result)
 
@@ -168,7 +196,9 @@ class ContextTruncator:
             truncated_non_system = truncated_non_system[index:]
 
         result = self._ensure_user_message(
-            system_messages, truncated_non_system, messages
+            system_messages,
+            truncated_non_system,
+            messages,
         )
         return self.fix_messages(result)
 
@@ -197,6 +227,8 @@ class ContextTruncator:
             truncated_non_system = truncated_non_system[index:]
 
         result = self._ensure_user_message(
-            system_messages, truncated_non_system, messages
+            system_messages,
+            truncated_non_system,
+            messages,
         )
         return self.fix_messages(result)

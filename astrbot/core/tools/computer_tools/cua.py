@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import mcp
+from mcp.types import ContentBlock
 
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
@@ -76,6 +77,7 @@ class CuaScreenshotTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         send_to_user: bool = True,
         return_image_to_llm: bool = True,
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Taking CUA screenshots"):
             return err
@@ -88,7 +90,7 @@ class CuaScreenshotTool(FunctionTool):
                 await context.context.event.send(MessageChain().file_image(path))
                 payload["sent_to_user"] = True
             image_data = payload.pop("base64", "")
-            content: list[mcp.types.TextContent | mcp.types.ImageContent] = [
+            content: list[ContentBlock] = [
                 mcp.types.TextContent(type="text", text=_to_json(payload))
             ]
             if return_image_to_llm:
@@ -128,9 +130,10 @@ class CuaMouseClickTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        x: int,
-        y: int,
+        x: int = 0,
+        y: int = 0,
         button: str = "left",
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Using CUA mouse"):
             return err
@@ -159,7 +162,8 @@ class CuaKeyboardTypeTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        text: str,
+        text: str = "",
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Using CUA keyboard"):
             return err

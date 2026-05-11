@@ -63,6 +63,14 @@ const goToList = () => {
   position: relative;
 }
 
+/* 页面切换动画 */
+.kb-fade-enter-active,
+.kb-fade-leave-active {
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+
 .page-header {
   align-items: flex-start;
   display: flex;

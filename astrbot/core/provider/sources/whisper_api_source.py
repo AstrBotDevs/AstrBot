@@ -1,9 +1,13 @@
 import os
 import uuid
 
+import anyio
 from openai import NOT_GIVEN, AsyncOpenAI
 
 from astrbot.core import logger
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import STTProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import convert_audio_to_wav
@@ -12,9 +16,9 @@ from astrbot.core.utils.tencent_record_helper import (
     tencent_silk_to_wav,
 )
 
-from ..entities import ProviderType
-from ..provider import STTProvider
-from ..register import register_provider_adapter
+
+def _open_file_rb(path: str):
+    return open(path, "rb")
 
 
 @register_provider_adapter(
@@ -45,8 +49,8 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         amr_header = b"#!AMR"
 
         try:
-            with open(file_path, "rb") as f:
-                file_header = f.read(8)
+            async with await anyio.open_file(file_path, "rb") as f:
+                file_header = await f.read(8)
         except FileNotFoundError:
             return None
 
@@ -74,7 +78,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             await download_file(audio_url, path)
             audio_url = path
 
-        if not os.path.exists(audio_url):
+        if not await anyio.Path(audio_url).exists():
             raise FileNotFoundError(f"文件不存在: {audio_url}")
 
         lower_audio_url = audio_url.lower()
@@ -105,26 +109,28 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
                 if file_format == "silk":
                     logger.info(
-                        "Converting silk file to wav using tencent_silk_to_wav..."
+                        "Converting silk file to wav using tencent_silk_to_wav...",
                     )
                     await tencent_silk_to_wav(audio_url, output_path)
                 elif file_format == "amr":
                     logger.info(
-                        "Converting amr file to wav using convert_to_pcm_wav..."
+                        "Converting amr file to wav using convert_to_pcm_wav...",
                     )
                     await convert_to_pcm_wav(audio_url, output_path)
 
                 audio_url = output_path
 
+        file_obj = await anyio.to_thread.run_sync(_open_file_rb, audio_url)  # type: ignore[call-arg]
         result = await self.client.audio.transcriptions.create(
             model=self.model_name,
-            file=("audio.wav", open(audio_url, "rb")),
+            file=("audio.wav", file_obj),
         )
+        file_obj.close()
 
         # remove temp file
-        if output_path and os.path.exists(output_path):
+        if output_path and await anyio.Path(output_path).exists():
             try:
-                os.remove(audio_url)
+                await anyio.Path(audio_url).unlink()
             except Exception as e:
                 logger.error(f"Failed to remove temp file {audio_url}: {e}")
         return result.text

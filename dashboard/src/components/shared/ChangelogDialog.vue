@@ -1,10 +1,11 @@
-<script setup>
-import { ref, watch, computed } from 'vue';
-import { useI18n } from '@/i18n/composables';
-import axios from 'axios';
-import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue';
-import 'markstream-vue/index.css';
-import 'katex/dist/katex.min.css';
+<script setup lang="ts">
+import { ref, watch, computed } from "vue";
+import { useI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
+import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
+import "markstream-vue/index.css";
+import "katex/dist/katex.min.css";
+import "highlight.js/styles/github.css";
 
 enableKatex();
 enableMermaid();
@@ -14,68 +15,73 @@ const { t } = useI18n();
 const props = defineProps({
   modelValue: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 });
 
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(["update:modelValue"]);
 
 const dialog = computed({
   get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value)
+  set: (value) => emit("update:modelValue", value),
 });
 
-const changelogContent = ref('');
+const changelogContent = ref("");
 const changelogLoading = ref(false);
-const changelogError = ref('');
-const changelogVersion = ref('');
-const selectedVersion = ref('');
+const changelogError = ref("");
+const changelogVersion = ref("");
+const selectedVersion = ref("");
 const availableVersions = ref([]);
 const loadingVersions = ref(false);
 
 // 获取当前版本号（从版本信息中提取）
 async function getCurrentVersion() {
   try {
-    const res = await axios.get('/api/stat/version');
-    const version = res.data.data?.version || '';
+    const res = await axios.get("/api/stat/version");
+    const version = res.data.data?.version || "";
     changelogVersion.value = version;
     selectedVersion.value = version;
     return version;
   } catch (err) {
-    console.error('Failed to get version:', err);
-    return '';
+    console.warn("Failed to get version:", err);
+    return "";
   }
 }
 
 // 加载更新日志
 async function loadChangelog(version) {
-  const targetVersion = version || selectedVersion.value || changelogVersion.value;
+  const targetVersion =
+    version || selectedVersion.value || changelogVersion.value;
   if (!targetVersion) {
-    changelogError.value = t('core.navigation.changelogDialog.selectVersion');
+    changelogError.value = t("core.navigation.changelogDialog.selectVersion");
     return;
   }
 
   changelogLoading.value = true;
-  changelogError.value = '';
-  changelogContent.value = '';
+  changelogError.value = "";
+  changelogContent.value = "";
 
   try {
-    const res = await axios.get('/api/stat/changelog', {
-      params: { version: targetVersion }
+    const res = await axios.get("/api/stat/changelog", {
+      params: { version: targetVersion },
     });
-    
-    if (res.data.status === 'ok') {
+
+    if (res.data.status === "ok") {
       changelogContent.value = res.data.data.content;
       selectedVersion.value = targetVersion;
     } else {
-      changelogError.value = res.data.message || t('core.navigation.changelogDialog.error');
+      changelogError.value =
+        res.data.message || t("core.navigation.changelogDialog.error");
     }
   } catch (err) {
-    console.error('Failed to load changelog:', err);
-    if (err.response?.status === 404 || err.response?.data?.message?.includes('not found')) {
-      changelogError.value = t('core.navigation.changelogDialog.notFound');
+    console.error("Failed to load changelog:", err);
+    if (
+      err.response?.status === 404 ||
+      err.response?.data?.message?.includes("not found")
+    ) {
+      changelogError.value = t("core.navigation.changelogDialog.notFound");
     } else {
-      changelogError.value = t('core.navigation.changelogDialog.error');
+      changelogError.value = t("core.navigation.changelogDialog.error");
     }
   } finally {
     changelogLoading.value = false;
@@ -86,12 +92,12 @@ async function loadChangelog(version) {
 async function loadAvailableVersions() {
   loadingVersions.value = true;
   try {
-    const res = await axios.get('/api/stat/changelog/list');
-    if (res.data.status === 'ok') {
+    const res = await axios.get("/api/stat/changelog/list");
+    if (res.data.status === "ok") {
       availableVersions.value = res.data.data.versions || [];
     }
   } catch (err) {
-    console.error('Failed to load versions:', err);
+    console.error("Failed to load versions:", err);
   } finally {
     loadingVersions.value = false;
   }
@@ -109,14 +115,17 @@ watch(dialog, async (newValue) => {
   if (newValue) {
     // 加载版本列表
     await loadAvailableVersions();
-    
+
     // 获取当前版本
     if (!changelogVersion.value) {
       await getCurrentVersion();
     }
-    
+
     // 如果当前版本在列表中，默认选择当前版本
-    if (changelogVersion.value && availableVersions.value.includes(changelogVersion.value)) {
+    if (
+      changelogVersion.value &&
+      availableVersions.value.includes(changelogVersion.value)
+    ) {
       selectedVersion.value = changelogVersion.value;
       await loadChangelog();
     } else if (availableVersions.value.length > 0) {
@@ -126,8 +135,8 @@ watch(dialog, async (newValue) => {
     }
   } else {
     // 关闭时重置状态
-    changelogContent.value = '';
-    changelogError.value = '';
+    changelogContent.value = "";
+    changelogError.value = "";
   }
 });
 
@@ -136,17 +145,19 @@ getCurrentVersion();
 </script>
 
 <template>
-  <v-dialog 
-    :model-value="dialog" 
-    @update:model-value="dialog = $event"
+  <v-dialog
+    :model-value="dialog"
     :width="$vuetify.display.smAndDown ? '100%' : '800'"
-    :fullscreen="$vuetify.display.xs" 
+    :fullscreen="$vuetify.display.xs"
     max-width="1000"
+    @update:model-value="dialog = $event"
   >
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
-        <span class="text-h3">{{ t('core.navigation.changelogDialog.title') }}</span>
-        <v-btn icon @click="dialog = false" flat>
+        <span class="text-h3">{{
+          t("core.navigation.changelogDialog.title")
+        }}</span>
+        <v-btn icon flat @click="dialog = false">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -162,39 +173,48 @@ getCurrentVersion();
             density="compact"
             @update:model-value="onVersionChange"
           >
-            <template v-slot:item="{ item, props }">
+            <template #item="{ item, props }">
               <v-list-item v-bind="props" :title="`v${item.value}`">
-                <template v-slot:append v-if="item.value === changelogVersion">
+                <template v-if="item.value === changelogVersion" #append>
                   <v-chip size="x-small" color="primary" variant="tonal">
-                    {{ t('core.navigation.changelogDialog.current') }}
+                    {{ t("core.navigation.changelogDialog.current") }}
                   </v-chip>
                 </template>
               </v-list-item>
             </template>
-            <template v-slot:selection="{ item }">
+            <template #selection="{ item }">
               <span>v{{ item.value }}</span>
             </template>
           </v-select>
         </div>
-        
+
         <!-- 更新日志内容 -->
-        <div style="max-height: 70vh; overflow-y: auto;">
+        <div style="max-height: 70vh; overflow-y: auto">
           <div v-if="changelogLoading" class="text-center py-8">
-            <v-progress-circular indeterminate color="primary"></v-progress-circular>
-            <div class="mt-4">{{ t('core.navigation.changelogDialog.loading') }}</div>
+            <v-progress-circular indeterminate color="primary" />
+            <div class="mt-4">
+              {{ t("core.navigation.changelogDialog.loading") }}
+            </div>
           </div>
-          <v-alert v-else-if="changelogError" type="error" variant="tonal" border="start">
+          <v-alert
+            v-else-if="changelogError"
+            type="error"
+            variant="tonal"
+            border="start"
+          >
             {{ changelogError }}
           </v-alert>
           <div v-else-if="changelogContent" class="changelog-content">
-            <MarkdownRender :content="changelogContent" :typewriter="false" class="markdown-content" />
+            <div class="markdown-content">
+              <MarkdownRender :content="changelogContent" :typewriter="false" />
+            </div>
           </div>
         </div>
       </v-card-text>
       <v-card-actions>
-        <v-spacer></v-spacer>
+        <v-spacer />
         <v-btn color="blue-darken-1" variant="text" @click="dialog = false">
-          {{ t('core.common.close') }}
+          {{ t("core.common.close") }}
         </v-btn>
       </v-card-actions>
     </v-card>

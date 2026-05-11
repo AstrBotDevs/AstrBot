@@ -161,7 +161,7 @@ async def test_do_handoff_background_reports_prepared_image_urls(
 
     run_context = _build_run_context()
     await FunctionToolExecutor._do_handoff_background(
-        tool=_DummyTool(),
+        tool=_DummyTool(),  # type: ignore[arg-type]
         run_context=run_context,
         task_id="task-id",
         input="hello",
@@ -187,10 +187,16 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
         captured.update(kwargs)
         return SimpleNamespace(completion_text="ok")
 
+    _tool_mgr = SimpleNamespace(
+        get_builtin_tool=lambda _: SimpleNamespace(
+            name="dummy", active=True, parameters={}
+        )
+    )
     context = SimpleNamespace(
         get_current_chat_provider_id=_fake_get_current_chat_provider_id,
         tool_loop_agent=_fake_tool_loop_agent,
         get_config=lambda **_kwargs: {"provider_settings": {}},
+        get_llm_tool_manager=lambda: _tool_mgr,
     )
     event = _DummyEvent([])
     run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
@@ -285,10 +291,16 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
         captured.update(kwargs)
         return SimpleNamespace(completion_text="ok")
 
+    _tool_mgr = SimpleNamespace(
+        get_builtin_tool=lambda _: SimpleNamespace(
+            name="dummy", active=True, parameters={}
+        )
+    )
     context = SimpleNamespace(
         get_current_chat_provider_id=_fake_get_current_chat_provider_id,
         tool_loop_agent=_fake_tool_loop_agent,
         get_config=lambda **_kwargs: {"provider_settings": {}},
+        get_llm_tool_manager=lambda: _tool_mgr,
     )
     event = _DummyEvent([])
     run_context = ContextWrapper(

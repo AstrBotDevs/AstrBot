@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -31,6 +32,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.star.star_tools import StarTools
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_path,
@@ -176,8 +178,6 @@ async def _install_requirements_with_precheck(
 
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
-        from .star_tools import StarTools
-
         self.updator = PluginUpdator()
 
         self.context = context
@@ -1019,9 +1019,9 @@ class PluginManager:
 
                     # 在实例化前注入类属性，保证插件 __init__ 可读取这些值
                     if metadata.star_cls_type:
-                        setattr(metadata.star_cls_type, "name", p_name)
-                        setattr(metadata.star_cls_type, "author", p_author)
-                        setattr(metadata.star_cls_type, "plugin_id", plugin_id)
+                        metadata.star_cls_type.name = p_name
+                        metadata.star_cls_type.author = p_author
+                        metadata.star_cls_type.plugin_id = plugin_id
 
                     if path not in inactivated_plugins:
                         # 只有没有禁用插件时才实例化插件类
@@ -1041,9 +1041,9 @@ class PluginManager:
                             )
 
                         if metadata.star_cls:
-                            setattr(metadata.star_cls, "name", p_name)
-                            setattr(metadata.star_cls, "author", p_author)
-                            setattr(metadata.star_cls, "plugin_id", plugin_id)
+                            metadata.star_cls.name = p_name
+                            metadata.star_cls.author = p_author
+                            metadata.star_cls.plugin_id = plugin_id
                     else:
                         logger.info("Plugin %s is disabled.", metadata.name)
 
@@ -1363,7 +1363,7 @@ class PluginManager:
         proxy: str = "",
         ignore_version_check: bool = False,
         download_url: str = "",
-    ):
+    ) -> dict[str, Any] | None:
         """从仓库 URL 安装插件
 
         从指定的仓库 URL 下载并安装插件，然后加载该插件到系统中

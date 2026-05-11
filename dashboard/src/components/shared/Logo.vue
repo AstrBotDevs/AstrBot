@@ -2,43 +2,49 @@
   <div class="logo-container">
     <div class="logo-content">
       <div class="logo-image">
-        <img width="110" src="@/assets/images/astrbot_logo_mini.webp" alt="AstrBot Logo">
+        <div class="logo-glow-ring" />
+        <img
+          width="110"
+          src="@/assets/images/astrbot_logo_mini.webp"
+          alt="AstrBot Logo"
+          class="logo-img"
+        />
       </div>
       <div class="logo-text">
-        <h2 
-          :style="{ color: 'rgb(var(--v-theme-primary))' }"
+        <h2
+          class="logo-title"
           v-html="formatTitle(title || t('core.header.logoTitle'))"
-        ></h2>
-        <!-- 父子组件传递css变量可能会出错，暂时使用十六进制颜色值 -->
-        <h4 :style="{ color: 'rgba(var(--v-theme-on-surface), 0.72)' }"
-            class="hint-text">{{ subtitle || t('core.header.accountDialog.title') }}</h4>
+        />
+        <h4 class="hint-text">
+          {{ subtitle || t("core.header.accountDialog.title") }}
+        </h4>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useI18n } from '@/i18n/composables';
+import { useI18n } from "@/i18n/composables";
 
 const { t } = useI18n();
 
-const props = withDefaults(defineProps<{
-  title?: string;
-  subtitle?: string;
-}>(), {
-  title: '',  // 默认为空，组件会使用翻译值
-  subtitle: ''
-})
+const props = withDefaults(
+  defineProps<{
+    title?: string;
+    subtitle?: string;
+  }>(),
+  {
+    title: "",
+    subtitle: "",
+  },
+);
 
-// 智能格式化标题，在小屏幕上允许在合适位置换行
 const formatTitle = (title: string) => {
-  // 如果标题包含 "AstrBot" 和其他文字，在它们之间添加换行机会
-  if (title.includes('AstrBot ') || title.includes('AstrBot')) {
-    // 处理 "AstrBot 仪表盘" 或 "AstrBot Dashboard" 等格式
-    return title.replace(/(AstrBot)\s+(.+)/, '$1<wbr> $2');
+  if (title.includes("AstrBot ") || title.includes("AstrBot")) {
+    return title.replace(/(AstrBot)\s+(.+)/, "$1<br> $2");
   }
   return title;
-}
+};
 </script>
 
 <style scoped>
@@ -60,13 +66,43 @@ const formatTitle = (title: string) => {
 }
 
 .logo-image {
+  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
-.logo-image img {
-  transition: transform 0.3s ease;
+/* Radial glow beneath the logo */
+.logo-glow-ring {
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse 70% 50% at 50% 60%,
+    rgba(0, 242, 255, 0.12) 0%,
+    rgba(0, 100, 180, 0.06) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  animation: logoBreath 4s ease-in-out infinite;
+}
+
+.logo-img {
+  position: relative;
+  z-index: 1;
+  filter: brightness(1.6) drop-shadow(0 0 8px rgba(0, 242, 255, 0.5))
+    drop-shadow(0 0 20px rgba(0, 242, 255, 0.2));
+  animation: logoBreath 4s ease-in-out infinite;
+}
+
+@keyframes logoBreath {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .logo-text {
@@ -77,23 +113,31 @@ const formatTitle = (title: string) => {
   flex: 1;
 }
 
-.logo-text h2 {
+.logo-title {
   margin: 0;
   font-size: 1.8rem;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
   white-space: nowrap;
   min-width: fit-content;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
 }
 
-/* 在小屏幕上允许在指定位置换行 */
-@media (max-width: 420px) {
-  .logo-text h2 {
-    line-height: 1.3;
-  }
+/* Dark mode: cyan glow */
+.v-theme--bluebusinessdarktheme .logo-title {
+  color: rgba(0, 242, 255, 0.95) !important;
+  text-shadow:
+    0 0 12px rgba(0, 242, 255, 0.5),
+    0 0 30px rgba(0, 242, 255, 0.2);
 }
 
-.logo-text h4 {
+/* Light mode: prussian blue, subtle shadow */
+.v-theme--bluebusinesstheme .logo-title {
+  color: #003153 !important;
+  text-shadow: 0 0 8px rgba(0, 49, 83, 0.2);
+}
+
+.hint-text {
   margin: 4px 0 0 0;
   font-size: 1rem;
   font-weight: 400;
@@ -101,21 +145,35 @@ const formatTitle = (title: string) => {
   white-space: nowrap;
 }
 
-/* 响应式处理 */
+/* Dark: faint gray text; Light: dark prussian */
+.v-theme--bluebusinessdarktheme .hint-text {
+  color: rgba(228, 225, 230, 0.45) !important;
+}
+
+.v-theme--bluebusinesstheme .hint-text {
+  color: rgba(0, 49, 83, 0.5) !important;
+}
+
+@media (max-width: 420px) {
+  .logo-title {
+    line-height: 1.3;
+  }
+}
+
 @media (max-width: 520px) {
   .logo-content {
     gap: 15px;
   }
-  
-  .logo-text h2 {
+
+  .logo-title {
     font-size: 1.6rem;
   }
-  
-  .logo-text h4 {
+
+  .hint-text {
     font-size: 0.9rem;
   }
-  
-  .logo-image img {
+
+  .logo-img {
     width: 90px;
   }
 }

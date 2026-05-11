@@ -22,6 +22,7 @@ def is_connection_error(exc: BaseException) -> bool:
 
     Returns:
         True if the exception is a connection/network error
+
     """
     # Check for httpx network errors
     if isinstance(
@@ -65,6 +66,7 @@ def log_connection_failure(
         provider_label: The provider name for log prefix (e.g., "OpenAI", "Gemini")
         error: The exception that occurred
         proxy: The proxy address if configured, or None/empty string
+
     """
     import os
 
@@ -74,16 +76,17 @@ def log_connection_failure(
     effective_proxy = proxy
     if not effective_proxy:
         effective_proxy = os.environ.get(
-            "http_proxy", os.environ.get("https_proxy", "")
+            "http_proxy",
+            os.environ.get("https_proxy", ""),
         )
 
     if effective_proxy:
         logger.error(
-            f"[{provider_label}] 网络/代理连接失败 ({error_type})。"
-            f"代理地址: {effective_proxy}，错误: {error}"
+            f"[{provider_label}] 网络/代理连接失败 ({error_type})｡"
+            f"代理地址: {effective_proxy},错误: {error}",
         )
     else:
-        logger.error(f"[{provider_label}] 网络连接失败 ({error_type})。错误: {error}")
+        logger.error(f"[{provider_label}] 网络连接失败 ({error_type})｡错误: {error}")
 
 
 def create_proxy_client(

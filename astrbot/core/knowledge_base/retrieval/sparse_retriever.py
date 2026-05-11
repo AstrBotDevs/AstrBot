@@ -75,10 +75,13 @@ class SparseRetriever:
         fallback_kb_ids = []
         query_tokens = tokenize_text(query, self.hit_stopwords)
         for kb_id in kb_ids:
-            vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
+            kb_config = kb_options.get(kb_id)
+            if not isinstance(kb_config, dict):
+                continue
+            vec_db: FaissVecDB | None = kb_config.get("vec_db")
             if not vec_db:
                 continue
-            top_k_sparse = kb_options.get(kb_id, {}).get("top_k_sparse", 50)
+            top_k_sparse = kb_config.get("top_k_sparse", 50)
             result = await vec_db.document_storage.search_sparse(
                 query_tokens=query_tokens,
                 limit=top_k_sparse,
@@ -120,7 +123,10 @@ class SparseRetriever:
         top_k_sparse = 0
         chunks = []
         for kb_id in kb_ids:
-            vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
+            kb_config = kb_options.get(kb_id)
+            if not isinstance(kb_config, dict):
+                continue
+            vec_db: FaissVecDB | None = kb_config.get("vec_db")
             if not vec_db:
                 continue
             result = await vec_db.document_storage.get_documents(
@@ -129,7 +135,7 @@ class SparseRetriever:
                 offset=None,
             )
             chunk_mds = [json.loads(doc["metadata"]) for doc in result]
-            result = [
+            mapped_chunks = [
                 {
                     "chunk_id": doc["doc_id"],
                     "chunk_index": chunk_md["chunk_index"],
@@ -139,8 +145,8 @@ class SparseRetriever:
                 }
                 for doc, chunk_md in zip(result, chunk_mds)
             ]
-            chunks.extend(result)
-            top_k_sparse += kb_options.get(kb_id, {}).get("top_k_sparse", 50)
+            chunks.extend(mapped_chunks)
+            top_k_sparse += kb_config.get("top_k_sparse", 50)
 
         if not chunks:
             return []
