@@ -806,11 +806,11 @@ Create sub-agents ONLY when:
         if config.name in session.subagents:
             session.handoff_tools.pop(config.name, None)
         # When shared_context is enabled, the send_shared_context tool is allocated regardless of whether the main agent allocates the tool to the subagent
-        if session.shared_context_enabled:
-            cls.register_inherent_tool("send_shared_context")
-
         if config.tools is None:
             config.tools = set()
+        # When shared_context is enabled, the send_shared_context tool is allocated regardless of whether the main agent allocates the tool to the subagent
+        if session.shared_context_enabled:
+            config.tools.add("send_shared_context")
         # remove tools in backlist
         for tool_bl in cls._tools_blacklist:
             config.tools.discard(tool_bl)
