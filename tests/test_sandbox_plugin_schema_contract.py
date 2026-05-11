@@ -66,7 +66,7 @@ def test_shipyard_schema_is_localized_and_has_defaults():
     schema = _load_schema("astrbot_sandbox_shipyard")
 
     assert schema["shipyard_endpoint"]["description"] == "Shipyard API 地址"
-    assert schema["shipyard_endpoint"]["default"] == "http://shipyard:8156"
+    assert schema["shipyard_endpoint"]["default"] == "http://127.0.0.1:8156"
     assert schema["shipyard_auto_start"]["default"] is True
     assert schema["shipyard_bay_image"]["default"] == "soulter/shipyard-bay:latest"
     assert schema["shipyard_ship_image"]["default"] == "soulter/shipyard-ship:latest"
@@ -84,7 +84,7 @@ def test_shipyard_neo_schema_is_localized_and_has_defaults():
     schema = _load_schema("astrbot_sandbox_shipyard_neo")
 
     assert schema["shipyard_neo_endpoint"]["description"] == "Shipyard Neo API 地址"
-    assert schema["shipyard_neo_endpoint"]["default"] == ""
+    assert schema["shipyard_neo_endpoint"]["default"] == "http://127.0.0.1:8114"
     assert schema["shipyard_neo_access_token"]["description"] == "Shipyard Neo 访问令牌"
     assert schema["shipyard_neo_access_token"]["default"] == ""
     assert schema["shipyard_neo_profile"]["description"] == "Shipyard Neo Profile"
