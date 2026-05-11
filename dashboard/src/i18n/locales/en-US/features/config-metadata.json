@@ -1000,6 +1000,14 @@
           "description": "Group Chat Image Caption Model",
           "hint": "Used for image understanding in group chat context awareness, configured separately from the default image caption model."
         },
+        "history_tool_result_truncate": {
+          "description": "Truncate Historical Tool Output",
+          "hint": "Only affects group chat LTM history, not the current tool call round's full reasoning."
+        },
+        "history_tool_result_max_chars": {
+          "description": "Historical Tool Output Truncation Limit",
+          "hint": "Maximum characters per tool output written to group chat history, default 8192."
+        },
         "active_reply": {
           "enable": {
             "description": "Active Reply"
