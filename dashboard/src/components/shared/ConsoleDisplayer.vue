@@ -15,6 +15,13 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
       </v-chip-group>
       <v-spacer></v-spacer>
       <v-btn
+        :icon="flushMode ? 'mdi-format-columns' : 'mdi-format-align-left'"
+        variant="text"
+        density="compact"
+        class="fullscreen-btn"
+        @click="toggleFlushMode"
+      ></v-btn>
+      <v-btn
         :icon="isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
         variant="text"
         density="compact"
@@ -23,7 +30,7 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
       ></v-btn>
     </div>
 
-    <div id="term" class="console-term">
+    <div id="term" class="console-term" :class="{ 'console-term--flush': flushMode }">
     </div>
   </div>
 </template>
@@ -35,6 +42,7 @@ export default {
     return {
       autoScroll: true,
       isFullscreen: false,
+      flushMode: localStorage.getItem('console_flush_mode') === 'true',
       logColorAnsiMap: {
         '\u001b[1;34m': 'color: #6cb6d9; font-weight: bold;',
         '\u001b[1;36m': 'color: #72c4cc; font-weight: bold;',
@@ -84,6 +92,9 @@ export default {
         this.refreshDisplay();
       },
       deep: true
+    },
+    flushMode(val) {
+      localStorage.setItem('console_flush_mode', val);
     }
   },
   async mounted() {
@@ -264,6 +275,10 @@ export default {
       this.autoScroll = !this.autoScroll;
     },
 
+    toggleFlushMode() {
+      this.flushMode = !this.flushMode;
+    },
+
     toggleFullscreen() {
       const container = document.getElementById('console-wrapper');
       if (!document.fullscreenElement) {
@@ -384,6 +399,22 @@ export default {
   column-gap: 8px;
   align-items: start;
   white-space: normal;
+}
+
+.console-term--flush :deep(.console-log-line--structured) {
+  display: block;
+  white-space: pre-wrap;
+}
+
+.console-term--flush :deep(.console-log-prefix),
+.console-term--flush :deep(.console-log-level),
+.console-term--flush :deep(.console-log-message) {
+  display: inline;
+}
+
+.console-term--flush :deep(.console-log-prefix),
+.console-term--flush :deep(.console-log-level) {
+  margin-right: 4px;
 }
 
 :deep(.console-log-prefix),
