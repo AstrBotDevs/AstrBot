@@ -291,7 +291,11 @@ class SandboxManager:
             current_record = None
         if current_sandbox_id and current_record:
             status = current_record.get("status")
-            if status in {SandboxStatus.CREATING, SandboxStatus.STOPPING, SandboxStatus.ERROR}:
+            if status in {
+                SandboxStatus.CREATING,
+                SandboxStatus.STOPPING,
+                SandboxStatus.ERROR,
+            }:
                 if current_record.get("controller_session_id") == session_id:
                     self.registry.release_lease(current_sandbox_id)
                 self.registry.set_current_sandbox_id(session_id, None)
@@ -465,7 +469,9 @@ class SandboxManager:
         except Exception:
             if booter is not None:
                 try:
-                    await provider.destroy_booter(booter, self.registry.get_sandbox(sandbox_id) or {})
+                    await provider.destroy_booter(
+                        booter, self.registry.get_sandbox(sandbox_id) or {}
+                    )
                 except Exception as destroy_err:
                     logger.warning(
                         "[Computer] Failed to rollback sandbox %s after registry save error: %s",
@@ -516,7 +522,10 @@ class SandboxManager:
 
         async with self._sandbox_boot_lock(sandbox_id):
             record = self.registry.get_sandbox(sandbox_id) or {}
-            if record.get("created_hook_fired") or sandbox_id in self.created_hook_inflight:
+            if (
+                record.get("created_hook_fired")
+                or sandbox_id in self.created_hook_inflight
+            ):
                 return
             self.created_hook_inflight.add(sandbox_id)
 
