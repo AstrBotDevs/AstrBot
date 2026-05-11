@@ -3,13 +3,13 @@
 > [!TIP]
 > 此功能目前处于技术预览阶段，可能会存在一些 Bug。如果您遇到了问题，请在 [GitHub](https://github.com/AstrBotDevs/AstrBot/issues) 上提交 issue。
 
-在 `v4.12.0` 版本及之后，AstrBot 引入了 Agent 沙盒环境，以替代之前的代码执行器功能。沙盒环境给 Agent 提供了更安全、更灵活的代码执行和自动化操作能力。
+从 `v4.12.0` 开始，AstrBot 引入了 Agent 沙盒环境，用来替代之前的代码执行器功能。它为 Agent 提供了更安全、更灵活的代码执行和自动化能力。
 
-如果你是从旧配置迁过来，重点先看配置怎么对应。沙盒运行时已经拆成独立插件，AstrBot Core 只负责调度、复用和清理；你需要做的是把 `Computer Use Runtime`、`沙盒驱动` 和各驱动自己的参数填对。
+如果你是从旧配置迁移过来的，建议先看清楚配置是怎么对应的。现在沙盒运行时已经拆成独立插件，AstrBot Core 只负责调度、复用和清理；你需要做的，就是把 `Computer Use Runtime`、`沙盒驱动`，以及各驱动自己的参数填正确。
 
 ![](https://files.astrbot.app/docs/source/images/astrbot-agent-sandbox/image.png)
 
-## 启用沙盒环境
+## 安装与启用沙盒环境
 
 ### 先看这 3 个配置
 
@@ -17,43 +17,45 @@
 2. 在 `沙盒驱动` 里选择 `Shipyard Neo`、`Shipyard` 或 `CUA`。
 3. 按所选驱动补齐对应配置，比如 `Shipyard Neo API Endpoint`、`Shipyard Neo Access Token`、`CUA Image`、`CUA Sandbox TTL`。
 
-这些驱动现在都以独立插件形式提供，所以先把插件装好，再回到 WebUI 改配置。
+这几个驱动现在都以独立插件的形式提供，所以顺序一定是：先装插件，再回到 WebUI 配置。
 
-目前可用的沙盒驱动包括：
+当前可用的沙盒驱动包括：
 
 - `Shipyard Neo`（推荐）
+- `BoxLite`（轻量本地沙盒，适合只需要 Shell、Python 和文件操作的场景）
 - `Shipyard`（旧方案，仍可继续使用）
 - `CUA`（本地或云端电脑使用沙盒，适合需要桌面操作的场景）
 
-推荐安装命令示例：
+安装示例：
 
 ```bash
-git clone https://github.com/zouyonghe/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
-git clone https://github.com/zouyonghe/astrbot_sandbox_shipyard.git data/plugins/astrbot_sandbox_shipyard
-git clone https://github.com/zouyonghe/astrbot_sandbox_cua.git data/plugins/astrbot_sandbox_cua
+git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
+git clone https://github.com/AstrBotDevs/astrbot_sandbox_boxlite.git data/plugins/astrbot_sandbox_boxlite
+git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard.git data/plugins/astrbot_sandbox_shipyard
+git clone https://github.com/AstrBotDevs/astrbot_sandbox_cua.git data/plugins/astrbot_sandbox_cua
 ```
 
-安装完成后，重启 AstrBot 或在插件管理页重新加载插件。
+安装完成后，重启 AstrBot，或者在插件管理页重新加载插件。
 
-在 AstrBot 控制台中，可在“AI 配置” -> “Agent Computer Use”中选择：
+然后打开 AstrBot 控制台，在“AI 配置” -> “Agent Computer Use”中选择：
 
 - `Computer Use Runtime` = `sandbox`
 - `沙盒驱动` = `Shipyard Neo`、`Shipyard` 或 `CUA`
 
-其中，`Shipyard Neo` 是当前默认驱动。它由 Bay、Ship、Gull 三部分组成：
+其中，`Shipyard Neo` 是当前推荐的默认驱动。它由 Bay、Ship、Gull 三部分组成：
 
 - **Bay**：控制面 API，负责创建和管理沙盒
 - **Ship**：负责 Python / Shell / 文件系统能力
 - **Gull**：负责浏览器自动化能力
 
-对于 `Shipyard Neo`，工作区根目录固定为 `/workspace`。在 AstrBot 中调用文件系统工具时，应当传入**相对于工作区根目录**的路径，例如 `reports/result.txt`，而不是 `/workspace/reports/result.txt`。
+对于 `Shipyard Neo`，工作区根目录固定为 `/workspace`。在 AstrBot 中调用文件系统工具时，请传入**相对于工作区根目录**的路径，例如 `reports/result.txt`，不要写成 `/workspace/reports/result.txt`。
 
 > [!TIP]
-> `Shipyard Neo` 下浏览器能力并不是所有 profile 都有。只有 profile 支持 `browser` capability 时，AstrBot 才会挂载浏览器相关工具。典型 profile 如 `browser-python`。
+> `Shipyard Neo` 的浏览器能力不是所有 profile 都支持。只有 profile 带有 `browser` capability 时，AstrBot 才会挂载浏览器相关工具。一个常见示例是 `browser-python`。
 
-## CUA 沙盒驱动
+## CUA 驱动
 
-`CUA` 面向电脑使用（Computer Use）场景。它可以通过统一的 Python SDK 创建 Linux、macOS、Windows、Android 等不同类型的沙盒，并提供 Shell、截图、鼠标、键盘、文件系统等接口。
+`CUA` 面向电脑使用（Computer Use）场景。它可以通过统一的 Python SDK 创建 Linux、macOS、Windows、Android 等不同类型的沙盒，并提供 Shell、截图、鼠标、键盘和文件系统等接口。
 
 在 AstrBot 中选择 `CUA` 驱动后，Agent 可以在 CUA 沙盒中使用：
 
@@ -66,44 +68,44 @@ git clone https://github.com/zouyonghe/astrbot_sandbox_cua.git data/plugins/astr
 - 沙盒文件上传与下载工具
 
 > [!NOTE]
-> CUA 是可选驱动，AstrBot 默认安装不会强制安装它。如果选择了 `CUA` 但当前 Python 环境没有安装 `cua` 包，启动沙盒时会提示安装缺失。
+> CUA 是可选驱动，AstrBot 默认不会强制安装它。如果你选择了 `CUA`，但当前 Python 环境里没有安装 `cua` 包，启动沙盒时会提示缺少依赖。
 
 ### 先安装 CUA 插件
 
-配置 `CUA` 驱动前，请先把插件安装到 AstrBot 的插件目录：
+在配置 `CUA` 之前，请先把插件安装到 AstrBot 的插件目录：
 
 ```bash
-git clone https://github.com/zouyonghe/astrbot_sandbox_cua.git data/plugins/astrbot_sandbox_cua
+git clone https://github.com/AstrBotDevs/astrbot_sandbox_cua.git data/plugins/astrbot_sandbox_cua
 ```
 
-然后重启 AstrBot，或在插件管理页重新加载插件。
+然后重启 AstrBot，或者在插件管理页重新加载插件。
 
 ### 安装 CUA 依赖
 
-如果您通过源码或虚拟环境运行 AstrBot，请在 AstrBot 使用的 Python 环境中安装 CUA：
+如果你是通过源码或虚拟环境运行 AstrBot，请在 AstrBot 使用的 Python 环境里安装 CUA：
 
 ```bash
 pip install cua
 ```
 
-如果您使用 `uv` 管理 AstrBot 环境，可在 AstrBot 项目目录中执行：
+如果你使用 `uv` 管理 AstrBot 环境，可以在 AstrBot 项目目录中执行：
 
 ```bash
 uv pip install cua
 ```
 
-CUA 本身还依赖具体运行方式：
+CUA 还依赖具体的运行方式：
 
 - 本地 Linux 容器通常需要 Docker 可用。
 - 本地 Linux/Windows VM 通常需要 QEMU 或 CUA 对应的本地运行时。
 - macOS VM 通常依赖 CUA/Lume 相关运行时。
 - 云端 CUA 需要可用的 CUA API Key。
 
-具体宿主机要求、镜像支持情况和本地运行时安装方式，请参考 [CUA 官方文档](https://cua.ai/docs)。
+具体的宿主机要求、镜像支持情况，以及本地运行时的安装方式，请参考 [CUA 官方文档](https://cua.ai/docs)。
 
 ### 在 AstrBot 中配置 CUA
 
-进入 WebUI：
+打开 WebUI：
 
 - `配置 -> 普通配置 -> 使用电脑能力`
 
@@ -121,7 +123,7 @@ CUA 相关配置项包括：
 - `CUA Local Runtime`：是否使用本地运行时。默认开启。关闭后会按 CUA SDK 的云端方式创建沙盒。
 - `CUA API Key`：云端 CUA 所需的 API Key。仅在使用云端运行时时填写。
 
-一个最小本地 Linux 容器配置通常是：
+一个最小的本地 Linux 容器配置通常是：
 
 ```text
 Computer Use Runtime = sandbox
@@ -132,7 +134,7 @@ CUA Local Runtime = true
 CUA Sandbox TTL = 3600
 ```
 
-如果使用云端 CUA，可改为：
+如果使用云端 CUA，可以改成：
 
 ```text
 Computer Use Runtime = sandbox
@@ -144,14 +146,14 @@ CUA API Key = <your-cua-api-key>
 ```
 
 > [!WARNING]
-> 不要把 CUA API Key 写入公开日志、截图或 issue。AstrBot 的运行日志不会输出该字段，但部署平台、Shell 历史和容器环境变量仍需自行保护。
+> 不要把 CUA API Key 写进公开日志、截图或 issue。AstrBot 的运行日志不会输出这个字段，但部署平台、Shell 历史和容器环境变量仍然需要你自己保护好。
 
 ### 使用 CUA 时的注意事项
 
 - `linux` 镜像通常适合 Shell、Python、文件系统和桌面自动化测试。
-- 非 POSIX 镜像（如 `windows`、`android`）不一定支持 `sh`、`cat`、`ls`、`rm`、`base64` 等命令。AstrBot 对需要这些命令的 fallback 操作会返回明确错误。
-- 如果需要在 CUA 沙盒中打开浏览器或 GUI 程序，通常应使用 Shell 后台执行，例如显式传入 `background=true`，避免命令阻塞后续工具调用。
-- 直接把沙盒内的文件路径发送给用户通常不可行。应优先使用 AstrBot 的沙盒下载工具，将文件下载到 AstrBot 临时目录后再发送。
+- 非 POSIX 镜像（如 `windows`、`android`）不一定支持 `sh`、`cat`、`ls`、`rm`、`base64` 等命令。AstrBot 对依赖这些命令的 fallback 操作会返回明确错误。
+- 如果你需要在 CUA 沙盒里打开浏览器或 GUI 程序，通常应通过 Shell 后台执行，例如显式传入 `background=true`，避免命令阻塞后续工具调用。
+- 直接把沙盒内的文件路径发给用户通常不可行。应优先使用 AstrBot 的沙盒下载工具，把文件下载到 AstrBot 临时目录后再发送。
 - CUA 与 Shipyard Neo 的 workspace 语义不同。Shipyard Neo 固定使用 `/workspace`；CUA 的工作目录和文件路径取决于镜像与运行时。
 
 ### 何时选择 CUA
@@ -162,7 +164,7 @@ CUA API Key = <your-cua-api-key>
 - 需要测试不同 OS 镜像中的行为，例如 Linux、Windows、Android。
 - 已经在本机或云端部署好 CUA 运行环境。
 
-如果只是需要稳定的 Python/Shell/文件系统沙盒，且不需要桌面 GUI 操作，通常优先选择 `Shipyard Neo`。它与 AstrBot 的 workspace、Skills 同步和长期运行模式更贴合。
+如果你只是需要稳定的 Python/Shell/文件系统沙盒，而且不需要桌面 GUI 操作，通常优先选择 `Shipyard Neo`。它和 AstrBot 的 workspace、Skills 同步，以及长期运行模式更匹配。
 
 ## 性能要求
 
@@ -177,8 +179,36 @@ AstrBot 给每个沙盒环境限制最高 1 CPU 和 512 MB 内存。
 在 AstrBot 侧配置 `Shipyard Neo` 之前，请先安装对应插件：
 
 ```bash
-git clone https://github.com/zouyonghe/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
+git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
 ```
+
+### BoxLite 驱动
+
+`BoxLite` 是一个更轻量的本地沙盒驱动，适合只需要 Shell、Python 和文件操作的场景，不提供浏览器或 GUI 专用工具。
+
+#### 安装 BoxLite 插件
+
+在配置 `BoxLite` 之前，请先把插件安装到 AstrBot 的插件目录，并保留 `Shipyard` 插件源码在同一目录树下：
+
+```bash
+git clone https://github.com/AstrBotDevs/astrbot_sandbox_boxlite.git data/plugins/astrbot_sandbox_boxlite
+git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard.git data/plugins/astrbot_sandbox_shipyard
+```
+
+然后重启 AstrBot，或者在插件管理页重新加载插件。
+
+#### 在 AstrBot 中配置 BoxLite
+
+打开 WebUI：
+
+- `配置 -> 普通配置 -> 使用电脑能力`
+
+然后设置：
+
+- `Computer Use Runtime` = `sandbox`
+- `沙盒驱动` = `BoxLite`
+
+`BoxLite` 当前没有额外的驱动级配置项，启用插件后即可使用。
 
 然后重启 AstrBot，或在插件管理页重新加载插件。
 
