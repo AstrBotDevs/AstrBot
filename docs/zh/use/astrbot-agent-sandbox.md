@@ -9,18 +9,18 @@
 
 ## 启用沙盒环境
 
-从当前版本开始，`Shipyard Neo`、`Shipyard`、`CUA` 等具体沙箱驱动器都是**独立插件**，不会默认内置在 AstrBot Core 中。
+从当前版本开始，`Shipyard Neo`、`Shipyard`、`CUA` 等具体沙盒驱动都以**独立插件**形式提供，不再默认内置在 AstrBot Core 中。
 
 因此，启用沙盒环境时请先完成两步：
 
 1. 安装对应的沙箱插件
-2. 再在 AstrBot WebUI 中选择并配置对应驱动器
+2. 在 AstrBot WebUI 中选择并配置对应驱动
 
-如果只在 WebUI 中把 `Computer Use Runtime` 切到 `sandbox`，但没有先安装对应插件，那么 AstrBot 不会拥有对应的沙箱驱动器能力。
+如果只在 WebUI 中把 `Computer Use Runtime` 切到 `sandbox`，但没有安装对应插件，AstrBot 就没有可用的沙盒驱动。
 
-目前，AstrBot 的沙盒环境驱动器支持：
+目前可用的沙盒驱动包括：
 
-- `Shipyard Neo`（当前推荐）
+- `Shipyard Neo`（推荐）
 - `Shipyard`（旧方案，仍可继续使用）
 - `CUA`（本地或云端电脑使用沙盒，适合需要桌面操作的场景）
 
@@ -34,14 +34,14 @@ git clone https://github.com/zouyonghe/astrbot_sandbox_cua.git data/plugins/astr
 
 安装完成后，重启 AstrBot 或在插件管理页重新加载插件。
 
-在当前版本的 AstrBot 控制台中，可在“AI 配置” -> “Agent Computer Use”中选择：
+在 AstrBot 控制台中，可在“AI 配置” -> “Agent Computer Use”中选择：
 
 - `Computer Use Runtime` = `sandbox`
-- `沙箱环境驱动器` = `Shipyard Neo`、`Shipyard` 或 `CUA`
+- `沙盒驱动` = `Shipyard Neo`、`Shipyard` 或 `CUA`
 
-其中，`Shipyard Neo` 是当前默认驱动器。它由 Bay、Ship、Gull 三部分组成：
+其中，`Shipyard Neo` 是当前默认驱动。它由 Bay、Ship、Gull 三部分组成：
 
-- **Bay**：控制面 API，负责创建和管理 sandbox
+- **Bay**：控制面 API，负责创建和管理沙盒
 - **Ship**：负责 Python / Shell / 文件系统能力
 - **Gull**：负责浏览器自动化能力
 
@@ -50,11 +50,11 @@ git clone https://github.com/zouyonghe/astrbot_sandbox_cua.git data/plugins/astr
 > [!TIP]
 > `Shipyard Neo` 下浏览器能力并不是所有 profile 都有。只有 profile 支持 `browser` capability 时，AstrBot 才会挂载浏览器相关工具。典型 profile 如 `browser-python`。
 
-## CUA 运行时
+## CUA 沙盒驱动
 
-`CUA` 是一个面向电脑使用（Computer Use）的沙盒运行时。它可以通过统一的 Python SDK 创建 Linux、macOS、Windows、Android 等不同类型的沙盒，并暴露 Shell、截图、鼠标、键盘、文件系统等接口。
+`CUA` 面向电脑使用（Computer Use）场景。它可以通过统一的 Python SDK 创建 Linux、macOS、Windows、Android 等不同类型的沙盒，并提供 Shell、截图、鼠标、键盘、文件系统等接口。
 
-在 AstrBot 中选择 `CUA` 驱动器后，Agent 可以在 CUA sandbox 中使用：
+在 AstrBot 中选择 `CUA` 驱动后，Agent 可以在 CUA 沙盒中使用：
 
 - Shell 工具
 - Python 工具
@@ -65,11 +65,11 @@ git clone https://github.com/zouyonghe/astrbot_sandbox_cua.git data/plugins/astr
 - 沙盒文件上传与下载工具
 
 > [!NOTE]
-> CUA 是可选运行时，AstrBot 默认安装不会强制安装它。如果选择了 `CUA` 但当前 Python 环境没有安装 `cua` 包，启动沙盒时会提示安装缺失。
+> CUA 是可选驱动，AstrBot 默认安装不会强制安装它。如果选择了 `CUA` 但当前 Python 环境没有安装 `cua` 包，启动沙盒时会提示安装缺失。
 
 ### 先安装 CUA 插件
 
-在配置 `CUA` 驱动器之前，请先把插件安装到 AstrBot 的插件目录：
+配置 `CUA` 驱动前，请先把插件安装到 AstrBot 的插件目录：
 
 ```bash
 git clone https://github.com/zouyonghe/astrbot_sandbox_cua.git data/plugins/astrbot_sandbox_cua
@@ -109,7 +109,7 @@ CUA 本身还依赖具体运行方式：
 然后设置：
 
 - `Computer Use Runtime` = `sandbox`
-- `沙箱环境驱动器` = `CUA`
+- `沙盒驱动` = `CUA`
 
 CUA 相关配置项包括：
 
@@ -124,7 +124,7 @@ CUA 相关配置项包括：
 
 ```text
 Computer Use Runtime = sandbox
-沙箱环境驱动器 = CUA
+沙盒驱动 = CUA
 CUA Image = linux
 CUA OS Type = linux
 CUA Local Runtime = true
@@ -135,7 +135,7 @@ CUA Sandbox TTL = 3600
 
 ```text
 Computer Use Runtime = sandbox
-沙箱环境驱动器 = CUA
+沙盒驱动 = CUA
 CUA Image = linux
 CUA OS Type = linux
 CUA Local Runtime = false
@@ -149,8 +149,8 @@ CUA API Key = <your-cua-api-key>
 
 - `linux` 镜像通常适合 Shell、Python、文件系统和桌面自动化测试。
 - 非 POSIX 镜像（如 `windows`、`android`）不一定支持 `sh`、`cat`、`ls`、`rm`、`base64` 等命令。AstrBot 对需要这些命令的 fallback 操作会返回明确错误。
-- 如果需要在 CUA sandbox 中打开浏览器或 GUI 程序，通常应使用 Shell 后台执行，例如显式传入 `background=true`，避免命令阻塞后续工具调用。
-- 直接把 sandbox 内的文件路径发送给用户通常不可行。应优先使用 AstrBot 的沙盒下载工具，将文件下载到 AstrBot 临时目录后再发送。
+- 如果需要在 CUA 沙盒中打开浏览器或 GUI 程序，通常应使用 Shell 后台执行，例如显式传入 `background=true`，避免命令阻塞后续工具调用。
+- 直接把沙盒内的文件路径发送给用户通常不可行。应优先使用 AstrBot 的沙盒下载工具，将文件下载到 AstrBot 临时目录后再发送。
 - CUA 与 Shipyard Neo 的 workspace 语义不同。Shipyard Neo 固定使用 `/workspace`；CUA 的工作目录和文件路径取决于镜像与运行时。
 
 ### 何时选择 CUA
@@ -197,7 +197,7 @@ docker compose up -d
 部署完成后：
 
 - Bay 默认监听在 `http://<your-host>:8114`
-- 在 AstrBot 控制台中选择 `Shipyard Neo` 驱动器
+- 在 AstrBot 控制台中选择 `Shipyard Neo` 驱动
 - `Shipyard Neo API Endpoint` 填写对应地址，例如 `http://<your-host>:8114`
 - `Shipyard Neo Access Token` 填写 Bay API Key；如果 AstrBot 能访问 Bay 的 `credentials.json`，也可以留空让 AstrBot 自动发现
 
@@ -212,7 +212,7 @@ docker compose up -d
 # Bay Production Config - Docker Compose (container_network mode)
 #
 # Bay 运行在 Docker 容器中，并通过共享 Docker 网络与 Ship/Gull 容器通信。
-# 这种模式下，sandbox 容器不需要向宿主机暴露端口。
+# 这种模式下，沙盒容器不需要向宿主机暴露端口。
 #
 # 部署前至少需要修改：
 #   1. security.api_key  —— 设置强随机密钥
@@ -234,7 +234,7 @@ driver:
   # 当前默认使用 Docker 驱动
   type: docker
 
-  # 创建新 sandbox 时是否拉取镜像。
+  # 创建新沙盒时是否拉取镜像。
   # 生产环境通常建议 always，以便拿到最新镜像。
   image_pull_policy: always
 
@@ -249,7 +249,7 @@ driver:
     # 共享网络名，必须与 docker-compose.yaml 中的网络一致
     network: "bay-network"
 
-    # 是否将 sandbox 容器端口暴露到宿主机。
+    # 是否将沙盒容器端口暴露到宿主机。
     # 生产环境建议关闭，以减少攻击面。
     publish_ports: false
     host_port: null
@@ -259,7 +259,7 @@ cargo:
   root_path: "/var/lib/bay/cargos"
   # 默认工作区大小限制（MB）
   default_size_limit_mb: 1024
-  # Cargo 挂载到 sandbox 内的路径。AstrBot/Neo 的工作区根目录就是这里。
+  # Cargo 挂载到沙盒内的路径。AstrBot/Neo 的工作区根目录就是这里。
   mount_path: "/workspace"
 
 security:
@@ -269,15 +269,15 @@ security:
   allow_anonymous: false
 
 # 容器代理环境变量注入。
-# 启用后，Bay 会把 HTTP(S)_PROXY 和 NO_PROXY 注入到 sandbox 容器。
+# 启用后，Bay 会把 HTTP(S)_PROXY 和 NO_PROXY 注入到沙盒容器。
 proxy:
   enabled: false
   # http_proxy: "http://proxy.example.com:7890"
   # https_proxy: "http://proxy.example.com:7890"
   # no_proxy: "my-internal.service"
 
-# Warm Pool：预热一批待命 sandbox，减少冷启动延迟。
-# 当用户创建 sandbox 时，Bay 会优先尝试领取一个已预热实例。
+# Warm Pool：预热一批待命沙盒，减少冷启动延迟。
+# 当用户创建沙盒时，Bay 会优先尝试领取一个已预热实例。
 warm_pool:
   enabled: true
   # 预热队列 worker 数量
@@ -405,13 +405,13 @@ gc:
 - **Session**：实际运行中的容器会话，可被停止或重建
 - **Cargo**：持久化工作区卷，挂载到 `/workspace`
 
-对 AstrBot 而言，当前会按请求的 `session_id` 维度缓存沙箱 booter；在主 Agent 默认流程下，这个 `session_id` 通常等于消息会话标识 `unified_msg_origin`。因此，同一消息会话的后续请求通常会继续复用同一个 Neo sandbox；如果沙箱失效，则会自动重建。
+AstrBot 会按请求的 `session_id` 缓存沙盒 booter。在主 Agent 默认流程下，这个 `session_id` 通常等于消息会话标识 `unified_msg_origin`。因此，同一消息会话的后续请求通常会复用同一个 Neo 沙盒；如果沙盒失效，AstrBot 会自动重建。
 
 关于 TTL 与数据持久化的更详细说明，请参考下文的“关于 `Shipyard Neo Sandbox TTL`”与“关于沙盒环境的数据持久化”小节。
 
 ## 旧方案：Shipyard
 
-以下内容为旧版 `Shipyard` 驱动器的部署与配置说明，仍然保留，供兼容旧部署方案时参考。
+以下内容是旧版 `Shipyard` 驱动的部署与配置说明，保留给仍在使用旧部署方案的用户参考。
 
 ### 使用 Docker Compose 部署 AstrBot 和 Shipyard
 
@@ -455,8 +455,8 @@ docker pull soulter/shipyard-ship:latest
 在 AstrBot 控制台，进入 “AI 配置” -> “Agent Computer Use”。
 
 1. 将 `Computer Use Runtime` 设为 `sandbox`
-2. 在 `沙箱环境驱动器` 中选择 `Shipyard Neo` 或 `Shipyard`
-3. 根据驱动器填写对应配置项
+2. 在 `沙盒驱动` 中选择 `Shipyard Neo` 或 `Shipyard`
+3. 根据驱动填写对应配置项
 4. 点击右下角“保存”
 
 ### 配置 Shipyard Neo
@@ -473,7 +473,7 @@ docker pull soulter/shipyard-ship:latest
   - 例如 `python-default`、`browser-python`
   - 如果未手动指定，AstrBot 会优先尝试选择能力更完整、且优先带有 `browser` capability 的 profile，失败时再回退到 `python-default`
 - `Shipyard Neo Sandbox TTL`
-  - sandbox 生命周期上限，默认值为 3600 秒（1 小时）
+  - 沙盒生命周期上限，默认值为 3600 秒（1 小时）
 
 ### 配置 Shipyard（旧方案）
 
@@ -493,7 +493,7 @@ docker pull soulter/shipyard-ship:latest
 
 在 `Shipyard Neo` 中：
 
-- TTL 表示 sandbox 生命周期上限
+- TTL 表示沙盒生命周期上限
 - profile 还会定义一个独立的空闲超时（`idle_timeout`）
 - AstrBot 发起能力调用时，通常会刷新空闲超时，而不是直接延长 TTL
 - `keepalive` 只会延长空闲超时，不会自动启动新的 session，也不会延长 TTL

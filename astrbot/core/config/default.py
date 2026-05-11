@@ -3266,7 +3266,7 @@ CONFIG_METADATA_3 = {
                         "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
                     },
                     "provider_settings.sandbox.booter": {
-                        "description": "沙箱环境驱动器",
+                        "description": "沙箱驱动",
                         "type": "string",
                         "options": [],
                         "labels": [],

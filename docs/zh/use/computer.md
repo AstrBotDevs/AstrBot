@@ -92,16 +92,16 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 中配置。用户可通过 `/sid` 获取自己的 ID。
 
-## Sandbox 模式
+## 沙盒模式
 
 `sandbox` 模式会把执行动作放到隔离环境中，而不是直接在 AstrBot 主机上运行。
 
 在沙盒中，Agent 仍然可以使用 Shell、Python、文件系统工具；如果所选沙盒 profile 支持 `browser` capability，还会挂载浏览器自动化工具。
 
-沙盒环境驱动器可在 `配置 -> 普通配置 -> 使用电脑能力` 的沙箱配置中选择。当前常用选项包括：
+沙盒驱动可在 `配置 -> 普通配置 -> 使用电脑能力` 的沙盒配置中选择。当前常用选项包括：
 
 - `Shipyard Neo`：AstrBot 推荐的远程/独立部署沙盒服务，适合长期运行和多人使用。
-- `CUA`：基于 [CUA](https://github.com/trycua/cua) 的本地或云端电脑使用沙盒，可提供桌面截图、鼠标、键盘、Shell、Python 和文件系统能力。
+- `CUA`：基于 [CUA](https://github.com/trycua/cua) 的本地或云端电脑使用沙盒，可提供桌面截图、鼠标、键盘、Shell、Python 和文件操作能力。
 
 使用 `Shipyard Neo` 时，沙盒 workspace 根目录通常是：
 
@@ -123,7 +123,7 @@ result.txt
 
 使用 `CUA` 时，工作目录和可用命令取决于所选 CUA image 与运行方式。Linux CUA 容器通常提供类 Unix Shell；Windows、Android 等非 POSIX 镜像不保证支持 `sh`、`ls`、`rm`、`base64` 等命令，AstrBot 会对部分 shell fallback 操作返回明确错误。
 
-沙盒部署、驱动器选择、CUA 配置、profile、TTL、数据持久化、浏览器能力等内容请参考：[Agent 沙盒环境](/use/astrbot-agent-sandbox)。
+沙盒部署、驱动选择、CUA 配置、profile、TTL、数据持久化、浏览器能力等内容请参考：[Agent 沙盒环境](/use/astrbot-agent-sandbox)。
 
 > [!NOTE]
 > 即使在 `sandbox` 模式下，“需要 AstrBot 管理员权限”仍会影响 Shell、Python、浏览器、上传下载等工具的调用权限。具体权限取决于你的配置。
