@@ -301,6 +301,33 @@ def test_unregister_provider_clears_runtime_tool_cache(monkeypatch, tmp_path):
     assert "generic_tool" not in second
 
 
+def test_current_sandbox_provider_ignores_terminal_status(monkeypatch, tmp_path):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={},
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    monkeypatch.setattr(computer_client, "sandbox_registry", manager.registry)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Terminal",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        status="error",
+    )
+    manager.registry.set_current_sandbox_id("session-a", "generic-1")
+
+    assert computer_client.get_current_sandbox_provider_id("session-a") is None
+
+
 def test_unregister_provider_rejects_active_managed_sandboxes(monkeypatch, tmp_path):
     from astrbot.core.computer import computer_client
     from astrbot.core.computer.sandbox_manager import SandboxManager
