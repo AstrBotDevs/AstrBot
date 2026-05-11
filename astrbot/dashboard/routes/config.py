@@ -8,7 +8,7 @@ from typing import Any
 
 from quart import request
 
-from astrbot.core import astrbot_config, file_token_service, logger
+from astrbot.core import LogManager, astrbot_config, file_token_service, logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -38,6 +38,70 @@ from .util import (
 )
 
 MAX_FILE_BYTES = 500 * 1024 * 1024
+
+_RUNTIME_LOG_KEYS = (
+    "log_level",
+    "log_file_enable",
+    "log_file_path",
+    "log_file_max_mb",
+)
+
+_RUNTIME_TRACE_LOG_KEYS = (
+    "trace_log_enable",
+    "trace_log_path",
+    "trace_log_max_mb",
+)
+
+
+def _runtime_log_config(conf: dict) -> dict:
+    legacy = conf.get("log_file") or {}
+    return {
+        **{key: copy.deepcopy(conf.get(key)) for key in _RUNTIME_LOG_KEYS},
+        "legacy_log_file": {
+            "enable": copy.deepcopy(legacy.get("enable")),
+            "path": copy.deepcopy(legacy.get("path")),
+            "max_mb": copy.deepcopy(legacy.get("max_mb")),
+        },
+    }
+
+
+def _runtime_trace_log_config(conf: dict) -> dict:
+    legacy = conf.get("log_file") or {}
+    return {
+        **{key: copy.deepcopy(conf.get(key)) for key in _RUNTIME_TRACE_LOG_KEYS},
+        "legacy_log_file": {
+            "trace_enable": copy.deepcopy(legacy.get("trace_enable")),
+            "trace_path": copy.deepcopy(legacy.get("trace_path")),
+            "trace_max_mb": copy.deepcopy(legacy.get("trace_max_mb")),
+        },
+    }
+
+
+def _apply_runtime_log_config_if_changed(
+    old_config: dict,
+    new_config: dict,
+) -> None:
+    old_log_config = _runtime_log_config(old_config)
+    new_log_config = _runtime_log_config(new_config)
+    old_trace_config = _runtime_trace_log_config(old_config)
+    new_trace_config = _runtime_trace_log_config(new_config)
+
+    if old_log_config == new_log_config and old_trace_config == new_trace_config:
+        return
+
+    try:
+        if old_log_config != new_log_config:
+            LogManager.configure_logger(logger, new_config)
+
+        if old_trace_config != new_trace_config:
+            LogManager.configure_trace_logger(new_config)
+
+        logger.info("Runtime log configuration updated.")
+    except Exception:
+        logger.error(
+            "Failed to update runtime log configuration:\n%s",
+            traceback.format_exc(),
+        )
 
 
 def try_cast(value: Any, type_: str):
@@ -304,6 +368,7 @@ def save_config(
 ) -> None:
     """验证并保存配置"""
     errors = None
+    old_config_snapshot = copy.deepcopy(dict(config)) if is_core else None
 
     # Snapshot old Computer config for change detection
     if is_core:
@@ -328,6 +393,9 @@ def save_config(
         raise ValueError(f"格式校验未通过: {errors}")
 
     config.save_config(post_config)
+
+    if is_core and old_config_snapshot is not None:
+        _apply_runtime_log_config_if_changed(old_config_snapshot, dict(config))
 
 
 class ConfigRoute(Route):
