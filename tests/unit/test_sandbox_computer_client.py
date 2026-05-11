@@ -188,7 +188,8 @@ async def test_sync_skills_uses_active_manager_booters(monkeypatch, tmp_path):
 
     synced = []
 
-    async def fake_sync(booter):
+    async def fake_sync(booter, provider_id=None):
+        assert provider_id is None or provider_id == "generic"
         synced.append(booter)
 
     manager_booter = FakeBooter()
