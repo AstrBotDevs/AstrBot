@@ -311,6 +311,7 @@ class LongTermMemory:
 # _build_segments — 从 raw lines 构建 OpenAI 格式 contexts 段
 # =============================================================================
 
+
 def _build_segments(raw_lines: list[str]) -> list[dict]:
     """从 raw strings 构建 OpenAI 格式 contexts 段。
 
@@ -376,6 +377,7 @@ def _build_segments(raw_lines: list[str]) -> list[dict]:
 # 解析 helper
 # =============================================================================
 
+
 def _parse_tool_call(line: str) -> dict | None:
     """<T:CALL>{"id":"x","name":"f","args":{...}}</T:CALL> → tool_call dict"""
     inner = _extract_tag_content(line, TOOL_CALL_PREFIX, "</T:CALL>")
@@ -397,14 +399,14 @@ def _parse_tool_call(line: str) -> dict | None:
 
 def _parse_tool_result(line: str) -> dict | None:
     """<T:RES id=xxx>content</T:RES> → {"role":"tool", ...}"""
-    rest = line[len(TOOL_RES_PREFIX):].strip()
+    rest = line[len(TOOL_RES_PREFIX) :].strip()
     gt = rest.find(">")
     if gt == -1:
         return None
     id_part = rest[:gt]
-    content = rest[gt + 1:]
+    content = rest[gt + 1 :]
     if content.endswith("</T:RES>"):
-        content = content[:-len("</T:RES>")]
+        content = content[: -len("</T:RES>")]
     if not id_part.startswith("id="):
         return None
     tc_id = id_part[3:]
@@ -416,14 +418,14 @@ def _extract_bot_content(line: str) -> str | None:
     idx = line.find(">: ")
     if idx == -1:
         return None
-    return line[idx + 3:].strip()
+    return line[idx + 3 :].strip()
 
 
 def _extract_tag_content(line: str, start_tag: str, end_tag: str) -> str | None:
     """<TAG>content</TAG> → content"""
     if not line.endswith(end_tag):
         return None
-    return line[len(start_tag):-len(end_tag)].strip()
+    return line[len(start_tag) : -len(end_tag)].strip()
 
 
 def _truncate_user_segment(lines: list[str]) -> list[str]:
