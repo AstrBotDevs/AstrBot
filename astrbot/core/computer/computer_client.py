@@ -1,3 +1,4 @@
+import asyncio
 import json
 import shutil
 import uuid
@@ -24,6 +25,7 @@ local_booter: LocalBooter | None = None
 sandbox_registry = SandboxRegistry()
 sandbox_manager = SandboxManager(registry=sandbox_registry, providers={})
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
+_SANDBOX_SKILLS_SYNC_LOCK = asyncio.Lock()
 
 # Tracks tools registered per provider so core can remove them on unregister.
 _provider_tools: dict[str, list[FunctionTool]] = {}
@@ -348,7 +350,7 @@ def _build_python_exec_command(script: str) -> str:
     )
 
 
-def _build_apply_sync_command() -> str:
+def _build_apply_sync_command(zip_name: str = "skills.zip") -> str:
     """Build shell command for sync stage only.
 
     This stage mutates sandbox files (managed skill replacement) but does not scan
@@ -362,7 +364,7 @@ import zipfile
 from pathlib import Path
 
 root = Path({SANDBOX_SKILLS_ROOT!r})
-zip_path = root / "skills.zip"
+zip_path = root / {zip_name!r}
 tmp_extract = Path(f"{{root}}_tmp_extract")
 managed_file = root / {_MANAGED_SKILLS_FILE!r}
 
@@ -594,7 +596,10 @@ def _update_sandbox_skills_cache(
     SkillManager().set_sandbox_skills_cache(skills, provider_id=provider_id)
 
 
-async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
+async def _apply_skills_to_sandbox(
+    booter: ComputerBooter,
+    zip_name: str = "skills.zip",
+) -> None:
     """Apply local skill bundle to sandbox filesystem only.
 
     This function is intentionally limited to file mutation. Metadata scanning is
@@ -602,7 +607,7 @@ async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
     """
     logger.info("[Computer] Skill sync phase=apply start")
     apply_result = _normalize_shell_exec_result(
-        await booter.shell.exec(_build_apply_sync_command())
+        await booter.shell.exec(_build_apply_sync_command(zip_name))
     )
     if not _shell_exec_succeeded(apply_result):
         detail = _format_exec_error_detail(apply_result)
@@ -639,57 +644,61 @@ async def _sync_skills_to_sandbox(
     Backward-compatible orchestrator: keep historical behavior while internally
     splitting into `apply` and `scan` phases.
     """
-    sync_skill_dirs = _collect_sync_skill_dirs()
+    async with _SANDBOX_SKILLS_SYNC_LOCK:
+        sync_skill_dirs = _collect_sync_skill_dirs()
 
-    temp_dir = Path(get_astrbot_temp_path())
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    zip_base = temp_dir / "skills_bundle"
-    zip_path = zip_base.with_suffix(".zip")
-    bundle_root = temp_dir / f"skills_bundle_{uuid.uuid4().hex}"
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        zip_base = temp_dir / f"skills_bundle_{uuid.uuid4().hex}"
+        zip_path = zip_base.with_suffix(".zip")
+        bundle_root = temp_dir / f"{zip_base.name}_contents"
+        remote_zip_name = f"{zip_base.name}.zip"
+        remote_zip = Path(SANDBOX_SKILLS_ROOT) / remote_zip_name
 
-    try:
-        if sync_skill_dirs:
-            if zip_path.exists():
-                zip_path.unlink()
-            if bundle_root.exists():
-                shutil.rmtree(bundle_root)
-            bundle_root.mkdir(parents=True)
-            for skill_name, skill_dir in sync_skill_dirs:
-                shutil.copytree(skill_dir, bundle_root / skill_name)
-            shutil.make_archive(str(zip_base), "zip", str(bundle_root))
-            remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
-            logger.info("Uploading skills bundle to sandbox...")
-            await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
-            upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
-            if not upload_result.get("success", False):
-                raise RuntimeError("Failed to upload skills bundle to sandbox.")
-        else:
-            logger.info(
-                "No local skills found. Keeping sandbox built-ins and refreshing metadata."
+        try:
+            if sync_skill_dirs:
+                bundle_root.mkdir(parents=True)
+                for skill_name, skill_dir in sync_skill_dirs:
+                    shutil.copytree(skill_dir, bundle_root / skill_name)
+                shutil.make_archive(str(zip_base), "zip", str(bundle_root))
+                logger.info("Uploading skills bundle to sandbox...")
+                await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
+                upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
+                if not upload_result.get("success", False):
+                    raise RuntimeError("Failed to upload skills bundle to sandbox.")
+            else:
+                logger.info(
+                    "No local skills found. Keeping sandbox built-ins and refreshing metadata."
+                )
+                await booter.shell.exec(
+                    f"rm -f {SANDBOX_SKILLS_ROOT}/{remote_zip_name}"
+                )
+
+            # Keep backward-compatible behavior while splitting lifecycle into two
+            # observable phases: apply (filesystem mutation) + scan (metadata read).
+            await _apply_skills_to_sandbox(booter, zip_name=remote_zip_name)
+            payload = await _scan_sandbox_skills(booter)
+            _update_sandbox_skills_cache(payload, provider_id=provider_id)
+            managed = (
+                payload.get("managed_skills", []) if isinstance(payload, dict) else []
             )
-            await booter.shell.exec(f"rm -f {SANDBOX_SKILLS_ROOT}/skills.zip")
-
-        # Keep backward-compatible behavior while splitting lifecycle into two
-        # observable phases: apply (filesystem mutation) + scan (metadata read).
-        await _apply_skills_to_sandbox(booter)
-        payload = await _scan_sandbox_skills(booter)
-        _update_sandbox_skills_cache(payload, provider_id=provider_id)
-        managed = payload.get("managed_skills", []) if isinstance(payload, dict) else []
-        logger.info(
-            "[Computer] Sandbox skill sync complete: managed=%d",
-            len(managed),
-        )
-    finally:
-        if bundle_root.exists():
-            try:
-                shutil.rmtree(bundle_root)
-            except Exception:
-                logger.warning(f"Failed to remove temp skills bundle: {bundle_root}")
-        if zip_path.exists():
-            try:
-                zip_path.unlink()
-            except Exception:
-                logger.warning(f"Failed to remove temp skills zip: {zip_path}")
+            logger.info(
+                "[Computer] Sandbox skill sync complete: managed=%d",
+                len(managed),
+            )
+        finally:
+            if bundle_root.exists():
+                try:
+                    shutil.rmtree(bundle_root)
+                except Exception:
+                    logger.warning(
+                        f"Failed to remove temp skills bundle: {bundle_root}"
+                    )
+            if zip_path.exists():
+                try:
+                    zip_path.unlink()
+                except Exception:
+                    logger.warning(f"Failed to remove temp skills zip: {zip_path}")
 
 
 async def get_booter(

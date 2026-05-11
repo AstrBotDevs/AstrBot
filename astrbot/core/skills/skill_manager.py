@@ -6,6 +6,7 @@ import re
 import shlex
 import shutil
 import tempfile
+import threading
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -29,6 +30,7 @@ SANDBOX_WORKSPACE_ROOT = "/workspace"
 _SANDBOX_SKILLS_CACHE_VERSION = 1
 
 _SKILL_NAME_RE = re.compile(r"^[\w.-]+$")
+_SANDBOX_SKILLS_CACHE_LOCK = threading.RLock()
 
 
 def _normalize_cache_provider_id(provider_id: str | None) -> str:
@@ -419,25 +421,27 @@ class SkillManager:
                 "path": path,
             }
         provider_key = _normalize_cache_provider_id(provider_id)
-        cache = self._load_sandbox_skills_cache()
-        providers = cache.get("providers", {})
-        if not isinstance(providers, dict):
-            providers = {}
-        if provider_key:
-            providers[provider_key] = {
-                "skills": [deduped[name] for name in sorted(deduped)],
+        skills_payload = [deduped[name] for name in sorted(deduped)]
+        with _SANDBOX_SKILLS_CACHE_LOCK:
+            cache = self._load_sandbox_skills_cache()
+            providers = cache.get("providers", {})
+            if not isinstance(providers, dict):
+                providers = {}
+            if provider_key:
+                providers[provider_key] = {
+                    "skills": skills_payload,
+                }
+            else:
+                cache["skills"] = skills_payload
+                providers["default"] = {
+                    "skills": skills_payload,
+                }
+            cache = {
+                "version": _SANDBOX_SKILLS_CACHE_VERSION,
+                "skills": cache.get("skills", []),
+                "providers": providers,
             }
-        else:
-            cache["skills"] = [deduped[name] for name in sorted(deduped)]
-            providers["default"] = {
-                "skills": [deduped[name] for name in sorted(deduped)],
-            }
-        cache = {
-            "version": _SANDBOX_SKILLS_CACHE_VERSION,
-            "skills": cache.get("skills", []),
-            "providers": providers,
-        }
-        self._save_sandbox_skills_cache(cache)
+            self._save_sandbox_skills_cache(cache)
 
     def _sandbox_cache_skills_for_provider(
         self, cache: dict, provider_id: str | None
@@ -691,46 +695,47 @@ class SkillManager:
         self._save_config(config)
 
     def _remove_skill_from_sandbox_cache(self, name: str) -> None:
-        cache = self._load_sandbox_skills_cache()
-        changed = False
-        skills = cache.get("skills", [])
-        if isinstance(skills, list):
-            filtered = [
-                item
-                for item in skills
-                if not (
-                    isinstance(item, dict)
-                    and str(item.get("name", "")).strip() == name
-                )
-            ]
-            if len(filtered) != len(skills):
-                cache["skills"] = filtered
-                changed = True
-
-        providers = cache.get("providers", {})
-        if isinstance(providers, dict):
-            for provider_key, provider_cache in list(providers.items()):
-                if not isinstance(provider_cache, dict):
-                    continue
-                provider_skills = provider_cache.get("skills", [])
-                if not isinstance(provider_skills, list):
-                    continue
+        with _SANDBOX_SKILLS_CACHE_LOCK:
+            cache = self._load_sandbox_skills_cache()
+            changed = False
+            skills = cache.get("skills", [])
+            if isinstance(skills, list):
                 filtered = [
                     item
-                    for item in provider_skills
+                    for item in skills
                     if not (
                         isinstance(item, dict)
                         and str(item.get("name", "")).strip() == name
                     )
                 ]
-                if len(filtered) != len(provider_skills):
-                    provider_cache["skills"] = filtered
-                    providers[provider_key] = provider_cache
+                if len(filtered) != len(skills):
+                    cache["skills"] = filtered
                     changed = True
 
-        if changed:
-            cache["providers"] = providers
-            self._save_sandbox_skills_cache(cache)
+            providers = cache.get("providers", {})
+            if isinstance(providers, dict):
+                for provider_key, provider_cache in list(providers.items()):
+                    if not isinstance(provider_cache, dict):
+                        continue
+                    provider_skills = provider_cache.get("skills", [])
+                    if not isinstance(provider_skills, list):
+                        continue
+                    filtered = [
+                        item
+                        for item in provider_skills
+                        if not (
+                            isinstance(item, dict)
+                            and str(item.get("name", "")).strip() == name
+                        )
+                    ]
+                    if len(filtered) != len(provider_skills):
+                        provider_cache["skills"] = filtered
+                        providers[provider_key] = provider_cache
+                        changed = True
+
+            if changed:
+                cache["providers"] = providers
+                self._save_sandbox_skills_cache(cache)
 
     def delete_skill(self, name: str) -> None:
         if self.is_sandbox_only_skill(name):
