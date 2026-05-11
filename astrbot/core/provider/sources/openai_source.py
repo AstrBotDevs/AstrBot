@@ -1387,6 +1387,90 @@ class ProviderOpenAIOfficial(Provider):
     "OpenAI API Responses 提供商适配器",
 )
 class ProviderOpenAIResponses(ProviderOpenAIOfficial):
+    def _convert_content_part_to_responses(self, part: dict) -> dict:
+        if not isinstance(part, dict):
+            return {"type": "input_text", "text": str(part)}
+
+        part_type = part.get("type")
+        if part_type == "text":
+            return {"type": "input_text", "text": part.get("text", "")}
+        if part_type == "image_url":
+            image_url = part.get("image_url")
+            if not isinstance(image_url, dict) or not image_url.get("url"):
+                raise ValueError("Invalid Responses image content part")
+            return {
+                "type": "input_image",
+                "image_url": image_url["url"],
+                "detail": image_url.get("detail") or "auto",
+            }
+
+        raise ValueError(f"Unsupported Responses content part type: {part_type}")
+
+    def _convert_tool_call_to_responses_item(self, tool_call: dict) -> dict:
+        if not isinstance(tool_call, dict):
+            raise ValueError("Invalid Responses tool call item")
+        function = tool_call.get("function")
+        if not isinstance(function, dict):
+            raise ValueError("Invalid Responses function tool call item")
+
+        call_id = tool_call.get("id")
+        name = function.get("name")
+        if not call_id or not name:
+            raise ValueError("Responses function tool call requires id and name")
+
+        return {
+            "type": "function_call",
+            "call_id": call_id,
+            "name": name,
+            "arguments": function.get("arguments") or "{}",
+        }
+
+    def _convert_message_to_responses_items(self, message: dict) -> list[dict]:
+        role = message.get("role", "user")
+        if role == "tool":
+            call_id = message.get("tool_call_id")
+            if not call_id:
+                raise ValueError("Responses tool output requires tool_call_id")
+            return [
+                {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": message.get("content") or "",
+                }
+            ]
+
+        if role not in {"user", "assistant", "system", "developer"}:
+            raise ValueError(f"Unsupported Responses message role: {role}")
+
+        items = []
+        tool_calls = message.get("tool_calls")
+        if tool_calls:
+            if not isinstance(tool_calls, list):
+                raise ValueError("Responses tool_calls must be a list")
+            items.extend(
+                self._convert_tool_call_to_responses_item(tool_call)
+                for tool_call in tool_calls
+            )
+
+        content = message.get("content")
+        if isinstance(content, list):
+            converted_content = [
+                self._convert_content_part_to_responses(part) for part in content
+            ]
+        elif content is None:
+            converted_content = []
+        else:
+            converted_content = [{"type": "input_text", "text": str(content)}]
+
+        if converted_content:
+            items.append({"role": role, "content": converted_content})
+        elif role != "assistant" or not items:
+            if role == "assistant":
+                return []
+            items.append({"role": role, "content": converted_content})
+
+        return items
+
     async def _prepare_responses_payload(
         self,
         prompt: str | None = None,
@@ -1413,43 +1497,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         responses_input = []
         for message in payloads["messages"]:
-            content = message.get("content")
-            if isinstance(content, list):
-                responses_content = []
-                for part in content:
-                    if not isinstance(part, dict):
-                        responses_content.append(
-                            {"type": "input_text", "text": str(part)}
-                        )
-                        continue
-                    if part.get("type") == "image_url":
-                        image_url = part.get("image_url")
-                        if isinstance(image_url, dict):
-                            image_payload = {
-                                "type": "input_image",
-                                "image_url": image_url.get("url", ""),
-                            }
-                            if image_url.get("detail") is not None:
-                                image_payload["detail"] = image_url["detail"]
-                            responses_content.append(image_payload)
-                        continue
-                    if part.get("type") == "text":
-                        responses_content.append(
-                            {"type": "input_text", "text": part.get("text", "")}
-                        )
-                        continue
-                    responses_content.append(part)
-            elif content is None:
-                responses_content = []
-            else:
-                responses_content = [{"type": "input_text", "text": str(content)}]
-
-            responses_input.append(
-                {
-                    "role": message.get("role", "user"),
-                    "content": responses_content,
-                }
-            )
+            responses_input.extend(self._convert_message_to_responses_items(message))
 
         response_payload = {
             "model": payloads["model"],

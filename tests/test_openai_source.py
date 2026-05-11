@@ -116,6 +116,7 @@ async def test_responses_payload_converts_text_and_image_input_blocks(monkeypatc
                     {
                         "type": "input_image",
                         "image_url": "https://example.com/a.png",
+                        "detail": "auto",
                     },
                 ],
             },
@@ -139,6 +140,86 @@ async def test_responses_payload_splits_reasoning_from_extra_body():
 
         assert payload["reasoning"] == {"effort": "high"}
         assert payload["extra_body"] == {"metadata": {"session": "test"}}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_payload_converts_tool_call_history():
+    provider = _make_responses_provider()
+    try:
+        payload = await provider._prepare_responses_payload(
+            contexts=[
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call-123",
+                            "type": "function",
+                            "function": {
+                                "name": "lookup_weather",
+                                "arguments": '{"city": "Hefei"}',
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call-123",
+                    "content": "sunny",
+                },
+            ],
+        )
+
+        assert payload["input"] == [
+            {
+                "type": "function_call",
+                "call_id": "call-123",
+                "name": "lookup_weather",
+                "arguments": '{"city": "Hefei"}',
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call-123",
+                "output": "sunny",
+            },
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_payload_skips_empty_assistant_without_tool_calls():
+    provider = _make_responses_provider()
+    try:
+        payload = await provider._prepare_responses_payload(
+            contexts=[{"role": "assistant", "content": None}]
+        )
+
+        assert payload["input"] == []
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_payload_rejects_unsupported_audio_parts():
+    provider = _make_responses_provider()
+    try:
+        with pytest.raises(ValueError, match="Unsupported Responses content part type"):
+            await provider._prepare_responses_payload(
+                contexts=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_audio",
+                                "input_audio": {"data": "abcd", "format": "wav"},
+                            }
+                        ],
+                    }
+                ]
+            )
     finally:
         await provider.terminate()
 
