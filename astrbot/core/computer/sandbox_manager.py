@@ -16,6 +16,7 @@ from astrbot.core.star.context import Context
 
 SANDBOX_LEASE_SECONDS = 300
 MAX_SANDBOX_LEASE_ATTEMPTS = 3
+MAX_IDLE_DESTROY_ATTEMPTS = 3
 
 
 @dataclass(slots=True)
@@ -121,6 +122,35 @@ class SandboxManager:
                 sandbox_id,
                 exc,
             )
+
+    async def wait_pending_destroy_task(
+        self, sandbox_id: str, *, timeout: float | None = 1
+    ) -> None:
+        task = self.pending_destroy_tasks.get(sandbox_id)
+        if task is None:
+            return
+        try:
+            if timeout is None:
+                await asyncio.shield(task)
+            else:
+                await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+        except TimeoutError:
+            if not task.done():
+                logger.warning(
+                    "[Computer] Timed out waiting for pending sandbox destroy task: %s",
+                    sandbox_id,
+                )
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.warning(
+                "[Computer] Pending sandbox destroy task ended with error for %s: %s",
+                sandbox_id,
+                exc,
+            )
+        finally:
+            if task.done():
+                self.pending_destroy_tasks.pop(sandbox_id, None)
 
     def get_provider(self, provider_id: str) -> SandboxProvider:
         provider = self.providers.get(provider_id)
@@ -1330,7 +1360,13 @@ class SandboxManager:
     async def cleanup_managed_sandboxes(self) -> None:
         for sandbox_id in list(self.pending_boot_tasks):
             await self.cancel_pending_boot_task(sandbox_id)
-        managed_records = self.list_sandboxes()
+        for sandbox_id in list(self.pending_destroy_tasks):
+            await self.wait_pending_destroy_task(sandbox_id, timeout=None)
+        managed_records = [
+            record
+            for record in self.list_sandboxes()
+            if record["sandbox_id"] not in self.pending_destroy_tasks
+        ]
         for record in managed_records:
             sandbox_id = record["sandbox_id"]
             if record.get("retention_policy") == "persistent":
@@ -1384,6 +1420,7 @@ class SandboxManager:
         self, sandbox_id: str, timeout: float, initial_expires_at: float
     ) -> None:
         current_expires_at = initial_expires_at
+        destroy_attempts = 0
         try:
             while True:
                 remaining = current_expires_at - time.monotonic()
@@ -1435,18 +1472,31 @@ class SandboxManager:
                         except Exception:
                             booter_available = False
                         if booter_available:
+                            destroy_attempts += 1
+                            if destroy_attempts < MAX_IDLE_DESTROY_ATTEMPTS:
+                                self.session_booter[sandbox_id] = booter
+                                self.registry.update_sandbox_status(
+                                    sandbox_id, SandboxStatus.UNKNOWN
+                                )
+                                await self.save_registry_async()
+                                # Retry cleanup after the normal timeout instead of
+                                # leaving the sandbox without any scheduled cleanup.
+                                current_expires_at = time.monotonic() + timeout
+                                self.idle_state[sandbox_id] = SandboxIdleState(
+                                    expires_at=current_expires_at, task=state.task
+                                )
+                                continue
+                            logger.warning(
+                                "[Computer] Giving up on idle sandbox %s after %d destroy attempts",
+                                sandbox_id,
+                                destroy_attempts,
+                            )
                             self.session_booter[sandbox_id] = booter
                             self.registry.update_sandbox_status(
-                                sandbox_id, SandboxStatus.UNKNOWN
+                                sandbox_id, SandboxStatus.ERROR
                             )
                             await self.save_registry_async()
-                            # Retry cleanup after the normal timeout instead of
-                            # leaving the sandbox without any scheduled cleanup.
-                            current_expires_at = time.monotonic() + timeout
-                            self.idle_state[sandbox_id] = SandboxIdleState(
-                                expires_at=current_expires_at, task=state.task
-                            )
-                            continue
+                            return
                         self.clear_runtime_state(sandbox_id)
                         if record.get("retention_policy") == "persistent":
                             self.registry.update_sandbox_status(

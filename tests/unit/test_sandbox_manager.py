@@ -179,6 +179,18 @@ class DeadIdleDestroyProvider(FakeProvider):
         raise RuntimeError("half-closed booter")
 
 
+class AlwaysFailingIdleDestroyProvider(FakeProvider):
+    def __init__(self):
+        super().__init__()
+        self.destroy_started = asyncio.Event()
+        self.destroy_calls = 0
+
+    async def destroy_booter(self, booter, record):
+        self.destroy_calls += 1
+        self.destroy_started.set()
+        raise RuntimeError("destroy failed")
+
+
 class FailingReconnectProvider(FakeProvider):
     async def create_booter(self, context, session_id, sandbox_id, config):
         raise RuntimeError("boot failed")
@@ -1459,6 +1471,48 @@ async def test_manager_idle_cleanup_does_not_retry_dead_booter(tmp_path):
     assert manager.registry.get_sandbox(sandbox["sandbox_id"]) is None
     assert sandbox["sandbox_id"] not in manager.session_booter
     assert sandbox["sandbox_id"] not in manager.idle_state
+
+
+@pytest.mark.asyncio
+async def test_manager_idle_cleanup_stops_retrying_after_max_attempts(tmp_path):
+    from astrbot.core.computer import sandbox_manager as sandbox_manager_module
+
+    provider = AlwaysFailingIdleDestroyProvider()
+    provider.idle_timeout = 0.01
+    manager, provider = _manager(tmp_path, provider)
+
+    sandbox = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    manager.release_current_sandbox("session-a", sandbox["sandbox_id"])
+
+    await asyncio.wait_for(provider.destroy_started.wait(), timeout=1)
+    await asyncio.sleep(0.12)
+
+    assert provider.destroy_calls == sandbox_manager_module.MAX_IDLE_DESTROY_ATTEMPTS
+    record = manager.registry.get_sandbox(sandbox["sandbox_id"])
+    assert record is not None
+    assert record["status"] == "error"
+    assert sandbox["sandbox_id"] in manager.session_booter
+    assert sandbox["sandbox_id"] not in manager.idle_state
+
+
+@pytest.mark.asyncio
+async def test_manager_cleanup_waits_for_pending_destroy_tasks(tmp_path):
+    manager, provider = _manager(tmp_path, BlockingDestroyProvider())
+
+    sandbox = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    task = asyncio.create_task(
+        manager.destroy_sandbox_deferred("session-a", sandbox["sandbox_id"])
+    )
+    await asyncio.wait_for(provider.destroy_started.wait(), timeout=1)
+    provider.allow_destroy.set()
+
+    await manager.cleanup_managed_sandboxes()
+
+    await task
+    assert sandbox["sandbox_id"] not in manager.pending_destroy_tasks
+    assert manager.registry.get_sandbox(sandbox["sandbox_id"]) is None
+    assert sandbox["sandbox_id"] not in manager.session_booter
+    assert provider.destroyed[0][1] == sandbox["sandbox_id"]
 
 
 @pytest.mark.asyncio
