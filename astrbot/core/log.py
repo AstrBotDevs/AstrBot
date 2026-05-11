@@ -339,6 +339,67 @@ class LogManager:
         )
 
     @classmethod
+    def _replace_file_sink(
+        cls,
+        *,
+        logger: logging.Logger,
+        enable_file: bool,
+        file_path: str | None,
+        max_mb: int | None,
+    ) -> None:
+        if not enable_file:
+            old_sink_id = cls._file_sink_id
+            cls._file_sink_id = None
+            cls._remove_sink(old_sink_id)
+            return
+
+        try:
+            new_sink_id = cls._add_file_sink(
+                file_path=cls._resolve_log_path(file_path),
+                level=logger.level,
+                max_mb=max_mb,
+                backup_count=3,
+                trace=False,
+            )
+        except Exception as e:
+            logger.error(f"Failed to add file sink: {e}")
+            return
+
+        old_sink_id = cls._file_sink_id
+        cls._file_sink_id = new_sink_id
+        cls._remove_sink(old_sink_id)
+
+    @classmethod
+    def _replace_trace_sink(
+        cls,
+        *,
+        enable: bool,
+        path: str | None,
+        max_mb: int | None,
+    ) -> None:
+        if not enable:
+            old_sink_id = cls._trace_sink_id
+            cls._trace_sink_id = None
+            cls._remove_sink(old_sink_id)
+            return
+
+        try:
+            new_sink_id = cls._add_file_sink(
+                file_path=cls._resolve_log_path(path or "logs/astrbot.trace.log"),
+                level=logging.INFO,
+                max_mb=max_mb,
+                backup_count=3,
+                trace=True,
+            )
+        except Exception as e:
+            logging.getLogger("astrbot").error(f"Failed to add trace sink: {e}")
+            return
+
+        old_sink_id = cls._trace_sink_id
+        cls._trace_sink_id = new_sink_id
+        cls._remove_sink(old_sink_id)
+
+    @classmethod
     def configure_logger(
         cls,
         logger: logging.Logger,
@@ -366,22 +427,12 @@ class LogManager:
                 file_path = config.get("log_file_path")
                 max_mb = config.get("log_file_max_mb")
 
-            cls._remove_sink(cls._file_sink_id)
-            cls._file_sink_id = None
-
-            if not enable_file:
-                return
-
-            try:
-                cls._file_sink_id = cls._add_file_sink(
-                    file_path=cls._resolve_log_path(file_path),
-                    level=logger.level,
-                    max_mb=max_mb,
-                    backup_count=3,
-                    trace=False,
-                )
-            except Exception as e:
-                logger.error(f"Failed to add file sink: {e}")
+            cls._replace_file_sink(
+                logger=logger,
+                enable_file=enable_file,
+                file_path=file_path,
+                max_mb=max_mb,
+            )
 
     @classmethod
     def configure_trace_logger(cls, config: dict | None) -> None:
@@ -406,16 +457,8 @@ class LogManager:
             trace_logger.setLevel(logging.INFO)
             trace_logger.propagate = False
 
-            cls._remove_sink(cls._trace_sink_id)
-            cls._trace_sink_id = None
-
-            if not enable:
-                return
-
-            cls._trace_sink_id = cls._add_file_sink(
-                file_path=cls._resolve_log_path(path or "logs/astrbot.trace.log"),
-                level=logging.INFO,
+            cls._replace_trace_sink(
+                enable=enable,
+                path=path,
                 max_mb=max_mb,
-                backup_count=3,
-                trace=True,
             )

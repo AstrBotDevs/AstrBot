@@ -89,19 +89,30 @@ def _apply_runtime_log_config_if_changed(
     if old_log_config == new_log_config and old_trace_config == new_trace_config:
         return
 
-    try:
-        if old_log_config != new_log_config:
+    updated = False
+
+    if old_log_config != new_log_config:
+        try:
             LogManager.configure_logger(logger, new_config)
+            updated = True
+        except Exception:
+            logger.error(
+                "Failed to update runtime logger:\n%s",
+                traceback.format_exc(),
+            )
 
-        if old_trace_config != new_trace_config:
+    if old_trace_config != new_trace_config:
+        try:
             LogManager.configure_trace_logger(new_config)
+            updated = True
+        except Exception:
+            logger.error(
+                "Failed to update runtime trace logger:\n%s",
+                traceback.format_exc(),
+            )
 
+    if updated:
         logger.info("Runtime log configuration updated.")
-    except Exception:
-        logger.error(
-            "Failed to update runtime log configuration:\n%s",
-            traceback.format_exc(),
-        )
 
 
 def try_cast(value: Any, type_: str):
@@ -364,11 +375,15 @@ async def _validate_neo_connectivity(
 
 
 def save_config(
-    post_config: dict, config: AstrBotConfig, is_core: bool = False
+    post_config: dict,
+    config: AstrBotConfig,
+    is_core: bool = False,
+    old_config_snapshot: dict | None = None,
 ) -> None:
     """验证并保存配置"""
     errors = None
-    old_config_snapshot = copy.deepcopy(dict(config)) if is_core else None
+    if is_core and old_config_snapshot is None:
+        old_config_snapshot = copy.deepcopy(dict(config))
 
     # Snapshot old Computer config for change detection
     if is_core:
@@ -1589,6 +1604,7 @@ class ConfigRoute(Route):
             if conf_id not in self.acm.confs:
                 raise ValueError(f"配置文件 {conf_id} 不存在")
             astrbot_config = self.acm.confs[conf_id]
+            old_config_snapshot = copy.deepcopy(dict(astrbot_config))
 
             # 保留服务端的 t2i_active_template 值
             if "t2i_active_template" in astrbot_config:
@@ -1596,7 +1612,12 @@ class ConfigRoute(Route):
                     "t2i_active_template"
                 ]
 
-            save_config(post_configs, astrbot_config, is_core=True)
+            save_config(
+                post_configs,
+                astrbot_config,
+                is_core=True,
+                old_config_snapshot=old_config_snapshot,
+            )
         except Exception as e:
             raise e
 
