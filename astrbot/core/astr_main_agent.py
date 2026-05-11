@@ -1027,7 +1027,7 @@ async def _apply_subagent_manager_tools(
         # Configure SubAgentManager with settings from subagent_orchestrator
         dynamic_cfg = orch_cfg.get("dynamic_agents", {})
         enable_dynamic = dynamic_cfg.get("enabled", False)
-        history_enabled = orch_cfg.get("history_enabled", False)
+        history_enabled = orch_cfg.get("history_enabled", True)
         shared_context_enabled = orch_cfg.get("shared_context_enabled", False)
         SubAgentManager.configure(
             max_subagent_count=dynamic_cfg.get("max_dynamic_subagent_count", 3),
@@ -1038,7 +1038,7 @@ async def _apply_subagent_manager_tools(
             tools_blacklist=dynamic_cfg.get("tools_blacklist", None),
             tools_inherent=dynamic_cfg.get("tools_inherent", None),
             execution_timeout=orch_cfg.get("execution_timeout", 1200),
-            history_enabled=orch_cfg.get("history_enabled", True),
+            history_enabled=history_enabled,
             rule_prompt=dynamic_cfg.get("rule_prompt", ""),
             time_prompt_enabled=orch_cfg.get("time_prompt_enabled", True),
             timezone=cfg.get("timezone", None),
