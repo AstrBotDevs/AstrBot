@@ -624,7 +624,7 @@ Create sub-agents ONLY when:
             ).resolve(strict=False)
 
         if not os.path.exists(workdir):
-            os.mkdir(workdir)
+            os.makedirs(workdir)
         workdir_prompt = (
             "# Working Directory\n"
             + f"Your working directory is `{workdir}`. Unless specified by the user, all generated files are saved by default in this directory.\n"

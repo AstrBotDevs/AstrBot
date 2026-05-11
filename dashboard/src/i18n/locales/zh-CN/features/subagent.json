@@ -116,8 +116,8 @@
     "executionTimeoutHint": "子代理执行任务的最大超时时间，-1表示不限制",
     "rulePrompt": "行为约束提示词",
     "rulePromptHint": "注入到动态子代理的固定行为约束，为空时使用默认规则",
-    "timePromptEnabled": "启用时间提示词",
-    "timePromptEnabledHint": "在子代理系统提示词中注入当前时间信息"
+    "timePromptEnabled": "启用时间感知",
+    "timePromptEnabledHint": "使子代理能感受到系统时间"
   },
   "enhancedSection": {
     "runtimeParams": "运行参数",
