@@ -16,6 +16,7 @@ Add a new `openai_responses_completion` provider type that uses OpenAI Responses
 ## Notes
 
 - Worktree: `.worktrees/openai-responses-provider`
-- Latest verified Task 1 test: `uv run pytest tests/test_dashboard.py::test_provider_templates_include_openai_responses_description -q`
-- Current Task 1 concern resolved: the dashboard test now executes `getProviderDescription()` at runtime through Node dynamic import instead of checking source text only.
+- Latest verified Task 1 Python test: `uv run pytest tests/test_dashboard.py::test_provider_templates_include_openai_responses_type -q`
+- Latest verified Task 1 dashboard test: `node --test tests/providerUtils.test.mjs` from `dashboard/`
+- Task 1 concern resolved: Python metadata coverage stays in `tests/test_dashboard.py`, and dashboard helper behavior is covered in `dashboard/tests/providerUtils.test.mjs`.
 - Known unrelated baseline failures remain in the dashboard and openai source suites; they are not part of Task 1.
