@@ -153,10 +153,29 @@ def test_sandbox_management_page_destroy_uses_backend_status_not_optimistic_stat
 
     assert "const res = await axios.delete(sandboxApiPath(target)" in content
     assert "upsertSandboxRecord({ ...target, status: 'stopping' })" not in content
-    assert "const sandbox = res.data.data?.sandbox as SandboxRecord | undefined" in content
+    assert (
+        "const sandbox = res.data.data?.sandbox as SandboxRecord | undefined" in content
+    )
     assert "upsertSandboxRecord(sandbox)" in content
     assert "void loadSandboxes({ silent: true })" in content
     assert "destroyQueued" not in content
+
+
+def test_sandbox_management_page_polls_until_destroyed_sandbox_disappears():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "function startDestroyPolling" in content
+    assert "pendingDestroySandboxes" in content
+    assert (
+        "const record = result.records.find((item) => item.sandbox_id === trackedSandboxId)"
+        in content
+    )
+    assert "if (!record) {" in content
+    assert "finishDestroyPolling(trackedSandboxId)" in content
+    assert "removeSandboxRecord(sandboxId)" in content
+    assert "startDestroyPolling(sandbox.sandbox_id)" in content
 
 
 def test_sandbox_management_page_splits_running_into_busy_and_available_labels():
@@ -194,7 +213,10 @@ def test_sandbox_management_page_displays_console_cwd_relative_to_sandbox_home()
     )
 
     assert "if (cwd === '/workspace') return '~'" in content
-    assert "if (cwd.startsWith('/workspace/')) return `~${cwd.slice('/workspace'.length)}`" in content
+    assert (
+        "if (cwd.startsWith('/workspace/')) return `~${cwd.slice('/workspace'.length)}`"
+        in content
+    )
     assert "cwd.match(/^\\/home\\/[^/]+(.*)$/)" in content
     assert "return suffix ? `~${suffix}` : '~'" in content
 

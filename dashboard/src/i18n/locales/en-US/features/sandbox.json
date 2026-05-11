@@ -117,6 +117,8 @@
         "released": "Sandbox occupancy released.",
         "takeover": "Current session now controls this sandbox.",
         "destroyed": "Sandbox destroyed.",
+        "destroyRefreshUnstable": "Sandbox status refresh became unstable during destroy. Refresh manually later.",
+        "destroyTimedOut": "Sandbox {sandboxId} is still being destroyed. Refresh manually later.",
         "screenshot": "Screenshot captured."
     }
 }

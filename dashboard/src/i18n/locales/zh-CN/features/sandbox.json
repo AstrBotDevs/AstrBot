@@ -117,6 +117,8 @@
         "released": "沙盒占用已释放。",
         "takeover": "当前会话已接管此沙盒。",
         "destroyed": "沙盒已销毁。",
+        "destroyRefreshUnstable": "销毁期间刷新状态不稳定，请稍后手动刷新确认。",
+        "destroyTimedOut": "沙盒 {sandboxId} 仍在销毁中，请稍后手动刷新确认。",
         "screenshot": "截图已完成。"
     }
 }

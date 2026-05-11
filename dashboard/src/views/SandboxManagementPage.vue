@@ -381,6 +381,9 @@ const createProvider = ref('')
 const createPollingTimers = ref<Record<string, ReturnType<typeof setTimeout>>>({})
 const createGeneration = ref(0)
 const pendingCreateSandboxes = ref<Record<string, { placeholder: SandboxRecord; attempts: number; refreshFailures: number }>>({})
+const destroyPollingTimers = ref<Record<string, ReturnType<typeof setTimeout>>>({})
+const destroyGeneration = ref(0)
+const pendingDestroySandboxes = ref<Record<string, { attempts: number; refreshFailures: number }>>({})
 const screenshotDialog = ref(false)
 const screenshotDataUrl = ref('')
 const destroyDialog = ref(false)
@@ -423,6 +426,9 @@ const selectedSandboxRecord = computed(() => {
 const CREATE_POLL_INTERVAL_MS = 2000
 const CREATE_POLL_MAX_ATTEMPTS = 60
 const CREATE_POLL_MAX_REFRESH_FAILURES = 3
+const DESTROY_POLL_INTERVAL_MS = 2000
+const DESTROY_POLL_MAX_ATTEMPTS = 60
+const DESTROY_POLL_MAX_REFRESH_FAILURES = 3
 const DANGEROUS_CONSOLE_COMMAND_PATTERNS = [
   /(^|[;&|]\s*)rm\s+(?:-[\w-]*r[\w-]*f[\w-]*|-[\w-]*f[\w-]*r[\w-]*)\s+(?:--\s+)?(?:\/(?:\S*)?|~(?:\S*)?|\$HOME(?:\S*)?)(?:\s|$)/i,
   /(^|[;&|]\s*)mkfs(?:\.[\w-]+)?\s+/,
@@ -520,6 +526,10 @@ function upsertSandboxRecord(record: SandboxRecord) {
   sandboxes.value = next
 }
 
+function removeSandboxRecord(sandboxId: string) {
+  sandboxes.value = sandboxes.value.filter((item) => item.sandbox_id !== sandboxId)
+}
+
 function setPendingCreateSandbox(
   sandboxId: string,
   pending: { placeholder: SandboxRecord; attempts: number; refreshFailures: number }
@@ -534,6 +544,22 @@ function removePendingCreateSandbox(sandboxId: string) {
   const next = { ...pendingCreateSandboxes.value }
   delete next[sandboxId]
   pendingCreateSandboxes.value = next
+}
+
+function setPendingDestroySandbox(
+  sandboxId: string,
+  pending: { attempts: number; refreshFailures: number }
+) {
+  pendingDestroySandboxes.value = {
+    ...pendingDestroySandboxes.value,
+    [sandboxId]: pending
+  }
+}
+
+function removePendingDestroySandbox(sandboxId: string) {
+  const next = { ...pendingDestroySandboxes.value }
+  delete next[sandboxId]
+  pendingDestroySandboxes.value = next
 }
 
 function formatTime(value?: number | null) {
@@ -673,6 +699,31 @@ function stopCreatePolling() {
   pendingCreateSandboxes.value = {}
 }
 
+function clearDestroyPollingTimer(sandboxId: string) {
+  const timer = destroyPollingTimers.value[sandboxId]
+  if (timer) {
+    clearTimeout(timer)
+    const next = { ...destroyPollingTimers.value }
+    delete next[sandboxId]
+    destroyPollingTimers.value = next
+  }
+}
+
+function stopDestroyPolling() {
+  for (const timer of Object.values(destroyPollingTimers.value)) {
+    clearTimeout(timer)
+  }
+  destroyPollingTimers.value = {}
+  destroyGeneration.value++
+  pendingDestroySandboxes.value = {}
+}
+
+function finishDestroyPolling(sandboxId: string) {
+  clearDestroyPollingTimer(sandboxId)
+  removePendingDestroySandbox(sandboxId)
+  removeSandboxRecord(sandboxId)
+}
+
 function finishCreatePolling(sandboxId: string, record?: SandboxRecord) {
   clearCreatePollingTimer(sandboxId)
   removePendingCreateSandbox(sandboxId)
@@ -779,6 +830,75 @@ function startCreatePolling(sandboxId: string, placeholder: SandboxRecord) {
   createPollingTimers.value = {
     ...createPollingTimers.value,
     [sandboxId]: setTimeout(() => void poll(sandboxId), CREATE_POLL_INTERVAL_MS)
+  }
+}
+
+function startDestroyPolling(sandboxId: string) {
+  setPendingDestroySandbox(sandboxId, {
+    attempts: 0,
+    refreshFailures: 0
+  })
+  const currentGen = destroyGeneration.value
+
+  const poll = async (trackedSandboxId: string) => {
+    if (currentGen !== destroyGeneration.value) return
+
+    const pending = pendingDestroySandboxes.value[trackedSandboxId]
+    if (!pending) return
+
+    setPendingDestroySandbox(trackedSandboxId, {
+      ...pending,
+      attempts: pending.attempts + 1
+    })
+    const result = await loadSandboxes({ silent: true })
+
+    if (currentGen !== destroyGeneration.value) return
+
+    const latestPending = pendingDestroySandboxes.value[trackedSandboxId]
+    if (!latestPending) return
+
+    if (!result.ok) {
+      const refreshFailures = latestPending.refreshFailures + 1
+      setPendingDestroySandbox(trackedSandboxId, {
+        ...latestPending,
+        refreshFailures
+      })
+      if (refreshFailures >= DESTROY_POLL_MAX_REFRESH_FAILURES || latestPending.attempts >= DESTROY_POLL_MAX_ATTEMPTS) {
+        clearDestroyPollingTimer(trackedSandboxId)
+        removePendingDestroySandbox(trackedSandboxId)
+        toast(tm('messages.destroyRefreshUnstable'), 'warning')
+        return
+      }
+      destroyPollingTimers.value = {
+        ...destroyPollingTimers.value,
+        [trackedSandboxId]: setTimeout(() => void poll(trackedSandboxId), DESTROY_POLL_INTERVAL_MS)
+      }
+      return
+    }
+
+    const record = result.records.find((item) => item.sandbox_id === trackedSandboxId)
+    if (!record) {
+      finishDestroyPolling(trackedSandboxId)
+      return
+    }
+
+    upsertSandboxRecord(record)
+    if (latestPending.attempts >= DESTROY_POLL_MAX_ATTEMPTS) {
+      clearDestroyPollingTimer(trackedSandboxId)
+      removePendingDestroySandbox(trackedSandboxId)
+      toast(tm('messages.destroyTimedOut', { sandboxId: trackedSandboxId }), 'warning')
+      return
+    }
+
+    destroyPollingTimers.value = {
+      ...destroyPollingTimers.value,
+      [trackedSandboxId]: setTimeout(() => void poll(trackedSandboxId), DESTROY_POLL_INTERVAL_MS)
+    }
+  }
+
+  destroyPollingTimers.value = {
+    ...destroyPollingTimers.value,
+    [sandboxId]: setTimeout(() => void poll(sandboxId), DESTROY_POLL_INTERVAL_MS)
   }
 }
 
@@ -891,6 +1011,7 @@ async function confirmDestroySandbox() {
       const sandbox = res.data.data?.sandbox as SandboxRecord | undefined
       if (sandbox?.sandbox_id) {
         upsertSandboxRecord(sandbox)
+        startDestroyPolling(sandbox.sandbox_id)
       }
       destroyDialog.value = false
       destroySandboxTarget.value = null
@@ -1072,6 +1193,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopCreatePolling()
+  stopDestroyPolling()
 })
 </script>
 
