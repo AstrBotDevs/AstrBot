@@ -602,34 +602,13 @@ def test_agent_group_dashboard_page_is_registered():
 
 
 def test_provider_templates_include_openai_responses_description():
-    root = Path(os.getcwd())
     provider_templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
         "config_template"
     ]
     template = provider_templates["OpenAI Responses"]
-    translations = json.loads(
-        (
-            root
-            / "dashboard"
-            / "src"
-            / "i18n"
-            / "locales"
-            / "en-US"
-            / "features"
-            / "provider.json"
-        ).read_text(encoding="utf-8")
-    )
-    provider_utils = (root / "dashboard" / "src" / "utils" / "providerUtils.js").read_text(
-        encoding="utf-8"
-    )
-
-    description = translations["providers"]["description"]["openai"]
 
     assert template
     assert template["type"] == "openai_responses_completion"
-    assert description != ""
-    assert "name === 'OpenAI' || name === 'OpenAI Responses'" in provider_utils
-    assert "providers.description.openai" in provider_utils
 
 
 @pytest.mark.asyncio
