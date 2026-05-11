@@ -1,7 +1,9 @@
 import asyncio
 import base64
 import copy
+import hashlib
 import inspect
+
 import json
 import random
 import re
@@ -562,6 +564,78 @@ class ProviderOpenAIOfficial(Provider):
 
         payloads["messages"] = cleaned
 
+     @staticmethod
+    def _normalize_tool_call_ids(payloads: dict) -> None:
+        """Normalize oversized tool_call IDs before sending the request.
+
+        Some OpenAI-compatible relay services return tool_call IDs that far
+        exceed the 64-character limit enforced by the OpenAI API spec
+        (observed lengths of 660 / 1650+ chars in the wild). Round-tripping
+        those IDs into the next request's messages triggers HTTP 400
+        ``string_above_max_length`` from the upstream.
+
+        This method rewrites any oversized ID to a deterministic short form
+        (``call_<md5>``, 37 chars). A shared map keeps assistant
+        ``tool_calls[].id`` and its matching tool ``tool_call_id`` in sync.
+        """
+        messages = payloads.get("messages")
+        if not isinstance(messages, list):
+            return
+
+        id_map: dict[str, str] = {}
+
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            role = msg.get("role")
+
+            if role == "assistant":
+                tool_calls = msg.get("tool_calls")
+                if isinstance(tool_calls, list):
+                    for tc in tool_calls:
+                        if not isinstance(tc, dict):
+                            continue
+                        tid = tc.get("id")
+                        if tid and len(tid) > 64 and tid not in id_map:
+                            id_map[tid] = "call_" + hashlib.md5(
+                                tid.encode("utf-8")
+                            ).hexdigest()
+
+            elif role == "tool":
+                tid = msg.get("tool_call_id")
+                if tid and len(tid) > 64 and tid not in id_map:
+                    id_map[tid] = "call_" + hashlib.md5(
+                        tid.encode("utf-8")
+                    ).hexdigest()
+
+        if not id_map:
+            return
+
+        logger.warning(
+            "Normalized %d oversized tool_call ID(s) before sending request.",
+            len(id_map),
+        )
+
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            role = msg.get("role")
+
+            if role == "assistant":
+                tool_calls = msg.get("tool_calls")
+                if isinstance(tool_calls, list):
+                    for tc in tool_calls:
+                        if not isinstance(tc, dict):
+                            continue
+                        tid = tc.get("id")
+                        if tid in id_map:
+                            tc["id"] = id_map[tid]
+
+            elif role == "tool":
+                tid = msg.get("tool_call_id")
+                if tid and tid in id_map:
+                    msg["tool_call_id"] = id_map[tid]
+                    
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
@@ -592,6 +666,7 @@ class ProviderOpenAIOfficial(Provider):
         model = payloads.get("model", "").lower()
 
         self._sanitize_assistant_messages(payloads)
+        self._normalize_tool_call_ids(payloads)
 
         completion = await self.client.chat.completions.create(
             **payloads,
@@ -644,6 +719,7 @@ class ProviderOpenAIOfficial(Provider):
         self._apply_provider_specific_extra_body_overrides(extra_body)
 
         self._sanitize_assistant_messages(payloads)
+        self._normalize_tool_call_ids(payloads)
 
         stream = await self.client.chat.completions.create(
             **payloads,
@@ -903,13 +979,27 @@ class ProviderOpenAIOfficial(Provider):
                         args = tool_call.function.arguments
                     args_ls.append(args)
                     func_name_ls.append(tool_call.function.name)
-                    tool_call_ids.append(tool_call.id)
+                    
+                    raw_id = tool_call.id
+                    if raw_id and len(raw_id) > 64:
+                        safe_id = "call_" + hashlib.md5(
+                            raw_id.encode("utf-8")
+                        ).hexdigest()
+                        logger.warning(
+                            "tool_call.id exceeded 64 chars (length=%d); "
+                            "normalized to a short ID. Original prefix: %s...",
+                            len(raw_id),
+                            raw_id[:80],
+                        )
+                    else:
+                        safe_id = raw_id
+                    tool_call_ids.append(safe_id)
 
                     # gemini-2.5 / gemini-3 series extra_content handling
                     extra_content = getattr(tool_call, "extra_content", None)
                     if extra_content is not None:
-                        tool_call_extra_content_dict[tool_call.id] = extra_content
-
+                         tool_call_extra_content_dict[safe_id] = extra_content
+                        
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
