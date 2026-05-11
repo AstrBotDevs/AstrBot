@@ -582,13 +582,16 @@ def _decode_sync_payload(stdout: str) -> dict | None:
     return None
 
 
-def _update_sandbox_skills_cache(payload: dict | None) -> None:
+def _update_sandbox_skills_cache(
+    payload: dict | None,
+    provider_id: str | None = None,
+) -> None:
     if not isinstance(payload, dict):
         return
     skills = payload.get("skills", [])
     if not isinstance(skills, list):
         return
-    SkillManager().set_sandbox_skills_cache(skills)
+    SkillManager().set_sandbox_skills_cache(skills, provider_id=provider_id)
 
 
 async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
@@ -627,7 +630,10 @@ async def _scan_sandbox_skills(booter: ComputerBooter) -> dict | None:
     return payload
 
 
-async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
+async def _sync_skills_to_sandbox(
+    booter: ComputerBooter,
+    provider_id: str | None = None,
+) -> None:
     """Sync local skills to sandbox and refresh cache.
 
     Backward-compatible orchestrator: keep historical behavior while internally
@@ -667,7 +673,7 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
         # observable phases: apply (filesystem mutation) + scan (metadata read).
         await _apply_skills_to_sandbox(booter)
         payload = await _scan_sandbox_skills(booter)
-        _update_sandbox_skills_cache(payload)
+        _update_sandbox_skills_cache(payload, provider_id=provider_id)
         managed = payload.get("managed_skills", []) if isinstance(payload, dict) else []
         logger.info(
             "[Computer] Sandbox skill sync complete: managed=%d",
@@ -737,10 +743,12 @@ async def sync_skills_to_active_sandboxes() -> None:
         "[Computer] Syncing skills to %d active sandbox(es)", len(active_booters)
     )
     for sandbox_id, booter in active_booters:
+        record = sandbox_manager.registry.get_sandbox(sandbox_id) or {}
+        provider_id = str(record.get("provider") or "").strip() or None
         try:
             if not await sandbox_manager.booter_available(booter):
                 continue
-            await _sync_skills_to_sandbox(booter)
+            await _sync_skills_to_sandbox(booter, provider_id=provider_id)
         except Exception as e:
             logger.warning(
                 "Failed to sync skills to sandbox for sandbox %s: %s",

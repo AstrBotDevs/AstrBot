@@ -5,6 +5,7 @@ import io
 import zipfile
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from mcp.types import CallToolResult, ImageContent
@@ -93,6 +94,62 @@ def _setup_local_fs_tools(
     workspace = workspaces_root / normalized_umo
     workspace.mkdir(parents=True, exist_ok=True)
     return workspace
+
+
+@pytest.mark.asyncio
+async def test_sandbox_file_download_keeps_original_filename(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        fs_tools,
+        "get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    booter = SimpleNamespace(download_file=AsyncMock())
+
+    async def _fake_get_booter(_ctx, _umo):
+        return booter
+
+    monkeypatch.setattr(fs_tools, "get_booter", _fake_get_booter)
+
+    context = _make_sandbox_context()
+    result = await fs_tools.FileDownloadTool().call(
+        context,
+        remote_path="reports/sandbox_evaluation_report.md",
+        also_send_to_user=True,
+    )
+
+    assert "sandbox_evaluation_report.md" in result
+    sent_chain = context.context.event.send.await_args.args[0]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "sandbox_evaluation_report.md"
+
+
+def _make_sandbox_context(
+    *,
+    role: str = "admin",
+    umo: str = "qq:friend:user-1",
+):
+    config_holder = SimpleNamespace(
+        get_config=lambda umo=None: {
+            "provider_settings": {
+                "computer_use_require_admin": True,
+                "computer_use_runtime": "sandbox",
+            }
+        }
+    )
+    event = SimpleNamespace(
+        role=role,
+        unified_msg_origin=umo,
+        send=AsyncMock(),
+    )
+    astr_ctx = SimpleNamespace(context=config_holder, event=event)
+    return ContextWrapper(context=astr_ctx)
 
 
 def _make_large_text() -> str:

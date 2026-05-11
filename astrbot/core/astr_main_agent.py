@@ -481,7 +481,16 @@ async def _ensure_persona_and_skills(
     # Inject skills prompt
     runtime = cfg.get("computer_use_runtime", "local")
     skill_manager = SkillManager()
-    skills = skill_manager.list_skills(active_only=True, runtime=runtime)
+    current_provider = resolve_effective_sandbox_provider_id(
+        session_id,
+        _configured_sandbox_provider_id(cfg),
+        computer_client.get_current_sandbox_provider_id,
+    )
+    skills = skill_manager.list_skills(
+        active_only=True,
+        runtime=runtime,
+        provider_id=current_provider,
+    )
     skills = _filter_skills_for_current_config(skills, cfg)
 
     if skills:

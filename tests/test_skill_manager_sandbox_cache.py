@@ -61,6 +61,40 @@ def test_list_skills_merges_local_and_sandbox_cache(monkeypatch, tmp_path: Path)
     assert by_name["python-sandbox"].path == "/app/skills/python-sandbox/SKILL.md"
 
 
+def test_sandbox_cache_isolated_by_provider(monkeypatch, tmp_path: Path):
+    data_dir = tmp_path / "data"
+    temp_dir = tmp_path / "temp"
+    skills_root = tmp_path / "skills"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    skills_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+
+    mgr = SkillManager(skills_root=str(skills_root))
+    mgr.set_sandbox_skills_cache(
+        [
+            {
+                "name": "python-sandbox",
+                "description": "ship built-in",
+                "path": "/home/ship_1e53ee8e/workspace/skills/python-sandbox/SKILL.md",
+            }
+        ],
+        provider_id="shipyard",
+    )
+
+    skills = mgr.list_skills(runtime="sandbox", provider_id="cua")
+
+    assert all(skill.name != "python-sandbox" for skill in skills)
+
+
 def test_sandbox_cached_skill_respects_active_and_display_path(
     monkeypatch,
     tmp_path: Path,
@@ -154,4 +188,3 @@ def test_sandbox_and_local_path_resolution_with_show_sandbox_path_false(
     assert local_skill_path.is_relative_to(skills_root)
     assert local_skill_path == skills_root / "custom-local" / "SKILL.md"
     assert by_name["python-sandbox"].path == "/app/skills/python-sandbox/SKILL.md"
-

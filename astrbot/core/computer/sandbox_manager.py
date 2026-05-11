@@ -496,7 +496,10 @@ class SandboxManager:
             booter = self.session_booter.get(sandbox_id)
             if booter is not None and hasattr(booter, "shell"):
                 try:
-                    await self._sync_skills_to_booter(booter)
+                    await self._sync_skills_to_booter(
+                        booter,
+                        provider_id=getattr(provider, "provider_id", None),
+                    )
                 except Exception as sync_err:
                     logger.warning(
                         "[Computer] Auto skill sync failed for %s: %s",
@@ -1471,8 +1474,11 @@ class SandboxManager:
                 self.idle_state.pop(sandbox_id, None)
 
     @staticmethod
-    async def _sync_skills_to_booter(booter: ComputerBooter) -> None:
+    async def _sync_skills_to_booter(
+        booter: ComputerBooter,
+        provider_id: str | None = None,
+    ) -> None:
         """Delay-import wrapper to avoid circular imports."""
         from astrbot.core.computer.computer_client import _sync_skills_to_sandbox
 
-        await _sync_skills_to_sandbox(booter)
+        await _sync_skills_to_sandbox(booter, provider_id=provider_id)

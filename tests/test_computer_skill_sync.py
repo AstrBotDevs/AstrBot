@@ -59,7 +59,8 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(
 
     captured = {"skills": None}
 
-    def _fake_set_cache(self, skills):
+    def _fake_set_cache(self, skills, provider_id=None):
+        _ = provider_id
         captured["skills"] = skills
 
     monkeypatch.setattr(
@@ -108,7 +109,8 @@ def test_sync_skills_uses_managed_strategy_instead_of_wiping_all(
 
     captured = {"skills": None}
 
-    def _fake_set_cache(self, skills):
+    def _fake_set_cache(self, skills, provider_id=None):
+        _ = provider_id
         captured["skills"] = skills
 
     monkeypatch.setattr(
@@ -158,7 +160,8 @@ def test_sync_skills_includes_plugin_provided_skills(
 
     captured = {"skills": None}
 
-    def _fake_set_cache(self, skills):
+    def _fake_set_cache(self, skills, provider_id=None):
+        _ = provider_id
         captured["skills"] = skills
 
     monkeypatch.setattr(
