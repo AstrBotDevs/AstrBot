@@ -5,18 +5,26 @@
 
 在 `v4.12.0` 版本及之后，AstrBot 引入了 Agent 沙盒环境，以替代之前的代码执行器功能。沙盒环境给 Agent 提供了更安全、更灵活的代码执行和自动化操作能力。
 
+如果你是从旧版代码执行器，或者从之前内置的沙盒方案迁移过来，可以先记住这几件事：
+
+- 沙盒运行时已经拆成独立插件，AstrBot Core 只负责调度、复用和清理。
+- 只把 `Computer Use Runtime` 切到 `sandbox` 还不够，必须先把对应驱动插件装好。
+- 同一个会话通常会复用同一个沙盒；如果沙盒失效、被销毁，或者当前状态不可用，AstrBot 会重新创建。
+
+真正容易漏掉的，通常不是配置项，而是插件本身还没生效。先确认驱动能在 WebUI 里看到，再去调 TTL、profile 和能力开关，会省很多时间。
+
 ![](https://files.astrbot.app/docs/source/images/astrbot-agent-sandbox/image.png)
 
 ## 启用沙盒环境
 
-从当前版本开始，`Shipyard Neo`、`Shipyard`、`CUA` 等具体沙盒驱动都以**独立插件**形式提供，不再默认内置在 AstrBot Core 中。
+### 迁移时先做的 4 件事
 
-因此，启用沙盒环境时请先完成两步：
+1. 安装你要用的沙盒驱动插件。
+2. 重启 AstrBot，或者在插件管理页重新加载插件。
+3. 在 `AI 配置` -> `Agent Computer Use` 里把 `Computer Use Runtime` 设为 `sandbox`，再选择对应驱动。
+4. 创建一个最小沙盒，确认路径、截图、浏览器和文件操作都能正常工作。
 
-1. 安装对应的沙箱插件
-2. 在 AstrBot WebUI 中选择并配置对应驱动
-
-如果只在 WebUI 中把 `Computer Use Runtime` 切到 `sandbox`，但没有安装对应插件，AstrBot 就没有可用的沙盒驱动。
+从当前版本开始，`Shipyard Neo`、`Shipyard`、`CUA` 等具体沙盒驱动都以**独立插件**形式提供，不再默认内置在 AstrBot Core 中。只把 `Computer Use Runtime` 切到 `sandbox` 还不够，必须先装好对应插件，再在 WebUI 里选中它。
 
 目前可用的沙盒驱动包括：
 
@@ -497,6 +505,8 @@ docker pull soulter/shipyard-ship:latest
 - profile 还会定义一个独立的空闲超时（`idle_timeout`）
 - AstrBot 发起能力调用时，通常会刷新空闲超时，而不是直接延长 TTL
 - `keepalive` 只会延长空闲超时，不会自动启动新的 session，也不会延长 TTL
+
+换句话说，TTL 更像“这个沙盒最多能活多久”，空闲超时更像“这个沙盒多久没人用就可以收掉”。两者不是一回事，排障时最好分开看。
 
 ## 关于 `Shipyard Ship 存活时间(秒)`
 
