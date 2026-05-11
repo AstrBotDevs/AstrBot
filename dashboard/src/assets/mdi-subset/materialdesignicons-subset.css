@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 260 icons */
+/* Auto-generated MDI subset – 275 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -60,12 +60,24 @@
   content: "\F1257";
 }
 
+.mdi-application-outline::before {
+  content: "\F0614";
+}
+
+.mdi-arrow-collapse-up::before {
+  content: "\F0795";
+}
+
 .mdi-arrow-down::before {
   content: "\F0045";
 }
 
 .mdi-arrow-down-thin::before {
   content: "\F19B3";
+}
+
+.mdi-arrow-expand-down::before {
+  content: "\F0796";
 }
 
 .mdi-arrow-left::before {
@@ -144,6 +156,10 @@
   content: "\F00F3";
 }
 
+.mdi-chart-timeline-variant::before {
+  content: "\F0E93";
+}
+
 .mdi-chat::before {
   content: "\F0B79";
 }
@@ -178,6 +194,10 @@
 
 .mdi-checkbox-marked::before {
   content: "\F0132";
+}
+
+.mdi-checkbox-multiple-marked::before {
+  content: "\F0138";
 }
 
 .mdi-chevron-double-left::before {
@@ -336,6 +356,10 @@
   content: "\F01B4";
 }
 
+.mdi-delete-alert::before {
+  content: "\F10A5";
+}
+
 .mdi-delete-outline::before {
   content: "\F09E7";
 }
@@ -360,8 +384,16 @@
   content: "\F01DA";
 }
 
+.mdi-download-multiple::before {
+  content: "\F09E9";
+}
+
 .mdi-download-outline::before {
   content: "\F0B8F";
+}
+
+.mdi-drag-horizontal::before {
+  content: "\F01DC";
 }
 
 .mdi-emoticon::before {
@@ -800,6 +832,10 @@
   content: "\F040A";
 }
 
+.mdi-play-circle-outline::before {
+  content: "\F040D";
+}
+
 .mdi-plus::before {
   content: "\F0415";
 }
@@ -818,6 +854,10 @@
 
 .mdi-puzzle-outline::before {
   content: "\F0A66";
+}
+
+.mdi-puzzle-plus-outline::before {
+  content: "\F14D6";
 }
 
 .mdi-qrcode::before {
@@ -884,6 +924,10 @@
   content: "\F0832";
 }
 
+.mdi-shield::before {
+  content: "\F0498";
+}
+
 .mdi-shield-check::before {
   content: "\F0565";
 }
@@ -942,6 +986,10 @@
 
 .mdi-stop-circle::before {
   content: "\F0666";
+}
+
+.mdi-stop-circle-outline::before {
+  content: "\F0667";
 }
 
 .mdi-store::before {
@@ -1026,6 +1074,18 @@
 
 .mdi-view-dashboard::before {
   content: "\F056E";
+}
+
+.mdi-view-dashboard-outline::before {
+  content: "\F0A1D";
+}
+
+.mdi-view-grid::before {
+  content: "\F0570";
+}
+
+.mdi-view-list::before {
+  content: "\F0572";
 }
 
 .mdi-volume-high::before {
