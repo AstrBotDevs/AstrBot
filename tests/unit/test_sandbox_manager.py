@@ -669,6 +669,46 @@ async def test_manager_creates_new_sandbox_when_current_binding_is_busy(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_get_or_create_booter_does_not_reuse_stopping_current_sandbox(tmp_path):
+    manager, provider = _manager(tmp_path)
+    first = await manager.create_sandbox(None, "session-a", "generic", "Stopping")
+    first_id = first["sandbox_id"]
+    first_booter = manager.session_booter[first_id]
+    manager.registry.update_sandbox_status(first_id, "stopping")
+
+    next_booter = await manager.get_or_create_booter(None, "session-a", "generic")
+
+    assert next_booter is not first_booter
+    assert manager.get_current_sandbox("session-a")["current_sandbox_id"] != first_id
+    assert len(provider.created) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_booter_revives_persistent_unknown_default(tmp_path):
+    manager, provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-persistent",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent", "persistent_name": "persist-1"},
+        status="unknown",
+        retention_policy="persistent",
+        is_default=True,
+    )
+    manager.registry.set_default_sandbox_id("generic-persistent")
+
+    await manager.get_or_create_booter(object(), "session-a", "generic")
+
+    assert len(provider.created) == 1
+    assert provider.created[0][3]["resume"] is True
+    assert provider.created[0][3]["persistent_name"] == "persist-1"
+
+
+@pytest.mark.asyncio
 async def test_manager_booter_available_accepts_sync_callable_and_property(tmp_path):
     manager, _provider = _manager(tmp_path)
 
@@ -696,6 +736,7 @@ async def test_manager_switches_releases_takes_over_and_destroys(tmp_path):
 
     taken = await manager.takeover_sandbox("session-b", created["sandbox_id"])
     assert taken["controller_session_id"] == "session-b"
+    assert manager.get_current_sandbox("session-a")["current_sandbox_id"] is None
 
     destroyed = await manager.destroy_sandbox("session-b", created["sandbox_id"])
     assert destroyed["sandbox_id"] == created["sandbox_id"]
@@ -1242,7 +1283,7 @@ async def test_manager_restore_persistent_sandboxes_times_out_and_deletes_record
     assert manager.registry.get_sandbox("generic-1") is None
 
 
-def test_manager_reconcile_on_startup_drops_temporary_records(tmp_path):
+def test_manager_reconcile_on_startup_marks_temporary_records_error(tmp_path):
     manager, _provider = _manager(tmp_path)
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
@@ -1260,7 +1301,9 @@ def test_manager_reconcile_on_startup_drops_temporary_records(tmp_path):
     manager.registry.save()
     manager.registry.reconcile_startup()
 
-    assert manager.registry.get_sandbox("generic-1") is None
+    record = manager.registry.get_sandbox("generic-1")
+    assert record is not None
+    assert record["status"] == "error"
 
 
 @pytest.mark.asyncio

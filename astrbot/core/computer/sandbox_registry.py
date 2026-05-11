@@ -316,15 +316,19 @@ class SandboxRegistry:
     def reconcile_startup(self) -> None:
         self._payload["session_current"] = {}
         for sandbox_id, record in list(self._payload["sandboxes"].items()):
-            if record.get("retention_policy") != "persistent":
-                self.delete_sandbox(sandbox_id)
-                continue
             record["controller_session_id"] = None
             record["controller_user_id"] = None
             record["lease_expires_at"] = None
-            if record.get("status") == SandboxStatus.RUNNING:
-                record["status"] = SandboxStatus.UNKNOWN.value
-            elif record.get("status") == SandboxStatus.CREATING:
+            if record.get("retention_policy") == "persistent":
+                if record.get("status") == SandboxStatus.RUNNING:
+                    record["status"] = SandboxStatus.UNKNOWN.value
+                elif record.get("status") == SandboxStatus.CREATING:
+                    record["status"] = SandboxStatus.ERROR.value
+            elif record.get("status") in {
+                SandboxStatus.RUNNING,
+                SandboxStatus.CREATING,
+                SandboxStatus.UNKNOWN,
+            }:
                 record["status"] = SandboxStatus.ERROR.value
         self._prune_default_references()
 

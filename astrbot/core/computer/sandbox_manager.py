@@ -258,6 +258,16 @@ class SandboxManager:
             return sandbox_id
         return None
 
+    @staticmethod
+    def _sandbox_can_be_bootstrapped(record: dict) -> bool:
+        status = record.get("status")
+        if status == SandboxStatus.RUNNING:
+            return True
+        return bool(
+            record.get("retention_policy") == "persistent"
+            and status == SandboxStatus.UNKNOWN
+        )
+
     async def get_or_create_booter(
         self, context: Context, session_id: str, provider_id: str
     ) -> ComputerBooter:
@@ -279,6 +289,23 @@ class SandboxManager:
             await self.save_registry_async()
             current_sandbox_id = None
             current_record = None
+        if current_sandbox_id and current_record:
+            status = current_record.get("status")
+            if status in {SandboxStatus.CREATING, SandboxStatus.STOPPING, SandboxStatus.ERROR}:
+                if current_record.get("controller_session_id") == session_id:
+                    self.registry.release_lease(current_sandbox_id)
+                self.registry.set_current_sandbox_id(session_id, None)
+                await self.save_registry_async()
+                current_sandbox_id = None
+                current_record = None
+            elif (
+                current_record.get("retention_policy") == "persistent"
+                and status == SandboxStatus.UNKNOWN
+                and current_sandbox_id not in self.session_booter
+            ):
+                current_record = await self._revive_persistent_booter_if_needed(
+                    current_record, current_sandbox_id, session_id, context
+                )
         if (
             current_sandbox_id
             and current_record
@@ -301,6 +328,20 @@ class SandboxManager:
 
         created_target_record = False
         target_sandbox_id = self.get_default_sandbox_id(provider_id)
+        target_record = self.registry.get_sandbox(target_sandbox_id)
+        if (
+            target_sandbox_id
+            and target_record
+            and target_record.get("provider") == provider_id
+            and target_record.get("retention_policy") == "persistent"
+            and target_record.get("status") == SandboxStatus.UNKNOWN
+        ):
+            target_record = await self._revive_persistent_booter_if_needed(
+                target_record, target_sandbox_id, session_id, context
+            )
+        elif target_record and not self._sandbox_can_be_bootstrapped(target_record):
+            target_sandbox_id = None
+
         if target_sandbox_id is None:
             target_sandbox_id = self.new_sandbox_id(provider_id)
             created_target_record = True
@@ -335,6 +376,16 @@ class SandboxManager:
 
         for _attempt in range(MAX_SANDBOX_LEASE_ATTEMPTS):
             async with self._sandbox_boot_lock(target_sandbox_id):
+                target_record = self.registry.get_sandbox(target_sandbox_id)
+                if target_record and not self._sandbox_can_be_bootstrapped(
+                    target_record
+                ):
+                    target_sandbox_id = await self._upsert_new_sandbox_record(
+                        context, session_id, provider_id, create_config
+                    )
+                    created_target_record = True
+                    continue
+
                 if target_sandbox_id in self.session_booter and not self.acquire_lease(
                     target_sandbox_id, session_id
                 ):
@@ -987,6 +1038,7 @@ class SandboxManager:
             raise RuntimeError(
                 f"Sandbox {sandbox_id} is unavailable (booter health check failed)"
             )
+        previous_controller_session_id = record.get("controller_session_id")
         updated = (
             self.registry.takeover_lease(
                 sandbox_id=sandbox_id,
@@ -999,6 +1051,14 @@ class SandboxManager:
         updated = await self._set_current_sandbox_after_lease(
             session_id, sandbox_id, updated
         )
+        if (
+            previous_controller_session_id
+            and previous_controller_session_id != session_id
+            and self.registry.get_current_sandbox_id(previous_controller_session_id)
+            == sandbox_id
+        ):
+            self.registry.set_current_sandbox_id(previous_controller_session_id, None)
+            await self.save_registry_async()
         provider = self.get_provider(record.get("provider", ""))
         await self._invoke_sandbox_created_hook(provider, sandbox_id)
         return updated
