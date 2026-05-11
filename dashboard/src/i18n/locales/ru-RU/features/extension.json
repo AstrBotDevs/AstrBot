@@ -43,6 +43,8 @@
         "viewInfo": "Детали",
         "viewDocs": "Документация",
         "viewRepo": "Репозиторий",
+        "openPages": "Pages",
+        "openPage": "Открыть",
         "close": "Закрыть",
         "save": "Сохранить",
         "saveAndClose": "Сохранить и закрыть",
@@ -102,7 +104,15 @@
         "notFound": "Плагин не найден",
         "docsTitle": "Документация",
         "docsEmpty": "Документация отсутствует",
+        "changelogTitle": "Журнал изменений",
+        "changelogEmpty": "Журнал изменений отсутствует",
         "handlerGroups": {
+            "page": "Pages",
+            "skill": "Skills",
+            "command": "Команды / группы команд",
+            "llm_tool": "LLM-инструменты",
+            "listener": "Слушатели событий",
+            "hook": "Хуки",
             "commands": "Команды / группы команд",
             "hooks": "Хуки",
             "functionTools": "Функциональные инструменты",
@@ -203,6 +213,12 @@
             "sectionTitle": "Установка",
             "downloadSource": "Пакет плагина будет установлен из:",
             "githubSecurityWarning": "AstrBot не может гарантировать безопасность плагинов, загруженных с GitHub. Устанавливайте только если доверяете источнику плагина."
+        },
+        "update": {
+            "title": "Обновление плагина",
+            "sectionTitle": "Обновление",
+            "downloadSource": "Пакет обновления будет установлен из:",
+            "confirm": "Подтвердить обновление"
         },
         "danger_warning": {
             "title": "Внимание!",
@@ -355,8 +371,10 @@
         "sourceLocalOnly": "Локальный навык",
         "sourceSandboxOnly": "Предустановленный Sandbox навык",
         "sourceBoth": "Локальный + Sandbox",
+        "sourcePlugin": "Плагин: {plugin}",
         "sandboxDiscoveryPending": "Предустановленные Sandbox навыки не найдены. Запустите сессию Sandbox хотя бы один раз.",
         "sandboxPresetReadonly": "Предустановленные навыки Sandbox доступны только для чтения и не могут быть удалены здесь.",
+        "pluginReadonly": "Навыки из плагинов управляются плагином и не могут быть удалены или скачаны здесь.",
         "openEditor": "Просмотр/правка",
         "editorTitle": "Редактировать навык",
         "editorLoadFailed": "Не удалось открыть файл навыка",

@@ -1,9 +1,51 @@
 # astrbot/core/utils/t2i/template_manager.py
 
+import logging
 import os
+import re
 import shutil
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_path
+
+logger = logging.getLogger("astrbot")
+
+_ALLOWED_VARS = frozenset({"text", "version", "shiki_runtime"})
+
+_SSTI_BLACKLIST: list[tuple[str, re.Pattern]] = [
+    (
+        "dunder_chain",
+        re.compile(
+            r"__\s*(class|globals|init|mro|base|bases|subclasses|reduce|getitem|builtins|import|self|func|code|reduce_ex)__"
+        ),
+    ),
+    (
+        "dangerous_builtins",
+        re.compile(
+            r"\b(import\s+(?!url)|os\.\w+|subprocess\.|\.popen\(|eval\(|exec\()"
+        ),
+    ),
+    ("flask_context", re.compile(r"\{\{.*?\b(config|request|session|g)\b.*?\}\}")),
+]
+
+_VAR_RE = re.compile(r"\{\{\s*(\w+)\s*(\|[^}]*)?\}\}")
+
+
+def validate_template_content(content: str, *, strict: bool = False) -> None:
+    for label, pattern in _SSTI_BLACKLIST:
+        if pattern.search(content):
+            logger.warning(f"SSTI validation blocked template: matched rule [{label}]")
+            raise ValueError(f"Template contains forbidden pattern ({label}).")
+    if strict:
+        for m in _VAR_RE.finditer(content):
+            var = m.group(1)
+            if var not in _ALLOWED_VARS:
+                logger.warning(
+                    f"SSTI validation blocked template: unauthorized variable '{var}'"
+                )
+                raise ValueError(
+                    f"Unauthorized Jinja2 variable '{var}'; "
+                    f"allowed: {', '.join(sorted(_ALLOWED_VARS))}."
+                )
 
 
 class TemplateManager:
@@ -86,6 +128,7 @@ class TemplateManager:
 
     def create_template(self, name: str, content: str) -> None:
         """在用户目录中创建一个新的模板文件。"""
+        validate_template_content(content, strict=True)
         path = self._get_user_template_path(name)
         if os.path.exists(path):
             raise FileExistsError("同名模板已存在。")
@@ -97,6 +140,7 @@ class TemplateManager:
         如果更新的是一个内置模板，此操作实际上会在用户目录中创建一个修改后的副本，
         从而实现对内置模板的“覆盖”。
         """
+        validate_template_content(content, strict=True)
         path = self._get_user_template_path(name)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)

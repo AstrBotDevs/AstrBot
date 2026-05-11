@@ -43,6 +43,8 @@
     "viewInfo": "Handlers",
     "viewDocs": "Documentation",
     "viewRepo": "Repository",
+    "openPages": "Pages",
+    "openPage": "Open",
     "close": "Close",
     "save": "Save",
     "saveAndClose": "Save and Close",
@@ -61,10 +63,10 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "system": "System",
-        "loading": "Loading...",
-        "installed": "Installed",
-        "unknown": "Unknown",
-        "incompatible": "Incompatible"
+    "loading": "Loading...",
+    "installed": "Installed",
+    "unknown": "Unknown",
+    "incompatible": "Incompatible"
   },
   "tooltips": {
     "enable": "Click to Enable",
@@ -102,7 +104,15 @@
     "notFound": "Plugin not found",
     "docsTitle": "Documentation",
     "docsEmpty": "No documentation",
+    "changelogTitle": "Changelog",
+    "changelogEmpty": "No changelog",
     "handlerGroups": {
+      "page": "Pages",
+      "skill": "Skills",
+      "command": "Commands / Command Groups",
+      "llm_tool": "LLM Tools",
+      "listener": "Event Listeners",
+      "hook": "Hooks",
       "commands": "Commands / Command Groups",
       "hooks": "Hooks",
       "functionTools": "Function Tools",
@@ -114,10 +124,10 @@
       "author": "Author",
       "category": "Category",
       "stars": "Stars",
-            "tags": "Tags",
-            "astrbotVersion": "AstrBot Version Requirement",
-            "supportPlatforms": "Supported Platforms",
-            "authorWebsite": "Author Website",
+      "tags": "Tags",
+      "astrbotVersion": "AstrBot Version Requirement",
+      "supportPlatforms": "Supported Platforms",
+      "authorWebsite": "Author Website",
       "repository": "Repository"
     }
   },
@@ -205,6 +215,12 @@
       "downloadSource": "The plugin package will be installed from:",
       "githubSecurityWarning": "AstrBot cannot guarantee the safety of plugins downloaded from GitHub. Install only if you trust the plugin source."
     },
+    "update": {
+      "title": "Update Extension",
+      "sectionTitle": "Update",
+      "downloadSource": "The update package will be installed from:",
+      "confirm": "Confirm Update"
+    },
     "danger_warning": {
       "title": "Dangerous Plugin Warning",
       "message": "This plugin has been flagged as containing security risks, including unsafe code or functionalities that may cause system malfunctions or data loss. Do you wish to proceed with the installation?",
@@ -254,7 +270,11 @@
     "noUpdatesAvailable": "No extensions have updates available",
     "fillSourceNameAndUrl": "Please fill in the complete source name and URL",
     "invalidUrl": "Please enter a valid URL",
-    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data"
+    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
+    "pluginNotFound": "Plugin not found",
+    "pluginDisabled": "This plugin is disabled. Enable it before opening its page.",
+    "pluginPageNotFound": "Plugin page not found",
+    "pluginPageLoadFailed": "Failed to load the plugin page"
   },
   "upload": {
     "fromFile": "Install from File",
@@ -356,8 +376,10 @@
     "sourceLocalOnly": "Local Skill",
     "sourceSandboxOnly": "Sandbox Preset Skill",
     "sourceBoth": "Local + Sandbox",
+    "sourcePlugin": "Plugin: {plugin}",
     "sandboxDiscoveryPending": "Sandbox preset skills have not been discovered yet. Start at least one sandbox session to populate this list.",
     "sandboxPresetReadonly": "Sandbox preset skills are read-only here. You cannot delete or enable/disable them from Local Skills.",
+    "pluginReadonly": "Plugin-provided skills are managed by their plugin. They cannot be deleted or downloaded from Local Skills.",
     "openEditor": "View/Edit",
     "editorTitle": "Edit Skill",
     "editorLoadFailed": "Failed to load Skill file",

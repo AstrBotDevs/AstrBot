@@ -5,7 +5,7 @@ import os
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.23.6"
+VERSION = "4.24.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -111,6 +111,7 @@ DEFAULT_CONFIG = {
         "websearch_bocha_key": [],
         "websearch_brave_key": [],
         "websearch_baidu_app_builder_key": "",
+        "websearch_firecrawl_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -177,7 +178,7 @@ DEFAULT_CONFIG = {
             "shipyard_neo_ttl": 3600,
             "cua_image": CUA_DEFAULT_CONFIG["image"],
             "cua_os_type": CUA_DEFAULT_CONFIG["os_type"],
-            "cua_ttl": CUA_DEFAULT_CONFIG["ttl"],
+            "cua_idle_timeout": CUA_DEFAULT_CONFIG["idle_timeout"],
             "cua_telemetry_enabled": CUA_DEFAULT_CONFIG["telemetry_enabled"],
             "cua_local": CUA_DEFAULT_CONFIG["local"],
             "cua_api_key": CUA_DEFAULT_CONFIG["api_key"],
@@ -290,6 +291,7 @@ DEFAULT_CONFIG = {
     "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
     "kb_agentic_mode": False,
     "disable_builtin_commands": False,
+    "disable_metrics": False,
 }
 
 
@@ -2923,6 +2925,11 @@ CONFIG_METADATA_2 = {
             "callback_api_base": {
                 "type": "string",
             },
+            "disable_metrics": {
+                "description": "禁用匿名使用统计",
+                "type": "bool",
+                "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。",
+            },
             "log_level": {
                 "type": "string",
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
@@ -3242,6 +3249,7 @@ CONFIG_METADATA_3 = {
                         "hint": "参考：https://console.bce.baidu.com/iam/#/iam/apikey/list",
                         "condition": {
                             "provider_settings.websearch_provider": "baidu_ai_search",
+                            "provider_settings.web_search": True,
                         },
                     },
                     "provider_settings.web_search_link": {
@@ -3339,10 +3347,10 @@ CONFIG_METADATA_3 = {
                             "provider_settings.sandbox.booter": "cua",
                         },
                     },
-                    "provider_settings.sandbox.cua_ttl": {
-                        "description": "CUA Sandbox TTL",
+                    "provider_settings.sandbox.cua_idle_timeout": {
+                        "description": "CUA Idle Timeout",
                         "type": "int",
-                        "hint": "CUA 沙箱生存时间（秒）。当前作为会话配置保存，具体生效取决于 CUA SDK。",
+                        "hint": "Idle timeout for CUA sandbox sessions in seconds. When greater than 0, AstrBot proactively shuts down an idle CUA sandbox after that amount of inactivity; 0 disables it.",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "cua",

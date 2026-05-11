@@ -519,6 +519,9 @@ class PluginManager:
                     if isinstance(metadata.get("astrbot_version"), str)
                     else None
                 ),
+                pages=metadata["pages"]
+                if isinstance(metadata.get("pages"), list)
+                else [],
                 i18n=PluginManager._load_plugin_i18n(plugin_path),
             )
 
@@ -989,6 +992,7 @@ class PluginManager:
                             metadata.display_name = metadata_yaml.display_name
                             metadata.support_platforms = metadata_yaml.support_platforms
                             metadata.astrbot_version = metadata_yaml.astrbot_version
+                            metadata.pages = metadata_yaml.pages
                             metadata.i18n = metadata_yaml.i18n
                     except Exception as e:
                         logger.warning(
@@ -1376,7 +1380,7 @@ class PluginManager:
                 如果找不到插件元数据则返回 None。
 
         """
-        # this metric is for displaying plugins installation count in webui
+        # this metric is for displaying plugins installation count in pages
         asyncio.create_task(
             Metric.upload(
                 et="install_star",
@@ -1653,7 +1657,9 @@ class PluginManager:
             is_reserved=plugin.reserved,
         )
 
-    async def update_plugin(self, plugin_name: str, proxy="") -> None:
+    async def update_plugin(
+        self, plugin_name: str, proxy="", download_url: str = ""
+    ) -> None:
         """升级一个插件"""
         plugin = self.context.get_registered_star(plugin_name)
         if not plugin:
@@ -1661,7 +1667,7 @@ class PluginManager:
         if plugin.reserved:
             raise Exception("该插件是 AstrBot 保留插件，无法更新。")
 
-        await self.updator.update(plugin, proxy=proxy)
+        await self.updator.update(plugin, proxy=proxy, download_url=download_url)
         if plugin.root_dir_name:
             plugin_dir_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
             await self._ensure_plugin_requirements(

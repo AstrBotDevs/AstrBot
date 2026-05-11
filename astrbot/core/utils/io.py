@@ -31,10 +31,34 @@ def on_error(func, path, exc_info) -> None:
 
 
 def remove_dir(file_path: str) -> bool:
-    if not os.path.exists(file_path):
+    if not os.path.lexists(file_path):
         return True
-    shutil.rmtree(file_path, onerror=on_error)
+    if os.path.isfile(file_path) or os.path.islink(file_path):
+        os.remove(file_path)
+    else:
+        shutil.rmtree(file_path, onerror=on_error)
     return True
+
+
+def ensure_dir(dir_path: str | Path) -> None:
+    """确保目录存在。如果路径处存在非目录的文件或损坏的符号链接，则先将其删除。"""
+    p = Path(dir_path)
+    if (p.exists() or p.is_symlink()) and not p.is_dir():
+        logger.warning(f"路径 {p} 已存在但不是目录，正在清理以创建目录。")
+        try:
+            if p.is_dir():
+                shutil.rmtree(p, onerror=on_error)
+            else:
+                p.unlink()
+        except Exception as e:
+            logger.error(f"清理冲突路径 {p} 失败: {e!s}")
+            raise RuntimeError(f"无法清理冲突路径 {p}：{e!s}") from e
+
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logger.error(f"创建目录 {p} 失败: {e!s}")
+        raise RuntimeError(f"无法创建目录 {p}：{e!s}") from e
 
 
 def port_checker(port: int, host: str = "localhost") -> bool:
@@ -265,9 +289,23 @@ async def download_dashboard(
             )
         except BaseException as _:
             if latest:
-                dashboard_release_url = "https://github.com/AstrBotDevs/AstrBot/releases/latest/download/dist.zip"
+                # Resolve latest release tag from GitHub API to construct correct asset URL
+                ssl_context = ssl.create_default_context(cafile=certifi.where())
+                async with aiohttp.ClientSession(
+                    connector=aiohttp.TCPConnector(ssl=ssl_context),
+                    trust_env=True,
+                ) as session:
+                    async with session.get(
+                        "https://api.github.com/repos/AstrBotDevs/AstrBot/releases/latest",
+                        timeout=30,
+                        headers={"Accept": "application/vnd.github+json"},
+                    ) as api_resp:
+                        api_resp.raise_for_status()
+                        release_data = await api_resp.json()
+                        tag = release_data["tag_name"]
             else:
-                dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{version}/dist.zip"
+                tag = version
+            dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{tag}/AstrBot-{tag}-dashboard.zip"
             if proxy:
                 dashboard_release_url = f"{proxy}/{dashboard_release_url}"
             await download_file(

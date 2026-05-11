@@ -27,6 +27,11 @@ const MainRoutes = {
       component: () => import('@/views/ExtensionPage.vue')
     },
     {
+      name: 'PluginPage',
+      path: '/plugin-page/:pluginName/:pageName',
+      component: () => import('@/views/PluginPagePage.vue')
+    },
+    {
       name: EXTENSION_DETAILS_ROUTE_NAME,
       path: '/extension/:pluginId',
       component: () => import('@/views/ExtensionPage.vue')
