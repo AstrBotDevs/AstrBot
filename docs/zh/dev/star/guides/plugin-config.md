@@ -15,7 +15,7 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
 {
   "token": {
     "description": "Bot Token",
-    "type": "string",
+    "type": "string"
   },
   "sub_config": {
     "description": "测试嵌套配置",
@@ -55,6 +55,10 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
 - `editor_language`: 可选。代码编辑器的代码语言，默认为 `json`。
 - `editor_theme`: 可选。代码编辑器的主题，可选值有 `vs-light`（默认）， `vs-dark`。
 - `_special`: 可选。用于调用 AstrBot 提供的可视化提供商选取、人格选取、知识库选取等功能，详见下文。
+
+### 配置项国际化（可选）
+
+配置项的 `description`、`hint` 和下拉选项 `labels` 支持按 WebUI 语言显示，详见[插件国际化](./plugin-i18n)。
 
 其中，如果启用了代码编辑器，效果如下图所示:
 

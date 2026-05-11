@@ -1,13 +1,12 @@
 import { defineStore } from 'pinia';
 import config from '@/config';
 
-export const useCustomizerStore = defineStore({
-  id: 'customizer',
+export const useCustomizerStore = defineStore("customizer", {
   state: () => ({
     Sidebar_drawer: config.Sidebar_drawer,
     Customizer_drawer: config.Customizer_drawer,
     mini_sidebar: config.mini_sidebar,
-    fontTheme: "Poppins",
+    fontTheme: "Noto Sans SC",
     uiTheme: config.uiTheme,
     inputBg: config.inputBg,
     chatSidebarOpen: false // chat mode mobile sidebar state

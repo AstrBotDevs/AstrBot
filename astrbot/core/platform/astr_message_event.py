@@ -53,6 +53,8 @@ class AstrMessageEvent(abc.ABC):
         self.is_at_or_wake_command = False
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras: dict[str, Any] = {}
+        self._force_stopped: bool = False
+        """独立的停止标志，不依赖 _result，不会被 clear_result() 重置"""
         message_type = getattr(message_obj, "type", None)
         if not isinstance(message_type, MessageType):
             try:
@@ -336,6 +338,7 @@ class AstrMessageEvent(abc.ABC):
 
     def stop_event(self) -> None:
         """终止事件传播。"""
+        self._force_stopped = True
         if self._result is None:
             self.set_result(MessageEventResult().stop_event())
         else:
@@ -343,6 +346,7 @@ class AstrMessageEvent(abc.ABC):
 
     def continue_event(self) -> None:
         """继续事件传播。"""
+        self._force_stopped = False
         if self._result is None:
             self.set_result(MessageEventResult().continue_event())
         else:
@@ -350,6 +354,8 @@ class AstrMessageEvent(abc.ABC):
 
     def is_stopped(self) -> bool:
         """是否终止事件传播。"""
+        if self._force_stopped:
+            return True
         if self._result is None:
             return False  # 默认是继续传播
         return self._result.is_stopped()
@@ -414,6 +420,7 @@ class AstrMessageEvent(abc.ABC):
         tool_set: ToolSet | None = None,
         session_id: str = "",
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         contexts: list | None = None,
         system_prompt: str = "",
         conversation: Conversation | None = None,
@@ -432,6 +439,8 @@ class AstrMessageEvent(abc.ABC):
 
         image_urls: 可以是 base64:// 或者 http:// 开头的图片链接，也可以是本地图片路径。
 
+        audio_urls: 音频 URL 列表，也支持本地路径。
+
         contexts: 当指定 contexts 时，将会使用 contexts 作为上下文。如果同时传入了 conversation，将会忽略 conversation。
 
         func_tool_manager: [Deprecated] 函数工具管理器，用于调用函数工具。用 self.context.get_llm_tool_manager() 获取。已过时，请使用 tool_set 参数代替。
@@ -441,6 +450,8 @@ class AstrMessageEvent(abc.ABC):
         """
         if image_urls is None:
             image_urls = []
+        if audio_urls is None:
+            audio_urls = []
         if contexts is None:
             contexts = []
         if len(contexts) > 0 and conversation:
@@ -450,6 +461,7 @@ class AstrMessageEvent(abc.ABC):
             prompt=prompt,
             session_id=session_id,
             image_urls=image_urls,
+            audio_urls=audio_urls,
             # func_tool=func_tool_manager,
             func_tool=tool_set,
             contexts=contexts,

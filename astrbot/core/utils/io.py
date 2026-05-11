@@ -31,10 +31,34 @@ def on_error(func, path, exc_info) -> None:
 
 
 def remove_dir(file_path: str) -> bool:
-    if not os.path.exists(file_path):
+    if not os.path.lexists(file_path):
         return True
-    shutil.rmtree(file_path, onerror=on_error)
+    if os.path.isfile(file_path) or os.path.islink(file_path):
+        os.remove(file_path)
+    else:
+        shutil.rmtree(file_path, onerror=on_error)
     return True
+
+
+def ensure_dir(dir_path: str | Path) -> None:
+    """确保目录存在。如果路径处存在非目录的文件或损坏的符号链接，则先将其删除。"""
+    p = Path(dir_path)
+    if (p.exists() or p.is_symlink()) and not p.is_dir():
+        logger.warning(f"路径 {p} 已存在但不是目录，正在清理以创建目录。")
+        try:
+            if p.is_dir():
+                shutil.rmtree(p, onerror=on_error)
+            else:
+                p.unlink()
+        except Exception as e:
+            logger.error(f"清理冲突路径 {p} 失败: {e!s}")
+            raise RuntimeError(f"无法清理冲突路径 {p}：{e!s}") from e
+
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logger.error(f"创建目录 {p} 失败: {e!s}")
+        raise RuntimeError(f"无法创建目录 {p}：{e!s}") from e
 
 
 def port_checker(port: int, host: str = "localhost") -> bool:
@@ -136,12 +160,14 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
         ) as session:
             async with session.get(url, timeout=1800) as resp:
                 if resp.status != 200:
-                    raise Exception(f"下载文件失败: {resp.status}")
+                    logger.error(
+                        f"Failed to download file from {url}. HTTP status code: {resp.status}"
+                    )
                 total_size = int(resp.headers.get("content-length", 0))
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
+                    print(f"Downloading: {url} | Size: {total_size / 1024:.2f} KB")
                 with open(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
@@ -157,13 +183,14 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                             )
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             print(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
+                                f"\rProgress: {downloaded_size / total_size:.2%} Speed: {speed:.2f} KB/s",
                                 end="",
                             )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
-            "SSL 证书验证失败，已关闭 SSL 验证（不安全，仅用于临时下载）。请检查目标服务器的证书配置。"
+            f"SSL certificate verification failed for {url}. "
+            "Falling back to unverified connection (CERT_NONE). "
         )
         logger.warning(
             f"SSL certificate verification failed for {url}. "
@@ -180,7 +207,7 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
+                    print(f"Size: {total_size / 1024:.2f} KB | URL: {url}")
                 with open(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
@@ -192,7 +219,7 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                             elapsed_time = time.time() - start_time
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             print(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
+                                f"\rProgress: {downloaded_size / total_size:.2%} Speed: {speed:.2f} KB/s",
                                 end="",
                             )
     if show_progress:
@@ -252,7 +279,7 @@ async def download_dashboard(
         ver_name = "latest" if latest else version
         dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
         logger.info(
-            f"准备下载指定发行版本的 AstrBot WebUI 文件: {dashboard_release_url}",
+            f"Downloading AstrBot WebUI from {dashboard_release_url}",
         )
         try:
             await download_file(
@@ -262,9 +289,23 @@ async def download_dashboard(
             )
         except BaseException as _:
             if latest:
-                dashboard_release_url = "https://github.com/AstrBotDevs/AstrBot/releases/latest/download/dist.zip"
+                # Resolve latest release tag from GitHub API to construct correct asset URL
+                ssl_context = ssl.create_default_context(cafile=certifi.where())
+                async with aiohttp.ClientSession(
+                    connector=aiohttp.TCPConnector(ssl=ssl_context),
+                    trust_env=True,
+                ) as session:
+                    async with session.get(
+                        "https://api.github.com/repos/AstrBotDevs/AstrBot/releases/latest",
+                        timeout=30,
+                        headers={"Accept": "application/vnd.github+json"},
+                    ) as api_resp:
+                        api_resp.raise_for_status()
+                        release_data = await api_resp.json()
+                        tag = release_data["tag_name"]
             else:
-                dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{version}/dist.zip"
+                tag = version
+            dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{tag}/AstrBot-{tag}-dashboard.zip"
             if proxy:
                 dashboard_release_url = f"{proxy}/{dashboard_release_url}"
             await download_file(
@@ -274,7 +315,7 @@ async def download_dashboard(
             )
     else:
         url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
-        logger.info(f"准备下载指定版本的 AstrBot WebUI: {url}")
+        logger.info(f"Downloading AstrBot WebUI from {url}")
         if proxy:
             url = f"{proxy}/{url}"
         await download_file(url, str(zip_path), show_progress=True)

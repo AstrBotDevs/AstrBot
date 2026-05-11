@@ -51,7 +51,7 @@ def check_env() -> None:
 
     site_packages_path = get_astrbot_site_packages_path()
     if site_packages_path not in sys.path:
-        sys.path.insert(0, site_packages_path)
+        sys.path.append(site_packages_path)
 
     os.makedirs(get_astrbot_config_path(), exist_ok=True)
     os.makedirs(get_astrbot_plugin_path(), exist_ok=True)
@@ -70,9 +70,9 @@ async def check_dashboard_files(webui_dir: str | None = None):
     # 指定webui目录
     if webui_dir:
         if os.path.exists(webui_dir):
-            logger.info(f"使用指定的 WebUI 目录: {webui_dir}")
+            logger.info("Using WebUI directory: %s", webui_dir)
             return webui_dir
-        logger.warning(f"指定的 WebUI 目录 {webui_dir} 不存在，将使用默认逻辑。")
+        logger.warning("WebUI directory not found: %s. Using default.", webui_dir)
 
     data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
     if os.path.exists(data_dist_path):
@@ -80,15 +80,17 @@ async def check_dashboard_files(webui_dir: str | None = None):
         if v is not None:
             # 存在文件
             if v == f"v{VERSION}":
-                logger.info("WebUI 版本已是最新。")
+                logger.info("WebUI is up to date.")
             else:
                 logger.warning(
-                    f"检测到 WebUI 版本 ({v}) 与当前 AstrBot 版本 (v{VERSION}) 不符。",
+                    "WebUI version mismatch: %s, expected v%s.",
+                    v,
+                    VERSION,
                 )
         return data_dist_path
 
     logger.info(
-        "开始下载管理面板文件...高峰期（晚上）可能导致较慢的速度。如多次下载失败，请前往 https://github.com/AstrBotDevs/AstrBot/releases/latest 下载 dist.zip，并将其中的 dist 文件夹解压至 data 目录下。",
+        "Downloading WebUI. If it fails, download dist.zip from https://github.com/AstrBotDevs/AstrBot/releases/latest and extract dist to data/.",
     )
 
     try:
@@ -126,7 +128,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--webui-dir",
         type=str,
-        help="指定 WebUI 静态文件目录路径",
+        help="Specify the directory path for WebUI static files",
         default=None,
     )
     args = parser.parse_args()
