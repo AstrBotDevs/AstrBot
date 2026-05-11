@@ -452,6 +452,30 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
+        for task in getattr(self, "curr_tasks", []):
+            task.cancel()
+
+        if self.cron_manager:
+            await self.cron_manager.shutdown()
+
+        persistent_restore_task = getattr(self, "_persistent_restore_task", None)
+        if persistent_restore_task is not None:
+            persistent_restore_task.cancel()
+            try:
+                await persistent_restore_task
+            except asyncio.CancelledError:
+                pass
+            self._persistent_restore_task = None
+
+        try:
+            await computer_client.cleanup_managed_sandboxes()
+        except Exception as e:
+            logger.warning(
+                "Managed sandbox cleanup during restart failed: %s",
+                e,
+                exc_info=True,
+            )
+
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()

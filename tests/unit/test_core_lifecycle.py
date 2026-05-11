@@ -1000,15 +1000,55 @@ class TestAstrBotCoreLifecycleRestart:
 
         lifecycle.astrbot_updator = MagicMock()
 
-        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
+        with (
+            patch(
+                "astrbot.core.core_lifecycle.computer_client.cleanup_managed_sandboxes",
+                new_callable=AsyncMock,
+            ) as mock_cleanup,
+            patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread,
+        ):
             await lifecycle.restart()
 
             # Verify managers were terminated
             lifecycle.provider_manager.terminate.assert_awaited_once()
             lifecycle.platform_manager.terminate.assert_awaited_once()
             lifecycle.kb_manager.terminate.assert_awaited_once()
+            mock_cleanup.assert_awaited_once()
 
             # Verify thread was started
+            mock_thread.assert_called_once()
+            mock_thread.return_value.start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_restart_cleans_managed_sandboxes_before_reboot(
+        self, mock_log_broker, mock_db
+    ):
+        """Test that restart cleans managed sandboxes before rebooting."""
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock()
+
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+
+        with (
+            patch(
+                "astrbot.core.core_lifecycle.computer_client.cleanup_managed_sandboxes",
+                new_callable=AsyncMock,
+            ) as mock_cleanup,
+            patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread,
+        ):
+            lifecycle.astrbot_updator = MagicMock()
+
+            await lifecycle.restart()
+
+            mock_cleanup.assert_awaited_once()
             mock_thread.assert_called_once()
             mock_thread.return_value.start.assert_called_once()
 
