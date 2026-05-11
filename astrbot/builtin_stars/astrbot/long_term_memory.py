@@ -28,6 +28,7 @@ CHATROOM_SYSTEM_NOTE = (
 MAX_MSGS_PER_USER_SEGMENT = 50
 MAX_CHARS_PER_USER_SEGMENT = 3000
 MAX_RAW_BYTES = 500_000  # 500KB / 群
+DEFAULT_HISTORY_TOOL_RESULT_MAX_CHARS = 8192
 
 TOOL_CALL_PREFIX = "<T:CALL>"
 TOOL_RES_PREFIX = "<T:RES"
@@ -50,20 +51,30 @@ class LongTermMemory:
         self.contexts: dict[str, list[dict]] = defaultdict(list)
         """累积累积态 LLM 上下文。由 ContextManager 修改后保留。"""
 
+        self._persisted_tool_call_ids: dict[str, set[str]] = defaultdict(set)
+        """已持久化到 raw_records 的 <T:CALL> 的 tool_call_id。用于防重复注入。"""
+        self._persisted_tool_result_ids: dict[str, set[str]] = defaultdict(set)
+        """已持久化到 raw_records 的 <T:RES> 的 tool_call_id。用于防重复注入。"""
+
     # =========================================================================
     # 配置
     # =========================================================================
 
     def cfg(self, event: AstrMessageEvent):
         cfg = self.context.get_config(umo=event.unified_msg_origin)
+        ltm_cfg = cfg["provider_ltm_settings"]
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
-        image_caption_provider_id = cfg["provider_ltm_settings"].get(
-            "image_caption_provider_id"
+        image_caption_provider_id = ltm_cfg.get("image_caption_provider_id")
+        image_caption = ltm_cfg["image_caption"] and bool(image_caption_provider_id)
+        history_tool_result_truncate = ltm_cfg.get("history_tool_result_truncate", True)
+        history_tool_result_max_chars = int(
+            ltm_cfg.get(
+                "history_tool_result_max_chars",
+                DEFAULT_HISTORY_TOOL_RESULT_MAX_CHARS,
+            )
+            or DEFAULT_HISTORY_TOOL_RESULT_MAX_CHARS
         )
-        image_caption = cfg["provider_ltm_settings"]["image_caption"] and bool(
-            image_caption_provider_id
-        )
-        active_reply = cfg["provider_ltm_settings"]["active_reply"]
+        active_reply = ltm_cfg["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
         ar_method = active_reply["method"]
         ar_possibility = active_reply["possibility_reply"]
@@ -73,6 +84,8 @@ class LongTermMemory:
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
             "image_caption_provider_id": image_caption_provider_id,
+            "history_tool_result_truncate": history_tool_result_truncate,
+            "history_tool_result_max_chars": max(1, history_tool_result_max_chars),
             "enable_active_reply": enable_active_reply,
             "ar_method": ar_method,
             "ar_possibility": ar_possibility,
@@ -142,6 +155,8 @@ class LongTermMemory:
         self.raw_records.pop(umo, None)
         self.contexts.pop(umo, None)
         self._raw_cursor.pop(umo, None)
+        self._persisted_tool_call_ids.pop(umo, None)
+        self._persisted_tool_result_ids.pop(umo, None)
         return cnt
 
     # =========================================================================
@@ -235,16 +250,22 @@ class LongTermMemory:
         if umo not in self.raw_records:
             return
 
+        cfg = self.cfg(event)
+
         async with self._lock:
             time_str = datetime.datetime.now().strftime("%H:%M:%S")
 
-            # 1. 提取工具链 → raw_records
+            # 1. 提取工具链 → raw_records（按 tool_call_id 去重，避免历史重复注入）
             for msg in run_context.messages:
                 if msg.role == "assistant" and msg.tool_calls:
                     for tc in msg.tool_calls:
                         tc_dict = tc if isinstance(tc, dict) else tc.model_dump()
+                        tc_id = tc_dict["id"]
+                        if tc_id in self._persisted_tool_call_ids[umo]:
+                            continue
+                        self._persisted_tool_call_ids[umo].add(tc_id)
                         call_entry = {
-                            "id": tc_dict["id"],
+                            "id": tc_id,
                             "name": tc_dict["function"]["name"],
                             "args": (
                                 json.loads(tc_dict["function"]["arguments"])
@@ -256,11 +277,18 @@ class LongTermMemory:
                             f"<T:CALL>{json.dumps(call_entry, ensure_ascii=False)}</T:CALL>"
                         )
                 elif msg.role == "tool":
+                    if msg.tool_call_id in self._persisted_tool_result_ids[umo]:
+                        continue
+                    self._persisted_tool_result_ids[umo].add(msg.tool_call_id)
                     content = (
                         msg.content
                         if isinstance(msg.content, str)
                         else str(msg.content)
                     )
+                    if cfg["history_tool_result_truncate"]:
+                        content = _truncate_tool_result_for_history(
+                            content, cfg["history_tool_result_max_chars"]
+                        )
                     self.raw_records[umo].append(
                         f"<T:RES id={msg.tool_call_id}>{content}</T:RES>"
                     )
@@ -411,6 +439,20 @@ def _parse_tool_result(line: str) -> dict | None:
         return None
     tc_id = id_part[3:]
     return {"role": "tool", "tool_call_id": tc_id, "content": content}
+
+
+def _truncate_tool_result_for_history(content: str, max_chars: int) -> str:
+    """Truncate a single tool result before persisting into LTM history."""
+    if max_chars <= 0 or len(content) <= max_chars:
+        return content
+
+    omitted = len(content) - max_chars
+    marker = f"\n...[TRUNCATED {omitted} chars]..."
+    if len(marker) >= max_chars:
+        return content[:max_chars]
+
+    head_len = max_chars - len(marker)
+    return content[:head_len] + marker
 
 
 def _extract_bot_content(line: str) -> str | None:

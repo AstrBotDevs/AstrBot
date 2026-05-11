@@ -220,6 +220,8 @@ DEFAULT_CONFIG = {
         "group_message_max_cnt": 300,
         "image_caption": False,
         "image_caption_provider_id": "",
+        "history_tool_result_truncate": True,
+        "history_tool_result_max_chars": 8192,
         "active_reply": {
             "enable": False,
             "method": "possibility_reply",
@@ -2871,6 +2873,12 @@ CONFIG_METADATA_2 = {
                     "image_caption_prompt": {
                         "type": "string",
                     },
+                    "history_tool_result_truncate": {
+                        "type": "bool",
+                    },
+                    "history_tool_result_max_chars": {
+                        "type": "int",
+                    },
                     "active_reply": {
                         "type": "object",
                         "items": {
@@ -4091,6 +4099,19 @@ CONFIG_METADATA_3 = {
                         "hint": "用于群聊上下文感知的图片理解，与默认图片转述模型分开配置。",
                         "condition": {
                             "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.history_tool_result_truncate": {
+                        "description": "截断历史工具输出",
+                        "type": "bool",
+                        "hint": "仅影响群聊 LTM 历史轮，不影响当前工具调用轮的完整推理。",
+                    },
+                    "provider_ltm_settings.history_tool_result_max_chars": {
+                        "description": "历史工具输出截断上限",
+                        "type": "int",
+                        "hint": "单条工具输出写入群聊历史时的最大字符数，默认 8192。",
+                        "condition": {
+                            "provider_ltm_settings.history_tool_result_truncate": True,
                         },
                     },
                     "provider_ltm_settings.active_reply.enable": {

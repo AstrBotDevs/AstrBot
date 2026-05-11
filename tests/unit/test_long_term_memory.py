@@ -11,6 +11,7 @@ from astrbot.builtin_stars.astrbot.long_term_memory import (
     _extract_tag_content,
     _parse_tool_call,
     _parse_tool_result,
+    _truncate_tool_result_for_history,
     _truncate_user_segment,
 )
 
@@ -102,6 +103,26 @@ class TestParseToolResult:
 
     def test_bad_prefix(self):
         assert _parse_tool_result("garbage") is None
+
+
+# =============================================================================
+# _truncate_tool_result_for_history
+# =============================================================================
+
+class TestTruncateToolResultForHistory:
+    def test_under_limit(self):
+        text = "short result"
+        assert _truncate_tool_result_for_history(text, 100) == text
+
+    def test_over_limit(self):
+        text = "x" * 50
+        result = _truncate_tool_result_for_history(text, 40)
+        assert len(result) <= 40
+        assert "TRUNCATED" in result
+
+    def test_non_positive_limit_keeps_original(self):
+        text = "x" * 50
+        assert _truncate_tool_result_for_history(text, 0) == text
 
 
 # =============================================================================
@@ -701,6 +722,65 @@ class TestAgentDoneToolChains:
         )
         assert has_tool_call
         assert not has_final_text
+
+    @pytest.mark.asyncio
+    async def test_tool_call_dedup_across_rounds(self, ltm, mock_event):
+        """历史工具调用不应被重复持久化——防重复注入的核心回归测试。"""
+        from astrbot.api.provider import LLMResponse
+        from unittest.mock import MagicMock
+
+        umo = "group_123"
+
+        # 确保 raw_records 存在（on_agent_done 前置条件）
+        ltm.raw_records[umo].append("[dummy/00:00]: hi")
+        ltm._raw_cursor[umo] = 1
+
+        tc_msg = MagicMock()
+        tc_msg.role = "assistant"
+        tc_msg.tool_calls = [
+            {"id": "c1", "function": {"name": "tool_a", "arguments": "{}"}}
+        ]
+        tool_msg = MagicMock()
+        tool_msg.role = "tool"
+        tool_msg.tool_call_id = "c1"
+        tool_msg.content = "result_a"
+
+        run_ctx = MagicMock(messages=[tc_msg, tool_msg])
+        resp = LLMResponse(role="assistant", completion_text="ok")
+
+        # Round 1 — 首次记录
+        await ltm.on_agent_done(mock_event, run_ctx, resp)
+        assert ltm._persisted_tool_call_ids[umo] == {"c1"}
+        assert ltm._persisted_tool_result_ids[umo] == {"c1"}
+
+        # Round 2 — 模拟历史注入：run_context.messages 仍包含 c1
+        ltm.raw_records[umo].append("[dummy2/00:01]: hi2")
+        resp2 = LLMResponse(role="assistant", completion_text="ok2")
+        await ltm.on_agent_done(mock_event, run_ctx, resp2)
+
+        # 去重集不变 — c1 未被重复持久化
+        assert ltm._persisted_tool_call_ids[umo] == {"c1"}
+        assert ltm._persisted_tool_result_ids[umo] == {"c1"}
+
+        # Round 3 — 历史 c1 + 新调用 c2 混合
+        ltm.raw_records[umo].append("[dummy3/00:02]: hi3")
+        new_tc = MagicMock()
+        new_tc.role = "assistant"
+        new_tc.tool_calls = [
+            {"id": "c2", "function": {"name": "tool_b", "arguments": "{}"}}
+        ]
+        new_tool = MagicMock()
+        new_tool.role = "tool"
+        new_tool.tool_call_id = "c2"
+        new_tool.content = "result_b"
+
+        mixed_ctx = MagicMock(messages=[tc_msg, tool_msg, new_tc, new_tool])
+        resp3 = LLMResponse(role="assistant", completion_text="ok3")
+        await ltm.on_agent_done(mock_event, mixed_ctx, resp3)
+
+        # c1 不变，c2 被添加
+        assert ltm._persisted_tool_call_ids[umo] == {"c1", "c2"}
+        assert ltm._persisted_tool_result_ids[umo] == {"c1", "c2"}
 
 
 # =============================================================================
