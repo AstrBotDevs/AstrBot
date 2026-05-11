@@ -629,7 +629,6 @@ class SandboxManager:
                 sandbox_id=sandbox_id,
                 create_config=create_config,
                 idle_timeout=idle_timeout,
-                record=record,
             )
         )
         self.pending_boot_tasks[sandbox_id] = task
@@ -645,7 +644,6 @@ class SandboxManager:
         sandbox_id: str,
         create_config: dict,
         idle_timeout: float,
-        record: dict,
     ) -> None:
         try:
             async with self._sandbox_boot_lock(sandbox_id):
@@ -673,7 +671,8 @@ class SandboxManager:
                 current = self.registry.get_sandbox(sandbox_id)
                 if current is None or current.get("status") != SandboxStatus.CREATING:
                     try:
-                        await provider.destroy_booter(client, current or record)
+                        cleanup_record = self.registry.get_sandbox(sandbox_id) or {}
+                        await provider.destroy_booter(client, cleanup_record)
                     except Exception as destroy_err:
                         logger.warning(
                             "[Computer] Deferred sandbox cleanup failed after record removal: sandbox_id=%s error=%s",
@@ -703,6 +702,8 @@ class SandboxManager:
         )
         sandbox_id = sandbox["sandbox_id"]
         if not self.acquire_lease(sandbox_id, session_id):
+            provider = self.get_provider(sandbox.get("provider", ""))
+            await self._destroy_sandbox_cleanup(provider, sandbox_id, sandbox)
             raise RuntimeError(f"Sandbox {sandbox_id} is busy")
         await self._set_current_sandbox_after_lease(session_id, sandbox_id, sandbox)
         provider = self.get_provider(sandbox.get("provider", ""))
@@ -719,9 +720,10 @@ class SandboxManager:
     def list_sandboxes(self) -> list[dict]:
         records = []
         for record in self.registry.list_sandboxes():
-            record = SandboxRecord.from_dict(record).to_dict()
             if not record.get("managed"):
                 continue
+            if "booter_type" in record:
+                record = SandboxRecord.from_dict(record).to_dict()
             provider = self.providers.get(record.get("provider"))
             updated = dict(record)
             updated["capabilities"] = sorted(
@@ -1414,23 +1416,38 @@ class SandboxManager:
                         self.session_booter.pop(sandbox_id, None)
                         await provider.destroy_booter(booter, record)
                     except Exception as shutdown_err:
-                        self.session_booter[sandbox_id] = booter
-                        self.registry.update_sandbox_status(
-                            sandbox_id, SandboxStatus.UNKNOWN
-                        )
-                        await self.save_registry_async()
                         logger.warning(
                             "[Computer] Failed to shutdown idle sandbox %s: %s",
                             sandbox_id,
                             shutdown_err,
                         )
-                        # Retry cleanup after the normal timeout instead of
-                        # leaving the sandbox without any scheduled cleanup.
-                        current_expires_at = time.monotonic() + timeout
-                        self.idle_state[sandbox_id] = SandboxIdleState(
-                            expires_at=current_expires_at, task=state.task
-                        )
-                        continue
+                        try:
+                            booter_available = await self.booter_available(booter)
+                        except Exception:
+                            booter_available = False
+                        if booter_available:
+                            self.session_booter[sandbox_id] = booter
+                            self.registry.update_sandbox_status(
+                                sandbox_id, SandboxStatus.UNKNOWN
+                            )
+                            await self.save_registry_async()
+                            # Retry cleanup after the normal timeout instead of
+                            # leaving the sandbox without any scheduled cleanup.
+                            current_expires_at = time.monotonic() + timeout
+                            self.idle_state[sandbox_id] = SandboxIdleState(
+                                expires_at=current_expires_at, task=state.task
+                            )
+                            continue
+                        self.clear_runtime_state(sandbox_id)
+                        if record.get("retention_policy") == "persistent":
+                            self.registry.update_sandbox_status(
+                                sandbox_id, SandboxStatus.STOPPED
+                            )
+                        else:
+                            self.registry.delete_sandbox(sandbox_id)
+                            self.drop_boot_lock(sandbox_id)
+                        await self.save_registry_async()
+                        return
                 if record.get("retention_policy") == "persistent":
                     self.registry.update_sandbox_status(
                         sandbox_id, SandboxStatus.STOPPED

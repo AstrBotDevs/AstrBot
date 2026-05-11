@@ -71,6 +71,23 @@ class FakeProvider:
         await booter.shutdown()
 
 
+class RecordCapturingProvider(FakeProvider):
+    def __init__(self):
+        super().__init__()
+        self.boot_started = asyncio.Event()
+        self.allow_boot = asyncio.Event()
+        self.destroyed_records = []
+
+    async def create_booter(self, context, session_id, sandbox_id, config):
+        self.boot_started.set()
+        await self.allow_boot.wait()
+        return await super().create_booter(context, session_id, sandbox_id, config)
+
+    async def destroy_booter(self, booter, record):
+        self.destroyed_records.append(dict(record))
+        await super().destroy_booter(booter, record)
+
+
 class SaveFailingProvider(FakeProvider):
     def __init__(self):
         super().__init__()
@@ -138,13 +155,28 @@ class SlowDeferredDestroyProvider(DeferredBootProvider):
             await self.allow_boot.wait()
         if self.raise_on_boot:
             raise RuntimeError("boot failed")
-        return await FakeProvider.create_booter(self, context, session_id, sandbox_id, config)
+        return await FakeProvider.create_booter(
+            self, context, session_id, sandbox_id, config
+        )
 
     async def destroy_booter(self, booter, record):
         self.destroy_started.set()
         if self.pause_destroy:
             await self.allow_destroy.wait()
         return await super().destroy_booter(booter, record)
+
+
+class DeadIdleDestroyProvider(FakeProvider):
+    def __init__(self):
+        super().__init__()
+        self.destroy_started = asyncio.Event()
+        self.destroy_calls = 0
+
+    async def destroy_booter(self, booter, record):
+        self.destroy_calls += 1
+        self.destroy_started.set()
+        booter.available_result = False
+        raise RuntimeError("half-closed booter")
 
 
 class FailingReconnectProvider(FakeProvider):
@@ -369,6 +401,47 @@ async def test_create_sandbox_uncontrolled_deferred_keeps_error_record_on_boot_f
     assert record is not None
     assert record["status"] == "error"
     assert sandbox["sandbox_id"] not in manager.session_booter
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_deferred_uses_fresh_record_for_cleanup(
+    tmp_path,
+):
+    provider = RecordCapturingProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    sandbox = await manager.create_sandbox_uncontrolled_deferred(
+        None, "session-a", "generic", "Named"
+    )
+
+    await asyncio.wait_for(provider.boot_started.wait(), timeout=1)
+    manager.registry.delete_sandbox(sandbox["sandbox_id"])
+    provider.allow_boot.set()
+
+    for _ in range(20):
+        if not manager.pending_boot_tasks:
+            break
+        await asyncio.sleep(0)
+
+    assert provider.destroyed_records == [{}]
+    assert manager.registry.get_sandbox(sandbox["sandbox_id"]) is None
+    assert sandbox["sandbox_id"] not in manager.session_booter
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_rolls_back_when_lease_acquisition_fails(tmp_path):
+    provider = FakeProvider()
+    manager = AlwaysBusyManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={provider.provider_id: provider},
+    )
+
+    with pytest.raises(RuntimeError, match="Sandbox .* is busy"):
+        await manager.create_sandbox(None, "session-a", "generic", "Named")
+
+    assert manager.registry.list_sandboxes() == []
+    assert manager.session_booter == {}
+    assert provider.destroyed and provider.destroyed[0][1].startswith("generic-")
 
 
 @pytest.mark.asyncio
@@ -1261,7 +1334,9 @@ async def test_manager_restore_persistent_sandboxes_times_out_and_deletes_record
     async def slow_create_booter(context, session_id, sandbox_id, config):
         restore_started.set()
         await asyncio.sleep(1)
-        return await FakeProvider().create_booter(context, session_id, sandbox_id, config)
+        return await FakeProvider().create_booter(
+            context, session_id, sandbox_id, config
+        )
 
     provider.create_booter = slow_create_booter
     manager.registry.upsert_sandbox(
@@ -1320,6 +1395,24 @@ async def test_manager_idle_cleanup_removes_temporary_sandbox(tmp_path):
 
     assert manager.registry.get_sandbox(sandbox_id) is None
     assert provider.destroyed[0][1] == sandbox_id
+
+
+@pytest.mark.asyncio
+async def test_manager_idle_cleanup_does_not_retry_dead_booter(tmp_path):
+    provider = DeadIdleDestroyProvider()
+    provider.idle_timeout = 0.01
+    manager, provider = _manager(tmp_path, provider)
+
+    sandbox = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    manager.release_current_sandbox("session-a", sandbox["sandbox_id"])
+
+    await asyncio.wait_for(provider.destroy_started.wait(), timeout=1)
+    await asyncio.sleep(0.05)
+
+    assert provider.destroy_calls == 1
+    assert manager.registry.get_sandbox(sandbox["sandbox_id"]) is None
+    assert sandbox["sandbox_id"] not in manager.session_booter
+    assert sandbox["sandbox_id"] not in manager.idle_state
 
 
 @pytest.mark.asyncio

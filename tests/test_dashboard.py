@@ -526,6 +526,49 @@ async def test_sandbox_dashboard_sets_default_sandbox(
 
 
 @pytest.mark.asyncio
+async def test_sandbox_dashboard_patch_preserves_existing_retention_policy(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    provider.supports_persistent_reconnect = True
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+        retention_policy="persistent",
+        status="running",
+    )
+
+    test_client = app.test_client()
+    response = await test_client.patch(
+        "/api/sandbox/sandbox-1",
+        json={"sandbox_name": "Renamed"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["sandbox"]["sandbox_name"] == "Renamed"
+    assert data["data"]["sandbox"]["retention_policy"] == "persistent"
+
+
+@pytest.mark.asyncio
 async def test_sandbox_dashboard_force_releases_busy_sandbox(
     app: Quart,
     authenticated_header: dict,

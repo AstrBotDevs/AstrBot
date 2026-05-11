@@ -16,6 +16,7 @@ from astrbot.core.utils.astrbot_path import (
 from .booters.base import ComputerBooter
 from .booters.local import LocalBooter
 from .sandbox_manager import SandboxManager
+from .sandbox_models import SandboxStatus
 from .sandbox_provider import SandboxProvider
 from .sandbox_registry import SandboxRegistry
 
@@ -271,7 +272,11 @@ def get_current_sandbox_provider_id(session_id: str) -> str | None:
     current_record = sandbox_manager.registry.get_sandbox(current_sandbox_id)
     if current_record is None:
         return None
-    if current_record.get("status") in {"stopping", "stopped", "error"}:
+    if current_record.get("status") in {
+        SandboxStatus.STOPPING,
+        SandboxStatus.STOPPED,
+        SandboxStatus.ERROR,
+    }:
         return None
     provider_id = str(current_record.get("provider") or "").strip()
     return provider_id or None

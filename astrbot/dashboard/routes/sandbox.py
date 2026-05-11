@@ -242,12 +242,21 @@ class SandboxRoute(Route):
     async def update_sandbox(self, sandbox_id: str):
         try:
             data = await request.get_json(silent=True) or {}
+            current_sandbox = computer_client.sandbox_manager.registry.get_sandbox(
+                sandbox_id
+            )
+            retention_policy = data.get(
+                "retention_policy",
+                current_sandbox.get("retention_policy", "temporary")
+                if current_sandbox
+                else "temporary",
+            )
             sandbox = computer_client.sandbox_manager.update_sandbox_config(
                 sandbox_id,
                 sandbox_name=data.get("sandbox_name"),
                 idle_timeout=data.get("idle_timeout"),
                 expires_at=data.get("expires_at"),
-                retention_policy=data.get("retention_policy", "temporary"),
+                retention_policy=retention_policy,
             )
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
         except Exception as e:

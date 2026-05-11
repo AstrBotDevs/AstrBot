@@ -6,6 +6,7 @@ import pytest
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
 ROOT = Path(__file__).resolve().parents[1]
+SHIPYARD_COMPOSE = (ROOT / "compose-with-shipyard.yml").read_text(encoding="utf-8")
 
 
 def _require_plugin_files(*relative_paths: str) -> None:
@@ -65,7 +66,12 @@ def test_shipyard_schema_is_localized_and_has_defaults():
     schema = _load_schema("astrbot_sandbox_shipyard")
 
     assert schema["shipyard_endpoint"]["description"] == "Shipyard API 地址"
-    assert schema["shipyard_endpoint"]["default"] == ""
+    assert schema["shipyard_endpoint"]["default"] == "http://shipyard:8156"
+    assert schema["shipyard_auto_start"]["default"] is True
+    assert schema["shipyard_bay_image"]["default"] == "soulter/shipyard-bay:latest"
+    assert schema["shipyard_ship_image"]["default"] == "soulter/shipyard-ship:latest"
+    assert schema["shipyard_bay_image"]["default"] in SHIPYARD_COMPOSE
+    assert schema["shipyard_ship_image"]["default"] in SHIPYARD_COMPOSE
     assert schema["shipyard_access_token"]["description"] == "Shipyard 访问令牌"
     assert schema["shipyard_access_token"]["default"] == ""
     assert schema["shipyard_ttl"]["description"] == "Shipyard 会话存活时间"
