@@ -20,13 +20,13 @@ SOURCE_ALIASES = {
 LANG_CONFIG = {
     "zh": {
         "index_title": "# AstrBot 中文文档",
-        "index_intro": "该页面由 `AstrBot-docs` 自动同步到 GitHub Wiki。",
+        "index_intro": "该页面由 `AstrBot-docs` 自动同步到 GitHub Wiki｡",
         "index_links": [
             ("关于 AstrBot", "zh-what-is-astrbot"),
             ("社区", "zh-community"),
             ("常见问题", "zh-faq"),
         ],
-        "home_intro": "该 Wiki 由 `AstrBot-docs` 自动同步生成。",
+        "home_intro": "该 Wiki 由 `AstrBot-docs` 自动同步生成｡",
         "home_links": [
             ("中文文档入口", "zh-index"),
             ("English Docs", "Home-en"),
@@ -147,7 +147,6 @@ def iter_markdown_links(content: str):
     This scanner intentionally handles inline `[]()` links used in the docs tree.
     It does not parse reference-style links or arbitrary HTML.
     """
-
     index = 0
     while index < len(content):
         label_start = content.find("[", index)
@@ -292,7 +291,9 @@ class LinkResolver:
         self.source_pages = discover_source_pages(str(self.source_root))
 
     def resolve_base_target(
-        self, base_target: str, source_path: str
+        self,
+        base_target: str,
+        source_path: str,
     ) -> ResolutionResult:
         return resolve_link_path(
             base_target=base_target,
@@ -302,7 +303,9 @@ class LinkResolver:
         )
 
     def resolve_markdown_target(
-        self, target: str, source_path: str
+        self,
+        target: str,
+        source_path: str,
     ) -> tuple[str | None, str]:
         parsed_target = parse_doc_target(target)
         if parsed_target is None:
@@ -386,7 +389,7 @@ def rewrite_links(
                     segment.text,
                     source_path=source_path,
                     resolver=resolver,
-                )
+                ),
             )
             continue
 
@@ -404,7 +407,8 @@ def find_unresolved_doc_links(source_root: Path) -> list[str]:
         content = (root / source_path).read_text(encoding="utf-8")
         for link in iter_markdown_links(content):
             resolved_path, _ = resolver.resolve_markdown_target(
-                link.target, source_path
+                link.target,
+                source_path,
             )
             if resolved_path is not None:
                 continue
@@ -470,7 +474,7 @@ def extract_title(content: str, source_path: str) -> str:
 
 def build_language_index(language: str, page_names: set[str]) -> str:
     config = LANG_CONFIG[language]
-    lines = [config["index_title"], "", config["index_intro"], ""]
+    lines: list[str] = [config["index_title"], "", config["index_intro"], ""]
 
     for label, page_name in config["index_links"]:
         if page_name in page_names:
@@ -481,7 +485,7 @@ def build_language_index(language: str, page_names: set[str]) -> str:
 
 def build_home_page(language: str) -> str:
     config = LANG_CONFIG[language]
-    lines = ["# AstrBot Wiki", "", config["home_intro"], ""]
+    lines: list[str] = ["# AstrBot Wiki", "", config["home_intro"], ""]
     for label, target in config["home_links"]:
         lines.append(f"- [{label}]({target})")
     return normalize_content("\n".join(lines))
@@ -523,7 +527,9 @@ def build_sidebar(page_infos: list[PageInfo]) -> str:
 
 
 def build_page_info(
-    source_root: Path, source_path: str, resolver: LinkResolver
+    source_root: Path,
+    source_path: str,
+    resolver: LinkResolver,
 ) -> PageInfo:
     source_file = source_root / source_path
     content = source_file.read_text(encoding="utf-8")
@@ -608,7 +614,7 @@ def sync_docs_to_wiki(source_root: Path, wiki_root: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Sync AstrBot docs content to GitHub wiki pages."
+        description="Sync AstrBot docs content to GitHub wiki pages.",
     )
     parser.add_argument(
         "--source-root",
@@ -635,7 +641,8 @@ def main() -> int:
         return 0
 
     sync_docs_to_wiki(
-        source_root=Path(args.source_root), wiki_root=Path(args.wiki_root)
+        source_root=Path(args.source_root),
+        wiki_root=Path(args.wiki_root),
     )
     return 0
 

@@ -103,8 +103,8 @@
 1. 如果你两个**全都**是使用 Docker 部署，请尝试在终端运行：
 
 ```bash
-sudo docker network create newnet           # 创建新网络 
-sudo docker network connect newnet astrbot  
+sudo docker network create newnet           # 创建新网络
+sudo docker network connect newnet astrbot
 sudo docker network connect newnet napcat   # 让两个容器连到一起
 sudo docker restart astrbot
 sudo docker restart napcat                  # 重启容器

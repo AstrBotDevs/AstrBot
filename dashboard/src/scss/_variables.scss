@@ -19,7 +19,7 @@ $code-text-color: #111827 !default;
   --astrbot-code-color: #{$code-text-color};
 }
 
-$body-font-family: $cjk-sans-fallback, sans-serif !default;
+$body-font-family: 'Roboto', $cjk-sans-fallback, sans-serif !default;
 $heading-font-family: $body-font-family !default;
 $btn-font-weight: 400 !default;
 $btn-letter-spacing: 0 !default;

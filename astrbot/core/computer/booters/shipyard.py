@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+import functools
 import shlex
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from shipyard import FileSystemComponent as ShipyardFileSystemComponent
 from shipyard import ShipyardClient, Spec
 
 from astrbot.api import logger
 
-from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
+if TYPE_CHECKING:
+    from astrbot.core.agent.tool import ToolSchema
+
+from astrbot.core.computer.olayer import (
+    FileSystemComponent,
+    PythonComponent,
+    ShellComponent,
+)
+
 from .base import ComputerBooter
 from .shell_background import build_detached_shell_command
 from .shipyard_search_file_util import search_files_via_shell
@@ -99,7 +107,7 @@ class ShipyardShellWrapper:
 
 class ShipyardFileSystemWrapper:
     def __init__(
-        self, _shipyard_fs: ShipyardFileSystemComponent, _shipyard_shell: ShellComponent
+        self, _shipyard_fs: FileSystemComponent, _shipyard_shell: ShellComponent
     ):
         self._fs = _shipyard_fs
         self._shell = _shipyard_shell
@@ -170,6 +178,27 @@ class ShipyardFileSystemWrapper:
 
 
 class ShipyardBooter(ComputerBooter):
+    @classmethod
+    @functools.cache
+    def _default_tools(cls) -> tuple[ToolSchema, ...]:
+        from astrbot.core.computer.tools import (
+            ExecuteShellTool,
+            FileDownloadTool,
+            FileUploadTool,
+            PythonTool,
+        )
+
+        return (
+            ExecuteShellTool(),
+            PythonTool(),
+            FileUploadTool(),
+            FileDownloadTool(),
+        )
+
+    @classmethod
+    def get_default_tools(cls) -> list[ToolSchema]:
+        return list(cls._default_tools())
+
     def __init__(
         self,
         endpoint_url: str,
@@ -178,7 +207,8 @@ class ShipyardBooter(ComputerBooter):
         session_num: int = 10,
     ) -> None:
         self._sandbox_client = ShipyardClient(
-            endpoint_url=endpoint_url, access_token=access_token
+            endpoint_url=endpoint_url,
+            access_token=access_token,
         )
         self._ttl = ttl
         self._session_num = session_num
@@ -190,17 +220,21 @@ class ShipyardBooter(ComputerBooter):
             max_session_num=self._session_num,
             session_id=session_id,
         )
-        logger.info(f"Got sandbox ship: {ship.id} for session: {session_id}")
+        logger.info(
+            "[Computer] sandbox_created booter=shipyard ship_id=%s session=%s",
+            ship.id,
+            session_id,
+        )
         self._ship = ship
-        self._shell = ShipyardShellWrapper(self._ship.shell)
-        self._fs = ShipyardFileSystemWrapper(self._ship.fs, self._shell)
+        self._shell = ShipyardShellWrapper(self._ship.shell)  # type: ignore[arg-type]
+        self._fs = ShipyardFileSystemWrapper(self._ship.fs, self._shell)  # type: ignore[arg-type]
 
     async def shutdown(self) -> None:
-        logger.info("[Computer] Shipyard booter shutdown.")
+        logger.info("[Computer] booter_shutdown booter=shipyard status=done")
 
     @property
     def fs(self) -> FileSystemComponent:
-        return self._fs
+        return self._ship.fs  # type: ignore[return-value]
 
     @property
     def python(self) -> PythonComponent:
@@ -208,19 +242,22 @@ class ShipyardBooter(ComputerBooter):
 
     @property
     def shell(self) -> ShellComponent:
-        return self._shell
+        return self._shell  # type: ignore[return-value]
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         """Upload file to sandbox"""
         result = await self._ship.upload_file(path, file_name)
-        logger.info("[Computer] File uploaded to Shipyard sandbox: %s", file_name)
+        logger.info(
+            "[Computer] file_upload booter=shipyard remote_path=%s",
+            file_name,
+        )
         return result
 
     async def download_file(self, remote_path: str, local_path: str):
         """Download file from sandbox."""
         result = await self._ship.download_file(remote_path, local_path)
         logger.info(
-            "[Computer] File downloaded from Shipyard sandbox: %s -> %s",
+            "[Computer] file_download booter=shipyard remote_path=%s local_path=%s",
             remote_path,
             local_path,
         )
@@ -232,18 +269,21 @@ class ShipyardBooter(ComputerBooter):
             ship_id = self._ship.id
             data = await self._sandbox_client.get_ship(ship_id)
             if not data:
-                logger.info(
-                    "[Computer] Shipyard sandbox health check: id=%s, healthy=False (no data)",
+                logger.debug(
+                    "[Computer] health_check booter=shipyard ship_id=%s healthy=false reason=no_data",
                     ship_id,
                 )
                 return False
             health = bool(data.get("status", 0) == 1)
-            logger.info(
-                "[Computer] Shipyard sandbox health check: id=%s, healthy=%s",
+            logger.debug(
+                "[Computer] health_check booter=shipyard ship_id=%s healthy=%s",
                 ship_id,
                 health,
             )
             return health
-        except Exception as e:
-            logger.error(f"Error checking Shipyard sandbox availability: {e}")
+        except Exception:
+            logger.exception(
+                "[Computer] health_check_failed booter=shipyard ship_id=%s",
+                getattr(getattr(self, "_ship", None), "id", "unknown"),
+            )
             return False

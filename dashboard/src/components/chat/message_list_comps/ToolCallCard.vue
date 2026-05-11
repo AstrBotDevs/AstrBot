@@ -1,48 +1,102 @@
 <template>
-  <div class="tool-call-card" :class="{ expanded: isExpanded }">
-    <button class="tool-call-header" type="button" @click="toggleExpanded">
-      <v-icon size="16" class="tool-call-icon">{{ toolCallIcon }}</v-icon>
-      <span class="tool-call-title">
-        {{ tm("actions.toolCallUsed", { name: displayToolName }) }}
-      </span>
-      <span class="tool-call-duration">{{ toolCallDuration }}</span>
+  <div
+    class="tool-call-card"
+    :class="{ 'is-dark': isDark, expanded: isExpanded }"
+    :style="
+      isDark
+        ? {
+            backgroundColor: 'rgba(40, 60, 100, 0.4)',
+            borderColor: 'rgba(100, 140, 200, 0.4)',
+          }
+        : {}
+    "
+  >
+    <!-- Header -->
+    <div
+      class="tool-call-header"
+      :class="{ 'is-dark': isDark }"
+      @click="toggleExpanded"
+    >
       <v-icon
-        size="22"
+        size="small"
         class="tool-call-expand-icon"
         :class="{ expanded: isExpanded }"
       >
         mdi-chevron-right
       </v-icon>
-    </button>
+      <v-icon size="small" class="tool-call-icon"> mdi-wrench-outline </v-icon>
+      <div class="tool-call-info">
+        <span class="tool-call-name">{{ toolCall.name }}</span>
+      </div>
+      <span
+        class="tool-call-status"
+        :class="{
+          'status-running': !toolCall.finished_ts,
+          'status-finished': toolCall.finished_ts,
+        }"
+      >
+        <template v-if="toolCall.finished_ts">
+          <v-icon size="x-small" class="status-icon">mdi-check-circle</v-icon>
+          {{ formatDuration(toolCall.finished_ts - toolCall.ts) }}
+        </template>
+        <template v-else>
+          <v-icon size="x-small" class="status-icon spinning"
+            >mdi-loading</v-icon
+          >
+          {{ elapsedTime }}
+        </template>
+      </span>
+    </div>
 
-    <div v-if="isExpanded" class="tool-call-details">
-      <div v-if="toolCall.id" class="tool-call-detail-row">
+    <!-- Details -->
+    <div
+      v-if="isExpanded"
+      class="tool-call-details"
+      :style="
+        isDark
+          ? {
+              borderTopColor: 'rgba(100, 140, 200, 0.3)',
+              backgroundColor: 'rgba(30, 45, 70, 0.5)',
+            }
+          : {}
+      "
+    >
+      <!-- ID -->
+      <div class="tool-call-detail-row">
         <span class="detail-label">ID:</span>
-        <code class="detail-value">
+        <code
+          class="detail-value"
+          :style="isDark ? { backgroundColor: 'transparent' } : {}"
+        >
           {{ toolCall.id }}
         </code>
       </div>
 
+      <!-- Args -->
       <div class="tool-call-detail-row">
         <span class="detail-label">Args:</span>
-        <pre class="detail-value detail-json">{{
-          JSON.stringify(toolCall.args, null, 2)
-        }}</pre>
+        <pre
+          class="detail-value detail-json"
+          :style="isDark ? { backgroundColor: 'transparent' } : {}"
+          >{{ JSON.stringify(toolCall.args, null, 2) }}</pre
+        >
       </div>
 
+      <!-- Result -->
       <div v-if="toolCall.result" class="tool-call-detail-row">
         <span class="detail-label">Result:</span>
-        <pre class="detail-value detail-json detail-result">{{
-          formattedResult
-        }}</pre>
+        <pre
+          class="detail-value detail-json detail-result"
+          :style="isDark ? { backgroundColor: 'transparent' } : {}"
+          >{{ formattedResult }}</pre
+        >
       </div>
     </div>
   </div>
 </template>
 
-<script setup>
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted } from "vue";
 
 const props = defineProps({
   toolCall: {
@@ -59,41 +113,14 @@ const props = defineProps({
   },
 });
 
-const { tm } = useModuleI18n("features/chat");
 const isExpanded = ref(props.initialExpanded);
 const currentTime = ref(Date.now() / 1000);
-let timer = null;
+let timer: ReturnType<typeof setInterval> | null = null;
 
 const elapsedTime = computed(() => {
   if (props.toolCall.finished_ts) return "";
-  const startTime = Number(props.toolCall.ts);
-  if (!Number.isFinite(startTime) || startTime <= 0) return "";
-  return formatDuration(currentTime.value - startTime);
-});
-
-const displayToolName = computed(() => props.toolCall.name || "tool");
-
-const toolCallIcon = computed(() => {
-  const name = String(props.toolCall.name || "");
-  if (name === "astrbot_execute_ipython" || name === "astrbot_execute_python") {
-    return "mdi-code-json";
-  }
-  if (name.includes("web_search") || name.includes("tavily")) {
-    return "mdi-web";
-  }
-  if (name === "astrbot_execute_shell") {
-    return "mdi-console-line";
-  }
-  return "mdi-wrench";
-});
-
-const toolCallDuration = computed(() => {
-  const startTime = Number(props.toolCall.ts);
-  if (!Number.isFinite(startTime) || startTime <= 0) return "";
-  if (props.toolCall.finished_ts) {
-    return formatDuration(Number(props.toolCall.finished_ts) - startTime);
-  }
-  return elapsedTime.value;
+  const elapsed = currentTime.value - props.toolCall.ts;
+  return formatDuration(elapsed);
 });
 
 const formattedResult = computed(() => {
@@ -106,8 +133,7 @@ const formattedResult = computed(() => {
   }
 });
 
-const formatDuration = (seconds) => {
-  if (!Number.isFinite(seconds) || seconds < 0) return "";
+const formatDuration = (seconds: number): string => {
   if (seconds < 1) {
     return `${Math.round(seconds * 1000)}ms`;
   } else if (seconds < 60) {
@@ -128,6 +154,7 @@ const updateTime = () => {
 };
 
 onMounted(() => {
+  // Update time periodically if tool call is running
   if (!props.toolCall.finished_ts) {
     timer = setInterval(updateTime, 100);
   }
@@ -142,11 +169,14 @@ onUnmounted(() => {
 
 <style scoped>
 .tool-call-card {
-  margin: 6px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #eff3f6;
+  margin: 8px 0px;
+  width: fit-content;
+  min-width: 320px;
   max-width: 100%;
-  color: rgba(var(--v-theme-on-surface), 0.7);
-  font-size: inherit;
-  line-height: inherit;
+  transition: all 0.1s ease;
 }
 
 .tool-call-card.expanded {
@@ -154,26 +184,25 @@ onUnmounted(() => {
 }
 
 .tool-call-header {
-  max-width: 100%;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: inherit;
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
   cursor: pointer;
   user-select: none;
-  display: inline-flex;
-  align-items: center;
+  transition: background-color;
   gap: 8px;
-  font: inherit;
-  text-align: left;
 }
 
 .tool-call-header:hover {
-  color: rgba(var(--v-theme-on-surface), 0.88);
+  background-color: rgba(169, 194, 219, 0.15);
+}
+
+.tool-call-header.is-dark:hover {
+  background-color: rgba(100, 150, 200, 0.2);
 }
 
 .tool-call-expand-icon {
-  color: currentcolor;
+  color: var(--v-theme-secondary);
   transition: transform 0.2s ease;
   flex-shrink: 0;
 }
@@ -183,25 +212,53 @@ onUnmounted(() => {
 }
 
 .tool-call-icon {
-  color: currentcolor;
+  color: var(--v-theme-secondary);
   flex-shrink: 0;
 }
 
-.tool-call-title {
+.tool-call-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.tool-call-duration {
+.tool-call-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--v-theme-secondary);
+}
+
+.tool-call-status {
+  margin-left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
   flex-shrink: 0;
-  color: rgba(var(--v-theme-on-surface), 0.48);
+}
+
+.tool-call-status.status-running {
+  color: #ff9800;
+}
+
+.tool-call-status.status-finished {
+  color: #4caf50;
+}
+
+.tool-call-status .status-icon {
+  font-size: 14px;
+}
+
+.tool-call-status .status-icon.spinning {
+  animation: spin 1s linear infinite;
 }
 
 .tool-call-details {
-  margin-top: 8px;
-  padding-left: 26px;
+  padding: 12px;
+  background-color: rgba(255, 255, 255, 0.5);
   animation: fadeIn 0.2s ease-in-out;
 }
 
@@ -218,22 +275,23 @@ onUnmounted(() => {
 .detail-label {
   font-size: 11px;
   font-weight: 600;
-  color: rgba(var(--v-theme-on-surface), 0.55);
+  color: var(--v-theme-secondaryText);
   text-transform: uppercase;
+  letter-spacing: 0.5px;
   margin-bottom: 4px;
 }
 
 .detail-value {
   font-size: 12px;
-  color: rgba(var(--v-theme-on-surface), 0.8);
+  color: var(--v-theme-primaryText);
   background-color: transparent;
-  padding: 0;
+  padding: 4px 8px;
   border-radius: 4px;
   word-break: break-all;
 }
 
 .detail-json {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: "Fira Code", "Consolas", monospace;
   white-space: pre-wrap;
   max-height: 200px;
   overflow-y: auto;

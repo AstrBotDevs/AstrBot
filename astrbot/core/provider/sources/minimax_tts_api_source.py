@@ -3,14 +3,14 @@ import os
 import uuid
 from collections.abc import AsyncIterator
 
+import aiofiles
 import aiohttp
 
 from astrbot.api import logger
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -121,7 +121,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                                     if "extra_info" in data:
                                         continue
                                     audio: str | None = data.get("data", {}).get(
-                                        "audio"
+                                        "audio",
                                     )
                                     if audio is not None:
                                         yield audio
@@ -159,12 +159,12 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                 raise Exception(
                     "MiniMax TTS API returned empty audio data. "
                     "Please verify your configuration, especially the 'group_id' parameter. "
-                    "You can find your group_id in Account Management -> Basic Information on the MiniMax platform."
+                    "You can find your group_id in Account Management -> Basic Information on the MiniMax platform.",
                 )
 
             # 结果保存至文件
-            with open(path, "wb") as file:
-                file.write(audio)
+            async with aiofiles.open(path, "wb") as file:
+                await file.write(audio)
 
             return path
 

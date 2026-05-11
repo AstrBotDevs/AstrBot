@@ -5,7 +5,11 @@ const HAN_IDEOGRAPH_RE = /\p{Unified_Ideograph}/u;
 export const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
 
 const normalizeLooseFromNormalized = (normalized) =>
-  normalized.replace(/[\s_-]+/g, "").replace(/[()（）【】\[\]{}·•]+/g, "");
+  normalized
+    .replace(/[\s_-]+/g, "")
+    .replace(/[()（）【】{}·•]/g, "")
+    .replace(/\[/g, "")
+    .replace(/\]/g, "");
 
 export const normalizeLoose = (s) =>
   normalizeLooseFromNormalized(normalizeStr(s));
@@ -32,9 +36,7 @@ const getLooseText = memoizeStringFn((text) =>
 );
 
 export const toPinyinText = memoizeStringFn((text) =>
-  pinyin(text, { toneType: "none" })
-    .toLowerCase()
-    .replace(/\s+/g, ""),
+  pinyin(text, { toneType: "none" }).toLowerCase().replace(/\s+/g, ""),
 );
 
 export const toInitials = memoizeStringFn((text) =>

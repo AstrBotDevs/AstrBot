@@ -1,0 +1,3 @@
+from io import BytesIO
+
+def decode(input_io: BytesIO, output_io: BytesIO, sample_rate: int) -> None: ...

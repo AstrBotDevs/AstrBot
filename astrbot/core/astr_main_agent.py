@@ -52,9 +52,6 @@ from astrbot.core.tools.computer_tools import (
     BrowserExecTool,
     CreateSkillCandidateTool,
     CreateSkillPayloadTool,
-    CuaKeyboardTypeTool,
-    CuaMouseClickTool,
-    CuaScreenshotTool,
     EvaluateSkillCandidateTool,
     ExecuteShellTool,
     FileDownloadTool,
@@ -80,13 +77,10 @@ from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
 )
-from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
     BraveWebSearchTool,
-    FirecrawlExtractWebPageTool,
-    FirecrawlWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
     normalize_legacy_web_search_config,
@@ -292,7 +286,7 @@ async def _apply_file_extract(
         logger.error("Unsupported file extract provider: %s", config.file_extract_prov)
         return
 
-    for file_content, file_name in zip(file_contents, file_names):
+    for file_content, file_name in zip(file_contents, file_names, strict=False):
         req.contexts.append(
             {
                 "role": "system",
@@ -438,6 +432,7 @@ async def _ensure_persona_and_skills(
         event, extract_persona_custom_error_message_from_persona(persona)
     )
 
+    # Ensure system_prompt is a string before any +=
     if req.system_prompt is None:
         req.system_prompt = ""
 
@@ -675,7 +670,7 @@ def _get_quoted_message_parser_settings(
     overrides = provider_settings.get("quoted_message_parser")
     if not isinstance(overrides, dict):
         return DEFAULT_QUOTED_MESSAGE_SETTINGS
-    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
+    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)  # type: ignore[arg-type]
 
 
 def _get_image_compress_args(
@@ -688,8 +683,11 @@ def _get_image_compress_args(
     if not isinstance(enabled, bool):
         enabled = True
 
-    raw_options = provider_settings.get("image_compress_options", {})
-    options = raw_options if isinstance(raw_options, dict) else {}
+    raw_options = provider_settings.get("image_compress_options")
+    if isinstance(raw_options, dict):
+        options = dict(raw_options.items())
+    else:
+        options = {}
 
     max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
     if not isinstance(max_size, int):
@@ -800,7 +798,7 @@ async def _process_quote_message(
                 compress_path
                 and compress_path != path
                 and os.path.exists(compress_path)
-            ):
+            ):  # noqa: PNT120
                 try:
                     os.remove(compress_path)
                 except Exception as exc:  # noqa: BLE001
@@ -911,7 +909,7 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 # 保留 MCP 工具
                 new_tool_set.add_tool(tool)
                 continue
-            mp = tool.handler_module_path
+            mp = getattr(tool, "handler_module_path", None)
             if not mp:
                 # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
                 # 不应受到会话插件过滤影响。
@@ -1061,22 +1059,6 @@ def _apply_sandbox_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
 
-    if booter == "cua":
-        req.system_prompt += (
-            "\n[CUA Desktop Control]\n"
-            "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
-            'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
-            "After each visible step, call `astrbot_cua_screenshot` with "
-            "`send_to_user=true` and `return_image_to_llm=true` so the user can "
-            "monitor progress. When typing, inspect the screenshot first and confirm "
-            "the target field is focused and empty or safe to append to. Use "
-            "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
-            "for text input; use text=`\\n` for Enter.\n"
-        )
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
-
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
 
@@ -1111,9 +1093,6 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BochaWebSearchTool))
     elif provider == "brave":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BraveWebSearchTool))
-    elif provider == "firecrawl":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlWebSearchTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlExtractWebPageTool))
     elif provider == "baidu_ai_search":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
 
@@ -1397,7 +1376,7 @@ async def build_main_agent(
             req.func_tool = ToolSet()
         req.func_tool.add_tool(
             plugin_context.get_llm_tool_manager().get_builtin_tool(
-                SendMessageToUserTool
+                "send_message_to_user"
             )
         )
 
@@ -1475,3 +1454,6 @@ async def build_main_agent(
         provider=provider,
         reset_coro=reset_coro if not apply_reset else None,
     )
+
+
+apply_sandbox_tools = _apply_sandbox_tools

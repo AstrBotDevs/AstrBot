@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 260 icons */
+/* Auto-generated MDI subset – 271 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -144,6 +144,10 @@
   content: "\F00F3";
 }
 
+.mdi-calendar-range::before {
+  content: "\F0679";
+}
+
 .mdi-chat::before {
   content: "\F0B79";
 }
@@ -180,6 +184,10 @@
   content: "\F0132";
 }
 
+.mdi-checkbox-multiple-marked-outline::before {
+  content: "\F0139";
+}
+
 .mdi-chevron-double-left::before {
   content: "\F013D";
 }
@@ -212,6 +220,10 @@
   content: "\F0765";
 }
 
+.mdi-circle-outline::before {
+  content: "\F0766";
+}
+
 .mdi-circle-small::before {
   content: "\F09DF";
 }
@@ -234,10 +246,6 @@
 
 .mdi-cloud-upload::before {
   content: "\F0167";
-}
-
-.mdi-code-braces::before {
-  content: "\F0169";
 }
 
 .mdi-code-json::before {
@@ -320,16 +328,16 @@
   content: "\F164B";
 }
 
+.mdi-database-import::before {
+  content: "\F095D";
+}
+
 .mdi-database-off::before {
   content: "\F1640";
 }
 
 .mdi-database-refresh-outline::before {
   content: "\F1634";
-}
-
-.mdi-database-search-outline::before {
-  content: "\F1636";
 }
 
 .mdi-delete::before {
@@ -362,6 +370,10 @@
 
 .mdi-download-outline::before {
   content: "\F0B8F";
+}
+
+.mdi-earth::before {
+  content: "\F01E7";
 }
 
 .mdi-emoticon::before {
@@ -432,10 +444,6 @@
   content: "\F021C";
 }
 
-.mdi-file-music-outline::before {
-  content: "\F0E2A";
-}
-
 .mdi-file-outline::before {
   content: "\F0224";
 }
@@ -456,16 +464,16 @@
   content: "\F0A4D";
 }
 
-.mdi-file-video-outline::before {
-  content: "\F0E2C";
-}
-
 .mdi-file-word-box::before {
   content: "\F022D";
 }
 
 .mdi-filter-remove::before {
   content: "\F0234";
+}
+
+.mdi-filter-variant::before {
+  content: "\F0236";
 }
 
 .mdi-folder::before {
@@ -560,10 +568,6 @@
   content: "\F0EFE";
 }
 
-.mdi-image-outline::before {
-  content: "\F0976";
-}
-
 .mdi-import::before {
   content: "\F02FA";
 }
@@ -588,8 +592,16 @@
   content: "\F0309";
 }
 
+.mdi-keyboard-outline::before {
+  content: "\F097B";
+}
+
 .mdi-label::before {
   content: "\F0315";
+}
+
+.mdi-lan-connect::before {
+  content: "\F0318";
 }
 
 .mdi-language-css3::before {
@@ -598,10 +610,6 @@
 
 .mdi-language-html5::before {
   content: "\F031D";
-}
-
-.mdi-language-java::before {
-  content: "\F0B37";
 }
 
 .mdi-language-javascript::before {
@@ -684,12 +692,20 @@
   content: "\F035F";
 }
 
+.mdi-message-off-outline::before {
+  content: "\F164E";
+}
+
 .mdi-message-outline::before {
   content: "\F0365";
 }
 
 .mdi-message-text::before {
   content: "\F0369";
+}
+
+.mdi-message-text-outline::before {
+  content: "\F036A";
 }
 
 .mdi-microphone::before {
@@ -710,6 +726,10 @@
 
 .mdi-monitor-dashboard::before {
   content: "\F0A07";
+}
+
+.mdi-moon-waning-crescent::before {
+  content: "\F0F65";
 }
 
 .mdi-music-note-outline::before {
@@ -740,16 +760,16 @@
   content: "\F0B3C";
 }
 
+.mdi-numeric-4::before {
+  content: "\F0B3D";
+}
+
 .mdi-open-in-new::before {
   content: "\F03CC";
 }
 
 .mdi-package-variant::before {
   content: "\F03D6";
-}
-
-.mdi-package-variant-closed::before {
-  content: "\F03D7";
 }
 
 .mdi-page-first::before {
@@ -760,12 +780,20 @@
   content: "\F0601";
 }
 
+.mdi-palette::before {
+  content: "\F03D8";
+}
+
 .mdi-paperclip::before {
   content: "\F03E2";
 }
 
 .mdi-pause::before {
   content: "\F03E4";
+}
+
+.mdi-pause-circle-outline::before {
+  content: "\F03E6";
 }
 
 .mdi-pencil::before {
@@ -798,6 +826,10 @@
 
 .mdi-play::before {
   content: "\F040A";
+}
+
+.mdi-play-circle-outline::before {
+  content: "\F040D";
 }
 
 .mdi-plus::before {
@@ -882,6 +914,10 @@
 
 .mdi-shape-outline::before {
   content: "\F0832";
+}
+
+.mdi-share-variant::before {
+  content: "\F0497";
 }
 
 .mdi-shield-check::before {
@@ -1026,6 +1062,14 @@
 
 .mdi-view-dashboard::before {
   content: "\F056E";
+}
+
+.mdi-view-grid::before {
+  content: "\F0570";
+}
+
+.mdi-view-list::before {
+  content: "\F0572";
 }
 
 .mdi-volume-high::before {

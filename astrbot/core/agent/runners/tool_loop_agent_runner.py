@@ -183,10 +183,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats.end_time = time.time()
 
         parts = []
-        if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
+        if llm_resp.reasoning_content or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
-                    think=llm_resp.reasoning_content or "",
+                    think=llm_resp.reasoning_content,
                     encrypted=llm_resp.reasoning_signature,
                 )
             )
@@ -714,18 +714,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
+                # update ttft
                 if self.stats.time_to_first_token == 0:
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
 
-                if llm_response.reasoning_content:
-                    yield AgentResponse(
-                        type="streaming_delta",
-                        data=AgentResponseData(
-                            chain=MessageChain(type="reasoning").message(
-                                llm_response.reasoning_content,
-                            ),
-                        ),
-                    )
                 if llm_response.result_chain:
                     yield AgentResponse(
                         type="streaming_delta",
@@ -736,6 +728,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         type="streaming_delta",
                         data=AgentResponseData(
                             chain=MessageChain().message(llm_response.completion_text),
+                        ),
+                    )
+                elif llm_response.reasoning_content:
+                    yield AgentResponse(
+                        type="streaming_delta",
+                        data=AgentResponseData(
+                            chain=MessageChain(type="reasoning").message(
+                                llm_response.reasoning_content,
+                            ),
                         ),
                     )
                 if self._is_stop_requested():
@@ -791,15 +792,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
-        if llm_resp.reasoning_content:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(
-                    chain=MessageChain(type="reasoning").message(
-                        llm_resp.reasoning_content,
-                    ),
-                ),
-            )
         if llm_resp.result_chain:
             yield AgentResponse(
                 type="llm_result",
@@ -821,15 +813,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.warning(
                         "skills_like tool re-query returned no tool calls; fallback to assistant response."
                     )
-                    if llm_resp.reasoning_content:
-                        yield AgentResponse(
-                            type="llm_result",
-                            data=AgentResponseData(
-                                chain=MessageChain(type="reasoning").message(
-                                    llm_resp.reasoning_content,
-                                ),
-                            ),
-                        )
                     if llm_resp.result_chain:
                         yield AgentResponse(
                             type="llm_result",
@@ -842,7 +825,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 chain=MessageChain().message(llm_resp.completion_text),
                             ),
                         )
-
                     await self._complete_with_assistant_response(llm_resp)
                     return
 
@@ -876,10 +858,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             # 将结果添加到上下文中
             parts = []
-            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
+            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
                 parts.append(
                     ThinkPart(
-                        think=llm_resp.reasoning_content or "",
+                        think=llm_resp.reasoning_content,
                         encrypted=llm_resp.reasoning_signature,
                     )
                 )
@@ -989,7 +971,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
         ):
-            tool_result_blocks_start = len(tool_call_result_blocks)
             tool_call_streak = self._track_tool_call_streak(func_tool_name)
             yield _HandleFunctionToolsResult.from_message_chain(
                 MessageChain(
@@ -1203,23 +1184,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     ),
                 )
 
-            if len(tool_call_result_blocks) > tool_result_blocks_start:
-                tool_result_content = str(tool_call_result_blocks[-1].content)
-                yield _HandleFunctionToolsResult.from_message_chain(
-                    MessageChain(
-                        type="tool_call_result",
-                        chain=[
-                            Json(
-                                data={
-                                    "id": func_tool_id,
-                                    "ts": time.time(),
-                                    "result": tool_result_content,
-                                }
-                            )
-                        ],
-                    )
+        # yield the last tool call result
+        if tool_call_result_blocks:
+            last_tcr_content = str(tool_call_result_blocks[-1].content)
+            yield _HandleFunctionToolsResult.from_message_chain(
+                MessageChain(
+                    type="tool_call_result",
+                    chain=[
+                        Json(
+                            data={
+                                "id": func_tool_id,
+                                "ts": time.time(),
+                                "result": last_tcr_content,
+                            }
+                        )
+                    ],
                 )
-                logger.info(f"Tool `{func_tool_name}` Result: {tool_result_content}")
+            )
+            logger.info(f"Tool `{func_tool_name}` Result: {last_tcr_content}")
 
         # 处理函数调用响应
         if tool_call_result_blocks:
@@ -1293,7 +1275,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     model=self.req.model,
                     session_id=self.req.session_id,
                     extra_user_content_parts=self.req.extra_user_content_parts,
-                    # tool_choice="required",
+                    tool_choice="required",
                     abort_signal=self._abort_signal,
                 )
                 if requery_resp:
@@ -1319,7 +1301,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         model=self.req.model,
                         session_id=self.req.session_id,
                         extra_user_content_parts=self.req.extra_user_content_parts,
-                        # tool_choice="required",
+                        tool_choice="required",
                         abort_signal=self._abort_signal,
                     )
                     if repair_resp:
@@ -1361,10 +1343,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats.end_time = time.time()
 
         parts = []
-        if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
+        if llm_resp.reasoning_content or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
-                    think=llm_resp.reasoning_content or "",
+                    think=llm_resp.reasoning_content,
                     encrypted=llm_resp.reasoning_signature,
                 )
             )

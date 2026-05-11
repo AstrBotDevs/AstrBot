@@ -1,6 +1,7 @@
-from ..entities import ProviderType
-from ..provider import STTProvider
-from ..register import register_provider_adapter
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import STTProvider
+from astrbot.core.provider.register import register_provider_adapter
+
 from .mimo_api_common import (
     DEFAULT_MIMO_API_BASE,
     DEFAULT_MIMO_STT_MODEL,
@@ -82,7 +83,7 @@ class ProviderMiMoSTTAPI(STTProvider):
             except Exception as exc:
                 error_text = response.text[:1024]
                 raise MiMoAPIError(
-                    f"MiMo STT API request failed: HTTP {response.status_code}, response: {error_text}"
+                    f"MiMo STT API request failed: HTTP {response.status_code}, response: {error_text}",
                 ) from exc
 
             data = response.json()
