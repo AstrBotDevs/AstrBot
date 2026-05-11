@@ -84,12 +84,13 @@
 
                 <div class="provider-model-row__actions" @click.stop>
                   <v-switch
-                    v-model="entry.provider.enable"
+                    :model-value="entry.provider.enable"
                     density="compact"
                     inset
                     hide-details
                     color="primary"
                     class="provider-model-row__switch"
+                    :disabled="isProviderSaving(entry.provider.id)"
                     @update:modelValue="emit('toggle-provider-enable', entry.provider, $event)"
                   ></v-switch>
 
@@ -97,7 +98,7 @@
                     icon="mdi-connection"
                     size="small"
                     variant="text"
-                    :disabled="!entry.provider.enable"
+                    :disabled="!entry.provider.enable || isProviderSaving(entry.provider.id)"
                     :loading="isProviderTesting(entry.provider.id)"
                     @click.stop="emit('test-provider', entry.provider)"
                   ></v-btn>
@@ -135,7 +136,7 @@
           <v-chip size="x-small" variant="tonal" label>{{ availableEntries.length }}</v-chip>
         </div>
 
-        <div v-if="availableEntries.length" class="provider-models-list">
+        <div v-if="availableEntries.length" class="provider-models-list provider-models-list--available">
           <v-tooltip
             v-for="entry in availableEntries"
             :key="entry.model"
@@ -240,6 +241,10 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
+  savingProviders: {
+    type: Array,
+    default: () => []
+  },
   tm: {
     type: Function,
     required: true
@@ -288,6 +293,7 @@ const capabilityIcons = (metadata) => {
 }
 
 const isProviderTesting = (providerId) => props.testingProviders.includes(providerId)
+const isProviderSaving = (providerId) => props.savingProviders.includes(providerId)
 </script>
 
 <style scoped>
@@ -368,6 +374,12 @@ const isProviderTesting = (providerId) => props.testingProviders.includes(provid
 .provider-models-list {
   display: flex;
   flex-direction: column;
+}
+
+.provider-models-list--available {
+  max-height: min(420px, 52vh);
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .provider-model-row {

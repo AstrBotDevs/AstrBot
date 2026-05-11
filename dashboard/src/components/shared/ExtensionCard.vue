@@ -1,27 +1,27 @@
 <script setup lang="ts">
-import { ref, computed, inject, watch, useAttrs } from "vue";
+import { ref, computed, watch, useAttrs } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
-import { getPlatformDisplayName, getPlatformIcon } from "@/utils/platformUtils";
 import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
 import PluginPlatformChip from "./PluginPlatformChip.vue";
 import StyledMenu from "./StyledMenu.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const props = defineProps({
   extension: {
     type: Object,
     required: true,
   },
-  pinned: {
-    type: Boolean,
-    default: false,
-  },
   marketMode: {
     type: Boolean,
     default: false,
   },
   highlight: {
+    type: Boolean,
+    default: false,
+  },
+  isPinned: {
     type: Boolean,
     default: false,
   },
@@ -32,22 +32,21 @@ const emit = defineEmits([
   "configure",
   "update",
   "reload",
-  "install",
   "uninstall",
   "toggle-activation",
-  "toggle-pin",
   "view-handlers",
   "view-readme",
   "view-changelog",
+  "toggle-pin",
 ]);
 
-const reveal = ref(false);
 const showUninstallDialog = ref(false);
 
 const attrs = useAttrs();
 
 // 国际化
 const { tm } = useModuleI18n("features/extension");
+const { pluginName, pluginDesc } = usePluginI18n();
 
 const supportPlatforms = computed(() => {
   const platforms = props.extension?.support_platforms;
@@ -57,26 +56,11 @@ const supportPlatforms = computed(() => {
   return platforms.filter((item) => typeof item === "string");
 });
 
-const supportPlatformDisplayNames = computed(() =>
-  supportPlatforms.value.map((platformId) => getPlatformDisplayName(platformId)),
-);
-
 const astrbotVersionRequirement = computed(() => {
   const versionSpec = props.extension?.astrbot_version;
   return typeof versionSpec === "string" && versionSpec.trim().length
     ? versionSpec.trim()
     : "";
-});
-
-// 作者显示（兼容多种字段名）
-const authorDisplay = computed(() => {
-  const ext = props.extension || {};
-  if (typeof ext.author === 'string' && ext.author.trim()) return ext.author;
-  if (Array.isArray(ext.authors) && ext.authors.length) return ext.authors.join(', ');
-  if (typeof ext.author_name === 'string' && ext.author_name.trim()) return ext.author_name;
-  if (typeof ext.owner === 'string' && ext.owner.trim()) return ext.owner;
-  if (ext.author && typeof ext.author === 'object' && ext.author.name) return ext.author.name;
-  return '';
 });
 
 const logoLoadFailed = ref(false);
@@ -90,6 +74,10 @@ const logoSrc = computed(() => {
     ? logo
     : defaultPluginIcon;
 });
+
+const localizedName = computed(() => pluginName(props.extension));
+
+const localizedDesc = computed(() => pluginDesc(props.extension));
 
 watch(
   () => props.extension?.logo,
@@ -111,12 +99,6 @@ const reloadExtension = () => {
   emit("reload", props.extension);
 };
 
-const $confirm = inject("$confirm");
-
-const installExtension = async () => {
-  emit("install", props.extension);
-};
-
 const uninstallExtension = async () => {
   showUninstallDialog.value = true;
 };
@@ -132,11 +114,6 @@ const toggleActivation = () => {
   emit("toggle-activation", props.extension);
 };
 
-const togglePin = (e?: Event) => {
-  if (e) e.stopPropagation();
-  emit("toggle-pin", props.extension);
-};
-
 const viewHandlers = () => {
   emit("view-handlers", props.extension);
 };
@@ -149,14 +126,20 @@ const viewChangelog = () => {
   emit("view-changelog", props.extension);
 };
 
+const togglePin = () => {
+  emit("toggle-pin", props.extension);
+};
+
 </script>
 
 <template>
   <v-card
     v-bind="attrs"
-    class="mx-auto d-flex flex-column h-100"
+    class="extension-card mx-auto d-flex flex-column h-100"
     elevation="0"
     height="100%"
+    :ripple="false"
+    variant="outlined"
     :style="{
       position: 'relative',
       backgroundColor:
@@ -173,15 +156,18 @@ const viewChangelog = () => {
           : '#ffffffdd',
     }"
   >
-    <v-card-text
-      style="
-        padding: 16px;
-        padding-bottom: 0px;
-        width: 100%;
-      "
-    >
-      <div style="overflow-x: auto; width: 100%">
-        <div style="width: 100%; margin-bottom: 24px">
+    <v-card-text class="extension-card-text">
+      <div class="extension-content-row">
+        <div class="extension-image-container">
+          <img
+            :src="logoSrc"
+            :alt="extension.name"
+            class="extension-logo"
+            @error="logoLoadFailed = true"
+          />
+        </div>
+
+        <div class="extension-meta-group">
           <div class="extension-title-row">
             <p
               class="text-h3 font-weight-black extension-title"
@@ -190,20 +176,29 @@ const viewChangelog = () => {
               <v-tooltip
                 location="top"
                 :text="
-                  extension.display_name?.length &&
-                  extension.display_name !== extension.name
-                    ? `${extension.display_name} (${extension.name})`
+                  localizedName?.length &&
+                  localizedName !== extension.name
+                    ? `${localizedName} (${extension.name})`
                     : extension.name
                 "
               >
                 <template v-slot:activator="{ props: titleTooltipProps }">
                   <span v-bind="titleTooltipProps" class="extension-title__text">{{
-                    extension.display_name?.length
-                      ? extension.display_name
-                      : extension.name
+                    localizedName
                   }}</span>
                 </template>
               </v-tooltip>
+              <span v-if="extension.version" class="extension-version">
+                {{ extension.version }}
+              </span>
+              <v-chip
+                v-if="extension.reserved"
+                color="primary"
+                size="x-small"
+                class="extension-system-chip"
+              >
+                {{ tm("status.system") }}
+              </v-chip>
               <v-tooltip
                 location="top"
                 v-if="extension?.has_update && !marketMode"
@@ -229,165 +224,91 @@ const viewChangelog = () => {
             <template v-if="!marketMode">
               <v-tooltip location="left">
                 <template v-slot:activator="{ props: tooltipProps }">
-                          <div class="extension-switch-wrap" @click.stop>
-                            <div v-bind="tooltipProps" style="display:inline-flex; align-items:center;">
-                              <v-switch
-                                :model-value="extension.activated"
-                                color="success"
-                                density="compact"
-                                hide-details
-                                inset
-                                @update:model-value="toggleActivation"
-                              ></v-switch>
-                            </div>
-
-                            <v-tooltip location="top" :text="pinned ? tm('buttons.unpin') : tm('buttons.pin')">
-                              <template #activator="{ props: pinProps }">
-                                <v-btn
-                                  v-bind="pinProps"
-                                  icon
-                                  size="small"
-                                  variant="tonal"
-                                  :color="pinned ? 'primary' : 'secondary'"
-                                  class="ml-2"
-                                  @click.stop="togglePin"
-                                >
-                                  <v-icon size="18">{{ pinned ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
-                                </v-btn>
-                              </template>
-                            </v-tooltip>
-                          </div>
+                  <div class="extension-switch-wrap" @click.stop>
+                    <div
+                      v-bind="tooltipProps"
+                      style="display: inline-flex; align-items: center"
+                    >
+                      <v-switch
+                        :model-value="extension.activated"
+                        color="success"
+                        density="compact"
+                        hide-details
+                        inset
+                        @update:model-value="toggleActivation"
+                      ></v-switch>
+                    </div>
+                  </div>
                 </template>
                 <span>{{
                   extension.activated ? tm("buttons.disable") : tm("buttons.enable")
                 }}</span>
               </v-tooltip>
             </template>
-            <template v-else>
-              <div class="extension-market-menu-wrap">
-                <v-menu offset-y>
-                  <template v-slot:activator="{ props: menuProps }">
-                    <v-btn
-                      icon
-                      variant="text"
-                      aria-label="more"
-                      v-if="extension?.repo"
-                      :href="extension?.repo"
-                      target="_blank"
-                    >
-                      <v-icon icon="mdi-github"></v-icon>
-                    </v-btn>
-                    <v-btn v-bind="menuProps" icon variant="text" aria-label="more">
-                      <v-icon icon="mdi-dots-vertical"></v-icon>
-                    </v-btn>
-                  </template>
-
-                  <v-list>
-                    <v-list-item @click="viewReadme">
-                      <v-list-item-title
-                        >📄 {{ tm("buttons.viewDocs") }}</v-list-item-title
-                      >
-                    </v-list-item>
-
-                    <v-list-item
-                      v-if="marketMode && !extension?.installed"
-                      @click="installExtension"
-                    >
-                      <v-list-item-title>
-                        {{ tm("buttons.install") }}</v-list-item-title
-                      >
-                    </v-list-item>
-
-                    <v-list-item v-if="marketMode && extension?.installed">
-                      <v-list-item-title class="text--disabled">{{
-                        tm("status.installed")
-                      }}</v-list-item-title>
-                    </v-list-item>
-                  </v-list>
-                </v-menu>
-              </div>
-            </template>
           </div>
 
-          <div class="extension-content-row mt-2">
-            <div class="extension-image-container">
-              <img
-                :src="logoSrc"
-                :alt="extension.name"
-                class="extension-logo"
-                @error="logoLoadFailed = true"
-              />
-            </div>
+          <div class="extension-chip-group d-flex flex-wrap">
+            <v-chip
+              v-if="extension?.has_update"
+              color="warning"
+              label
+              size="small"
+              style="cursor: pointer"
+              @click.stop="updateExtension"
+            >
+              <v-icon icon="mdi-arrow-up-bold" start></v-icon>
+              {{ extension.online_version }}
+            </v-chip>
+            <v-chip
+              v-for="tag in extension.tags"
+              :key="tag"
+              :color="tag === 'danger' ? 'error' : 'primary'"
+              label
+              size="small"
+            >
+              {{ tag === "danger" ? tm("tags.danger") : tag }}
+            </v-chip>
+            <PluginPlatformChip :platforms="supportPlatforms" />
+            <v-chip
+              v-if="astrbotVersionRequirement"
+              color="secondary"
+              variant="outlined"
+              label
+              size="small"
+            >
+              AstrBot: {{ astrbotVersionRequirement }}
+            </v-chip>
+          </div>
 
-            <div class="extension-meta-group">
-              <div class="extension-chip-group d-flex flex-wrap">
-                <v-chip color="primary" label size="small">
-                  <v-icon icon="mdi-source-branch" start></v-icon>
-                  {{ extension.version }}
-                </v-chip>
-                <v-chip
-                  v-if="extension?.has_update"
-                  color="warning"
-                  label
-                  size="small"
-                  style="cursor: pointer"
-                  @click="updateExtension"
-                >
-                  <v-icon icon="mdi-arrow-up-bold" start></v-icon>
-                  {{ extension.online_version }}
-                </v-chip>
-                <v-chip
-                  v-if="extension.handlers?.length"
-                  color="primary"
-                  label
-                  size="small"
-                  @click="viewHandlers"
-                  style="cursor: pointer"
-                >
-                  <v-icon icon="mdi-cogs" start></v-icon>
-                  {{ extension.handlers?.length
-                  }}{{ tm("card.status.handlersCount") }}
-                </v-chip>
-                <v-chip
-                  v-for="tag in extension.tags"
-                  :key="tag"
-                  :color="tag === 'danger' ? 'error' : 'primary'"
-                  label
-                  size="small"
-                >
-                  {{ tag === "danger" ? tm("tags.danger") : tag }}
-                </v-chip>
-                <PluginPlatformChip :platforms="supportPlatforms" />
-                <v-chip v-if="authorDisplay" color="info" label size="small">
-                  <v-icon icon="mdi-account" start></v-icon>
-                  {{ authorDisplay }}
-                </v-chip>
-                <v-chip
-                  v-if="astrbotVersionRequirement"
-                  color="secondary"
-                  variant="outlined"
-                  label
-                  size="small"
-                >
-                  AstrBot: {{ astrbotVersionRequirement }}
-                </v-chip>
-              </div>
-
-              <div
-                class="extension-desc"
-                :class="{ 'text-caption': $vuetify.display.xs }"
-              >
-                {{ extension.desc }}
-              </div>
-            </div>
+          <div
+            class="extension-desc"
+            :class="{ 'text-caption': $vuetify.display.xs }"
+          >
+            {{ localizedDesc }}
           </div>
         </div>
       </div>
     </v-card-text>
 
-    <v-card-actions class="extension-actions" @click.stop>
+    <v-card-actions class="extension-actions">
       <template v-if="!marketMode">
         <v-spacer></v-spacer>
+        <v-tooltip location="top">
+          <template v-slot:activator="{ props: pinTooltipProps }">
+            <v-btn
+              v-bind="pinTooltipProps"
+              :aria-label="isPinned ? tm('buttons.unpin') : tm('buttons.pin')"
+              :color="isPinned ? 'primary' : 'secondary'"
+              :icon="isPinned ? 'mdi-pin' : 'mdi-pin-outline'"
+              size="small"
+              variant="tonal"
+              class="extension-pin-btn"
+              @click.stop="togglePin"
+            ></v-btn>
+          </template>
+          <span>{{ isPinned ? tm("buttons.unpin") : tm("buttons.pin") }}</span>
+        </v-tooltip>
+
         <v-tooltip location="top" :text="tm('buttons.viewDocs')">
           <template v-slot:activator="{ props: actionProps }">
             <v-btn
@@ -396,7 +317,7 @@ const viewChangelog = () => {
               size="small"
               variant="tonal"
               color="info"
-              @click="viewReadme"
+              @click.stop="viewReadme"
             ></v-btn>
           </template>
         </v-tooltip>
@@ -409,21 +330,7 @@ const viewChangelog = () => {
               size="small"
               variant="tonal"
               color="primary"
-              @click="configure"
-            ></v-btn>
-          </template>
-        </v-tooltip>
-
-        <v-tooltip v-if="extension?.repo" location="top" :text="tm('buttons.viewRepo')">
-          <template v-slot:activator="{ props: actionProps }">
-            <v-btn
-              v-bind="actionProps"
-              icon="mdi-github"
-              size="small"
-              variant="tonal"
-              color="secondary"
-              :href="extension.repo"
-              target="_blank"
+              @click.stop="configure"
             ></v-btn>
           </template>
         </v-tooltip>
@@ -436,7 +343,7 @@ const viewChangelog = () => {
               size="small"
               variant="tonal"
               color="primary"
-              @click="reloadExtension"
+              @click.stop="reloadExtension"
             ></v-btn>
           </template>
         </v-tooltip>
@@ -449,14 +356,15 @@ const viewChangelog = () => {
               size="small"
               variant="tonal"
               color="secondary"
+              @click.stop
             ></v-btn>
           </template>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-information" @click="viewHandlers">
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-information" @click.stop="viewHandlers">
             <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
           </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click="updateExtension">
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click.stop="updateExtension">
             <v-list-item-title>{{
               extension.has_update
                 ? tm("card.actions.updateTo") + " " + extension.online_version
@@ -464,13 +372,13 @@ const viewChangelog = () => {
             }}</v-list-item-title>
           </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click="uninstallExtension">
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click.stop="uninstallExtension">
             <v-list-item-title class="text-error">{{ tm("card.actions.uninstallPlugin") }}</v-list-item-title>
           </v-list-item>
         </StyledMenu>
       </template>
       <template v-else>
-        <v-btn color="primary" size="small" @click="viewReadme">
+        <v-btn color="primary" size="small" @click.stop="viewReadme">
           {{ tm("buttons.viewDocs") }}
         </v-btn>
       </template>
@@ -485,6 +393,15 @@ const viewChangelog = () => {
 </template>
 
 <style scoped>
+.extension-card-text {
+  padding: 12px 14px 8px;
+  width: 100%;
+}
+
+.extension-card {
+  cursor: pointer;
+}
+
 .extension-image-container {
   display: flex;
   align-items: flex-start;
@@ -492,15 +409,15 @@ const viewChangelog = () => {
 }
 
 .extension-logo {
-  width: 72px;
-  height: 72px;
-  border-radius: 12px;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
   object-fit: cover;
 }
 
 .extension-content-row {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   align-items: flex-start;
 }
 
@@ -510,14 +427,17 @@ const viewChangelog = () => {
 }
 
 .extension-chip-group {
-  gap: 8px;
+  gap: 6px;
 }
 
 .extension-desc {
-  margin-top: 8px;
+  margin-top: 6px;
   font-size: 90%;
-  overflow-y: auto;
-  height: 70px;
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .extension-title {
@@ -542,9 +462,27 @@ const viewChangelog = () => {
   white-space: nowrap;
 }
 
+.extension-version {
+  color: rgba(var(--v-theme-on-surface), 0.48);
+  flex-shrink: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-left: 10px;
+  white-space: nowrap;
+}
+
+.extension-system-chip {
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
 .extension-switch-wrap {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
+}
+
+.extension-pin-btn {
   flex-shrink: 0;
 }
 
@@ -552,26 +490,22 @@ const viewChangelog = () => {
   margin: 0;
 }
 
-.extension-market-menu-wrap {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
 @media (max-width: 600px) {
   .extension-content-row {
-    flex-direction: column;
+    gap: 10px;
   }
 
   .extension-logo {
-    width: 64px;
-    height: 64px;
+    width: 52px;
+    height: 52px;
   }
 }
 
 .extension-actions {
   margin-top: auto;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
+  min-height: 42px;
+  padding: 0 12px 10px;
 }
 </style>

@@ -14,6 +14,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.tools.computer_tools.util import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -67,7 +68,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 },
                 "session": {
                     "type": "string",
-                    "description": "Optional. Target session string. Defaults to current session.",
+                    "description": (
+                        "Optional. Leave empty for the current session. "
+                        "Use 'platform_id:message_type:session_id' to target another session."
+                    ),
                 },
             },
             "required": ["messages"],
@@ -117,7 +121,16 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
-        session = kwargs.get("session") or context.context.event.unified_msg_origin
+        # Security: only AstrBot admins can send messages to other sessions.
+        # Non-admin users are always restricted to their own session.
+        # See https://github.com/AstrBotDevs/AstrBot/issues/7822
+        current_session = context.context.event.unified_msg_origin
+        session = kwargs.get("session") or current_session
+        if session != current_session:
+            if permission_error := check_admin_permission(
+                context, "Send message to another session"
+            ):
+                return permission_error
         messages = kwargs.get("messages")
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
@@ -209,8 +222,27 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 if isinstance(session, str)
                 else session
             )
-        except Exception as exc:
-            return f"error: invalid session: {exc}"
+        except Exception:
+            # LLM 在 cron 等主动场景下可能只传 session_id（如 oc_xxx），
+            # 而不是完整的三段式 platform_id:message_type:session_id。
+            # 此时用 current_session 的前两段补全。
+            # 注意：这里的session是传入的session参数，实际上是用户输入的session_id
+            # current_session才是完整的三段式session字符串。
+            # 仅当传入字符串不含 ':'（明显是裸 session_id）时才用 current_session 补全，
+            # 避免 LLM 传了带 ':' 但格式错误的目标 session 被错误修复。
+            # issue: https://github.com/AstrBotDevs/AstrBot/issues/7907
+            if isinstance(session, str) and current_session and ":" not in session:
+                try:
+                    cur = MessageSession.from_str(current_session)
+                    target_session = MessageSession(
+                        platform_name=cur.platform_id,
+                        message_type=cur.message_type,
+                        session_id=session,
+                    )
+                except Exception:
+                    return f"error: invalid session: {session}"
+            else:
+                return f"error: invalid session: {session}"
 
         await context.context.context.send_message(
             target_session,

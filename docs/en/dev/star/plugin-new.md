@@ -51,6 +51,43 @@ You can add a `logo.png` file in the plugin directory as the plugin's logo. Plea
 
 You can modify (or add) the `display_name` field in the `metadata.yaml` file to serve as the plugin's display name in scenarios like the plugin marketplace, making it easier for users to read.
 
+Plugin display names and descriptions can follow the WebUI language. See [Plugin Internationalization](./guides/plugin-i18n).
+
+### Plugin Short Description (Optional)
+
+You can add a `short_desc` field to `metadata.yaml` as the short description shown on plugin marketplace cards. Keep it to a concise one-sentence summary. If it is not provided, cards fall back to `desc`.
+
+```yaml
+short_desc: A one-line summary of your plugin.
+```
+
+### Bundle Skills with a Plugin (Optional)
+
+Plugins can provide a `skills/` directory. After AstrBot loads the plugin, valid Skills inside that directory are automatically included in the Skill Manager, with their source shown as the plugin.
+
+For multiple Skills, use this structure:
+
+```text
+your_plugin/
+  metadata.yaml
+  main.py
+  skills/
+    web-search-helper/
+      SKILL.md
+    report-writer/
+      SKILL.md
+```
+
+If `skills/` itself is one Skill, you can also place `SKILL.md` directly under it:
+
+```text
+your_plugin/
+  skills/
+    SKILL.md
+```
+
+In that case, the Skill name uses the plugin directory name. Plugin-provided Skills are managed by the plugin and appear as read-only sources in the WebUI Skills page. They can be enabled or disabled, but cannot be deleted or edited from Local Skills. When the plugin is uninstalled or updated, its bundled Skills change with the plugin files.
+
 ### Declare Supported Platforms (Optional)
 
 You can add a `support_platforms` field (`list[str]`) to `metadata.yaml` to declare which platform adapters your plugin supports. The WebUI plugin page will display this field.

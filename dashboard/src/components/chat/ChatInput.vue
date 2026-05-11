@@ -112,6 +112,10 @@
         ref="inputField"
         v-model="localPrompt"
         @keydown="handleKeyDown"
+        @compositionstart="handleCompositionStart"
+        @compositionend="handleCompositionEnd"
+        @compositioncancel="handleCompositionEnd"
+        @blur="clearCompositionState()"
         :disabled="disabled"
         placeholder="Ask AstrBot..."
         class="chat-textarea"
@@ -310,6 +314,7 @@ import {
 import { useDisplay } from "vuetify";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
+import { isComposingEnter } from "@/utils/imeInput.mjs";
 import ConfigSelector from "./ConfigSelector.vue";
 import ProviderModelMenu from "./ProviderModelMenu.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
@@ -390,6 +395,8 @@ const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
 const showProviderSelector = ref(true);
 const isReplyClosing = ref(false);
 const isDragging = ref(false);
+const isComposing = ref(false);
+const lastCompositionEndAt = ref<number | null>(null);
 let dragLeaveTimeout: number | null = null;
 
 const localPrompt = computed({
@@ -525,6 +532,10 @@ function handleKeyDown(e: KeyboardEvent) {
     return;
   }
 
+  if (isComposingEnter(e, isComposing.value, lastCompositionEndAt.value)) {
+    return;
+  }
+
   const isSendHotkey =
     e.ctrlKey ||
     e.metaKey ||
@@ -541,6 +552,23 @@ function handleKeyDown(e: KeyboardEvent) {
       emit("send");
     }
     return;
+  }
+}
+
+function handleCompositionStart() {
+  isComposing.value = true;
+  lastCompositionEndAt.value = null;
+}
+
+function handleCompositionEnd(e: CompositionEvent) {
+  lastCompositionEndAt.value = e.timeStamp;
+  clearCompositionState({ keepLastEndAt: true });
+}
+
+function clearCompositionState({ keepLastEndAt = false } = {}) {
+  isComposing.value = false;
+  if (!keepLastEndAt) {
+    lastCompositionEndAt.value = null;
   }
 }
 
@@ -645,6 +673,7 @@ onBeforeUnmount(() => {
   if (inputField.value) {
     inputField.value.removeEventListener("paste", handlePaste);
   }
+  clearCompositionState();
   document.removeEventListener("keyup", handleKeyUp);
 });
 

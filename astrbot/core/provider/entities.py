@@ -206,7 +206,7 @@ class ProviderRequest:
         # 2. 额外的内容块（系统提醒、指令等）
         if self.extra_user_content_parts:
             for part in self.extra_user_content_parts:
-                content_blocks.append(part.model_dump())
+                content_blocks.append(part.model_dump_for_context())
 
         # 3. 图片内容
         if self.image_urls:
@@ -353,7 +353,7 @@ class LLMResponse:
     """Tool call IDs."""
     tools_call_extra_content: dict[str, dict[str, Any]] = field(default_factory=dict)
     """Tool call extra content. tool_call_id -> extra_content dict"""
-    reasoning_content: str = ""
+    reasoning_content: str | None = None
     """The reasoning content extracted from the LLM, if any."""
     reasoning_signature: str | None = None
     """The signature of the reasoning content, if any."""
@@ -404,8 +404,6 @@ class LLMResponse:
             raw_completion (ChatCompletion, optional): 原始响应, OpenAI 格式. Defaults to None.
 
         """
-        if reasoning_content is None:
-            reasoning_content = ""
         if tools_call_args is None:
             tools_call_args = []
         if tools_call_name is None:

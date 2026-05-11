@@ -537,6 +537,22 @@ class LiveChatRoute(Route):
 
             pending_bot_message_flusher = flush_pending_bot_message
 
+            async def send_attachment_saved_event(part: dict | None) -> None:
+                if not part or not part.get("attachment_id") or not part.get("type"):
+                    return
+
+                await self._send_chat_payload(
+                    session,
+                    {
+                        "ct": "chat",
+                        "type": "attachment_saved",
+                        "data": {
+                            "id": part["attachment_id"],
+                            "type": part["type"],
+                        },
+                    },
+                )
+
             while True:
                 if session.should_interrupt:
                     session.should_interrupt = False
@@ -586,18 +602,22 @@ class LiveChatRoute(Route):
                     filename = str(result_text).replace("[IMAGE]", "")
                     part = await self._create_attachment_from_file(filename, "image")
                     message_accumulator.add_attachment(part)
+                    await send_attachment_saved_event(part)
                 elif msg_type == "record":
                     filename = str(result_text).replace("[RECORD]", "")
                     part = await self._create_attachment_from_file(filename, "record")
                     message_accumulator.add_attachment(part)
+                    await send_attachment_saved_event(part)
                 elif msg_type == "file":
                     filename = str(result_text).replace("[FILE]", "").split("|", 1)[0]
                     part = await self._create_attachment_from_file(filename, "file")
                     message_accumulator.add_attachment(part)
+                    await send_attachment_saved_event(part)
                 elif msg_type == "video":
                     filename = str(result_text).replace("[VIDEO]", "").split("|", 1)[0]
                     part = await self._create_attachment_from_file(filename, "video")
                     message_accumulator.add_attachment(part)
+                    await send_attachment_saved_event(part)
 
                 should_save = False
                 if msg_type == "end":
