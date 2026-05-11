@@ -22,7 +22,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 CHATROOM_SYSTEM_NOTE = (
     "You are now in a chatroom. "
     "Chat history messages below use the format '[username/time]: content'. "
-    "Messages from yourself are prefixed with '<BOT/time>:'.\n"
+    "Your own messages are presented via the standard assistant role.\n"
 )
 
 MAX_MSGS_PER_USER_SEGMENT = 50
@@ -414,14 +414,17 @@ def _parse_tool_call(line: str) -> dict | None:
         return None
     try:
         tc = json.loads(inner)
-    except (json.JSONDecodeError, TypeError):
+        tc_id = tc["id"]
+        tc_name = tc["name"]
+        tc_args = tc["args"]
+    except (json.JSONDecodeError, TypeError, KeyError):
         return None
     return {
-        "id": tc["id"],
+        "id": tc_id,
         "type": "function",
         "function": {
-            "name": tc["name"],
-            "arguments": json.dumps(tc["args"], ensure_ascii=False),
+            "name": tc_name,
+            "arguments": json.dumps(tc_args, ensure_ascii=False),
         },
     }
 

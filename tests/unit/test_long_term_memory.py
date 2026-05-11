@@ -78,6 +78,17 @@ class TestParseToolCall:
     def test_missing_end_tag(self):
         assert _parse_tool_call('<T:CALL>{"id":"x"}</T') is None
 
+    def test_valid_json_missing_keys(self):
+        """合法 JSON 但缺 id/name/args 时应安全返回 None。"""
+        # 缺 name
+        assert _parse_tool_call('<T:CALL>{"id":"x","args":{}}</T:CALL>') is None
+        # 缺 id
+        assert _parse_tool_call('<T:CALL>{"name":"f","args":{}}</T:CALL>') is None
+        # 全缺
+        assert _parse_tool_call('<T:CALL>{"foo":1}</T:CALL>') is None
+        # 非 dict JSON（json.loads 返回 int）
+        assert _parse_tool_call("<T:CALL>123</T:CALL>") is None
+
 
 # =============================================================================
 # _parse_tool_result
