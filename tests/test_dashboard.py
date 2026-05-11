@@ -1,7 +1,6 @@
 import asyncio
 import copy
 import io
-import json
 import os
 import sys
 import uuid
@@ -601,13 +600,12 @@ def test_agent_group_dashboard_page_is_registered():
     assert "axios.post('/api/agent-group/config', payload)" in page
 
 
-def test_provider_templates_include_openai_responses_description():
+def test_provider_templates_include_openai_responses_type():
     provider_templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
         "config_template"
     ]
     template = provider_templates["OpenAI Responses"]
 
-    assert template
     assert template["type"] == "openai_responses_completion"
 
 
