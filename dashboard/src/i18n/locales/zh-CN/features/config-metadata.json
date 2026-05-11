@@ -170,7 +170,7 @@
         },
         "sandbox": {
           "booter": {
-            "description": "沙箱驱动"
+            "description": "默认沙箱驱动"
           }
         }
       }

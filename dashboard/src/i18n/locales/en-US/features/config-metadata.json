@@ -168,7 +168,7 @@
         },
         "sandbox": {
           "booter": {
-            "description": "Sandbox Environment Driver"
+            "description": "Default Sandbox Driver"
           }
         }
       }
