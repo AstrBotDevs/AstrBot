@@ -18,8 +18,14 @@ from astrbot.core.computer.file_read_utils import (
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_root
 
-from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
+from ..olayer import (
+    FileSystemComponent,
+    InteractiveShellComponent,
+    PythonComponent,
+    ShellComponent,
+)
 from .base import ComputerBooter
+from .local_interactive_shell import LocalInteractiveShellComponent
 from .shipyard_search_file_util import _truncate_long_lines
 
 _BLOCKED_COMMAND_PATTERNS = [
@@ -312,6 +318,7 @@ class LocalBooter(ComputerBooter):
         self._fs = LocalFileSystemComponent()
         self._python = LocalPythonComponent()
         self._shell = LocalShellComponent()
+        self._interactive_shell = LocalInteractiveShellComponent()
 
     async def boot(self, session_id: str) -> None:
         logger.info(f"Local computer booter initialized for session: {session_id}")
@@ -330,6 +337,10 @@ class LocalBooter(ComputerBooter):
     @property
     def shell(self) -> ShellComponent:
         return self._shell
+
+    @property
+    def interactive_shell(self) -> InteractiveShellComponent:
+        return self._interactive_shell
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         raise NotImplementedError(
