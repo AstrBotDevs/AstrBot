@@ -1133,7 +1133,7 @@ def _get_compress_provider(
             "指定的上下文压缩模型 %s 不可用",
             config.llm_compress_provider_id,
         )
-    # fallback: 使用主聊天 provider 进行压缩（issue #7）
+    # fallback: 使用主聊天 provider 进行压缩
     if event:
         provider = plugin_context.get_using_provider(umo=event.unified_msg_origin)
         if provider:

@@ -171,7 +171,7 @@ class LongTermMemory:
         async with self._lock:
             umo = event.unified_msg_origin
 
-            # 记录写入前索引 → on_req_llm 精确排除（issue #1, #9）
+            # 记录写入前索引 → on_req_llm 精确排除
             raw_idx = len(self.raw_records[umo])
             event.set_extra("_ltm_raw_idx", raw_idx)
 
@@ -229,7 +229,7 @@ class LongTermMemory:
                 self.contexts[umo].extend(new_segs)
                 self._raw_cursor[umo] = prompt_idx
 
-        # 前置保留 Persona 已注入的 begin_dialogs（河狸 issue A）
+        # 前置保留 Persona 已注入的 begin_dialogs
         existing_contexts = req.contexts or []
         req.contexts = existing_contexts + self.contexts[umo]
         req.conversation = None
@@ -316,7 +316,7 @@ class LongTermMemory:
     # =========================================================================
 
     def _trim_raw_records(self, umo: str) -> None:
-        """仅淘汰 cursor 之前的条目。cursor 之后的绝不碰（issue #2）。"""
+        """仅淘汰 cursor 之前的条目。cursor 之后的绝不碰。"""
         dq = self.raw_records[umo]
         cursor = self._raw_cursor[umo]
 
