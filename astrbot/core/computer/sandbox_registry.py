@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from astrbot.api import logger
-from astrbot.core.computer.sandbox_models import SandboxRecord
+from astrbot.core.computer.sandbox_models import SandboxRecord, SandboxStatus
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 _UNSET = object()
@@ -322,10 +322,10 @@ class SandboxRegistry:
             record["controller_session_id"] = None
             record["controller_user_id"] = None
             record["lease_expires_at"] = None
-            if record.get("status") == "running":
-                record["status"] = "unknown"
-            elif record.get("status") == "creating":
-                record["status"] = "error"
+            if record.get("status") == SandboxStatus.RUNNING:
+                record["status"] = SandboxStatus.UNKNOWN.value
+            elif record.get("status") == SandboxStatus.CREATING:
+                record["status"] = SandboxStatus.ERROR.value
         self._prune_default_references()
 
     def _prune_default_references(self) -> None:

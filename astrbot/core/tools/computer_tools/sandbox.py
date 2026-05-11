@@ -1,4 +1,5 @@
 import json
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,14 +45,18 @@ def _visible_to_session(record: dict, session_id: str) -> bool:
 
 
 def _is_idle_sandbox(record: dict) -> bool:
-    return not bool(record.get("controller_session_id"))
+    controller_session_id = record.get("controller_session_id")
+    if not controller_session_id:
+        return True
+    lease_expires_at = record.get("lease_expires_at")
+    return bool(lease_expires_at and lease_expires_at <= time.time())
 
 
 def _sandbox_status_for_session(record: dict, session_id: str) -> str:
     controller_session_id = record.get("controller_session_id")
     if controller_session_id == session_id:
         return "current"
-    if controller_session_id:
+    if controller_session_id and not _is_idle_sandbox(record):
         return "occupied"
     return "idle"
 
@@ -63,7 +68,7 @@ def _redact_sandbox_for_session(record: dict, session_id: str, *, admin: bool) -
     visible["access"] = {
         "status": _sandbox_status_for_session(record, session_id),
         "can_switch": _visible_to_session(record, session_id),
-        "occupied": bool(record.get("controller_session_id")),
+        "occupied": not _is_idle_sandbox(record),
     }
     visible.pop("connect_info", None)
     visible["owner_session_id"] = None

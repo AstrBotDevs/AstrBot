@@ -71,6 +71,12 @@ class FakeProvider:
         await booter.shutdown()
 
 
+class SaveFailingProvider(FakeProvider):
+    def __init__(self):
+        super().__init__()
+        self.destroyed = []
+
+
 class OtherFakeProvider(FakeProvider):
     provider_id = "other"
 
@@ -567,6 +573,27 @@ async def test_create_sandbox_sets_current_sandbox_after_lease(tmp_path):
         manager.get_current_sandbox("session-a")["current_sandbox_id"]
         == sandbox["sandbox_id"]
     )
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_booter_rolls_back_on_registry_save_failure(tmp_path):
+    provider = FakeProvider()
+    manager, _provider = _manager(tmp_path, provider)
+    save_calls = 0
+
+    async def fail_save():
+        nonlocal save_calls
+        save_calls += 1
+        if save_calls > 1:
+            raise RuntimeError("disk full")
+
+    manager.save_registry_async = fail_save
+
+    with pytest.raises(RuntimeError, match="disk full"):
+        await manager.get_or_create_booter(None, "session-a", "generic")
+
+    assert manager.session_booter == {}
+    assert provider.destroyed
 
 
 @pytest.mark.asyncio

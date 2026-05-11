@@ -1,4 +1,5 @@
 import json
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -359,6 +360,39 @@ async def test_member_switch_sandbox_allows_idle_sandbox_from_any_session(monkey
     )
 
     assert "other-idle" in str(result)
+    assert called
+
+
+@pytest.mark.asyncio
+async def test_member_switch_sandbox_allows_expired_lease_sandbox(monkeypatch):
+    called = []
+
+    class FakeManager:
+        registry = SimpleNamespace(
+            get_sandbox=lambda sandbox_id: {
+                "sandbox_id": sandbox_id,
+                "owner_session_id": "session-b",
+                "controller_session_id": "session-b",
+                "lease_expires_at": time.time() - 1,
+                "is_default": False,
+            }
+        )
+
+        async def switch_current_sandbox_checked(
+            self, session_id, sandbox_id, **kwargs
+        ):
+            called.append((session_id, sandbox_id, kwargs))
+            return {"sandbox_id": sandbox_id}
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
+    )
+
+    result = await SwitchSandboxTool().call(
+        _member_context_without_admin_requirement(), "expired-id"
+    )
+
+    assert "expired-id" in str(result)
     assert called
 
 

@@ -404,11 +404,27 @@ class SandboxManager:
         idle_timeout: float,
     ) -> None:
         """Common post-creation steps: persist, idle cleanup, skill sync, hooks."""
+        booter = self.session_booter.get(sandbox_id)
         self.registry.touch_sandbox(sandbox_id)
         self.registry.update_sandbox_status(sandbox_id, SandboxStatus.RUNNING)
         if session_id is not None:
             self.registry.set_current_sandbox_id(session_id, sandbox_id)
-        await self.save_registry_async()
+        try:
+            await self.save_registry_async()
+        except Exception:
+            if booter is not None:
+                try:
+                    await provider.destroy_booter(booter, self.registry.get_sandbox(sandbox_id) or {})
+                except Exception as destroy_err:
+                    logger.warning(
+                        "[Computer] Failed to rollback sandbox %s after registry save error: %s",
+                        sandbox_id,
+                        destroy_err,
+                    )
+            self.clear_runtime_state(sandbox_id)
+            if session_id is not None:
+                self.registry.set_current_sandbox_id(session_id, None)
+            raise
         self.schedule_idle_cleanup(sandbox_id, idle_timeout)
 
         # Auto-sync skills unless the provider opts out.  Best-effort: a sync
@@ -597,7 +613,7 @@ class SandboxManager:
                 current = self.registry.get_sandbox(sandbox_id)
                 if current is None or current.get("status") != SandboxStatus.CREATING:
                     try:
-                        await provider.destroy_booter(client, record)
+                        await provider.destroy_booter(client, current or record)
                     except Exception as destroy_err:
                         logger.warning(
                             "[Computer] Deferred sandbox cleanup failed after record removal: sandbox_id=%s error=%s",
@@ -697,6 +713,8 @@ class SandboxManager:
             )
         if retention_policy == "persistent":
             idle_timeout = None
+            # `expires_at` is currently reserved for future lifecycle policy
+            # handling and not enforced by the idle timer.
             expires_at = None
         updates = {
             "idle_timeout": idle_timeout,
