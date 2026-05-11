@@ -545,7 +545,11 @@ Create sub-agents ONLY when:
         if system_msgs:
             lines.append("\n## @System - System Announcements")
             for msg in system_msgs:
-                ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
+                if cls._timezone:
+                    import zoneinfo
+                    ts = datetime.fromtimestamp(msg["timestamp"], tz=zoneinfo.ZoneInfo(cls._timezone)).strftime("%H:%M:%S")
+                else:
+                    ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
                 content_text = msg["content"]
                 lines.append(f"[{ts}] System: {content_text}")
 
