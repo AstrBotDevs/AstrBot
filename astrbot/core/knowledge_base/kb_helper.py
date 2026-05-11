@@ -21,6 +21,7 @@ from astrbot.core.provider.provider import (
 )
 
 from .chunking.base import BaseChunker
+from .chunking.markdown import MarkdownChunker
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .models import KBDocument, KBMedia, KnowledgeBase
@@ -315,7 +316,19 @@ class KBHelper:
                     await progress_callback("chunking", 0, 100)
 
                 try:
-                    chunks_text = await self.chunker.chunk(
+                    # 根据文件类型选择分块器：Markdown 文件使用结构感知分块
+                    effective_chunker = self.chunker
+                    file_ext = Path(file_name).suffix.lower() if file_name else ""
+                    if file_ext in (".md", ".markdown", ".mkd", ".mdx"):
+                        effective_chunker = MarkdownChunker(
+                            chunk_size=chunk_size,
+                            chunk_overlap=chunk_overlap,
+                        )
+                        logger.info(
+                            f"检测到 Markdown 文件 '{file_name}'，使用 MarkdownChunker 进行结构化分块"
+                        )
+
+                    chunks_text = await effective_chunker.chunk(
                         text_content,
                         chunk_size=chunk_size,
                         chunk_overlap=chunk_overlap,
