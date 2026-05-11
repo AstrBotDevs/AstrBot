@@ -7,7 +7,10 @@ from PIL import Image as PILImage
 
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.sources.groq_source import ProviderGroq
-from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+from astrbot.core.provider.sources.openai_source import (
+    ProviderOpenAIOfficial,
+    ProviderOpenAIResponses,
+)
 
 
 class _ErrorWithBody(Exception):
@@ -37,6 +40,23 @@ def _make_provider(overrides: dict | None = None) -> ProviderOpenAIOfficial:
     )
 
 
+def _make_responses_provider(
+    overrides: dict | None = None,
+) -> ProviderOpenAIResponses:
+    provider_config = {
+        "id": "test-openai-responses",
+        "type": "openai_responses_completion",
+        "model": "gpt-5.5",
+        "key": ["test-key"],
+    }
+    if overrides:
+        provider_config.update(overrides)
+    return ProviderOpenAIResponses(
+        provider_config=provider_config,
+        provider_settings={},
+    )
+
+
 def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
     provider_config = {
         "id": "test-groq",
@@ -50,6 +70,15 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
         provider_config=provider_config,
         provider_settings={},
     )
+
+
+@pytest.mark.asyncio
+async def test_openai_responses_provider_uses_configured_model():
+    provider = _make_responses_provider()
+    try:
+        assert provider.get_model() == "gpt-5.5"
+    finally:
+        await provider.terminate()
 
 
 @pytest.mark.asyncio

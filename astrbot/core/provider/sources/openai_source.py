@@ -1380,3 +1380,11 @@ class ProviderOpenAIOfficial(Provider):
     async def terminate(self):
         if self.client:
             await self.client.close()
+
+
+@register_provider_adapter(
+    "openai_responses_completion",
+    "OpenAI API Responses 提供商适配器",
+)
+class ProviderOpenAIResponses(ProviderOpenAIOfficial):
+    pass
