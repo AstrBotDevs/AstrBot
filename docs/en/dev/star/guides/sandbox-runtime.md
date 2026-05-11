@@ -2,6 +2,8 @@
 
 A sandbox runtime plugin teaches AstrBot how to start and connect to a sandbox service. The plugin usually contains a provider, a booter/client, a config schema, and optional tools for features such as screenshots or browser control.
 
+If you are migrating an existing runtime, focus on the config boundary first: AstrBot Core handles routing, reuse, and cleanup, while the plugin owns the actual endpoint, token, image, and timeout settings.
+
 Start with this structure:
 
 ```text
@@ -64,6 +66,15 @@ AstrBot calls the provider whenever it needs to create, reuse, rename, or destro
 - `get_idle_timeout(context, session_id)`
 - `create_booter(context, session_id, sandbox_id, config)`
 - `destroy_booter(booter, record)`
+
+## 2.1 How config migration works
+
+If older versions already stored settings in `provider_settings.sandbox`, treat that as a compatibility input and move new editable values into the plugin config:
+
+- Put new user-facing fields in `_conf_schema.json` first.
+- Use `build_create_config()` to merge plugin config with any legacy overrides.
+- Keep `provider_settings.sandbox` as a transition layer only.
+- Treat `tool_names`, `capabilities`, and `system_prompt` as runtime capability declarations rather than user config entries.
 
 This is a minimal provider skeleton:
 

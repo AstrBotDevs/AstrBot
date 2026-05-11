@@ -5,26 +5,19 @@
 
 在 `v4.12.0` 版本及之后，AstrBot 引入了 Agent 沙盒环境，以替代之前的代码执行器功能。沙盒环境给 Agent 提供了更安全、更灵活的代码执行和自动化操作能力。
 
-如果你是从旧版代码执行器，或者从之前内置的沙盒方案迁移过来，可以先记住这几件事：
-
-- 沙盒运行时已经拆成独立插件，AstrBot Core 只负责调度、复用和清理。
-- 只把 `Computer Use Runtime` 切到 `sandbox` 还不够，必须先把对应驱动插件装好。
-- 同一个会话通常会复用同一个沙盒；如果沙盒失效、被销毁，或者当前状态不可用，AstrBot 会重新创建。
-
-真正容易漏掉的，通常不是配置项，而是插件本身还没生效。先确认驱动能在 WebUI 里看到，再去调 TTL、profile 和能力开关，会省很多时间。
+如果你是从旧配置迁过来，重点先看配置怎么对应。沙盒运行时已经拆成独立插件，AstrBot Core 只负责调度、复用和清理；你需要做的是把 `Computer Use Runtime`、`沙盒驱动` 和各驱动自己的参数填对。
 
 ![](https://files.astrbot.app/docs/source/images/astrbot-agent-sandbox/image.png)
 
 ## 启用沙盒环境
 
-### 迁移时先做的 4 件事
+### 先看这 3 个配置
 
-1. 安装你要用的沙盒驱动插件。
-2. 重启 AstrBot，或者在插件管理页重新加载插件。
-3. 在 `AI 配置` -> `Agent Computer Use` 里把 `Computer Use Runtime` 设为 `sandbox`，再选择对应驱动。
-4. 创建一个最小沙盒，确认路径、截图、浏览器和文件操作都能正常工作。
+1. `Computer Use Runtime` 设为 `sandbox`。
+2. 在 `沙盒驱动` 里选择 `Shipyard Neo`、`Shipyard` 或 `CUA`。
+3. 按所选驱动补齐对应配置，比如 `Shipyard Neo API Endpoint`、`Shipyard Neo Access Token`、`CUA Image`、`CUA Sandbox TTL`。
 
-从当前版本开始，`Shipyard Neo`、`Shipyard`、`CUA` 等具体沙盒驱动都以**独立插件**形式提供，不再默认内置在 AstrBot Core 中。只把 `Computer Use Runtime` 切到 `sandbox` 还不够，必须先装好对应插件，再在 WebUI 里选中它。
+这些驱动现在都以独立插件形式提供，所以先把插件装好，再回到 WebUI 改配置。
 
 目前可用的沙盒驱动包括：
 

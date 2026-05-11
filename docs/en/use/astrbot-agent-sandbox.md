@@ -9,6 +9,8 @@ Starting from version `v4.12.0`, AstrBot introduced the Agent sandbox environmen
 
 ## Enabling the Sandbox Environment
 
+If you are migrating existing settings, focus on the config mapping first. Sandbox drivers are now shipped as separate plugins, and AstrBot Core only handles routing, reuse, and cleanup. What you need to update is the `Computer Use Runtime`, the `Sandbox Driver`, and the driver-specific settings.
+
 Starting with the current version, concrete sandbox drivers such as `Shipyard Neo`, `Shipyard`, and `CUA` are shipped as **separate plugins**, not built into AstrBot Core by default.
 
 That means enabling sandbox mode always has two steps:

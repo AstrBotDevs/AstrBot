@@ -2,7 +2,7 @@
 
 沙盒运行时插件负责告诉 AstrBot 如何启动并连接到一个沙盒服务。一个插件通常包含驱动实现、booter/client、配置 schema，以及截图、浏览器控制这类可选工具。
 
-如果你要把一个现有运行时迁移成插件，先把边界分清：AstrBot Core 只管“什么时候用、用哪个、怎么回收”，真正怎么连沙盒、怎么拿工具、怎么处理路径规则，都应该放在插件里。
+如果你要把一个现有运行时迁移成插件，先把配置边界分清：AstrBot Core 只管“什么时候用、用哪个、怎么回收”，真正要填哪些地址、令牌、镜像和超时，应该放在插件自己的配置里。
 
 ## 先看整体结构
 
@@ -77,6 +77,15 @@ AstrBot 在创建、复用、重命名、销毁沙盒时会调用这个驱动。
 - `get_idle_timeout(context, session_id)`
 - `create_booter(context, session_id, sandbox_id, config)`
 - `destroy_booter(booter, record)`
+
+## 2.1 配置迁移怎么做
+
+如果旧版本已经把配置写在 `provider_settings.sandbox` 里，迁移时可以先把它当成兼容输入，再逐步迁到插件配置：
+
+- 新的可编辑项优先放到 `_conf_schema.json`。
+- `build_create_config()` 负责把插件配置和旧配置合并成真正的创建参数。
+- `provider_settings.sandbox` 只适合作为过渡层，不建议继续扩展新字段。
+- `tool_names`、`capabilities`、`system_prompt` 不是用户配置入口，它们更像运行时能力声明。
 
 下面是一个最小骨架：
 
