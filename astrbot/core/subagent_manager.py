@@ -875,10 +875,10 @@ Create sub-agents ONLY when:
         if (
             config.name not in session.subagents
         ):  # if the static agent already exists, pass
-            if session.shared_context_enabled:
-                cls.register_inherent_tool("send_shared_context")
             if config.tools is None:
                 config.tools = set()
+            if session.shared_context_enabled:
+                config.tools.add("send_shared_context")
             session.subagents[config.name] = config
             agent = Agent(
                 name=config.name,
