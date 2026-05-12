@@ -6,12 +6,9 @@
       </div>
       <div class="logo-text">
         <h2 
-          :style="{ color: '#000000' }"
           v-html="formatTitle(title || t('core.header.logoTitle'))"
         ></h2>
-        <!-- 父子组件传递css变量可能会出错，暂时使用十六进制颜色值 -->
-        <h4 :style="{ color: 'rgba(var(--v-theme-on-surface), 0.72)' }"
-            class="hint-text">{{ subtitle || t('core.header.accountDialog.title') }}</h4>
+        <h4 class="hint-text">{{ subtitle || t('core.header.accountDialog.title') }}</h4>
       </div>
     </div>
   </div>
@@ -78,6 +75,7 @@ const formatTitle = (title: string) => {
 }
 
 .logo-text h2 {
+  color: rgb(var(--v-theme-on-surface));
   margin: 0;
   font-size: 1.8rem;
   font-weight: 600;
@@ -94,6 +92,7 @@ const formatTitle = (title: string) => {
 }
 
 .logo-text h4 {
+  color: rgba(var(--v-theme-on-surface), 0.72);
   margin: 4px 0 0 0;
   font-size: 1rem;
   font-weight: 400;
