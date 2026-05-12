@@ -2,6 +2,7 @@
 # Reference: https://intellij-support.jetbrains.com/hc/en-us/articles/206544839
 # github actions
 .git
+.worktrees/
 .github/
 .*ignore
 # User-specific stuff

@@ -1278,6 +1278,34 @@ async def test_initial_recipients_dispatch_in_parallel():
 
 
 @pytest.mark.asyncio
+async def test_start_run_dispatches_initial_task_to_every_enabled_member():
+    subagent_runtime = FakeSubAgentRuntime()
+    config = enabled_config()
+    config["presets"][0]["initial_recipients"] = ["planner"]
+    runtime = manager(config, subagent_runtime=subagent_runtime)
+    started = await runtime.start_run(
+        FakeEvent(),
+        "review_team",
+        "Review",
+        dispatch_initial=False,
+    )
+
+    assert started.ok is True
+    assert started.data["metadata"]["initial_recipients"] == ["planner", "reviewer"]
+
+    await runtime._dispatch_initial_recipients(
+        FakeEvent(),
+        started.data,
+    )
+
+    assert [call["name"] for call in subagent_runtime.run_calls] == [
+        "agent_group_run-1_planner",
+        "agent_group_run-1_reviewer",
+    ]
+    assert all("Task: Review" in call["input_text"] for call in subagent_runtime.run_calls)
+
+
+@pytest.mark.asyncio
 async def test_parallel_dispatch_records_all_member_results_with_independent_db_rows():
     subagent_runtime = BlockingSubAgentRuntime()
     config = enabled_config()

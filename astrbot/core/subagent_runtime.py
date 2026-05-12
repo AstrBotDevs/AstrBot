@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import copy
 import inspect
+import traceback
 from dataclasses import asdict, dataclass
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 
+from astrbot import logger
 from astrbot.core.agent.context.token_counter import EstimateTokenCounter
 from astrbot.core.agent.context.truncator import ContextTruncator
 from astrbot.core.agent.message import Message
@@ -76,6 +78,8 @@ def normalize_subagent_orchestrator_config(raw: Any) -> dict[str, Any]:
             continue
         normalized.setdefault("provider_id", None)
         normalized.setdefault("persona_id", None)
+        normalized.setdefault("checkpoint_async_enabled", None)
+        normalized.setdefault("checkpoint_async_provider_id", None)
         normalized_agents.append(normalized)
 
     if not has_summary:
@@ -94,6 +98,8 @@ _MUTABLE_INSTANCE_FIELDS = {
     "skills",
     "max_persisted_turns",
     "max_persisted_tokens",
+    "checkpoint_async_enabled",
+    "checkpoint_async_provider_id",
 }
 
 
@@ -108,6 +114,10 @@ class SubAgentPreset:
     tools: list | None = None
     skills: list | None = None
     begin_dialogs: list | None = None
+    checkpoint_async_enabled: bool | None = None
+    """null = inherit category default, true = enabled, false = disabled"""
+    checkpoint_async_provider_id: str | None = None
+    """null = inherit from global/provider chain"""
 
 
 @dataclass
@@ -652,6 +662,9 @@ class SubAgentRuntimeManager:
                     image_urls,
                 )
             except Exception:
+                logger.error(
+                    f"Sub-agent execution failed for instance '{instance.name}':\n{traceback.format_exc()}"
+                )
                 return SubAgentRuntimeResult.failure(
                     SUBAGENT_EXECUTION_FAILED,
                     "Sub-agent execution failed.",

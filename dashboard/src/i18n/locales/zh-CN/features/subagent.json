@@ -31,6 +31,15 @@
     "dedupe": "主 LLM 去重重复工具（与子代理重叠的工具将被隐藏）",
     "dedupeHint": "从主代理中移除与子代理重复的工具"
   },
+  "runtime": {
+    "title": "持久化运行时设置",
+    "enable": "启用持久化运行时",
+    "enableHint": "允许创建长期运行的子代理实例，保留对话历史。Agent Group 等功能依赖此项。",
+    "maxInstances": "每个 Scope 最大实例数",
+    "maxTurns": "最大历史轮数",
+    "maxTokens": "最大 Token 数（留空 = 不限制）",
+    "tokensUnlimited": "不限制"
+  },
   "description": {
     "disabled": "未启动子代理编排功能。",
     "enabled": "子代理将作为工具放在主代理的工具集中，主代理会在适当的时机调用子代理完成任务。"

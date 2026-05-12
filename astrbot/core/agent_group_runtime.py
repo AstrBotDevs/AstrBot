@@ -2342,7 +2342,10 @@ class AgentGroupRuntimeManager:
 
     @classmethod
     def _run_metadata(cls, run) -> dict:
-        return cls._value(run, "metadata") or cls._value(run, "metadata_json") or {}
+        result = cls._value(run, "metadata_json") or cls._value(run, "metadata")
+        if isinstance(result, dict):
+            return result
+        return {}
 
     @classmethod
     def _json_safe(cls, value: Any) -> Any:

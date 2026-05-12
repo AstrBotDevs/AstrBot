@@ -72,6 +72,87 @@
 
       <div class="dashboard-section-head">
         <div>
+          <div class="dashboard-section-title">{{ tm('runtime.title') }}</div>
+          <div class="dashboard-section-subtitle">{{ tm('runtime.enableHint') }}</div>
+        </div>
+      </div>
+
+      <div class="dashboard-form-grid global-settings-grid mb-5">
+        <div class="setting-card">
+          <div class="setting-card-head">
+            <div>
+              <div class="setting-title">{{ tm('runtime.enable') }}</div>
+              <div class="setting-subtitle">{{ tm('runtime.enableHint') }}</div>
+            </div>
+            <v-switch
+              v-model="cfg.runtime.enable"
+              color="primary"
+              hide-details
+              inset
+              density="comfortable"
+            />
+          </div>
+        </div>
+
+        <div class="setting-card">
+          <div class="setting-card-head">
+            <div>
+              <div class="setting-title">{{ tm('runtime.maxInstances') }}</div>
+            </div>
+            <v-text-field
+              v-model.number="cfg.runtime.max_instances_per_scope"
+              type="number"
+              min="1"
+              variant="outlined"
+              density="comfortable"
+              hide-details
+              style="max-width: 120px"
+            />
+          </div>
+        </div>
+
+        <div class="setting-card">
+          <div class="setting-card-head">
+            <div>
+              <div class="setting-title">{{ tm('runtime.maxTurns') }}</div>
+            </div>
+            <v-text-field
+              v-model.number="cfg.runtime.max_persisted_turns"
+              type="number"
+              min="1"
+              variant="outlined"
+              density="comfortable"
+              hide-details
+              style="max-width: 120px"
+            />
+          </div>
+        </div>
+
+        <div class="setting-card">
+          <div class="setting-card-head">
+            <div>
+              <div class="setting-title">{{ tm('runtime.maxTokens') }}</div>
+              <div class="setting-subtitle">
+                {{ cfg.runtime.max_persisted_tokens == null ? tm('runtime.tokensUnlimited') : '' }}
+              </div>
+            </div>
+            <v-text-field
+              v-model.number="cfg.runtime.max_persisted_tokens"
+              type="number"
+              min="0"
+              variant="outlined"
+              density="comfortable"
+              hide-details
+              clearable
+              :placeholder="tm('runtime.tokensUnlimited')"
+              style="max-width: 140px"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="dashboard-section-head">
+        <div>
           <div class="dashboard-section-title">{{ tm('section.title') }}</div>
           <div class="dashboard-section-subtitle">{{ tm('section.subtitle') }}</div>
         </div>
@@ -272,11 +353,19 @@ type SubAgentItem = {
   skills?: string[] | null
 }
 
+type RuntimeConfig = {
+  enable: boolean
+  max_instances_per_scope: number
+  max_persisted_turns: number
+  max_persisted_tokens: number | null
+}
+
 type SubAgentConfig = {
   [key: string]: any
   main_enable: boolean
   remove_main_duplicate_tools: boolean
   agents: SubAgentItem[]
+  runtime: RuntimeConfig
 }
 
 const { tm } = useModuleI18n('features/subagent')
@@ -303,7 +392,13 @@ function toast(message: string, color: 'success' | 'error' | 'warning' = 'succes
 const cfg = ref<SubAgentConfig>({
   main_enable: false,
   remove_main_duplicate_tools: false,
-  agents: []
+  agents: [],
+  runtime: {
+    enable: false,
+    max_instances_per_scope: 8,
+    max_persisted_turns: 20,
+    max_persisted_tokens: null,
+  }
 })
 
 const availableSkillItems = ref<{ title: string; value: string }[]>([])
@@ -337,6 +432,16 @@ const mainStateDescription = computed(() =>
 
 const hasUnsavedChanges = computed(() => hasLoaded.value && serializeConfig(cfg.value) !== initialSnapshot.value)
 
+function normalizeRuntimeConfig(raw: any): RuntimeConfig {
+  const runtime = raw ?? {}
+  return {
+    enable: !!runtime.enable,
+    max_instances_per_scope: Number(runtime.max_instances_per_scope) || 8,
+    max_persisted_turns: Number(runtime.max_persisted_turns) || 20,
+    max_persisted_tokens: runtime.max_persisted_tokens != null ? Number(runtime.max_persisted_tokens) || null : null,
+  }
+}
+
 function normalizeConfig(raw: any): SubAgentConfig {
   const main_enable = !!raw?.main_enable
   const remove_main_duplicate_tools = !!raw?.remove_main_duplicate_tools
@@ -355,15 +460,23 @@ function normalizeConfig(raw: any): SubAgentConfig {
     skills: a?.skills === null ? null : Array.isArray(a?.skills) ? a.skills.map((skill: any) => skill.toString()) : []
   }))
 
-  return { ...raw, main_enable, remove_main_duplicate_tools, agents }
+  const runtime = normalizeRuntimeConfig(raw?.runtime)
+
+  return { ...raw, main_enable, remove_main_duplicate_tools, agents, runtime }
 }
 
 function toSerializableConfig(config: SubAgentConfig) {
-  const { agents, ...topLevelConfig } = config
+  const { agents, runtime, ...topLevelConfig } = config
   return {
     ...topLevelConfig,
     main_enable: config.main_enable,
     remove_main_duplicate_tools: config.remove_main_duplicate_tools,
+    runtime: {
+      enable: !!runtime.enable,
+      max_instances_per_scope: Number(runtime.max_instances_per_scope) || 8,
+      max_persisted_turns: Number(runtime.max_persisted_turns) || 20,
+      max_persisted_tokens: runtime.max_persisted_tokens != null ? Number(runtime.max_persisted_tokens) || null : null,
+    },
     agents: agents.map((agent) => {
       const { __key, ...agentConfig } = agent
       return {

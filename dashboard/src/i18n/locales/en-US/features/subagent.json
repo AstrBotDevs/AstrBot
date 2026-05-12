@@ -31,6 +31,15 @@
     "dedupe": "Deduplicate main LLM tools (hide tools duplicated by SubAgents)",
     "dedupeHint": "Remove duplicate tools from main agent"
   },
+  "runtime": {
+    "title": "Persistent Runtime Settings",
+    "enable": "Enable persistent runtime",
+    "enableHint": "Allow long-lived sub-agent instances with conversation history. Required for features like Agent Group.",
+    "maxInstances": "Max instances per scope",
+    "maxTurns": "Max persisted turns",
+    "maxTokens": "Max tokens (empty = unlimited)",
+    "tokensUnlimited": "Unlimited"
+  },
   "description": {
     "disabled": "When off: SubAgent is disabled; the main LLM mounts tools via persona rules (all by default) and calls them directly.",
     "enabled": "When on: the main LLM keeps its own tools and mounts transfer_to_* delegate tools. With deduplication, tools overlapping with SubAgents are removed from the main tool set."
