@@ -30,6 +30,7 @@ MAX_MSGS_PER_USER_SEGMENT = 50
 MAX_CHARS_PER_USER_SEGMENT = 3000
 MAX_RAW_BYTES = 500_000  # 500KB / 群
 DEFAULT_HISTORY_TOOL_RESULT_MAX_CHARS = 8192
+SUMMARY_RETRY_COOLDOWN = 5  # 轮数：LLM 摘要失败后等待多少轮再重试
 
 TOOL_CALL_PREFIX = "<T:CALL>"
 TOOL_RES_PREFIX = "<T:RES"
@@ -59,6 +60,9 @@ class LongTermMemory:
 
         self.summaries: dict[str, str] = defaultdict(str)
         """LLM summary 策略下每个群聊的长期摘要文本。"""
+
+        self._summary_next_retry: dict[str, int] = defaultdict(int)
+        """LLM 摘要失败后，下次允许重试的 rounds 数下限（冷却期内跳过）。"""
 
     # =========================================================================
     # 配置
@@ -181,6 +185,7 @@ class LongTermMemory:
         self._raw_cursor.pop(umo, None)
         self._persisted_tool_call_ids.pop(umo, None)
         self._persisted_tool_result_ids.pop(umo, None)
+        self._summary_next_retry.pop(umo, None)
         self.summaries.pop(umo, None)
         return cnt
 
@@ -357,13 +362,20 @@ class LongTermMemory:
                 trigger = cfg.get("ltm_summary_trigger_rounds", 80)
                 keep_recent = cfg.get("ltm_summary_keep_recent_rounds", 30)
                 if provider_id and len(rounds) > trigger:
-                    await self._compact_with_llm_summary(
-                        event,
-                        provider_id,
-                        keep_recent,
-                        cfg.get("ltm_summary_prompt", ""),
-                        rounds,
-                    )
+                    next_retry = self._summary_next_retry.get(umo, 0)
+                    if len(rounds) < next_retry:
+                        logger.debug(
+                            "LTM summary 冷却中 (umo=%s, rounds=%d, 允许=%d)",
+                            umo, len(rounds), next_retry,
+                        )
+                    else:
+                        await self._compact_with_llm_summary(
+                            event,
+                            provider_id,
+                            keep_recent,
+                            cfg.get("ltm_summary_prompt", ""),
+                            rounds,
+                        )
             else:
                 max_rounds = cfg.get("ltm_max_rounds", 80)
                 drop_rounds = cfg.get("ltm_truncate_drop_rounds", 50)
@@ -429,11 +441,15 @@ class LongTermMemory:
                     "LTM LLM summary 返回空文本，跳过本次压缩 "
                     "(umo=%s, provider=%s)", umo, provider_id
                 )
+                self._summary_next_retry[umo] = len(rounds) + SUMMARY_RETRY_COOLDOWN
                 return
             self.summaries[umo] = summary_text
             self.contexts[umo] = [seg for rnd in recent_rounds for seg in rnd]
+            # 成功后清除冷却，下次按正常 trigger 走
+            self._summary_next_retry.pop(umo, None)
         except Exception:
             logger.warning("LTM LLM summary 失败，保留原始 contexts", exc_info=True)
+            self._summary_next_retry[umo] = len(rounds) + SUMMARY_RETRY_COOLDOWN
 
     # =========================================================================
     # 裁剪

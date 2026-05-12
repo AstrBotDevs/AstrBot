@@ -1581,14 +1581,18 @@ class TestLLMSummaryErrorPath:
 
     @pytest.mark.asyncio
     async def test_empty_summary_response_is_no_op(self, mock_event):
-        """LLM 返回空文本时不得覆盖 context/summary。"""
-        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        """LLM 返回空文本时不得覆盖 context/summary，并设置冷却期。"""
+        from astrbot.builtin_stars.astrbot.long_term_memory import (
+            LongTermMemory,
+            SUMMARY_RETRY_COOLDOWN,
+        )
+        from astrbot.api.provider import Provider
         from unittest.mock import MagicMock, AsyncMock
 
         fake_resp = MagicMock()
         fake_resp.completion_text = "   "  # whitespace-only
 
-        fake_provider = MagicMock()
+        fake_provider = MagicMock(spec=Provider)
         fake_provider.text_chat = AsyncMock(return_value=fake_resp)
 
         ctx = MagicMock()
@@ -1598,18 +1602,22 @@ class TestLLMSummaryErrorPath:
         ltm = LongTermMemory(MagicMock(), ctx)
         umo = mock_event.unified_msg_origin
 
-        old_ctxs = [{"role": "user", "content": "old"}]
+        old_ctxs = [
+            {"role": "user", "content": "old"},
+            {"role": "assistant", "content": "old reply"},
+            {"role": "user", "content": "new"},
+            {"role": "assistant", "content": "new reply"},
+        ]
         ltm.contexts[umo] = old_ctxs
         ltm.summaries[umo] = "existing summary"
 
-        rounds = _split_into_rounds(old_ctxs + [
-            {"role": "assistant", "content": "new round"}
-        ])
+        rounds = _split_into_rounds(old_ctxs)  # 2 rounds
 
+        # keep_recent=1 → old_rounds has 1 round, provider will be called
         await ltm._compact_with_llm_summary(
             event=mock_event,
             provider_id="test_provider",
-            keep_recent=0,
+            keep_recent=1,
             prompt="",
             rounds=rounds,
         )
@@ -1617,6 +1625,93 @@ class TestLLMSummaryErrorPath:
         # Both must be untouched
         assert ltm.contexts[umo] is old_ctxs
         assert ltm.summaries[umo] == "existing summary"
+        # Cooldown set
+        assert ltm._summary_next_retry[umo] == len(rounds) + SUMMARY_RETRY_COOLDOWN
+
+    @pytest.mark.asyncio
+    async def test_summary_exception_sets_cooldown(self, mock_event):
+        """LLM 调用抛异常时设置冷却期。"""
+        from astrbot.builtin_stars.astrbot.long_term_memory import (
+            LongTermMemory,
+            SUMMARY_RETRY_COOLDOWN,
+        )
+        from astrbot.api.provider import Provider
+        from unittest.mock import MagicMock, AsyncMock
+
+        fake_provider = MagicMock(spec=Provider)
+        fake_provider.text_chat = AsyncMock(side_effect=RuntimeError("boom"))
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {}
+        ctx.get_provider_by_id.return_value = fake_provider
+
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = mock_event.unified_msg_origin
+
+        ctxs = [
+            {"role": "user", "content": "q0"},
+            {"role": "assistant", "content": "a0"},
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+        ]
+        ltm.contexts[umo] = ctxs
+        ltm.summaries[umo] = "existing summary"
+
+        rounds = _split_into_rounds(ctxs)  # 2 rounds
+
+        await ltm._compact_with_llm_summary(
+            event=mock_event,
+            provider_id="test_provider",
+            keep_recent=1,
+            prompt="",
+            rounds=rounds,
+        )
+
+        assert ltm.contexts[umo] is ctxs
+        assert ltm.summaries[umo] == "existing summary"
+        assert ltm._summary_next_retry[umo] == len(rounds) + SUMMARY_RETRY_COOLDOWN
+
+    @pytest.mark.asyncio
+    async def test_summary_success_clears_cooldown(self, mock_event):
+        """LLM 调用成功时清除冷却标记。"""
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        from astrbot.api.provider import Provider
+        from unittest.mock import MagicMock, AsyncMock
+
+        fake_resp = MagicMock()
+        fake_resp.completion_text = "good summary"
+
+        fake_provider = MagicMock(spec=Provider)
+        fake_provider.text_chat = AsyncMock(return_value=fake_resp)
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {}
+        ctx.get_provider_by_id.return_value = fake_provider
+
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = mock_event.unified_msg_origin
+        # Pre-set cooldown to simulate a previous failure
+        ltm._summary_next_retry[umo] = 999
+
+        ctxs = [
+            {"role": "user", "content": "q0"},
+            {"role": "assistant", "content": "a0"},
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+        ]
+        rounds = _split_into_rounds(ctxs)  # 2 rounds
+
+        await ltm._compact_with_llm_summary(
+            event=mock_event,
+            provider_id="test_provider",
+            keep_recent=1,
+            prompt="",
+            rounds=rounds,
+        )
+
+        # Cooldown cleared
+        assert umo not in ltm._summary_next_retry
+        assert ltm.summaries[umo] == "good summary"
 
 
 # =============================================================================
