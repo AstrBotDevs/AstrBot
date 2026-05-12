@@ -6,17 +6,68 @@
 
 在 [release](https://github.com/AstrBotDevs/AstrBot/releases) 页面下载 `dist.zip`，解压拖到 `AstrBot/data` 下。还不行请重启电脑（来自群里的反馈）
 
+
+### 首次登录的默认账号和随机密码
+
+首次启动时，WebUI 的默认账号为 `astrbot`，默认密码会随机生成，不会写死为固定值。请在启动日志中查找以下内容并使用日志中的随机初始密码登录：
+
+```text
+[00:27:40.590] [Core] [INFO] [dashboard.server:523]:
+ ✨✨✨
+  AstrBot v4.24.3 WebUI is ready
+
+   ➜  Local: http://localhost:6185
+   ➜  Initial username: astrbot
+   ➜  Initial password: UiYVpZxnW8k22IWqf0ru5pOy
+   ➜  Change it after logging in
+ ✨✨✨
+Set dashboard.host in data/cmd_config.json to enable remote access.
+```
+
 ### 管理面板的密码忘记了
 
-如果你忘记了 AstrBot 管理面板的密码，你可以在 `AstrBot/data/cmd_config.json` 配置文件中找到 `"dashboard"` 字段进行修改，其中 `"username"` 是你的用户名，`"password"` 是你的密码（经过 MD5 加密）。
+如果你忘记了 AstrBot 管理面板的密码，你可以在 `AstrBot/data/cmd_config.json` 配置文件中找到 `"dashboard"` 字段，如下：
 
-如果想要修改账号密码，你可以这样做：
+```json
+  "dashboard": {
+    "enable": true,
+    "username": "astrbot",
+    "password": "81e0c3dxxxxxxxxxxx78862e78",
+    "pbkdf2_password": "pbkdf2_sha256$600000$1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "password_storage_upgraded": true,
+    "password_change_required": true,
+    "jwt_secret": "5e1b0280bcxxxxxxxxxxxxxxxxf4a",
+    "host": "127.0.0.1",
+    "port": 6185,
+    "disable_access_log": true,
+    "ssl": {
+      "enable": false,
+      "cert_file": "",
+      "key_file": "",
+      "ca_certs": ""
+    }
+  },
+```
 
-1. 修改 `"username"` 字段，注意保留 `""`；如果不想修改用户名，可以不修改
-2. 进入网站：[在线 MD5 生成](https://www.metools.info/code/c26.html)
-3. 在转换前文本框输入你的新密码
-4. 选择 MD5 加密（32 位），请确认选择 32 位选项
-5. 将转换后的字符粘贴至配置文件，注意保留 `""`, 且字母使用小写
+删除 `username`, `password`, `pbkdf2_password`, `password_storage_upgraded`, `password_change_required`, `jwt_secret` 五个字段（连同值一起），然后保存。上述片段修改类似如下：
+
+
+```json
+  "dashboard": {
+    "enable": true,
+    "host": "127.0.0.1",
+    "port": 6185,
+    "disable_access_log": true,
+    "ssl": {
+      "enable": false,
+      "cert_file": "",
+      "key_file": "",
+      "ca_certs": ""
+    }
+  },
+```
+
+重启后 AstrBot 将会自动生成随机的密码以及固定的用户名 `astrbot`，请在日志查看。
 
 ## AstrBot 使用相关
 
