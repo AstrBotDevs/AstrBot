@@ -172,7 +172,7 @@ You can add different aliases for commands or command groups:
 
 ```python
 @filter.command("help", alias={'帮助', 'helpme'})
-def help(self, event: AstrMessageEvent):
+async def help(self, event: AstrMessageEvent):
     yield event.plain_result("This is a calculator plugin with add and sub commands.")
 ```
 
