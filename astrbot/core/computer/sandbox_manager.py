@@ -1144,7 +1144,12 @@ class SandboxManager:
         self.save_registry()
         return self.registry.get_sandbox(sandbox_id) or record
 
-    async def takeover_sandbox(self, session_id: str, sandbox_id: str) -> dict:
+    async def takeover_sandbox(
+        self,
+        session_id: str,
+        sandbox_id: str,
+        context: Context | None = None,
+    ) -> dict:
         record = self.registry.get_sandbox(sandbox_id)
         if record is None or not record.get("managed"):
             raise RuntimeError(f"Sandbox {sandbox_id} not found")
@@ -1183,7 +1188,7 @@ class SandboxManager:
                 sandbox_id=sandbox_id,
                 session_id=session_id,
                 user_id=session_id,
-                ttl=DEFAULT_SANDBOX_LEASE_TIMEOUT_SECONDS,
+                ttl=self._lease_timeout(context, session_id),
             )
             or record
         )

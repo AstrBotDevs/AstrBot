@@ -970,6 +970,22 @@ async def test_manager_takeover_releases_previous_sandbox_owned_by_same_session(
 
 
 @pytest.mark.asyncio
+async def test_manager_takeover_uses_configured_lease_timeout(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+
+    taken = await manager.takeover_sandbox(
+        "session-b",
+        created["sandbox_id"],
+        context=FakeContext({"sandbox_lease_timeout": 12}),
+    )
+
+    assert taken["controller_session_id"] == "session-b"
+    assert taken["lease_expires_at"] > time.time() + 10
+    assert taken["lease_expires_at"] < time.time() + 20
+
+
+@pytest.mark.asyncio
 async def test_manager_force_releases_other_session_lease(tmp_path):
     manager, _provider = _manager(tmp_path)
     created = await manager.create_sandbox(None, "session-a", "generic", "Named")

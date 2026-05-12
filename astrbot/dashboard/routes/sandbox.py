@@ -161,7 +161,7 @@ class SandboxRoute(Route):
     async def takeover_sandbox(self, sandbox_id: str):
         try:
             sandbox = await computer_client.sandbox_manager.takeover_sandbox(
-                self._session_id(), sandbox_id
+                self._session_id(), sandbox_id, context=self.core_lifecycle.star_context
             )
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
         except Exception as e:

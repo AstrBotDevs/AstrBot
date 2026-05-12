@@ -5,7 +5,7 @@ import time
 from collections.abc import Mapping
 from typing import Any
 
-DEFAULT_SANDBOX_LEASE_TIMEOUT_SECONDS = 300.0
+DEFAULT_SANDBOX_LEASE_TIMEOUT_SECONDS = 600.0
 
 
 def _coerce_timeout(value: Any, default: float) -> float:
