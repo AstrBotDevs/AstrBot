@@ -28,7 +28,7 @@ router.beforeEach(async (to, from, next) => {
     loadingStore.start();
   }
 
-  const publicPages = ['/auth/login'];
+  const publicPages = ['/auth/login', '/auth/setup'];
   const authRequired = !publicPages.includes(to.path);
   const auth: AuthStore = useAuthStore();
 

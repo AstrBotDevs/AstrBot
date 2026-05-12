@@ -25,7 +25,7 @@
     "date-fns": "2.30.0",
     "dompurify": "^3.3.2",
     "event-source-polyfill": "^1.0.31",
-    "js-md5": "^0.8.3",
+    "highlight.js": "11.11.1",
     "katex": "^0.16.27",
     "lodash": "4.17.23",
     "markdown-it": "^14.1.1",

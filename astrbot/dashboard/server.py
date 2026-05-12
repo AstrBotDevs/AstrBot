@@ -153,7 +153,7 @@ class AstrBotDashboard:
         self.cr = ConfigRoute(self.context, core_lifecycle)
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
         self.sfr = StaticFileRoute(self.context)
-        self.ar = AuthRoute(self.context)
+        self.ar = AuthRoute(self.context, db)
         self.api_key_route = ApiKeyRoute(self.context, db)
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
         self.open_api_route = OpenApiRoute(
@@ -241,15 +241,21 @@ class AstrBotDashboard:
             await self.db.touch_api_key(api_key.key_id)
             return None
 
-        allowed_endpoints = [
+        allowed_exact_endpoints = {
             "/api/auth/login",
             "/api/auth/logout",
+            "/api/auth/setup-status",
+            "/api/auth/setup",
+        }
+        allowed_endpoint_prefixes = [
             "/api/file",
             "/api/platform/webhook",
             "/api/stat/start-time",
             "/api/backup/download",  # 备份下载使用 URL 参数传递 token
         ]
-        if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
+        if request.path in allowed_exact_endpoints or any(
+            request.path.startswith(prefix) for prefix in allowed_endpoint_prefixes
+        ):
             return None
         is_plugin_page_path = PluginPageAuth.is_protected_path(request.path)
         token = self._extract_dashboard_jwt()
@@ -373,6 +379,20 @@ class AstrBotDashboard:
             logger.info("Initialized random JWT secret for dashboard.")
         self._jwt_secret = self.config["dashboard"]["jwt_secret"]
 
+    def _build_dashboard_credentials_display(self) -> str:
+        username = self.config["dashboard"].get("username", "astrbot")
+        generated_password = getattr(self.config, "_generated_dashboard_password", None)
+        if not generated_password:
+            return f"   ➜  Username: {username}\n ✨✨✨\n"
+
+        credentials_display = (
+            f"   ➜  Initial username: {username}\n"
+            f"   ➜  Initial password: {generated_password}\n"
+            "   ➜  Change it after logging in\n ✨✨✨\n"
+        )
+        object.__setattr__(self.config, "_generated_dashboard_password", None)
+        return credentials_display
+
     @staticmethod
     def _resolve_dashboard_ssl_config(
         ssl_config: dict,
@@ -492,7 +512,7 @@ class AstrBotDashboard:
         parts.append(f"   ➜  Local: {scheme}://localhost:{port}\n")
         for ip in ip_addr:
             parts.append(f"   ➜  Network: {scheme}://{ip}:{port}\n")
-        parts.append("   ➜  Default username/password: astrbot / astrbot\n ✨✨✨\n")
+        parts.append(self._build_dashboard_credentials_display())
         display = "".join(parts)
 
         if not ip_addr:
