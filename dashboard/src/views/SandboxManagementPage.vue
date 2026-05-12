@@ -946,8 +946,7 @@ async function createSandbox() {
 
     createDialog.value = false
     createName.value = ''
-    const placeholder = { ...created, status: 'creating' as const }
-    startCreatePolling(created.sandbox_id, placeholder)
+    startCreatePolling(created.sandbox_id, created)
   } catch (e: any) {
     toast(e?.response?.data?.message || tm('messages.operationFailed'), 'error')
   } finally {

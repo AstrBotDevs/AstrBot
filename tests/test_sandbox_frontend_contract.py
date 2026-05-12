@@ -71,12 +71,13 @@ def test_sandbox_management_page_release_is_not_limited_to_dashboard_controller(
     assert "return status !== 'stopping' && !!item.controller_session_id" in content
 
 
-def test_sandbox_management_page_refreshes_list_after_immediate_create_success():
+def test_sandbox_management_page_uses_backend_create_record_without_local_status_guess():
     content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
         encoding="utf-8"
     )
 
-    assert "const placeholder = { ...created, status: 'creating' as const }" in content
+    assert "status: 'creating' as const" not in content
+    assert "startCreatePolling(created.sandbox_id, created)" in content
     assert "upsertSandboxRecord(placeholder)" in content
     assert (
         "const index = sandboxes.value.findIndex((item) => item.sandbox_id === record.sandbox_id)"
