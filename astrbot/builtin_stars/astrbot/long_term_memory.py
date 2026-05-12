@@ -366,7 +366,9 @@ class LongTermMemory:
                     if len(rounds) < next_retry:
                         logger.debug(
                             "LTM summary 冷却中 (umo=%s, rounds=%d, 允许=%d)",
-                            umo, len(rounds), next_retry,
+                            umo,
+                            len(rounds),
+                            next_retry,
                         )
                     else:
                         await self._compact_with_llm_summary(
@@ -438,8 +440,9 @@ class LongTermMemory:
             summary_text = resp.completion_text.strip()
             if not summary_text:
                 logger.warning(
-                    "LTM LLM summary 返回空文本，跳过本次压缩 "
-                    "(umo=%s, provider=%s)", umo, provider_id
+                    "LTM LLM summary 返回空文本，跳过本次压缩 (umo=%s, provider=%s)",
+                    umo,
+                    provider_id,
                 )
                 self._summary_next_retry[umo] = len(rounds) + SUMMARY_RETRY_COOLDOWN
                 return
