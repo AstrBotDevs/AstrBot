@@ -1357,6 +1357,8 @@ class SandboxManager:
     async def reconcile_on_startup(self) -> None:
         for sandbox_id in list(self.pending_boot_tasks):
             await self.cancel_pending_boot_task(sandbox_id)
+        for sandbox_id in list(self.pending_destroy_tasks):
+            await self.wait_pending_destroy_task(sandbox_id, timeout=None)
         self.registry.load()
         self.registry.reconcile_startup()
         self.clear_all_runtime_state()
@@ -1612,15 +1614,6 @@ class SandboxManager:
                         expires_at=current_expires_at, task=state.task
                     )
                     continue
-                last_used_at = record.get("last_used_at")
-                if last_used_at is not None:
-                    idle_remaining = timeout - (time.time() - float(last_used_at))
-                    if idle_remaining > 0:
-                        current_expires_at = time.monotonic() + idle_remaining
-                        self.idle_state[sandbox_id] = SandboxIdleState(
-                            expires_at=current_expires_at, task=state.task
-                        )
-                        continue
                 booter = self.session_booter.get(sandbox_id)
                 if record.get("retention_policy") == "persistent":
                     self.session_booter.pop(sandbox_id, None)

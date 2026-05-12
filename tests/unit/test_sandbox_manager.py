@@ -1397,6 +1397,23 @@ async def test_manager_reconcile_on_startup_clears_all_runtime_state(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_manager_reconcile_on_startup_waits_for_pending_destroy_tasks(tmp_path):
+    manager, provider = _manager(tmp_path, BlockingDestroyProvider())
+    sandbox = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    task = asyncio.create_task(
+        manager.destroy_sandbox_deferred("session-a", sandbox["sandbox_id"])
+    )
+    await asyncio.wait_for(provider.destroy_started.wait(), timeout=1)
+    provider.allow_destroy.set()
+
+    await manager.reconcile_on_startup()
+    await task
+
+    assert sandbox["sandbox_id"] not in manager.pending_destroy_tasks
+    assert manager.registry.get_sandbox(sandbox["sandbox_id"]) is None
+
+
+@pytest.mark.asyncio
 async def test_manager_reconcile_on_startup_keeps_persistent_records_for_missing_provider(
     tmp_path,
 ):
@@ -1546,6 +1563,24 @@ async def test_manager_idle_cleanup_removes_temporary_sandbox(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_manager_idle_cleanup_uses_scheduled_monotonic_deadline(tmp_path):
+    manager, provider = _manager(tmp_path)
+    context = FakeContext({"sandbox_idle_timeout": 0.01, "sandbox_ttl": 0})
+
+    sandbox = await manager.create_sandbox(context, "session-a", "generic", "Named")
+    sandbox_id = sandbox["sandbox_id"]
+    manager.release_current_sandbox("session-a", sandbox_id)
+    manager.registry._payload["sandboxes"][sandbox_id]["last_used_at"] = (
+        time.time() + 3600
+    )
+
+    await asyncio.sleep(0.05)
+
+    assert manager.registry.get_sandbox(sandbox_id) is None
+    assert provider.destroyed[0][1] == sandbox_id
+
+
+@pytest.mark.asyncio
 async def test_manager_idle_cleanup_does_not_retry_dead_booter(tmp_path):
     provider = DeadIdleDestroyProvider()
     manager, provider = _manager(tmp_path, provider)
@@ -1680,6 +1715,37 @@ def test_manager_update_sandbox_config_rejects_duplicate_name(tmp_path):
             expires_at=None,
             retention_policy="temporary",
         )
+
+
+@pytest.mark.asyncio
+async def test_manager_update_sandbox_config_clears_expires_at_when_idle_enabled(
+    tmp_path,
+):
+    manager, _provider = _manager(tmp_path)
+    record = manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Generic"},
+        idle_timeout=0,
+        expires_at=time.time() + 3600,
+    )
+
+    updated = manager.update_sandbox_config(
+        record["sandbox_id"],
+        idle_timeout=30,
+        expires_at=time.time() + 7200,
+        retention_policy="temporary",
+    )
+
+    assert updated["idle_timeout"] == 30
+    assert updated["expires_at"] is None
+    assert record["sandbox_id"] in manager.idle_state
+    assert record["sandbox_id"] not in manager.expiration_state
 
 
 def test_manager_update_sandbox_config_rejects_persistent_for_unsupported_provider(
