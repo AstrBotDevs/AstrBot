@@ -795,6 +795,50 @@ class TestAgentDoneToolChains:
         assert ltm._persisted_tool_call_ids[umo] == {"c1", "c2"}
         assert ltm._persisted_tool_result_ids[umo] == {"c1", "c2"}
 
+    @pytest.mark.asyncio
+    async def test_tool_result_not_truncated_when_disabled(self, mock_event):
+        """history_tool_result_truncate=False 时工具结果不被截断。"""
+        from collections import deque
+        from unittest.mock import MagicMock
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                                 "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+                "history_tool_result_truncate": False,
+                "history_tool_result_max_chars": 10,  # 如果截断就会生效
+                "ltm_compaction_strategy": "truncate",
+                "ltm_max_rounds": 80,
+                "ltm_truncate_drop_rounds": 50,
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = mock_event.unified_msg_origin
+        ltm.raw_records[umo] = deque()
+
+        long_content = "TOOL-RESULT-" + ("X" * 5000)
+
+        tool_msg = MagicMock()
+        tool_msg.role = "tool"
+        tool_msg.tool_call_id = "tool-1"
+        tool_msg.content = long_content
+
+        run_ctx = MagicMock(messages=[tool_msg])
+
+        await ltm.on_agent_done(mock_event, run_ctx, None)
+
+        # raw_records 被 _trim_raw_records 清空，检查 contexts
+        ctxs = ltm.contexts[umo]
+        tool_msgs = [c for c in ctxs if c.get("role") == "tool"]
+        assert len(tool_msgs) > 0
+        assert long_content in tool_msgs[0]["content"]
+        assert "[TRUNCATED" not in tool_msgs[0]["content"]
+
 
 # =============================================================================
 # 极端数据
