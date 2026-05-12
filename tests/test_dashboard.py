@@ -16,6 +16,7 @@ from quart import Quart
 from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
+from astrbot.core.config.default import CONFIG_METADATA_2
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
@@ -597,6 +598,15 @@ def test_agent_group_dashboard_page_is_registered():
     assert "member.skills" not in page
     assert "axios.get('/api/agent-group/config')" in page
     assert "axios.post('/api/agent-group/config', payload)" in page
+
+
+def test_provider_templates_include_openai_responses_type():
+    provider_templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
+        "config_template"
+    ]
+    template = provider_templates["OpenAI Responses"]
+
+    assert template["type"] == "openai_responses_completion"
 
 
 @pytest.mark.asyncio

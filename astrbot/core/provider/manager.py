@@ -361,6 +361,10 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
+            case "openai_responses_completion":
+                from .sources.openai_source import (
+                    ProviderOpenAIResponses as ProviderOpenAIResponses,
+                )
             case "longcat_chat_completion":
                 from .sources.longcat_source import ProviderLongCat as ProviderLongCat
             case "minimax_token_plan":
@@ -855,7 +859,7 @@ class ProviderManager:
             # load instance
             await self.load_provider(new_config)
             # sync in-memory config for API queries (e.g., embedding provider list)
-            self.providers_config = astrbot_config["provider"]
+            self.providers_config = config["provider"]
 
     async def terminate(self) -> None:
         if self._mcp_init_task and not self._mcp_init_task.done():

@@ -7,7 +7,10 @@ from PIL import Image as PILImage
 
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.sources.groq_source import ProviderGroq
-from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+from astrbot.core.provider.sources.openai_source import (
+    ProviderOpenAIOfficial,
+    ProviderOpenAIResponses,
+)
 
 
 class _ErrorWithBody(Exception):
@@ -37,6 +40,23 @@ def _make_provider(overrides: dict | None = None) -> ProviderOpenAIOfficial:
     )
 
 
+def _make_responses_provider(
+    overrides: dict | None = None,
+) -> ProviderOpenAIResponses:
+    provider_config = {
+        "id": "test-openai-responses",
+        "type": "openai_responses_completion",
+        "model": "gpt-5.5",
+        "key": ["test-key"],
+    }
+    if overrides:
+        provider_config.update(overrides)
+    return ProviderOpenAIResponses(
+        provider_config=provider_config,
+        provider_settings={},
+    )
+
+
 def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
     provider_config = {
         "id": "test-groq",
@@ -50,6 +70,628 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
         provider_config=provider_config,
         provider_settings={},
     )
+
+
+class _MemoryConfig(dict):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.saved = False
+
+    def save_config(self):
+        self.saved = True
+
+
+@pytest.mark.asyncio
+async def test_openai_responses_provider_uses_configured_model():
+    provider = _make_responses_provider()
+    try:
+        assert provider.get_model() == "gpt-5.5"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_responses_created_provider_uses_responses_api(monkeypatch):
+    from astrbot.core.provider.manager import ProviderManager
+
+    config = _MemoryConfig(
+        {
+            "provider": [],
+            "provider_sources": [],
+            "provider_settings": {
+                "default_provider_id": "responses-created",
+            },
+        }
+    )
+    manager = ProviderManager(
+        acm=SimpleNamespace(default_conf=config, confs={"default": config}),
+        db_helper=SimpleNamespace(),
+        persona_mgr=SimpleNamespace(default_persona=None),
+    )
+    provider_config = {
+        "id": "responses-created",
+        "provider": "openai",
+        "type": "openai_responses_completion",
+        "provider_type": "chat_completion",
+        "enable": True,
+        "key": ["test-key"],
+        "api_base": "https://example.invalid/v1",
+        "model": "gpt-5.5",
+        "custom_extra_body": {
+            "reasoning": {"effort": "high"},
+            "vendor_option": {"trace": "task-5"},
+        },
+    }
+    try:
+        await manager.create_provider(provider_config)
+        provider = manager.inst_map["responses-created"]
+        assert isinstance(provider, ProviderOpenAIResponses)
+
+        captured_kwargs = {}
+
+        async def fake_responses_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return SimpleNamespace(
+                id="resp-task-5",
+                output=[
+                    SimpleNamespace(
+                        type="message",
+                        role="assistant",
+                        content=[SimpleNamespace(type="output_text", text="ok")],
+                    )
+                ],
+                usage=SimpleNamespace(
+                    input_tokens=3,
+                    input_tokens_details=SimpleNamespace(cached_tokens=1),
+                    output_tokens=2,
+                ),
+            )
+
+        async def fail_chat_create(**_kwargs):
+            raise AssertionError("Responses provider used chat completions")
+
+        monkeypatch.setattr(provider.client.responses, "create", fake_responses_create)
+        monkeypatch.setattr(
+            provider.client.chat.completions, "create", fail_chat_create
+        )
+
+        llm_response = await provider.text_chat(
+            prompt="hello",
+            system_prompt="system",
+        )
+
+        assert config.saved is True
+        assert manager.providers_config == [provider_config]
+        assert llm_response.completion_text == "ok"
+        assert captured_kwargs["model"] == "gpt-5.5"
+        assert captured_kwargs["stream"] is False
+        assert "messages" not in captured_kwargs
+        assert captured_kwargs["input"] == [
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": "system"}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": "hello"}],
+            },
+        ]
+        assert captured_kwargs["reasoning"] == {"effort": "high"}
+        assert captured_kwargs["extra_body"] == {"vendor_option": {"trace": "task-5"}}
+    finally:
+        await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_payload_converts_text_and_image_input_blocks(monkeypatch):
+    provider = _make_responses_provider()
+    try:
+
+        async def fake_resolve_image_part(image_url: str, *, image_detail=None):
+            assert image_url == "https://example.com/a.png"
+            assert image_detail is None
+            return {
+                "type": "image_url",
+                "image_url": {"url": "https://example.com/a.png"},
+            }
+
+        monkeypatch.setattr(provider, "_resolve_image_part", fake_resolve_image_part)
+
+        payload = await provider._prepare_responses_payload(
+            prompt="look",
+            image_urls=["https://example.com/a.png"],
+            system_prompt="system",
+            model="gpt-5.5",
+        )
+
+        assert payload["model"] == "gpt-5.5"
+        assert payload["input"] == [
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": "system"}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "look"},
+                    {
+                        "type": "input_image",
+                        "image_url": "https://example.com/a.png",
+                        "detail": "auto",
+                    },
+                ],
+            },
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_chat_completion_provider_does_not_use_responses_api(monkeypatch):
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+
+        async def fake_chat_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-task-5",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            )
+
+        async def fail_responses_create(**_kwargs):
+            raise AssertionError("Chat completion provider used Responses API")
+
+        monkeypatch.setattr(
+            provider.client.chat.completions, "create", fake_chat_create
+        )
+        monkeypatch.setattr(provider.client.responses, "create", fail_responses_create)
+
+        llm_response = await provider.text_chat(prompt="hello")
+
+        assert llm_response.completion_text == "ok"
+        assert captured_kwargs["model"] == "gpt-4o-mini"
+        assert captured_kwargs["stream"] is False
+        assert captured_kwargs["messages"] == [{"role": "user", "content": "hello"}]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_payload_splits_reasoning_from_extra_body():
+    provider = _make_responses_provider(
+        {
+            "custom_extra_body": {
+                "reasoning": {"effort": "high"},
+                "metadata": {"session": "test"},
+            }
+        }
+    )
+    try:
+        payload = await provider._prepare_responses_payload(prompt="hello")
+
+        assert payload["reasoning"] == {"effort": "high"}
+        assert payload["extra_body"] == {"metadata": {"session": "test"}}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_payload_converts_tool_call_history():
+    provider = _make_responses_provider()
+    try:
+        payload = await provider._prepare_responses_payload(
+            contexts=[
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call-123",
+                            "type": "function",
+                            "function": {
+                                "name": "lookup_weather",
+                                "arguments": '{"city": "Hefei"}',
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call-123",
+                    "content": "sunny",
+                },
+            ],
+        )
+
+        assert payload["input"] == [
+            {
+                "type": "function_call",
+                "call_id": "call-123",
+                "name": "lookup_weather",
+                "arguments": '{"city": "Hefei"}',
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call-123",
+                "output": "sunny",
+            },
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_payload_orders_assistant_content_before_tool_calls():
+    provider = _make_responses_provider()
+    try:
+        payload = await provider._prepare_responses_payload(
+            contexts=[
+                {
+                    "role": "assistant",
+                    "content": "I will check that.",
+                    "tool_calls": [
+                        {
+                            "id": "call-123",
+                            "type": "function",
+                            "function": {
+                                "name": "lookup_weather",
+                                "arguments": '{"city": "Hefei"}',
+                            },
+                        }
+                    ],
+                },
+            ],
+        )
+
+        assert payload["input"] == [
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "input_text", "text": "I will check that."},
+                ],
+            },
+            {
+                "type": "function_call",
+                "call_id": "call-123",
+                "name": "lookup_weather",
+                "arguments": '{"city": "Hefei"}',
+            },
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_payload_skips_empty_assistant_without_tool_calls():
+    provider = _make_responses_provider()
+    try:
+        payload = await provider._prepare_responses_payload(
+            contexts=[
+                {"role": "assistant", "content": None},
+                {"role": "assistant", "content": ""},
+            ]
+        )
+
+        assert payload["input"] == []
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_payload_rejects_unsupported_audio_parts():
+    provider = _make_responses_provider()
+    try:
+        with pytest.raises(ValueError, match="Unsupported Responses content part type"):
+            await provider._prepare_responses_payload(
+                contexts=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_audio",
+                                "input_audio": {"data": "abcd", "format": "wav"},
+                            }
+                        ],
+                    }
+                ]
+            )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_response_parses_text_reasoning_tool_call_and_usage():
+    provider = _make_responses_provider()
+    try:
+        response = SimpleNamespace(
+            id="resp-123",
+            output=[
+                SimpleNamespace(
+                    type="message",
+                    role="assistant",
+                    content=[
+                        SimpleNamespace(type="output_text", text="Hello "),
+                        {"type": "output_text", "text": "world"},
+                    ],
+                ),
+                SimpleNamespace(
+                    type="reasoning",
+                    summary=[
+                        SimpleNamespace(
+                            type="summary_text", text="Checked the weather."
+                        ),
+                    ],
+                ),
+                SimpleNamespace(
+                    type="function_call",
+                    call_id="call-weather",
+                    name="lookup_weather",
+                    arguments='{"city": "Hefei"}',
+                ),
+            ],
+            usage=SimpleNamespace(
+                input_tokens=10,
+                input_tokens_details=SimpleNamespace(cached_tokens=3),
+                output_tokens=5,
+            ),
+        )
+
+        llm_response = await provider._parse_openai_responses_response(response)
+
+        assert llm_response.role == "tool"
+        assert llm_response.id == "resp-123"
+        assert llm_response.raw_completion is response
+        assert llm_response.completion_text == "Hello world"
+        assert llm_response.reasoning_content == "Checked the weather."
+        assert llm_response.tools_call_args == [{"city": "Hefei"}]
+        assert llm_response.tools_call_name == ["lookup_weather"]
+        assert llm_response.tools_call_ids == ["call-weather"]
+        assert llm_response.usage is not None
+        assert llm_response.usage.input_other == 7
+        assert llm_response.usage.input_cached == 3
+        assert llm_response.usage.output == 5
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_response_raises_empty_model_output_error():
+    provider = _make_responses_provider()
+    try:
+        response = SimpleNamespace(id="resp-empty", output=[], usage=None)
+
+        with pytest.raises(EmptyModelOutputError):
+            await provider._parse_openai_responses_response(response)
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_response_preserves_refusal_as_completion_text():
+    provider = _make_responses_provider()
+    try:
+        response = SimpleNamespace(
+            id="resp-refusal",
+            output=[
+                SimpleNamespace(
+                    type="message",
+                    role="assistant",
+                    content=[
+                        {"type": "refusal", "refusal": "I cannot help with that."},
+                        SimpleNamespace(
+                            type="refusal", text=" Please try another request."
+                        ),
+                    ],
+                )
+            ],
+            usage=None,
+        )
+
+        llm_response = await provider._parse_openai_responses_response(response)
+
+        assert llm_response.role == "assistant"
+        assert (
+            llm_response.completion_text
+            == "I cannot help with that. Please try another request."
+        )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_response_stream_reconstructs_text_reasoning_and_tool_call():
+    provider = _make_responses_provider()
+    try:
+        events = [
+            SimpleNamespace(
+                type="response.output_text.delta",
+                output_index=0,
+                content_index=0,
+                delta="Hel",
+            ),
+            SimpleNamespace(
+                type="response.output_text.delta",
+                output_index=0,
+                content_index=0,
+                delta="lo",
+            ),
+            SimpleNamespace(
+                type="response.output_text.done",
+                output_index=0,
+                content_index=0,
+                text="Hello",
+            ),
+            SimpleNamespace(
+                type="response.reasoning_summary_text.delta",
+                output_index=1,
+                summary_index=0,
+                delta="Pl",
+            ),
+            SimpleNamespace(
+                type="response.reasoning_summary_text.delta",
+                output_index=1,
+                summary_index=0,
+                delta="an",
+            ),
+            SimpleNamespace(
+                type="response.reasoning_summary_text.done",
+                output_index=1,
+                summary_index=0,
+                text="Plan",
+            ),
+            SimpleNamespace(
+                type="response.function_call_arguments.delta",
+                output_index=2,
+                item_id="call-stream",
+                delta='{"city"',
+            ),
+            SimpleNamespace(
+                type="response.function_call_arguments.delta",
+                output_index=2,
+                item_id="call-stream",
+                delta=': "Hefei"}',
+            ),
+            SimpleNamespace(
+                type="response.function_call_arguments.done",
+                output_index=2,
+                item_id="call-stream",
+                name="lookup_weather",
+                arguments='{"city": "Hefei"}',
+            ),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(
+                    id="resp-stream",
+                    output=[],
+                    usage=SimpleNamespace(
+                        input_tokens=12,
+                        input_tokens_details=SimpleNamespace(cached_tokens=2),
+                        output_tokens=4,
+                    ),
+                ),
+            ),
+        ]
+
+        async def fake_stream():
+            for event in events:
+                yield event
+
+        responses = [
+            response
+            async for response in provider._parse_openai_responses_stream(fake_stream())
+        ]
+
+        assert responses[0].is_chunk is True
+        assert responses[0].completion_text == "Hel"
+        final_response = responses[-1]
+        assert final_response.is_chunk is False
+        assert final_response.role == "tool"
+        assert final_response.id == "resp-stream"
+        assert final_response.completion_text == "Hello"
+        assert final_response.reasoning_content == "Plan"
+        assert final_response.tools_call_args == [{"city": "Hefei"}]
+        assert final_response.tools_call_name == ["lookup_weather"]
+        assert final_response.tools_call_ids == ["call-stream"]
+        assert final_response.usage is not None
+        assert final_response.usage.input_other == 10
+        assert final_response.usage.input_cached == 2
+        assert final_response.usage.output == 4
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_response_stream_failed_event_raises_after_delta():
+    provider = _make_responses_provider()
+    try:
+        events = [
+            SimpleNamespace(
+                type="response.output_text.delta",
+                output_index=0,
+                content_index=0,
+                delta="partial",
+            ),
+            SimpleNamespace(
+                type="response.failed",
+                response=SimpleNamespace(
+                    id="resp-failed",
+                    status="failed",
+                    error=SimpleNamespace(
+                        code="rate_limit_exceeded",
+                        message="upstream rate limit",
+                    ),
+                ),
+            ),
+        ]
+
+        async def fake_stream():
+            for event in events:
+                yield event
+
+        responses = []
+        with pytest.raises(
+            Exception,
+            match="OpenAI Responses stream failed.*rate_limit_exceeded.*upstream rate limit",
+        ):
+            async for response in provider._parse_openai_responses_stream(
+                fake_stream()
+            ):
+                responses.append(response)
+
+        assert len(responses) == 1
+        assert responses[0].completion_text == "partial"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_response_stream_incomplete_event_raises_with_reason():
+    provider = _make_responses_provider()
+    try:
+        events = [
+            SimpleNamespace(
+                type="response.incomplete",
+                response=SimpleNamespace(
+                    id="resp-incomplete",
+                    status="incomplete",
+                    output=[],
+                    usage=None,
+                    incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+                ),
+            ),
+        ]
+
+        async def fake_stream():
+            for event in events:
+                yield event
+
+        with pytest.raises(
+            Exception,
+            match="OpenAI Responses stream incomplete.*max_output_tokens",
+        ):
+            async for _response in provider._parse_openai_responses_stream(
+                fake_stream()
+            ):
+                pass
+    finally:
+        await provider.terminate()
 
 
 @pytest.mark.asyncio

@@ -20,7 +20,7 @@
       "typed": "No {type} type service providers available, click Add Provider to add one"
     },
     "description": {
-      "openai": "Supports all OpenAI API compatible providers.",
+      "openai": "Supports OpenAI API compatible providers, including Chat Completions and Responses.",
       "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API compatibility layer.",
       "default": ""
     }

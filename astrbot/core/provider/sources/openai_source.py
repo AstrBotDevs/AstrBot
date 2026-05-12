@@ -1380,3 +1380,582 @@ class ProviderOpenAIOfficial(Provider):
     async def terminate(self):
         if self.client:
             await self.client.close()
+
+
+@register_provider_adapter(
+    "openai_responses_completion",
+    "OpenAI API Responses 提供商适配器",
+)
+class ProviderOpenAIResponses(ProviderOpenAIOfficial):
+    def __init__(self, provider_config, provider_settings) -> None:
+        super().__init__(provider_config, provider_settings)
+        self.default_params = inspect.signature(
+            self.client.responses.create,
+        ).parameters.keys()
+
+    @staticmethod
+    def _get_response_field(item: Any, field: str, default: Any = None) -> Any:
+        if isinstance(item, dict):
+            return item.get(field, default)
+        return getattr(item, field, default)
+
+    @classmethod
+    def _response_item_type(cls, item: Any) -> str | None:
+        item_type = cls._get_response_field(item, "type")
+        return str(item_type) if item_type is not None else None
+
+    @classmethod
+    def _response_list_field(cls, item: Any, field: str) -> list[Any]:
+        value = cls._get_response_field(item, field, [])
+        return value if isinstance(value, list) else []
+
+    @classmethod
+    def _response_text_field(cls, item: Any, field: str) -> str:
+        value = cls._get_response_field(item, field, "")
+        return str(value) if value is not None else ""
+
+    @staticmethod
+    def _parse_responses_tool_arguments(arguments: Any) -> dict[str, Any]:
+        if isinstance(arguments, str):
+            try:
+                parsed = json.loads(arguments or "{}")
+            except json.JSONDecodeError as e:
+                logger.error(f"解析 Responses 工具调用参数失败: {e}")
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return arguments if isinstance(arguments, dict) else {}
+
+    def _response_function_call_to_tool_call(self, item: Any) -> dict[str, Any] | None:
+        name = self._get_response_field(item, "name")
+        call_id = self._get_response_field(item, "call_id") or self._get_response_field(
+            item, "id"
+        )
+        if not name or not call_id:
+            return None
+
+        arguments = self._get_response_field(item, "arguments", "{}")
+        return {
+            "id": str(call_id),
+            "name": str(name),
+            "args": self._parse_responses_tool_arguments(arguments),
+        }
+
+    def _collect_responses_reasoning_text(self, item: Any) -> str:
+        reasoning_parts: list[str] = []
+        for summary_part in self._response_list_field(item, "summary"):
+            if self._response_item_type(summary_part) == "summary_text":
+                reasoning_parts.append(self._response_text_field(summary_part, "text"))
+        for content_part in self._response_list_field(item, "content"):
+            if self._response_item_type(content_part) == "reasoning_text":
+                reasoning_parts.append(self._response_text_field(content_part, "text"))
+        return "".join(reasoning_parts)
+
+    def _collect_responses_output(
+        self, response: Any
+    ) -> tuple[str, str, list[dict[str, Any]]]:
+        text_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
+
+        for item in self._response_list_field(response, "output"):
+            item_type = self._response_item_type(item)
+            if item_type == "message":
+                role = self._get_response_field(item, "role", "assistant")
+                if role != "assistant":
+                    continue
+                for content_part in self._response_list_field(item, "content"):
+                    content_type = self._response_item_type(content_part)
+                    if content_type == "output_text":
+                        text_parts.append(
+                            self._response_text_field(content_part, "text")
+                        )
+                    elif content_type == "refusal":
+                        text_parts.append(
+                            self._response_text_field(content_part, "refusal")
+                            or self._response_text_field(content_part, "text")
+                        )
+            elif item_type == "reasoning":
+                reasoning_parts.append(self._collect_responses_reasoning_text(item))
+            elif item_type == "function_call":
+                tool_call = self._response_function_call_to_tool_call(item)
+                if tool_call is not None:
+                    tool_calls.append(tool_call)
+
+        return "".join(text_parts), "".join(reasoning_parts), tool_calls
+
+    def _extract_responses_usage(self, usage: Any) -> TokenUsage:
+        input_details = self._get_response_field(usage, "input_tokens_details")
+        cached = self._get_response_field(input_details, "cached_tokens", 0) or 0
+        input_tokens = self._get_response_field(usage, "input_tokens", 0) or 0
+        output_tokens = self._get_response_field(usage, "output_tokens", 0) or 0
+        return TokenUsage(
+            input_other=input_tokens - cached,
+            input_cached=cached,
+            output=output_tokens,
+        )
+
+    def _build_responses_llm_response(
+        self,
+        response: Any,
+        completion_text: str,
+        reasoning_content: str,
+        tool_calls: list[dict[str, Any]],
+    ) -> LLMResponse:
+        llm_response = LLMResponse("assistant")
+        if completion_text:
+            llm_response.result_chain = MessageChain().message(completion_text)
+        llm_response.reasoning_content = reasoning_content
+
+        if tool_calls:
+            llm_response.role = "tool"
+            llm_response.tools_call_args = [
+                tool_call["args"] for tool_call in tool_calls
+            ]
+            llm_response.tools_call_name = [
+                tool_call["name"] for tool_call in tool_calls
+            ]
+            llm_response.tools_call_ids = [tool_call["id"] for tool_call in tool_calls]
+
+        llm_response.raw_completion = response
+        llm_response.id = self._get_response_field(response, "id")
+        if usage := self._get_response_field(response, "usage"):
+            llm_response.usage = self._extract_responses_usage(usage)
+
+        has_text_output = bool((llm_response.completion_text or "").strip())
+        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        if (
+            not has_text_output
+            and not has_reasoning_output
+            and not llm_response.tools_call_args
+        ):
+            response_id = self._get_response_field(response, "id")
+            status = self._get_response_field(response, "status")
+            logger.error(
+                f"OpenAI Responses completion has no usable output: {response}."
+            )
+            raise EmptyModelOutputError(
+                "OpenAI Responses completion has no usable output. "
+                f"response_id={response_id}, status={status}"
+            )
+
+        return llm_response
+
+    async def _parse_openai_responses_response(self, response: Any) -> LLMResponse:
+        completion_text, reasoning_content, tool_calls = self._collect_responses_output(
+            response
+        )
+        return self._build_responses_llm_response(
+            response,
+            completion_text,
+            reasoning_content,
+            tool_calls,
+        )
+
+    @staticmethod
+    def _ordered_stream_text(parts: dict[tuple[int, int], str]) -> str:
+        return "".join(parts[key] for key in sorted(parts))
+
+    @staticmethod
+    def _ordered_stream_reasoning(parts: dict[tuple[int, int, str], str]) -> str:
+        return "".join(
+            value for _key, value in sorted(parts.items(), key=lambda item: item[0])
+        )
+
+    def _stream_tool_calls_to_list(
+        self, tool_calls: dict[int, dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        result = []
+        for output_index in sorted(tool_calls):
+            tool_call = tool_calls[output_index]
+            name = tool_call.get("name")
+            call_id = tool_call.get("call_id") or tool_call.get("item_id")
+            if not name or not call_id:
+                continue
+            result.append(
+                {
+                    "id": str(call_id),
+                    "name": str(name),
+                    "args": self._parse_responses_tool_arguments(
+                        tool_call.get("arguments", "{}")
+                    ),
+                }
+            )
+        return result
+
+    def _record_responses_stream_item(
+        self,
+        item: Any,
+        output_index: int,
+        tool_calls: dict[int, dict[str, Any]],
+    ) -> None:
+        if self._response_item_type(item) != "function_call":
+            return
+        tool_call = tool_calls.setdefault(output_index, {})
+        call_id = self._get_response_field(item, "call_id") or self._get_response_field(
+            item, "id"
+        )
+        if call_id:
+            tool_call["call_id"] = call_id
+        if name := self._get_response_field(item, "name"):
+            tool_call["name"] = name
+        if arguments := self._get_response_field(item, "arguments"):
+            tool_call["arguments"] = arguments
+
+    def _responses_stream_terminal_error_message(
+        self, event: Any, fallback_status: str
+    ) -> str:
+        response = self._get_response_field(event, "response")
+        response_id = self._get_response_field(response, "id")
+        status = self._get_response_field(response, "status", fallback_status)
+        error = self._get_response_field(response, "error")
+        code = self._get_response_field(error, "code")
+        message = self._get_response_field(error, "message")
+        incomplete_details = self._get_response_field(response, "incomplete_details")
+        reason = self._get_response_field(incomplete_details, "reason")
+
+        details = [f"response_id={response_id}", f"status={status}"]
+        if code:
+            details.append(f"code={code}")
+        if reason:
+            details.append(f"reason={reason}")
+        if message:
+            details.append(str(message))
+        return f"OpenAI Responses stream {fallback_status}: " + ", ".join(details)
+
+    async def _parse_openai_responses_stream(
+        self, stream: Any
+    ) -> AsyncGenerator[LLMResponse, None]:
+        text_parts: dict[tuple[int, int], str] = {}
+        reasoning_parts: dict[tuple[int, int, str], str] = {}
+        tool_calls: dict[int, dict[str, Any]] = {}
+        completed_response = None
+
+        async for event in stream:
+            event_type = self._response_item_type(event)
+            output_index = self._get_response_field(event, "output_index", 0) or 0
+
+            if event_type == "response.output_text.delta":
+                content_index = self._get_response_field(event, "content_index", 0) or 0
+                key = (output_index, content_index)
+                delta = self._response_text_field(event, "delta")
+                text_parts[key] = text_parts.get(key, "") + delta
+                if delta:
+                    yield LLMResponse(
+                        role="assistant",
+                        completion_text=delta,
+                        is_chunk=True,
+                    )
+            elif event_type == "response.output_text.done":
+                content_index = self._get_response_field(event, "content_index", 0) or 0
+                text_parts[(output_index, content_index)] = self._response_text_field(
+                    event, "text"
+                )
+            elif event_type == "response.reasoning_text.delta":
+                content_index = self._get_response_field(event, "content_index", 0) or 0
+                key = (output_index, content_index, "reasoning")
+                delta = self._response_text_field(event, "delta")
+                reasoning_parts[key] = reasoning_parts.get(key, "") + delta
+                if delta:
+                    yield LLMResponse(
+                        role="assistant",
+                        reasoning_content=delta,
+                        is_chunk=True,
+                    )
+            elif event_type == "response.reasoning_text.done":
+                content_index = self._get_response_field(event, "content_index", 0) or 0
+                reasoning_parts[(output_index, content_index, "reasoning")] = (
+                    self._response_text_field(event, "text")
+                )
+            elif event_type == "response.reasoning_summary_text.delta":
+                summary_index = self._get_response_field(event, "summary_index", 0) or 0
+                key = (output_index, summary_index, "summary")
+                delta = self._response_text_field(event, "delta")
+                reasoning_parts[key] = reasoning_parts.get(key, "") + delta
+                if delta:
+                    yield LLMResponse(
+                        role="assistant",
+                        reasoning_content=delta,
+                        is_chunk=True,
+                    )
+            elif event_type == "response.reasoning_summary_text.done":
+                summary_index = self._get_response_field(event, "summary_index", 0) or 0
+                reasoning_parts[(output_index, summary_index, "summary")] = (
+                    self._response_text_field(event, "text")
+                )
+            elif event_type == "response.reasoning_summary_part.done":
+                summary_index = self._get_response_field(event, "summary_index", 0) or 0
+                part = self._get_response_field(event, "part")
+                reasoning_parts[(output_index, summary_index, "summary")] = (
+                    self._response_text_field(part, "text")
+                )
+            elif event_type in {
+                "response.output_item.added",
+                "response.output_item.done",
+            }:
+                self._record_responses_stream_item(
+                    self._get_response_field(event, "item"),
+                    output_index,
+                    tool_calls,
+                )
+            elif event_type == "response.function_call_arguments.delta":
+                tool_call = tool_calls.setdefault(output_index, {})
+                if item_id := self._get_response_field(event, "item_id"):
+                    tool_call.setdefault("item_id", item_id)
+                tool_call["arguments"] = tool_call.get(
+                    "arguments", ""
+                ) + self._response_text_field(event, "delta")
+            elif event_type == "response.function_call_arguments.done":
+                tool_call = tool_calls.setdefault(output_index, {})
+                if item_id := self._get_response_field(event, "item_id"):
+                    tool_call.setdefault("item_id", item_id)
+                if name := self._get_response_field(event, "name"):
+                    tool_call["name"] = name
+                tool_call["arguments"] = self._response_text_field(event, "arguments")
+            elif event_type == "response.completed":
+                completed_response = self._get_response_field(event, "response")
+            elif event_type in {"response.failed", "response.incomplete"}:
+                status = event_type.removeprefix("response.")
+                raise Exception(
+                    self._responses_stream_terminal_error_message(event, status)
+                )
+            elif event_type == "error":
+                raise Exception(self._response_text_field(event, "message"))
+
+        completion_text = self._ordered_stream_text(text_parts)
+        reasoning_content = self._ordered_stream_reasoning(reasoning_parts)
+        final_tool_calls = self._stream_tool_calls_to_list(tool_calls)
+
+        final_response = completed_response or {"id": None, "output": []}
+        if completed_response is not None:
+            (
+                completed_text,
+                completed_reasoning,
+                completed_tool_calls,
+            ) = self._collect_responses_output(completed_response)
+            completion_text = completed_text or completion_text
+            reasoning_content = completed_reasoning or reasoning_content
+            final_tool_calls = completed_tool_calls or final_tool_calls
+
+        yield self._build_responses_llm_response(
+            final_response,
+            completion_text,
+            reasoning_content,
+            final_tool_calls,
+        )
+
+    def _convert_openai_tool_to_responses_tool(self, tool: dict) -> dict:
+        if not isinstance(tool, dict) or tool.get("type") != "function":
+            return tool
+        function = tool.get("function")
+        if not isinstance(function, dict):
+            return tool
+
+        responses_tool = {
+            "type": "function",
+            "name": function.get("name"),
+            "parameters": function.get("parameters"),
+            "strict": function.get("strict", False),
+        }
+        if "description" in function:
+            responses_tool["description"] = function["description"]
+        return responses_tool
+
+    def _convert_chat_payload_to_responses_payload(self, payloads: dict) -> dict:
+        payloads = copy.deepcopy(payloads)
+        messages = payloads.pop("messages", [])
+        response_payload = {**payloads}
+        response_payload["input"] = []
+        for message in messages:
+            response_payload["input"].extend(
+                self._convert_message_to_responses_items(message)
+            )
+
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = response_payload.get("extra_body", {})
+        extra_body = extra_body.copy() if isinstance(extra_body, dict) else {}
+        if isinstance(custom_extra_body, dict):
+            extra_body = {**custom_extra_body, **extra_body}
+        if "reasoning" in extra_body:
+            response_payload["reasoning"] = extra_body.pop("reasoning")
+        response_payload["extra_body"] = extra_body
+        return response_payload
+
+    def _normalize_responses_payload(self, payloads: dict) -> dict:
+        if "messages" in payloads:
+            payloads = self._convert_chat_payload_to_responses_payload(payloads)
+        else:
+            payloads = copy.deepcopy(payloads)
+
+        extra_body = payloads.get("extra_body", {})
+        extra_body = extra_body.copy() if isinstance(extra_body, dict) else {}
+        for key in list(payloads.keys()):
+            if key not in self.default_params:
+                extra_body[key] = payloads.pop(key)
+        payloads["extra_body"] = extra_body
+        return payloads
+
+    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+        payloads = self._normalize_responses_payload(payloads)
+        if tools:
+            tool_list = tools.get_func_desc_openai_style()
+            if tool_list:
+                payloads["tools"] = [
+                    self._convert_openai_tool_to_responses_tool(tool)
+                    for tool in tool_list
+                ]
+                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+
+        response = await self.client.responses.create(**payloads, stream=False)
+        logger.debug(f"responses completion: {response}")
+        return await self._parse_openai_responses_response(response)
+
+    async def _query_stream(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+    ) -> AsyncGenerator[LLMResponse, None]:
+        payloads = self._normalize_responses_payload(payloads)
+        if tools:
+            tool_list = tools.get_func_desc_openai_style()
+            if tool_list:
+                payloads["tools"] = [
+                    self._convert_openai_tool_to_responses_tool(tool)
+                    for tool in tool_list
+                ]
+                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+
+        stream = await self.client.responses.create(**payloads, stream=True)
+        async for response in self._parse_openai_responses_stream(stream):
+            yield response
+
+    def _convert_content_part_to_responses(self, part: dict) -> dict:
+        if not isinstance(part, dict):
+            return {"type": "input_text", "text": str(part)}
+
+        part_type = part.get("type")
+        if part_type == "text":
+            return {"type": "input_text", "text": part.get("text", "")}
+        if part_type == "image_url":
+            image_url = part.get("image_url")
+            if not isinstance(image_url, dict) or not image_url.get("url"):
+                raise ValueError("Invalid Responses image content part")
+            return {
+                "type": "input_image",
+                "image_url": image_url["url"],
+                "detail": image_url.get("detail") or "auto",
+            }
+
+        raise ValueError(f"Unsupported Responses content part type: {part_type}")
+
+    def _convert_tool_call_to_responses_item(self, tool_call: dict) -> dict:
+        if not isinstance(tool_call, dict):
+            raise ValueError("Invalid Responses tool call item")
+        function = tool_call.get("function")
+        if not isinstance(function, dict):
+            raise ValueError("Invalid Responses function tool call item")
+
+        call_id = tool_call.get("id")
+        name = function.get("name")
+        if not call_id or not name:
+            raise ValueError("Responses function tool call requires id and name")
+
+        return {
+            "type": "function_call",
+            "call_id": call_id,
+            "name": name,
+            "arguments": function.get("arguments") or "{}",
+        }
+
+    def _convert_message_to_responses_items(self, message: dict) -> list[dict]:
+        role = message.get("role", "user")
+        if role == "tool":
+            call_id = message.get("tool_call_id")
+            if not call_id:
+                raise ValueError("Responses tool output requires tool_call_id")
+            return [
+                {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": message.get("content") or "",
+                }
+            ]
+
+        if role not in {"user", "assistant", "system", "developer"}:
+            raise ValueError(f"Unsupported Responses message role: {role}")
+
+        items = []
+        tool_calls = message.get("tool_calls")
+        if tool_calls:
+            if not isinstance(tool_calls, list):
+                raise ValueError("Responses tool_calls must be a list")
+            tool_call_items = [
+                self._convert_tool_call_to_responses_item(tool_call)
+                for tool_call in tool_calls
+            ]
+            items.extend(tool_call_items)
+
+        content = message.get("content")
+        if role == "assistant" and content in (None, "", []):
+            return items
+        if isinstance(content, list):
+            converted_content = [
+                self._convert_content_part_to_responses(part) for part in content
+            ]
+        elif content is None:
+            converted_content = []
+        else:
+            converted_content = [{"type": "input_text", "text": str(content)}]
+
+        if converted_content:
+            if tool_calls and role == "assistant":
+                return [{"role": role, "content": converted_content}, *items]
+            items.append({"role": role, "content": converted_content})
+        elif role != "assistant" or not items:
+            if role == "assistant":
+                return []
+            items.append({"role": role, "content": converted_content})
+
+        return items
+
+    async def _prepare_responses_payload(
+        self,
+        prompt: str | None = None,
+        image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
+        contexts: list[dict] | list[Message] | None = None,
+        system_prompt: str | None = None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
+        model: str | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
+        **kwargs,
+    ) -> dict:
+        payloads, _ = await super()._prepare_chat_payload(
+            prompt=prompt,
+            image_urls=image_urls,
+            audio_urls=audio_urls,
+            contexts=contexts,
+            system_prompt=system_prompt,
+            tool_calls_result=tool_calls_result,
+            model=model,
+            extra_user_content_parts=extra_user_content_parts,
+            **kwargs,
+        )
+
+        responses_input = []
+        for message in payloads["messages"]:
+            responses_input.extend(self._convert_message_to_responses_items(message))
+
+        response_payload = {
+            "model": payloads["model"],
+            "input": responses_input,
+        }
+
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = (
+            custom_extra_body.copy() if isinstance(custom_extra_body, dict) else {}
+        )
+        if "reasoning" in extra_body:
+            response_payload["reasoning"] = extra_body.pop("reasoning")
+        response_payload["extra_body"] = extra_body
+
+        return response_payload
