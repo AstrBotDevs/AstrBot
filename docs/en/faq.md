@@ -23,7 +23,7 @@ On first startup, the WebUI account is `astrbot` by default, and the default pas
 Set dashboard.host in data/cmd_config.json to enable remote access.
 ```
 
-The random initial password may be different each first startup, so please change it as soon as possible in WebUI settings after logging in.
+`UiYVpZxnW8k22IWqf0ru5pOy` is the default password.
 
 ### Forgot Dashboard Password
 
