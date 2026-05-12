@@ -427,8 +427,22 @@ class DiscordPlatformAdapter(Platform):
 
         # 使用 Pycord 的方法同步指令
         # 注意：这可能需要一些时间，并且有频率限制
-        await self.client.sync_commands()
-        logger.info("[Discord] Command synchronization completed.")
+        try:
+            await self.client.sync_commands()
+            logger.info("[Discord] Command synchronization completed.")
+        except discord.HTTPException as e:
+            if self._is_daily_command_quota_error(e):
+                logger.warning(
+                    "[Discord] Daily application command create quota reached "
+                    "(30034); command sync skipped. Existing commands should "
+                    "continue to work until the quota resets.",
+                )
+                return
+            logger.warning(f"[Discord] Sync commands failed: {e}")
+
+    @staticmethod
+    def _is_daily_command_quota_error(error: discord.HTTPException) -> bool:
+        return getattr(error, "code", None) == 30034
 
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""
