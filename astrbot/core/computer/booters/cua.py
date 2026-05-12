@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import inspect
 import shlex
+import subprocess
 from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -698,6 +700,16 @@ def _screenshot_to_bytes(raw: Any) -> bytes:
     raise TypeError(f"Unsupported CUA screenshot result: {type(raw)!r}")
 
 
+def _docker_image_for_cua_image(image: str, os_type: str) -> str | None:
+    image_name = (image or os_type or "linux").strip()
+    normalized = image_name.lower()
+    if "/" in image_name or ":" in image_name:
+        return image_name
+    if normalized in {"linux", "ubuntu", "xfce"}:
+        return "trycua/cua-xfce:latest"
+    return None
+
+
 @dataclass(slots=True)
 class _CuaRuntime:
     sandbox_cm: Any
@@ -728,6 +740,7 @@ class CuaBooter(ComputerBooter):
 
     async def boot(self, session_id: str) -> None:
         _ = session_id
+        await self._preflight_local_image()
         try:
             from cua import Image, Sandbox
         except ImportError as exc:
@@ -757,6 +770,40 @@ class CuaBooter(ComputerBooter):
             "[Computer] CUA sandbox booted: image=%s, os_type=%s",
             self.image,
             self.os_type,
+        )
+
+    async def _preflight_local_image(self) -> None:
+        if not self.local:
+            return
+        docker_image = _docker_image_for_cua_image(self.image, self.os_type)
+        if docker_image is None:
+            return
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "docker",
+                "image",
+                "inspect",
+                docker_image,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            returncode = await proc.wait()
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                "Docker is required for local CUA sandboxes, but the `docker` command was not found."
+            ) from exc
+        if returncode == 0:
+            return
+        pull_command = f"docker pull {docker_image}"
+        logger.warning(
+            "[Computer] CUA Docker image %s is not available locally. "
+            "Pull it before starting the sandbox: %s",
+            docker_image,
+            pull_command,
+        )
+        raise RuntimeError(
+            "CUA Docker image is not available locally. "
+            f"This image is large and may take several minutes to download. Run `{pull_command}` first, then retry."
         )
 
     def _build_image(self, image_cls: Any) -> Any:

@@ -19,6 +19,10 @@ from asyncio import Queue
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.computer.computer_client import (
+    cleanup_managed_cua_sandboxes,
+    reconcile_cua_sandboxes_on_startup,
+)
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
@@ -158,6 +162,8 @@ class AstrBotCoreLifecycle:
         await self.db.initialize()
 
         await html_renderer.initialize()
+
+        await reconcile_cua_sandboxes_on_startup()
 
         # 初始化 UMOP 配置路由器
         self.umop_config_router = UmopConfigRouter(sp=sp)
@@ -377,6 +383,7 @@ class AstrBotCoreLifecycle:
                     f"插件 {plugin.name} 未被正常终止 {e!s}, 可能会导致资源泄露等问题。",
                 )
 
+        await cleanup_managed_cua_sandboxes()
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
@@ -393,6 +400,7 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
+        await cleanup_managed_cua_sandboxes()
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()

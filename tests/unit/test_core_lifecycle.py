@@ -125,6 +125,44 @@ class TestAstrBotCoreLifecycleStop:
         # Should not raise
         await lifecycle.stop()
 
+    @pytest.mark.asyncio
+    async def test_stop_closes_managed_sandboxes_before_managers(
+        self,
+        mock_log_broker,
+        mock_db,
+    ):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle.temp_dir_cleaner = None
+        lifecycle.cron_manager = None
+        lifecycle.plugin_manager = MagicMock()
+        lifecycle.plugin_manager.context = MagicMock()
+        lifecycle.plugin_manager.context.get_all_stars = MagicMock(return_value=[])
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock()
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+        lifecycle.curr_tasks = []
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+        order = []
+
+        async def cleanup_managed_sandboxes():
+            order.append("sandboxes")
+
+        async def terminate_provider_manager():
+            order.append("provider")
+
+        lifecycle.provider_manager.terminate.side_effect = terminate_provider_manager
+
+        with patch(
+            "astrbot.core.core_lifecycle.cleanup_managed_cua_sandboxes",
+            cleanup_managed_sandboxes,
+        ):
+            await lifecycle.stop()
+
+        assert order[:2] == ["sandboxes", "provider"]
+
 
 class TestAstrBotCoreLifecycleTaskWrapper:
     """Tests for AstrBotCoreLifecycle._task_wrapper method."""
@@ -487,6 +525,10 @@ class TestAstrBotCoreLifecycleInitialize:
             patch("astrbot.core.core_lifecycle.EventBus", return_value=mock_event_bus),
             patch("astrbot.core.core_lifecycle.migra", new_callable=AsyncMock),
             patch(
+                "astrbot.core.core_lifecycle.reconcile_cua_sandboxes_on_startup",
+                new_callable=AsyncMock,
+            ) as mock_reconcile_sandboxes,
+            patch(
                 "astrbot.core.core_lifecycle.update_llm_metadata",
                 new_callable=AsyncMock,
             ),
@@ -498,6 +540,8 @@ class TestAstrBotCoreLifecycleInitialize:
 
         # Verify html renderer initialized
         mock_html_renderer.initialize.assert_awaited_once()
+
+        mock_reconcile_sandboxes.assert_awaited_once()
 
         # Verify UMOP config router initialized
         mock_umop_config_router.initialize.assert_awaited_once()
@@ -897,6 +941,31 @@ class TestAstrBotCoreLifecycleRestart:
             # Verify thread was started
             mock_thread.assert_called_once()
             mock_thread.return_value.start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_restart_cleans_up_managed_cua_sandboxes(
+        self, mock_log_broker, mock_db
+    ):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock()
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+        lifecycle.astrbot_updator = MagicMock()
+
+        with (
+            patch("astrbot.core.core_lifecycle.threading.Thread"),
+            patch(
+                "astrbot.core.core_lifecycle.cleanup_managed_cua_sandboxes",
+                new_callable=AsyncMock,
+            ) as cleanup,
+        ):
+            await lifecycle.restart()
+
+        cleanup.assert_awaited_once()
 
 
 class TestAstrBotCoreLifecycleLoadPipelineScheduler:

@@ -12,7 +12,7 @@ from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.computer.computer_client import get_booter
+from astrbot.core.computer.computer_client import get_booter, get_cua_observer_booter
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.tools.computer_tools.util import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
@@ -32,10 +32,28 @@ def _exception_detail(error: Exception) -> str:
     return str(error) or type(error).__name__
 
 
+def _session_id(context: ContextWrapper[AstrAgentContext]) -> str:
+    return context.context.event.unified_msg_origin
+
+
 async def _get_gui_component(context: ContextWrapper[AstrAgentContext]) -> Any:
     booter = await get_booter(
         context.context.context,
-        context.context.event.unified_msg_origin,
+        _session_id(context),
+    )
+    gui = getattr(booter, "gui", None)
+    if gui is None:
+        raise RuntimeError(
+            "Current sandbox booter does not support CUA GUI capability. "
+            "Please switch sandbox booter to cua."
+        )
+    return gui
+
+
+async def _get_gui_observer_component(context: ContextWrapper[AstrAgentContext]) -> Any:
+    booter = await get_cua_observer_booter(
+        context.context.context,
+        _session_id(context),
     )
     gui = getattr(booter, "gui", None)
     if gui is None:
@@ -80,7 +98,7 @@ class CuaScreenshotTool(FunctionTool):
         if err := check_admin_permission(context, "Taking CUA screenshots"):
             return err
         try:
-            gui = await _get_gui_component(context)
+            gui = await _get_gui_observer_component(context)
             path = _new_screenshot_path(context.context.event.unified_msg_origin)
             result = await gui.screenshot(path)
             payload = {"success": True, **result, "path": path}
