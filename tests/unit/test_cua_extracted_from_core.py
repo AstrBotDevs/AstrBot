@@ -34,7 +34,10 @@ def test_core_no_longer_ships_concrete_sandbox_runtime_modules():
 def test_core_default_config_does_not_include_runtime_specific_settings():
     sandbox = DEFAULT_CONFIG["provider_settings"]["sandbox"]
 
-    assert sandbox == {"booter": ""}
+    assert sandbox["booter"] == ""
+    assert sandbox["sandbox_ttl"] == 3600
+    assert sandbox["sandbox_idle_timeout"] == 1800
+    assert sandbox["sandbox_lease_timeout"] == 600
     assert "cua_image" not in sandbox
     assert "cua_os_type" not in sandbox
     assert "cua_ttl" not in sandbox

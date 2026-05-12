@@ -429,7 +429,9 @@ async def test_keep_alive_sandbox_tool_renews_current_sandbox(monkeypatch):
     calls = []
 
     class FakeManager:
-        async def renew_current_sandbox_lease(self, session_id, ttl_seconds=None):
+        async def renew_current_sandbox_lease(
+            self, session_id, ttl_seconds=None, context=None
+        ):
             calls.append((session_id, ttl_seconds))
             return {"sandbox_id": "sandbox-1", "lease_expires_at": 123.0}
 
