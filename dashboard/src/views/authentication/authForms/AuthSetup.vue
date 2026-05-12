@@ -19,7 +19,7 @@ const usernameRules = [
 ];
 const passwordRules = [
   (value: string) => !!value || t('setup.validation.passwordRequired'),
-  (value: string) => (value && value.length >= 10) || t('setup.validation.passwordMinLength'),
+  (value: string) => (value && value.length >= 8) || t('setup.validation.passwordMinLength'),
   (value: string) => /[A-Z]/.test(value) || t('setup.validation.passwordUppercase'),
   (value: string) => /[a-z]/.test(value) || t('setup.validation.passwordLowercase'),
   (value: string) => /\d/.test(value) || t('setup.validation.passwordDigit'),

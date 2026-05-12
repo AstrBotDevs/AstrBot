@@ -107,7 +107,7 @@ const passwordRules = computed(() => [
   (v: string) =>
     !!v || t("core.header.accountDialog.validation.passwordRequired"),
   (v: string) =>
-    v.length >= 10 ||
+    v.length >= 8 ||
     t("core.header.accountDialog.validation.passwordMinLength"),
   (v: string) =>
     /[A-Z]/.test(v) ||
