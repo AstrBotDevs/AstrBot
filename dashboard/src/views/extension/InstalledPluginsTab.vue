@@ -1,6 +1,8 @@
 <script setup>
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
+import PluginImportDialog from "@/components/extension/PluginImportDialog.vue";
 import { normalizeTextInput } from "@/utils/inputValue";
+import LZString from 'lz-string';
 import {
   readPinnedExtensions,
   writePinnedExtensions,
@@ -202,6 +204,43 @@ const togglePinnedExtension = (extension) => {
   }
   pinnedExtensionNames.value = next;
 };
+
+
+const showExportCode = ref(false);
+const exportCode = ref("");
+const exportPlugin = (pluginList) => {
+  // 传入是空的插件列表，默认导出全部插件
+  if(!pluginList){
+    pluginList = filteredPlugins.value;
+    console.log("导出全部插件", pluginList);
+    showExportCode.value = true;
+    const jsonStr = JSON.stringify(
+      pluginList.map((plugin) => ({
+        name: plugin.name,
+        version: plugin.version,
+        repo: plugin.repo,
+      })),
+    );
+    exportCode.value = LZString.compressToEncodedURIComponent(jsonStr);
+  }
+}
+
+const copyExportCode = async () => {
+  try {
+    await navigator.clipboard.writeText(exportCode.value);
+    toast("已复制到剪贴板", "success");
+  } catch (err) {
+    console.error("复制失败", err);
+    toast("复制失败", "error");
+  }
+}
+
+const showImportDialog = ref(false);
+
+const openImportDialog = () => {
+  showImportDialog.value = true;
+}
+
 </script>
 
 <template>
@@ -211,6 +250,14 @@ const togglePinnedExtension = (extension) => {
         <h2 class="text-h2 mb-0">{{ tm("titles.installedAstrBotPlugins") }}</h2>
 
         <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
+
+          <v-btn @click="exportPlugin()">
+            导出全部筛选出的插件
+          </v-btn>
+
+          <v-btn @click="openImportDialog">
+            导入插件
+          </v-btn>
           <v-text-field
             :model-value="pluginSearch"
             @update:model-value="pluginSearch = normalizeTextInput($event)"
@@ -227,7 +274,34 @@ const togglePinnedExtension = (extension) => {
           </v-text-field>
         </div>
       </div>
+
+      <v-expand-transition>
+        <v-card v-if="showExportCode" class="mt-3 rounded-lg" variant="outlined">
+          <v-card-title class="d-flex align-center pa-3">
+            <v-icon class="mr-2" size="small">mdi-code-braces</v-icon>
+            <span class="text-body-1">插件码</span>
+            <v-spacer />
+            <v-btn icon="mdi-content-copy" variant="text" size="small" @click="copyExportCode" />
+            <v-btn icon="mdi-close" variant="text" size="small" @click="showExportCode = false" />
+          </v-card-title>
+          <v-card-text class="pt-0">
+            <v-textarea
+              :model-value="exportCode"
+              readonly
+              variant="outlined"
+              density="compact"
+              auto-grow
+              rows="3"
+              max-rows="8"
+              hide-details
+              class="export-code-textarea"
+            />
+          </v-card-text>
+        </v-card>
+      </v-expand-transition>
     </div>
+
+    <PluginImportDialog v-model="showImportDialog" />
 
     <v-card
       v-if="failedPluginItems.length > 0"
