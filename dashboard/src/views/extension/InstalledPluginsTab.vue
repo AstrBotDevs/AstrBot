@@ -3,6 +3,7 @@ import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import PluginImportDialog from "@/components/extension/PluginImportDialog.vue";
 import { normalizeTextInput } from "@/utils/inputValue";
 import LZString from 'lz-string';
+import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import {
   readPinnedExtensions,
   writePinnedExtensions,
@@ -208,21 +209,76 @@ const togglePinnedExtension = (extension) => {
 
 const showExportCode = ref(false);
 const exportCode = ref("");
+
+const EXPORT_BLACKLIST = new Set(["astrbot", "builtin_commands"]);
+const exportablePlugins = computed(() =>
+  filteredPlugins.value.filter(
+    (p) => p?.name && !EXPORT_BLACKLIST.has(p.name),
+  ),
+);
+
 const exportPlugin = (pluginList) => {
-  // 传入是空的插件列表，默认导出全部插件
-  if(!pluginList){
-    pluginList = filteredPlugins.value;
-    console.log("导出全部插件", pluginList);
-    showExportCode.value = true;
-    const jsonStr = JSON.stringify(
-      pluginList.map((plugin) => ({
-        name: plugin.name,
-        version: plugin.version,
-        repo: plugin.repo,
-      })),
-    );
-    exportCode.value = LZString.compressToEncodedURIComponent(jsonStr);
+  if (!pluginList || pluginList.length === 0) {
+    toast("没有可导出的插件", "warning");
+    return;
   }
+  showExportCode.value = true;
+  const jsonStr = JSON.stringify(
+    pluginList.map((plugin) => ({
+      name: plugin.name,
+      version: plugin.version,
+      repo: plugin.repo,
+      logo: plugin.logo,
+    })),
+  );
+  exportCode.value = LZString.compressToEncodedURIComponent(jsonStr);
+}
+
+const exportFiltered = () => {
+  exportPlugin(exportablePlugins.value);
+}
+
+const exportPinned = () => {
+  const pinnedNames = pinnedExtensionNames.value;
+  const pinned = exportablePlugins.value.filter((p) => pinnedNames.includes(p?.name));
+  exportPlugin(pinned);
+}
+
+const showExportSelectDialog = ref(false);
+const exportSelected = ref([]);
+
+const openExportSelectDialog = () => {
+  exportSelected.value = exportablePlugins.value.map(() => false);
+  showExportSelectDialog.value = true;
+}
+
+const selectedExportCount = computed(() =>
+  exportSelected.value.filter(Boolean).length,
+);
+
+const allExportSelected = computed(
+  () =>
+    exportablePlugins.value.length > 0 &&
+    selectedExportCount.value === exportablePlugins.value.length,
+);
+
+const someExportSelected = computed(
+  () => selectedExportCount.value > 0 && !allExportSelected.value,
+);
+
+const toggleExportSelectAll = () => {
+  const next = !allExportSelected.value;
+  exportSelected.value = exportablePlugins.value.map(() => next);
+}
+
+const confirmExportSelected = () => {
+  const picked = exportablePlugins.value.filter((_, i) => exportSelected.value[i]);
+  if (picked.length === 0) {
+    toast("请至少选择一个插件", "warning");
+    return;
+  }
+  showExportSelectDialog.value = false;
+  exportPlugin(picked);
 }
 
 const copyExportCode = async () => {
@@ -251,11 +307,37 @@ const openImportDialog = () => {
 
         <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
 
-          <v-btn @click="exportPlugin()">
-            导出全部筛选出的插件
-          </v-btn>
+          <v-menu>
+            <template #activator="{ props: menuProps }">
+              <v-btn
+                v-bind="menuProps"
+                color="primary"
+                variant="tonal"
+                prepend-icon="mdi-export-variant"
+                append-icon="mdi-menu-down"
+              >
+                导出插件
+              </v-btn>
+            </template>
+            <v-list density="compact">
+              <v-list-item prepend-icon="mdi-filter-variant" @click="exportFiltered">
+                <v-list-item-title>导出全部筛选出的插件</v-list-item-title>
+              </v-list-item>
+              <v-list-item prepend-icon="mdi-pin" @click="exportPinned">
+                <v-list-item-title>导出置顶的插件</v-list-item-title>
+              </v-list-item>
+              <v-list-item prepend-icon="mdi-cursor-default-click-outline" @click="openExportSelectDialog">
+                <v-list-item-title>挑选插件导出</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
 
-          <v-btn @click="openImportDialog">
+          <v-btn
+            color="primary"
+            variant="tonal"
+            prepend-icon="mdi-import"
+            @click="openImportDialog"
+          >
             导入插件
           </v-btn>
           <v-text-field
@@ -302,6 +384,86 @@ const openImportDialog = () => {
     </div>
 
     <PluginImportDialog v-model="showImportDialog" />
+
+    <v-dialog v-model="showExportSelectDialog" max-width="640">
+      <v-card class="rounded-lg">
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon class="mr-2">mdi-cursor-default-click-outline</v-icon>
+          <span>挑选插件导出</span>
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="showExportSelectDialog = false" />
+        </v-card-title>
+        <v-card-text>
+          <div class="d-flex align-center mb-2">
+            <v-checkbox
+              :model-value="allExportSelected"
+              :indeterminate="someExportSelected"
+              density="compact"
+              hide-details
+              color="primary"
+              @update:model-value="toggleExportSelectAll"
+            />
+            <span class="text-body-2 ml-1">
+              共 {{ exportablePlugins.length }} 个插件，已选 {{ selectedExportCount }} 个
+            </span>
+          </div>
+          <v-list density="compact" style="max-height: 400px; overflow-y: auto;">
+            <v-list-item
+              v-for="(plugin, idx) in exportablePlugins"
+              :key="plugin.name || idx"
+              class="rounded-lg mb-1"
+              border
+            >
+              <template #prepend>
+                <v-checkbox
+                  :model-value="!!exportSelected[idx]"
+                  density="compact"
+                  hide-details
+                  color="primary"
+                  @update:model-value="exportSelected[idx] = !exportSelected[idx]"
+                />
+
+                <v-avatar size="32" class="mr-2" rounded="lg">
+                  <v-img
+                    :src="plugin.logo || defaultPluginIcon"
+                    :alt="plugin.name"
+                    cover
+                  >
+                    <template #error>
+                      <v-img :src="defaultPluginIcon" cover />
+                    </template>
+                  </v-img>
+                </v-avatar>
+              </template>
+              <v-list-item-title class="text-body-2 font-weight-medium">
+                {{ plugin.name || "(未命名)" }}
+                <span class="text-caption text-medium-emphasis ml-2">
+                  v{{ plugin.version || "?" }}
+                </span>
+              </v-list-item-title>
+              <v-list-item-subtitle v-if="plugin.repo" class="text-caption">
+                {{ plugin.repo }}
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <v-btn variant="text" size="small" @click="showExportSelectDialog = false">
+            取消
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            size="small"
+            :disabled="selectedExportCount === 0"
+            @click="confirmExportSelected"
+          >
+            导出 ({{ selectedExportCount }})
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-card
       v-if="failedPluginItems.length > 0"
