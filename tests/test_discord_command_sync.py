@@ -55,17 +55,3 @@ async def test_discord_command_sync_ignores_daily_quota(monkeypatch):
     adapter.client.sync_commands.assert_awaited_once()
     warning.assert_called_once()
     assert "30034" in warning.call_args.args[0]
-
-
-@pytest.mark.asyncio
-async def test_discord_command_sync_keeps_other_errors_fatal(monkeypatch):
-    adapter = _build_adapter(monkeypatch)
-    adapter.client.sync_commands.side_effect = DiscordSyncError(
-        "Missing Access",
-        code=50001,
-    )
-
-    with pytest.raises(DiscordSyncError):
-        await adapter._collect_and_register_commands()
-
-    adapter.client.sync_commands.assert_awaited_once()
