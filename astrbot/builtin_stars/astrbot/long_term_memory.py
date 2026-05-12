@@ -56,6 +56,9 @@ class LongTermMemory:
         self._persisted_tool_result_ids: dict[str, set[str]] = defaultdict(set)
         """已持久化到 raw_records 的 <T:RES> 的 tool_call_id。用于防重复注入。"""
 
+        self.summaries: dict[str, str] = defaultdict(str)
+        """LLM summary 策略下每个群聊的长期摘要文本。"""
+
     # =========================================================================
     # 配置
     # =========================================================================
@@ -80,6 +83,14 @@ class LongTermMemory:
         ar_possibility = active_reply["possibility_reply"]
         ar_prompt = active_reply.get("prompt", "")
         ar_whitelist = active_reply.get("whitelist", [])
+        # LTM compaction
+        ltm_compaction_strategy = ltm_cfg.get("ltm_compaction_strategy", "truncate")
+        ltm_max_rounds = ltm_cfg.get("ltm_max_rounds", 80)
+        ltm_summary_keep_recent_rounds = ltm_cfg.get(
+            "ltm_summary_keep_recent_rounds", 30
+        )
+        ltm_summary_provider_id = ltm_cfg.get("ltm_summary_provider_id", "")
+        ltm_summary_prompt = ltm_cfg.get("ltm_summary_prompt", "")
         return {
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
@@ -91,6 +102,11 @@ class LongTermMemory:
             "ar_possibility": ar_possibility,
             "ar_prompt": ar_prompt,
             "ar_whitelist": ar_whitelist,
+            "ltm_compaction_strategy": ltm_compaction_strategy,
+            "ltm_max_rounds": max(1, ltm_max_rounds),
+            "ltm_summary_keep_recent_rounds": max(1, ltm_summary_keep_recent_rounds),
+            "ltm_summary_provider_id": ltm_summary_provider_id,
+            "ltm_summary_prompt": ltm_summary_prompt,
         }
 
     # =========================================================================
@@ -157,6 +173,7 @@ class LongTermMemory:
         self._raw_cursor.pop(umo, None)
         self._persisted_tool_call_ids.pop(umo, None)
         self._persisted_tool_result_ids.pop(umo, None)
+        self.summaries.pop(umo, None)
         return cnt
 
     # =========================================================================
@@ -231,7 +248,22 @@ class LongTermMemory:
 
         # 前置保留 Persona 已注入的 begin_dialogs
         existing_contexts = req.contexts or []
-        req.contexts = existing_contexts + self.contexts[umo]
+        ctxs: list[dict] = list(existing_contexts)
+
+        # Inject LTM summary if available (LLM summary compaction strategy).
+        summary = self.summaries.get(umo, "")
+        if summary:
+            ctxs.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "Long-term group memory summary:\n" + summary
+                    ),
+                }
+            )
+
+        ctxs.extend(self.contexts[umo])
+        req.contexts = ctxs
         req.conversation = None
         req.system_prompt += CHATROOM_SYSTEM_NOTE
 
@@ -308,8 +340,84 @@ class LongTermMemory:
                 self.contexts[umo].extend(new_segs)
                 self._raw_cursor[umo] = len(raw_list)
 
+            # 2b. LTM persistent compaction — either turn-based truncation OR
+            # LLM summary, mutually exclusive.
+            strategy = cfg.get("ltm_compaction_strategy", "truncate")
+            rounds = _split_into_rounds(self.contexts[umo])
+
+            if strategy == "llm_summary":
+                provider_id = cfg.get("ltm_summary_provider_id", "")
+                keep_recent = cfg.get("ltm_summary_keep_recent_rounds", 30)
+                if provider_id and len(rounds) > keep_recent:
+                    await self._compact_with_llm_summary(
+                        event, provider_id, keep_recent,
+                        cfg.get("ltm_summary_prompt", ""), rounds,
+                    )
+            else:
+                max_rounds = cfg.get("ltm_max_rounds", 80)
+                if len(rounds) > max_rounds:
+                    kept = rounds[-max_rounds:]
+                    self.contexts[umo] = [
+                        seg for rnd in kept for seg in rnd
+                    ]
+
             # 3. 裁剪 raw_records
             self._trim_raw_records(umo)
+
+    # =========================================================================
+    # LTM compaction
+    # =========================================================================
+
+    async def _compact_with_llm_summary(
+        self,
+        event: AstrMessageEvent,
+        provider_id: str,
+        keep_recent: int,
+        prompt: str,
+        rounds: list[list[dict]],
+    ) -> None:
+        """Compress old rounds into a persistent summary using an LLM."""
+        umo = event.unified_msg_origin
+        old_rounds = rounds[:-keep_recent]
+        recent_rounds = rounds[-keep_recent:]
+        if not old_rounds:
+            return
+
+        provider = self.context.get_provider_by_id(provider_id)
+        if provider is None or not isinstance(provider, Provider):
+            logger.warning(
+                "LTM summary 指定的 provider %s 不可用", provider_id
+            )
+            return
+
+        old_text = _rounds_to_text(old_rounds)
+        existing_summary = self.summaries.get(umo, "")
+        instruction = prompt or (
+            "Merge the older conversation rounds below into the existing "
+            "group-chat memory summary. Preserve stable facts about users, "
+            "preferences, decisions, recurring topics, and unresolved tasks. "
+            "Drop transient chatter, greetings, and irrelevant details. "
+            "Output only the updated summary, no preamble."
+        )
+
+        summary_prompt = (
+            f"{instruction}\n\n"
+            f"Existing memory summary:\n{existing_summary or '(none)'}\n\n"
+            f"Older conversation rounds to merge:\n{old_text}"
+        )
+
+        try:
+            resp = await provider.text_chat(
+                prompt=summary_prompt,
+                session_id=uuid.uuid4().hex,
+                persist=False,
+            )
+            self.summaries[umo] = resp.completion_text
+            self.contexts[umo] = [
+                seg for rnd in recent_rounds for seg in rnd
+            ]
+        except Exception:
+            logger.warning("LTM LLM summary 失败，保留原始 contexts", exc_info=True)
 
     # =========================================================================
     # 裁剪
@@ -487,3 +595,40 @@ def _truncate_user_segment(lines: list[str]) -> list[str]:
         total += len(line) + 1  # +1 for \n
     result.reverse()
     return result
+
+
+# =============================================================================
+# _split_into_rounds — LTM compaction helper
+# =============================================================================
+
+
+def _split_into_rounds(contexts: list[dict]) -> list[list[dict]]:
+    """Split a flat contexts list into logical rounds.
+
+    A round begins at a ``user`` segment and includes all subsequent
+    ``assistant`` / ``tool`` segments until the next ``user`` segment.
+    """
+    rounds: list[list[dict]] = []
+    current: list[dict] = []
+    for seg in contexts:
+        if seg.get("role") == "user" and current:
+            rounds.append(current)
+            current = []
+        current.append(seg)
+    if current:
+        rounds.append(current)
+    return rounds
+
+
+def _rounds_to_text(rounds: list[list[dict]]) -> str:
+    """Render rounds into a plain-text string for LLM summarisation."""
+    lines: list[str] = []
+    for i, rnd in enumerate(rounds, 1):
+        lines.append(f"--- Round {i} ---")
+        for seg in rnd:
+            role = seg.get("role", "?")
+            content = seg.get("content") or seg.get("tool_calls") or ""
+            if isinstance(content, list):
+                content = json.dumps(content, ensure_ascii=False)
+            lines.append(f"[{role}] {content}")
+    return "\n".join(lines)

@@ -1009,6 +1009,26 @@
                     "description": "Лимит обрезки истории инструментов",
                     "hint": "Макс. символов для вывода одного инструмента в истории группы, по умолчанию 8192."
                 },
+                "ltm_compaction_strategy": {
+                    "description": "Стратегия сжатия LTM",
+                    "hint": "truncate: только последние раунды; llm_summary: LLM резюмирует старые раунды."
+                },
+                "ltm_max_rounds": {
+                    "description": "Макс. раундов LTM",
+                    "hint": "При стратегии truncate — лимит раундов, по умолчанию 80."
+                },
+                "ltm_summary_keep_recent_rounds": {
+                    "description": "Сохранять последних раундов (LLM summary)",
+                    "hint": "При llm_summary — сколько последних раундов хранить точно, по умолчанию 30."
+                },
+                "ltm_summary_provider_id": {
+                    "description": "Модель для LTM резюме",
+                    "hint": "Модель для llm_summary. Оставьте пустым, чтобы использовать текущую модель чата."
+                },
+                "ltm_summary_prompt": {
+                    "description": "Промпт для LTM резюме",
+                    "hint": "Свой промпт для llm_summary. Оставьте пустым для встроенного по умолчанию."
+                },
                 "active_reply": {
                     "enable": {
                         "description": "Активный ответ"

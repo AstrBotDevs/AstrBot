@@ -1008,6 +1008,26 @@
           "description": "Historical Tool Output Truncation Limit",
           "hint": "Maximum characters per tool output written to group chat history, default 8192."
         },
+        "ltm_compaction_strategy": {
+          "description": "LTM Context Compaction Strategy",
+          "hint": "truncate: keep only recent rounds; llm_summary: use LLM to produce a long-term memory summary."
+        },
+        "ltm_max_rounds": {
+          "description": "LTM Max Retained Rounds",
+          "hint": "When truncate strategy is active, drop rounds beyond this limit. Default 80."
+        },
+        "ltm_summary_keep_recent_rounds": {
+          "description": "Recent Rounds to Keep (Summary)",
+          "hint": "Under llm_summary strategy, keep this many recent rounds precise. Default 30."
+        },
+        "ltm_summary_provider_id": {
+          "description": "LTM Summary Model",
+          "hint": "Model used for llm_summary compaction. Leave empty to use the current chat model."
+        },
+        "ltm_summary_prompt": {
+          "description": "LTM Summary Prompt",
+          "hint": "Custom summary prompt for llm_summary strategy. Leave empty for built-in default."
+        },
         "active_reply": {
           "enable": {
             "description": "Active Reply"

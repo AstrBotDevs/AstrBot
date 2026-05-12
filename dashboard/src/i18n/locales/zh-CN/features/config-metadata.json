@@ -1010,6 +1010,26 @@
           "description": "历史工具输出截断上限",
           "hint": "单条工具输出写入群聊历史时的最大字符数，默认 8192。"
         },
+        "ltm_compaction_strategy": {
+          "description": "LTM 上下文压缩策略",
+          "hint": "truncate: 按轮截断; llm_summary: 调用 LLM 做长期摘要。"
+        },
+        "ltm_max_rounds": {
+          "description": "LTM 最大保留轮数",
+          "hint": "truncate 策略生效时的截断上限，默认 80。"
+        },
+        "ltm_summary_keep_recent_rounds": {
+          "description": "摘要时保留最近轮数",
+          "hint": "llm_summary 策略下保留最近 N 轮精确上下文，默认 30。"
+        },
+        "ltm_summary_provider_id": {
+          "description": "LTM 摘要模型",
+          "hint": "llm_summary 策略使用的模型，留空使用当前聊天模型。"
+        },
+        "ltm_summary_prompt": {
+          "description": "LTM 摘要提示词",
+          "hint": "llm_summary 策略的自定义摘要 prompt，留空使用内置默认。"
+        },
         "active_reply": {
           "enable": {
             "description": "主动回复"
