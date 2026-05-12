@@ -383,7 +383,7 @@ const openImportDialog = () => {
       </v-expand-transition>
     </div>
 
-    <PluginImportDialog v-model="showImportDialog" />
+    <PluginImportDialog v-model="showImportDialog" :proxy="getSelectedGitHubProxy()" @done="getExtensions" />
 
     <v-dialog v-model="showExportSelectDialog" max-width="640">
       <v-card class="rounded-lg">

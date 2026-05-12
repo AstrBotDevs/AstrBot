@@ -41,11 +41,10 @@ const someSelected = computed(
 );
 
 const progressText = computed(() => {
-  if (!installing.value && Object.keys(installStatus.value).length === 0) return "";
-  const total = importPlugins.value.length;
-  const done = Object.values(installStatus.value).filter(
-    (s) => s === "success" || s === "error",
-  ).length;
+  const entries = Object.entries(installStatus.value).filter(([key]) => !key.endsWith("_msg"));
+  if (!installing.value && entries.length === 0) return "";
+  const total = entries.length;
+  const done = entries.filter(([_, status]) => status === "success" || status === "error").length;
   return `${done}/${total}`;
 });
 
