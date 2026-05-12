@@ -146,13 +146,18 @@ def test_sandbox_management_page_does_not_toast_running_after_create():
     assert "toast(tm('messages.createReady'))" not in content
 
 
-def test_sandbox_management_page_destroy_uses_backend_status_not_optimistic_status():
+def test_sandbox_management_page_destroy_closes_dialog_before_backend_cleanup():
     content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
         encoding="utf-8"
     )
 
-    assert "const res = await axios.delete(sandboxApiPath(target)" in content
-    assert "upsertSandboxRecord({ ...target, status: 'stopping' })" not in content
+    assert "const targetId = target.sandbox_id" in content
+    assert "destroyDialog.value = false" in content
+    assert "startDestroyPolling(targetId)" in content
+    assert "const res = await axios.delete(sandboxApiPath(targetId)" in content
+    assert "status: 'stopping'" not in content
+    assert "upsertSandboxRecord(stoppingRecord)" not in content
+    assert "destroying" not in content
     assert (
         "const sandbox = res.data.data?.sandbox as SandboxRecord | undefined" in content
     )
@@ -175,7 +180,7 @@ def test_sandbox_management_page_polls_until_destroyed_sandbox_disappears():
     assert "if (!record) {" in content
     assert "finishDestroyPolling(trackedSandboxId)" in content
     assert "removeSandboxRecord(sandboxId)" in content
-    assert "startDestroyPolling(sandbox.sandbox_id)" in content
+    assert "startDestroyPolling(targetId)" in content
 
 
 def test_sandbox_management_page_splits_running_into_busy_and_available_labels():

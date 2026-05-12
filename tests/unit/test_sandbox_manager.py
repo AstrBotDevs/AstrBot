@@ -118,6 +118,16 @@ class BlockingDestroyProvider(FakeProvider):
         return await super().destroy_booter(booter, record)
 
 
+class ImmediateDestroyProvider(FakeProvider):
+    def __init__(self):
+        super().__init__()
+        self.destroy_started = asyncio.Event()
+
+    async def destroy_booter(self, booter, record):
+        self.destroy_started.set()
+        await super().destroy_booter(booter, record)
+
+
 class SlowCreatedHookProvider(FakeProvider):
     def __init__(self):
         super().__init__()
@@ -633,6 +643,24 @@ async def test_destroy_sandbox_deferred_returns_stopping_before_background_delet
 
     assert manager.registry.get_sandbox(created["sandbox_id"]) is None
     assert provider.destroyed[0][1] == created["sandbox_id"]
+
+
+@pytest.mark.asyncio
+async def test_destroy_sandbox_deferred_delays_cleanup_past_next_loop_turn(tmp_path):
+    provider = ImmediateDestroyProvider()
+    manager, _provider = _manager(tmp_path, provider)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+
+    destroyed = await manager.destroy_sandbox_deferred(
+        "session-a", created["sandbox_id"]
+    )
+
+    assert destroyed["status"] == "stopping"
+    assert not provider.destroy_started.is_set()
+    await asyncio.sleep(0)
+    assert not provider.destroy_started.is_set()
+
+    await asyncio.wait_for(provider.destroy_started.wait(), timeout=1)
 
 
 @pytest.mark.asyncio

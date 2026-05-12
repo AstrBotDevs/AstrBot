@@ -289,7 +289,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="destroyDialog = false">{{ tm('actions.cancel') }}</v-btn>
-          <v-btn color="error" :loading="destroying" @click="confirmDestroySandbox">{{ tm('actions.destroy') }}</v-btn>
+          <v-btn color="error" @click="confirmDestroySandbox">{{ tm('actions.destroy') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -388,7 +388,6 @@ const pendingDestroySandboxes = ref<Record<string, { attempts: number; refreshFa
 const screenshotDialog = ref(false)
 const screenshotDataUrl = ref('')
 const destroyDialog = ref(false)
-const destroying = ref(false)
 const destroySandboxTarget = ref<SandboxRecord | null>(null)
 const consoleOpen = ref(false)
 const consoleSandbox = ref<SandboxRecord | null>(null)
@@ -1018,19 +1017,19 @@ function openDestroyConfirm(item: SandboxRecord) {
 async function confirmDestroySandbox() {
   const target = destroySandboxTarget.value
   if (!target) return
-  destroying.value = true
+  const targetId = target.sandbox_id
+  destroyDialog.value = false
+  destroySandboxTarget.value = null
+  startDestroyPolling(targetId)
   try {
-    const res = await axios.delete(sandboxApiPath(target), {
+    const res = await axios.delete(sandboxApiPath(targetId), {
       params: { session_id: 'dashboard', _t: Date.now() }
     })
     if (res.data.status === 'ok') {
       const sandbox = res.data.data?.sandbox as SandboxRecord | undefined
       if (sandbox?.sandbox_id) {
         upsertSandboxRecord(sandbox)
-        startDestroyPolling(sandbox.sandbox_id)
       }
-      destroyDialog.value = false
-      destroySandboxTarget.value = null
       void loadSandboxes({ silent: true })
     } else {
       toast(res.data.message || tm('messages.operationFailed'), 'error')
@@ -1039,8 +1038,6 @@ async function confirmDestroySandbox() {
   } catch (e: any) {
     toast(e?.response?.data?.message || tm('messages.operationFailed'), 'error')
     await loadSandboxes({ silent: true })
-  } finally {
-    destroying.value = false
   }
 }
 

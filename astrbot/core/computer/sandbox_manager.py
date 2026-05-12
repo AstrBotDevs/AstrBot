@@ -1281,6 +1281,7 @@ class SandboxManager:
 
         async def _run_destroy_cleanup() -> None:
             try:
+                await asyncio.sleep(0)
                 await self.cancel_pending_boot_task(sandbox_id)
                 await self._destroy_sandbox_cleanup(provider, sandbox_id, record)
             finally:
