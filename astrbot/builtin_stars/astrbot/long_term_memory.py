@@ -87,6 +87,8 @@ class LongTermMemory:
         # LTM compaction
         ltm_compaction_strategy = ltm_cfg.get("ltm_compaction_strategy", "truncate")
         ltm_max_rounds = ltm_cfg.get("ltm_max_rounds", 80)
+        ltm_truncate_drop_rounds = ltm_cfg.get("ltm_truncate_drop_rounds", 50)
+        ltm_summary_trigger_rounds = ltm_cfg.get("ltm_summary_trigger_rounds", 80)
         ltm_summary_keep_recent_rounds = ltm_cfg.get(
             "ltm_summary_keep_recent_rounds", 30
         )
@@ -105,6 +107,8 @@ class LongTermMemory:
             "ar_whitelist": ar_whitelist,
             "ltm_compaction_strategy": ltm_compaction_strategy,
             "ltm_max_rounds": max(1, ltm_max_rounds),
+            "ltm_truncate_drop_rounds": max(1, ltm_truncate_drop_rounds),
+            "ltm_summary_trigger_rounds": max(1, ltm_summary_trigger_rounds),
             "ltm_summary_keep_recent_rounds": max(1, ltm_summary_keep_recent_rounds),
             "ltm_summary_provider_id": ltm_summary_provider_id,
             "ltm_summary_prompt": ltm_summary_prompt,
@@ -343,14 +347,16 @@ class LongTermMemory:
                 self._raw_cursor[umo] = len(raw_list)
 
             # 2b. LTM persistent compaction — either turn-based truncation OR
-            # LLM summary, mutually exclusive.
+            # LLM summary, mutually exclusive.  Both use high-water / low-water
+            # to avoid per-round churn.
             strategy = cfg.get("ltm_compaction_strategy", "truncate")
             rounds = _split_into_rounds(self.contexts[umo])
 
             if strategy == "llm_summary":
                 provider_id = cfg.get("ltm_summary_provider_id", "")
+                trigger = cfg.get("ltm_summary_trigger_rounds", 80)
                 keep_recent = cfg.get("ltm_summary_keep_recent_rounds", 30)
-                if provider_id and len(rounds) > keep_recent:
+                if provider_id and len(rounds) > trigger:
                     await self._compact_with_llm_summary(
                         event,
                         provider_id,
@@ -360,8 +366,10 @@ class LongTermMemory:
                     )
             else:
                 max_rounds = cfg.get("ltm_max_rounds", 80)
+                drop_rounds = cfg.get("ltm_truncate_drop_rounds", 50)
                 if len(rounds) > max_rounds:
-                    kept = rounds[-max_rounds:]
+                    safe_drop = min(drop_rounds, len(rounds) - 1)
+                    kept = rounds[safe_drop:]
                     self.contexts[umo] = [seg for rnd in kept for seg in rnd]
 
             # 3. 裁剪 raw_records

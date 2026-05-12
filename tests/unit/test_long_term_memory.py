@@ -1229,20 +1229,20 @@ class TestLTMTruncationCompaction:
                                  "possibility_reply": 0.0, "prompt": "", "whitelist": []},
                 "ltm_compaction_strategy": "truncate",
                 "ltm_max_rounds": 10,
+                "ltm_truncate_drop_rounds": 5,
             },
             "provider_settings": {"image_caption_prompt": ""},
         }
         ltm = LongTermMemory(MagicMock(), ctx)
         umo = mock_event.unified_msg_origin
 
-        # 5 rounds → under 10 limit
+        # 5 rounds → not over 10 limit
         ltm.contexts[umo] = self.make_contexts(5)
         rounds_before = _split_into_rounds(ltm.contexts[umo])
 
-        # Simulate the compaction block from on_agent_done
         cfg = ltm.cfg(mock_event)
         if len(rounds_before) > cfg["ltm_max_rounds"]:
-            kept = rounds_before[-cfg["ltm_max_rounds"] :]
+            kept = rounds_before[cfg["ltm_truncate_drop_rounds"] :]
             ltm.contexts[umo] = [seg for rnd in kept for seg in rnd]
 
         rounds_after = _split_into_rounds(ltm.contexts[umo])
@@ -1250,7 +1250,8 @@ class TestLTMTruncationCompaction:
         assert rounds_after[0][0]["content"] == "q0"
 
     @pytest.mark.asyncio
-    async def test_truncation_when_over_limit(self, mock_event):
+    async def test_truncation_burst_drop(self, mock_event):
+        """超过 ltm_max_rounds 时从前面弹掉 ltm_truncate_drop_rounds 轮。"""
         from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
         from unittest.mock import MagicMock
 
@@ -1261,28 +1262,31 @@ class TestLTMTruncationCompaction:
                 "active_reply": {"enable": False, "method": "possibility_reply",
                                  "possibility_reply": 0.0, "prompt": "", "whitelist": []},
                 "ltm_compaction_strategy": "truncate",
-                "ltm_max_rounds": 3,
+                "ltm_max_rounds": 10,
+                "ltm_truncate_drop_rounds": 4,
             },
             "provider_settings": {"image_caption_prompt": ""},
         }
         ltm = LongTermMemory(MagicMock(), ctx)
         umo = mock_event.unified_msg_origin
 
-        ltm.contexts[umo] = self.make_contexts(10)
+        # 12 rounds → over 10 → drop 4 from front → 8 remain
+        ltm.contexts[umo] = self.make_contexts(12)
         rounds_before = _split_into_rounds(ltm.contexts[umo])
 
         cfg = ltm.cfg(mock_event)
         if len(rounds_before) > cfg["ltm_max_rounds"]:
-            kept = rounds_before[-cfg["ltm_max_rounds"] :]
+            kept = rounds_before[cfg["ltm_truncate_drop_rounds"] :]
             ltm.contexts[umo] = [seg for rnd in kept for seg in rnd]
 
         rounds_after = _split_into_rounds(ltm.contexts[umo])
-        assert len(rounds_after) == 3
-        # first retained round should be the 8th (index 7, 0-based) → q7
-        assert rounds_after[0][0]["content"] == "q7"
+        assert len(rounds_after) == 8
+        # first retained should be q4 (index 4 after dropping 0-3)
+        assert rounds_after[0][0]["content"] == "q4"
 
     @pytest.mark.asyncio
-    async def test_truncation_keeps_max_rounds_1(self, mock_event):
+    async def test_truncation_burst_drop_huge_drop(self, mock_event):
+        """drop_rounds >= total 时保留最后 1 轮（防御边界）。"""
         from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
         from unittest.mock import MagicMock
 
@@ -1293,7 +1297,8 @@ class TestLTMTruncationCompaction:
                 "active_reply": {"enable": False, "method": "possibility_reply",
                                  "possibility_reply": 0.0, "prompt": "", "whitelist": []},
                 "ltm_compaction_strategy": "truncate",
-                "ltm_max_rounds": 1,
+                "ltm_max_rounds": 5,
+                "ltm_truncate_drop_rounds": 50,
             },
             "provider_settings": {"image_caption_prompt": ""},
         }
@@ -1305,10 +1310,12 @@ class TestLTMTruncationCompaction:
 
         cfg = ltm.cfg(mock_event)
         if len(rounds_before) > cfg["ltm_max_rounds"]:
-            kept = rounds_before[-cfg["ltm_max_rounds"] :]
+            safe_drop = min(cfg["ltm_truncate_drop_rounds"], len(rounds_before) - 1)
+            kept = rounds_before[safe_drop:]
             ltm.contexts[umo] = [seg for rnd in kept for seg in rnd]
 
         rounds_after = _split_into_rounds(ltm.contexts[umo])
+        # drop=50 but only 10 exist → safe_drop=9, keeps last 1 round
         assert len(rounds_after) == 1
 
     @pytest.mark.asyncio
@@ -1324,7 +1331,8 @@ class TestLTMTruncationCompaction:
                 "active_reply": {"enable": False, "method": "possibility_reply",
                                  "possibility_reply": 0.0, "prompt": "", "whitelist": []},
                 "ltm_compaction_strategy": "truncate",
-                "ltm_max_rounds": 1,
+                "ltm_max_rounds": 2,
+                "ltm_truncate_drop_rounds": 2,
             },
             "provider_settings": {"image_caption_prompt": ""},
         }
@@ -1347,7 +1355,7 @@ class TestLTMTruncationCompaction:
         rounds_before = _split_into_rounds(ltm.contexts[umo])
         cfg = ltm.cfg(mock_event)
         if len(rounds_before) > cfg["ltm_max_rounds"]:
-            kept = rounds_before[-cfg["ltm_max_rounds"] :]
+            kept = rounds_before[cfg["ltm_truncate_drop_rounds"] :]
             ltm.contexts[umo] = [seg for rnd in kept for seg in rnd]
 
         rounds_after = _split_into_rounds(ltm.contexts[umo])
@@ -1597,6 +1605,8 @@ class TestConfigDefaults:
 
         assert cfg["ltm_compaction_strategy"] == "truncate"
         assert cfg["ltm_max_rounds"] == 80
+        assert cfg["ltm_truncate_drop_rounds"] == 50
+        assert cfg["ltm_summary_trigger_rounds"] == 80
         assert cfg["ltm_summary_keep_recent_rounds"] == 30
         assert cfg["ltm_summary_provider_id"] == ""
         assert cfg["ltm_summary_prompt"] == ""

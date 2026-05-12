@@ -217,13 +217,14 @@ DEFAULT_CONFIG = {
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
-        "group_message_max_cnt": 300,
         "image_caption": False,
         "image_caption_provider_id": "",
         "history_tool_result_truncate": True,
         "history_tool_result_max_chars": 8192,
         "ltm_compaction_strategy": "truncate",
         "ltm_max_rounds": 80,
+        "ltm_truncate_drop_rounds": 50,
+        "ltm_summary_trigger_rounds": 80,
         "ltm_summary_keep_recent_rounds": 30,
         "ltm_summary_provider_id": "",
         "ltm_summary_prompt": "",
@@ -2867,9 +2868,6 @@ CONFIG_METADATA_2 = {
                     "group_icl_enable": {
                         "type": "bool",
                     },
-                    "group_message_max_cnt": {
-                        "type": "int",
-                    },
                     "image_caption": {
                         "type": "bool",
                     },
@@ -4089,10 +4087,6 @@ CONFIG_METADATA_3 = {
                         "description": "启用群聊上下文感知",
                         "type": "bool",
                     },
-                    "provider_ltm_settings.group_message_max_cnt": {
-                        "description": "最大消息数量",
-                        "type": "int",
-                    },
                     "provider_ltm_settings.image_caption": {
                         "description": "自动理解图片",
                         "type": "bool",
@@ -4132,6 +4126,22 @@ CONFIG_METADATA_3 = {
                         "hint": "truncate 策略生效时的截断上限，默认 80。",
                         "condition": {
                             "provider_ltm_settings.ltm_compaction_strategy": "truncate",
+                        },
+                    },
+                    "provider_ltm_settings.ltm_truncate_drop_rounds": {
+                        "description": "截断时丢弃轮数",
+                        "type": "int",
+                        "hint": "truncate 策略触发截断时，从前面丢弃多少轮。默认 50。",
+                        "condition": {
+                            "provider_ltm_settings.ltm_compaction_strategy": "truncate",
+                        },
+                    },
+                    "provider_ltm_settings.ltm_summary_trigger_rounds": {
+                        "description": "摘要触发轮数",
+                        "type": "int",
+                        "hint": "超过多少轮时触发 LLM 摘要压缩，默认 80。",
+                        "condition": {
+                            "provider_ltm_settings.ltm_compaction_strategy": "llm_summary",
                         },
                     },
                     "provider_ltm_settings.ltm_summary_keep_recent_rounds": {

@@ -990,9 +990,6 @@
                 "group_icl_enable": {
                     "description": "Включить осведомленность о контексте группы"
                 },
-                "group_message_max_cnt": {
-                    "description": "Максимальное количество сообщений"
-                },
                 "image_caption": {
                     "description": "Автоматическое понимание изображений",
                     "hint": "Требуется настройка модели описания изображений для группового чата."
@@ -1016,6 +1013,14 @@
                 "ltm_max_rounds": {
                     "description": "Макс. раундов LTM",
                     "hint": "При стратегии truncate — лимит раундов, по умолчанию 80."
+                },
+                "ltm_truncate_drop_rounds": {
+                    "description": "Сброс раундов при truncate",
+                    "hint": "При срабатывании truncate — сколько раундов отбросить спереди. По умолчанию 50."
+                },
+                "ltm_summary_trigger_rounds": {
+                    "description": "Порог для LLM резюме",
+                    "hint": "При превышении этого количества раундов запускается LLM резюме. По умолчанию 80."
                 },
                 "ltm_summary_keep_recent_rounds": {
                     "description": "Сохранять последних раундов (LLM summary)",

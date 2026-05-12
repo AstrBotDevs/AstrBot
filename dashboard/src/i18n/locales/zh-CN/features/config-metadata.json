@@ -991,9 +991,6 @@
         "group_icl_enable": {
           "description": "启用群聊上下文感知"
         },
-        "group_message_max_cnt": {
-          "description": "最大消息数量"
-        },
         "image_caption": {
           "description": "自动理解图片",
           "hint": "需要设置群聊图片转述模型。"
@@ -1017,6 +1014,14 @@
         "ltm_max_rounds": {
           "description": "LTM 最大保留轮数",
           "hint": "truncate 策略生效时的截断上限，默认 80。"
+        },
+        "ltm_truncate_drop_rounds": {
+          "description": "截断时丢弃轮数",
+          "hint": "truncate 策略触发截断时，从前面丢弃的轮数。默认 50。"
+        },
+        "ltm_summary_trigger_rounds": {
+          "description": "摘要触发轮数",
+          "hint": "超过多少轮时触发 LLM 摘要压缩，默认 80。"
         },
         "ltm_summary_keep_recent_rounds": {
           "description": "摘要时保留最近轮数",
