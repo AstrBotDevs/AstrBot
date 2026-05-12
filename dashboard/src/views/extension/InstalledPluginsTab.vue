@@ -219,7 +219,7 @@ const exportablePlugins = computed(() =>
 
 const exportPlugin = (pluginList) => {
   if (!pluginList || pluginList.length === 0) {
-    toast("没有可导出的插件", "warning");
+    toast(tm("exportImport.errors.nothingToExport"), "warning");
     return;
   }
   showExportCode.value = true;
@@ -274,7 +274,7 @@ const toggleExportSelectAll = () => {
 const confirmExportSelected = () => {
   const picked = exportablePlugins.value.filter((_, i) => exportSelected.value[i]);
   if (picked.length === 0) {
-    toast("请至少选择一个插件", "warning");
+    toast(tm("exportImport.errors.needOneSelection"), "warning");
     return;
   }
   showExportSelectDialog.value = false;
@@ -284,10 +284,10 @@ const confirmExportSelected = () => {
 const copyExportCode = async () => {
   try {
     await navigator.clipboard.writeText(exportCode.value);
-    toast("已复制到剪贴板", "success");
+    toast(tm("exportImport.errors.copySuccess"), "success");
   } catch (err) {
-    console.error("复制失败", err);
-    toast("复制失败", "error");
+    console.error("Copy failed", err);
+    toast(tm("exportImport.errors.copyFailed"), "error");
   }
 }
 
@@ -316,18 +316,18 @@ const openImportDialog = () => {
                 prepend-icon="mdi-export-variant"
                 append-icon="mdi-menu-down"
               >
-                导出插件
+                {{ tm("exportImport.exportPlugin") }}
               </v-btn>
             </template>
             <v-list density="compact">
               <v-list-item prepend-icon="mdi-filter-variant" @click="exportFiltered">
-                <v-list-item-title>导出全部筛选出的插件</v-list-item-title>
+                <v-list-item-title>{{ tm("exportImport.exportFiltered") }}</v-list-item-title>
               </v-list-item>
               <v-list-item prepend-icon="mdi-pin" @click="exportPinned">
-                <v-list-item-title>导出置顶的插件</v-list-item-title>
+                <v-list-item-title>{{ tm("exportImport.exportPinned") }}</v-list-item-title>
               </v-list-item>
               <v-list-item prepend-icon="mdi-cursor-default-click-outline" @click="openExportSelectDialog">
-                <v-list-item-title>挑选插件导出</v-list-item-title>
+                <v-list-item-title>{{ tm("exportImport.exportSelected") }}</v-list-item-title>
               </v-list-item>
             </v-list>
           </v-menu>
@@ -338,7 +338,7 @@ const openImportDialog = () => {
             prepend-icon="mdi-import"
             @click="openImportDialog"
           >
-            导入插件
+            {{ tm("exportImport.importPlugin") }}
           </v-btn>
           <v-text-field
             :model-value="pluginSearch"
@@ -361,7 +361,7 @@ const openImportDialog = () => {
         <v-card v-if="showExportCode" class="mt-3 rounded-lg" variant="outlined">
           <v-card-title class="d-flex align-center pa-3">
             <v-icon class="mr-2" size="small">mdi-code-braces</v-icon>
-            <span class="text-body-1">插件码</span>
+            <span class="text-body-1">{{ tm("exportImport.pluginCode") }}</span>
             <v-spacer />
             <v-btn icon="mdi-content-copy" variant="text" size="small" @click="copyExportCode" />
             <v-btn icon="mdi-close" variant="text" size="small" @click="showExportCode = false" />
@@ -389,7 +389,7 @@ const openImportDialog = () => {
       <v-card class="rounded-lg">
         <v-card-title class="d-flex align-center pa-4">
           <v-icon class="mr-2">mdi-cursor-default-click-outline</v-icon>
-          <span>挑选插件导出</span>
+          <span>{{ tm("exportImport.exportSelected") }}</span>
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" size="small" @click="showExportSelectDialog = false" />
         </v-card-title>
@@ -404,7 +404,7 @@ const openImportDialog = () => {
               @update:model-value="toggleExportSelectAll"
             />
             <span class="text-body-2 ml-1">
-              共 {{ exportablePlugins.length }} 个插件，已选 {{ selectedExportCount }} 个
+              {{ tm("exportImport.exportSummary", { total: exportablePlugins.length, selected: selectedExportCount }) }}
             </span>
           </div>
           <v-list density="compact" style="max-height: 400px; overflow-y: auto;">
@@ -436,13 +436,21 @@ const openImportDialog = () => {
                 </v-avatar>
               </template>
               <v-list-item-title class="text-body-2 font-weight-medium">
-                {{ plugin.name || "(未命名)" }}
+                {{ plugin.name || tm("exportImport.unnamed") }}
                 <span class="text-caption text-medium-emphasis ml-2">
                   v{{ plugin.version || "?" }}
                 </span>
               </v-list-item-title>
               <v-list-item-subtitle v-if="plugin.repo" class="text-caption">
-                {{ plugin.repo }}
+                <a
+                  :href="plugin.repo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="repo-link"
+                  @click.stop
+                >
+                  {{ plugin.repo }}
+                </a>
               </v-list-item-subtitle>
             </v-list-item>
           </v-list>
@@ -450,7 +458,7 @@ const openImportDialog = () => {
         <v-card-actions class="pa-4 pt-0">
           <v-spacer />
           <v-btn variant="text" size="small" @click="showExportSelectDialog = false">
-            取消
+            {{ tm("exportImport.cancel") }}
           </v-btn>
           <v-btn
             color="primary"
@@ -459,7 +467,7 @@ const openImportDialog = () => {
             :disabled="selectedExportCount === 0"
             @click="confirmExportSelected"
           >
-            导出 ({{ selectedExportCount }})
+            {{ tm("exportImport.export") }} ({{ selectedExportCount }})
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -633,6 +641,16 @@ const openImportDialog = () => {
 </template>
 
 <style scoped>
+.repo-link {
+  color: rgb(var(--v-theme-primary));
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.repo-link:hover {
+  text-decoration: underline;
+}
+
 .fab-button {
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);

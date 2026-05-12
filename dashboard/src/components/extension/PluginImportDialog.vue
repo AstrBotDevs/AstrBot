@@ -2,6 +2,9 @@
 import LZString from "lz-string";
 import axios from "axios";
 import { computed, ref, watch } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+
+const { tm } = useModuleI18n("features/extension");
 
 const props = defineProps({
   modelValue: {
@@ -72,24 +75,24 @@ const parseImportCode = () => {
   installStatus.value = {};
   const code = (importCode.value || "").trim();
   if (!code) {
-    importError.value = "请先粘贴插件码";
+    importError.value = tm("exportImport.errors.needCode");
     return;
   }
   try {
     const jsonStr = LZString.decompressFromEncodedURIComponent(code);
     if (!jsonStr) {
-      importError.value = "插件码解析失败，请检查格式";
+      importError.value = tm("exportImport.errors.parseFailedFormat");
       return;
     }
     const parsed = JSON.parse(jsonStr);
     if (!Array.isArray(parsed)) {
-      importError.value = "插件码内容格式错误";
+      importError.value = tm("exportImport.errors.parseFailedContent");
       return;
     }
     importPlugins.value = parsed;
     selected.value = parsed.map(() => true);
   } catch (err) {
-    importError.value = "插件码解析失败：" + err.message;
+    importError.value = tm("exportImport.errors.parseFailed", { msg: err.message });
   }
 };
 
@@ -106,7 +109,7 @@ const installOne = async (plugin, idx) => {
   installStatus.value = { ...installStatus.value, [idx]: "installing" };
   try {
     if (!plugin.repo) {
-      throw new Error("缺少仓库地址");
+      throw new Error(tm("exportImport.errors.missingRepo"));
     }
     await axios.post("/api/plugin/install", {
       url: plugin.repo,
@@ -116,7 +119,7 @@ const installOne = async (plugin, idx) => {
     installStatus.value = { ...installStatus.value, [idx]: "success" };
   } catch (err) {
     const msg =
-      err?.response?.data?.message || err?.message || "未知错误";
+      err?.response?.data?.message || err?.message || tm("exportImport.errors.unknownError");
     installStatus.value = { ...installStatus.value, [idx]: "error", [`${idx}_msg`]: msg };
   }
 };
@@ -174,7 +177,7 @@ const statusIcon = (idx) => {
     <v-card class="rounded-lg">
       <v-card-title class="d-flex align-center pa-4">
         <v-icon class="mr-2">mdi-import</v-icon>
-        <span>导入插件</span>
+        <span>{{ tm("exportImport.importPlugin") }}</span>
         <v-chip
           v-if="progressText"
           size="small"
@@ -182,7 +185,7 @@ const statusIcon = (idx) => {
           :color="installing ? 'primary' : 'default'"
           variant="tonal"
         >
-          {{ installing ? `导入中 ${progressText}` : `完成 ${progressText}` }}
+          {{ installing ? `${tm("exportImport.importing")} ${progressText}` : `${tm("exportImport.completed")} ${progressText}` }}
         </v-chip>
         <v-spacer />
         <v-btn
@@ -197,7 +200,7 @@ const statusIcon = (idx) => {
       <v-card-text>
         <v-textarea
           v-model="importCode"
-          label="粘贴插件码"
+          :label="tm('exportImport.pasteCode')"
           variant="outlined"
           density="compact"
           auto-grow
@@ -206,8 +209,18 @@ const statusIcon = (idx) => {
           hide-details="auto"
           :error-messages="importError"
           :disabled="installing"
-          class="mb-3"
+          class="mb-2"
         />
+
+        <v-alert
+          type="warning"
+          variant="tonal"
+          density="compact"
+          icon="mdi-shield-alert-outline"
+          class="mb-3 text-caption"
+        >
+          {{ tm("exportImport.securityHint") }}
+        </v-alert>
 
         <div class="d-flex justify-end mb-3">
           <v-btn
@@ -217,7 +230,7 @@ const statusIcon = (idx) => {
             :disabled="installing"
             @click="parseImportCode"
           >
-            解析
+            {{ tm("exportImport.parse") }}
           </v-btn>
         </div>
 
@@ -235,7 +248,7 @@ const statusIcon = (idx) => {
               @update:model-value="toggleSelectAll"
             />
             <span class="text-body-2 ml-1">
-              共解析到 {{ importPlugins.length }} 个插件，已选 {{ selectedCount }} 个
+              {{ tm("exportImport.importSummary", { total: importPlugins.length, selected: selectedCount }) }}
             </span>
           </div>
 
@@ -258,13 +271,21 @@ const statusIcon = (idx) => {
                 <v-icon size="small" class="mr-2">mdi-puzzle</v-icon>
               </template>
               <v-list-item-title class="text-body-2 font-weight-medium">
-                {{ plugin.name || "(未命名)" }}
+                {{ plugin.name || tm("exportImport.unnamed") }}
                 <span class="text-caption text-medium-emphasis ml-2">
                   v{{ plugin.version || "?" }}
                 </span>
               </v-list-item-title>
               <v-list-item-subtitle v-if="plugin.repo" class="text-caption">
-                {{ plugin.repo }}
+                <a
+                  :href="plugin.repo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="repo-link"
+                  @click.stop
+                >
+                  {{ plugin.repo }}
+                </a>
               </v-list-item-subtitle>
               <v-list-item-subtitle
                 v-if="installStatus[`${idx}_msg`]"
@@ -294,7 +315,7 @@ const statusIcon = (idx) => {
           :loading="installing"
           @click="importSelected"
         >
-          导入选中 ({{ selectedCount }})
+          {{ tm("exportImport.importSelected") }} ({{ selectedCount }})
         </v-btn>
         <v-btn
           color="primary"
@@ -304,7 +325,7 @@ const statusIcon = (idx) => {
           :loading="installing"
           @click="importAll"
         >
-          全部导入
+          {{ tm("exportImport.importAll") }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -323,5 +344,15 @@ const statusIcon = (idx) => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.repo-link {
+  color: rgb(var(--v-theme-primary));
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.repo-link:hover {
+  text-decoration: underline;
 }
 </style>
