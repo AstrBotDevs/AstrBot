@@ -4,6 +4,7 @@ import json
 import random
 import uuid
 from collections import defaultdict, deque
+from typing import Any
 
 from astrbot import logger
 from astrbot.api import star
@@ -607,14 +608,14 @@ def _truncate_user_segment(lines: list[str]) -> list[str]:
 # =============================================================================
 
 
-def _split_into_rounds(contexts: list[dict]) -> list[list[dict]]:
+def _split_into_rounds(contexts: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
     """Split a flat contexts list into logical rounds.
 
     A round begins at a ``user`` segment and includes all subsequent
     ``assistant`` / ``tool`` segments until the next ``user`` segment.
     """
-    rounds: list[list[dict]] = []
-    current: list[dict] = []
+    rounds: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
     for seg in contexts:
         if seg.get("role") == "user" and current:
             rounds.append(current)
@@ -625,7 +626,7 @@ def _split_into_rounds(contexts: list[dict]) -> list[list[dict]]:
     return rounds
 
 
-def _rounds_to_text(rounds: list[list[dict]]) -> str:
+def _rounds_to_text(rounds: list[list[dict[str, Any]]]) -> str:
     """Render rounds into a plain-text string for LLM summarisation."""
     lines: list[str] = []
     for i, rnd in enumerate(rounds, 1):

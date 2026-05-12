@@ -11,6 +11,8 @@ from astrbot.builtin_stars.astrbot.long_term_memory import (
     _extract_tag_content,
     _parse_tool_call,
     _parse_tool_result,
+    _rounds_to_text,
+    _split_into_rounds,
     _truncate_tool_result_for_history,
     _truncate_user_segment,
 )
@@ -1024,7 +1026,7 @@ class TestConcurrentSafety:
         """并发 handle 后 raw_records 无交错损坏。"""
         import asyncio
 
-        async def record_with_delay(text, delay=0):
+        async def record_with_delay(text, delay: float = 0):
             await asyncio.sleep(delay)
             await ltm.handle_message(
                 mock_event_factory(raw_idx=0, text=text)
@@ -1039,3 +1041,563 @@ class TestConcurrentSafety:
         raw = list(ltm.raw_records["group_123"])
         assert len(raw) == 3
         assert all(any(t in s for s in raw) for t in ["a", "b", "c"])
+
+
+# =============================================================================
+# _split_into_rounds
+# =============================================================================
+
+
+class TestSplitIntoRounds:
+    def test_empty(self):
+        assert _split_into_rounds([]) == []
+
+    def test_single_user(self):
+        rounds = _split_into_rounds([{"role": "user", "content": "hi"}])
+        assert len(rounds) == 1
+        assert len(rounds[0]) == 1
+
+    def test_user_assistant_single_round(self):
+        ctxs = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
+        rounds = _split_into_rounds(ctxs)
+        assert len(rounds) == 1
+        assert len(rounds[0]) == 2
+
+    def test_multi_round(self):
+        ctxs = [
+            {"role": "user", "content": "r1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "r2"},
+            {"role": "assistant", "content": "a2"},
+        ]
+        rounds = _split_into_rounds(ctxs)
+        assert len(rounds) == 2
+        assert len(rounds[0]) == 2
+        assert len(rounds[1]) == 2
+        assert rounds[0][0]["content"] == "r1"
+        assert rounds[1][0]["content"] == "r2"
+
+    def test_tool_chain_single_round(self):
+        ctxs = [
+            {"role": "user", "content": "@bot weather"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "c1"}]},
+            {"role": "tool", "tool_call_id": "c1", "content": "sunny"},
+            {"role": "assistant", "content": "it's sunny"},
+        ]
+        rounds = _split_into_rounds(ctxs)
+        assert len(rounds) == 1
+        assert len(rounds[0]) == 4  # tool chain stays together
+
+    def test_multi_step_tool_chain(self):
+        ctxs = [
+            {"role": "user", "content": "@bot complex"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "c1"}]},
+            {"role": "tool", "tool_call_id": "c1", "content": "r1"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "c2"}]},
+            {"role": "tool", "tool_call_id": "c2", "content": "r2"},
+            {"role": "assistant", "content": "done"},
+        ]
+        rounds = _split_into_rounds(ctxs)
+        assert len(rounds) == 1
+        assert len(rounds[0]) == 6  # multi-step tool chain in one round
+
+    def test_two_rounds_with_tools(self):
+        ctxs = [
+            {"role": "user", "content": "@bot weather"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "c1"}]},
+            {"role": "tool", "tool_call_id": "c1", "content": "sunny"},
+            {"role": "assistant", "content": "it's sunny"},
+            {"role": "user", "content": "@bot search"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "c2"}]},
+            {"role": "tool", "tool_call_id": "c2", "content": "results"},
+            {"role": "assistant", "content": "done"},
+        ]
+        rounds = _split_into_rounds(ctxs)
+        assert len(rounds) == 2
+        assert len(rounds[0]) == 4
+        assert len(rounds[1]) == 4
+
+    def test_starts_with_assistant(self):
+        """Defensive: first segment isn't user."""
+        rounds = _split_into_rounds([{"role": "assistant", "content": "orphan"}])
+        assert len(rounds) == 1
+        assert rounds[0][0]["role"] == "assistant"
+
+    def test_consecutive_users(self):
+        """Two user segments in a row → second starts new round."""
+        ctxs = [
+            {"role": "user", "content": "u1"},
+            {"role": "user", "content": "u2"},
+            {"role": "assistant", "content": "a1"},
+        ]
+        rounds = _split_into_rounds(ctxs)
+        assert len(rounds) == 2
+        assert rounds[0] == [{"role": "user", "content": "u1"}]
+        assert rounds[1] == [
+            {"role": "user", "content": "u2"},
+            {"role": "assistant", "content": "a1"},
+        ]
+
+
+# =============================================================================
+# _rounds_to_text
+# =============================================================================
+
+
+class TestRoundsToText:
+    def test_empty(self):
+        assert _rounds_to_text([]) == ""
+
+    def test_single_round(self):
+        rounds = [
+            [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "hello"},
+            ],
+        ]
+        text = _rounds_to_text(rounds)
+        assert "--- Round 1 ---" in text
+        assert "[user] hi" in text
+        assert "[assistant] hello" in text
+
+    def test_multi_round(self):
+        rounds = [
+            [{"role": "user", "content": "r1"}],
+            [{"role": "assistant", "content": "a1"}],
+        ]
+        text = _rounds_to_text(rounds)
+        assert "--- Round 1 ---" in text
+        assert "--- Round 2 ---" in text
+
+    def test_tool_calls_serialized(self):
+        """tool_calls (list) is json.dumps-ed, not crashing."""
+        rounds = [
+            [
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{"id": "c1", "function": {"name": "f"}}],
+                },
+            ],
+        ]
+        text = _rounds_to_text(rounds)
+        assert '"id"' in text  # json-serialized
+        assert "c1" in text
+
+
+# =============================================================================
+# LTM truncation compaction
+# =============================================================================
+
+
+class TestLTMTruncationCompaction:
+    @pytest.fixture
+    def mock_event(self):
+        from unittest.mock import MagicMock
+        from astrbot.api.event import AstrMessageEvent
+        from astrbot.api.platform import MessageType
+        event = MagicMock(spec=AstrMessageEvent)
+        event.unified_msg_origin = "group_123"
+        event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+        event.get_extra.return_value = 0
+        event.get_messages.return_value = []
+        event.message_obj = MagicMock()
+        event.message_obj.sender_nickname = "小明"
+        return event
+
+    def make_contexts(self, n_rounds: int) -> list[dict]:
+        """Build N simple user→assistant rounds."""
+        ctxs = []
+        for i in range(n_rounds):
+            ctxs.append({"role": "user", "content": f"q{i}"})
+            ctxs.append({"role": "assistant", "content": f"a{i}"})
+        return ctxs
+
+    @pytest.mark.asyncio
+    async def test_no_truncation_when_under_limit(self, mock_event):
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        from unittest.mock import MagicMock
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                                 "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+                "ltm_compaction_strategy": "truncate",
+                "ltm_max_rounds": 10,
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = mock_event.unified_msg_origin
+
+        # 5 rounds → under 10 limit
+        ltm.contexts[umo] = self.make_contexts(5)
+        rounds_before = _split_into_rounds(ltm.contexts[umo])
+
+        # Simulate the compaction block from on_agent_done
+        cfg = ltm.cfg(mock_event)
+        if len(rounds_before) > cfg["ltm_max_rounds"]:
+            kept = rounds_before[-cfg["ltm_max_rounds"] :]
+            ltm.contexts[umo] = [seg for rnd in kept for seg in rnd]
+
+        rounds_after = _split_into_rounds(ltm.contexts[umo])
+        assert len(rounds_after) == 5
+        assert rounds_after[0][0]["content"] == "q0"
+
+    @pytest.mark.asyncio
+    async def test_truncation_when_over_limit(self, mock_event):
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        from unittest.mock import MagicMock
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                                 "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+                "ltm_compaction_strategy": "truncate",
+                "ltm_max_rounds": 3,
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = mock_event.unified_msg_origin
+
+        ltm.contexts[umo] = self.make_contexts(10)
+        rounds_before = _split_into_rounds(ltm.contexts[umo])
+
+        cfg = ltm.cfg(mock_event)
+        if len(rounds_before) > cfg["ltm_max_rounds"]:
+            kept = rounds_before[-cfg["ltm_max_rounds"] :]
+            ltm.contexts[umo] = [seg for rnd in kept for seg in rnd]
+
+        rounds_after = _split_into_rounds(ltm.contexts[umo])
+        assert len(rounds_after) == 3
+        # first retained round should be the 8th (index 7, 0-based) → q7
+        assert rounds_after[0][0]["content"] == "q7"
+
+    @pytest.mark.asyncio
+    async def test_truncation_keeps_max_rounds_1(self, mock_event):
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        from unittest.mock import MagicMock
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                                 "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+                "ltm_compaction_strategy": "truncate",
+                "ltm_max_rounds": 1,
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = mock_event.unified_msg_origin
+
+        ltm.contexts[umo] = self.make_contexts(10)
+        rounds_before = _split_into_rounds(ltm.contexts[umo])
+
+        cfg = ltm.cfg(mock_event)
+        if len(rounds_before) > cfg["ltm_max_rounds"]:
+            kept = rounds_before[-cfg["ltm_max_rounds"] :]
+            ltm.contexts[umo] = [seg for rnd in kept for seg in rnd]
+
+        rounds_after = _split_into_rounds(ltm.contexts[umo])
+        assert len(rounds_after) == 1
+
+    @pytest.mark.asyncio
+    async def test_tool_chain_not_split(self, mock_event):
+        """截断不应拆散工具链。"""
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        from unittest.mock import MagicMock
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                                 "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+                "ltm_compaction_strategy": "truncate",
+                "ltm_max_rounds": 1,
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = mock_event.unified_msg_origin
+
+        # 3 rounds, last one has tool chain
+        ctxs = [
+            {"role": "user", "content": "q0"},
+            {"role": "assistant", "content": "a0"},
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "c1"}]},
+            {"role": "tool", "tool_call_id": "c1", "content": "result"},
+            {"role": "assistant", "content": "final"},
+        ]
+        ltm.contexts[umo] = ctxs
+
+        rounds_before = _split_into_rounds(ltm.contexts[umo])
+        cfg = ltm.cfg(mock_event)
+        if len(rounds_before) > cfg["ltm_max_rounds"]:
+            kept = rounds_before[-cfg["ltm_max_rounds"] :]
+            ltm.contexts[umo] = [seg for rnd in kept for seg in rnd]
+
+        rounds_after = _split_into_rounds(ltm.contexts[umo])
+        assert len(rounds_after) == 1
+        # round preserved should have all 4 tool-chain segs intact
+        assert len(rounds_after[0]) == 4
+        # verify the tool message is there
+        assert rounds_after[0][2]["tool_call_id"] == "c1"
+
+
+# =============================================================================
+# Summary injection (on_req_llm)
+# =============================================================================
+
+
+class TestSummaryInjection:
+    @pytest.mark.asyncio
+    async def test_summary_injected_when_present(self):
+        from unittest.mock import MagicMock
+        from astrbot.api.provider import ProviderRequest
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                                 "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+                "ltm_compaction_strategy": "truncate",
+                "ltm_max_rounds": 80,
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = "group_123"
+        ltm.raw_records[umo].append("[小明/14:30]: @bot hi")
+        ltm._raw_cursor[umo] = 0
+        ltm.summaries[umo] = "Test summary text"
+
+        event = MagicMock()
+        event.unified_msg_origin = umo
+        event.get_extra.return_value = 0
+
+        req = ProviderRequest()
+        req.contexts = [{"role": "user", "content": "persona dial"}]
+
+        # simulate on_req_llm injection
+        existing = req.contexts or []
+        ctxs = list(existing)
+        summary = ltm.summaries.get(umo, "")
+        if summary:
+            ctxs.append({
+                "role": "system",
+                "content": "Long-term group memory summary:\n" + summary,
+            })
+        ctxs.extend(ltm.contexts.get(umo, []))
+        req.contexts = ctxs
+
+        # persona dialog still present
+        assert req.contexts[0]["role"] == "user"
+        assert req.contexts[0]["content"] == "persona dial"
+        # summary injected after persona, before LTM contexts
+        assert req.contexts[1]["role"] == "system"
+        assert "Test summary text" in req.contexts[1]["content"]
+
+    @pytest.mark.asyncio
+    async def test_no_summary_when_empty(self):
+        from unittest.mock import MagicMock
+        from astrbot.api.provider import ProviderRequest
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                                 "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+                "ltm_compaction_strategy": "truncate",
+                "ltm_max_rounds": 80,
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = "group_123"
+        ltm.raw_records[umo].append("[小明/14:30]: @bot hi")
+        ltm._raw_cursor[umo] = 0
+
+        event = MagicMock()
+        event.unified_msg_origin = umo
+        event.get_extra.return_value = 0
+
+        req = ProviderRequest()
+        req.contexts = [{"role": "user", "content": "persona dial"}]
+
+        existing = req.contexts or []
+        ctxs = list(existing)
+        summary = ltm.summaries.get(umo, "")
+        if summary:
+            ctxs.append({"role": "system", "content": "..."})
+        ctxs.extend(ltm.contexts.get(umo, []))
+        req.contexts = ctxs
+
+        # no system summary injected
+        assert all(s["role"] != "system" for s in req.contexts)
+
+
+# =============================================================================
+# remove_session cleanup
+# =============================================================================
+
+
+class TestRemoveSessionCleanup:
+    @pytest.mark.asyncio
+    async def test_summaries_cleaned(self, mock_event):
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        from unittest.mock import MagicMock
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                                 "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+                "ltm_compaction_strategy": "truncate",
+                "ltm_max_rounds": 80,
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = mock_event.unified_msg_origin
+        ltm.summaries[umo] = "test"
+        ltm._persisted_tool_call_ids[umo].add("c1")
+        ltm._persisted_tool_result_ids[umo].add("c1")
+        ltm.raw_records[umo].append("[小明/14:30]: hi")
+
+        await ltm.remove_session(mock_event)
+
+        assert umo not in ltm.summaries
+        assert umo not in ltm._persisted_tool_call_ids
+        assert umo not in ltm._persisted_tool_result_ids
+        assert umo not in ltm.raw_records
+
+
+# =============================================================================
+# LLM summary error paths
+# =============================================================================
+
+
+class TestLLMSummaryErrorPath:
+    @pytest.mark.asyncio
+    async def test_missing_provider_does_not_crash(self, mock_event):
+        """provider_id 不存在时打 warning，不崩。"""
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        from unittest.mock import MagicMock
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                                 "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+                "ltm_compaction_strategy": "llm_summary",
+                "ltm_summary_provider_id": "nonexistent",
+                "ltm_summary_keep_recent_rounds": 2,
+                "ltm_summary_prompt": "",
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        ctx.get_provider_by_id.return_value = None
+
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = mock_event.unified_msg_origin
+        ltm.raw_records[umo].append("[小明/14:30]: hi")
+        ltm._raw_cursor[umo] = 0
+
+        # Build 5 rounds of contexts
+        ctxs = []
+        for i in range(5):
+            ctxs.append({"role": "user", "content": f"q{i}"})
+            ctxs.append({"role": "assistant", "content": f"a{i}"})
+        ltm.contexts[umo] = ctxs
+
+        rounds = _split_into_rounds(ctxs)
+        # Should NOT crash — just return without modifying
+        await ltm._compact_with_llm_summary(
+            event=mock_event,
+            provider_id="nonexistent",
+            keep_recent=2,
+            prompt="",
+            rounds=rounds,
+        )
+        # contexts unchanged after failed summary attempt
+        assert len(ltm.contexts[umo]) == 10
+
+    @pytest.mark.asyncio
+    async def test_below_keep_recent_no_op(self, mock_event):
+        """rounds <= keep_recent 时不触发压缩。"""
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        from unittest.mock import MagicMock
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {}
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = mock_event.unified_msg_origin
+
+        ctxs = [
+            {"role": "user", "content": "q0"},
+            {"role": "assistant", "content": "a0"},
+        ]
+        ltm.contexts[umo] = ctxs
+        original_len = len(ltm.contexts[umo])
+
+        rounds = _split_into_rounds(ctxs)
+        await ltm._compact_with_llm_summary(
+            event=mock_event,
+            provider_id="some_id",
+            keep_recent=5,
+            prompt="",
+            rounds=rounds,
+        )
+        # 1 round < 5 keep_recent → no-op
+        assert len(ltm.contexts[umo]) == original_len
+
+
+# =============================================================================
+# Config defaults
+# =============================================================================
+
+
+class TestConfigDefaults:
+    @pytest.mark.asyncio
+    async def test_defaults(self, mock_event):
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        from unittest.mock import MagicMock
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                                 "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        ltm = LongTermMemory(MagicMock(), ctx)
+        cfg = ltm.cfg(mock_event)
+
+        assert cfg["ltm_compaction_strategy"] == "truncate"
+        assert cfg["ltm_max_rounds"] == 80
+        assert cfg["ltm_summary_keep_recent_rounds"] == 30
+        assert cfg["ltm_summary_provider_id"] == ""
+        assert cfg["ltm_summary_prompt"] == ""
+        assert cfg["ltm_raw_records_max_bytes"] == 500000
