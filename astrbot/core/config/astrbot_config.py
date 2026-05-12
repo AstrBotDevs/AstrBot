@@ -90,10 +90,6 @@ class AstrBotConfig(dict):
         ):
             self._reset_generated_dashboard_password(conf)
             has_new = True
-        if "dashboard" in conf and isinstance(conf["dashboard"], dict):
-            if "password_change_required" in conf["dashboard"]:
-                conf["dashboard"].pop("password_change_required", None)
-                has_new = True
         self.update(conf)
         if has_new:
             self.save_config()
@@ -108,6 +104,8 @@ class AstrBotConfig(dict):
         conf["dashboard"]["password"] = hash_legacy_dashboard_password(
             generated_password
         )
+        conf["dashboard"]["password_storage_upgraded"] = True
+        conf["dashboard"]["password_change_required"] = True
         object.__setattr__(
             self,
             "_generated_dashboard_password",

@@ -3,78 +3,90 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
     hash_legacy_dashboard_password,
+    is_legacy_dashboard_password,
 )
 
-DASHBOARD_PREF_SCOPE = "global"
-DASHBOARD_PREF_SCOPE_ID = "global"
-PASSWORD_STORAGE_UPGRADED_KEY = "dashboard_password_storage_upgraded"
-PASSWORD_CHANGE_REQUIRED_KEY = "dashboard_password_change_required"
+PASSWORD_STORAGE_UPGRADED_KEY = "password_storage_upgraded"
+PASSWORD_CHANGE_REQUIRED_KEY = "password_change_required"
 
 
-async def _get_pref(db: BaseDatabase, key: str, default=None):
-    pref = await db.get_preference(
-        DASHBOARD_PREF_SCOPE,
-        DASHBOARD_PREF_SCOPE_ID,
-        key,
-    )
-    if not pref:
-        return default
-    if not isinstance(pref.value, dict):
-        return default
-    return pref.value.get("val", default)
+def _set_dashboard_flag(config: AstrBotConfig, key: str, value: bool) -> None:
+    if config["dashboard"].get(key) == bool(value):
+        return
+    config["dashboard"][key] = bool(value)
+    config.save_config()
 
 
-async def _set_pref(db: BaseDatabase, key: str, value) -> None:
-    await db.insert_preference_or_update(
-        DASHBOARD_PREF_SCOPE,
-        DASHBOARD_PREF_SCOPE_ID,
-        key,
-        {"val": value},
-    )
+def _has_usable_pbkdf2_password(config: AstrBotConfig) -> bool:
+    password = config["dashboard"].get("pbkdf2_password", "")
+    if not isinstance(password, str) or not password.startswith("pbkdf2_sha256$"):
+        return False
+
+    parts = password.split("$")
+    if len(parts) != 4:
+        return False
+
+    _, iterations, salt, digest = parts
+    try:
+        int(iterations)
+        bytes.fromhex(salt)
+        bytes.fromhex(digest)
+    except ValueError:
+        return False
+    return True
 
 
 async def is_password_storage_upgraded(
     db: BaseDatabase,
     config: AstrBotConfig,
 ) -> bool:
-    stored = await _get_pref(db, PASSWORD_STORAGE_UPGRADED_KEY, None)
-    if stored is not None:
-        return bool(stored)
-
-    upgraded = bool(config["dashboard"].get("pbkdf2_password"))
-    await set_password_storage_upgraded(db, upgraded)
-    return upgraded
+    config_upgraded = _has_usable_pbkdf2_password(config)
+    if config["dashboard"].get(PASSWORD_STORAGE_UPGRADED_KEY) != config_upgraded:
+        _set_dashboard_flag(config, PASSWORD_STORAGE_UPGRADED_KEY, config_upgraded)
+    return config_upgraded
 
 
-async def set_password_storage_upgraded(db: BaseDatabase, upgraded: bool) -> None:
-    await _set_pref(db, PASSWORD_STORAGE_UPGRADED_KEY, bool(upgraded))
+async def set_password_storage_upgraded(
+    db: BaseDatabase,
+    config: AstrBotConfig,
+    upgraded: bool,
+) -> None:
+    _set_dashboard_flag(config, PASSWORD_STORAGE_UPGRADED_KEY, upgraded)
 
 
 async def is_password_change_required(
     db: BaseDatabase,
     config: AstrBotConfig,
 ) -> bool:
-    stored = await _get_pref(db, PASSWORD_CHANGE_REQUIRED_KEY, None)
+    stored = config["dashboard"].get(PASSWORD_CHANGE_REQUIRED_KEY, None)
     if stored is not None:
         return bool(stored)
 
     required = bool(
         getattr(config, "_generated_dashboard_password_change_required", False)
         or getattr(config, "_dashboard_password_change_required_from_config", False)
-        or config["dashboard"].get("password_change_required", False)
     )
-    await set_password_change_required(db, required)
+    if required:
+        _set_dashboard_flag(config, PASSWORD_CHANGE_REQUIRED_KEY, True)
     return required
 
 
-async def set_password_change_required(db: BaseDatabase, required: bool) -> None:
-    await _set_pref(db, PASSWORD_CHANGE_REQUIRED_KEY, bool(required))
+async def set_password_change_required(
+    db: BaseDatabase,
+    config: AstrBotConfig,
+    required: bool,
+) -> None:
+    _set_dashboard_flag(config, PASSWORD_CHANGE_REQUIRED_KEY, required)
 
 
 def get_dashboard_password_hash(config: AstrBotConfig, *, upgraded: bool) -> str:
-    if upgraded:
+    if upgraded and _has_usable_pbkdf2_password(config):
         return config["dashboard"].get("pbkdf2_password", "")
-    return config["dashboard"].get("password", "")
+
+    legacy_password = config["dashboard"].get("password", "")
+    if upgraded and not is_legacy_dashboard_password(legacy_password):
+        return ""
+    return legacy_password
 
 
 def set_dashboard_password_hashes(config: AstrBotConfig, raw_password: str) -> None:

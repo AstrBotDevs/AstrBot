@@ -246,6 +246,8 @@ DEFAULT_CONFIG = {
         "username": "astrbot",
         "password": "",
         "pbkdf2_password": "",
+        "password_storage_upgraded": False,
+        "password_change_required": False,
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,

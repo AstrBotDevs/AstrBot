@@ -100,8 +100,8 @@ class AuthRoute(Route):
         username = new_username.strip()
         self.config["dashboard"]["username"] = username
         set_dashboard_password_hashes(self.config, new_password)
-        await set_password_storage_upgraded(self.db, True)
-        await set_password_change_required(self.db, False)
+        await set_password_storage_upgraded(self.db, self.config, True)
+        await set_password_change_required(self.db, self.config, False)
         self.config.save_config()
 
         token = self.generate_jwt(username)
@@ -223,8 +223,8 @@ class AuthRoute(Route):
             except ValueError as e:
                 return Response().error(str(e)).__dict__
             set_dashboard_password_hashes(self.config, new_pwd)
-            await set_password_storage_upgraded(self.db, True)
-            await set_password_change_required(self.db, False)
+            await set_password_storage_upgraded(self.db, self.config, True)
+            await set_password_change_required(self.db, self.config, False)
         if new_username:
             self.config["dashboard"]["username"] = new_username
 

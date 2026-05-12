@@ -29,6 +29,7 @@ from astrbot.core.utils.auth_password import (
 )
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.dashboard.password_state import (
+    get_dashboard_password_hash,
     is_password_change_required,
     is_password_storage_upgraded,
     set_password_change_required,
@@ -167,8 +168,16 @@ async def core_lifecycle_td(tmp_path_factory):
         core_lifecycle.astrbot_config["dashboard"]["password"] = (
             hash_legacy_dashboard_password(dashboard_password)
         )
-        await set_password_storage_upgraded(core_lifecycle.db, True)
-        await set_password_change_required(core_lifecycle.db, False)
+        await set_password_storage_upgraded(
+            core_lifecycle.db,
+            core_lifecycle.astrbot_config,
+            True,
+        )
+        await set_password_change_required(
+            core_lifecycle.db,
+            core_lifecycle.astrbot_config,
+            False,
+        )
     object.__setattr__(
         core_lifecycle,
         "_dashboard_plain_password",
@@ -211,7 +220,11 @@ async def _set_dashboard_password_change_required(
     core_lifecycle_td: AstrBotCoreLifecycle,
     required: bool,
 ) -> None:
-    await set_password_change_required(core_lifecycle_td.db, required)
+    await set_password_change_required(
+        core_lifecycle_td.db,
+        core_lifecycle_td.astrbot_config,
+        required,
+    )
 
 
 async def _restore_dashboard_password_state(
@@ -219,9 +232,14 @@ async def _restore_dashboard_password_state(
     dashboard_config: dict,
 ) -> None:
     core_lifecycle_td.astrbot_config["dashboard"] = dashboard_config
-    await set_password_change_required(core_lifecycle_td.db, False)
+    await set_password_change_required(
+        core_lifecycle_td.db,
+        core_lifecycle_td.astrbot_config,
+        False,
+    )
     await set_password_storage_upgraded(
         core_lifecycle_td.db,
+        core_lifecycle_td.astrbot_config,
         bool(dashboard_config.get("pbkdf2_password")),
     )
 
@@ -327,7 +345,11 @@ async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
         )
         core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
         await _set_dashboard_password_change_required(core_lifecycle_td, False)
-        await set_password_storage_upgraded(core_lifecycle_td.db, False)
+        await set_password_storage_upgraded(
+            core_lifecycle_td.db,
+            core_lifecycle_td.astrbot_config,
+            False,
+        )
 
         response = await test_client.post(
             "/api/auth/login",
@@ -389,6 +411,74 @@ async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
             core_lifecycle_td,
             original_dashboard_config,
         )
+
+
+@pytest.mark.asyncio
+async def test_password_storage_flag_repairs_after_rollback_clears_pbkdf2(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    legacy_password = "AstrbotRollback123"
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["username"] = "astrbot"
+        core_lifecycle_td.astrbot_config["dashboard"]["password"] = (
+            hash_legacy_dashboard_password(legacy_password)
+        )
+        core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
+        await set_password_storage_upgraded(
+            core_lifecycle_td.db,
+            core_lifecycle_td.astrbot_config,
+            True,
+        )
+
+        response = await test_client.post(
+            "/api/auth/login",
+            json={"username": "astrbot", "password": legacy_password},
+        )
+        data = await response.get_json()
+
+        assert data["status"] == "ok"
+        assert data["data"]["legacy_pwd_hint"] is True
+        assert data["data"]["password_upgrade_required"] is True
+        assert (
+            await is_password_storage_upgraded(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
+            is False
+        )
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+def test_password_hash_lookup_falls_back_to_legacy_when_pbkdf2_missing(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    dashboard_config = copy.deepcopy(core_lifecycle_td.astrbot_config["dashboard"])
+    legacy_hash = hash_legacy_dashboard_password("AstrbotRollback123")
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["password"] = legacy_hash
+        core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
+
+        assert (
+            get_dashboard_password_hash(
+                core_lifecycle_td.astrbot_config,
+                upgraded=True,
+            )
+            == legacy_hash
+        )
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = dashboard_config
 
 
 @pytest.mark.asyncio

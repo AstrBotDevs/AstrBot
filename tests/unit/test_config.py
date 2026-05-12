@@ -214,7 +214,8 @@ class TestAstrBotConfigLoad:
         assert config["dashboard"]["pbkdf2_password"].startswith(
             "pbkdf2_sha256$600000$"
         )
-        assert "password_change_required" not in config["dashboard"]
+        assert config["dashboard"]["password_change_required"] is True
+        assert config["dashboard"]["password_storage_upgraded"] is True
         assert (
             getattr(config, "_generated_dashboard_password_change_required", False)
             is True
@@ -228,10 +229,10 @@ class TestAstrBotConfigLoad:
             generated_password,
         )
 
-    def test_legacy_password_change_required_rotates_and_removes_config_flag(
+    def test_legacy_password_change_required_rotates_and_keeps_config_flag(
         self, temp_config_path
     ):
-        """Test that the old setup flag is consumed instead of kept in config."""
+        """Test that the setup flag stays in dashboard config."""
         default_config = {
             "dashboard": {
                 "username": "astrbot",
@@ -259,7 +260,8 @@ class TestAstrBotConfigLoad:
         generated_password = getattr(config, "_generated_dashboard_password", None)
 
         assert isinstance(generated_password, str)
-        assert "password_change_required" not in config["dashboard"]
+        assert config["dashboard"]["password_change_required"] is True
+        assert config["dashboard"]["password_storage_upgraded"] is True
         assert (
             getattr(config, "_dashboard_password_change_required_from_config", False)
             is True
@@ -300,7 +302,6 @@ class TestAstrBotConfigLoad:
         generated_password = getattr(config, "_generated_dashboard_password", None)
 
         assert generated_password is None
-        assert "password_change_required" not in config["dashboard"]
         assert config["dashboard"]["pbkdf2_password"] == ""
         assert verify_dashboard_password(
             config["dashboard"]["password"], DEFAULT_DASHBOARD_PASSWORD
