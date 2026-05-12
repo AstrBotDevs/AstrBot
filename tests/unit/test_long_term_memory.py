@@ -1505,55 +1505,15 @@ class TestRemoveSessionCleanup:
 
 
 class TestLLMSummaryErrorPath:
-    @pytest.mark.asyncio
-    async def test_missing_provider_does_not_crash(self, mock_event):
-        """provider_id 不存在时打 warning，不崩。"""
-        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
-        from unittest.mock import MagicMock
-
-        ctx = MagicMock()
-        ctx.get_config.return_value = {
-            "provider_ltm_settings": {
-                "image_caption": False, "image_caption_provider_id": "",
-                "active_reply": {"enable": False, "method": "possibility_reply",
-                                 "possibility_reply": 0.0, "prompt": "", "whitelist": []},
-                "ltm_compaction_strategy": "llm_summary",
-                "ltm_summary_provider_id": "nonexistent",
-                "ltm_summary_keep_recent_rounds": 2,
-                "ltm_summary_prompt": "",
-            },
-            "provider_settings": {"image_caption_prompt": ""},
-        }
-        ctx.get_provider_by_id.return_value = None
-
-        ltm = LongTermMemory(MagicMock(), ctx)
-        umo = mock_event.unified_msg_origin
-        ltm.raw_records[umo].append("[小明/14:30]: hi")
-        ltm._raw_cursor[umo] = 0
-
-        # Build 5 rounds of contexts
-        ctxs = []
-        for i in range(5):
-            ctxs.append({"role": "user", "content": f"q{i}"})
-            ctxs.append({"role": "assistant", "content": f"a{i}"})
-        ltm.contexts[umo] = ctxs
-
-        rounds = _split_into_rounds(ctxs)
-        # Should NOT crash — just return without modifying
-        await ltm._compact_with_llm_summary(
-            event=mock_event,
-            provider_id="nonexistent",
-            keep_recent=2,
-            prompt="",
-            rounds=rounds,
-        )
-        # contexts unchanged after failed summary attempt
-        assert len(ltm.contexts[umo]) == 10
+    # test_missing_provider_does_not_crash removed: provider-availability
+    # check moved to on_agent_done which resolves the provider before
+    # calling _compact_with_llm_summary.
 
     @pytest.mark.asyncio
     async def test_below_keep_recent_no_op(self, mock_event):
         """rounds <= keep_recent 时不触发压缩。"""
         from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        from astrbot.api.provider import Provider
         from unittest.mock import MagicMock
 
         ctx = MagicMock()
@@ -1571,7 +1531,7 @@ class TestLLMSummaryErrorPath:
         rounds = _split_into_rounds(ctxs)
         await ltm._compact_with_llm_summary(
             event=mock_event,
-            provider_id="some_id",
+            provider=MagicMock(spec=Provider),
             keep_recent=5,
             prompt="",
             rounds=rounds,
@@ -1597,7 +1557,6 @@ class TestLLMSummaryErrorPath:
 
         ctx = MagicMock()
         ctx.get_config.return_value = {}
-        ctx.get_provider_by_id.return_value = fake_provider
 
         ltm = LongTermMemory(MagicMock(), ctx)
         umo = mock_event.unified_msg_origin
@@ -1616,7 +1575,7 @@ class TestLLMSummaryErrorPath:
         # keep_recent=1 → old_rounds has 1 round, provider will be called
         await ltm._compact_with_llm_summary(
             event=mock_event,
-            provider_id="test_provider",
+            provider=fake_provider,
             keep_recent=1,
             prompt="",
             rounds=rounds,
@@ -1643,7 +1602,6 @@ class TestLLMSummaryErrorPath:
 
         ctx = MagicMock()
         ctx.get_config.return_value = {}
-        ctx.get_provider_by_id.return_value = fake_provider
 
         ltm = LongTermMemory(MagicMock(), ctx)
         umo = mock_event.unified_msg_origin
@@ -1661,7 +1619,7 @@ class TestLLMSummaryErrorPath:
 
         await ltm._compact_with_llm_summary(
             event=mock_event,
-            provider_id="test_provider",
+            provider=fake_provider,
             keep_recent=1,
             prompt="",
             rounds=rounds,
@@ -1686,7 +1644,6 @@ class TestLLMSummaryErrorPath:
 
         ctx = MagicMock()
         ctx.get_config.return_value = {}
-        ctx.get_provider_by_id.return_value = fake_provider
 
         ltm = LongTermMemory(MagicMock(), ctx)
         umo = mock_event.unified_msg_origin
@@ -1703,7 +1660,7 @@ class TestLLMSummaryErrorPath:
 
         await ltm._compact_with_llm_summary(
             event=mock_event,
-            provider_id="test_provider",
+            provider=fake_provider,
             keep_recent=1,
             prompt="",
             rounds=rounds,

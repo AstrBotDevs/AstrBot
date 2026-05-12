@@ -361,23 +361,33 @@ class LongTermMemory:
                 provider_id = cfg.get("ltm_summary_provider_id", "")
                 trigger = cfg.get("ltm_summary_trigger_rounds", 80)
                 keep_recent = cfg.get("ltm_summary_keep_recent_rounds", 30)
-                if provider_id and len(rounds) > trigger:
-                    next_retry = self._summary_next_retry.get(umo, 0)
-                    if len(rounds) < next_retry:
-                        logger.debug(
-                            "LTM summary 冷却中 (umo=%s, rounds=%d, 允许=%d)",
-                            umo,
-                            len(rounds),
-                            next_retry,
+                if len(rounds) > trigger:
+                    # Resolve provider: explicit ID first, fallback to
+                    # current chat model for this group (umo).
+                    if provider_id:
+                        provider = self.context.get_provider_by_id(provider_id)
+                    else:
+                        provider = self.context.get_using_provider(umo)
+                    if provider is None or not isinstance(provider, Provider):
+                        logger.warning(
+                            "LTM summary 没有可用的 provider "
+                            "(umo=%s, configured=%s)", umo, provider_id or "(auto)"
                         )
                     else:
-                        await self._compact_with_llm_summary(
-                            event,
-                            provider_id,
-                            keep_recent,
-                            cfg.get("ltm_summary_prompt", ""),
-                            rounds,
-                        )
+                        next_retry = self._summary_next_retry.get(umo, 0)
+                        if len(rounds) < next_retry:
+                            logger.debug(
+                                "LTM summary 冷却中 (umo=%s, rounds=%d, 允许=%d)",
+                                umo, len(rounds), next_retry,
+                            )
+                        else:
+                            await self._compact_with_llm_summary(
+                                event,
+                                provider,
+                                keep_recent,
+                                cfg.get("ltm_summary_prompt", ""),
+                                rounds,
+                            )
             else:
                 max_rounds = cfg.get("ltm_max_rounds", 80)
                 drop_rounds = cfg.get("ltm_truncate_drop_rounds", 50)
@@ -398,7 +408,7 @@ class LongTermMemory:
     async def _compact_with_llm_summary(
         self,
         event: AstrMessageEvent,
-        provider_id: str,
+        provider: Provider,
         keep_recent: int,
         prompt: str,
         rounds: list[list[dict]],
@@ -408,11 +418,6 @@ class LongTermMemory:
         old_rounds = rounds[:-keep_recent]
         recent_rounds = rounds[-keep_recent:]
         if not old_rounds:
-            return
-
-        provider = self.context.get_provider_by_id(provider_id)
-        if provider is None or not isinstance(provider, Provider):
-            logger.warning("LTM summary 指定的 provider %s 不可用", provider_id)
             return
 
         old_text = _rounds_to_text(old_rounds)
@@ -442,7 +447,7 @@ class LongTermMemory:
                 logger.warning(
                     "LTM LLM summary 返回空文本，跳过本次压缩 (umo=%s, provider=%s)",
                     umo,
-                    provider_id,
+                    provider,
                 )
                 self._summary_next_retry[umo] = len(rounds) + SUMMARY_RETRY_COOLDOWN
                 return
