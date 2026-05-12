@@ -19,6 +19,7 @@ _BUILTIN_TOOL_MODULES = (
 
 _builtin_tool_classes_by_name: dict[str, type[FunctionTool]] = {}
 _builtin_tool_names_by_class: dict[type[FunctionTool], str] = {}
+_builtin_tool_names_by_module_prefix: dict[str, tuple[str, ...]] = {}
 _builtin_tools_loaded = False
 _MISSING = object()
 
@@ -249,14 +250,37 @@ def unregister_builtin_tool_class(tool_cls: type[FunctionTool]) -> str | None:
     return tool_name
 
 
+def _iter_builtin_tool_names_by_module_prefix(module_prefix: str) -> tuple[str, ...]:
+    return tuple(
+        tool_name
+        for tool_cls, tool_name in _builtin_tool_names_by_class.items()
+        if getattr(tool_cls, "__module__", "").startswith(module_prefix)
+    )
+
+
+def register_builtin_tools_by_module_prefix(module_prefix: str) -> list[str]:
+    ensure_builtin_tools_loaded()
+    tool_names = _iter_builtin_tool_names_by_module_prefix(module_prefix)
+    _builtin_tool_names_by_module_prefix[module_prefix] = tool_names
+    return list(tool_names)
+
+
 def unregister_builtin_tools_by_module_prefix(module_prefix: str) -> list[str]:
+    recorded_tool_names = _builtin_tool_names_by_module_prefix.pop(module_prefix, ())
+    tool_names = recorded_tool_names or _iter_builtin_tool_names_by_module_prefix(
+        module_prefix
+    )
+
     removed: list[str] = []
-    for tool_cls in tuple(_builtin_tool_names_by_class):
+    for tool_name in tool_names:
+        tool_cls = _builtin_tool_classes_by_name.get(tool_name)
+        if tool_cls is None:
+            continue
         if not getattr(tool_cls, "__module__", "").startswith(module_prefix):
             continue
-        tool_name = unregister_builtin_tool_class(tool_cls)
-        if tool_name is not None:
-            removed.append(tool_name)
+        removed_tool_name = unregister_builtin_tool_class(tool_cls)
+        if removed_tool_name is not None:
+            removed.append(removed_tool_name)
     return removed
 
 
@@ -347,6 +371,7 @@ __all__ = [
     "get_builtin_tool_class",
     "get_builtin_tool_name",
     "iter_builtin_tool_classes",
+    "register_builtin_tools_by_module_prefix",
     "unregister_builtin_tool_class",
     "unregister_builtin_tools_by_module_prefix",
 ]

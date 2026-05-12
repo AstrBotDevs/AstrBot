@@ -404,6 +404,7 @@ const snackbar = ref({ show: false, message: '', color: 'success' })
 
 const providerOptions = ref<ProviderOption[]>([])
 const hasProviderOptions = computed(() => providerOptions.value.length > 0)
+let sandboxesRefreshTimer: ReturnType<typeof window.setInterval> | null = null
 
 const headers = computed(() => [
   { title: tm('headers.sandbox'), key: 'identity', sortable: false, width: '22%' },
@@ -644,6 +645,20 @@ async function loadProviders() {
   } catch {
     providerOptions.value = []
     createProvider.value = ''
+  }
+}
+
+function startSandboxesAutoRefresh() {
+  if (sandboxesRefreshTimer !== null) return
+  sandboxesRefreshTimer = window.setInterval(() => {
+    void loadSandboxes({ silent: true })
+  }, 5000)
+}
+
+function stopSandboxesAutoRefresh() {
+  if (sandboxesRefreshTimer !== null) {
+    window.clearInterval(sandboxesRefreshTimer)
+    sandboxesRefreshTimer = null
   }
 }
 
@@ -1189,9 +1204,11 @@ async function scrollConsoleToBottom() {
 onMounted(async () => {
   await loadProviders()
   await loadSandboxes()
+  startSandboxesAutoRefresh()
 })
 
 onUnmounted(() => {
+  stopSandboxesAutoRefresh()
   stopCreatePolling()
   stopDestroyPolling()
 })
