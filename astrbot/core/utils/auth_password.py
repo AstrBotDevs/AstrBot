@@ -47,6 +47,13 @@ def hash_dashboard_password(raw_password: str) -> str:
     return f"{_PBKDF2_FORMAT}{_PBKDF2_ITERATIONS}${salt}${digest}"
 
 
+def hash_legacy_dashboard_password(raw_password: str) -> str:
+    """Return legacy MD5 hash for downgrade compatibility only."""
+    if not isinstance(raw_password, str) or raw_password == "":
+        raise ValueError("Password cannot be empty")
+    return hashlib.md5(raw_password.encode("utf-8")).hexdigest()
+
+
 def validate_dashboard_password(raw_password: str) -> None:
     """Validate whether dashboard password meets the minimal complexity policy."""
     if not isinstance(raw_password, str) or raw_password == "":

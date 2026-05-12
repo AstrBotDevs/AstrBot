@@ -24,9 +24,16 @@ from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
+    hash_legacy_dashboard_password,
     verify_dashboard_password,
 )
 from astrbot.core.utils.pip_installer import PipInstallError
+from astrbot.dashboard.password_state import (
+    is_password_change_required,
+    is_password_storage_upgraded,
+    set_password_change_required,
+    set_password_storage_upgraded,
+)
 from astrbot.dashboard.routes.auth import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
@@ -154,10 +161,14 @@ async def core_lifecycle_td(tmp_path_factory):
     )
     dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
     if not generated_password:
-        core_lifecycle.astrbot_config["dashboard"]["password"] = (
+        core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
             hash_dashboard_password(dashboard_password)
         )
-        core_lifecycle.astrbot_config["dashboard"]["password_change_required"] = False
+        core_lifecycle.astrbot_config["dashboard"]["password"] = (
+            hash_legacy_dashboard_password(dashboard_password)
+        )
+        await set_password_storage_upgraded(core_lifecycle.db, True)
+        await set_password_change_required(core_lifecycle.db, False)
     object.__setattr__(
         core_lifecycle,
         "_dashboard_plain_password",
@@ -190,10 +201,29 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
     generated_password = getattr(core_lifecycle_td, "_dashboard_plain_password", None)
     if generated_password:
         return generated_password
-    password = core_lifecycle_td.astrbot_config["dashboard"]["password"]
+    password = core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"]
     if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
         return "astrbot"
     return password
+
+
+async def _set_dashboard_password_change_required(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    required: bool,
+) -> None:
+    await set_password_change_required(core_lifecycle_td.db, required)
+
+
+async def _restore_dashboard_password_state(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    dashboard_config: dict,
+) -> None:
+    core_lifecycle_td.astrbot_config["dashboard"] = dashboard_config
+    await set_password_change_required(core_lifecycle_td.db, False)
+    await set_password_storage_upgraded(
+        core_lifecycle_td.db,
+        bool(dashboard_config.get("pbkdf2_password")),
+    )
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -279,6 +309,89 @@ async def test_auth_login_secure_cookie_override(
 
 
 @pytest.mark.asyncio
+async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    legacy_password = "AstrbotLegacy123"
+    changed_password = "AstrbotChanged123"
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["username"] = "astrbot"
+        core_lifecycle_td.astrbot_config["dashboard"]["password"] = (
+            hash_legacy_dashboard_password(legacy_password)
+        )
+        core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
+        await set_password_storage_upgraded(core_lifecycle_td.db, False)
+
+        response = await test_client.post(
+            "/api/auth/login",
+            json={"username": "astrbot", "password": legacy_password},
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["change_pwd_hint"] is False
+        assert data["data"]["legacy_pwd_hint"] is True
+        assert data["data"]["password_upgrade_required"] is True
+
+        response = await test_client.post(
+            "/api/auth/account/edit",
+            json={
+                "password": legacy_password,
+                "new_password": "",
+                "confirm_password": "",
+                "new_username": "astrbot-admin",
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "error"
+        assert (
+            await is_password_storage_upgraded(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
+            is False
+        )
+
+        response = await test_client.post(
+            "/api/auth/account/edit",
+            json={
+                "password": legacy_password,
+                "new_password": changed_password,
+                "confirm_password": changed_password,
+                "new_username": "astrbot",
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert (
+            await is_password_storage_upgraded(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
+            is True
+        )
+        assert verify_dashboard_password(
+            core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"],
+            changed_password,
+        )
+        assert verify_dashboard_password(
+            core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            changed_password,
+        )
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
 async def test_generated_password_requires_password_change_until_changed(
     app: Quart,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -290,7 +403,7 @@ async def test_generated_password_requires_password_change_until_changed(
     changed_password = "AstrbotChanged123"
 
     try:
-        core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"] = True
+        await _set_dashboard_password_change_required(core_lifecycle_td, True)
 
         response = await test_client.post(
             "/api/auth/login",
@@ -307,6 +420,27 @@ async def test_generated_password_requires_password_change_until_changed(
             "/api/auth/account/edit",
             json={
                 "password": _resolve_dashboard_password(core_lifecycle_td),
+                "new_password": "",
+                "confirm_password": "",
+                "new_username": core_lifecycle_td.astrbot_config["dashboard"][
+                    "username"
+                ],
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "error"
+        assert (
+            await is_password_change_required(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
+            is True
+        )
+
+        response = await test_client.post(
+            "/api/auth/account/edit",
+            json={
+                "password": _resolve_dashboard_password(core_lifecycle_td),
                 "new_password": changed_password,
                 "confirm_password": changed_password,
                 "new_username": core_lifecycle_td.astrbot_config["dashboard"][
@@ -317,11 +451,17 @@ async def test_generated_password_requires_password_change_until_changed(
         data = await response.get_json()
         assert data["status"] == "ok"
         assert (
-            core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"]
+            await is_password_change_required(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
             is False
         )
     finally:
-        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
 
 
 @pytest.mark.asyncio
@@ -340,7 +480,7 @@ async def test_local_setup_can_skip_default_password_auth(
     try:
         monkeypatch.setenv("ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH", "true")
         core_lifecycle_td.astrbot_config["dashboard"]["host"] = "127.0.0.1"
-        core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"] = True
+        await _set_dashboard_password_change_required(core_lifecycle_td, True)
 
         response = await test_client.get("/api/auth/setup-status")
         data = await response.get_json()
@@ -361,18 +501,28 @@ async def test_local_setup_can_skip_default_password_auth(
         assert data["data"]["username"] == setup_username
         assert data["data"]["token"]
         assert (
-            core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"]
+            await is_password_change_required(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
             is False
         )
         assert (
             core_lifecycle_td.astrbot_config["dashboard"]["username"] == setup_username
         )
         assert verify_dashboard_password(
+            core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"],
+            setup_password,
+        )
+        assert verify_dashboard_password(
             core_lifecycle_td.astrbot_config["dashboard"]["password"],
             setup_password,
         )
     finally:
-        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
 
 
 @pytest.mark.asyncio
@@ -388,7 +538,7 @@ async def test_authenticated_default_password_login_can_complete_setup(
     setup_username = "astrbot-admin"
 
     try:
-        core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"] = True
+        await _set_dashboard_password_change_required(core_lifecycle_td, True)
 
         login_response = await test_client.post(
             "/api/auth/login",
@@ -415,15 +565,25 @@ async def test_authenticated_default_password_login_can_complete_setup(
         assert data["status"] == "ok"
         assert data["data"]["username"] == setup_username
         assert (
-            core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"]
+            await is_password_change_required(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
             is False
+        )
+        assert verify_dashboard_password(
+            core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"],
+            setup_password,
         )
         assert verify_dashboard_password(
             core_lifecycle_td.astrbot_config["dashboard"]["password"],
             setup_password,
         )
     finally:
-        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
 
 
 @pytest.mark.asyncio
@@ -440,7 +600,7 @@ async def test_setup_skip_requires_local_host(
     try:
         monkeypatch.setenv("ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH", "true")
         core_lifecycle_td.astrbot_config["dashboard"]["host"] = "0.0.0.0"
-        core_lifecycle_td.astrbot_config["dashboard"]["password_change_required"] = True
+        await _set_dashboard_password_change_required(core_lifecycle_td, True)
 
         response = await test_client.get("/api/auth/setup-status")
         data = await response.get_json()
@@ -459,7 +619,10 @@ async def test_setup_skip_requires_local_host(
         data = await response.get_json()
         assert data["status"] == "error"
     finally:
-        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
 
 
 @pytest.mark.asyncio

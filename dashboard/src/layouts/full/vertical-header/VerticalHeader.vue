@@ -32,6 +32,7 @@ const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
 let dialog = ref(false);
 let accountWarning = ref(false);
 let accountWarningLegacy = ref(false);
+let accountWarningUpgrade = ref(false);
 let updateStatusDialog = ref(false);
 let aboutDialog = ref(false);
 const username = localStorage.getItem("user");
@@ -259,15 +260,15 @@ function accountEdit() {
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
-  const passwordHash = password.value ? password.value : "";
-  const newPasswordHash = newPassword.value ? newPassword.value : "";
-  const confirmPasswordHash = confirmPassword.value ? confirmPassword.value : "";
+  const currentPasswordValue = password.value ? password.value : "";
+  const newPasswordValue = newPassword.value ? newPassword.value : "";
+  const confirmPasswordValue = confirmPassword.value ? confirmPassword.value : "";
 
   axios
     .post("/api/auth/account/edit", {
-      password: passwordHash,
-      new_password: newPasswordHash,
-      confirm_password: confirmPasswordHash,
+      password: currentPasswordValue,
+      new_password: newPasswordValue,
+      confirm_password: confirmPasswordValue,
       new_username: newUsername.value ? newUsername.value : username,
     })
     .then((res) => {
@@ -313,22 +314,37 @@ function getVersion() {
         res.data.data.version,
         res.data.data?.dashboard_version,
       );
-      let change_pwd_hint = res.data.data?.change_pwd_hint;
+      const change_pwd_hint = res.data.data?.change_pwd_hint;
       const legacy_pwd_hint = res.data.data?.legacy_pwd_hint;
-      if (change_pwd_hint || legacy_pwd_hint) {
+      const password_upgrade_required =
+        res.data.data?.password_upgrade_required;
+      if (change_pwd_hint || legacy_pwd_hint || password_upgrade_required) {
         dialog.value = true;
         accountWarning.value = true;
-        accountWarningLegacy.value = !!legacy_pwd_hint;
-        localStorage.setItem("change_pwd_hint", "true");
-        if (legacy_pwd_hint) {
+        accountWarningUpgrade.value = !!password_upgrade_required;
+        accountWarningLegacy.value =
+          !!legacy_pwd_hint && !password_upgrade_required;
+        if (change_pwd_hint || (legacy_pwd_hint && !password_upgrade_required)) {
+          localStorage.setItem("change_pwd_hint", "true");
+        } else {
+          localStorage.removeItem("change_pwd_hint");
+        }
+        if (legacy_pwd_hint && !password_upgrade_required) {
           localStorage.setItem("legacy_pwd_hint", "true");
         } else {
           localStorage.removeItem("legacy_pwd_hint");
         }
+        if (password_upgrade_required) {
+          localStorage.setItem("password_upgrade_required", "true");
+        } else {
+          localStorage.removeItem("password_upgrade_required");
+        }
       } else {
         accountWarningLegacy.value = false;
+        accountWarningUpgrade.value = false;
         localStorage.removeItem("change_pwd_hint");
         localStorage.removeItem("legacy_pwd_hint");
+        localStorage.removeItem("password_upgrade_required");
       }
     })
     .catch((err) => {
@@ -337,12 +353,16 @@ function getVersion() {
 }
 
 function initPasswordWarningFromStorage() {
-  const hasChangePwdHint = localStorage.getItem('change_pwd_hint') === 'true';
-  const hasLegacyPwdHint = localStorage.getItem('legacy_pwd_hint') === 'true';
-  if (hasChangePwdHint || hasLegacyPwdHint) {
+  const hasChangePwdHint = localStorage.getItem("change_pwd_hint") === "true";
+  const hasLegacyPwdHint = localStorage.getItem("legacy_pwd_hint") === "true";
+  const hasPasswordUpgradeRequired =
+    localStorage.getItem("password_upgrade_required") === "true";
+  if (hasChangePwdHint || hasLegacyPwdHint || hasPasswordUpgradeRequired) {
     dialog.value = true;
     accountWarning.value = true;
-    accountWarningLegacy.value = hasLegacyPwdHint;
+    accountWarningUpgrade.value = hasPasswordUpgradeRequired;
+    accountWarningLegacy.value =
+      hasLegacyPwdHint && !hasPasswordUpgradeRequired;
   }
 }
 
@@ -1143,7 +1163,7 @@ onMounted(async () => {
     >
       <v-card class="account-dialog">
         <v-card-text class="py-6">
-          <div class="d-flex flex-column align-center mb-6">
+          <div class="d-flex flex-column align-start mb-6">
             <logo
               :title="t('core.header.logoTitle')"
               :subtitle="t('core.header.accountDialog.title')"
@@ -1158,7 +1178,9 @@ onMounted(async () => {
           >
             <strong>{{
               t(
-                accountWarningLegacy
+                accountWarningUpgrade
+                  ? "core.header.accountDialog.securityWarningUpgrade"
+                  : accountWarningLegacy
                   ? "core.header.accountDialog.securityWarningLegacy"
                   : "core.header.accountDialog.securityWarning",
               )

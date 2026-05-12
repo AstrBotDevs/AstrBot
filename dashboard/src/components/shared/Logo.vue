@@ -2,11 +2,11 @@
   <div class="logo-container">
     <div class="logo-content">
       <div class="logo-image">
-        <img width="110" src="@/assets/images/astrbot_logo_mini.webp" alt="AstrBot Logo">
+        <img width="80" src="@/assets/images/plugin_icon.png" alt="AstrBot Logo">
       </div>
       <div class="logo-text">
         <h2 
-          :style="{ color: 'rgb(var(--v-theme-primary))' }"
+          :style="{ color: '#000000' }"
           v-html="formatTitle(title || t('core.header.logoTitle'))"
         ></h2>
         <!-- 父子组件传递css变量可能会出错，暂时使用十六进制颜色值 -->
@@ -44,7 +44,7 @@ const formatTitle = (title: string) => {
 <style scoped>
 .logo-container {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   width: 100%;
   margin-bottom: 10px;
@@ -52,9 +52,9 @@ const formatTitle = (title: string) => {
 
 .logo-content {
   display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 10px;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 10px 0;
   max-width: 100%;
   overflow: visible;
 }
@@ -104,7 +104,7 @@ const formatTitle = (title: string) => {
 /* 响应式处理 */
 @media (max-width: 520px) {
   .logo-content {
-    gap: 15px;
+    gap: 8px;
   }
   
   .logo-text h2 {
@@ -116,7 +116,7 @@ const formatTitle = (title: string) => {
   }
   
   .logo-image img {
-    width: 90px;
+    width: 64px;
   }
 }
 </style>

@@ -8,11 +8,18 @@ from quart import current_app, g, jsonify, make_response, request
 from astrbot import logger
 from astrbot.core import DEMO_MODE
 from astrbot.core.utils.auth_password import (
-    hash_dashboard_password,
     is_default_dashboard_password,
     is_legacy_dashboard_password,
     validate_dashboard_password,
     verify_dashboard_password,
+)
+from astrbot.dashboard.password_state import (
+    get_dashboard_password_hash,
+    is_password_change_required,
+    is_password_storage_upgraded,
+    set_dashboard_password_hashes,
+    set_password_change_required,
+    set_password_storage_upgraded,
 )
 
 from .route import Response, Route, RouteContext
@@ -25,8 +32,9 @@ LOCAL_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 class AuthRoute(Route):
-    def __init__(self, context: RouteContext) -> None:
+    def __init__(self, context: RouteContext, db) -> None:
         super().__init__(context)
+        self.db = db
         self.routes = {
             "/auth/login": ("POST", self.login),
             "/auth/logout": ("POST", self.logout),
@@ -42,8 +50,12 @@ class AuthRoute(Route):
             Response()
             .ok(
                 {
-                    "setup_required": self._is_setup_required(),
+                    "setup_required": await self._is_setup_required(),
                     "skip_default_password_auth": self._can_skip_default_password_auth(),
+                    "password_upgrade_required": not await is_password_storage_upgraded(
+                        self.db,
+                        self.config,
+                    ),
                 }
             )
             .__dict__
@@ -52,13 +64,13 @@ class AuthRoute(Route):
     async def setup(self):
         if not self._can_skip_default_password_auth():
             return Response().error("Setup without password is not enabled").__dict__
-        if not self._is_setup_required():
+        if not await self._is_setup_required():
             return Response().error("Setup is not required").__dict__
 
         return await self._complete_setup()
 
     async def setup_authenticated(self):
-        if not self._is_setup_required():
+        if not await self._is_setup_required():
             return Response().error("Setup is not required").__dict__
         if not isinstance(getattr(g, "username", None), str):
             return Response().error("未授权").__dict__
@@ -87,8 +99,9 @@ class AuthRoute(Route):
 
         username = new_username.strip()
         self.config["dashboard"]["username"] = username
-        self.config["dashboard"]["password"] = hash_dashboard_password(new_password)
-        self.config["dashboard"]["password_change_required"] = False
+        set_dashboard_password_hashes(self.config, new_password)
+        await set_password_storage_upgraded(self.db, True)
+        await set_password_change_required(self.db, False)
         self.config.save_config()
 
         token = self.generate_jwt(username)
@@ -98,6 +111,7 @@ class AuthRoute(Route):
                 "username": username,
                 "change_pwd_hint": False,
                 "legacy_pwd_hint": False,
+                "password_upgrade_required": False,
             },
             "Setup completed successfully",
         )
@@ -107,7 +121,8 @@ class AuthRoute(Route):
 
     async def login(self):
         username = self.config["dashboard"]["username"]
-        password = self.config["dashboard"]["password"]
+        storage_upgraded = await is_password_storage_upgraded(self.db, self.config)
+        password = get_dashboard_password_hash(self.config, upgraded=storage_upgraded)
         post_data = await request.json
 
         req_username = (
@@ -126,11 +141,13 @@ class AuthRoute(Route):
         if login_verified:
             change_pwd_hint = False
             legacy_pwd_hint = is_legacy_dashboard_password(password)
-            password_change_required = bool(
-                self.config["dashboard"].get("password_change_required", False)
+            password_change_required = await is_password_change_required(
+                self.db,
+                self.config,
             )
             if (
-                username == "astrbot"
+                storage_upgraded
+                and username == "astrbot"
                 and is_default_dashboard_password(password)
                 and not DEMO_MODE
             ):
@@ -140,17 +157,13 @@ class AuthRoute(Route):
             if password_change_required and not DEMO_MODE:
                 change_pwd_hint = True
             token = self.generate_jwt(username)
-            if legacy_pwd_hint:
-                self.config["dashboard"]["password"] = hash_dashboard_password(
-                    req_password
-                )
-                self.config.save_config()
             payload = Response().ok(
                 {
                     "token": token,
                     "username": username,
                     "change_pwd_hint": change_pwd_hint,
                     "legacy_pwd_hint": legacy_pwd_hint,
+                    "password_upgrade_required": not storage_upgraded,
                 },
             )
             response = await make_response(jsonify(payload.__dict__))
@@ -174,7 +187,8 @@ class AuthRoute(Route):
                 .__dict__
             )
 
-        password = self.config["dashboard"]["password"]
+        storage_upgraded = await is_password_storage_upgraded(self.db, self.config)
+        password = get_dashboard_password_hash(self.config, upgraded=storage_upgraded)
         post_data = await request.json
         if not isinstance(post_data, dict):
             return Response().error("Invalid request payload").__dict__
@@ -188,6 +202,12 @@ class AuthRoute(Route):
 
         new_pwd = post_data.get("new_password", None)
         new_username = post_data.get("new_username", None)
+        password_change_required = await is_password_change_required(
+            self.db,
+            self.config,
+        )
+        if (not storage_upgraded or password_change_required) and not new_pwd:
+            return Response().error("请设置新密码以完成安全升级").__dict__
         if not new_pwd and not new_username:
             return Response().error("新用户名和新密码不能同时为空").__dict__
 
@@ -202,8 +222,9 @@ class AuthRoute(Route):
                 validate_dashboard_password(new_pwd)
             except ValueError as e:
                 return Response().error(str(e)).__dict__
-            self.config["dashboard"]["password"] = hash_dashboard_password(new_pwd)
-            self.config["dashboard"]["password_change_required"] = False
+            set_dashboard_password_hashes(self.config, new_pwd)
+            await set_password_storage_upgraded(self.db, True)
+            await set_password_change_required(self.db, False)
         if new_username:
             self.config["dashboard"]["username"] = new_username
 
@@ -223,21 +244,26 @@ class AuthRoute(Route):
         token = jwt.encode(payload, jwt_token, algorithm="HS256")
         return token
 
-    def _is_setup_required(self) -> bool:
+    async def _is_setup_required(self) -> bool:
         if DEMO_MODE:
             return False
 
         dashboard_config = self.config["dashboard"]
-        password_change_required = bool(
-            dashboard_config.get("password_change_required", False)
+        password_change_required = await is_password_change_required(
+            self.db,
+            self.config,
         )
         if password_change_required:
             return True
 
+        storage_upgraded = await is_password_storage_upgraded(self.db, self.config)
+        if not storage_upgraded:
+            return False
+
         return dashboard_config.get(
             "username"
         ) == "astrbot" and is_default_dashboard_password(
-            dashboard_config.get("password", "")
+            dashboard_config.get("pbkdf2_password", "")
         )
 
     def _can_skip_default_password_auth(self) -> bool:

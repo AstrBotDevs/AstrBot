@@ -7,6 +7,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
     generate_dashboard_password,
     hash_dashboard_password,
+    hash_legacy_dashboard_password,
 )
 
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
@@ -61,37 +62,38 @@ class AstrBotConfig(dict):
                 conf_str = conf_str[1:]
             conf = json.loads(conf_str)
         dashboard_conf = conf.get("dashboard")
-        dashboard_password_change_required_missing = (
+        legacy_dashboard_password_change_required = bool(
             isinstance(dashboard_conf, dict)
-            and "password_change_required" not in dashboard_conf
+            and dashboard_conf.get("password_change_required", False)
         )
-
+        if legacy_dashboard_password_change_required:
+            object.__setattr__(
+                self,
+                "_dashboard_password_change_required_from_config",
+                True,
+            )
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
         if (
             "dashboard" in conf
             and isinstance(conf["dashboard"], dict)
+            and not conf["dashboard"].get("pbkdf2_password")
             and not conf["dashboard"].get("password")
         ):
             self._reset_generated_dashboard_password(conf)
-            conf["dashboard"]["password_change_required"] = True
             has_new = True
         elif (
             "dashboard" in conf
             and isinstance(conf["dashboard"], dict)
-            and conf["dashboard"].get("password_change_required", False)
+            and legacy_dashboard_password_change_required
+            and conf["dashboard"].get("pbkdf2_password")
         ):
             self._reset_generated_dashboard_password(conf)
             has_new = True
-        elif (
-            "dashboard" in conf
-            and isinstance(conf["dashboard"], dict)
-            and dashboard_password_change_required_missing
-            and conf["dashboard"].get("username") == "astrbot"
-        ):
-            self._reset_generated_dashboard_password(conf)
-            conf["dashboard"]["password_change_required"] = True
-            has_new = True
+        if "dashboard" in conf and isinstance(conf["dashboard"], dict):
+            if "password_change_required" in conf["dashboard"]:
+                conf["dashboard"].pop("password_change_required", None)
+                has_new = True
         self.update(conf)
         if has_new:
             self.save_config()
@@ -100,11 +102,21 @@ class AstrBotConfig(dict):
 
     def _reset_generated_dashboard_password(self, conf: dict) -> None:
         generated_password = generate_dashboard_password()
-        conf["dashboard"]["password"] = hash_dashboard_password(generated_password)
+        conf["dashboard"]["pbkdf2_password"] = hash_dashboard_password(
+            generated_password
+        )
+        conf["dashboard"]["password"] = hash_legacy_dashboard_password(
+            generated_password
+        )
         object.__setattr__(
             self,
             "_generated_dashboard_password",
             generated_password,
+        )
+        object.__setattr__(
+            self,
+            "_generated_dashboard_password_change_required",
+            True,
         )
 
     def _config_schema_to_default_config(self, schema: dict) -> dict:

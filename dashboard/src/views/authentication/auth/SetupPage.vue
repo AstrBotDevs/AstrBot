@@ -44,8 +44,10 @@ onMounted(async () => {
   <div class="setup-page-container">
     <v-card class="setup-card" elevation="1">
       <v-card-title>
-        <div class="d-flex justify-space-between align-center w-100">
-          <img width="80" src="@/assets/images/icon-no-shadow.svg" alt="AstrBot Logo">
+        <div class="setup-header">
+          <div class="setup-brand">
+            <img width="80" src="@/assets/images/plugin_icon.png" alt="AstrBot Logo">
+          </div>
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
             <v-divider vertical class="mx-1"
@@ -60,8 +62,8 @@ onMounted(async () => {
             </v-btn>
           </div>
         </div>
-        <div class="ml-2" style="font-size: 26px;">{{ t('setup.title') }}</div>
-        <div class="mt-2 ml-2" style="font-size: 14px; color: grey;">{{ t('setup.subtitle') }}</div>
+        <div class="setup-title">{{ t('setup.title') }}</div>
+        <div class="setup-subtitle">{{ t('setup.subtitle') }}</div>
       </v-card-title>
       <v-card-text>
         <AuthSetup />
@@ -85,5 +87,38 @@ onMounted(async () => {
 .setup-card {
   width: 420px;
   padding: 8px;
+}
+
+.setup-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
+.setup-brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.setup-brand img {
+  flex: 0 0 auto;
+}
+
+.setup-title {
+  margin-top: 8px;
+  color: #000000;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.setup-subtitle {
+  margin-top: 6px;
+  color: grey;
+  font-size: 14px;
+  line-height: 1.35;
 }
 </style>

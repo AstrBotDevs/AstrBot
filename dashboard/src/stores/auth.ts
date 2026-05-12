@@ -13,9 +13,13 @@ export const useAuthStore = defineStore("auth", {
       this.username = data.username;
       localStorage.setItem('user', this.username);
       localStorage.setItem('token', data.token);
-      if (data?.change_pwd_hint || data?.legacy_pwd_hint) {
+      const passwordUpgradeRequired = !!data?.password_upgrade_required;
+      const passwordWarning =
+        !!data?.change_pwd_hint ||
+        (!!data?.legacy_pwd_hint && !passwordUpgradeRequired);
+      if (passwordWarning) {
         localStorage.setItem('change_pwd_hint', 'true');
-        if (data?.legacy_pwd_hint) {
+        if (data?.legacy_pwd_hint && !passwordUpgradeRequired) {
           localStorage.setItem('legacy_pwd_hint', 'true');
         } else {
           localStorage.removeItem('legacy_pwd_hint');
@@ -24,10 +28,15 @@ export const useAuthStore = defineStore("auth", {
         localStorage.removeItem('change_pwd_hint');
         localStorage.removeItem('legacy_pwd_hint');
       }
+      if (passwordUpgradeRequired) {
+        localStorage.setItem('password_upgrade_required', 'true');
+      } else {
+        localStorage.removeItem('password_upgrade_required');
+      }
 
       const onboardingCompleted = await this.checkOnboardingCompleted();
       this.returnUrl = null;
-      if (data?.change_pwd_hint || data?.legacy_pwd_hint) {
+      if (passwordWarning) {
         router.push('/auth/setup');
         return;
       }
@@ -106,6 +115,7 @@ export const useAuthStore = defineStore("auth", {
       localStorage.removeItem('token');
       localStorage.removeItem('change_pwd_hint');
       localStorage.removeItem('legacy_pwd_hint');
+      localStorage.removeItem('password_upgrade_required');
       void axios.post('/api/auth/logout').catch(() => undefined);
       router.push('/auth/login');
     },
