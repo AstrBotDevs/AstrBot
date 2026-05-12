@@ -463,6 +463,51 @@ class InternalAgentSubStage(Stage):
                 continue
             messages_to_save.append(message)
 
+        # Persistent conversation compaction — either turn-based truncation OR
+        # LLM summary, mutually exclusive. We avoid running both in sequence
+        # (truncation would destroy prompt cache before the LLM summary runs).
+        if self.max_context_length > 0:
+            compress_provider = None
+            if (
+                self.context_limit_reached_strategy == "llm_compress"
+                and self.llm_compress_provider_id
+            ):
+                from astrbot.api.provider import Provider as ApiProvider
+
+                raw_provider = self.ctx.plugin_manager.context.get_provider_by_id(
+                    self.llm_compress_provider_id
+                )
+                if raw_provider is not None and isinstance(raw_provider, ApiProvider):
+                    compress_provider = raw_provider
+                else:
+                    logger.warning(
+                        "指定的上下文压缩模型 %s 不可用",
+                        self.llm_compress_provider_id,
+                    )
+
+            if compress_provider is not None:
+                # LLM summary strategy: compress old turns into a summary.
+                from astrbot.core.agent.context.compressor import (
+                    LLMSummaryCompressor,
+                )
+
+                compressor = LLMSummaryCompressor(
+                    provider=compress_provider,
+                    keep_recent=self.llm_compress_keep_recent,
+                    instruction_text=self.llm_compress_instruction,
+                )
+                messages_to_save = await compressor(messages_to_save)
+            else:
+                # Fallback: turn-based truncation only.
+                from astrbot.core.agent.context.truncator import ContextTruncator
+
+                truncator = ContextTruncator()
+                messages_to_save = truncator.truncate_by_turns(
+                    messages_to_save,
+                    keep_most_recent_turns=self.max_context_length,
+                    drop_turns=self.dequeue_context_length,
+                )
+
         checkpoint_id = event.get_extra("llm_checkpoint_id")
         message_to_save = dump_messages_with_checkpoints(messages_to_save)
         if isinstance(checkpoint_id, str) and checkpoint_id:

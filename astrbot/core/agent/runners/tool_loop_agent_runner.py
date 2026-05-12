@@ -458,8 +458,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        messages_for_provider = getattr(
+            self, "_provider_messages", self.run_context.messages
+        )
         payload = {
-            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
+            "contexts": self._sanitize_contexts_for_provider(messages_for_provider),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
@@ -703,11 +706,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
-        # Apply request-time context guard before the provider call.
-        # Persistent history compaction belongs to the memory layer.
+        # Apply request-time context guard *on a copy* so the runner's canonical
+        # messages are never mutated by the guard. The guard result is only used
+        # for this provider call. Persistent compaction is owned by the
+        # conversation / memory layer.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]")
-        self.run_context.messages = await self.request_context_guard.process(
+        self._provider_messages = await self.request_context_guard.process(
             self.run_context.messages, trusted_token_usage=token_usage
         )
         self._simple_print_message_role("[AftCompact]")
