@@ -1,5 +1,6 @@
 """Tests for send_message_to_user session handling."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -133,3 +134,43 @@ async def test_send_message_empty_messages_returns_error():
     result = await tool.call(ctx, messages=[], session="oc_xxx")
     assert "error:" in result
     assert "messages" in result.lower()
+
+
+# JSON-string messages compatibility for issue #7961.
+
+
+@pytest.mark.asyncio
+async def test_messages_as_json_string_parsed():
+    """JSON-string array messages are parsed before validation."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(current_session="feishu:GroupMessage:oc_xxx")
+    messages_str = '[{"type": "plain", "text": "hello from string"}]'
+    result = await tool.call(ctx, messages=messages_str, session="oc_xxx")
+    assert "Message sent to session" in result
+
+
+@pytest.mark.asyncio
+async def test_messages_as_json_string_with_newlines():
+    """JSON-string messages preserve multiline text after parsing."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(current_session="feishu:GroupMessage:oc_xxx")
+
+    long_text = "line1\n\nline2\nline3"
+    messages_str = json.dumps([{"type": "plain", "text": long_text}])
+    result = await tool.call(ctx, messages=messages_str, session="oc_xxx")
+    assert "Message sent to session" in result
+    call_args = ctx.context.context.send_message.call_args
+    chain = call_args[0][1]
+    assert len(chain.chain) == 1
+    assert chain.chain[0].text == long_text
+
+
+@pytest.mark.asyncio
+async def test_messages_as_invalid_json_string_returns_error():
+    """Invalid JSON-string messages still return a validation error."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context()
+    result = await tool.call(ctx, messages="not valid json at all", session="oc_xxx")
+    assert "error:" in result or "invalid" in result.lower()
+    result2 = await tool.call(ctx, messages="", session="oc_xxx")
+    assert "error:" in result2 or "invalid" in result2.lower()
