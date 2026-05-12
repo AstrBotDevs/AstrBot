@@ -238,6 +238,28 @@ def builtin_tool(
     return _register(tool_cls)
 
 
+def unregister_builtin_tool_class(tool_cls: type[FunctionTool]) -> str | None:
+    tool_name = _builtin_tool_names_by_class.pop(tool_cls, None)
+    if tool_name is None:
+        return None
+    existing = _builtin_tool_classes_by_name.get(tool_name)
+    if existing is tool_cls:
+        _builtin_tool_classes_by_name.pop(tool_name, None)
+    _BUILTIN_TOOL_CONFIG_RULES.pop(tool_name, None)
+    return tool_name
+
+
+def unregister_builtin_tools_by_module_prefix(module_prefix: str) -> list[str]:
+    removed: list[str] = []
+    for tool_cls in tuple(_builtin_tool_names_by_class):
+        if not getattr(tool_cls, "__module__", "").startswith(module_prefix):
+            continue
+        tool_name = unregister_builtin_tool_class(tool_cls)
+        if tool_name is not None:
+            removed.append(tool_name)
+    return removed
+
+
 def ensure_builtin_tools_loaded() -> None:
     global _builtin_tools_loaded
     if _builtin_tools_loaded:
@@ -325,4 +347,6 @@ __all__ = [
     "get_builtin_tool_class",
     "get_builtin_tool_name",
     "iter_builtin_tool_classes",
+    "unregister_builtin_tool_class",
+    "unregister_builtin_tools_by_module_prefix",
 ]
