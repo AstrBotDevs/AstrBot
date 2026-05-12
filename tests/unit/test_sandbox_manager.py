@@ -393,6 +393,45 @@ async def test_create_sandbox_uncontrolled_deferred_returns_creating_then_runnin
 
 
 @pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_deferred_tracks_pending_boot_task(
+    tmp_path,
+):
+    provider = DeferredBootProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    sandbox = await manager.create_sandbox_uncontrolled_deferred(
+        None, "session-a", "generic", "Named"
+    )
+
+    task = manager.pending_boot_tasks.get(sandbox["sandbox_id"])
+    assert task is not None
+    assert not task.done()
+
+    provider.allow_boot.set()
+    await asyncio.wait_for(task, timeout=1)
+    assert sandbox["sandbox_id"] not in manager.pending_boot_tasks
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_deferred_delays_boot_past_next_loop_turn(
+    tmp_path,
+):
+    provider = DeferredBootProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    sandbox = await manager.create_sandbox_uncontrolled_deferred(
+        None, "session-a", "generic", "Named"
+    )
+
+    assert sandbox["status"] == "creating"
+    assert not provider.boot_started.is_set()
+    await asyncio.sleep(0)
+    assert not provider.boot_started.is_set()
+
+    await asyncio.wait_for(provider.boot_started.wait(), timeout=1)
+
+
+@pytest.mark.asyncio
 async def test_create_sandbox_uncontrolled_deferred_rejects_duplicate_name(tmp_path):
     provider = DeferredBootProvider()
     manager, _provider = _manager(tmp_path, provider)
@@ -661,6 +700,25 @@ async def test_destroy_sandbox_deferred_delays_cleanup_past_next_loop_turn(tmp_p
     assert not provider.destroy_started.is_set()
 
     await asyncio.wait_for(provider.destroy_started.wait(), timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_destroy_sandbox_deferred_tracks_pending_destroy_task(tmp_path):
+    provider = BlockingDestroyProvider()
+    manager, _provider = _manager(tmp_path, provider)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+
+    destroyed = await manager.destroy_sandbox_deferred(
+        "session-a", created["sandbox_id"]
+    )
+
+    task = manager.pending_destroy_tasks.get(destroyed["sandbox_id"])
+    assert task is not None
+    assert not task.done()
+
+    provider.allow_destroy.set()
+    await asyncio.wait_for(task, timeout=1)
+    assert destroyed["sandbox_id"] not in manager.pending_destroy_tasks
 
 
 @pytest.mark.asyncio

@@ -89,6 +89,11 @@ class SandboxManager:
             logger.warning("[Computer] Failed to save sandbox registry: %s", exc)
             raise
 
+    async def _defer_lifecycle_task_start(self) -> None:
+        # Let the request that queued this lifecycle work finish before a
+        # provider boot/destroy path gets a chance to monopolize the event loop.
+        await asyncio.sleep(0)
+
     def _sandbox_boot_lock(self, sandbox_id: str) -> asyncio.Lock:
         lock = self.boot_locks.get(sandbox_id)
         if lock is None:
@@ -754,6 +759,7 @@ class SandboxManager:
         idle_timeout: float,
     ) -> None:
         try:
+            await self._defer_lifecycle_task_start()
             async with self._sandbox_boot_lock(sandbox_id):
                 current = self.registry.get_sandbox(sandbox_id)
                 if current is None or current.get("status") != SandboxStatus.CREATING:
@@ -1281,7 +1287,7 @@ class SandboxManager:
 
         async def _run_destroy_cleanup() -> None:
             try:
-                await asyncio.sleep(0)
+                await self._defer_lifecycle_task_start()
                 await self.cancel_pending_boot_task(sandbox_id)
                 await self._destroy_sandbox_cleanup(provider, sandbox_id, record)
             finally:
