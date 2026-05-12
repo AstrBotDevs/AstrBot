@@ -1029,6 +1029,10 @@
                     "description": "Промпт для LTM резюме",
                     "hint": "Свой промпт для llm_summary. Оставьте пустым для встроенного по умолчанию."
                 },
+                "ltm_raw_records_max_bytes": {
+                    "description": "Макс. байт для raw_records",
+                    "hint": "Максимальный размер raw_records deque на группу. По умолчанию 500000 (500KB)."
+                },
                 "active_reply": {
                     "enable": {
                         "description": "Активный ответ"

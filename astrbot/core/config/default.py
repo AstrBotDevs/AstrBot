@@ -227,6 +227,7 @@ DEFAULT_CONFIG = {
         "ltm_summary_keep_recent_rounds": 30,
         "ltm_summary_provider_id": "",
         "ltm_summary_prompt": "",
+        "ltm_raw_records_max_bytes": 500000,
         "active_reply": {
             "enable": False,
             "method": "possibility_reply",
@@ -4157,6 +4158,11 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_ltm_settings.ltm_compaction_strategy": "llm_summary",
                         },
+                    },
+                    "provider_ltm_settings.ltm_raw_records_max_bytes": {
+                        "description": "Raw Records 最大内存字节",
+                        "type": "int",
+                        "hint": "每个群聊允许 raw_records 占用的最大字节数，默认 500000 (500KB)。",
                     },
                     "provider_ltm_settings.active_reply.enable": {
                         "description": "主动回复",

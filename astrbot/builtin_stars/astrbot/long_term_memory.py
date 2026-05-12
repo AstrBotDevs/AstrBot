@@ -107,6 +107,9 @@ class LongTermMemory:
             "ltm_summary_keep_recent_rounds": max(1, ltm_summary_keep_recent_rounds),
             "ltm_summary_provider_id": ltm_summary_provider_id,
             "ltm_summary_prompt": ltm_summary_prompt,
+            "ltm_raw_records_max_bytes": ltm_cfg.get(
+                "ltm_raw_records_max_bytes", MAX_RAW_BYTES
+            ),
         }
 
     # =========================================================================
@@ -362,7 +365,9 @@ class LongTermMemory:
                     ]
 
             # 3. 裁剪 raw_records
-            self._trim_raw_records(umo)
+            self._trim_raw_records(
+                umo, max_bytes=cfg.get("ltm_raw_records_max_bytes", MAX_RAW_BYTES)
+            )
 
     # =========================================================================
     # LTM compaction
@@ -423,7 +428,7 @@ class LongTermMemory:
     # 裁剪
     # =========================================================================
 
-    def _trim_raw_records(self, umo: str) -> None:
+    def _trim_raw_records(self, umo: str, max_bytes: int = MAX_RAW_BYTES) -> None:
         """仅淘汰 cursor 之前的条目。cursor 之后的绝不碰。"""
         dq = self.raw_records[umo]
         cursor = self._raw_cursor[umo]
@@ -436,7 +441,7 @@ class LongTermMemory:
 
         # 2. 按大小继续从前面淘汰（限制极端情况的总内存）
         total = sum(len(s.encode()) for s in dq)
-        while total > MAX_RAW_BYTES and dq:
+        while total > max_bytes and dq:
             removed = dq.popleft()
             total -= len(removed.encode())
             if cursor > 0:

@@ -864,31 +864,23 @@ class TestExtremeData:
         # cursor 归零（所有已消费全部清掉）
         assert ltm._raw_cursor[umo] == 0
 
-    def test_size_based_trim_actually_activates(self, ltm, monkeypatch):
+    def test_size_based_trim_actually_activates(self, ltm):
         """size-based 淘汰在超限时真正触发，且不依赖 cursor > 0。"""
-        import astrbot.builtin_stars.astrbot.long_term_memory as ltm_mod
-
-        monkeypatch.setattr(ltm_mod, "MAX_RAW_BYTES", 100)
-
         umo = "overflow_group"
         # 20 条 unconsumed，每条 ~55 bytes → ~1100 bytes >> 100
         for i in range(20):
             ltm.raw_records[umo].append("x" * 50 + f" msg{i}")
         ltm._raw_cursor[umo] = 0
 
-        ltm._trim_raw_records(umo)
+        ltm._trim_raw_records(umo, max_bytes=100)
 
         remaining = list(ltm.raw_records[umo])
         total = sum(len(s.encode()) for s in remaining)
         assert total <= 100, f"expected ≤100 bytes, got {total}"
         assert ltm._raw_cursor[umo] == 0
 
-    def test_size_based_trim_with_mixed_consumed(self, ltm, monkeypatch):
+    def test_size_based_trim_with_mixed_consumed(self, ltm):
         """size-based 淘汰在混合 consumed/unconsumed 时正确工作。"""
-        import astrbot.builtin_stars.astrbot.long_term_memory as ltm_mod
-
-        monkeypatch.setattr(ltm_mod, "MAX_RAW_BYTES", 100)
-
         umo = "mixed_group"
         # 5 consumed (cursor=5) + 15 unconsumed → 先清 consumed，再按 size 淘汰 unconsumed
         for i in range(5):
@@ -897,7 +889,7 @@ class TestExtremeData:
         for i in range(15):
             ltm.raw_records[umo].append("y" * 50 + f" unconsumed{i}")
 
-        ltm._trim_raw_records(umo)
+        ltm._trim_raw_records(umo, max_bytes=100)
 
         remaining = list(ltm.raw_records[umo])
         total = sum(len(s.encode()) for s in remaining)

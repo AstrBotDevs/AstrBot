@@ -1030,6 +1030,10 @@
           "description": "LTM 摘要提示词",
           "hint": "llm_summary 策略的自定义摘要 prompt，留空使用内置默认。"
         },
+        "ltm_raw_records_max_bytes": {
+          "description": "Raw Records 最大内存字节",
+          "hint": "每个群聊允许 raw_records 占用的最大字节数，默认 500000 (500KB)。"
+        },
         "active_reply": {
           "enable": {
             "description": "主动回复"
