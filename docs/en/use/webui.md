@@ -13,7 +13,7 @@ After starting AstrBot, you can access the admin panel by visiting `http://local
 
 ## Login
 
-The default username and password are both `astrbot`.
+For first-time login, AstrBot generates a random initial password and prints it in startup logs. Please read the startup log line containing the WebUI credential and use that password to log in (username is usually `astrbot`).
 
 ## ChatUI
 

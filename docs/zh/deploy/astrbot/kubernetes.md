@@ -194,4 +194,4 @@ image: m.daocloud.io/docker.io/soulter/astrbot:latest
 
 部署并暴露服务后，您就可以通过相应的 IP 和端口访问 AstrBot 管理面板了。
 
-> 默认用户名和密码是 `astrbot` 和 `astrbot`。
+> 首次登录请使用启动日志中打印的随机初始密码（用户名通常为 `astrbot`）。登录后请立即修改密码。
