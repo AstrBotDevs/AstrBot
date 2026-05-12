@@ -28,13 +28,15 @@ class MockStar:
         self.info = {"repo": TEST_PLUGIN_REPO, "readme": ""}
 
 
-def _write_local_test_plugin(plugin_path: Path, repo_url: str):
+def _write_local_test_plugin(
+    plugin_path: Path, repo_url: str, version: str = "1.0.0"
+):
     """Creates a minimal valid plugin structure."""
     plugin_path.mkdir(parents=True, exist_ok=True)
     metadata = {
         "name": TEST_PLUGIN_NAME,
         "repo": repo_url,
-        "version": "1.0.0",
+        "version": version,
         "author": "AstrBot Team",
         "desc": "Local test plugin",
         "short_desc": "Local test short description",
@@ -384,6 +386,41 @@ async def test_install_plugin_from_file_dependency_install_flow(
         await plugin_manager_pm.install_plugin_from_file(str(zip_file_path))
         assert any(e[0] == "deps" for e in events)
         assert ("load", TEST_PLUGIN_DIR) in events
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_from_file_conflict_keeps_failed_plugins_clean(
+    plugin_manager_pm: PluginManager,
+    local_updator: Path,
+    monkeypatch,
+    tmp_path: Path,
+):
+    zip_file_path = tmp_path / "plugin_upload_helloworld_v2.zip"
+    zip_file_path.write_text("placeholder", encoding="utf-8")
+    plugin_store_path = Path(plugin_manager_pm.plugin_store_path)
+    existing_upload_dirs = set(plugin_store_path.glob("plugin_upload_*"))
+
+    def mock_unzip_file(zip_path: str, target_dir: str) -> None:
+        assert zip_path == str(zip_file_path)
+        _write_local_test_plugin(
+            Path(target_dir),
+            TEST_PLUGIN_REPO,
+            version="2.0.0",
+        )
+
+    assert local_updator.is_dir()
+    monkeypatch.setattr(plugin_manager_pm.updator, "unzip_file", mock_unzip_file)
+
+    with pytest.raises(Exception, match=f"安装失败：目录 {TEST_PLUGIN_DIR} 已存在。"):
+        await plugin_manager_pm.install_plugin_from_file(str(zip_file_path))
+
+    new_upload_dirs = [
+        upload_dir
+        for upload_dir in plugin_store_path.glob("plugin_upload_*")
+        if upload_dir not in existing_upload_dirs
+    ]
+    assert plugin_manager_pm.failed_plugin_dict == {}
+    assert new_upload_dirs == []
 
 
 @pytest.mark.asyncio
