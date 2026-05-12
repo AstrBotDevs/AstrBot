@@ -2,6 +2,7 @@ import json
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from astrbot.api import FunctionTool
@@ -22,6 +23,34 @@ _SANDBOX_RUNTIME_TOOL_CONFIG = {
 
 def _dump(data) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
+
+
+def _format_agent_time(value: int | float | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return str(value)
+    if not isinstance(value, (int, float)):
+        return str(value)
+    return (
+        datetime.fromtimestamp(float(value))
+        .astimezone()
+        .strftime("%Y-%m-%d %H:%M:%S %Z")
+    )
+
+
+def _format_sandbox_for_agent(value):
+    if isinstance(value, list):
+        return [_format_sandbox_for_agent(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    formatted = {}
+    for key, item in value.items():
+        if key.endswith("_at"):
+            formatted[key] = _format_agent_time(item)
+        else:
+            formatted[key] = _format_sandbox_for_agent(item)
+    return formatted
 
 
 def _sandbox_manager():
@@ -108,7 +137,7 @@ class ListSandboxesTool(FunctionTool):
             _redact_sandbox_for_session(record, session_id, admin=_is_admin(context))
             for record in sandboxes
         ]
-        return _dump({"sandboxes": sandboxes})
+        return _dump({"sandboxes": _format_sandbox_for_agent(sandboxes)})
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
@@ -209,7 +238,7 @@ class CreateSandboxTool(FunctionTool):
             detail = str(e) or type(e).__name__
             return f"Error creating sandbox: {detail}"
 
-        return _dump({"sandbox": sandbox})
+        return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
@@ -242,7 +271,7 @@ class SwitchSandboxTool(FunctionTool):
         except Exception as e:
             detail = str(e) or type(e).__name__
             return f"Error switching sandbox: {detail}"
-        return _dump({"sandbox": sandbox})
+        return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
@@ -273,7 +302,7 @@ class ReleaseSandboxTool(FunctionTool):
         except Exception as e:
             detail = str(e) or type(e).__name__
             return f"Error releasing sandbox: {detail}"
-        return _dump({"sandbox": sandbox})
+        return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
@@ -281,7 +310,7 @@ class ReleaseSandboxTool(FunctionTool):
 class KeepAliveSandboxTool(FunctionTool):
     name: str = "astrbot_keep_sandbox_alive"
     description: str = (
-        "Extend this session's current sandbox occupancy. Use this before a long-running task so the sandbox is not released and reused by another session. "
+        "Renew this session's current sandbox occupancy from now, resetting the lease deadline to a fresh timeout window. Use this before a long-running task so the sandbox is not released and reused by another session. "
         "Call astrbot_release_sandbox when the task is done."
     )
     parameters: dict = field(
@@ -290,7 +319,7 @@ class KeepAliveSandboxTool(FunctionTool):
             "properties": {
                 "ttl_seconds": {
                     "type": "number",
-                    "description": "Optional lease duration in seconds. Defaults to the normal sandbox lease timeout.",
+                    "description": "Optional lease duration in seconds. The lease is recalculated from the current time, not added to the previous deadline. Defaults to the normal sandbox lease timeout.",
                 }
             },
         }
@@ -309,7 +338,7 @@ class KeepAliveSandboxTool(FunctionTool):
         except Exception as e:
             detail = str(e) or type(e).__name__
             return f"Error keeping sandbox alive: {detail}"
-        return _dump({"sandbox": sandbox})
+        return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
@@ -340,7 +369,7 @@ class TakeoverSandboxTool(FunctionTool):
         except Exception as e:
             detail = str(e) or type(e).__name__
             return f"Error taking over sandbox: {detail}"
-        return _dump({"sandbox": sandbox})
+        return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
@@ -371,7 +400,7 @@ class DestroySandboxTool(FunctionTool):
         except Exception as e:
             detail = str(e) or type(e).__name__
             return f"Error destroying sandbox: {detail}"
-        return _dump({"sandbox": sandbox})
+        return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)

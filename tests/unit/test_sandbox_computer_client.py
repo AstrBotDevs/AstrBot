@@ -174,6 +174,25 @@ def test_computer_client_does_not_expose_legacy_session_cache():
     assert not hasattr(computer_client, "session_booter")
 
 
+def test_sandbox_tool_formats_timestamps_for_agent():
+    from astrbot.core.tools.computer_tools.sandbox import _format_sandbox_for_agent
+
+    payload = _format_sandbox_for_agent(
+        {
+            "lease_expires_at": 1778557598.4646258,
+            "idle_cleanup_at": None,
+            "expires_at": 1778559999,
+            "nested": [{"last_used_at": 1778550000}],
+        }
+    )
+
+    assert payload["lease_expires_at"] != 1778557598.4646258
+    assert payload["lease_expires_at"]
+    assert payload["idle_cleanup_at"] is None
+    assert payload["expires_at"]
+    assert payload["nested"][0]["last_used_at"]
+
+
 @pytest.mark.asyncio
 async def test_sync_skills_uses_active_manager_booters(monkeypatch, tmp_path):
     from astrbot.core.computer import computer_client
