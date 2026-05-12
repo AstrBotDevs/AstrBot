@@ -138,8 +138,8 @@
           <v-list-item :title="tm('fields.owner')" :subtitle="selectedSandboxRecord.owner_session_id || '-'" />
           <v-list-item :title="tm('fields.controller')" :subtitle="selectedSandboxRecord.controller_session_id || '-'" />
           <v-list-item :title="tm('fields.retentionPolicy')" :subtitle="retentionLabel(selectedSandboxRecord.retention_policy)" />
-          <v-list-item :title="tm('fields.leaseExpires')" :subtitle="formatTime(selectedSandboxRecord.lease_expires_at)" />
-          <v-list-item :title="tm('fields.idleTimeout')" :subtitle="String(selectedSandboxRecord.idle_timeout ?? '-')" />
+          <v-list-item :title="tm('fields.occupiedUntil')" :subtitle="formatTime(selectedSandboxRecord.lease_expires_at)" />
+          <v-list-item :title="tm('fields.idleCleanupAt')" :subtitle="formatTime(selectedSandboxRecord.idle_cleanup_at)" />
           <v-list-item :title="tm('fields.expiresAt')" :subtitle="formatTime(selectedSandboxRecord.expires_at)" />
         </v-list>
         <v-divider class="my-4" />
@@ -320,6 +320,7 @@ type SandboxRecord = {
   lease_expires_at?: number | null
   last_used_at?: number | null
   idle_timeout?: number | null
+  idle_cleanup_at?: number | null
   expires_at?: number | null
   retention_policy?: string | null
   status?: string

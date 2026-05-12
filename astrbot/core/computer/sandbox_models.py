@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+from astrbot.core.computer.sandbox_timeouts import lease_is_active
 
 
 class SandboxRetentionPolicy(str, Enum):
@@ -124,11 +125,8 @@ class SandboxRecord:
         }
 
     def has_active_lease(self, *, now: float | None = None) -> bool:
-        current_time = time.time() if now is None else now
-        return bool(
-            self.controller_session_id
-            and self.lease_expires_at
-            and self.lease_expires_at > current_time
+        return lease_is_active(
+            self.controller_session_id, self.lease_expires_at, now=now
         )
 
     def is_controlled_by(self, session_id: str, *, now: float | None = None) -> bool:

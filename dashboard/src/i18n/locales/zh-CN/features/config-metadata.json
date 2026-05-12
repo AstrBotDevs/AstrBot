@@ -171,6 +171,18 @@
         "sandbox": {
           "booter": {
             "description": "默认沙箱驱动"
+          },
+          "sandbox_lease_timeout": {
+            "description": "沙箱占用超时",
+            "hint": "单位为秒。`0` 表示占用不会过期，需手动释放。"
+          },
+          "sandbox_idle_timeout": {
+            "description": "沙箱空闲清理时间",
+            "hint": "单位为秒。`0` 表示不启用空闲清理；只有这种情况下才会启用 TTL 清理。"
+          },
+          "sandbox_ttl": {
+            "description": "沙箱存活时间",
+            "hint": "单位为秒。仅在空闲清理为 `0` 时生效；`0` 表示不自动过期。"
           }
         }
       }

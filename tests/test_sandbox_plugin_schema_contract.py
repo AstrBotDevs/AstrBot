@@ -4,9 +4,20 @@ from pathlib import Path
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config.default import DEFAULT_CONFIG
 
 ROOT = Path(__file__).resolve().parents[1]
 SHIPYARD_COMPOSE = (ROOT / "compose-with-shipyard.yml").read_text(encoding="utf-8")
+SANDBOX_TIMEOUT_KEYS = {
+    "sandbox_ttl",
+    "sandbox_idle_timeout",
+    "sandbox_lease_timeout",
+    "cua_ttl",
+    "cua_idle_timeout",
+    "shipyard_ttl",
+    "shipyard_idle_timeout",
+    "shipyard_neo_ttl",
+}
 
 
 def _require_plugin_files(*relative_paths: str) -> None:
@@ -20,6 +31,10 @@ def _load_schema(plugin_name: str) -> dict:
     if not schema_path.is_file():
         pytest.skip(f"sandbox plugin schema is not present: {schema_path}")
     return json.loads(schema_path.read_text(encoding="utf-8"))
+
+
+def _assert_no_plugin_timeout_schema(schema: dict) -> None:
+    assert not (SANDBOX_TIMEOUT_KEYS & set(schema))
 
 
 def _read_plugin_file(plugin_name: str, filename: str) -> str:
@@ -48,13 +63,20 @@ def test_sandbox_plugin_metadata_is_localized(plugin_name: str, description: str
     assert "sandbox runtime provider for AstrBot" not in main_py
 
 
+def test_core_sandbox_timeout_defaults_live_in_bot_config():
+    sandbox = DEFAULT_CONFIG["provider_settings"]["sandbox"]
+
+    assert sandbox["sandbox_ttl"] == 3600
+    assert sandbox["sandbox_idle_timeout"] == 1800
+    assert sandbox["sandbox_lease_timeout"] == 600
+
+
 def test_cua_schema_defaults_match_documented_hints():
     schema = _load_schema("astrbot_sandbox_cua")
 
+    _assert_no_plugin_timeout_schema(schema)
     assert schema["cua_image"]["default"] == "linux"
     assert schema["cua_os_type"]["default"] == "linux"
-    assert schema["cua_ttl"]["default"] == 3600
-    assert schema["cua_idle_timeout"]["default"] == 0
     assert schema["cua_telemetry_enabled"]["default"] is False
     assert schema["cua_local"]["default"] is True
     assert schema["cua_api_key"]["default"] == ""
@@ -65,6 +87,7 @@ def test_cua_schema_defaults_match_documented_hints():
 def test_shipyard_schema_is_localized_and_has_defaults():
     schema = _load_schema("astrbot_sandbox_shipyard")
 
+    _assert_no_plugin_timeout_schema(schema)
     assert schema["shipyard_endpoint"]["description"] == "Shipyard API 地址"
     assert schema["shipyard_endpoint"]["default"] == "http://127.0.0.1:8156"
     assert schema["shipyard_auto_start"]["default"] is True
@@ -74,8 +97,6 @@ def test_shipyard_schema_is_localized_and_has_defaults():
     assert schema["shipyard_ship_image"]["default"] in SHIPYARD_COMPOSE
     assert schema["shipyard_access_token"]["description"] == "Shipyard 访问令牌"
     assert schema["shipyard_access_token"]["default"] == ""
-    assert schema["shipyard_ttl"]["description"] == "Shipyard 会话存活时间"
-    assert schema["shipyard_ttl"]["default"] == 3600
     assert schema["shipyard_max_sessions"]["description"] == "Shipyard 最大会话数"
     assert schema["shipyard_max_sessions"]["default"] == 10
 
@@ -83,14 +104,13 @@ def test_shipyard_schema_is_localized_and_has_defaults():
 def test_shipyard_neo_schema_is_localized_and_has_defaults():
     schema = _load_schema("astrbot_sandbox_shipyard_neo")
 
+    _assert_no_plugin_timeout_schema(schema)
     assert schema["shipyard_neo_endpoint"]["description"] == "Shipyard Neo API 地址"
     assert schema["shipyard_neo_endpoint"]["default"] == "http://127.0.0.1:8114"
     assert schema["shipyard_neo_access_token"]["description"] == "Shipyard Neo 访问令牌"
     assert schema["shipyard_neo_access_token"]["default"] == ""
     assert schema["shipyard_neo_profile"]["description"] == "Shipyard Neo Profile"
     assert schema["shipyard_neo_profile"]["default"] == "python-default"
-    assert schema["shipyard_neo_ttl"]["description"] == "Shipyard Neo 沙箱存活时间"
-    assert schema["shipyard_neo_ttl"]["default"] == 3600
 
 
 def test_shipyard_neo_plugin_does_not_duplicate_builtin_tool_registration():

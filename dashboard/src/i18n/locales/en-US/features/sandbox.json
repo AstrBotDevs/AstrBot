@@ -55,9 +55,9 @@
         "owner": "Owner session",
         "controller": "Controller session",
         "retentionPolicy": "Retention policy",
-        "leaseExpires": "Occupied until",
-        "idleTimeout": "Idle timeout",
-        "expiresAt": "Expires at",
+        "occupiedUntil": "Occupied until",
+        "idleCleanupAt": "Idle cleanup at",
+        "expiresAt": "Expiration cleanup at",
         "connectInfo": "Connection info"
     },
     "empty": {

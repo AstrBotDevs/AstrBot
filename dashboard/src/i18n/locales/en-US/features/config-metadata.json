@@ -169,6 +169,18 @@
         "sandbox": {
           "booter": {
             "description": "Default Sandbox Driver"
+          },
+          "sandbox_lease_timeout": {
+            "description": "Sandbox lease timeout",
+            "hint": "Seconds. `0` means the lease never expires and must be released manually."
+          },
+          "sandbox_idle_timeout": {
+            "description": "Sandbox idle cleanup timeout",
+            "hint": "Seconds. `0` disables idle cleanup; TTL cleanup will only apply in that case."
+          },
+          "sandbox_ttl": {
+            "description": "Sandbox lifetime",
+            "hint": "Seconds. Only active when idle cleanup is `0`; `0` disables automatic expiration."
           }
         }
       }

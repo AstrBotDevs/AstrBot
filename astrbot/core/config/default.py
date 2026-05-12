@@ -165,7 +165,12 @@ DEFAULT_CONFIG = {
         },
         "computer_use_runtime": "none",
         "computer_use_require_admin": True,
-        "sandbox": {"booter": ""},
+        "sandbox": {
+            "booter": "",
+            "sandbox_lease_timeout": 600,
+            "sandbox_idle_timeout": 1800,
+            "sandbox_ttl": 3600,
+        },
         "image_compress_enabled": True,
         "image_compress_options": {
             "max_size": 1280,
@@ -3270,6 +3275,30 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "options": [],
                         "labels": [],
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                        },
+                    },
+                    "provider_settings.sandbox.sandbox_lease_timeout": {
+                        "description": "沙箱占用超时",
+                        "type": "int",
+                        "hint": "单位为秒。`0` 表示永久占用，需手动释放。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                        },
+                    },
+                    "provider_settings.sandbox.sandbox_idle_timeout": {
+                        "description": "沙箱空闲回收时间",
+                        "type": "int",
+                        "hint": "单位为秒。`0` 表示不启用空闲回收，此时才会启用沙箱存活时间。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                        },
+                    },
+                    "provider_settings.sandbox.sandbox_ttl": {
+                        "description": "沙箱存活时间",
+                        "type": "int",
+                        "hint": "单位为秒。仅在空闲回收时间为 `0` 时生效；`0` 表示不自动销毁。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                         },

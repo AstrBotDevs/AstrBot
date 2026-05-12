@@ -12,15 +12,29 @@ from astrbot.core.computer.booters.base import ComputerBooter
 from astrbot.core.computer.sandbox_models import SandboxRecord, SandboxStatus
 from astrbot.core.computer.sandbox_provider import SandboxProvider
 from astrbot.core.computer.sandbox_registry import SandboxRegistry
+from astrbot.core.computer.sandbox_timeouts import (
+    DEFAULT_SANDBOX_LEASE_TIMEOUT_SECONDS,
+    expires_at_from_timeout,
+    get_provider_sandbox_config,
+    idle_cleanup_at_from_record,
+    lease_is_active,
+    resolve_sandbox_timeout,
+)
 from astrbot.core.star.context import Context
 
-SANDBOX_LEASE_SECONDS = 300
+SANDBOX_LEASE_SECONDS = int(DEFAULT_SANDBOX_LEASE_TIMEOUT_SECONDS)
 MAX_SANDBOX_LEASE_ATTEMPTS = 3
 MAX_IDLE_DESTROY_ATTEMPTS = 3
 
 
 @dataclass(slots=True)
 class SandboxIdleState:
+    expires_at: float
+    task: asyncio.Task
+
+
+@dataclass(slots=True)
+class SandboxExpirationState:
     expires_at: float
     task: asyncio.Task
 
@@ -36,6 +50,7 @@ class SandboxManager:
         self.providers = providers
         self.session_booter: dict[str, ComputerBooter] = {}
         self.idle_state: dict[str, SandboxIdleState] = {}
+        self.expiration_state: dict[str, SandboxExpirationState] = {}
         self.boot_locks: dict[str, asyncio.Lock] = {}
         self.created_hook_inflight: set[str] = set()
         self.pending_boot_tasks: dict[str, asyncio.Task] = {}
@@ -81,12 +96,49 @@ class SandboxManager:
             self.boot_locks[sandbox_id] = lock
         return lock
 
+    def _lease_timeout(self, context: Context | None, session_id: str) -> float:
+        sandbox_cfg = get_provider_sandbox_config(context, session_id)
+        return resolve_sandbox_timeout(
+            sandbox_cfg,
+            "sandbox_lease_timeout",
+            aliases=("lease_timeout",),
+            default=DEFAULT_SANDBOX_LEASE_TIMEOUT_SECONDS,
+        )
+
+    def _idle_timeout(self, context: Context | None, session_id: str) -> float:
+        sandbox_cfg = get_provider_sandbox_config(context, session_id)
+        return resolve_sandbox_timeout(
+            sandbox_cfg,
+            "sandbox_idle_timeout",
+            default=0.0,
+        )
+
+    def _expires_at(
+        self, context: Context | None, session_id: str, idle_timeout: float
+    ) -> float | None:
+        if idle_timeout > 0:
+            return None
+        sandbox_cfg = get_provider_sandbox_config(context, session_id)
+        ttl = resolve_sandbox_timeout(
+            sandbox_cfg,
+            "sandbox_ttl",
+            default=0.0,
+        )
+        return expires_at_from_timeout(ttl)
+
+    def _sandbox_policy_timeouts(
+        self, context: Context | None, session_id: str
+    ) -> tuple[float, float | None]:
+        idle_timeout = self._idle_timeout(context, session_id)
+        return idle_timeout, self._expires_at(context, session_id, idle_timeout)
+
     def drop_boot_lock(self, sandbox_id: str) -> None:
         self.boot_locks.pop(sandbox_id, None)
 
     def clear_runtime_state(self, sandbox_id: str) -> None:
         self.session_booter.pop(sandbox_id, None)
         self.clear_idle_state(sandbox_id)
+        self.clear_expiration_state(sandbox_id)
         self.created_hook_inflight.discard(sandbox_id)
 
     def clear_runtime_state_and_drop_lock(self, sandbox_id: str) -> None:
@@ -97,6 +149,8 @@ class SandboxManager:
         for sandbox_id in list(self.session_booter):
             self.clear_runtime_state(sandbox_id)
         for sandbox_id in list(self.idle_state):
+            self.clear_runtime_state(sandbox_id)
+        for sandbox_id in list(self.expiration_state):
             self.clear_runtime_state(sandbox_id)
         self.boot_locks.clear()
 
@@ -166,6 +220,7 @@ class SandboxManager:
         session_id: str,
         provider_id: str,
         idle_timeout: float,
+        expires_at: float | None,
         connect_info: dict,
         is_default: bool = False,
         status: str = SandboxStatus.RUNNING,
@@ -187,6 +242,7 @@ class SandboxManager:
             ),
             "is_default": is_default,
             "idle_timeout": idle_timeout,
+            "expires_at": expires_at,
             "status": status,
         }
 
@@ -224,19 +280,16 @@ class SandboxManager:
             sandbox_id=sandbox_id,
             session_id=session_id,
             user_id=session_id,
-            ttl=SANDBOX_LEASE_SECONDS if ttl is None else ttl,
+            ttl=DEFAULT_SANDBOX_LEASE_TIMEOUT_SECONDS if ttl is None else ttl,
         )
 
     def sandbox_has_active_lease(self, sandbox_id: str) -> bool:
         record = self.registry.get_sandbox(sandbox_id)
         if record is None:
             return False
-        lease_expires_at = record.get("lease_expires_at")
-        controller_session_id = record.get("controller_session_id")
-        return bool(
-            controller_session_id
-            and lease_expires_at
-            and lease_expires_at > time.time()
+        return lease_is_active(
+            record.get("controller_session_id"),
+            record.get("lease_expires_at"),
         )
 
     def sandbox_controlled_by_other_session(
@@ -245,24 +298,25 @@ class SandboxManager:
         record = self.registry.get_sandbox(sandbox_id)
         if record is None:
             return False
-        lease_expires_at = record.get("lease_expires_at")
         controller_session_id = record.get("controller_session_id")
         if not controller_session_id or controller_session_id == session_id:
             return False
-        return bool(lease_expires_at and lease_expires_at > time.time())
+        return lease_is_active(controller_session_id, record.get("lease_expires_at"))
 
     async def _upsert_new_sandbox_record(
         self, context: Context, session_id: str, provider_id: str, create_config: dict
     ) -> str:
         provider = self.get_provider(provider_id)
         sandbox_id = self.new_sandbox_id(provider_id)
+        idle_timeout, expires_at = self._sandbox_policy_timeouts(context, session_id)
         self.registry.upsert_sandbox(
             **self.build_record_payload(
                 sandbox_id=sandbox_id,
                 sandbox_name=sandbox_id,
                 session_id=session_id,
                 provider_id=provider_id,
-                idle_timeout=provider.get_idle_timeout(context, session_id),
+                idle_timeout=idle_timeout,
+                expires_at=expires_at,
                 connect_info=provider.build_connect_info(sandbox_id, create_config),
             )
         )
@@ -303,7 +357,8 @@ class SandboxManager:
     ) -> ComputerBooter:
         provider = self.get_provider(provider_id)
         create_config = provider.build_create_config(context, session_id)
-        idle_timeout = provider.get_idle_timeout(context, session_id)
+        idle_timeout, expires_at = self._sandbox_policy_timeouts(context, session_id)
+        lease_timeout = self._lease_timeout(context, session_id)
 
         current_sandbox_id = self.registry.get_current_sandbox_id(session_id)
         current_record = self.registry.get_sandbox(current_sandbox_id)
@@ -352,7 +407,9 @@ class SandboxManager:
             and current_record.get("provider") == provider_id
             and current_sandbox_id in self.session_booter
         ):
-            if not self.acquire_lease(current_sandbox_id, session_id):
+            if not self.acquire_lease(
+                current_sandbox_id, session_id, ttl=lease_timeout
+            ):
                 self.registry.set_current_sandbox_id(session_id, None)
                 await self.save_registry_async()
             else:
@@ -360,7 +417,11 @@ class SandboxManager:
                 if await self.booter_available(booter):
                     self.registry.touch_sandbox(current_sandbox_id)
                     await self.save_registry_async()
-                    self.schedule_idle_cleanup(current_sandbox_id, idle_timeout)
+                    self.schedule_lifecycle_cleanup(
+                        current_sandbox_id,
+                        idle_timeout,
+                        current_record.get("expires_at"),
+                    )
                     return booter
                 self.clear_runtime_state(current_sandbox_id)
                 self.registry.release_lease(current_sandbox_id)
@@ -392,6 +453,7 @@ class SandboxManager:
                     session_id=session_id,
                     provider_id=provider_id,
                     idle_timeout=idle_timeout,
+                    expires_at=expires_at,
                     connect_info=provider.build_connect_info(
                         target_sandbox_id, create_config
                     ),
@@ -427,7 +489,7 @@ class SandboxManager:
                     continue
 
                 if target_sandbox_id in self.session_booter and not self.acquire_lease(
-                    target_sandbox_id, session_id
+                    target_sandbox_id, session_id, ttl=lease_timeout
                 ):
                     target_sandbox_id = await self._upsert_new_sandbox_record(
                         context, session_id, provider_id, create_config
@@ -446,7 +508,9 @@ class SandboxManager:
                     )
                     await self.save_registry_async()
 
-                if not self.acquire_lease(target_sandbox_id, session_id):
+                if not self.acquire_lease(
+                    target_sandbox_id, session_id, ttl=lease_timeout
+                ):
                     target_sandbox_id = await self._upsert_new_sandbox_record(
                         context, session_id, provider_id, create_config
                     )
@@ -518,7 +582,10 @@ class SandboxManager:
             if session_id is not None:
                 self.registry.set_current_sandbox_id(session_id, None)
             raise
-        self.schedule_idle_cleanup(sandbox_id, idle_timeout)
+        record = self.registry.get_sandbox(sandbox_id) or {}
+        self.schedule_lifecycle_cleanup(
+            sandbox_id, idle_timeout, record.get("expires_at")
+        )
 
         # Auto-sync skills unless the provider opts out.  Best-effort: a sync
         # failure is logged but does not destroy the already-created sandbox.
@@ -599,7 +666,7 @@ class SandboxManager:
         create_config = provider.build_create_config(context, session_id)
         sandbox_id = self.new_sandbox_id(provider_id)
         sandbox_name = self._created_sandbox_name(sandbox_id, sandbox_name)
-        idle_timeout = provider.get_idle_timeout(context, session_id)
+        idle_timeout, expires_at = self._sandbox_policy_timeouts(context, session_id)
         async with self._sandbox_boot_lock(sandbox_id):
             record = self.registry.upsert_sandbox(
                 **self.build_record_payload(
@@ -608,6 +675,7 @@ class SandboxManager:
                     session_id=session_id,
                     provider_id=provider_id,
                     idle_timeout=idle_timeout,
+                    expires_at=expires_at,
                     connect_info=provider.build_connect_info(
                         sandbox_name, create_config
                     ),
@@ -643,7 +711,7 @@ class SandboxManager:
         create_config = provider.build_create_config(context, session_id)
         sandbox_id = self.new_sandbox_id(provider_id)
         sandbox_name = self._created_sandbox_name(sandbox_id, sandbox_name)
-        idle_timeout = provider.get_idle_timeout(context, session_id)
+        idle_timeout, expires_at = self._sandbox_policy_timeouts(context, session_id)
         async with self._sandbox_boot_lock(sandbox_id):
             record = self.registry.upsert_sandbox(
                 **self.build_record_payload(
@@ -652,6 +720,7 @@ class SandboxManager:
                     session_id=session_id,
                     provider_id=provider_id,
                     idle_timeout=idle_timeout,
+                    expires_at=expires_at,
                     connect_info=provider.build_connect_info(
                         sandbox_name, create_config
                     ),
@@ -740,7 +809,8 @@ class SandboxManager:
             context, session_id, provider_id, sandbox_name
         )
         sandbox_id = sandbox["sandbox_id"]
-        if not self.acquire_lease(sandbox_id, session_id):
+        lease_timeout = self._lease_timeout(context, session_id)
+        if not self.acquire_lease(sandbox_id, session_id, ttl=lease_timeout):
             provider = self.get_provider(sandbox.get("provider", ""))
             await self._destroy_sandbox_cleanup(provider, sandbox_id, sandbox)
             raise RuntimeError(f"Sandbox {sandbox_id} is busy")
@@ -751,8 +821,9 @@ class SandboxManager:
         # short idle_timeout could let the timer expire before the lease is
         # acquired.  Re-scheduling here guarantees a full idle window.
         idle_timeout = sandbox.get("idle_timeout") or 0
-        if idle_timeout:
-            self.schedule_idle_cleanup(sandbox_id, float(idle_timeout))
+        self.schedule_lifecycle_cleanup(
+            sandbox_id, float(idle_timeout), sandbox.get("expires_at")
+        )
         await self._invoke_sandbox_created_hook(provider, sandbox_id)
         return self.registry.get_sandbox(sandbox_id) or sandbox
 
@@ -775,6 +846,13 @@ class SandboxManager:
                 if provider
                 else record.get("tool_names", [])
             )
+            if self.sandbox_has_active_lease(updated["sandbox_id"]):
+                updated["idle_cleanup_at"] = None
+            else:
+                updated["idle_cleanup_at"] = idle_cleanup_at_from_record(
+                    last_used_at=updated.get("last_used_at"),
+                    idle_timeout=updated.get("idle_timeout"),
+                )
             records.append(updated)
         return records
 
@@ -814,8 +892,8 @@ class SandboxManager:
             )
         if retention_policy == "persistent":
             idle_timeout = None
-            # `expires_at` is currently reserved for future lifecycle policy
-            # handling and not enforced by the idle timer.
+            expires_at = None
+        elif idle_timeout and float(idle_timeout) > 0:
             expires_at = None
         updates = {
             "idle_timeout": idle_timeout,
@@ -836,10 +914,13 @@ class SandboxManager:
                     sandbox_name=normalized_name,
                 )
         updated = self.registry.update_sandbox_config(sandbox_id, **updates)
-        if retention_policy == "persistent" or not idle_timeout:
+        if retention_policy == "persistent":
             self.clear_idle_state(sandbox_id)
+            self.clear_expiration_state(sandbox_id)
         else:
-            self.schedule_idle_cleanup(sandbox_id, float(idle_timeout))
+            self.schedule_lifecycle_cleanup(
+                sandbox_id, float(idle_timeout or 0), expires_at
+            )
         self.save_registry()
         return updated or record
 
@@ -919,7 +1000,7 @@ class SandboxManager:
                     idle_timeout=(
                         0
                         if record.get("retention_policy") == "persistent"
-                        else provider.get_idle_timeout(context, create_session_id)
+                        else self._idle_timeout(context, create_session_id)
                     ),
                 )
             return self.registry.get_sandbox(sandbox_id) or record
@@ -941,7 +1022,8 @@ class SandboxManager:
             self.registry.update_sandbox_status(sandbox_id, SandboxStatus.UNKNOWN)
             await self.save_registry_async()
             raise RuntimeError(f"Sandbox {sandbox_id} is not running")
-        if not self.acquire_lease(sandbox_id, session_id):
+        lease_timeout = self._lease_timeout(context, session_id)
+        if not self.acquire_lease(sandbox_id, session_id, ttl=lease_timeout):
             raise RuntimeError(f"Sandbox {sandbox_id} is busy")
         result = await self._set_current_sandbox_after_lease(
             session_id, sandbox_id, record
@@ -1012,7 +1094,10 @@ class SandboxManager:
         return released
 
     async def renew_current_sandbox_lease(
-        self, session_id: str, ttl_seconds: int | float | None = None
+        self,
+        session_id: str,
+        ttl_seconds: int | float | None = None,
+        context: Context | None = None,
     ) -> dict:
         sandbox_id = self.registry.get_current_sandbox_id(session_id)
         if sandbox_id is None:
@@ -1044,11 +1129,15 @@ class SandboxManager:
         controller_session_id = record.get("controller_session_id")
         if controller_session_id and controller_session_id != session_id:
             raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
-        ttl = SANDBOX_LEASE_SECONDS if ttl_seconds is None else float(ttl_seconds)
+        ttl = (
+            self._lease_timeout(context, session_id)
+            if ttl_seconds is None
+            else float(ttl_seconds)
+        )
         if not math.isfinite(ttl):
             raise RuntimeError("ttl_seconds must be finite")
-        if ttl <= 0:
-            raise RuntimeError("ttl_seconds must be positive")
+        if ttl < 0:
+            raise RuntimeError("ttl_seconds must be non-negative")
         if not self.acquire_lease(sandbox_id, session_id, ttl=ttl):
             raise RuntimeError(f"Sandbox {sandbox_id} is busy")
         self.registry.touch_sandbox(sandbox_id)
@@ -1094,7 +1183,7 @@ class SandboxManager:
                 sandbox_id=sandbox_id,
                 session_id=session_id,
                 user_id=session_id,
-                ttl=SANDBOX_LEASE_SECONDS,
+                ttl=DEFAULT_SANDBOX_LEASE_TIMEOUT_SECONDS,
             )
             or record
         )
@@ -1244,7 +1333,8 @@ class SandboxManager:
                 f"Sandbox {sandbox_id} is unavailable (booter health check failed)"
             )
         if require_lease and session_id:
-            if not self.acquire_lease(sandbox_id, session_id):
+            lease_timeout = self._lease_timeout(context, session_id)
+            if not self.acquire_lease(sandbox_id, session_id, ttl=lease_timeout):
                 raise RuntimeError(f"Sandbox {sandbox_id} is busy")
             record = self.registry.get_sandbox(sandbox_id) or record
         # Only touch lifecycle when the caller actually holds the lease (or
@@ -1254,7 +1344,9 @@ class SandboxManager:
             self.registry.touch_sandbox(sandbox_id)
             await self.save_registry_async()
             idle_timeout = record.get("idle_timeout") or 0
-            self.schedule_idle_cleanup(sandbox_id, float(idle_timeout))
+            self.schedule_lifecycle_cleanup(
+                sandbox_id, float(idle_timeout), record.get("expires_at")
+            )
         return booter
 
     async def reconcile_on_startup(self) -> None:
@@ -1405,6 +1497,11 @@ class SandboxManager:
         if state is not None and not state.task.done():
             state.task.cancel()
 
+    def clear_expiration_state(self, sandbox_id: str) -> None:
+        state = self.expiration_state.pop(sandbox_id, None)
+        if state is not None and not state.task.done():
+            state.task.cancel()
+
     def schedule_idle_cleanup(self, sandbox_id: str, timeout: float) -> None:
         self.clear_idle_state(sandbox_id)
         if timeout <= 0:
@@ -1415,6 +1512,77 @@ class SandboxManager:
             self._expire_when_idle(sandbox_id, timeout, expires_at)
         )
         self.idle_state[sandbox_id] = SandboxIdleState(expires_at=expires_at, task=task)
+
+    def schedule_ttl_cleanup(self, sandbox_id: str, expires_at: float | None) -> None:
+        self.clear_expiration_state(sandbox_id)
+        if expires_at is None:
+            return
+        task = asyncio.create_task(
+            self._expire_at_fixed_time(sandbox_id, float(expires_at))
+        )
+        self.expiration_state[sandbox_id] = SandboxExpirationState(
+            expires_at=float(expires_at), task=task
+        )
+
+    def schedule_lifecycle_cleanup(
+        self,
+        sandbox_id: str,
+        idle_timeout: float,
+        expires_at: float | None,
+    ) -> None:
+        if idle_timeout > 0:
+            self.clear_expiration_state(sandbox_id)
+            self.schedule_idle_cleanup(sandbox_id, idle_timeout)
+            return
+        self.clear_idle_state(sandbox_id)
+        self.schedule_ttl_cleanup(sandbox_id, expires_at)
+
+    async def _expire_at_fixed_time(self, sandbox_id: str, expires_at: float) -> None:
+        current_task = asyncio.current_task()
+        try:
+            remaining = float(expires_at) - time.time()
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+            state = self.expiration_state.get(sandbox_id)
+            if (
+                state is None
+                or state.task is not current_task
+                or state.expires_at != float(expires_at)
+            ):
+                return
+            record = self.registry.get_sandbox(sandbox_id)
+            if record is None:
+                self.session_booter.pop(sandbox_id, None)
+                return
+            if float(record.get("expires_at") or 0) != float(expires_at):
+                return
+            booter = self.session_booter.get(sandbox_id)
+            if booter is not None:
+                try:
+                    provider = self.get_provider(record.get("provider", ""))
+                    await provider.destroy_booter(booter, record)
+                except Exception as shutdown_err:
+                    logger.warning(
+                        "[Computer] Failed to shutdown expired sandbox %s: %s",
+                        sandbox_id,
+                        shutdown_err,
+                    )
+                    return
+            self.clear_runtime_state(sandbox_id)
+            if record.get("retention_policy") == "persistent":
+                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.STOPPED)
+            else:
+                self.registry.delete_sandbox(sandbox_id)
+                self.drop_boot_lock(sandbox_id)
+            await self.save_registry_async()
+        finally:
+            state = self.expiration_state.get(sandbox_id)
+            if (
+                state is not None
+                and state.task is current_task
+                and state.expires_at == float(expires_at)
+            ):
+                self.expiration_state.pop(sandbox_id, None)
 
     async def _expire_when_idle(
         self, sandbox_id: str, timeout: float, initial_expires_at: float

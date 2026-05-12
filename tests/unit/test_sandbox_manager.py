@@ -71,6 +71,14 @@ class FakeProvider:
         await booter.shutdown()
 
 
+class FakeContext:
+    def __init__(self, sandbox_config=None):
+        self._sandbox_config = sandbox_config or {}
+
+    def get_config(self, umo):
+        return {"provider_settings": {"sandbox": dict(self._sandbox_config)}}
+
+
 class RecordCapturingProvider(FakeProvider):
     def __init__(self):
         super().__init__()
@@ -997,12 +1005,16 @@ async def test_manager_renew_current_sandbox_rejects_missing_current(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_manager_renew_current_sandbox_rejects_non_positive_ttl(tmp_path):
+async def test_manager_renew_current_sandbox_allows_zero_ttl_for_permanent_lease(
+    tmp_path,
+):
     manager, _provider = _manager(tmp_path)
     await manager.create_sandbox(None, "session-a", "generic", "Named")
 
-    with pytest.raises(RuntimeError, match="ttl_seconds must be positive"):
-        await manager.renew_current_sandbox_lease("session-a", ttl_seconds=0)
+    renewed = await manager.renew_current_sandbox_lease("session-a", ttl_seconds=0)
+
+    assert renewed["controller_session_id"] == "session-a"
+    assert renewed["lease_expires_at"] is None
 
 
 @pytest.mark.asyncio
@@ -1012,6 +1024,70 @@ async def test_manager_renew_current_sandbox_rejects_non_finite_ttl(tmp_path):
 
     with pytest.raises(RuntimeError, match="ttl_seconds must be finite"):
         await manager.renew_current_sandbox_lease("session-a", ttl_seconds=float("inf"))
+
+
+@pytest.mark.asyncio
+async def test_manager_uses_configured_lease_timeout_for_new_sandboxes(tmp_path):
+    manager, _provider = _manager(tmp_path)
+
+    created = await manager.create_sandbox(
+        FakeContext({"sandbox_lease_timeout": 12}),
+        "session-a",
+        "generic",
+        "Named",
+    )
+
+    assert created["lease_expires_at"] > time.time() + 10
+
+
+@pytest.mark.asyncio
+async def test_manager_list_sandboxes_exposes_exact_cleanup_times(tmp_path):
+    manager, _provider = _manager(tmp_path)
+
+    idle_created = await manager.create_sandbox(
+        FakeContext({"sandbox_idle_timeout": 30, "sandbox_ttl": 0}),
+        "session-a",
+        "generic",
+        "Idle",
+    )
+    ttl_created = await manager.create_sandbox(
+        FakeContext({"sandbox_idle_timeout": 0, "sandbox_ttl": 120}),
+        "session-b",
+        "generic",
+        "TTL",
+    )
+    listed = {item["sandbox_id"]: item for item in manager.list_sandboxes()}
+
+    assert idle_created["expires_at"] is None
+    assert listed[idle_created["sandbox_id"]]["idle_cleanup_at"] is None
+    manager.release_current_sandbox("session-a", idle_created["sandbox_id"])
+    idle_listed = {item["sandbox_id"]: item for item in manager.list_sandboxes()}[
+        idle_created["sandbox_id"]
+    ]
+    assert idle_listed["idle_cleanup_at"] == pytest.approx(
+        idle_listed["last_used_at"] + idle_listed["idle_timeout"], abs=0.01
+    )
+    assert ttl_created["expires_at"] > time.time() + 110
+    assert listed[ttl_created["sandbox_id"]]["idle_cleanup_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_manager_ttl_cleanup_removes_temporary_sandbox_when_idle_cleanup_disabled(
+    tmp_path,
+):
+    manager, provider = _manager(tmp_path)
+
+    sandbox = await manager.create_sandbox(
+        FakeContext({"sandbox_idle_timeout": 0, "sandbox_ttl": 0.01}),
+        "session-a",
+        "generic",
+        "TTL",
+    )
+
+    await asyncio.sleep(0.05)
+
+    assert manager.registry.get_sandbox(sandbox["sandbox_id"]) is None
+    assert provider.destroyed[0][1] == sandbox["sandbox_id"]
 
 
 @pytest.mark.asyncio
@@ -1241,7 +1317,6 @@ async def test_manager_revives_persistent_sandbox_for_tool_access(tmp_path):
 @pytest.mark.asyncio
 async def test_manager_restores_persistent_sandboxes_on_startup(tmp_path):
     provider = FakeProvider()
-    provider.idle_timeout = 0.01
     manager, provider = _manager(tmp_path, provider)
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
@@ -1441,11 +1516,10 @@ def test_manager_reconcile_on_startup_marks_temporary_records_error(tmp_path):
 
 @pytest.mark.asyncio
 async def test_manager_idle_cleanup_removes_temporary_sandbox(tmp_path):
-    provider = FakeProvider()
-    provider.idle_timeout = 0.01
-    manager, provider = _manager(tmp_path, provider)
+    manager, provider = _manager(tmp_path)
+    context = FakeContext({"sandbox_idle_timeout": 0.01, "sandbox_ttl": 0})
 
-    await manager.get_or_create_booter(None, "session-a", "generic")
+    await manager.get_or_create_booter(context, "session-a", "generic")
     sandbox_id = manager.list_sandboxes()[0]["sandbox_id"]
     manager.release_current_sandbox("session-a", sandbox_id)
 
@@ -1458,10 +1532,10 @@ async def test_manager_idle_cleanup_removes_temporary_sandbox(tmp_path):
 @pytest.mark.asyncio
 async def test_manager_idle_cleanup_does_not_retry_dead_booter(tmp_path):
     provider = DeadIdleDestroyProvider()
-    provider.idle_timeout = 0.01
     manager, provider = _manager(tmp_path, provider)
+    context = FakeContext({"sandbox_idle_timeout": 0.01, "sandbox_ttl": 0})
 
-    sandbox = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    sandbox = await manager.create_sandbox(context, "session-a", "generic", "Named")
     manager.release_current_sandbox("session-a", sandbox["sandbox_id"])
 
     await asyncio.wait_for(provider.destroy_started.wait(), timeout=1)
@@ -1478,10 +1552,10 @@ async def test_manager_idle_cleanup_stops_retrying_after_max_attempts(tmp_path):
     from astrbot.core.computer import sandbox_manager as sandbox_manager_module
 
     provider = AlwaysFailingIdleDestroyProvider()
-    provider.idle_timeout = 0.01
     manager, provider = _manager(tmp_path, provider)
+    context = FakeContext({"sandbox_idle_timeout": 0.01, "sandbox_ttl": 0})
 
-    sandbox = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    sandbox = await manager.create_sandbox(context, "session-a", "generic", "Named")
     manager.release_current_sandbox("session-a", sandbox["sandbox_id"])
 
     await asyncio.wait_for(provider.destroy_started.wait(), timeout=1)
@@ -1675,9 +1749,12 @@ async def test_manager_observer_access_does_not_refresh_idle_timer_for_unclaimed
     tmp_path,
 ):
     provider = FakeProvider()
-    provider.idle_timeout = 30
     manager, _provider = _manager(tmp_path, provider)
-    created = await manager.create_sandbox(None, "session-a", "generic")
+    created = await manager.create_sandbox(
+        FakeContext({"sandbox_idle_timeout": 30, "sandbox_ttl": 0}),
+        "session-a",
+        "generic",
+    )
     manager.release_current_sandbox("session-a", created["sandbox_id"])
     first_state = manager.idle_state[created["sandbox_id"]]
     first_last_used_at = manager.registry.get_sandbox(created["sandbox_id"])[

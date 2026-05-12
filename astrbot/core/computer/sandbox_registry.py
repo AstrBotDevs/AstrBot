@@ -9,6 +9,10 @@ from typing import Any
 
 from astrbot.api import logger
 from astrbot.core.computer.sandbox_models import SandboxRecord, SandboxStatus
+from astrbot.core.computer.sandbox_timeouts import (
+    lease_expires_at_from_timeout,
+    lease_is_active,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 _UNSET = object()
@@ -274,16 +278,15 @@ class SandboxRegistry:
         current_time = time.time() if now is None else now
         controller_session_id = record.get("controller_session_id")
         lease_expires_at = record.get("lease_expires_at")
-        if (
-            controller_session_id
-            and controller_session_id != session_id
-            and lease_expires_at
-            and lease_expires_at > current_time
-        ):
+        if lease_is_active(
+            controller_session_id, lease_expires_at, now=current_time
+        ) and (controller_session_id != session_id):
             return False
         record["controller_session_id"] = session_id
         record["controller_user_id"] = user_id
-        record["lease_expires_at"] = current_time + ttl
+        record["lease_expires_at"] = lease_expires_at_from_timeout(
+            ttl, now=current_time
+        )
         return True
 
     def release_lease(self, sandbox_id: str) -> dict[str, Any] | None:
@@ -310,7 +313,9 @@ class SandboxRegistry:
         current_time = time.time() if now is None else now
         record["controller_session_id"] = session_id
         record["controller_user_id"] = user_id
-        record["lease_expires_at"] = current_time + ttl
+        record["lease_expires_at"] = lease_expires_at_from_timeout(
+            ttl, now=current_time
+        )
         return deepcopy(record)
 
     def reconcile_startup(self) -> None:

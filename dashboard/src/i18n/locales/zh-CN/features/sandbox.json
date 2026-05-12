@@ -55,9 +55,9 @@
         "owner": "所属会话",
         "controller": "控制会话",
         "retentionPolicy": "保留策略",
-        "leaseExpires": "占用到期",
-        "idleTimeout": "空闲超时",
-        "expiresAt": "过期时间",
+        "occupiedUntil": "占用到期时间",
+        "idleCleanupAt": "空闲清理时间",
+        "expiresAt": "到期清理时间",
         "connectInfo": "连接信息"
     },
     "empty": {
