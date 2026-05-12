@@ -438,7 +438,7 @@ class DiscordPlatformAdapter(Platform):
                     "continue to work until the quota resets.",
                 )
                 return
-            raise
+            logger.warning(f"[Discord] Sync commands failed: {e}")
 
     @staticmethod
     def _is_daily_command_quota_error(error: discord.HTTPException) -> bool:
