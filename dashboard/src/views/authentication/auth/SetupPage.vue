@@ -1,22 +1,20 @@
 <script setup lang="ts">
-import AuthLogin from '../authForms/AuthLogin.vue';
+import AuthSetup from '../authForms/AuthSetup.vue';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import { onMounted, ref } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
-import { useCustomizerStore } from "@/stores/customizer";
+import { useCustomizerStore } from '@/stores/customizer';
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
 import axios from 'axios';
 
-const cardVisible = ref(false);
 const router = useRouter();
 const authStore = useAuthStore();
 const customizer = useCustomizerStore();
 const { tm: t } = useModuleI18n('features/auth');
 const theme = useTheme();
 
-// 主题切换函数
 function toggleTheme() {
   const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
   customizer.SET_UI_THEME(newTheme);
@@ -24,43 +22,32 @@ function toggleTheme() {
 }
 
 onMounted(async () => {
-  // 检查用户是否已登录，如果已登录则重定向
-  if (authStore.has_token()) {
-    const onboardingCompleted = await authStore.checkOnboardingCompleted();
-    if (onboardingCompleted) {
-      router.push('/dashboard/default');
-    } else {
-      router.push('/welcome');
-    }
-    return;
-  }
+  const hasToken = authStore.has_token();
 
   try {
     const setupStatus = await axios.get('/api/auth/setup-status');
+    const setupRequired = !!setupStatus.data?.data?.setup_required;
+    const canSkipDefaultPassword = !!setupStatus.data?.data?.skip_default_password_auth;
     if (
-      setupStatus.data?.data?.setup_required &&
-      setupStatus.data?.data?.skip_default_password_auth
+      !setupRequired ||
+      (!hasToken && !canSkipDefaultPassword)
     ) {
-      router.push('/auth/setup');
-      return;
+      router.push('/auth/login');
     }
   } catch {
-    // Keep the normal login flow if setup status is unavailable.
+    router.push('/auth/login');
   }
-
-  // 添加一个小延迟以获得更好的动画效果
-  setTimeout(() => {
-    cardVisible.value = true;
-  }, 100);
 });
 </script>
 
 <template>
-  <div class="login-page-container">
-    <v-card class="login-card" elevation="1">
+  <div class="setup-page-container">
+    <v-card class="setup-card" elevation="1">
       <v-card-title>
-        <div class="d-flex justify-space-between align-center w-100">
-          <img width="80" src="@/assets/images/icon-no-shadow.svg" alt="AstrBot Logo">
+        <div class="setup-header">
+          <div class="setup-brand">
+            <img width="80" src="@/assets/images/plugin_icon.png" alt="AstrBot Logo">
+          </div>
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
             <v-divider vertical class="mx-1"
@@ -75,18 +62,18 @@ onMounted(async () => {
             </v-btn>
           </div>
         </div>
-        <div class="ml-2" style="font-size: 26px;">{{ t('logo.title') }}</div>
-        <div class="mt-2 ml-2" style="font-size: 14px; color: grey;">{{ t('logo.subtitle') }}</div>
+        <div class="setup-title">{{ t('setup.title') }}</div>
+        <div class="setup-subtitle">{{ t('setup.subtitle') }}</div>
       </v-card-title>
       <v-card-text>
-        <AuthLogin />
+        <AuthSetup />
       </v-card-text>
     </v-card>
   </div>
 </template>
 
 <style lang="scss">
-.login-page-container {
+.setup-page-container {
   background-color: rgb(var(--v-theme-containerBg));
   position: relative;
   width: 100vw;
@@ -97,8 +84,41 @@ onMounted(async () => {
   align-items: center;
 }
 
-.login-card {
-  width: 400px;
+.setup-card {
+  width: 420px;
   padding: 8px;
+}
+
+.setup-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
+.setup-brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.setup-brand img {
+  flex: 0 0 auto;
+}
+
+.setup-title {
+  margin-top: 8px;
+  color: #000000;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.setup-subtitle {
+  margin-top: 6px;
+  color: grey;
+  font-size: 14px;
+  line-height: 1.35;
 }
 </style>
