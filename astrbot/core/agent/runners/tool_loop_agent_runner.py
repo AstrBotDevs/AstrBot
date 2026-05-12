@@ -50,7 +50,7 @@ from astrbot.core.provider.provider import Provider
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
-from ..context.manager import ContextManager
+from ..context.guard import RequestContextGuard
 from ..context.token_counter import EstimateTokenCounter, TokenCounter
 from ..hooks import BaseAgentRunHooks
 from ..message import (
@@ -241,13 +241,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_result_overflow_dir = tool_result_overflow_dir
         self.read_tool = read_tool
         self._tool_result_token_counter = EstimateTokenCounter()
-        # we will do compress when:
-        # 1. before requesting LLM
-        # TODO: 2. after LLM output a tool call
-        self.context_config = ContextConfig(
-            # <=0 will never do compress
+        self.request_context_guard_config = ContextConfig(
+            # <=0 disables token-based guarding.
             max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
-            # enforce max turns before compression
+            # Enforce max turns before token-based guarding.
             enforce_max_turns=self.enforce_max_turns,
             truncate_turns=self.truncate_turns,
             llm_compress_instruction=self.llm_compress_instruction,
@@ -256,7 +253,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )
-        self.context_manager = ContextManager(self.context_config)
+        self.request_context_guard = RequestContextGuard(
+            self.request_context_guard_config
+        )
 
         self.provider = provider
         self.fallback_providers: list[Provider] = []
@@ -704,10 +703,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
-        # do truncate and compress
+        # Apply request-time context guard before the provider call.
+        # Persistent history compaction belongs to the memory layer.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]")
-        self.run_context.messages = await self.context_manager.process(
+        self.run_context.messages = await self.request_context_guard.process(
             self.run_context.messages, trusted_token_usage=token_usage
         )
         self._simple_print_message_role("[AftCompact]")
@@ -1395,6 +1395,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         executor: AsyncIterator[ToolExecutorResultT],
     ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+        async def _next_executor_result() -> ToolExecutorResultT:
+            return await anext(executor)
+
         while True:
             if self._is_stop_requested():
                 await self._close_executor(executor)
@@ -1402,7 +1405,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "Tool execution interrupted before reading the next tool result."
                 )
 
-            next_result_task = asyncio.create_task(anext(executor))
+            next_result_task = asyncio.create_task(_next_executor_result())
             abort_task = asyncio.create_task(self._abort_signal.wait())
             try:
                 done, _ = await asyncio.wait(
