@@ -238,6 +238,15 @@ def _manager(tmp_path, provider=None):
     return manager, provider
 
 
+async def wait_until(predicate, *, timeout: float = 1.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("condition was not met before timeout")
+
+
 def test_manager_list_sandboxes_preserves_persisted_tool_names_without_provider(
     tmp_path,
 ):
@@ -382,11 +391,12 @@ async def test_create_sandbox_uncontrolled_deferred_returns_creating_then_runnin
     assert manager.registry.get_sandbox(sandbox["sandbox_id"])["status"] == "creating"
 
     provider.allow_boot.set()
-    for _ in range(20):
-        record = manager.registry.get_sandbox(sandbox["sandbox_id"])
-        if record and record["status"] == "running":
-            break
-        await asyncio.sleep(0)
+    await wait_until(
+        lambda: (
+            (record := manager.registry.get_sandbox(sandbox["sandbox_id"])) is not None
+            and record["status"] == "running"
+        )
+    )
 
     assert manager.registry.get_sandbox(sandbox["sandbox_id"])["status"] == "running"
     assert sandbox["sandbox_id"] in manager.session_booter
@@ -460,11 +470,12 @@ async def test_create_sandbox_uncontrolled_deferred_keeps_error_record_on_boot_f
 
     await asyncio.wait_for(provider.boot_started.wait(), timeout=1)
     provider.allow_boot.set()
-    for _ in range(20):
-        record = manager.registry.get_sandbox(sandbox["sandbox_id"])
-        if record and record["status"] == "error":
-            break
-        await asyncio.sleep(0)
+    await wait_until(
+        lambda: (
+            (record := manager.registry.get_sandbox(sandbox["sandbox_id"])) is not None
+            and record["status"] == "error"
+        )
+    )
 
     record = manager.registry.get_sandbox(sandbox["sandbox_id"])
     assert record is not None
@@ -487,10 +498,7 @@ async def test_create_sandbox_uncontrolled_deferred_uses_fresh_record_for_cleanu
     manager.registry.delete_sandbox(sandbox["sandbox_id"])
     provider.allow_boot.set()
 
-    for _ in range(20):
-        if not manager.pending_boot_tasks:
-            break
-        await asyncio.sleep(0)
+    await wait_until(lambda: not manager.pending_boot_tasks)
 
     assert provider.destroyed_records == [{}]
     assert manager.registry.get_sandbox(sandbox["sandbox_id"]) is None
@@ -533,10 +541,7 @@ async def test_manager_waits_for_current_creating_sandbox_instead_of_creating_an
     assert created["sandbox_id"] in manager.pending_boot_tasks
 
     provider.allow_boot.set()
-    for _ in range(20):
-        if created["sandbox_id"] in manager.session_booter:
-            break
-        await asyncio.sleep(0)
+    await wait_until(lambda: created["sandbox_id"] in manager.session_booter)
     booter = await manager.get_or_create_booter(None, "session-a", "generic")
 
     assert booter is manager.session_booter[created["sandbox_id"]]
@@ -675,10 +680,9 @@ async def test_destroy_sandbox_deferred_returns_stopping_before_background_delet
     assert record["status"] == "stopping"
 
     provider.allow_destroy.set()
-    for _ in range(20):
-        if manager.registry.get_sandbox(created["sandbox_id"]) is None:
-            break
-        await asyncio.sleep(0)
+    await wait_until(
+        lambda: manager.registry.get_sandbox(created["sandbox_id"]) is None
+    )
 
     assert manager.registry.get_sandbox(created["sandbox_id"]) is None
     assert provider.destroyed[0][1] == created["sandbox_id"]
