@@ -88,14 +88,14 @@
       "newPassword": "New Password",
       "confirmPassword": "Confirm New Password",
       "newUsername": "New Username (Optional)",
-      "passwordHint": "At least 12 characters, including uppercase, lowercase letters, and digits",
+      "passwordHint": "At least 10 characters, including uppercase, lowercase letters, and digits",
       "confirmPasswordHint": "Please enter new password again to confirm",
       "usernameHint": "Leave blank to keep current username",
       "defaultCredentials": "The default username is astrbot. An initial password is generated on first startup and shown in the console."
     },
     "validation": {
       "passwordRequired": "Please enter password",
-      "passwordMinLength": "Password must be at least 12 characters",
+      "passwordMinLength": "Password must be at least 10 characters",
       "passwordUppercase": "Password must include at least one uppercase letter",
       "passwordLowercase": "Password must include at least one lowercase letter",
       "passwordDigit": "Password must include at least one digit",

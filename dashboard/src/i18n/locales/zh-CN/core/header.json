@@ -88,14 +88,14 @@
       "newPassword": "新密码",
       "confirmPassword": "确认新密码",
       "newUsername": "新用户名 (可选)",
-      "passwordHint": "长度至少 12 位，且包含大写字母、小写字母和数字",
+      "passwordHint": "长度至少 10 位，且包含大写字母、小写字母和数字",
       "confirmPasswordHint": "请再次输入新密码以确认",
       "usernameHint": "留空表示不修改用户名",
       "defaultCredentials": "默认用户名为 astrbot，初始密码会在首次启动时自动生成并显示在控制台中。"
     },
     "validation": {
       "passwordRequired": "请输入密码",
-      "passwordMinLength": "密码长度至少 12 位",
+      "passwordMinLength": "密码长度至少 10 位",
       "passwordUppercase": "密码必须包含至少一个大写字母",
       "passwordLowercase": "密码必须包含至少一个小写字母",
       "passwordDigit": "密码必须包含至少一个数字",
