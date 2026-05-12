@@ -260,9 +260,7 @@ class LongTermMemory:
             ctxs.append(
                 {
                     "role": "system",
-                    "content": (
-                        "Long-term group memory summary:\n" + summary
-                    ),
+                    "content": ("Long-term group memory summary:\n" + summary),
                 }
             )
 
@@ -354,16 +352,17 @@ class LongTermMemory:
                 keep_recent = cfg.get("ltm_summary_keep_recent_rounds", 30)
                 if provider_id and len(rounds) > keep_recent:
                     await self._compact_with_llm_summary(
-                        event, provider_id, keep_recent,
-                        cfg.get("ltm_summary_prompt", ""), rounds,
+                        event,
+                        provider_id,
+                        keep_recent,
+                        cfg.get("ltm_summary_prompt", ""),
+                        rounds,
                     )
             else:
                 max_rounds = cfg.get("ltm_max_rounds", 80)
                 if len(rounds) > max_rounds:
                     kept = rounds[-max_rounds:]
-                    self.contexts[umo] = [
-                        seg for rnd in kept for seg in rnd
-                    ]
+                    self.contexts[umo] = [seg for rnd in kept for seg in rnd]
 
             # 3. 裁剪 raw_records
             self._trim_raw_records(
@@ -391,9 +390,7 @@ class LongTermMemory:
 
         provider = self.context.get_provider_by_id(provider_id)
         if provider is None or not isinstance(provider, Provider):
-            logger.warning(
-                "LTM summary 指定的 provider %s 不可用", provider_id
-            )
+            logger.warning("LTM summary 指定的 provider %s 不可用", provider_id)
             return
 
         old_text = _rounds_to_text(old_rounds)
@@ -419,9 +416,7 @@ class LongTermMemory:
                 persist=False,
             )
             self.summaries[umo] = resp.completion_text
-            self.contexts[umo] = [
-                seg for rnd in recent_rounds for seg in rnd
-            ]
+            self.contexts[umo] = [seg for rnd in recent_rounds for seg in rnd]
         except Exception:
             logger.warning("LTM LLM summary 失败，保留原始 contexts", exc_info=True)
 
