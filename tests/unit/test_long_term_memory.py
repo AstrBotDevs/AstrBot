@@ -1579,6 +1579,45 @@ class TestLLMSummaryErrorPath:
         # 1 round < 5 keep_recent → no-op
         assert len(ltm.contexts[umo]) == original_len
 
+    @pytest.mark.asyncio
+    async def test_empty_summary_response_is_no_op(self, mock_event):
+        """LLM 返回空文本时不得覆盖 context/summary。"""
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        from unittest.mock import MagicMock, AsyncMock
+
+        fake_resp = MagicMock()
+        fake_resp.completion_text = "   "  # whitespace-only
+
+        fake_provider = MagicMock()
+        fake_provider.text_chat = AsyncMock(return_value=fake_resp)
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = {}
+        ctx.get_provider_by_id.return_value = fake_provider
+
+        ltm = LongTermMemory(MagicMock(), ctx)
+        umo = mock_event.unified_msg_origin
+
+        old_ctxs = [{"role": "user", "content": "old"}]
+        ltm.contexts[umo] = old_ctxs
+        ltm.summaries[umo] = "existing summary"
+
+        rounds = _split_into_rounds(old_ctxs + [
+            {"role": "assistant", "content": "new round"}
+        ])
+
+        await ltm._compact_with_llm_summary(
+            event=mock_event,
+            provider_id="test_provider",
+            keep_recent=0,
+            prompt="",
+            rounds=rounds,
+        )
+
+        # Both must be untouched
+        assert ltm.contexts[umo] is old_ctxs
+        assert ltm.summaries[umo] == "existing summary"
+
 
 # =============================================================================
 # Config defaults

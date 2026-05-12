@@ -423,7 +423,14 @@ class LongTermMemory:
                 session_id=uuid.uuid4().hex,
                 persist=False,
             )
-            self.summaries[umo] = resp.completion_text
+            summary_text = resp.completion_text.strip()
+            if not summary_text:
+                logger.warning(
+                    "LTM LLM summary 返回空文本，跳过本次压缩 "
+                    "(umo=%s, provider=%s)", umo, provider_id
+                )
+                return
+            self.summaries[umo] = summary_text
             self.contexts[umo] = [seg for rnd in recent_rounds for seg in rnd]
         except Exception:
             logger.warning("LTM LLM summary 失败，保留原始 contexts", exc_info=True)
