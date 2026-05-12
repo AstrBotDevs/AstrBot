@@ -98,7 +98,7 @@ AstrBot 会自动帮你解析指令的参数。
 @filter.command("add")
 async def add(self, event: AstrMessageEvent, a: int, b: int):
     # /add 1 2 -> 结果是: 3
-    yield event.plain_result(f"Wow! The anwser is {a + b}!")
+    yield event.plain_result(f"Wow! The answer is {a + b}!")
 ```
 
 ## 指令组
@@ -172,7 +172,7 @@ async def calc_help(self, event: AstrMessageEvent):
 
 ```python
 @filter.command("help", alias={'帮助', 'helpme'})
-def help(self, event: AstrMessageEvent):
+async def help(self, event: AstrMessageEvent):
     yield event.plain_result("这是一个计算器插件，拥有 add, sub 指令。")
 ```
 
