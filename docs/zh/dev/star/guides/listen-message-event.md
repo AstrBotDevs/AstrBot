@@ -1,4 +1,3 @@
-
 # 处理消息事件
 
 事件监听器可以收到平台下发的消息内容，可以实现指令、指令组、事件监听等功能。
@@ -97,9 +96,9 @@ AstrBot 会自动帮你解析指令的参数。
 
 ```python
 @filter.command("add")
-def add(self, event: AstrMessageEvent, a: int, b: int):
+async def add(self, event: AstrMessageEvent, a: int, b: int):
     # /add 1 2 -> 结果是: 3
-    yield event.plain_result(f"Wow! The anwser is {a + b}!")
+    yield event.plain_result(f"Wow! The answer is {a + b}!")
 ```
 
 ## 指令组
@@ -108,7 +107,7 @@ def add(self, event: AstrMessageEvent, a: int, b: int):
 
 ```python
 @filter.command_group("math")
-def math(self):
+def math():
     pass
 
 @math.command("add")
@@ -160,7 +159,7 @@ async def sub(self, event: AstrMessageEvent, a: int, b: int):
     yield event.plain_result(f"结果是: {a - b}")
 
 @calc.command("help")
-def calc_help(self, event: AstrMessageEvent):
+async def calc_help(self, event: AstrMessageEvent):
     # /math calc help
     yield event.plain_result("这是一个计算器插件，拥有 add, sub 指令。")
 ```
@@ -173,7 +172,7 @@ def calc_help(self, event: AstrMessageEvent):
 
 ```python
 @filter.command("help", alias={'帮助', 'helpme'})
-def help(self, event: AstrMessageEvent):
+async def help(self, event: AstrMessageEvent):
     yield event.plain_result("这是一个计算器插件，拥有 add, sub 指令。")
 ```
 
@@ -209,7 +208,7 @@ async def on_aiocqhttp(self, event: AstrMessageEvent):
     yield event.plain_result("收到了一条信息")
 ```
 
-当前版本下，`PlatformAdapterType` 有 `AIOCQHTTP`, `QQOFFICIAL`, `GEWECHAT`, `ALL`。
+当前版本下，`PlatformAdapterType` 支持以下值：`AIOCQHTTP`、`QQOFFICIAL`、`QQOFFICIAL_WEBHOOK`、`TELEGRAM`、`WECOM`、`WECOM_AI_BOT`、`LARK`、`DINGTALK`、`DISCORD`、`SLACK`、`KOOK`、`VOCECHAT`、`WEIXIN_OFFICIAL_ACCOUNT`、`SATORI`、`MISSKEY`、`LINE`、`MATRIX`、`WEIXIN_OC`、`MATTERMOST`、`WEBCHAT`、`ALL`。
 
 #### 管理员指令
 
@@ -437,13 +436,14 @@ async def on_agent_done(self, event: AstrMessageEvent, run_context: ContextWrapp
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+import astrbot.api.message_components as Comp
 
 @filter.on_decorating_result()
 async def on_decorating_result(self, event: AstrMessageEvent):
     result = event.get_result()
     chain = result.chain
     print(chain) # 打印消息链
-    chain.append(Plain("!")) # 在消息链的最后添加一个感叹号
+    chain.append(Comp.Plain("!")) # 在消息链的最后添加一个感叹号
 ```
 
 > 这里不能使用 yield 来发送消息。这个钩子只是用来装饰 event.get_result().chain 的。如需发送，请直接使用 `event.send()` 方法。

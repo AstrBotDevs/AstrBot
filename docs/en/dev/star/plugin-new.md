@@ -102,8 +102,10 @@ The values in `support_platforms` must be keys from `ADAPTER_NAME_2_TYPE`. Curre
 
 - `aiocqhttp`
 - `qq_official`
+- `qq_official_webhook`
 - `telegram`
 - `wecom`
+- `wecom_ai_bot`
 - `lark`
 - `dingtalk`
 - `discord`
@@ -111,9 +113,12 @@ The values in `support_platforms` must be keys from `ADAPTER_NAME_2_TYPE`. Curre
 - `kook`
 - `vocechat`
 - `weixin_official_account`
+- `weixin_oc`
 - `satori`
 - `misskey`
 - `line`
+- `matrix`
+- `mattermost`
 
 ### Declare AstrBot Version Range (Optional)
 

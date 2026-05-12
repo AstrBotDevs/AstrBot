@@ -1,4 +1,3 @@
-
 # Handling Message Events
 
 Event listeners can receive message content delivered by the platform and implement features such as commands, command groups, and event listening.
@@ -97,7 +96,7 @@ AstrBot will automatically parse command parameters for you.
 
 ```python
 @filter.command("add")
-def add(self, event: AstrMessageEvent, a: int, b: int):
+async def add(self, event: AstrMessageEvent, a: int, b: int):
     # /add 1 2 -> Result is: 3
     yield event.plain_result(f"Wow! The answer is {a + b}!")
 ```
@@ -108,7 +107,7 @@ Command groups help you organize commands.
 
 ```python
 @filter.command_group("math")
-def math(self):
+def math():
     pass
 
 @math.command("add")
@@ -160,7 +159,7 @@ async def sub(self, event: AstrMessageEvent, a: int, b: int):
     yield event.plain_result(f"Result is: {a - b}")
 
 @calc.command("help")
-def calc_help(self, event: AstrMessageEvent):
+async def calc_help(self, event: AstrMessageEvent):
     # /math calc help
     yield event.plain_result("This is a calculator plugin with add and sub commands.")
 ```
@@ -173,7 +172,7 @@ You can add different aliases for commands or command groups:
 
 ```python
 @filter.command("help", alias={'帮助', 'helpme'})
-def help(self, event: AstrMessageEvent):
+async def help(self, event: AstrMessageEvent):
     yield event.plain_result("This is a calculator plugin with add and sub commands.")
 ```
 
@@ -209,7 +208,7 @@ async def on_aiocqhttp(self, event: AstrMessageEvent):
     yield event.plain_result("Received a message")
 ```
 
-In the current version, `PlatformAdapterType` includes `AIOCQHTTP`, `QQOFFICIAL`, `GEWECHAT`, and `ALL`.
+In the current version, `PlatformAdapterType` supports the following values: `AIOCQHTTP`, `QQOFFICIAL`, `QQOFFICIAL_WEBHOOK`, `TELEGRAM`, `WECOM`, `WECOM_AI_BOT`, `LARK`, `DINGTALK`, `DISCORD`, `SLACK`, `KOOK`, `VOCECHAT`, `WEIXIN_OFFICIAL_ACCOUNT`, `SATORI`, `MISSKEY`, `LINE`, `MATRIX`, `WEIXIN_OC`, `MATTERMOST`, `WEBCHAT`, `ALL`.
 
 #### Admin Commands
 
@@ -420,13 +419,14 @@ You can implement some message decoration here, such as converting to voice, con
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+import astrbot.api.message_components as Comp
 
 @filter.on_decorating_result()
 async def on_decorating_result(self, event: AstrMessageEvent):
     result = event.get_result()
     chain = result.chain
     print(chain) # Print the message chain
-    chain.append(Plain("!")) # Add an exclamation mark at the end of the message chain
+    chain.append(Comp.Plain("!")) # Add an exclamation mark at the end of the message chain
 ```
 
 > You cannot use yield to send messages here. This hook is only for decorating event.get_result().chain. If you need to send, please use the `event.send()` method directly.
