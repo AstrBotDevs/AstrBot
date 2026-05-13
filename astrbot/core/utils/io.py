@@ -1,6 +1,7 @@
 import base64
 import logging
 import os
+import re
 import shutil
 import socket
 import ssl
@@ -257,6 +258,20 @@ def get_bundled_dashboard_dist_path() -> Path:
     return Path(get_astrbot_path()) / "astrbot" / "dashboard" / "dist"
 
 
+def _normalize_dashboard_version(version: str) -> str:
+    version = version.strip()
+    if version[:1].lower() == "v":
+        version = version[1:]
+    if not re.match(
+        r"^[0-9]+(?:\.[0-9]+)*"
+        r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+        r"(?:\+.+)?$",
+        version,
+    ):
+        raise ValueError(f"invalid dashboard version: {version!r}")
+    return version
+
+
 def should_use_bundled_dashboard_dist(
     user_dist: str | Path, current_version: str
 ) -> bool:
@@ -264,7 +279,16 @@ def should_use_bundled_dashboard_dist(
     bundled_dist = get_bundled_dashboard_dist_path()
     if user_version is None or not bundled_dist.exists():
         return False
-    return VersionComparator.compare_version(current_version, user_version) > 0
+    try:
+        return (
+            VersionComparator.compare_version(
+                _normalize_dashboard_version(current_version),
+                _normalize_dashboard_version(user_version),
+            )
+            > 0
+        )
+    except (TypeError, ValueError):
+        return False
 
 
 async def get_dashboard_version():
