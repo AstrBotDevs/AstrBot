@@ -515,6 +515,47 @@ class ProviderOpenAIOfficial(Provider):
         extra_body.pop("think", None)
         extra_body["reasoning_effort"] = "none"
 
+    def _requires_tool_call_reasoning_content(
+        self,
+        payloads: dict,
+        extra_body: dict[str, Any],
+    ) -> bool:
+        thinking = extra_body.get("thinking")
+        if isinstance(thinking, dict) and thinking.get("type") == "disabled":
+            return False
+
+        provider = str(self.provider_config.get("provider", "")).lower()
+        api_base = str(self.provider_config.get("api_base", "")).lower()
+        model = str(payloads.get("model", "")).lower()
+
+        return (
+            provider in {"moonshot", "opencode-go"}
+            or "moonshot" in api_base
+            or "api.kimi" in api_base
+            or model.startswith(("kimi-k2.5", "kimi-k2.6", "kimi-k2-thinking"))
+        )
+
+    def _ensure_tool_call_reasoning_content(
+        self,
+        payloads: dict,
+        extra_body: dict[str, Any],
+    ) -> None:
+        if not self._requires_tool_call_reasoning_content(payloads, extra_body):
+            return
+
+        messages = payloads.get("messages")
+        if not isinstance(messages, list):
+            return
+
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            if message.get("role") != "assistant" or not message.get("tool_calls"):
+                continue
+            reasoning_content = message.get("reasoning_content")
+            if not isinstance(reasoning_content, str) or not reasoning_content.strip():
+                message["reasoning_content"] = " "
+
     async def get_models(self):
         try:
             models_str = []
@@ -591,6 +632,7 @@ class ProviderOpenAIOfficial(Provider):
 
         model = payloads.get("model", "").lower()
 
+        self._ensure_tool_call_reasoning_content(payloads, extra_body)
         self._sanitize_assistant_messages(payloads)
 
         completion = await self.client.chat.completions.create(
@@ -643,6 +685,7 @@ class ProviderOpenAIOfficial(Provider):
             del payloads[key]
         self._apply_provider_specific_extra_body_overrides(extra_body)
 
+        self._ensure_tool_call_reasoning_content(payloads, extra_body)
         self._sanitize_assistant_messages(payloads)
 
         stream = await self.client.chat.completions.create(
