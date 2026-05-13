@@ -29,6 +29,15 @@ DASHBOARD_JWT_COOKIE_MAX_AGE = 7 * 24 * 60 * 60
 SKIP_DEFAULT_PASSWORD_AUTH_ENV = "ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH"
 SKIP_DEFAULT_PASSWORD_AUTH_ENV_LEGACY = "DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH"
 LOCAL_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
+DEFAULT_PASSWORD_LOGIN_FAILURE_MESSAGE = (
+    "Login failed. If this is your first time using AstrBot, the old default "
+    "astrbot password has been replaced by a random strong password printed in "
+    "the startup logs. Check the initial password in the logs and try again. "
+    "Learn more: https://docs.astrbot.app/en/faq.html\n\n"
+    "登录失败。如果您是初次使用，旧版默认 astrbot 密码已改为启动日志中输出的"
+    "随机强密码。请使用日志中提供的的初始密码来登录。了解更多："
+    "https://docs.astrbot.app/faq.html"
+)
 
 
 class AuthRoute(Route):
@@ -170,6 +179,8 @@ class AuthRoute(Route):
             self._set_dashboard_jwt_cookie(response, token)
             return response
         await asyncio.sleep(3)
+        if req_password == "astrbot":
+            return Response().error(DEFAULT_PASSWORD_LOGIN_FAILURE_MESSAGE).__dict__
         return Response().error("用户名或密码错误").__dict__
 
     async def logout(self):

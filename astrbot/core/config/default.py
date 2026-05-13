@@ -4,7 +4,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.24.3"
+VERSION = "4.24.4"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -3285,7 +3285,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.sandbox_lease_timeout": {
                         "description": "沙箱占用超时",
                         "type": "int",
-                        "hint": "单位为秒。`0` 表示永久占用，需手动释放。",
+                        "hint": "单位为秒。Agent 占用沙盒后的租期，默认 600 秒；到期后需要重新占用或续租。`0` 表示占用不会过期，需手动释放。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                         },
