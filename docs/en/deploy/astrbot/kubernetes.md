@@ -194,4 +194,4 @@ Edit the `02-deployment.yaml` file and add `volumes` and `volumeMounts` under `s
 
 After deploying and exposing the service, you can access the AstrBot admin panel through the corresponding IP and port.
 
-> The default username and password are `astrbot` and `astrbot`.
+> New users must use the random password printed in the startup logs for the first login. Use the username shown in the logs (usually `astrbot`) and change it after logging in.
