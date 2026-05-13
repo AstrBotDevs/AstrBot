@@ -715,7 +715,7 @@ class TestEnsurePersonaAndSkills:
         assert req.func_tool is not None
 
     @pytest.mark.asyncio
-    async def test_ensure_persona_filters_other_sandbox_provider_tools(
+    async def test_ensure_persona_keeps_all_sandbox_provider_tools_in_sandbox_runtime(
         self, mock_event, mock_context
     ):
         module = ama
@@ -751,7 +751,7 @@ class TestEnsurePersonaAndSkills:
 
         assert req.func_tool is not None
         assert "regular_tool" in req.func_tool.names()
-        assert "provider_a_screenshot" not in req.func_tool.names()
+        assert "provider_a_screenshot" in req.func_tool.names()
 
     @pytest.mark.asyncio
     async def test_ensure_persona_keeps_current_sandbox_provider_tools(
@@ -791,7 +791,7 @@ class TestEnsurePersonaAndSkills:
         assert "provider_a_screenshot" in req.func_tool.names()
 
     @pytest.mark.asyncio
-    async def test_ensure_persona_prefers_bound_sandbox_provider_over_config(
+    async def test_ensure_persona_keeps_all_provider_tools_with_bound_sandbox(
         self, monkeypatch, mock_event, mock_context
     ):
         module = ama
@@ -849,7 +849,7 @@ class TestEnsurePersonaAndSkills:
 
         assert req.func_tool is not None
         assert "provider_b_tool" in req.func_tool.names()
-        assert "provider_a_screenshot" not in req.func_tool.names()
+        assert "provider_a_screenshot" in req.func_tool.names()
 
     @pytest.mark.asyncio
     async def test_handoff_all_tools_filters_other_sandbox_provider_tools(
@@ -1119,7 +1119,7 @@ class TestPluginToolFix:
 
         assert "transfer_to_demo_agent" in req.func_tool.names()
 
-    def test_plugin_tool_fix_filters_provider_specific_tools_without_current_sandbox(
+    def test_plugin_tool_fix_keeps_provider_specific_tools_in_sandbox_runtime(
         self, mock_event
     ):
         module = ama
@@ -1160,9 +1160,9 @@ class TestPluginToolFix:
             )
 
         assert "astrbot_list_sandboxes" in req.func_tool.names()
-        assert "astrbot_cua_screenshot" not in req.func_tool.names()
+        assert "astrbot_cua_screenshot" in req.func_tool.names()
 
-    def test_plugin_tool_fix_keeps_only_current_provider_specific_tools(
+    def test_plugin_tool_fix_hides_provider_specific_tools_outside_sandbox_runtime(
         self, mock_event
     ):
         module = ama
@@ -1192,18 +1192,14 @@ class TestPluginToolFix:
 
         with (
             patch("astrbot.core.astr_main_agent.star_map"),
-            patch(
-                "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
-                return_value="cua",
-            ),
         ):
             module._plugin_tool_fix(
                 mock_event,
                 req,
-                {"computer_use_runtime": "sandbox"},
+                {"computer_use_runtime": "local"},
             )
 
-        assert "astrbot_cua_screenshot" in req.func_tool.names()
+        assert "astrbot_cua_screenshot" not in req.func_tool.names()
         assert "astrbot_execute_browser" not in req.func_tool.names()
 
 
@@ -2009,82 +2005,7 @@ class TestApplySandboxTools:
         assert "fresh or separate environment" in req.system_prompt
         assert "send screenshots to the user to show progress" not in req.system_prompt
 
-    def test_apply_sandbox_tools_adds_gui_prompt_only_for_gui_provider(
-        self, mock_context
-    ):
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={"booter": "gui-provider"},
-        )
-        req = ProviderRequest(prompt="Test", system_prompt=None)
-
-        with patch(
-            "astrbot.core.computer.computer_client.get_sandbox_provider_info",
-            return_value={"tool_names": [], "capabilities": ["gui"]},
-        ):
-            module._apply_sandbox_tools(config, req)
-
-        assert "send screenshots to the user to show progress" in req.system_prompt
-        assert "especially after each meaningful GUI step" in req.system_prompt
-
-    def test_apply_sandbox_tools_adds_provider_system_prompt(self, mock_context):
-        """Test that provider-specific sandbox prompt is added to system_prompt."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={"booter": "generic"},
-        )
-        req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
-
-        with patch(
-            "astrbot.core.computer.computer_client.get_sandbox_provider_info",
-            return_value={
-                "tool_names": [],
-                "system_prompt": "[Provider Rules]\nUse relative sandbox paths.",
-            },
-        ):
-            module._apply_sandbox_tools(config, req)
-
-        assert req.system_prompt.startswith("Base prompt")
-        assert "sandboxed environment" in req.system_prompt
-        assert "[Provider Rules]" in req.system_prompt
-        assert "Use relative sandbox paths." in req.system_prompt
-
-    def test_apply_sandbox_tools_prefers_current_sandbox_provider(self, mock_context):
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={"booter": "provider_a"},
-        )
-        req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
-        req.session_id = "session-a"
-
-        def provider_info(provider_id):
-            return {
-                "tool_names": [],
-                "system_prompt": f"[{provider_id} provider]",
-            }
-
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
-                return_value="provider_b",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_provider_info",
-                side_effect=provider_info,
-            ),
-        ):
-            module._apply_sandbox_tools(config, req)
-
-        assert "[provider_b provider]" in req.system_prompt
-        assert "[provider_a provider]" not in req.system_prompt
-
-    def test_apply_sandbox_tools_does_not_use_configured_provider_without_current_sandbox(
+    def test_apply_sandbox_tools_adds_all_provider_tools_with_scoped_descriptions(
         self, mock_context
     ):
         module = ama
@@ -2105,20 +2026,13 @@ class TestApplySandboxTools:
 
         with (
             patch(
-                "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
-                return_value=None,
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_provider_info",
-                side_effect=lambda provider_id: (
+                "astrbot.core.computer.computer_client.list_sandbox_providers",
+                return_value=[
                     {
+                        "provider_id": "provider_a",
                         "tool_names": ["provider_a_screenshot"],
-                        "capabilities": ["gui"],
-                        "system_prompt": "[provider_a provider]",
                     }
-                    if provider_id == "provider_a"
-                    else None
-                ),
+                ],
             ),
             patch(
                 "astrbot.core.provider.register.llm_tools.get_func",
@@ -2127,7 +2041,49 @@ class TestApplySandboxTools:
         ):
             module._apply_sandbox_tools(config, req)
 
-        assert "provider_a_screenshot" not in req.func_tool.names()
+        tool = req.func_tool.get_tool("provider_a_screenshot")
+        assert tool is not None
+        assert "Sandbox provider-specific tool: provider_a" in tool.description
+        assert "current sandbox uses provider 'provider_a'" in tool.description
+        assert "send screenshots to the user to show progress" not in req.system_prompt
+
+    def test_apply_sandbox_tools_includes_provider_tools_without_current_sandbox(
+        self, mock_context
+    ):
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={"booter": "provider_a"},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
+        req.session_id = "session-a"
+
+        provider_tool = FunctionTool(
+            name="provider_a_screenshot",
+            parameters={"type": "object", "properties": {}},
+            description="Provider A screenshot",
+        )
+        provider_tool.sandbox_provider_id = "provider_a"
+
+        with (
+            patch(
+                "astrbot.core.computer.computer_client.list_sandbox_providers",
+                return_value=[
+                    {
+                        "provider_id": "provider_a",
+                        "tool_names": ["provider_a_screenshot"],
+                    }
+                ],
+            ),
+            patch(
+                "astrbot.core.provider.register.llm_tools.get_func",
+                return_value=provider_tool,
+            ),
+        ):
+            module._apply_sandbox_tools(config, req)
+
+        assert "provider_a_screenshot" in req.func_tool.names()
         assert "[provider_a provider]" not in req.system_prompt
         assert "send screenshots to the user to show progress" not in req.system_prompt
 
@@ -2147,8 +2103,8 @@ class TestApplySandboxTools:
         tool_mgr.get_func.side_effect = lambda name: NamedTool(name)
 
         with patch(
-            "astrbot.core.computer.computer_client.get_sandbox_provider_info",
-            return_value={"tool_names": []},
+            "astrbot.core.computer.computer_client.list_sandbox_providers",
+            return_value=[],
         ):
             tools = ama.FunctionToolExecutor._get_runtime_computer_tools(
                 "sandbox", tool_mgr, "provider_a"
@@ -2179,8 +2135,8 @@ class TestApplySandboxTools:
         ama.FunctionToolExecutor._runtime_computer_tools_cache.clear()
 
         with patch(
-            "astrbot.core.computer.computer_client.get_sandbox_provider_info",
-            return_value={"tool_names": []},
+            "astrbot.core.computer.computer_client.list_sandbox_providers",
+            return_value=[],
         ) as provider_info:
             first = ama.FunctionToolExecutor._get_runtime_computer_tools(
                 "sandbox", tool_mgr, "provider_a"

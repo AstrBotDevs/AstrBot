@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from typing import Any
 
@@ -23,6 +24,26 @@ def resolve_sandbox_provider_bindings(
     return provider_info, tools
 
 
+def resolve_all_sandbox_provider_bindings(
+    tool_mgr: Any,
+    providers_lookup: Callable[[], list[dict]],
+) -> list[Any]:
+    """Return all active provider-specific tools annotated with provider scope."""
+    tools: list[Any] = []
+    seen_names: set[str] = set()
+    for provider_info in providers_lookup():
+        provider_id = _normalize_provider_id(provider_info.get("provider_id"))
+        if not provider_id:
+            continue
+        for tool_name in provider_info.get("tool_names", []):
+            tool = tool_mgr.get_func(tool_name)
+            if not tool or not getattr(tool, "active", True) or tool.name in seen_names:
+                continue
+            tools.append(_with_sandbox_provider_description(tool, provider_id))
+            seen_names.add(tool.name)
+    return tools
+
+
 def resolve_effective_sandbox_provider_id(
     session_id: str,
     fallback_provider_id: str | None,
@@ -41,10 +62,21 @@ def tool_matches_sandbox_provider(
     tool_provider = getattr(tool, "sandbox_provider_id", None)
     if not tool_provider:
         return True
-    if runtime != "sandbox":
-        return False
-    normalized_provider_id = _normalize_provider_id(provider_id)
-    return str(tool_provider).lower() == normalized_provider_id
+    return runtime == "sandbox"
+
+
+def _with_sandbox_provider_description(tool: Any, provider_id: str) -> Any:
+    scoped_tool = copy.copy(tool)
+    scoped_tool.sandbox_provider_id = provider_id
+    marker = f"[Sandbox provider-specific tool: {provider_id}]"
+    description = str(getattr(scoped_tool, "description", "") or "")
+    if marker not in description:
+        scoped_tool.description = (
+            f"{marker} This tool only works when the current sandbox uses provider "
+            f"'{provider_id}'. If the current sandbox uses another provider, switch or "
+            f"create a '{provider_id}' sandbox first. {description}"
+        ).strip()
+    return scoped_tool
 
 
 def _normalize_provider_id(provider_id: str | None) -> str:

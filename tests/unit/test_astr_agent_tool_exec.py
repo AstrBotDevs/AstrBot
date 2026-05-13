@@ -226,7 +226,7 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
 
 
 @pytest.mark.asyncio
-async def test_build_handoff_toolset_prefers_current_sandbox_provider(
+async def test_build_handoff_toolset_includes_all_provider_tools(
     monkeypatch: pytest.MonkeyPatch,
 ):
     from astrbot.core.agent.tool import FunctionTool
@@ -309,7 +309,11 @@ async def test_build_handoff_toolset_prefers_current_sandbox_provider(
         assert toolset is not None
         assert "astrbot_list_sandbox_providers" in toolset.names()
         assert "provider_b_tool" in toolset.names()
-        assert "provider_a_screenshot" not in toolset.names()
+        assert "provider_a_screenshot" in toolset.names()
+        assert (
+            "Sandbox provider-specific tool: provider_a"
+            in toolset.get_tool("provider_a_screenshot").description
+        )
     finally:
         llm_tools.func_list = previous_tools
         sandbox_manager.providers = previous_providers
@@ -317,7 +321,7 @@ async def test_build_handoff_toolset_prefers_current_sandbox_provider(
 
 
 @pytest.mark.asyncio
-async def test_build_handoff_toolset_does_not_use_configured_provider_without_current_sandbox(
+async def test_build_handoff_toolset_includes_provider_tools_without_current_sandbox(
     monkeypatch: pytest.MonkeyPatch,
 ):
     from astrbot.core.agent.tool import FunctionTool
@@ -368,7 +372,7 @@ async def test_build_handoff_toolset_does_not_use_configured_provider_without_cu
         toolset = FunctionToolExecutor._build_handoff_toolset(run_context, None)
         assert toolset is not None
         assert "astrbot_list_sandbox_providers" in toolset.names()
-        assert "provider_a_screenshot" not in toolset.names()
+        assert "provider_a_screenshot" in toolset.names()
     finally:
         llm_tools.func_list = previous_tools
         sandbox_manager.providers = previous_providers

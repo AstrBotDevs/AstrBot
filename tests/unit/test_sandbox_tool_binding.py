@@ -1,4 +1,5 @@
 from astrbot.core.computer.sandbox_tool_binding import (
+    resolve_all_sandbox_provider_bindings,
     resolve_effective_sandbox_provider_id,
     resolve_sandbox_provider_bindings,
     tool_matches_sandbox_provider,
@@ -48,6 +49,23 @@ def test_resolve_sandbox_provider_bindings_uses_lookup_and_filters_inactive_tool
         "tool_names": ["active", "inactive", "missing"],
     }
     assert [tool.name for tool in tools] == ["active"]
+
+
+def test_resolve_all_sandbox_provider_bindings_marks_provider_scope():
+    provider_tool = FakeTool("provider_tool", sandbox_provider_id="provider_a")
+    provider_tool.description = "Provider action."
+    tool_mgr = FakeToolMgr({"provider_tool": provider_tool})
+
+    tools = resolve_all_sandbox_provider_bindings(
+        tool_mgr,
+        lambda: [{"provider_id": "provider_a", "tool_names": ["provider_tool"]}],
+    )
+
+    assert [tool.name for tool in tools] == ["provider_tool"]
+    assert tools[0] is not provider_tool
+    assert provider_tool.description == "Provider action."
+    assert "Sandbox provider-specific tool: provider_a" in tools[0].description
+    assert "current sandbox uses provider 'provider_a'" in tools[0].description
 
 
 def test_resolve_effective_sandbox_provider_id_prefers_current_provider_lookup():

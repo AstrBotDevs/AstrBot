@@ -22,7 +22,7 @@ from astrbot.core.astr_main_agent_resources import (
 )
 from astrbot.core.computer import computer_client
 from astrbot.core.computer.sandbox_tool_binding import (
-    resolve_sandbox_provider_bindings,
+    resolve_all_sandbox_provider_bindings,
     tool_matches_sandbox_provider,
 )
 from astrbot.core.cron.events import CronMessageEvent
@@ -280,10 +280,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 edit_tool.name: edit_tool,
                 grep_tool.name: grep_tool,
             }
-            _provider_info, provider_tools = resolve_sandbox_provider_bindings(
-                booter,
+            provider_tools = resolve_all_sandbox_provider_bindings(
                 tool_mgr,
-                computer_client.get_sandbox_provider_info,
+                computer_client.list_sandbox_providers,
             )
             for provider_tool in provider_tools:
                 tools[provider_tool.name] = provider_tool
@@ -319,9 +318,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
-        current_provider = computer_client.get_current_sandbox_provider_id(
-            event.unified_msg_origin
-        )
         tool_mgr = (
             ctx.get_llm_tool_manager()
             if hasattr(ctx, "get_llm_tool_manager")
@@ -330,7 +326,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
             tool_mgr,
-            current_provider,
         )
 
         # Keep persona semantics aligned with the main agent: tools=None means
@@ -341,7 +336,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 if isinstance(registered_tool, HandoffTool):
                     continue
                 if registered_tool.active and tool_matches_sandbox_provider(
-                    registered_tool, runtime, current_provider
+                    registered_tool, runtime, None
                 ):
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():

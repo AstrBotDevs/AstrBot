@@ -24,13 +24,15 @@ from astrbot.core.astr_main_agent_resources import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
-    SANDBOX_GUI_PROMPT,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.computer import computer_client
-from astrbot.core.computer.sandbox_tool_binding import tool_matches_sandbox_provider
+from astrbot.core.computer.sandbox_tool_binding import (
+    resolve_all_sandbox_provider_bindings,
+    tool_matches_sandbox_provider,
+)
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
@@ -414,8 +416,8 @@ def _tool_matches_current_sandbox_provider(
     tool: FunctionTool, cfg: dict, session_id: str
 ) -> bool:
     runtime = str(cfg.get("computer_use_runtime", "local"))
-    current_provider = computer_client.get_current_sandbox_provider_id(session_id)
-    return tool_matches_sandbox_provider(tool, runtime, current_provider)
+    del session_id
+    return tool_matches_sandbox_provider(tool, runtime, None)
 
 
 def _filter_tools_for_current_config(
@@ -1029,8 +1031,6 @@ def _apply_sandbox_tools(
         req.func_tool = ToolSet()
     if req.system_prompt is None:
         req.system_prompt = ""
-    current_provider = computer_client.get_current_sandbox_provider_id(req.session_id)
-
     tool_mgr = llm_tools
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSandboxesTool))
@@ -1052,25 +1052,14 @@ def _apply_sandbox_tools(
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    from astrbot.core.computer.sandbox_tool_binding import (
-        resolve_sandbox_provider_bindings,
-    )
-
-    provider_info, provider_tools = resolve_sandbox_provider_bindings(
-        current_provider,
+    provider_tools = resolve_all_sandbox_provider_bindings(
         tool_mgr,
-        computer_client.get_sandbox_provider_info,
+        computer_client.list_sandbox_providers,
     )
     for tool in provider_tools:
         req.func_tool.add_tool(tool)
 
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
-    provider_system_prompt = (provider_info or {}).get("system_prompt", "").strip()
-    provider_capabilities = set((provider_info or {}).get("capabilities") or [])
-    if provider_capabilities.intersection({"gui", "screenshot", "mouse", "keyboard"}):
-        req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_GUI_PROMPT}\n"
-    if provider_system_prompt:
-        req.system_prompt = f"{req.system_prompt or ''}\n{provider_system_prompt}\n"
 
 
 def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> None:
