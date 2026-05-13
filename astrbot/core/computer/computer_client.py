@@ -504,7 +504,8 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             for skill_name, skill_dir in sync_skill_dirs:
                 shutil.copytree(skill_dir, bundle_root / skill_name)
             shutil.make_archive(str(zip_base), "zip", str(bundle_root))
-            remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
+            # 强制使用沙盒支持的正斜杠 /，彻底解决路径分隔符问题
+            remote_zip = f"{SANDBOX_SKILLS_ROOT}/skills.zip"
             logger.info("Uploading skills bundle to sandbox...")
             await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
             upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
