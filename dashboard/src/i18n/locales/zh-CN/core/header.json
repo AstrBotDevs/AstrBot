@@ -23,6 +23,7 @@
     "tabs": {
       "release": "😊 正式版"
     },
+    "advancedSettings": "高级设置",
     "updateToLatest": "更新到最新版本",
     "preRelease": "预发布",
     "preReleaseWarning": {
@@ -45,7 +46,19 @@
       "switch": "切换"
     },
     "releaseNotes": {
-      "title": "更新日志"
+      "title": "更新日志",
+      "latestLabel": "最新版本"
+    },
+    "progress": {
+      "target": "目标版本：",
+      "preparing": "正在准备更新...",
+      "dashboard": "下载 WebUI",
+      "core": "下载项目代码",
+      "dependencies": "正在更新依赖...",
+      "restart": "正在准备重启...",
+      "restarting": "正在重启 AstrBot",
+      "completed": "更新完成",
+      "failed": "更新失败"
     },
     "redirectConfirm": {
       "title": "即将跳转",
@@ -75,6 +88,7 @@
       "currentVersion": "当前版本",
       "hasNewVersion": "有新版本！",
       "isLatest": "已经是最新版本了。",
+      "fallback": "完整更新异常时，可仅重新下载 WebUI 作为兜底。",
       "downloadAndUpdate": "下载并更新"
     }
   },

@@ -1738,13 +1738,22 @@ async def test_do_update(
     # Use a temporary path for the mock update to avoid side effects
     temp_release_dir = tmp_path_factory.mktemp("release")
     release_path = temp_release_dir / "astrbot"
+    calls = []
 
     async def mock_update(*args, **kwargs):
         """Mocks the update process by creating a directory in the temp path."""
+        calls.append("core")
+        callback = kwargs.get("progress_callback")
+        if callback:
+            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
         os.makedirs(release_path, exist_ok=True)
 
     async def mock_download_dashboard(*args, **kwargs):
         """Mocks the dashboard download to prevent network access."""
+        calls.append("dashboard")
+        callback = kwargs.get("progress_callback")
+        if callback:
+            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
         return
 
     async def mock_pip_install(*args, **kwargs):
@@ -1764,12 +1773,22 @@ async def test_do_update(
     response = await test_client.post(
         "/api/update/do",
         headers=authenticated_header,
-        json={"version": "v3.4.0", "reboot": False},
+        json={"version": "v3.4.0", "reboot": False, "progress_id": "test-progress"},
     )
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
     assert os.path.exists(release_path)
+    assert calls[:2] == ["dashboard", "core"]
+
+    progress_response = await test_client.get(
+        "/api/update/progress?id=test-progress",
+        headers=authenticated_header,
+    )
+    progress_data = await progress_response.get_json()
+    assert progress_data["status"] == "ok"
+    assert progress_data["data"]["status"] == "success"
+    assert progress_data["data"]["overall_percent"] == 100
 
 
 @pytest.mark.asyncio

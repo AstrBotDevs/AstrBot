@@ -1,4 +1,5 @@
 import base64
+import inspect
 import logging
 import os
 import shutil
@@ -147,7 +148,20 @@ async def download_image_by_url(
         raise e
 
 
-async def download_file(url: str, path: str, show_progress: bool = False) -> None:
+async def _emit_download_progress(progress_callback, payload: dict) -> None:
+    if not progress_callback:
+        return
+    result = progress_callback(payload)
+    if inspect.isawaitable(result):
+        await result
+
+
+async def download_file(
+    url: str,
+    path: str,
+    show_progress: bool = False,
+    progress_callback=None,
+) -> None:
     """从指定 url 下载文件到指定路径 path"""
     try:
         ssl_context = ssl.create_default_context(
@@ -168,6 +182,16 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 start_time = time.time()
                 if show_progress:
                     print(f"Downloading: {url} | Size: {total_size / 1024:.2f} KB")
+                await _emit_download_progress(
+                    progress_callback,
+                    {
+                        "url": url,
+                        "downloaded": 0,
+                        "total": total_size,
+                        "percent": 0,
+                        "speed": 0,
+                    },
+                )
                 with open(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
@@ -175,17 +199,38 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                             break
                         f.write(chunk)
                         downloaded_size += len(chunk)
+                        elapsed_time = (
+                            time.time() - start_time
+                            if time.time() - start_time > 0
+                            else 1
+                        )
+                        speed = downloaded_size / 1024 / elapsed_time  # KB/s
+                        percent = downloaded_size / total_size if total_size > 0 else 0
+                        await _emit_download_progress(
+                            progress_callback,
+                            {
+                                "url": url,
+                                "downloaded": downloaded_size,
+                                "total": total_size,
+                                "percent": percent,
+                                "speed": speed,
+                            },
+                        )
                         if show_progress:
-                            elapsed_time = (
-                                time.time() - start_time
-                                if time.time() - start_time > 0
-                                else 1
-                            )
-                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             print(
-                                f"\rProgress: {downloaded_size / total_size:.2%} Speed: {speed:.2f} KB/s",
+                                f"\rProgress: {percent:.2%} Speed: {speed:.2f} KB/s",
                                 end="",
                             )
+                await _emit_download_progress(
+                    progress_callback,
+                    {
+                        "url": url,
+                        "downloaded": downloaded_size,
+                        "total": total_size,
+                        "percent": 1,
+                        "speed": 0,
+                    },
+                )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
@@ -208,6 +253,16 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 start_time = time.time()
                 if show_progress:
                     print(f"Size: {total_size / 1024:.2f} KB | URL: {url}")
+                await _emit_download_progress(
+                    progress_callback,
+                    {
+                        "url": url,
+                        "downloaded": 0,
+                        "total": total_size,
+                        "percent": 0,
+                        "speed": 0,
+                    },
+                )
                 with open(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
@@ -215,13 +270,38 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                             break
                         f.write(chunk)
                         downloaded_size += len(chunk)
+                        elapsed_time = (
+                            time.time() - start_time
+                            if time.time() - start_time > 0
+                            else 1
+                        )
+                        speed = downloaded_size / 1024 / elapsed_time  # KB/s
+                        percent = downloaded_size / total_size if total_size > 0 else 0
+                        await _emit_download_progress(
+                            progress_callback,
+                            {
+                                "url": url,
+                                "downloaded": downloaded_size,
+                                "total": total_size,
+                                "percent": percent,
+                                "speed": speed,
+                            },
+                        )
                         if show_progress:
-                            elapsed_time = time.time() - start_time
-                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             print(
-                                f"\rProgress: {downloaded_size / total_size:.2%} Speed: {speed:.2f} KB/s",
+                                f"\rProgress: {percent:.2%} Speed: {speed:.2f} KB/s",
                                 end="",
                             )
+                await _emit_download_progress(
+                    progress_callback,
+                    {
+                        "url": url,
+                        "downloaded": downloaded_size,
+                        "total": total_size,
+                        "percent": 1,
+                        "speed": 0,
+                    },
+                )
     if show_progress:
         print()
 
@@ -268,6 +348,7 @@ async def download_dashboard(
     latest: bool = True,
     version: str | None = None,
     proxy: str | None = None,
+    progress_callback=None,
 ) -> None:
     """下载管理面板文件"""
     if path is None:
@@ -286,6 +367,7 @@ async def download_dashboard(
                 dashboard_release_url,
                 str(zip_path),
                 show_progress=True,
+                progress_callback=progress_callback,
             )
         except BaseException as _:
             if latest:
@@ -312,12 +394,18 @@ async def download_dashboard(
                 dashboard_release_url,
                 str(zip_path),
                 show_progress=True,
+                progress_callback=progress_callback,
             )
     else:
         url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
         logger.info(f"Downloading AstrBot WebUI from {url}")
         if proxy:
             url = f"{proxy}/{url}"
-        await download_file(url, str(zip_path), show_progress=True)
+        await download_file(
+            url,
+            str(zip_path),
+            show_progress=True,
+            progress_callback=progress_callback,
+        )
     with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(extract_path)

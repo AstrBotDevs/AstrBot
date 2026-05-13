@@ -143,7 +143,14 @@ class AstrBotUpdator(RepoZipUpdator):
     async def get_releases(self) -> list:
         return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
 
-    async def update(self, reboot=False, latest=True, version=None, proxy="") -> None:
+    async def update(
+        self,
+        reboot=False,
+        latest=True,
+        version=None,
+        proxy="",
+        progress_callback=None,
+    ) -> None:
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
 
@@ -175,7 +182,11 @@ class AstrBotUpdator(RepoZipUpdator):
             file_url = f"{proxy}/{file_url}"
 
         try:
-            await self._download_file(file_url, "temp.zip")
+            await self._download_file(
+                file_url,
+                "temp.zip",
+                progress_callback=progress_callback,
+            )
             logger.info("下载 AstrBot Core 更新文件完成，正在执行解压...")
             self.unzip_file("temp.zip", self.MAIN_PATH)
         except BaseException as e:

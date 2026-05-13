@@ -1,6 +1,8 @@
+import inspect
 import os
 import re
 import shutil
+import time
 import zipfile
 from pathlib import Path
 from typing import NoReturn
@@ -53,18 +55,64 @@ class RepoZipUpdator:
         return body[:max_len] + "...[truncated]"
 
     async def _download_file(
-        self, url: str, path: str, timeout: float = 1800.0
+        self,
+        url: str,
+        path: str,
+        timeout: float = 1800.0,
+        progress_callback=None,
     ) -> None:
         target_path = Path(path)
         ensure_dir(target_path.parent)
+
+        async def _emit_progress(payload: dict) -> None:
+            if not progress_callback:
+                return
+            result = progress_callback(payload)
+            if inspect.isawaitable(result):
+                await result
 
         try:
             async with self._create_httpx_client(timeout=timeout) as client:
                 async with client.stream("GET", url) as response:
                     response.raise_for_status()
+                    headers = getattr(response, "headers", {})
+                    total_size = int(headers.get("content-length", 0))
+                    downloaded_size = 0
+                    start_time = time.time()
+                    await _emit_progress(
+                        {
+                            "url": url,
+                            "downloaded": 0,
+                            "total": total_size,
+                            "percent": 0,
+                            "speed": 0,
+                        },
+                    )
                     with target_path.open("wb") as file:
                         async for chunk in response.aiter_bytes(8192):
                             file.write(chunk)
+                            downloaded_size += len(chunk)
+                            elapsed_time = max(time.time() - start_time, 1)
+                            await _emit_progress(
+                                {
+                                    "url": url,
+                                    "downloaded": downloaded_size,
+                                    "total": total_size,
+                                    "percent": downloaded_size / total_size
+                                    if total_size > 0
+                                    else 0,
+                                    "speed": downloaded_size / 1024 / elapsed_time,
+                                },
+                            )
+                    await _emit_progress(
+                        {
+                            "url": url,
+                            "downloaded": downloaded_size,
+                            "total": total_size,
+                            "percent": 1,
+                            "speed": 0,
+                        },
+                    )
         except Exception as e:
             logger.error(f"下载文件失败: {url} -> {target_path}, 错误: {e}")
             if self.rm_on_error and target_path.exists():
