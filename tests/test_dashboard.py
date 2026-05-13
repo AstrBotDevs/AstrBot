@@ -414,6 +414,48 @@ async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
 
 
 @pytest.mark.asyncio
+async def test_legacy_md5_login_failure_includes_upgrade_faq_hint(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    legacy_password = "AstrbotLegacy123"
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["username"] = "astrbot"
+        core_lifecycle_td.astrbot_config["dashboard"]["password"] = (
+            hash_legacy_dashboard_password(legacy_password)
+        )
+        core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
+        await set_password_storage_upgraded(
+            core_lifecycle_td.db,
+            core_lifecycle_td.astrbot_config,
+            False,
+        )
+
+        response = await test_client.post(
+            "/api/auth/login",
+            json={"username": "astrbot", "password": "WrongPassword123"},
+        )
+        data = await response.get_json()
+
+        assert data["status"] == "error"
+        assert data["message"].startswith("Incorrect username or password.")
+        assert "用户名或密码错误" in data["message"]
+        assert "https://docs.astrbot.app/en/faq.html" in data["message"]
+        assert "https://docs.astrbot.app/faq.html" in data["message"]
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
 async def test_password_storage_flag_repairs_after_rollback_clears_pbkdf2(
     app: Quart,
     core_lifecycle_td: AstrBotCoreLifecycle,
