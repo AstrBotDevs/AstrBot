@@ -948,7 +948,9 @@ async def _decorate_llm_request(
     _apply_workspace_extra_prompt(event, req)
 
 
-def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
+def _plugin_tool_fix(
+    event: AstrMessageEvent, req: ProviderRequest, cfg: dict | None = None
+) -> None:
     """根据事件中的插件设置，过滤请求中的工具列表。
 
     注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
@@ -975,6 +977,10 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
             if plugin.name in event.plugins_name or plugin.reserved:
                 new_tool_set.add_tool(tool)
         req.func_tool = new_tool_set
+
+    if req.func_tool is not None and cfg is not None:
+        session_id = req.session_id or event.unified_msg_origin
+        req.func_tool = _filter_tools_for_current_config(req.func_tool, cfg, session_id)
 
 
 async def _handle_webchat(
@@ -1380,7 +1386,7 @@ async def build_main_agent(
     if not req.session_id:
         req.session_id = event.unified_msg_origin
 
-    _plugin_tool_fix(event, req)
+    _plugin_tool_fix(event, req, config.provider_settings)
     await _apply_web_search_tools(event, req, plugin_context)
 
     if config.llm_safety_mode:

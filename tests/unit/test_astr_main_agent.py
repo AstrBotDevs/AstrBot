@@ -1115,6 +1115,87 @@ class TestPluginToolFix:
 
         assert "transfer_to_demo_agent" in req.func_tool.names()
 
+    def test_plugin_tool_fix_filters_provider_specific_tools_without_current_sandbox(
+        self, mock_event
+    ):
+        module = ama
+        provider_tool = FunctionTool(
+            name="astrbot_cua_screenshot",
+            description="provider-specific",
+            parameters={"type": "object", "properties": {}},
+            handler_module_path=None,
+            active=True,
+        )
+        provider_tool.sandbox_provider_id = "cua"
+        generic_tool = FunctionTool(
+            name="astrbot_list_sandboxes",
+            description="generic",
+            parameters={"type": "object", "properties": {}},
+            handler_module_path=None,
+            active=True,
+        )
+
+        tool_set = ToolSet()
+        tool_set.add_tool(provider_tool)
+        tool_set.add_tool(generic_tool)
+        req = ProviderRequest(func_tool=tool_set, session_id="session-a")
+        mock_event.plugins_name = ["other_plugin"]
+        mock_event.unified_msg_origin = "session-a"
+
+        with patch("astrbot.core.astr_main_agent.star_map"), patch(
+            "astrbot.core.astr_main_agent.resolve_effective_sandbox_provider_id",
+            return_value="",
+        ):
+            module._plugin_tool_fix(
+                mock_event,
+                req,
+                {"computer_use_runtime": "sandbox"},
+            )
+
+        assert "astrbot_list_sandboxes" in req.func_tool.names()
+        assert "astrbot_cua_screenshot" not in req.func_tool.names()
+
+    def test_plugin_tool_fix_keeps_only_current_provider_specific_tools(
+        self, mock_event
+    ):
+        module = ama
+        cua_tool = FunctionTool(
+            name="astrbot_cua_screenshot",
+            description="cua",
+            parameters={"type": "object", "properties": {}},
+            handler_module_path=None,
+            active=True,
+        )
+        cua_tool.sandbox_provider_id = "cua"
+        neo_tool = FunctionTool(
+            name="astrbot_execute_browser",
+            description="neo",
+            parameters={"type": "object", "properties": {}},
+            handler_module_path=None,
+            active=True,
+        )
+        neo_tool.sandbox_provider_id = "shipyard_neo"
+
+        tool_set = ToolSet()
+        tool_set.add_tool(cua_tool)
+        tool_set.add_tool(neo_tool)
+        req = ProviderRequest(func_tool=tool_set, session_id="session-a")
+        mock_event.plugins_name = ["other_plugin"]
+        mock_event.unified_msg_origin = "session-a"
+
+        with patch("astrbot.core.astr_main_agent.star_map"), patch(
+            "astrbot.core.astr_main_agent.resolve_effective_sandbox_provider_id",
+            return_value="cua",
+        ):
+            module._plugin_tool_fix(
+                mock_event,
+                req,
+                {"computer_use_runtime": "sandbox"},
+            )
+
+        assert "astrbot_cua_screenshot" in req.func_tool.names()
+        assert "astrbot_execute_browser" not in req.func_tool.names()
+
 
 class TestBuildMainAgent:
     """Tests for build_main_agent function."""
