@@ -1657,7 +1657,9 @@ class PluginManager:
             is_reserved=plugin.reserved,
         )
 
-    async def update_plugin(self, plugin_name: str, proxy="") -> None:
+    async def update_plugin(
+        self, plugin_name: str, proxy="", download_url: str = ""
+    ) -> None:
         """升级一个插件"""
         plugin = self.context.get_registered_star(plugin_name)
         if not plugin:
@@ -1665,7 +1667,7 @@ class PluginManager:
         if plugin.reserved:
             raise Exception("该插件是 AstrBot 保留插件，无法更新。")
 
-        await self.updator.update(plugin, proxy=proxy)
+        await self.updator.update(plugin, proxy=proxy, download_url=download_url)
         if plugin.root_dir_name:
             plugin_dir_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
             await self._ensure_plugin_requirements(
@@ -1796,6 +1798,7 @@ class PluginManager:
             dir=self.plugin_store_path, prefix="plugin_upload_"
         )
         temp_desti_dir = desti_dir
+        skip_failed_tracking = False
 
         try:
             self.updator.unzip_file(zip_file_path, desti_dir)
@@ -1805,6 +1808,7 @@ class PluginManager:
                 metadata_dir_name,
             )
             if target_plugin_path != desti_dir and os.path.exists(target_plugin_path):
+                skip_failed_tracking = True
                 raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
             if target_plugin_path != desti_dir:
                 os.rename(desti_dir, target_plugin_path)
@@ -1868,17 +1872,20 @@ class PluginManager:
 
             return plugin_info
         except Exception as e:
-            self._track_failed_install_dir(
-                dir_name=dir_name,
-                plugin_path=desti_dir,
-                error=e,
-            )
+            if not skip_failed_tracking:
+                self._track_failed_install_dir(
+                    dir_name=dir_name,
+                    plugin_path=desti_dir,
+                    error=e,
+                )
             logger.warning(
                 f"安装插件 {dir_name} 失败，插件安装目录：{desti_dir}",
             )
             raise
         finally:
-            if temp_desti_dir != desti_dir and os.path.isdir(temp_desti_dir):
+            if (skip_failed_tracking or temp_desti_dir != desti_dir) and os.path.isdir(
+                temp_desti_dir
+            ):
                 try:
                     remove_dir(temp_desti_dir)
                 except Exception as e:

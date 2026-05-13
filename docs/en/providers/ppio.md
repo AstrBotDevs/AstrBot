@@ -1,43 +1,41 @@
-# 接入 PPIO 派欧云
+# Connect PPIO Cloud
 
-PPIO 派欧云是中国领先的独立分布式云计算服务商，您可以在派欧云上使用稳定、低价甚至免费的模型服务。
+PPIO Cloud is a leading independent distributed cloud computing provider in China, offering stable, affordable, and even free model services.
 
-## 准备
+## Preparation
 
-打开 [PPIO 派欧云官网](https://ppio.cn/user/register?invited_by=AIOONE)，并注册账户（通过此链接注册的账户将会获得 15 元人民币的代金券）。
+Open the [PPIO Cloud website](https://ppio.cn/user/register?invited_by=AIOONE) and register an account (accounts registered through this link will receive a ¥15 voucher).
 
-进入 [模型 API 服务](https://ppio.cn/model-api/console)，找到你想接入的模型。你可以通过筛选器选择不同厂商或者免费的模型。
+Go to [Model API Service](https://ppio.cn/model-api/console) and find the model you want to use. You can filter by provider or select free models.
 
 ![image](https://files.astrbot.app/docs/source/images/ppio/image-1.png)
 
-找到你想要接入的模型后，点击模型卡片，侧边会展开一个模型详情卡片，找到下方的 API 接入指南，如果您还没创建过 Key 可以点击创建。
+Once you find the model, click its card to expand a detail panel on the right. Scroll down to the API integration guide — if you haven't created a key yet, click to create one.
 
 ![image](https://files.astrbot.app/docs/source/images/ppio/image-3.png)
 
-打开 AstrBot 控制台 -> 服务提供商页面，点击新增提供商，找到并点击 `PPIO派欧云`(需要版本 >= 3.5.10，旧版本也可使用，见下文)。
+Open the AstrBot dashboard → Service Providers page, click **Add Provider**, find and click `PPIO Cloud` (requires version >= 3.5.10; older versions are also supported, see below).
 
 ![image](https://files.astrbot.app/docs/source/images/ppio/image.png)
 
-将 API Key 和模型名称填入对话框表单，点击保存，即可完成创建。
+Fill in the API Key and model name in the dialog form, then click **Save** to complete the setup.
 
 > [!TIP]
-> 如果您是 AstrBot 旧版本（< 3.5.10）的用户，请打开 AstrBot 控制台 -> 服务提供商页面，点击新增提供商，找到 `OpenAI`，点击进入。
-> 1. 将 ID 命名为 `ppio`（随意）
-> 2. 然后将 `API Base URL` 设置为 `https://api.ppinfra.com/v3/openai`
-> 3. 然后将 API Key 和模型名称填入对话框表单，点击保存，即可完成创建。
+> If you are using an older version of AstrBot (< 3.5.10), open the AstrBot dashboard → Service Providers page, click **Add Provider**, find `OpenAI`, and click to enter.
+> 1. Set the ID to `ppio` (any name works)
+> 2. Set `API Base URL` to `https://api.ppinfra.com/v3/openai`
+> 3. Fill in the API Key and model name in the dialog form, then click **Save** to complete the setup.
 
+## Usage
 
-## 使用
+Send the `/provider` command to the bot to switch to the PPIO Cloud provider you just added.
 
-对机器人输入 `/provider` 指令，将提供商切换到刚刚添加的 PPIO 派欧云提供商，即可使用。
+## FAQ
 
-## 常见问题
-
-#### 显示 `400` 错误
+#### `400` Error
 
 ```log
 Error code: 400 - {'code': 400, 'message': '"auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set', 'type': 'BadRequestError'}
 ```
 
-
-请暂时使用 `/tool off_all` 禁用所有的函数调用工具即可使用，或者换用其他模型。
+Temporarily disable all function calling tools with `/tool off_all`, or switch to a different model.
