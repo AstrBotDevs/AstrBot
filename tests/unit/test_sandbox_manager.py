@@ -1789,6 +1789,7 @@ async def test_manager_cleanup_destroys_temporary_sandboxes_and_keeps_persistent
     manager, provider = _manager(tmp_path)
     temporary = await manager.create_sandbox(None, "session-a", "generic")
     persistent = await manager.create_sandbox(None, "session-b", "generic")
+    persistent_booter = manager.session_booter[persistent["sandbox_id"]]
     manager.update_sandbox_config(
         persistent["sandbox_id"],
         idle_timeout=None,
@@ -1802,12 +1803,14 @@ async def test_manager_cleanup_destroys_temporary_sandboxes_and_keeps_persistent
     assert manager.registry.get_sandbox(persistent["sandbox_id"])["status"] == "running"
     assert len(provider.destroyed) == 1
     assert provider.destroyed[0][1] == temporary["sandbox_id"]
+    assert persistent_booter.shutdown_calls == 1
 
 
 @pytest.mark.asyncio
 async def test_manager_cleanup_clears_persistent_runtime_memory_state(tmp_path):
     manager, provider = _manager(tmp_path)
     persistent = await manager.create_sandbox(None, "session-a", "generic")
+    persistent_booter = manager.session_booter[persistent["sandbox_id"]]
     manager.update_sandbox_config(
         persistent["sandbox_id"],
         idle_timeout=None,
@@ -1824,6 +1827,7 @@ async def test_manager_cleanup_clears_persistent_runtime_memory_state(tmp_path):
     assert persistent_id not in manager.idle_state
     assert persistent_id not in manager.boot_locks
     assert provider.destroyed == []
+    assert persistent_booter.shutdown_calls == 1
 
 
 def test_manager_update_sandbox_config_rejects_duplicate_name(tmp_path):

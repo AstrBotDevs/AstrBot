@@ -1502,6 +1502,16 @@ class SandboxManager:
         for record in managed_records:
             sandbox_id = record["sandbox_id"]
             if record.get("retention_policy") == "persistent":
+                booter = self.session_booter.get(sandbox_id)
+                if booter is not None:
+                    try:
+                        await booter.shutdown()
+                    except Exception as shutdown_err:
+                        logger.warning(
+                            "[Computer] Failed to close persistent sandbox runtime %s: %s",
+                            sandbox_id,
+                            shutdown_err,
+                        )
                 self.clear_runtime_state_and_drop_lock(sandbox_id)
                 continue
             provider = None

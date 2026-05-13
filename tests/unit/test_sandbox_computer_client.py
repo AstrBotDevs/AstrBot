@@ -7,11 +7,14 @@ from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 
 
 class FakeBooter:
+    def __init__(self):
+        self.shutdown_calls = 0
+
     async def available(self):
         return True
 
     async def shutdown(self):
-        pass
+        self.shutdown_calls += 1
 
 
 class FakeProvider:
@@ -445,12 +448,6 @@ async def test_unregister_provider_force_closes_persistent_booters(
     from astrbot.core.computer.sandbox_manager import SandboxManager
     from astrbot.core.computer.sandbox_registry import SandboxRegistry
 
-    closed = []
-
-    class PersistentBooter:
-        async def shutdown(self):
-            closed.append("shutdown")
-
     manager = SandboxManager(
         registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
         providers={},
@@ -469,7 +466,8 @@ async def test_unregister_provider_force_closes_persistent_booters(
         retention_policy="persistent",
         status="running",
     )
-    manager.session_booter["generic-1"] = PersistentBooter()
+    persistent_booter = FakeBooter()
+    manager.session_booter["generic-1"] = persistent_booter
 
     computer_client.unregister_sandbox_provider("generic", force=True)
     await asyncio.sleep(0)
@@ -478,7 +476,7 @@ async def test_unregister_provider_force_closes_persistent_booters(
     assert record is not None
     assert record["retention_policy"] == "persistent"
     assert "generic-1" not in manager.session_booter
-    assert closed == []
+    assert persistent_booter.shutdown_calls == 1
 
 
 def test_list_sandbox_providers_is_sorted(monkeypatch, tmp_path):
@@ -595,6 +593,7 @@ async def test_cleanup_sandbox_provider_destroys_temporary_and_preserves_persist
     assert manager.registry.get_sandbox("generic-temp") is None
     assert manager.registry.get_sandbox("generic-persistent") is not None
     assert destroyed == ["generic-temp"]
+    assert persistent_booter.shutdown_calls == 1
 
 
 @pytest.mark.asyncio

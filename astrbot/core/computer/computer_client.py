@@ -125,9 +125,11 @@ def _unregister_provider_tools(provider_id: str) -> None:
 def _cleanup_provider_sandboxes_sync(provider_id: str) -> None:
     """Synchronous cleanup of a provider's managed sandboxes on unregister.
 
-    Registry records and in-memory state are removed immediately.  If a booter
-    is alive and an event loop is running, an async destroy_booter task is
-    spawned as a best-effort cleanup.
+    Temporary registry records and in-memory state are removed immediately.  If
+    a temporary booter is alive and an event loop is running, an async
+    destroy_booter task is spawned as a best-effort cleanup.  Persistent records
+    are preserved and their live booters are only shut down to close the current
+    runtime connection.
     """
     import asyncio
 
@@ -136,9 +138,15 @@ def _cleanup_provider_sandboxes_sync(provider_id: str) -> None:
             continue
         sandbox_id = record["sandbox_id"]
         if record.get("retention_policy") == "persistent":
-            sandbox_manager.session_booter.pop(sandbox_id, None)
+            booter = sandbox_manager.session_booter.pop(sandbox_id, None)
             sandbox_manager.clear_idle_state(sandbox_id)
             sandbox_manager.drop_boot_lock(sandbox_id)
+            if booter is not None:
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(_safe_shutdown_booter(booter, record))
+                except RuntimeError:
+                    pass  # no running event loop
             continue
         booter = sandbox_manager.session_booter.pop(sandbox_id, None)
         sandbox_manager.clear_idle_state(sandbox_id)
@@ -188,6 +196,8 @@ async def cleanup_sandbox_provider(provider_id: str) -> None:
         handled_sandbox_ids.add(sandbox_id)
         booter = _pop_live_booter(sandbox_id)
         if record.get("retention_policy") == "persistent":
+            if booter is not None:
+                await _safe_shutdown_booter(booter, record)
             preserved += 1
             continue
         if booter is not None and provider is not None:
