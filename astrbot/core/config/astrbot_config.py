@@ -15,31 +15,7 @@ from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 logger = logging.getLogger("astrbot")
 
-LEGACY_SANDBOX_PROVIDER_CONFIG_KEYS = {
-    "cua_api_key",
-    "cua_idle_timeout",
-    "cua_image",
-    "cua_local",
-    "cua_os_type",
-    "cua_telemetry_enabled",
-    "cua_ttl",
-    "shipyard_access_token",
-    "shipyard_endpoint",
-    "shipyard_max_sessions",
-    "shipyard_neo_access_token",
-    "shipyard_neo_endpoint",
-    "shipyard_neo_profile",
-    "shipyard_neo_ttl",
-    "shipyard_ttl",
-}
-
-LEGACY_SANDBOX_RUNTIME_IDS = {
-    "bay",
-    "boxlite",
-    "cua",
-    "shipyard",
-    "shipyard_neo",
-}
+CORE_COMPUTER_RUNTIME_IDS = {"local", "sandbox", "none"}
 
 
 class RateLimitStrategy(enum.Enum):
@@ -100,7 +76,6 @@ class AstrBotConfig(dict):
             )
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
-        has_new |= self._remove_legacy_sandbox_provider_config_keys(conf)
         has_new |= self._migrate_legacy_sandbox_runtime(conf)
         if (
             "dashboard" in conf
@@ -172,31 +147,18 @@ class AstrBotConfig(dict):
 
         return conf
 
-    def _remove_legacy_sandbox_provider_config_keys(self, conf: dict) -> bool:
-        sandbox_cfg = (
-            conf.get("provider_settings", {}).get("sandbox", {})
-            if isinstance(conf.get("provider_settings"), dict)
-            else {}
-        )
-        if not isinstance(sandbox_cfg, dict):
-            return False
-        removed = False
-        for key in LEGACY_SANDBOX_PROVIDER_CONFIG_KEYS:
-            if key in sandbox_cfg:
-                sandbox_cfg.pop(key, None)
-                logger.info("Config key removed: provider_settings.sandbox.%s", key)
-                removed = True
-        return removed
-
     def _migrate_legacy_sandbox_runtime(self, conf: dict) -> bool:
         provider_settings = conf.get("provider_settings")
         if not isinstance(provider_settings, dict):
             return False
 
         runtime = provider_settings.get("computer_use_runtime")
-        if runtime not in LEGACY_SANDBOX_RUNTIME_IDS:
+        if runtime in CORE_COMPUTER_RUNTIME_IDS or not runtime:
             return False
 
+        # Older configs stored sandbox provider IDs directly as the runtime.
+        # Preserve that value as the selected sandbox booter without teaching
+        # core about concrete provider names.
         sandbox_cfg = provider_settings.get("sandbox")
         if not isinstance(sandbox_cfg, dict):
             sandbox_cfg = {}

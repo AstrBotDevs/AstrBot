@@ -182,36 +182,6 @@ AstrBot 给每个沙盒环境限制最高 1 CPU 和 512 MB 内存。
 git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
 ```
 
-### BoxLite 驱动
-
-`BoxLite` 是一个更轻量的本地沙盒驱动，适合只需要 Shell、Python 和文件操作的场景，不提供浏览器或 GUI 专用工具。
-
-#### 安装 BoxLite 插件
-
-在配置 `BoxLite` 之前，请先把插件安装到 AstrBot 的插件目录，并保留 `Shipyard` 插件源码在同一目录树下：
-
-```bash
-git clone https://github.com/AstrBotDevs/astrbot_sandbox_boxlite.git data/plugins/astrbot_sandbox_boxlite
-git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard.git data/plugins/astrbot_sandbox_shipyard
-```
-
-然后重启 AstrBot，或者在插件管理页重新加载插件。
-
-#### 在 AstrBot 中配置 BoxLite
-
-打开 WebUI：
-
-- `配置 -> 普通配置 -> 使用电脑能力`
-
-然后设置：
-
-- `Computer Use Runtime` = `sandbox`
-- `沙盒驱动` = `BoxLite`
-
-`BoxLite` 当前没有额外的驱动级配置项，启用插件后即可使用。
-
-然后重启 AstrBot，或在插件管理页重新加载插件。
-
 如果您准备长期使用 `Shipyard Neo`，更推荐将它**单独部署在一台资源更充足的机器上**，例如您的 homelab、局域网服务器，或独立云主机，然后再让 AstrBot 远程接入 Bay。
 
 原因是：`Shipyard Neo` 在启用浏览器能力时需要运行较重的浏览器运行时。对于资源紧张的云服务器，把 AstrBot 和 `Shipyard Neo` 部署在同一台机器上，通常会让 CPU 和内存压力都比较大，稳定性和体验都不理想。
@@ -439,6 +409,36 @@ gc:
 AstrBot 会按请求的 `session_id` 缓存沙盒 booter。在主 Agent 默认流程下，这个 `session_id` 通常等于消息会话标识 `unified_msg_origin`。因此，同一消息会话的后续请求通常会复用同一个 Neo 沙盒；如果沙盒失效，AstrBot 会自动重建。
 
 关于 TTL 与数据持久化的更详细说明，请参考下文的“关于 `Shipyard Neo Sandbox TTL`”与“关于沙盒环境的数据持久化”小节。
+
+## BoxLite 驱动
+
+`BoxLite` 是一个更轻量的本地沙盒驱动，适合只需要 Shell、Python 和文件操作的场景，不提供浏览器或 GUI 专用工具。
+
+### 安装 BoxLite 插件
+
+在配置 `BoxLite` 之前，请先把插件安装到 AstrBot 的插件目录，并保留 `Shipyard` 插件源码在同一目录树下：
+
+```bash
+git clone https://github.com/AstrBotDevs/astrbot_sandbox_boxlite.git data/plugins/astrbot_sandbox_boxlite
+git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard.git data/plugins/astrbot_sandbox_shipyard
+```
+
+然后重启 AstrBot，或者在插件管理页重新加载插件。
+
+### 在 AstrBot 中配置 BoxLite
+
+打开 WebUI：
+
+- `配置 -> 普通配置 -> 使用电脑能力`
+
+然后设置：
+
+- `Computer Use Runtime` = `sandbox`
+- `沙盒驱动` = `BoxLite`
+
+`BoxLite` 当前没有额外的驱动级配置项，启用插件后即可使用。
+
+然后重启 AstrBot，或在插件管理页重新加载插件。
 
 ## 旧方案：Shipyard
 

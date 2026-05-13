@@ -117,36 +117,6 @@ Before configuring `Shipyard Neo` in AstrBot, install the plugin on the AstrBot 
 git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
 ```
 
-### BoxLite Driver
-
-`BoxLite` is a lighter local sandbox driver for scenarios that only need shell, Python, and file operations. It does not provide browser or GUI-specific tools.
-
-#### Install the BoxLite Plugin
-
-Before configuring `BoxLite`, install the plugin into AstrBot's plugin directory and keep the `Shipyard` plugin source available in the same plugin tree:
-
-```bash
-git clone https://github.com/AstrBotDevs/astrbot_sandbox_boxlite.git data/plugins/astrbot_sandbox_boxlite
-git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard.git data/plugins/astrbot_sandbox_shipyard
-```
-
-Then restart AstrBot or reload plugins from the plugin management page.
-
-#### Configure BoxLite in AstrBot
-
-Open the WebUI:
-
-- `Config -> General Config -> Computer Use`
-
-Then set:
-
-- `Computer Use Runtime` = `sandbox`
-- `Sandbox Driver` = `BoxLite`
-
-`BoxLite` does not currently expose any extra driver-specific configuration fields. Once the plugin is enabled, it is ready to use.
-
-Then restart AstrBot or reload plugins from the plugin management page.
-
 If you plan to use `Shipyard Neo` for the long term, it is generally better to **deploy it separately on a machine with more resources**, such as your homelab, a LAN server, or a dedicated cloud host, and then let AstrBot connect to Bay remotely.
 
 The reason is that `Shipyard Neo` can become fairly resource-heavy when browser capability is enabled, because it needs to run a full browser runtime. On resource-constrained cloud servers, deploying AstrBot and `Shipyard Neo` on the same machine usually puts significant pressure on CPU and memory, which can negatively affect both stability and overall experience.
@@ -375,6 +345,36 @@ A practical way to think about this file:
 From AstrBot's perspective, the current implementation caches the sandbox booter by request `session_id`; in the default main-agent flow, this `session_id` usually equals the message-session identifier `unified_msg_origin`. As a result, follow-up requests from the same message session will usually continue using the same Neo sandbox; if the sandbox becomes unavailable, it will be rebuilt automatically.
 
 For more detailed explanations of TTL and persistence behavior, see the later sections on “`Shipyard Neo Sandbox TTL`” and “Data Persistence in the Sandbox Environment”.
+
+## BoxLite Driver
+
+`BoxLite` is a lighter local sandbox driver for scenarios that only need shell, Python, and file operations. It does not provide browser or GUI-specific tools.
+
+### Install the BoxLite Plugin
+
+Before configuring `BoxLite`, install the plugin into AstrBot's plugin directory and keep the `Shipyard` plugin source available in the same plugin tree:
+
+```bash
+git clone https://github.com/AstrBotDevs/astrbot_sandbox_boxlite.git data/plugins/astrbot_sandbox_boxlite
+git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard.git data/plugins/astrbot_sandbox_shipyard
+```
+
+Then restart AstrBot or reload plugins from the plugin management page.
+
+### Configure BoxLite in AstrBot
+
+Open the WebUI:
+
+- `Config -> General Config -> Computer Use`
+
+Then set:
+
+- `Computer Use Runtime` = `sandbox`
+- `Sandbox Driver` = `BoxLite`
+
+`BoxLite` does not currently expose any extra driver-specific configuration fields. Once the plugin is enabled, it is ready to use.
+
+Then restart AstrBot or reload plugins from the plugin management page.
 
 ## Legacy Option: Shipyard
 
