@@ -9,10 +9,12 @@ from astrbot.core.tools.computer_tools.sandbox import (
     CopyFileBetweenSandboxesTool,
     CreateSandboxTool,
     DestroySandboxTool,
+    GetCurrentSandboxTool,
     KeepAliveSandboxTool,
     ListSandboxesTool,
     ListSandboxProvidersTool,
     ScreenshotSandboxTool,
+    SetSandboxRetentionPolicyTool,
     SwitchSandboxTool,
     TakeoverSandboxTool,
 )
@@ -105,6 +107,15 @@ async def test_sensitive_sandbox_tools_require_strict_admin_permission():
     assert "Permission denied" in str(
         await DestroySandboxTool().call(context, "sandbox-1")
     )
+
+
+@pytest.mark.asyncio
+async def test_set_sandbox_retention_policy_tool_respects_admin_requirement():
+    result = await SetSandboxRetentionPolicyTool().call(
+        _context(), "persistent", "sandbox-1"
+    )
+
+    assert "Permission denied" in str(result)
 
 
 @pytest.mark.asyncio
@@ -215,6 +226,31 @@ async def test_list_sandbox_providers_tool_exposes_loaded_provider_capabilities(
             "system_prompt": "",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_current_sandbox_tool_formats_agent_timestamps(monkeypatch):
+    class FakeManager:
+        def get_current_sandbox(self, session_id):
+            return {
+                "current_sandbox_id": "sandbox-1",
+                "sandbox": {
+                    "sandbox_id": "sandbox-1",
+                    "retention_policy": "persistent",
+                    "lease_expires_at": 1778557598.4646258,
+                },
+            }
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
+    )
+
+    result = await GetCurrentSandboxTool().call(_sandbox_context())
+    payload = json.loads(str(result))
+
+    assert payload["sandbox"]["retention_policy"] == "persistent"
+    assert payload["sandbox"]["lease_expires_at"] != 1778557598.4646258
+    assert payload["sandbox"]["lease_expires_at"]
 
 
 @pytest.mark.asyncio
@@ -445,3 +481,63 @@ async def test_keep_alive_sandbox_tool_renews_current_sandbox(monkeypatch):
 
     assert "sandbox-1" in str(result)
     assert calls == [("session-a", 3600)]
+
+
+@pytest.mark.asyncio
+async def test_set_sandbox_retention_policy_tool_updates_current_sandbox(monkeypatch):
+    calls = []
+
+    class FakeManager:
+        registry = SimpleNamespace(
+            get_sandbox=lambda sandbox_id: {
+                "sandbox_id": sandbox_id,
+                "controller_session_id": "session-a",
+            }
+        )
+
+        def set_sandbox_retention_policy(
+            self, plugin_context, session_id, sandbox_id, retention_policy, **kwargs
+        ):
+            calls.append((plugin_context, session_id, sandbox_id, retention_policy))
+            return {"sandbox_id": sandbox_id, "retention_policy": retention_policy}
+
+        def get_current_sandbox(self, session_id):
+            return {"current_sandbox_id": "sandbox-1"}
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
+    )
+
+    context = _member_context_without_admin_requirement()
+    result = await SetSandboxRetentionPolicyTool().call(context, "persistent")
+    payload = json.loads(str(result))
+
+    assert payload["sandbox"]["retention_policy"] == "persistent"
+    assert calls == [(context.context.context, "session-a", "sandbox-1", "persistent")]
+
+
+@pytest.mark.asyncio
+async def test_set_sandbox_retention_policy_tool_rejects_other_session_sandbox(
+    monkeypatch,
+):
+    class FakeManager:
+        registry = SimpleNamespace(
+            get_sandbox=lambda sandbox_id: {
+                "sandbox_id": sandbox_id,
+                "controller_session_id": "session-b",
+                "lease_expires_at": time.time() + 60,
+            }
+        )
+
+        def set_sandbox_retention_policy(self, *args, **kwargs):
+            raise AssertionError("must not update another session's sandbox")
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
+    )
+
+    result = await SetSandboxRetentionPolicyTool().call(
+        _member_context_without_admin_requirement(), "persistent", "sandbox-1"
+    )
+
+    assert "Permission denied" in str(result)

@@ -17,6 +17,7 @@ from .sandbox import (
     ListSandboxProvidersTool,
     ReleaseSandboxTool,
     ScreenshotSandboxTool,
+    SetSandboxRetentionPolicyTool,
     SwitchSandboxTool,
     TakeoverSandboxTool,
 )
@@ -40,6 +41,7 @@ __all__ = [
     "SwitchSandboxTool",
     "KeepAliveSandboxTool",
     "ReleaseSandboxTool",
+    "SetSandboxRetentionPolicyTool",
     "TakeoverSandboxTool",
     "DestroySandboxTool",
     "ScreenshotSandboxTool",

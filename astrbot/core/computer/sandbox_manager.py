@@ -930,6 +930,32 @@ class SandboxManager:
         self.save_registry()
         return updated or record
 
+    def set_sandbox_retention_policy(
+        self,
+        context: Context | None,
+        session_id: str,
+        sandbox_id: str,
+        retention_policy: str,
+        *,
+        sandbox_name: str | None = None,
+    ) -> dict:
+        idle_timeout: float | None
+        expires_at: float | None
+        if retention_policy == "persistent":
+            idle_timeout = None
+            expires_at = None
+        else:
+            idle_timeout, expires_at = self._sandbox_policy_timeouts(
+                context, session_id
+            )
+        return self.update_sandbox_config(
+            sandbox_id,
+            sandbox_name=sandbox_name,
+            idle_timeout=idle_timeout,
+            expires_at=expires_at,
+            retention_policy=retention_policy,
+        )
+
     async def _revive_persistent_booter_if_needed(
         self,
         record: dict,
@@ -1621,14 +1647,9 @@ class SandboxManager:
                         expires_at=current_expires_at, task=state.task
                     )
                     continue
-                booter = self.session_booter.get(sandbox_id)
                 if record.get("retention_policy") == "persistent":
-                    self.session_booter.pop(sandbox_id, None)
-                    self.registry.update_sandbox_status(
-                        sandbox_id, SandboxStatus.STOPPED
-                    )
-                    await self.save_registry_async()
                     return
+                booter = self.session_booter.get(sandbox_id)
                 if booter is not None:
                     try:
                         provider = self.get_provider(record.get("provider", ""))
@@ -1671,22 +1692,12 @@ class SandboxManager:
                             await self.save_registry_async()
                             return
                         self.clear_runtime_state(sandbox_id)
-                        if record.get("retention_policy") == "persistent":
-                            self.registry.update_sandbox_status(
-                                sandbox_id, SandboxStatus.STOPPED
-                            )
-                        else:
-                            self.registry.delete_sandbox(sandbox_id)
-                            self.drop_boot_lock(sandbox_id)
+                        self.registry.delete_sandbox(sandbox_id)
+                        self.drop_boot_lock(sandbox_id)
                         await self.save_registry_async()
                         return
-                if record.get("retention_policy") == "persistent":
-                    self.registry.update_sandbox_status(
-                        sandbox_id, SandboxStatus.STOPPED
-                    )
-                else:
-                    self.registry.delete_sandbox(sandbox_id)
-                    self.drop_boot_lock(sandbox_id)
+                self.registry.delete_sandbox(sandbox_id)
+                self.drop_boot_lock(sandbox_id)
                 await self.save_registry_async()
                 return
         except asyncio.CancelledError:

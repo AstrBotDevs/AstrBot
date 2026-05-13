@@ -1842,6 +1842,7 @@ class TestApplySandboxTools:
         assert "astrbot_switch_sandbox" in tool_names
         assert "astrbot_keep_sandbox_alive" in tool_names
         assert "astrbot_release_sandbox" in tool_names
+        assert "astrbot_set_sandbox_retention_policy" in tool_names
         assert "astrbot_takeover_sandbox" in tool_names
         assert "astrbot_destroy_sandbox" in tool_names
         assert "astrbot_screenshot_sandbox" in tool_names
@@ -2022,6 +2023,7 @@ class TestApplySandboxTools:
         assert "astrbot_switch_sandbox" in tools
         assert "astrbot_release_sandbox" in tools
         assert "astrbot_keep_sandbox_alive" in tools
+        assert "astrbot_set_sandbox_retention_policy" in tools
         assert "astrbot_takeover_sandbox" in tools
         assert "astrbot_destroy_sandbox" in tools
         assert "astrbot_screenshot_sandbox" in tools

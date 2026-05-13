@@ -1671,6 +1671,58 @@ async def test_manager_idle_cleanup_uses_scheduled_monotonic_deadline(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_manager_idle_cleanup_ignores_persistent_sandbox(tmp_path):
+    manager, provider = _manager(tmp_path)
+    context = FakeContext({"sandbox_idle_timeout": 0.01, "sandbox_ttl": 0})
+
+    sandbox = await manager.create_sandbox(context, "session-a", "generic", "Named")
+    sandbox_id = sandbox["sandbox_id"]
+    manager.update_sandbox_config(
+        sandbox_id,
+        idle_timeout=None,
+        expires_at=None,
+        retention_policy="persistent",
+    )
+    manager.release_current_sandbox("session-a", sandbox_id)
+
+    await asyncio.sleep(0.05)
+
+    record = manager.registry.get_sandbox(sandbox_id)
+    assert record is not None
+    assert record["status"] == "running"
+    assert provider.destroyed == []
+
+
+@pytest.mark.asyncio
+async def test_manager_stale_idle_cleanup_task_skips_persistent_sandbox(tmp_path):
+    manager, provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="persistent-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+        idle_timeout=0.01,
+    )
+    booter = FakeBooter()
+    manager.session_booter["persistent-1"] = booter
+
+    manager.schedule_idle_cleanup("persistent-1", 0.01)
+    await asyncio.sleep(0.05)
+
+    record = manager.registry.get_sandbox("persistent-1")
+    assert record is not None
+    assert record["status"] == "running"
+    assert manager.session_booter["persistent-1"] is booter
+    assert provider.destroyed == []
+
+
+@pytest.mark.asyncio
 async def test_manager_idle_cleanup_does_not_retry_dead_booter(tmp_path):
     provider = DeadIdleDestroyProvider()
     manager, provider = _manager(tmp_path, provider)
@@ -1889,6 +1941,65 @@ def test_manager_update_sandbox_config_rejects_persistent_for_missing_provider(
             expires_at=None,
             retention_policy="persistent",
         )
+
+
+@pytest.mark.asyncio
+async def test_manager_set_sandbox_retention_policy_makes_sandbox_persistent(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    record = manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Generic"},
+        idle_timeout=30,
+        expires_at=time.time() + 3600,
+    )
+    manager.schedule_idle_cleanup(record["sandbox_id"], 30)
+
+    updated = manager.set_sandbox_retention_policy(
+        FakeContext({"sandbox_idle_timeout": 30, "sandbox_ttl": 120}),
+        "session-a",
+        record["sandbox_id"],
+        "persistent",
+    )
+
+    assert updated["retention_policy"] == "persistent"
+    assert updated["idle_timeout"] is None
+    assert updated["expires_at"] is None
+    assert record["sandbox_id"] not in manager.idle_state
+    assert record["sandbox_id"] not in manager.expiration_state
+
+
+@pytest.mark.asyncio
+async def test_manager_set_sandbox_retention_policy_makes_sandbox_temporary(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    record = manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Generic",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Generic"},
+        retention_policy="persistent",
+    )
+
+    updated = manager.set_sandbox_retention_policy(
+        FakeContext({"sandbox_idle_timeout": 30, "sandbox_ttl": 120}),
+        "session-a",
+        record["sandbox_id"],
+        "temporary",
+    )
+
+    assert updated["retention_policy"] == "temporary"
+    assert updated["idle_timeout"] == 30
+    assert updated["expires_at"] is None
+    assert record["sandbox_id"] in manager.idle_state
 
 
 def test_manager_save_registry_propagates_write_failures(tmp_path):

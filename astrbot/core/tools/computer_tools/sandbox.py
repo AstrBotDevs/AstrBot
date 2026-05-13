@@ -168,7 +168,11 @@ class GetCurrentSandboxTool(FunctionTool):
 
     async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
         session_id = context.context.event.unified_msg_origin
-        return _dump(_sandbox_manager().get_current_sandbox(session_id))
+        return _dump(
+            _format_sandbox_for_agent(
+                _sandbox_manager().get_current_sandbox(session_id)
+            )
+        )
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
@@ -302,6 +306,72 @@ class ReleaseSandboxTool(FunctionTool):
         except Exception as e:
             detail = str(e) or type(e).__name__
             return f"Error releasing sandbox: {detail}"
+        return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
+
+
+@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
+@dataclass
+class SetSandboxRetentionPolicyTool(FunctionTool):
+    name: str = "astrbot_set_sandbox_retention_policy"
+    description: str = (
+        "Set a managed sandbox retention policy. Use persistent to preserve a prepared environment for reuse, "
+        "or temporary when the work is done and the sandbox should follow normal cleanup policy again."
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "retention_policy": {
+                    "type": "string",
+                    "enum": ["persistent", "temporary"],
+                    "description": "Target retention policy.",
+                },
+                "sandbox_id": {
+                    "type": "string",
+                    "description": "Optional sandbox ID. Defaults to the current sandbox.",
+                },
+                "sandbox_name": {
+                    "type": "string",
+                    "description": "Optional new human-readable sandbox name.",
+                },
+            },
+            "required": ["retention_policy"],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        retention_policy: str,
+        sandbox_id: str = "",
+        sandbox_name: str = "",
+    ) -> ToolExecResult:
+        if permission_error := check_admin_permission(
+            context, "Changing sandbox retention policy"
+        ):
+            return permission_error
+        manager = _sandbox_manager()
+        session_id = context.context.event.unified_msg_origin
+        target_sandbox_id = sandbox_id.strip()
+        if not target_sandbox_id:
+            current = manager.get_current_sandbox(session_id)
+            target_sandbox_id = current.get("current_sandbox_id") or ""
+        if not target_sandbox_id:
+            return "Error changing sandbox retention policy: No current sandbox"
+        record = manager.registry.get_sandbox(target_sandbox_id)
+        if permission_error := _sandbox_access_denied(context, record):
+            return permission_error
+        try:
+            sandbox = manager.set_sandbox_retention_policy(
+                context.context.context,
+                session_id,
+                target_sandbox_id,
+                retention_policy.strip().lower(),
+                sandbox_name=sandbox_name.strip() or None,
+            )
+        except Exception as e:
+            detail = str(e) or type(e).__name__
+            return f"Error changing sandbox retention policy: {detail}"
         return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
 
 

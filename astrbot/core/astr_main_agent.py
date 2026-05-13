@@ -71,6 +71,7 @@ from astrbot.core.tools.computer_tools import (
     PythonTool,
     ReleaseSandboxTool,
     ScreenshotSandboxTool,
+    SetSandboxRetentionPolicyTool,
     SwitchSandboxTool,
     TakeoverSandboxTool,
     normalize_umo_for_workspace,
@@ -1054,6 +1055,7 @@ def _apply_sandbox_tools(
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(SwitchSandboxTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(KeepAliveSandboxTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ReleaseSandboxTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(SetSandboxRetentionPolicyTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(TakeoverSandboxTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(DestroySandboxTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ScreenshotSandboxTool))
