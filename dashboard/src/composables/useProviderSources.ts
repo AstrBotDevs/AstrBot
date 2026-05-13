@@ -543,7 +543,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!selectedProviderSource.value) return
 
     const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
-    const newId = `${sourceId}/${modelName}`
+    const newId = modelName.startsWith(`${sourceId}/`)
+      ? modelName
+      : `${sourceId}/${modelName}`
 
     const metadata = getModelMetadata(modelName)
     let modalities: string[]

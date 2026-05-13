@@ -53,6 +53,11 @@ class ProviderOpenCodeGo(Provider):
         return resolved_model
 
     @classmethod
+    def _to_provider_model(cls, model: str) -> str:
+        api_model = cls._to_api_model(model)
+        return f"{OPENCODE_GO_MODEL_PREFIX}{api_model}"
+
+    @classmethod
     def _ensure_chat_completions_model(cls, model: str | None) -> str:
         api_model = cls._to_api_model(model)
         if api_model in OPENCODE_GO_MESSAGES_ONLY_MODELS:
@@ -75,7 +80,7 @@ class ProviderOpenCodeGo(Provider):
     async def get_models(self) -> list[str]:
         models = await self.openai_provider.get_models()
         return sorted(
-            self._to_api_model(model)
+            self._to_provider_model(model)
             for model in models
             if model.strip()
             and self._to_api_model(model) not in OPENCODE_GO_MESSAGES_ONLY_MODELS
