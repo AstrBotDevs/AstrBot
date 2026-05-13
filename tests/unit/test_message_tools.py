@@ -133,3 +133,31 @@ async def test_send_message_empty_messages_returns_error():
     result = await tool.call(ctx, messages=[], session="oc_xxx")
     assert "error:" in result
     assert "messages" in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_send_message_missing_image_path_stops_before_send(tmp_path, monkeypatch):
+    """Missing image paths fail before sending any message components."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context()
+    missing_image_path = tmp_path / "missing.png"
+
+    async def mock_get_booter(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("sandbox unavailable")
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_booter",
+        mock_get_booter,
+    )
+
+    result = await tool.call(
+        ctx,
+        messages=[
+            {"type": "plain", "text": "before image"},
+            {"type": "image", "path": str(missing_image_path)},
+        ],
+    )
+
+    assert "error: failed to build messages[1] component: sandbox unavailable" in result
+    ctx.context.context.send_message.assert_not_called()
