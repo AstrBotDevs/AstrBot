@@ -86,7 +86,7 @@ If there are no errors, you will see a log message similar to `🌈 Dashboard st
 > [!TIP]
 > If you are deploying AstrBot on a server, you need to replace `localhost` with your server's IP address.
 >
-> The default username and password are `astrbot` and `astrbot`.
+> New users must use the random password printed in the startup logs to log in for the first time. Use the username shown in the logs (usually `astrbot`) and change it after first login.
 
 
 Next, you need to deploy any messaging platform to use AstrBot on that platform.

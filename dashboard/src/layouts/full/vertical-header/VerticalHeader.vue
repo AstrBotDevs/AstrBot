@@ -3,12 +3,12 @@ import { ref, computed, watch, onMounted } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "axios";
 import Logo from "@/components/shared/Logo.vue";
-import { md5 } from "js-md5";
 import { useAuthStore } from "@/stores/auth";
 import { useCommonStore } from "@/stores/common";
 import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
+import "highlight.js/styles/github.css";
 import { useI18n } from "@/i18n/composables";
 import { router } from "@/router";
 import { useRoute } from "vue-router";
@@ -31,6 +31,8 @@ const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
 const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
 let dialog = ref(false);
 let accountWarning = ref(false);
+let accountWarningLegacy = ref(false);
+let accountWarningUpgrade = ref(false);
 let updateStatusDialog = ref(false);
 let aboutDialog = ref(false);
 const username = localStorage.getItem("user");
@@ -107,6 +109,14 @@ const passwordRules = computed(() => [
   (v: string) =>
     v.length >= 8 ||
     t("core.header.accountDialog.validation.passwordMinLength"),
+  (v: string) =>
+    /[A-Z]/.test(v) ||
+    t("core.header.accountDialog.validation.passwordUppercase"),
+  (v: string) =>
+    /[a-z]/.test(v) ||
+    t("core.header.accountDialog.validation.passwordLowercase"),
+  (v: string) =>
+    /\d/.test(v) || t("core.header.accountDialog.validation.passwordDigit"),
 ]);
 const confirmPasswordRules = computed(() => [
   (v: string) =>
@@ -250,17 +260,15 @@ function accountEdit() {
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
-  const passwordHash = password.value ? md5(password.value) : "";
-  const newPasswordHash = newPassword.value ? md5(newPassword.value) : "";
-  const confirmPasswordHash = confirmPassword.value
-    ? md5(confirmPassword.value)
-    : "";
+  const currentPasswordValue = password.value ? password.value : "";
+  const newPasswordValue = newPassword.value ? newPassword.value : "";
+  const confirmPasswordValue = confirmPassword.value ? confirmPassword.value : "";
 
   axios
     .post("/api/auth/account/edit", {
-      password: passwordHash,
-      new_password: newPasswordHash,
-      confirm_password: confirmPasswordHash,
+      password: currentPasswordValue,
+      new_password: newPasswordValue,
+      confirm_password: confirmPasswordValue,
       new_username: newUsername.value ? newUsername.value : username,
     })
     .then((res) => {
@@ -306,18 +314,56 @@ function getVersion() {
         res.data.data.version,
         res.data.data?.dashboard_version,
       );
-      let change_pwd_hint = res.data.data?.change_pwd_hint;
-      if (change_pwd_hint) {
+      const change_pwd_hint = res.data.data?.change_pwd_hint;
+      const legacy_pwd_hint = res.data.data?.legacy_pwd_hint;
+      const password_upgrade_required =
+        res.data.data?.password_upgrade_required;
+      if (change_pwd_hint || legacy_pwd_hint || password_upgrade_required) {
         dialog.value = true;
         accountWarning.value = true;
-        localStorage.setItem("change_pwd_hint", "true");
+        accountWarningUpgrade.value = !!password_upgrade_required;
+        accountWarningLegacy.value =
+          !!legacy_pwd_hint && !password_upgrade_required;
+        if (change_pwd_hint || (legacy_pwd_hint && !password_upgrade_required)) {
+          localStorage.setItem("change_pwd_hint", "true");
+        } else {
+          localStorage.removeItem("change_pwd_hint");
+        }
+        if (legacy_pwd_hint && !password_upgrade_required) {
+          localStorage.setItem("legacy_pwd_hint", "true");
+        } else {
+          localStorage.removeItem("legacy_pwd_hint");
+        }
+        if (password_upgrade_required) {
+          localStorage.setItem("password_upgrade_required", "true");
+        } else {
+          localStorage.removeItem("password_upgrade_required");
+        }
       } else {
+        accountWarningLegacy.value = false;
+        accountWarningUpgrade.value = false;
         localStorage.removeItem("change_pwd_hint");
+        localStorage.removeItem("legacy_pwd_hint");
+        localStorage.removeItem("password_upgrade_required");
       }
     })
     .catch((err) => {
       console.log(err);
     });
+}
+
+function initPasswordWarningFromStorage() {
+  const hasChangePwdHint = localStorage.getItem("change_pwd_hint") === "true";
+  const hasLegacyPwdHint = localStorage.getItem("legacy_pwd_hint") === "true";
+  const hasPasswordUpgradeRequired =
+    localStorage.getItem("password_upgrade_required") === "true";
+  if (hasChangePwdHint || hasLegacyPwdHint || hasPasswordUpgradeRequired) {
+    dialog.value = true;
+    accountWarning.value = true;
+    accountWarningUpgrade.value = hasPasswordUpgradeRequired;
+    accountWarningLegacy.value =
+      hasLegacyPwdHint && !hasPasswordUpgradeRequired;
+  }
 }
 
 function checkUpdate() {
@@ -435,6 +481,7 @@ function handleLogoClick() {
 
 getVersion();
 checkUpdate();
+initPasswordWarningFromStorage();
 
 commonStore.createEventSource(); // log
 commonStore.getStartTime();
@@ -1116,7 +1163,7 @@ onMounted(async () => {
     >
       <v-card class="account-dialog">
         <v-card-text class="py-6">
-          <div class="d-flex flex-column align-center mb-6">
+          <div class="d-flex flex-column align-start mb-6">
             <logo
               :title="t('core.header.logoTitle')"
               :subtitle="t('core.header.accountDialog.title')"
@@ -1130,7 +1177,13 @@ onMounted(async () => {
             class="mb-4"
           >
             <strong>{{
-              t("core.header.accountDialog.securityWarning")
+              t(
+                accountWarningUpgrade
+                  ? "core.header.accountDialog.securityWarningUpgrade"
+                  : accountWarningLegacy
+                  ? "core.header.accountDialog.securityWarningLegacy"
+                  : "core.header.accountDialog.securityWarning",
+              )
             }}</strong>
           </v-alert>
 
@@ -1219,8 +1272,6 @@ onMounted(async () => {
           </div>
         </v-card-text>
 
-        <v-divider></v-divider>
-
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn
@@ -1296,6 +1347,20 @@ onMounted(async () => {
 
 .account-dialog .v-avatar:hover {
   transform: scale(1.05);
+}
+
+.account-dialog-header {
+  .theme-toggle-btn {
+    opacity: 0.85;
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+}
+
+.theme-toggle-btn {
+  margin-left: 0;
 }
 
 /* 响应式布局样式 */
