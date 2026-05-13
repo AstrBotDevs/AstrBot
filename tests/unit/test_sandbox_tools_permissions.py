@@ -50,6 +50,24 @@ def _member_context_without_admin_requirement():
     )
 
 
+def _member_context_with_sandbox_permissions(**permissions):
+    plugin_context = SimpleNamespace(
+        get_config=lambda umo=None: {
+            "provider_settings": {
+                "computer_use_require_admin": False,
+                "computer_use_runtime": "sandbox",
+                "sandbox": {
+                    "booter": "generic",
+                    "member_permissions": dict(permissions),
+                },
+            }
+        }
+    )
+    return ContextWrapper(
+        context=SimpleNamespace(event=FakeEvent(), context=plugin_context)
+    )
+
+
 def _sandbox_context(default_provider: str = "generic"):
     plugin_context = SimpleNamespace(
         get_config=lambda umo=None: {
@@ -87,20 +105,8 @@ async def test_copy_file_between_sandboxes_tool_requires_admin_permission():
 
 @pytest.mark.asyncio
 async def test_sensitive_sandbox_tools_require_strict_admin_permission():
-    context = _member_context_without_admin_requirement()
+    context = _member_context_with_sandbox_permissions(set_retention_policy=True)
 
-    assert "Permission denied" in str(
-        await ScreenshotSandboxTool().call(context, "sandbox-1")
-    )
-    assert "Permission denied" in str(
-        await CopyFileBetweenSandboxesTool().call(
-            context,
-            "source-1",
-            "/tmp/source.txt",
-            "target-1",
-            "/tmp/target.txt",
-        )
-    )
     assert "Permission denied" in str(
         await TakeoverSandboxTool().call(context, "sandbox-1")
     )
@@ -116,6 +122,113 @@ async def test_set_sandbox_retention_policy_tool_respects_admin_requirement():
     )
 
     assert "Permission denied" in str(result)
+
+
+@pytest.mark.asyncio
+async def test_readonly_sandbox_tools_respect_admin_requirement(monkeypatch):
+    class FakeManager:
+        def list_sandboxes(self):
+            raise AssertionError("list must be denied")
+
+        def get_current_sandbox(self, session_id):
+            raise AssertionError("get current must be denied")
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.list_sandbox_providers",
+        lambda: (_ for _ in ()).throw(AssertionError("providers must be denied")),
+    )
+    context = _context()
+
+    assert "Permission denied" in str(await ListSandboxesTool().call(context))
+    assert "Permission denied" in str(await ListSandboxProvidersTool().call(context))
+    assert "Permission denied" in str(await GetCurrentSandboxTool().call(context))
+
+
+@pytest.mark.asyncio
+async def test_member_sandbox_management_permissions_default_to_disabled(monkeypatch):
+    class FakeManager:
+        providers = {"generic": object()}
+        registry = SimpleNamespace(
+            get_sandbox=lambda sandbox_id: {
+                "sandbox_id": sandbox_id,
+                "controller_session_id": "session-a",
+            }
+        )
+
+        async def create_sandbox(self, *args, **kwargs):
+            raise AssertionError("create must be denied by default")
+
+        def set_sandbox_retention_policy(self, *args, **kwargs):
+            raise AssertionError("retention changes must be denied by default")
+
+        async def destroy_sandbox(self, *args, **kwargs):
+            raise AssertionError("destroy must be denied by default")
+
+        async def takeover_sandbox(self, *args, **kwargs):
+            raise AssertionError("takeover must be denied by default")
+
+        def get_current_sandbox(self, session_id):
+            return {"current_sandbox_id": "sandbox-1"}
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
+    )
+    context = _member_context_with_sandbox_permissions()
+
+    assert "Permission denied" in str(await CreateSandboxTool().call(context))
+    assert "Permission denied" in str(
+        await SetSandboxRetentionPolicyTool().call(context, "persistent")
+    )
+    assert "Permission denied" in str(
+        await DestroySandboxTool().call(context, "sandbox-1")
+    )
+    assert "Permission denied" in str(
+        await TakeoverSandboxTool().call(context, "sandbox-1")
+    )
+
+
+@pytest.mark.asyncio
+async def test_member_takeover_sandbox_requires_explicit_permission(monkeypatch):
+    calls = []
+
+    class FakeManager:
+        async def takeover_sandbox(self, session_id, sandbox_id, **kwargs):
+            calls.append((session_id, sandbox_id, kwargs))
+            return {"sandbox_id": sandbox_id}
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
+    )
+
+    result = await TakeoverSandboxTool().call(
+        _member_context_with_sandbox_permissions(takeover=True), "sandbox-1"
+    )
+
+    assert "sandbox-1" in str(result)
+    assert calls
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_tool_reports_max_sandbox_limit(monkeypatch):
+    class FakeManager:
+        providers = {"generic": object()}
+
+        async def create_sandbox(self, *args, **kwargs):
+            raise RuntimeError("Sandbox limit reached. Maximum managed sandboxes: 10.")
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
+    )
+
+    result = await CreateSandboxTool().call(
+        _member_context_with_sandbox_permissions(create=True)
+    )
+
+    assert "Error creating sandbox" in str(result)
+    assert "Sandbox limit reached" in str(result)
 
 
 @pytest.mark.asyncio
@@ -270,7 +383,9 @@ async def test_create_sandbox_tool_defaults_to_configured_provider(monkeypatch):
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await CreateSandboxTool().call(_sandbox_context(), sandbox_name="Fresh")
+    result = await CreateSandboxTool().call(
+        _member_context_with_sandbox_permissions(create=True), sandbox_name="Fresh"
+    )
     payload = json.loads(str(result))
 
     assert payload["sandbox"]["provider"] == "generic"
@@ -295,7 +410,9 @@ async def test_create_sandbox_tool_accepts_explicit_provider_id(monkeypatch):
     )
 
     result = await CreateSandboxTool().call(
-        _sandbox_context(), sandbox_name="Fresh", provider_id="other"
+        _member_context_with_sandbox_permissions(create=True),
+        sandbox_name="Fresh",
+        provider_id="other",
     )
     payload = json.loads(str(result))
 
@@ -508,7 +625,7 @@ async def test_set_sandbox_retention_policy_tool_updates_current_sandbox(monkeyp
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    context = _member_context_without_admin_requirement()
+    context = _member_context_with_sandbox_permissions(set_retention_policy=True)
     result = await SetSandboxRetentionPolicyTool().call(context, "persistent")
     payload = json.loads(str(result))
 
@@ -537,7 +654,9 @@ async def test_set_sandbox_retention_policy_tool_rejects_other_session_sandbox(
     )
 
     result = await SetSandboxRetentionPolicyTool().call(
-        _member_context_without_admin_requirement(), "persistent", "sandbox-1"
+        _member_context_with_sandbox_permissions(set_retention_policy=True),
+        "persistent",
+        "sandbox-1",
     )
 
     assert "Permission denied" in str(result)

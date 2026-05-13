@@ -13,6 +13,12 @@ def _is_sandbox_name_conflict(error: Exception) -> bool:
     return isinstance(error, RuntimeError) and str(error).startswith("Sandbox name ")
 
 
+def _is_sandbox_limit_error(error: Exception) -> bool:
+    return isinstance(error, RuntimeError) and str(error).startswith(
+        "Sandbox limit reached"
+    )
+
+
 class SandboxRoute(Route):
     def __init__(
         self,
@@ -111,7 +117,7 @@ class SandboxRoute(Route):
             )
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
         except RuntimeError as e:
-            if _is_sandbox_name_conflict(e):
+            if _is_sandbox_name_conflict(e) or _is_sandbox_limit_error(e):
                 logger.warning(str(e))
                 return jsonify(Response().error(str(e)).__dict__)
             logger.error(traceback.format_exc())

@@ -137,6 +137,30 @@ class SandboxManager:
         idle_timeout = self._idle_timeout(context, session_id)
         return idle_timeout, self._expires_at(context, session_id, idle_timeout)
 
+    def _max_sandboxes(self, context: Context | None, session_id: str) -> int:
+        sandbox_cfg = get_provider_sandbox_config(context, session_id)
+        try:
+            max_sandboxes = int(sandbox_cfg.get("max_sandboxes", 10))
+        except (TypeError, ValueError):
+            return 0
+        if max_sandboxes < 0:
+            return 0
+        return max_sandboxes
+
+    def _ensure_under_max_sandboxes(
+        self, context: Context | None, session_id: str
+    ) -> None:
+        max_sandboxes = self._max_sandboxes(context, session_id)
+        if max_sandboxes <= 0:
+            return
+        managed_count = sum(
+            1 for record in self.registry.list_sandboxes() if record.get("managed")
+        )
+        if managed_count >= max_sandboxes:
+            raise RuntimeError(
+                f"Sandbox limit reached. Maximum managed sandboxes: {max_sandboxes}."
+            )
+
     def drop_boot_lock(self, sandbox_id: str) -> None:
         self.boot_locks.pop(sandbox_id, None)
 
@@ -667,6 +691,7 @@ class SandboxManager:
         provider_id: str,
         sandbox_name: str | None = None,
     ) -> dict:
+        self._ensure_under_max_sandboxes(context, session_id)
         provider = self.get_provider(provider_id)
         create_config = provider.build_create_config(context, session_id)
         sandbox_id = self.new_sandbox_id(provider_id)
@@ -712,6 +737,7 @@ class SandboxManager:
         provider_id: str,
         sandbox_name: str | None = None,
     ) -> dict:
+        self._ensure_under_max_sandboxes(context, session_id)
         provider = self.get_provider(provider_id)
         create_config = provider.build_create_config(context, session_id)
         sandbox_id = self.new_sandbox_id(provider_id)

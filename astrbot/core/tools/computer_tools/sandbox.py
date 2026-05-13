@@ -14,7 +14,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..registry import builtin_tool
-from .util import check_admin_permission, check_strict_admin_permission
+from .util import check_admin_permission
 
 _SANDBOX_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": "sandbox",
@@ -67,6 +67,42 @@ def _current_provider_id(context: ContextWrapper[AstrAgentContext]) -> str:
 
 def _is_admin(context: ContextWrapper[AstrAgentContext]) -> bool:
     return context.context.event.role == "admin"
+
+
+def _sandbox_config(context: ContextWrapper[AstrAgentContext]) -> dict:
+    config = context.context.context.get_config(
+        umo=context.context.event.unified_msg_origin
+    )
+    sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
+    return sandbox_cfg if isinstance(sandbox_cfg, dict) else {}
+
+
+def _member_sandbox_permission_enabled(
+    context: ContextWrapper[AstrAgentContext], permission: str
+) -> bool:
+    permissions = _sandbox_config(context).get("member_permissions", {})
+    if not isinstance(permissions, dict):
+        return False
+    return bool(permissions.get(permission, False))
+
+
+def _check_basic_sandbox_permission(
+    context: ContextWrapper[AstrAgentContext], operation_name: str
+) -> str | None:
+    return check_admin_permission(context, operation_name)
+
+
+def _check_member_sandbox_permission(
+    context: ContextWrapper[AstrAgentContext], operation_name: str, permission: str
+) -> str | None:
+    if permission_error := check_admin_permission(context, operation_name):
+        return permission_error
+    if _is_admin(context) or _member_sandbox_permission_enabled(context, permission):
+        return None
+    return (
+        f"error: Permission denied. {operation_name} is disabled for non-admin users "
+        "by sandbox member permission settings."
+    )
 
 
 def _visible_to_session(record: dict, session_id: str) -> bool:
@@ -131,6 +167,10 @@ class ListSandboxesTool(FunctionTool):
     )
 
     async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
+        if permission_error := _check_basic_sandbox_permission(
+            context, "Listing sandboxes"
+        ):
+            return permission_error
         session_id = context.context.event.unified_msg_origin
         sandboxes = _sandbox_manager().list_sandboxes()
         sandboxes = [
@@ -153,7 +193,10 @@ class ListSandboxProvidersTool(FunctionTool):
     )
 
     async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
-        del context
+        if permission_error := _check_basic_sandbox_permission(
+            context, "Listing sandbox providers"
+        ):
+            return permission_error
         return _dump({"providers": computer_client.list_sandbox_providers()})
 
 
@@ -167,6 +210,10 @@ class GetCurrentSandboxTool(FunctionTool):
     )
 
     async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
+        if permission_error := _check_basic_sandbox_permission(
+            context, "Getting current sandbox"
+        ):
+            return permission_error
         session_id = context.context.event.unified_msg_origin
         return _dump(
             _format_sandbox_for_agent(
@@ -210,7 +257,9 @@ class CreateSandboxTool(FunctionTool):
         sandbox_name: str = "",
         provider_id: str = "",
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(context, "Creating sandbox"):
+        if permission_error := _check_member_sandbox_permission(
+            context, "Creating sandbox", "create"
+        ):
             return permission_error
 
         plugin_context = context.context.context
@@ -263,6 +312,10 @@ class SwitchSandboxTool(FunctionTool):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], sandbox_id: str
     ) -> ToolExecResult:
+        if permission_error := _check_basic_sandbox_permission(
+            context, "Switching sandbox"
+        ):
+            return permission_error
         session_id = context.context.event.unified_msg_origin
         manager = _sandbox_manager()
         record = manager.registry.get_sandbox(sandbox_id)
@@ -298,6 +351,10 @@ class ReleaseSandboxTool(FunctionTool):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], sandbox_id: str = ""
     ) -> ToolExecResult:
+        if permission_error := _check_basic_sandbox_permission(
+            context, "Releasing sandbox"
+        ):
+            return permission_error
         session_id = context.context.event.unified_msg_origin
         try:
             sandbox = _sandbox_manager().release_current_sandbox(
@@ -346,8 +403,8 @@ class SetSandboxRetentionPolicyTool(FunctionTool):
         sandbox_id: str = "",
         sandbox_name: str = "",
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(
-            context, "Changing sandbox retention policy"
+        if permission_error := _check_member_sandbox_permission(
+            context, "Changing sandbox retention policy", "set_retention_policy"
         ):
             return permission_error
         manager = _sandbox_manager()
@@ -400,6 +457,10 @@ class KeepAliveSandboxTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         ttl_seconds: int | float | None = None,
     ) -> ToolExecResult:
+        if permission_error := _check_basic_sandbox_permission(
+            context, "Keeping sandbox alive"
+        ):
+            return permission_error
         session_id = context.context.event.unified_msg_origin
         try:
             sandbox = await _sandbox_manager().renew_current_sandbox_lease(
@@ -429,8 +490,8 @@ class TakeoverSandboxTool(FunctionTool):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], sandbox_id: str
     ) -> ToolExecResult:
-        if permission_error := check_strict_admin_permission(
-            context, "Taking over sandbox"
+        if permission_error := _check_member_sandbox_permission(
+            context, "Taking over sandbox", "takeover"
         ):
             return permission_error
         session_id = context.context.event.unified_msg_origin
@@ -462,8 +523,8 @@ class DestroySandboxTool(FunctionTool):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], sandbox_id: str
     ) -> ToolExecResult:
-        if permission_error := check_strict_admin_permission(
-            context, "Destroying sandbox"
+        if permission_error := _check_member_sandbox_permission(
+            context, "Destroying sandbox", "destroy"
         ):
             return permission_error
         session_id = context.context.event.unified_msg_origin
@@ -501,7 +562,7 @@ class ScreenshotSandboxTool(FunctionTool):
         sandbox_id: str,
         send_to_user: bool = False,
     ) -> ToolExecResult:
-        if permission_error := check_strict_admin_permission(
+        if permission_error := _check_basic_sandbox_permission(
             context, "Sandbox screenshot capture"
         ):
             return permission_error
@@ -571,7 +632,7 @@ class CopyFileBetweenSandboxesTool(FunctionTool):
         target_sandbox_id: str,
         target_path: str,
     ) -> ToolExecResult:
-        if permission_error := check_strict_admin_permission(
+        if permission_error := _check_basic_sandbox_permission(
             context, "Copying files between sandboxes"
         ):
             return permission_error

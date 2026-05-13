@@ -170,6 +170,13 @@ DEFAULT_CONFIG = {
             "sandbox_lease_timeout": 600,
             "sandbox_idle_timeout": 1800,
             "sandbox_ttl": 3600,
+            "max_sandboxes": 10,
+            "member_permissions": {
+                "create": False,
+                "set_retention_policy": False,
+                "takeover": False,
+                "destroy": False,
+            },
         },
         "image_compress_enabled": True,
         "image_compress_options": {
@@ -3304,6 +3311,50 @@ CONFIG_METADATA_3 = {
                         "hint": "单位为秒。仅在空闲回收时间为 `0` 时生效；`0` 表示不自动销毁。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
+                        },
+                    },
+                    "provider_settings.sandbox.max_sandboxes": {
+                        "description": "最大沙箱数量",
+                        "type": "int",
+                        "hint": "全局托管沙箱数量上限，默认 10。`0` 表示不限制。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                        },
+                    },
+                    "provider_settings.sandbox.member_permissions.create": {
+                        "description": "允许普通用户创建沙箱",
+                        "type": "bool",
+                        "hint": "允许普通用户创建新的托管沙箱。普通用户的创建请求仍会受到最大沙箱数量限制。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.computer_use_require_admin": False,
+                        },
+                    },
+                    "provider_settings.sandbox.member_permissions.set_retention_policy": {
+                        "description": "允许普通用户修改沙箱保留策略",
+                        "type": "bool",
+                        "hint": "允许普通用户在临时沙箱和持久沙箱策略之间切换。持久沙箱会保留环境以便后续复用。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.computer_use_require_admin": False,
+                        },
+                    },
+                    "provider_settings.sandbox.member_permissions.takeover": {
+                        "description": "允许普通用户强占沙箱",
+                        "type": "bool",
+                        "hint": "允许普通用户强制接管被其他会话占用的沙箱。此操作会转移沙箱控制权，建议谨慎开启。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.computer_use_require_admin": False,
+                        },
+                    },
+                    "provider_settings.sandbox.member_permissions.destroy": {
+                        "description": "允许普通用户删除沙箱",
+                        "type": "bool",
+                        "hint": "允许普通用户删除自己可访问的托管沙箱。删除后沙箱环境和对应记录都会被移除。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.computer_use_require_admin": False,
                         },
                     },
                 },

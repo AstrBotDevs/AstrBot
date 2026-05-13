@@ -564,6 +564,55 @@ async def test_sandbox_dashboard_create_rejects_duplicate_name(
 
 
 @pytest.mark.asyncio
+async def test_sandbox_dashboard_create_reports_max_sandbox_limit(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="dashboard",
+        owner_session_id="dashboard",
+        connect_info={"name": "Sandbox 1"},
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.star_context,
+        "get_config",
+        lambda umo=None: {
+            "provider_settings": {
+                "sandbox": {"max_sandboxes": 1},
+            }
+        },
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox?session_id=dashboard",
+        json={"provider_id": provider.provider_id, "sandbox_name": "Second"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert "Sandbox limit reached" in data["message"]
+
+
+@pytest.mark.asyncio
 async def test_sandbox_dashboard_sets_default_sandbox(
     app: Quart,
     authenticated_header: dict,

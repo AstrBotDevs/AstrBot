@@ -357,6 +357,28 @@ async def test_create_sandbox_uncontrolled_rejects_duplicate_name(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_create_sandbox_respects_global_max_sandboxes(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    context = FakeContext({"max_sandboxes": 1})
+
+    await manager.create_sandbox(context, "session-a", "generic")
+
+    with pytest.raises(RuntimeError, match="Sandbox limit reached"):
+        await manager.create_sandbox(context, "session-b", "generic")
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uses_default_max_sandboxes_when_config_missing(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    context = FakeContext({})
+    for index in range(10):
+        await manager.create_sandbox(context, f"session-{index}", "generic")
+
+    with pytest.raises(RuntimeError, match="Maximum managed sandboxes: 10"):
+        await manager.create_sandbox(context, "session-over-limit", "generic")
+
+
+@pytest.mark.asyncio
 async def test_create_sandbox_uncontrolled_blank_name_falls_back_to_sandbox_id(
     tmp_path,
 ):
