@@ -691,11 +691,11 @@ class SandboxManager:
         provider_id: str,
         sandbox_name: str | None = None,
     ) -> dict:
-        self._ensure_under_max_sandboxes(context, session_id)
         provider = self.get_provider(provider_id)
-        create_config = provider.build_create_config(context, session_id)
         sandbox_id = self.new_sandbox_id(provider_id)
         sandbox_name = self._created_sandbox_name(sandbox_id, sandbox_name)
+        self._ensure_under_max_sandboxes(context, session_id)
+        create_config = provider.build_create_config(context, session_id)
         idle_timeout, expires_at = self._sandbox_policy_timeouts(context, session_id)
         async with self._sandbox_boot_lock(sandbox_id):
             record = self.registry.upsert_sandbox(
@@ -737,11 +737,11 @@ class SandboxManager:
         provider_id: str,
         sandbox_name: str | None = None,
     ) -> dict:
-        self._ensure_under_max_sandboxes(context, session_id)
         provider = self.get_provider(provider_id)
-        create_config = provider.build_create_config(context, session_id)
         sandbox_id = self.new_sandbox_id(provider_id)
         sandbox_name = self._created_sandbox_name(sandbox_id, sandbox_name)
+        self._ensure_under_max_sandboxes(context, session_id)
+        create_config = provider.build_create_config(context, session_id)
         idle_timeout, expires_at = self._sandbox_policy_timeouts(context, session_id)
         async with self._sandbox_boot_lock(sandbox_id):
             record = self.registry.upsert_sandbox(

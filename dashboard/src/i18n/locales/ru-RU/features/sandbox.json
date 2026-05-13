@@ -112,6 +112,7 @@
         "createNotVisible": "Sandbox {sandboxId} is not visible in the list yet. Refresh manually later.",
         "createTimedOut": "Sandbox {sandboxId} is still processing. Refresh manually later.",
         "createUnexpectedStatus": "Sandbox creation ended with status: {status}.",
+        "maxSandboxesReached": "Достигнут максимальный лимит песочниц: {max}. Сначала освободите или удалите ненужную песочницу.",
         "defaultSet": "Default sandbox updated.",
         "configSaved": "Sandbox configuration saved.",
         "released": "Sandbox occupancy released.",

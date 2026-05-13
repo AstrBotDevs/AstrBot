@@ -112,6 +112,7 @@
         "createNotVisible": "沙盒 {sandboxId} 暂未出现在列表中，请稍后手动刷新确认。",
         "createTimedOut": "沙盒 {sandboxId} 仍在处理中，请稍后手动刷新确认。",
         "createUnexpectedStatus": "沙盒创建流程结束，当前状态：{status}。",
+        "maxSandboxesReached": "已达到最大沙箱数量：{max}。请先释放或销毁不需要的沙箱。",
         "defaultSet": "默认沙盒已更新。",
         "configSaved": "沙盒配置已保存。",
         "released": "沙盒占用已释放。",

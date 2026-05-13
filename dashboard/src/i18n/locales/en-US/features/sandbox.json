@@ -112,6 +112,7 @@
         "createNotVisible": "Sandbox {sandboxId} is not visible in the list yet. Refresh manually later.",
         "createTimedOut": "Sandbox {sandboxId} is still processing. Refresh manually later.",
         "createUnexpectedStatus": "Sandbox creation ended with status: {status}.",
+        "maxSandboxesReached": "Maximum sandbox count reached: {max}. Release or destroy an unused sandbox first.",
         "defaultSet": "Default sandbox updated.",
         "configSaved": "Sandbox configuration saved.",
         "released": "Sandbox occupancy released.",

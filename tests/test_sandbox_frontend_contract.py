@@ -235,6 +235,28 @@ def test_sandbox_management_page_surfaces_unknown_status_key():
     assert "tm('labels.unknownStatus', { status: key })" in content
 
 
+def test_sandbox_management_page_localizes_max_sandbox_limit_errors():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+    zh = (ROOT / "dashboard/src/i18n/locales/zh-CN/features/sandbox.json").read_text(
+        encoding="utf-8"
+    )
+    en = (ROOT / "dashboard/src/i18n/locales/en-US/features/sandbox.json").read_text(
+        encoding="utf-8"
+    )
+    ru = (ROOT / "dashboard/src/i18n/locales/ru-RU/features/sandbox.json").read_text(
+        encoding="utf-8"
+    )
+
+    assert "function localizedSandboxError" in content
+    assert "Sandbox limit reached" in content
+    assert "messages.maxSandboxesReached" in content
+    assert "maxSandboxesReached" in zh
+    assert "maxSandboxesReached" in en
+    assert "maxSandboxesReached" in ru
+
+
 def test_sandbox_management_page_does_not_render_legacy_booter_type():
     content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
         encoding="utf-8"

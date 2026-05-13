@@ -441,6 +441,15 @@ function toast(message: string, color: 'success' | 'error' | 'warning' = 'succes
   snackbar.value = { show: true, message, color }
 }
 
+function localizedSandboxError(message?: string) {
+  const text = String(message || '').trim()
+  const limitMatch = text.match(/Sandbox limit reached\. Maximum managed sandboxes: (\d+)\./)
+  if (limitMatch) {
+    return tm('messages.maxSandboxesReached', { max: limitMatch[1] })
+  }
+  return text || tm('messages.operationFailed')
+}
+
 function requiredSandboxNameRule(value: string) {
   return !!value?.trim() || tm('config.nameRequired')
 }
@@ -934,7 +943,7 @@ async function createSandbox() {
     }, { params: { session_id: 'dashboard' } })
 
     if (res.data.status !== 'ok') {
-      toast(res.data.message || tm('messages.operationFailed'), 'error')
+      toast(localizedSandboxError(res.data.message), 'error')
       return
     }
 
@@ -948,7 +957,7 @@ async function createSandbox() {
     createName.value = ''
     startCreatePolling(created.sandbox_id, created)
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.operationFailed'), 'error')
+    toast(localizedSandboxError(e?.response?.data?.message), 'error')
   } finally {
     creatingRequestPending.value = false
   }
