@@ -182,7 +182,7 @@
           },
           "shipyard_neo_profile": {
             "description": "Shipyard Neo Profile",
-            "hint": "Shipyard Neo 沙箱 profile，例如 python-default。"
+            "hint": "Shipyard Neo 沙箱 profile，例如 python-default。留空时自动选择能力更完整的 profile。"
           },
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox 存活时间(秒)",

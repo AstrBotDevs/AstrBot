@@ -180,7 +180,7 @@
                     },
                     "shipyard_neo_profile": {
                         "description": "Профиль Shipyard Neo",
-                        "hint": "Профиль песочницы, например, python-default."
+                        "hint": "Профиль песочницы, например, python-default. Оставьте пустым для автоматического выбора самого функционального профиля."
                     },
                     "shipyard_neo_ttl": {
                         "description": "TTL песочницы Shipyard Neo",

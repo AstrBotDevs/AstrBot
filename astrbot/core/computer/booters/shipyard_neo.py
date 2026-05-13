@@ -353,12 +353,12 @@ class ShipyardNeoBooter(ComputerBooter):
         self,
         endpoint_url: str,
         access_token: str,
-        profile: str = DEFAULT_PROFILE,
+        profile: str = "",
         ttl: int = 3600,
     ) -> None:
         self._endpoint_url = endpoint_url
         self._access_token = access_token
-        self._profile = profile
+        self._profile = profile.strip() if profile else ""
         self._ttl = ttl
         self._client: BayClient | None = None
         self._sandbox: Sandbox | None = None
@@ -431,7 +431,9 @@ class ShipyardNeoBooter(ComputerBooter):
         )
         await self._client.__aenter__()
 
-        # Resolve profile: user-specified > smart selection > default
+        # Resolve profile: user-specified > smart selection > default.
+        # An empty profile means auto-select; any non-empty profile must be
+        # honoured as an explicit choice, including "python-default".
         resolved_profile = await self._resolve_profile(self._client)
 
         self._sandbox = await self._client.create_sandbox(
@@ -535,7 +537,7 @@ class ShipyardNeoBooter(ComputerBooter):
         """Pick the best profile for this session.
 
         Resolution order:
-        1. User-specified profile (non-empty, non-default) → use as-is.
+        1. User-specified profile (non-empty) → use as-is.
         2. Query ``GET /v1/profiles`` and pick the profile with the most
            capabilities, preferring profiles that include ``"browser"``.
         3. Fall back to :attr:`DEFAULT_PROFILE`.
@@ -544,8 +546,8 @@ class ShipyardNeoBooter(ComputerBooter):
         misconfigured token, and silently falling back would just delay the
         real failure to ``create_sandbox``.
         """
-        # User explicitly set a profile → honour it
-        if self._profile and self._profile != self.DEFAULT_PROFILE:
+        # User explicitly set a profile → honour it.
+        if self._profile:
             logger.info("[Computer] Using user-specified profile: %s", self._profile)
             return self._profile
 
