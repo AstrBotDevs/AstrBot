@@ -1650,7 +1650,8 @@ class WeixinOCAdapter(Platform):
             )
         if failed_segments:
             raise RuntimeError(
-                f"weixin_oc failed to send {failed_segments} message segment(s)"
+                f"weixin_oc({self.meta().id}, target_user={target_user}) "
+                f"failed to send {failed_segments} message segment(s)"
             )
         await super().send_by_session(session, message_chain)
 

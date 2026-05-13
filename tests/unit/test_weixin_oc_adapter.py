@@ -34,5 +34,8 @@ async def test_send_by_session_raises_when_media_segment_fails(monkeypatch):
     )
     chain = MessageChain(chain=[File(name="report.pdf", file="report.pdf")])
 
-    with pytest.raises(RuntimeError, match="failed to send 1 message segment"):
+    with pytest.raises(
+        RuntimeError,
+        match=r"weixin_oc\(weixin_personal, target_user=user@im\.wechat\) failed to send 1 message segment",
+    ):
         await adapter.send_by_session(session, chain)
