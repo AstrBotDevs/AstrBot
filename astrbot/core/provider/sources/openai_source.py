@@ -524,16 +524,10 @@ class ProviderOpenAIOfficial(Provider):
         if isinstance(thinking, dict) and thinking.get("type") == "disabled":
             return False
 
-        provider = str(self.provider_config.get("provider", "")).lower()
-        api_base = str(self.provider_config.get("api_base", "")).lower()
-        model = str(payloads.get("model", "")).lower()
-
-        return (
-            provider in {"moonshot", "opencode-go"}
-            or "moonshot" in api_base
-            or "api.kimi" in api_base
-            or model.startswith(("kimi-k2.5", "kimi-k2.6", "kimi-k2-thinking"))
-        )
+        value = self.provider_config.get("force_tool_call_reasoning_content", False)
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
 
     def _ensure_tool_call_reasoning_content(
         self,

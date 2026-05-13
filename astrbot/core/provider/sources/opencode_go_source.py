@@ -35,7 +35,7 @@ class ProviderOpenCodeGo(Provider):
         self.set_model(model)
 
         self.openai_provider = ProviderOpenAIOfficial(
-            self._build_delegate_config(model=self._to_api_model(model)),
+            self._build_delegate_config(model=model),
             provider_settings,
         )
 
@@ -43,6 +43,7 @@ class ProviderOpenCodeGo(Provider):
         config = dict(self.provider_config)
         config["api_base"] = self.api_base
         config["model"] = model
+        config["force_tool_call_reasoning_content"] = True
         return config
 
     @classmethod
@@ -68,6 +69,9 @@ class ProviderOpenCodeGo(Provider):
             )
         return api_model
 
+    def _resolve_model(self, model: str | None = None) -> str:
+        return self._ensure_chat_completions_model(model or self.get_model())
+
     def get_current_key(self) -> str:
         return self.openai_provider.get_current_key()
 
@@ -79,12 +83,13 @@ class ProviderOpenCodeGo(Provider):
 
     async def get_models(self) -> list[str]:
         models = await self.openai_provider.get_models()
-        return sorted(
-            self._to_provider_model(model)
-            for model in models
-            if model.strip()
-            and self._to_api_model(model) not in OPENCODE_GO_MESSAGES_ONLY_MODELS
-        )
+        provider_models: list[str] = []
+        for model in models:
+            api_model = self._to_api_model(model)
+            if not api_model or api_model in OPENCODE_GO_MESSAGES_ONLY_MODELS:
+                continue
+            provider_models.append(f"{OPENCODE_GO_MODEL_PREFIX}{api_model}")
+        return sorted(provider_models)
 
     async def text_chat(
         self,
@@ -101,7 +106,6 @@ class ProviderOpenCodeGo(Provider):
         tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> LLMResponse:
-        requested_model = model or self.get_model()
         return await self.openai_provider.text_chat(
             prompt=prompt,
             session_id=session_id,
@@ -111,7 +115,7 @@ class ProviderOpenCodeGo(Provider):
             contexts=contexts,
             system_prompt=system_prompt,
             tool_calls_result=tool_calls_result,
-            model=self._ensure_chat_completions_model(requested_model),
+            model=self._resolve_model(model),
             extra_user_content_parts=extra_user_content_parts,
             tool_choice=tool_choice,
             **kwargs,
@@ -131,7 +135,6 @@ class ProviderOpenCodeGo(Provider):
         tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
-        requested_model = model or self.get_model()
         async for response in self.openai_provider.text_chat_stream(
             prompt=prompt,
             session_id=session_id,
@@ -141,7 +144,7 @@ class ProviderOpenCodeGo(Provider):
             contexts=contexts,
             system_prompt=system_prompt,
             tool_calls_result=tool_calls_result,
-            model=self._ensure_chat_completions_model(requested_model),
+            model=self._resolve_model(model),
             tool_choice=tool_choice,
             **kwargs,
         ):
