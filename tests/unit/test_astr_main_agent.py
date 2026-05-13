@@ -773,15 +773,19 @@ class TestEnsurePersonaAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id=None)
 
-        await module._ensure_persona_and_skills(
-            req,
-            {
-                "computer_use_runtime": "sandbox",
-                "sandbox": {"booter": "provider_a"},
-            },
-            mock_context,
-            mock_event,
-        )
+        with patch(
+            "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
+            return_value="provider_a",
+        ):
+            await module._ensure_persona_and_skills(
+                req,
+                {
+                    "computer_use_runtime": "sandbox",
+                    "sandbox": {"booter": "provider_a"},
+                },
+                mock_context,
+                mock_event,
+            )
 
         assert req.func_tool is not None
         assert "provider_a_screenshot" in req.func_tool.names()
@@ -1142,9 +1146,12 @@ class TestPluginToolFix:
         mock_event.plugins_name = ["other_plugin"]
         mock_event.unified_msg_origin = "session-a"
 
-        with patch("astrbot.core.astr_main_agent.star_map"), patch(
-            "astrbot.core.astr_main_agent.resolve_effective_sandbox_provider_id",
-            return_value="",
+        with (
+            patch("astrbot.core.astr_main_agent.star_map"),
+            patch(
+                "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
+                return_value=None,
+            ),
         ):
             module._plugin_tool_fix(
                 mock_event,
@@ -1183,9 +1190,12 @@ class TestPluginToolFix:
         mock_event.plugins_name = ["other_plugin"]
         mock_event.unified_msg_origin = "session-a"
 
-        with patch("astrbot.core.astr_main_agent.star_map"), patch(
-            "astrbot.core.astr_main_agent.resolve_effective_sandbox_provider_id",
-            return_value="cua",
+        with (
+            patch("astrbot.core.astr_main_agent.star_map"),
+            patch(
+                "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
+                return_value="cua",
+            ),
         ):
             module._plugin_tool_fix(
                 mock_event,
@@ -2073,6 +2083,53 @@ class TestApplySandboxTools:
 
         assert "[provider_b provider]" in req.system_prompt
         assert "[provider_a provider]" not in req.system_prompt
+
+    def test_apply_sandbox_tools_does_not_use_configured_provider_without_current_sandbox(
+        self, mock_context
+    ):
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={"booter": "provider_a"},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
+        req.session_id = "session-a"
+
+        provider_tool = FunctionTool(
+            name="provider_a_screenshot",
+            parameters={"type": "object", "properties": {}},
+            description="Provider A screenshot",
+        )
+        provider_tool.sandbox_provider_id = "provider_a"
+
+        with (
+            patch(
+                "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
+                return_value=None,
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.get_sandbox_provider_info",
+                side_effect=lambda provider_id: (
+                    {
+                        "tool_names": ["provider_a_screenshot"],
+                        "capabilities": ["gui"],
+                        "system_prompt": "[provider_a provider]",
+                    }
+                    if provider_id == "provider_a"
+                    else None
+                ),
+            ),
+            patch(
+                "astrbot.core.provider.register.llm_tools.get_func",
+                return_value=provider_tool,
+            ),
+        ):
+            module._apply_sandbox_tools(config, req)
+
+        assert "provider_a_screenshot" not in req.func_tool.names()
+        assert "[provider_a provider]" not in req.system_prompt
+        assert "send screenshots to the user to show progress" not in req.system_prompt
 
     def test_handoff_runtime_computer_tools_include_sandbox_lifecycle_tools(self):
         tool_mgr = MagicMock()

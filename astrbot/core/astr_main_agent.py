@@ -30,10 +30,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.computer import computer_client
-from astrbot.core.computer.sandbox_tool_binding import (
-    resolve_effective_sandbox_provider_id,
-    tool_matches_sandbox_provider,
-)
+from astrbot.core.computer.sandbox_tool_binding import tool_matches_sandbox_provider
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
@@ -413,20 +410,11 @@ def _filter_skills_for_current_config(
     return filtered
 
 
-def _configured_sandbox_provider_id(cfg: dict) -> str | None:
-    sandbox_cfg = cfg.get("sandbox", {})
-    return sandbox_cfg.get("booter") if isinstance(sandbox_cfg, dict) else None
-
-
 def _tool_matches_current_sandbox_provider(
     tool: FunctionTool, cfg: dict, session_id: str
 ) -> bool:
     runtime = str(cfg.get("computer_use_runtime", "local"))
-    current_provider = resolve_effective_sandbox_provider_id(
-        session_id,
-        _configured_sandbox_provider_id(cfg),
-        computer_client.get_current_sandbox_provider_id,
-    )
+    current_provider = computer_client.get_current_sandbox_provider_id(session_id)
     return tool_matches_sandbox_provider(tool, runtime, current_provider)
 
 
@@ -482,11 +470,7 @@ async def _ensure_persona_and_skills(
     # Inject skills prompt
     runtime = cfg.get("computer_use_runtime", "local")
     skill_manager = SkillManager()
-    current_provider = resolve_effective_sandbox_provider_id(
-        session_id,
-        _configured_sandbox_provider_id(cfg),
-        computer_client.get_current_sandbox_provider_id,
-    )
+    current_provider = computer_client.get_current_sandbox_provider_id(session_id)
     skills = skill_manager.list_skills(
         active_only=True,
         runtime=runtime,
@@ -1045,12 +1029,7 @@ def _apply_sandbox_tools(
         req.func_tool = ToolSet()
     if req.system_prompt is None:
         req.system_prompt = ""
-    configured_booter = config.sandbox_cfg.get("booter", "")
-    current_provider = resolve_effective_sandbox_provider_id(
-        req.session_id,
-        configured_booter,
-        computer_client.get_current_sandbox_provider_id,
-    )
+    current_provider = computer_client.get_current_sandbox_provider_id(req.session_id)
 
     tool_mgr = llm_tools
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))

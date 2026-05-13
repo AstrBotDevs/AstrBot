@@ -317,6 +317,65 @@ async def test_build_handoff_toolset_prefers_current_sandbox_provider(
 
 
 @pytest.mark.asyncio
+async def test_build_handoff_toolset_does_not_use_configured_provider_without_current_sandbox(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.agent.tool import FunctionTool
+    from astrbot.core.computer.computer_client import sandbox_manager
+
+    provider_tool = FunctionTool(
+        name="provider_a_screenshot",
+        parameters={"type": "object", "properties": {}},
+        description="Provider A screenshot",
+    )
+    provider_tool.sandbox_provider_id = "provider_a"
+
+    previous_tools = list(llm_tools.func_list)
+    previous_providers = dict(sandbox_manager.providers)
+    FunctionToolExecutor._runtime_computer_tools_cache.clear()
+    llm_tools.func_list = [provider_tool]
+    sandbox_manager.providers = {
+        "provider_a": SimpleNamespace(
+            provider_id="provider_a",
+            capabilities=set(),
+            tool_names={"provider_a_screenshot"},
+        ),
+    }
+
+    tool_mgr = SimpleNamespace(
+        get_builtin_tool=lambda cls, **kwargs: cls(**kwargs),
+        get_func=lambda name: {"provider_a_screenshot": provider_tool}.get(name),
+    )
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "provider_a"},
+            }
+        },
+        get_llm_tool_manager=lambda: tool_mgr,
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+    monkeypatch.setattr(
+        sandbox_manager.registry,
+        "get_current_sandbox_id",
+        lambda session_id: None,
+    )
+
+    try:
+        toolset = FunctionToolExecutor._build_handoff_toolset(run_context, None)
+        assert toolset is not None
+        assert "astrbot_list_sandbox_providers" in toolset.names()
+        assert "provider_a_screenshot" not in toolset.names()
+    finally:
+        llm_tools.func_list = previous_tools
+        sandbox_manager.providers = previous_providers
+        FunctionToolExecutor._runtime_computer_tools_cache.clear()
+
+
+@pytest.mark.asyncio
 async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_file(
     monkeypatch: pytest.MonkeyPatch,
 ):

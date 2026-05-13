@@ -22,7 +22,6 @@ from astrbot.core.astr_main_agent_resources import (
 )
 from astrbot.core.computer import computer_client
 from astrbot.core.computer.sandbox_tool_binding import (
-    resolve_effective_sandbox_provider_id,
     resolve_sandbox_provider_bindings,
     tool_matches_sandbox_provider,
 )
@@ -320,14 +319,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
-        sandbox_cfg = provider_settings.get("sandbox", {})
-        configured_provider = (
-            sandbox_cfg.get("booter") if isinstance(sandbox_cfg, dict) else None
-        )
-        current_provider = resolve_effective_sandbox_provider_id(
-            event.unified_msg_origin,
-            configured_provider,
-            computer_client.get_current_sandbox_provider_id,
+        current_provider = computer_client.get_current_sandbox_provider_id(
+            event.unified_msg_origin
         )
         tool_mgr = (
             ctx.get_llm_tool_manager()
