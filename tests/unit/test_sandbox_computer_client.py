@@ -35,9 +35,6 @@ class FakeProvider:
     def update_connect_info(self, record, *, sandbox_name):
         return {"name": sandbox_name}
 
-    def get_idle_timeout(self, context, session_id):
-        return 0
-
     async def create_booter(self, context, session_id, sandbox_id, config):
         self.created.append((session_id, sandbox_id, config))
         return FakeBooter()

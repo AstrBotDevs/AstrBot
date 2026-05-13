@@ -16,7 +16,7 @@ class SandboxProvider(Protocol):
 
     Optional attributes (core uses ``getattr`` with safe fallbacks):
         provider_api_version: Provider API compatibility version. Defaults to "1.0".
-        system_prompt: Extra system prompt injected when this provider is active.
+        system_prompt: Runtime-specific instructions exposed in provider metadata.
         plugin_config: Plugin-specific configuration dict.  Implementations are
             encouraged to accept this as an ``__init__`` parameter so the
             provider is fully initialized at construction time.
@@ -38,8 +38,6 @@ class SandboxProvider(Protocol):
     def build_connect_info(self, sandbox_name: str, config: dict) -> dict: ...
 
     def update_connect_info(self, record: dict, *, sandbox_name: str) -> dict: ...
-
-    def get_idle_timeout(self, context: Context, session_id: str) -> float: ...
 
     async def create_booter(
         self,

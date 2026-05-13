@@ -251,11 +251,19 @@ class SandboxRoute(Route):
                 if current_sandbox
                 else "temporary",
             )
+            idle_timeout = data.get(
+                "idle_timeout",
+                current_sandbox.get("idle_timeout") if current_sandbox else None,
+            )
+            expires_at = data.get(
+                "expires_at",
+                current_sandbox.get("expires_at") if current_sandbox else None,
+            )
             sandbox = computer_client.sandbox_manager.update_sandbox_config(
                 sandbox_id,
                 sandbox_name=data.get("sandbox_name"),
-                idle_timeout=data.get("idle_timeout"),
-                expires_at=data.get("expires_at"),
+                idle_timeout=idle_timeout,
+                expires_at=expires_at,
                 retention_policy=retention_policy,
             )
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)

@@ -416,7 +416,7 @@ class TestConfigValidation:
 
         assert "unknown_key" not in config
 
-    def test_remove_legacy_sandbox_provider_config_keys(self, temp_config_path):
+    def test_remove_unknown_sandbox_provider_config_keys(self, temp_config_path):
         default_config = {
             "provider_settings": {
                 "sandbox": {"booter": ""},

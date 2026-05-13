@@ -45,7 +45,6 @@ class FakeProvider:
     def __init__(self):
         self.created = []
         self.destroyed = []
-        self.idle_timeout = 0
 
     def build_create_config(self, context, session_id):
         return {"session_id": session_id}
@@ -57,9 +56,6 @@ class FakeProvider:
         info = dict(record.get("connect_info") or {})
         info["name"] = sandbox_name
         return info
-
-    def get_idle_timeout(self, context, session_id):
-        return self.idle_timeout
 
     async def create_booter(self, context, session_id, sandbox_id, config):
         booter = FakeBooter()

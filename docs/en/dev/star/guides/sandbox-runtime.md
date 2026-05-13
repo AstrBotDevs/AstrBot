@@ -63,7 +63,6 @@ AstrBot calls the provider whenever it needs to create, reuse, rename, or destro
 - `build_create_config(context, session_id)`
 - `build_connect_info(sandbox_name, config)`
 - `update_connect_info(record, *, sandbox_name)`
-- `get_idle_timeout(context, session_id)`
 - `create_booter(context, session_id, sandbox_id, config)`
 - `destroy_booter(booter, record)`
 
@@ -106,9 +105,6 @@ class MySandboxProvider:
         info = dict(record.get("connect_info") or {})
         info["name"] = sandbox_name
         return info
-
-    def get_idle_timeout(self, context, session_id):
-        return 0.0
 
     async def create_booter(self, context, session_id, sandbox_id, config):
         booter = MyBooter(**config)
@@ -157,7 +153,7 @@ Common examples:
 
 AstrBot uses `tool_names` when mounting tools in sandbox mode. Make sure the names match the tools you register in `main.py`.
 
-Use `system_prompt` for stable runtime-specific instructions that the model must see whenever this provider is active. Examples include file path rules, GUI screenshot workflow, browser automation constraints, or provider-specific skill lifecycle steps.
+Use `system_prompt` as provider metadata for stable runtime-specific instructions. Core exposes it through provider info so dashboards or higher-level integrations can show the provider rules, but it is not automatically appended to every model request.
 
 ## 5. Try it locally
 
