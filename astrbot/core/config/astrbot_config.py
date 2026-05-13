@@ -8,11 +8,13 @@ from astrbot.core.utils.auth_password import (
     generate_dashboard_password,
     hash_dashboard_password,
     hash_legacy_dashboard_password,
+    validate_dashboard_password,
 )
 
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
+DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
 logger = logging.getLogger("astrbot")
 
 
@@ -97,7 +99,7 @@ class AstrBotConfig(dict):
         self.update(conf)
 
     def _reset_generated_dashboard_password(self, conf: dict) -> None:
-        generated_password = generate_dashboard_password()
+        generated_password = self._resolve_initial_dashboard_password()
         conf["dashboard"]["pbkdf2_password"] = hash_dashboard_password(
             generated_password
         )
@@ -116,6 +118,14 @@ class AstrBotConfig(dict):
             "_generated_dashboard_password_change_required",
             True,
         )
+
+    @staticmethod
+    def _resolve_initial_dashboard_password() -> str:
+        env_password = os.environ.get(DASHBOARD_INITIAL_PASSWORD_ENV)
+        if env_password is None:
+            return generate_dashboard_password()
+        validate_dashboard_password(env_password)
+        return env_password
 
     def _config_schema_to_default_config(self, schema: dict) -> dict:
         """将 Schema 转换成 Config"""
