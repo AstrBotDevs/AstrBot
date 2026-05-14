@@ -68,79 +68,12 @@ async def get_media_duration(file_path: str) -> int | None:
 
 
 async def convert_audio_to_opus(audio_path: str, output_path: str | None = None) -> str:
-    """使用ffmpeg将音频转换为opus格式
-
-    Args:
-        audio_path: 原始音频文件路径
-        output_path: 输出文件路径，如果为None则自动生成
-
-    Returns:
-        转换后的opus文件路径
-
-    Raises:
-        Exception: 转换失败时抛出异常
-    """
-    # 如果已经是opus格式，直接返回
-    if audio_path.lower().endswith(".opus"):
-        return audio_path
-
-    # 生成输出文件路径
-    if output_path is None:
-        temp_dir = get_astrbot_temp_path()
-        os.makedirs(temp_dir, exist_ok=True)
-        output_path = os.path.join(temp_dir, f"media_audio_{uuid.uuid4().hex}.opus")
-
-    try:
-        # 使用ffmpeg转换为opus格式
-        # -y: 覆盖输出文件
-        # -i: 输入文件
-        # -acodec libopus: 使用opus编码器
-        # -ac 1: 单声道
-        # -ar 16000: 采样率16kHz
-        process = await asyncio.create_subprocess_exec(
-            "ffmpeg",
-            "-y",
-            "-i",
-            audio_path,
-            "-acodec",
-            "libopus",
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            output_path,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-
-        stdout, stderr = await process.communicate()
-
-        if process.returncode != 0:
-            # 清理可能已生成但无效的临时文件
-            if output_path and os.path.exists(output_path):
-                try:
-                    os.remove(output_path)
-                    logger.debug(
-                        f"[Media Utils] 已清理失败的opus输出文件: {output_path}"
-                    )
-                except OSError as e:
-                    logger.warning(f"[Media Utils] 清理失败的opus输出文件时出错: {e}")
-
-            error_msg = stderr.decode() if stderr else "未知错误"
-            logger.error(f"[Media Utils] ffmpeg转换音频失败: {error_msg}")
-            raise Exception(f"ffmpeg conversion failed: {error_msg}")
-
-        logger.debug(f"[Media Utils] 音频转换成功: {audio_path} -> {output_path}")
-        return output_path
-
-    except FileNotFoundError:
-        logger.error(
-            "[Media Utils] ffmpeg未安装或不在PATH中，无法转换音频格式。请安装ffmpeg: https://ffmpeg.org/"
-        )
-        raise Exception("ffmpeg not found")
-    except Exception as e:
-        logger.error(f"[Media Utils] 转换音频格式时出错: {e}")
-        raise
+    """将音频转换为opus格式。"""
+    return await convert_audio_format(
+        audio_path=audio_path,
+        output_format="opus",
+        output_path=output_path,
+    )
 
 
 async def convert_video_format(
@@ -245,7 +178,24 @@ async def convert_audio_format(
 
     args = ["ffmpeg", "-y", "-i", audio_path]
     if output_format == "amr":
-        args.extend(["-ac", "1", "-ar", "8000", "-ab", "12.2k"])
+        args.extend(
+            [
+                "-ac",
+                "1",
+                "-ar",
+                "8000",
+                "-ab",
+                "12.2k",
+                "-af",
+                (
+                    "highpass=f=310:poles=2,"
+                    "lowpass=f=3720:poles=2,"
+                    "equalizer=f=3150:width_type=h:width=1000:g=7.5,"
+                    "loudnorm=I=-18.5:TP=-1.5:LRA=6,"
+                    "aresample=8000"
+                ),
+            ]
+        )
     elif output_format == "ogg":
         args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
     elif output_format == "opus":
