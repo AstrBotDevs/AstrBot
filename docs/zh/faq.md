@@ -24,6 +24,8 @@
 Set dashboard.host in data/cmd_config.json to enable remote access.
 ```
 
+其中的 `UiYVpZxnW8k22IWqf0ru5pOy` 就是默认密码。在使用默认密码登录后，会自动进入设置账户环节。
+
 ### 管理面板的密码忘记了
 
 如果你忘记了 AstrBot 管理面板的密码，你可以在 `AstrBot/data/cmd_config.json` 配置文件中找到 `"dashboard"` 字段，如下：
@@ -68,6 +70,18 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 ```
 
 重启后 AstrBot 将会自动生成随机的密码以及固定的用户名 `astrbot`，请在日志查看。
+
+### 升级 AstrBot 后密码正确但无法登录
+
+如果你确认管理面板密码正确，但升级 AstrBot 后仍然无法登录，可能是旧版 WebUI 静态文件缓存与新版后端不兼容。
+
+解决方案：
+
+1. 停止 AstrBot。
+2. 删除 AstrBot 的 `data` 目录下的 `dist` 文件夹，即 `AstrBot/data/dist`。
+3. 重新启动 AstrBot。
+
+重启后，AstrBot 会重新加载或下载匹配当前版本的 WebUI 文件。
 
 ## AstrBot 使用相关
 

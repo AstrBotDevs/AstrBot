@@ -23,7 +23,7 @@ On first startup, the WebUI account is `astrbot` by default, and the default pas
 Set dashboard.host in data/cmd_config.json to enable remote access.
 ```
 
-The random initial password may be different each first startup, so please change it as soon as possible in WebUI settings after logging in.
+`UiYVpZxnW8k22IWqf0ru5pOy` is the default password.
 
 ### Forgot Dashboard Password
 
@@ -69,6 +69,18 @@ The segment should look like:
 ```
 
 After restart, AstrBot will automatically generate a random password with the fixed username `astrbot`; check the startup logs.
+
+### Correct Password Cannot Log In After Upgrading AstrBot
+
+If you are sure the dashboard password is correct but still cannot log in after upgrading AstrBot, the old WebUI static files may be incompatible with the newer backend.
+
+Solution:
+
+1. Stop AstrBot.
+2. Delete the `dist` folder under AstrBot's `data` directory: `AstrBot/data/dist`.
+3. Restart AstrBot.
+
+After restart, AstrBot will reload or download WebUI files that match the current version.
 
 ## Bot Core Related
 
