@@ -130,6 +130,34 @@
     "waiting": "Waiting for QR",
     "close": "Close"
   },
+  "registrationAction": {
+    "lark": {
+      "title": "One-click QR Setup",
+      "show": "One-click QR Setup",
+      "feishu": "Feishu China",
+      "lark": "Lark Global"
+    },
+    "start": "Start Setup",
+    "created": "Setup Complete",
+    "startFailed": "Failed to start QR setup",
+    "pollFailed": "Failed to poll QR setup status",
+    "mode": {
+      "title": "Choose setup method",
+      "scan": "One-click QR setup",
+      "manual": "Manual setup (supports self-hosted Feishu)"
+    },
+    "scanTitle": "Scan with Feishu on your phone",
+    "status": {
+      "idle": "Not Started",
+      "starting": "Starting",
+      "pending": "Waiting for Scan",
+      "slow_down": "Polling Slowed",
+      "created": "Setup Complete - remember to click the save button!",
+      "denied": "Canceled",
+      "expired": "Expired",
+      "error": "Setup Failed"
+    }
+  },
   "errorDialog": {
     "title": "Error Details",
     "platformId": "Platform ID",
