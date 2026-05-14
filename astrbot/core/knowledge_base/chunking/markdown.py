@@ -129,7 +129,7 @@ class MarkdownChunker(BaseChunker):
                 # 扣除前缀长度，确保添加前缀后不超过 chunk_size
                 prefix_len = self._estimate_prefix_length(heading_path)
                 effective_chunk_size = max(
-                    chunk_size - prefix_len, chunk_size // 2
+                    chunk_size // 4, chunk_size - prefix_len
                 )
 
                 sub_chunks = await self._fallback_chunker.chunk(
