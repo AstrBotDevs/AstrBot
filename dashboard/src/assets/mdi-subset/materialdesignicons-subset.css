@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 263 icons */
+/* Auto-generated MDI subset – 265 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -592,6 +592,10 @@
   content: "\F0309";
 }
 
+.mdi-key-variant::before {
+  content: "\F030B";
+}
+
 .mdi-label::before {
   content: "\F0315";
 }
@@ -902,6 +906,10 @@
 
 .mdi-shield-check-outline::before {
   content: "\F0CC8";
+}
+
+.mdi-shield-key::before {
+  content: "\F0BC4";
 }
 
 .mdi-shuffle-variant::before {

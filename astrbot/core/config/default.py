@@ -252,6 +252,17 @@ DEFAULT_CONFIG = {
         "host": "0.0.0.0",
         "port": 6185,
         "disable_access_log": True,
+        "trust_proxy_headers": False,
+        "auth_rate_limit": {
+            "enable": True,
+            "average_interval": 1.0,
+            "max_burst": 3,
+        },
+        "totp": {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        },
         "ssl": {
             "enable": False,
             "cert_file": "",
@@ -2966,6 +2977,10 @@ CONFIG_METADATA_2 = {
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             },
             "dashboard.ssl.enable": {"type": "bool"},
+            "dashboard.trust_proxy_headers": {"type": "bool"},
+            "dashboard.auth_rate_limit.enable": {"type": "bool"},
+            "dashboard.auth_rate_limit.average_interval": {"type": "float"},
+            "dashboard.auth_rate_limit.max_burst": {"type": "int"},
             "dashboard.ssl.cert_file": {
                 "type": "string",
                 "condition": {"dashboard.ssl.enable": True},
@@ -4207,6 +4222,34 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "启用 WebUI HTTPS",
                         "type": "bool",
                         "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。",
+                    },
+                    "dashboard.trust_proxy_headers": {
+                        "description": "信任代理请求头获取客户端 IP",
+                        "type": "bool",
+                        "hint": "关闭时忽略 X-Forwarded-For/X-Real-IP，仅使用连接地址。",
+                    },
+                    "dashboard.auth_rate_limit.enable": {
+                        "description": "启用登录验证速率限制",
+                        "type": "bool",
+                        "hint": "关闭后将不对登录、TOTP 等身份验证接口进行速率限制。",
+                    },
+                    "dashboard.auth_rate_limit.average_interval": {
+                        "description": "登录验证速率限制平均间隔(秒)",
+                        "type": "float",
+                        "hint": "两次身份验证请求之间的最小平均间隔时间。例如设置为 1.0 表示每秒最多处理 1 个请求。",
+                        "condition": {"dashboard.auth_rate_limit.enable": True},
+                    },
+                    "dashboard.auth_rate_limit.max_burst": {
+                        "description": "登录验证速率限制最大突发数",
+                        "type": "int",
+                        "hint": "允许的瞬时最大突发请求数。例如设置为 3 表示在短时间内最多连续处理 3 个请求。",
+                        "condition": {"dashboard.auth_rate_limit.enable": True},
+                    },
+                    "dashboard.totp.enable": {
+                        "description": "启用 WebUI TOTP 双因素认证",
+                        "type": "bool",
+                        "hint": "启用后，登录 WebUI 需要额外输入验证码。",
+                        "_special": "dashboard_totp_manager",
                     },
                     "dashboard.ssl.cert_file": {
                         "description": "SSL 证书文件路径",
