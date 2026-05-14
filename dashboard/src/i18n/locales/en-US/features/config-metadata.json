@@ -1092,6 +1092,20 @@
           "description": "Trust Proxy Headers for Client IP",
           "hint": "When disabled, ignore X-Forwarded-For/X-Real-IP and use the connection address only."
         },
+        "auth_rate_limit": {
+          "enable": {
+            "description": "Enable Login Rate Limiting",
+            "hint": "When disabled, authentication endpoints (login, TOTP, etc.) will not be rate-limited."
+          },
+          "average_interval": {
+            "description": "Rate Limit Average Interval (seconds)",
+            "hint": "Minimum average interval between authentication requests. For example, 1.0 means at most 1 request per second."
+          },
+          "max_burst": {
+            "description": "Rate Limit Max Burst",
+            "hint": "Maximum number of consecutive burst requests allowed. For example, 3 allows up to 3 requests in a short burst."
+          }
+        },
         "ssl": {
           "enable": {
             "description": "Enable WebUI HTTPS",

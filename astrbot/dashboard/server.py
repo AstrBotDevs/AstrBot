@@ -283,19 +283,31 @@ class AstrBotDashboard:
             os.environ.get("ASTRBOT_TEST_MODE") != "true"
             and request.path in _RATE_LIMITED_ENDPOINTS
         ):
-            client_ip = self._get_request_client_ip()
-            limiter = _rate_limiters.get(client_ip)
-            if limiter is None:
-                limiter = _AuthRateLimiter(capacity=3, refill_rate=1.0)
-                _rate_limiters[client_ip] = limiter
-            if not await limiter.acquire():
-                r = jsonify(
-                    Response()
-                    .error("验证尝试过于频繁，系统可能正在遭受暴力破解")
-                    .__dict__
-                )
-                r.status_code = 429
-                return r
+            rl_config = self.config.get("dashboard", {}).get("auth_rate_limit", {})
+            rl_enabled = rl_config.get("enable", True)
+            if rl_enabled:
+                average_interval = float(rl_config.get("average_interval", 1.0))
+                max_burst = int(rl_config.get("max_burst", 3))
+                if average_interval <= 0:
+                    average_interval = 1.0
+                if max_burst <= 0:
+                    max_burst = 3
+                refill_rate = 1.0 / average_interval
+                client_ip = self._get_request_client_ip()
+                limiter = _rate_limiters.get(client_ip)
+                if limiter is None:
+                    limiter = _AuthRateLimiter(
+                        capacity=max_burst, refill_rate=refill_rate
+                    )
+                    _rate_limiters[client_ip] = limiter
+                if not await limiter.acquire():
+                    r = jsonify(
+                        Response()
+                        .error("验证尝试过于频繁，系统可能正在遭受暴力破解")
+                        .__dict__
+                    )
+                    r.status_code = 429
+                    return r
 
         allowed_exact_endpoints = {
             "/api/auth/login",
