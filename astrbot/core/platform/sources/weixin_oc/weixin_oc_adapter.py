@@ -993,7 +993,12 @@ class WeixinOCAdapter(Platform):
                 file_name,
             )
         except Exception as e:
-            logger.error("weixin_oc(%s): prepare media failed: %s", self.meta().id, e)
+            logger.error(
+                "weixin_oc(%s): prepare media failed: %s",
+                self.meta().id,
+                e,
+                exc_info=True,
+            )
             return False
 
         if text:
@@ -1608,6 +1613,7 @@ class WeixinOCAdapter(Platform):
         target_user = session.session_id
         pending_text = ""
         has_supported_segment = False
+        failed_segments = 0
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
                 pending_text += segment.text
@@ -1615,11 +1621,13 @@ class WeixinOCAdapter(Platform):
 
             if isinstance(segment, (Image, Video, File)):
                 has_supported_segment = True
-                await self._send_media_segment(
+                sent = await self._send_media_segment(
                     target_user,
                     segment,
                     text=pending_text.strip() or None,
                 )
+                if not sent:
+                    failed_segments += 1
                 pending_text = ""
                 continue
 
@@ -1631,12 +1639,19 @@ class WeixinOCAdapter(Platform):
 
         if pending_text:
             has_supported_segment = True
-            await self._send_to_session(target_user, pending_text.strip())
+            sent = await self._send_to_session(target_user, pending_text.strip())
+            if not sent:
+                failed_segments += 1
 
         if not has_supported_segment:
             logger.warning(
                 "weixin_oc(%s): outbound message ignored, no supported segments",
                 self.meta().id,
+            )
+        if failed_segments:
+            raise RuntimeError(
+                f"weixin_oc({self.meta().id}, target_user={target_user}) "
+                f"failed to send {failed_segments} message segment(s)"
             )
         await super().send_by_session(session, message_chain)
 
