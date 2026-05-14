@@ -34,17 +34,24 @@ class FakeSummaryProvider(Provider):
         return await self.text_chat_mock(**kwargs)
 
 
-def make_stage(*, provider: Provider | None = None, max_turns: int = 3):
+def make_stage(
+    *,
+    provider: Provider | None = None,
+    current_provider: Provider | None = None,
+    max_turns: int = 3,
+    provider_id: str | None = "summary",
+):
     stage = InternalAgentSubStage()
     stage.max_context_length = max_turns
     stage.dequeue_context_length = 1
     stage.context_limit_reached_strategy = "llm_compress"
-    stage.llm_compress_provider_id = "summary" if provider is not None else ""
+    stage.llm_compress_provider_id = provider_id or ""
     stage.llm_compress_keep_recent = 2
     stage.llm_compress_instruction = "Summarize history"
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     plugin_context = SimpleNamespace(
-        get_provider_by_id=MagicMock(return_value=provider)
+        get_provider_by_id=MagicMock(return_value=provider),
+        get_using_provider=MagicMock(return_value=current_provider),
     )
     stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=plugin_context))
     return stage
@@ -146,6 +153,76 @@ async def test_save_history_summarizes_only_after_turn_limit_exceeded():
         "Our previous history conversation summary:"
     )
     assert saved_history[-2]["content"] == "question 3"
+    assert saved_history[-1]["content"] == "answer 3"
+
+
+@pytest.mark.asyncio
+async def test_save_history_uses_current_provider_when_compress_provider_id_empty():
+    provider = FakeSummaryProvider()
+    stage = make_stage(
+        current_provider=provider,
+        max_turns=3,
+        provider_id="",
+    )
+
+    await stage._save_to_history(
+        make_event(),
+        make_request(),
+        LLMResponse(role="assistant", completion_text="latest answer"),
+        make_plain_turns(4),
+        runner_stats=None,
+    )
+
+    stage.ctx.plugin_manager.context.get_provider_by_id.assert_not_called()
+    stage.ctx.plugin_manager.context.get_using_provider.assert_called_once_with(
+        umo="umo-1"
+    )
+    provider.text_chat_mock.assert_awaited_once()
+    saved_history = stage.conv_manager.update_conversation.await_args.kwargs["history"]
+    assert saved_history[0]["content"].startswith(
+        "Our previous history conversation summary:"
+    )
+
+
+@pytest.mark.asyncio
+async def test_save_history_falls_back_when_summary_returns_empty_text():
+    provider = FakeSummaryProvider()
+    provider.text_chat_mock.return_value = LLMResponse(
+        role="assistant", completion_text=""
+    )
+    stage = make_stage(provider=provider, max_turns=3)
+
+    await stage._save_to_history(
+        make_event(),
+        make_request(),
+        LLMResponse(role="assistant", completion_text="latest answer"),
+        make_plain_turns(4),
+        runner_stats=None,
+    )
+
+    provider.text_chat_mock.assert_awaited_once()
+    saved_history = stage.conv_manager.update_conversation.await_args.kwargs["history"]
+    assert saved_history[0]["content"] == "question 1"
+    assert saved_history[-1]["content"] == "answer 3"
+
+
+@pytest.mark.asyncio
+async def test_save_history_falls_back_when_summary_provider_raises():
+    provider = FakeSummaryProvider()
+    provider.text_chat_mock.side_effect = RuntimeError("boom")
+    stage = make_stage(provider=provider, max_turns=3)
+
+    await stage._save_to_history(
+        make_event(),
+        make_request(),
+        LLMResponse(role="assistant", completion_text="latest answer"),
+        make_plain_turns(4),
+        runner_stats=None,
+    )
+
+    provider.text_chat_mock.assert_awaited_once()
+    saved_history = stage.conv_manager.update_conversation.await_args.kwargs["history"]
+    assert saved_history[0]["content"] == "question 1"
     assert saved_history[-1]["content"] == "answer 3"
 
 

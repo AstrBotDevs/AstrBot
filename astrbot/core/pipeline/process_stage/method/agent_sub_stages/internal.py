@@ -68,6 +68,19 @@ def _history_exceeds_turn_limit(messages: list[Message], max_turns: int) -> bool
     return _count_conversation_turns(messages) > max_turns
 
 
+def _has_valid_summary_message(messages: list[Message]) -> bool:
+    """Return whether LLM compression produced a non-empty summary block."""
+    summary_prefix = "Our previous history conversation summary:"
+    for message in messages:
+        if message.role != "user" or not isinstance(message.content, str):
+            continue
+        if not message.content.startswith(summary_prefix):
+            continue
+        summary_text = message.content.removeprefix(summary_prefix).strip()
+        return bool(summary_text)
+    return False
+
+
 class InternalAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
@@ -487,22 +500,40 @@ class InternalAgentSubStage(Stage):
         # the configured turn limit is exceeded; request-time token guarding is
         # handled separately by the agent runner.
         if _history_exceeds_turn_limit(messages_to_save, self.max_context_length):
+            from astrbot.core.agent.context.truncator import ContextTruncator
+
+            def fallback_truncate() -> list[Message]:
+                truncator = ContextTruncator()
+                return truncator.truncate_by_turns(
+                    messages_to_save,
+                    keep_most_recent_turns=self.max_context_length,
+                    drop_turns=self.dequeue_context_length,
+                )
+
             compress_provider = None
-            if (
-                self.context_limit_reached_strategy == "llm_compress"
-                and self.llm_compress_provider_id
-            ):
+            if self.context_limit_reached_strategy == "llm_compress":
                 from astrbot.api.provider import Provider as ApiProvider
 
-                raw_provider = self.ctx.plugin_manager.context.get_provider_by_id(
-                    self.llm_compress_provider_id
+                provider_source = (
+                    self.llm_compress_provider_id or "(current chat model)"
                 )
+                if self.llm_compress_provider_id:
+                    raw_provider = self.ctx.plugin_manager.context.get_provider_by_id(
+                        self.llm_compress_provider_id
+                    )
+                else:
+                    raw_provider = self.ctx.plugin_manager.context.get_using_provider(
+                        umo=event.unified_msg_origin
+                    )
+
                 if raw_provider is not None and isinstance(raw_provider, ApiProvider):
                     compress_provider = raw_provider
+                    if not self.llm_compress_provider_id:
+                        logger.info("llm_compress 使用当前聊天模型进行持久化历史压缩")
                 else:
                     logger.warning(
-                        "指定的上下文压缩模型 %s 不可用",
-                        self.llm_compress_provider_id,
+                        "上下文压缩模型 %s 不可用，将回退为按对话轮数截断",
+                        provider_source,
                     )
 
             if compress_provider is not None:
@@ -511,22 +542,26 @@ class InternalAgentSubStage(Stage):
                     LLMSummaryCompressor,
                 )
 
+                original_messages = messages_to_save
                 compressor = LLMSummaryCompressor(
                     provider=compress_provider,
                     keep_recent=self.llm_compress_keep_recent,
                     instruction_text=self.llm_compress_instruction,
                 )
-                messages_to_save = await compressor(messages_to_save)
+                compressed_messages = await compressor(original_messages)
+                if (
+                    compressed_messages is original_messages
+                    or not _has_valid_summary_message(compressed_messages)
+                ):
+                    logger.warning(
+                        "LLM 上下文压缩未产生有效摘要，将回退为按对话轮数截断"
+                    )
+                    messages_to_save = fallback_truncate()
+                else:
+                    messages_to_save = compressed_messages
             else:
                 # Fallback: turn-based truncation only.
-                from astrbot.core.agent.context.truncator import ContextTruncator
-
-                truncator = ContextTruncator()
-                messages_to_save = truncator.truncate_by_turns(
-                    messages_to_save,
-                    keep_most_recent_turns=self.max_context_length,
-                    drop_turns=self.dequeue_context_length,
-                )
+                messages_to_save = fallback_truncate()
 
         checkpoint_id = event.get_extra("llm_checkpoint_id")
         message_to_save = dump_messages_with_checkpoints(messages_to_save)

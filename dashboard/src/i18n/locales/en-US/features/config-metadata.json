@@ -271,7 +271,7 @@
         },
         "llm_compress_provider_id": {
           "description": "Model Provider ID for Context Compression",
-          "hint": "When left empty, will fall back to the 'Truncate by Turns' strategy."
+          "hint": "When left empty, the current chat model will be used for compression. If the model is unavailable or compression fails, AstrBot falls back to the 'Truncate by Turns' strategy."
         },
         "fallback_max_context_tokens": {
           "description": "Fallback context window size",
