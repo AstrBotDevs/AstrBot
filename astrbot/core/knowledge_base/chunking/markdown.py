@@ -320,7 +320,7 @@ class MarkdownChunker(BaseChunker):
         matches = list(fence_pattern.finditer(text))
 
         i = 0
-        while i < len(matches) - 1:
+        while i < len(matches):
             open_match = matches[i]
             open_fence = open_match.group(1)
             fence_char = open_fence[0]
