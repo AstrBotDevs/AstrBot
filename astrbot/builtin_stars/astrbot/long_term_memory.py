@@ -42,7 +42,7 @@ class LongTermMemory:
         self.acm = acm
         self.context = context
 
-        self._lock = asyncio.Lock()
+        self._locks: dict[str, asyncio.Lock] = {}
 
         self.raw_records: dict[str, deque[str]] = defaultdict(deque)
         """群聊原始记录。deque 支持 O(1) popleft。"""
@@ -63,6 +63,14 @@ class LongTermMemory:
 
         self._summary_next_retry: dict[str, int] = defaultdict(int)
         """LLM 摘要失败后，下次允许重试的 rounds 数下限（冷却期内跳过）。"""
+
+    def _get_lock(self, umo: str) -> asyncio.Lock:
+        """Return the per-session lock for a unified message origin."""
+        lock = self._locks.get(umo)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[umo] = lock
+        return lock
 
     # =========================================================================
     # 配置
@@ -179,15 +187,16 @@ class LongTermMemory:
     async def remove_session(self, event: AstrMessageEvent) -> int:
         """清理指定群的全部 LTM 状态。返回被清理的 raw_records 条数。"""
         umo = event.unified_msg_origin
-        cnt = len(self.raw_records.get(umo, deque()))
-        self.raw_records.pop(umo, None)
-        self.contexts.pop(umo, None)
-        self._raw_cursor.pop(umo, None)
-        self._persisted_tool_call_ids.pop(umo, None)
-        self._persisted_tool_result_ids.pop(umo, None)
-        self._summary_next_retry.pop(umo, None)
-        self.summaries.pop(umo, None)
-        return cnt
+        async with self._get_lock(umo):
+            cnt = len(self.raw_records.get(umo, deque()))
+            self.raw_records.pop(umo, None)
+            self.contexts.pop(umo, None)
+            self._raw_cursor.pop(umo, None)
+            self._persisted_tool_call_ids.pop(umo, None)
+            self._persisted_tool_result_ids.pop(umo, None)
+            self._summary_next_retry.pop(umo, None)
+            self.summaries.pop(umo, None)
+            return cnt
 
     # =========================================================================
     # 消息记录 (on_message 调用)
@@ -198,9 +207,8 @@ class LongTermMemory:
         if event.get_message_type() != MessageType.GROUP_MESSAGE:
             return
 
-        async with self._lock:
-            umo = event.unified_msg_origin
-
+        umo = event.unified_msg_origin
+        async with self._get_lock(umo):
             # 记录写入前索引 → on_req_llm 精确排除
             raw_idx = len(self.raw_records[umo])
             event.set_extra("_ltm_raw_idx", raw_idx)
@@ -242,14 +250,14 @@ class LongTermMemory:
     async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
         """增量构建 contexts 并注入到 req。ContextManager 由 agent runner 自动调用。"""
         umo = event.unified_msg_origin
-        if umo not in self.raw_records:
-            return
-
         prompt_idx = event.get_extra("_ltm_raw_idx", -1)
         if prompt_idx < 0:
             return
 
-        async with self._lock:
+        async with self._get_lock(umo):
+            if umo not in self.raw_records:
+                return
+
             raw_list = list(self.raw_records[umo])
             cursor = self._raw_cursor[umo]
             new_raw = raw_list[cursor:prompt_idx] if prompt_idx > cursor else []
@@ -259,24 +267,24 @@ class LongTermMemory:
                 self.contexts[umo].extend(new_segs)
                 self._raw_cursor[umo] = prompt_idx
 
-        # 前置保留 Persona 已注入的 begin_dialogs
-        existing_contexts = req.contexts or []
-        ctxs: list[dict] = list(existing_contexts)
+            # 前置保留 Persona 已注入的 begin_dialogs
+            existing_contexts = req.contexts or []
+            ctxs: list[dict] = list(existing_contexts)
 
-        # Inject LTM summary if available (LLM summary compaction strategy).
-        summary = self.summaries.get(umo, "")
-        if summary:
-            ctxs.append(
-                {
-                    "role": "system",
-                    "content": ("Long-term group memory summary:\n" + summary),
-                }
-            )
+            # Inject LTM summary if available (LLM summary compaction strategy).
+            summary = self.summaries.get(umo, "")
+            if summary:
+                ctxs.append(
+                    {
+                        "role": "system",
+                        "content": ("Long-term group memory summary:\n" + summary),
+                    }
+                )
 
-        ctxs.extend(self.contexts[umo])
-        req.contexts = ctxs
-        req.conversation = None
-        req.system_prompt += CHATROOM_SYSTEM_NOTE
+            ctxs.extend(self.contexts[umo])
+            req.contexts = ctxs
+            req.conversation = None
+            req.system_prompt += CHATROOM_SYSTEM_NOTE
 
     # =========================================================================
     # Agent 完成后（on_agent_done 钩子 → main.py 调用）
@@ -290,12 +298,12 @@ class LongTermMemory:
     ) -> None:
         """记录工具链 + bot 回复到 raw_records，闭合段，裁剪。"""
         umo = event.unified_msg_origin
-        if umo not in self.raw_records:
-            return
-
         cfg = self.cfg(event)
 
-        async with self._lock:
+        async with self._get_lock(umo):
+            if umo not in self.raw_records:
+                return
+
             time_str = datetime.datetime.now().strftime("%H:%M:%S")
 
             # 1. 提取工具链 → raw_records（按 tool_call_id 去重，避免历史重复注入）

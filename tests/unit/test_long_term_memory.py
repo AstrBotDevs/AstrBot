@@ -516,6 +516,92 @@ class TestLongTermMemoryIntegration:
         assert remaining[-1] == "[user99/14:00]: msg99"
         assert ltm._raw_cursor[umo] == 0  # 所有剩余条目在 cursor 之前被清除后归零
 
+    @pytest.mark.asyncio
+    async def test_slow_summary_does_not_block_other_umo(self):
+        """A slow LTM summary in one session must not block another session."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        from astrbot.api.event import AstrMessageEvent
+        from astrbot.api.message_components import Plain
+        from astrbot.api.platform import MessageType
+        from astrbot.api.provider import LLMResponse, Provider
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+
+        slow_umo = "group_slow"
+        fast_umo = "group_fast"
+        summary_started = asyncio.Event()
+        release_summary = asyncio.Event()
+
+        async def slow_text_chat(*args, **kwargs):
+            summary_started.set()
+            await release_summary.wait()
+            return LLMResponse(role="assistant", completion_text="summary")
+
+        provider = MagicMock(spec=Provider)
+        provider.text_chat = AsyncMock(side_effect=slow_text_chat)
+
+        cfg = {
+            "provider_ltm_settings": {
+                "image_caption": False,
+                "image_caption_provider_id": "",
+                "active_reply": {
+                    "enable": False,
+                    "method": "possibility_reply",
+                    "possibility_reply": 0.0,
+                    "prompt": "",
+                    "whitelist": [],
+                },
+                "ltm_compaction_strategy": "llm_summary",
+                "ltm_summary_trigger_rounds": 1,
+                "ltm_summary_keep_recent_rounds": 1,
+                "ltm_summary_provider_id": "summary-provider",
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        ctx = MagicMock()
+        ctx.get_config.return_value = cfg
+        ctx.get_provider_by_id.return_value = provider
+        ltm = LongTermMemory(MagicMock(), ctx)
+
+        slow_event = MagicMock(spec=AstrMessageEvent)
+        slow_event.unified_msg_origin = slow_umo
+        slow_event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+        slow_event.message_obj = MagicMock()
+        slow_event.message_obj.sender.nickname = "slow"
+
+        fast_event = MagicMock(spec=AstrMessageEvent)
+        fast_event.unified_msg_origin = fast_umo
+        fast_event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+        fast_event.get_messages.return_value = [Plain(text="hello from fast")]
+        fast_event.message_obj = MagicMock()
+        fast_event.message_obj.sender.nickname = "fast"
+
+        ltm.raw_records[slow_umo].append("[slow/00:00:00]: already consumed")
+        ltm._raw_cursor[slow_umo] = 1
+        ltm.contexts[slow_umo] = [
+            {"role": "user", "content": "old question"},
+            {"role": "assistant", "content": "old answer"},
+            {"role": "user", "content": "recent question"},
+            {"role": "assistant", "content": "recent answer"},
+        ]
+
+        slow_task = asyncio.create_task(
+            ltm.on_agent_done(
+                slow_event,
+                MagicMock(messages=[]),
+                LLMResponse(role="assistant", completion_text="slow reply"),
+            )
+        )
+        await asyncio.wait_for(summary_started.wait(), timeout=1)
+
+        await asyncio.wait_for(ltm.handle_message(fast_event), timeout=0.2)
+        assert len(ltm.raw_records[fast_umo]) == 1
+        assert fast_event.set_extra.call_args.args == ("_ltm_raw_idx", 0)
+
+        release_summary.set()
+        await asyncio.wait_for(slow_task, timeout=1)
+
 
 # =============================================================================
 # 多轮累积
