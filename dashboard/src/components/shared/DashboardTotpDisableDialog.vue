@@ -42,7 +42,7 @@
               color="error"
               variant="tonal"
               :loading="verifying"
-              :disabled="!recoveryCode || recoveryCode.length < 5"
+              :disabled="!isValidRecoveryCode"
               @click="confirmDisable"
             >
               {{ tm('system_group.system.dashboard.totp.disableConfirm') }}
@@ -91,7 +91,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
 
@@ -103,6 +103,12 @@ const recoveryCode = ref('')
 const showRecovery = ref(false)
 const verifying = ref(false)
 const errorMsg = ref('')
+
+const isValidRecoveryCode = computed(() => {
+  if (!recoveryCode.value) return false
+  const normalized = recoveryCode.value.replace(/[^A-Za-z0-9]/g, '')
+  return normalized.length === 32
+})
 
 function resetState() {
   code.value = ''
