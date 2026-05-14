@@ -1,11 +1,16 @@
+import json
 from types import SimpleNamespace
 
 import mcp
 import pytest
 
+from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.tools.message_tools import SendMessageToUserTool
 
 
 class _DummyEvent:
@@ -319,6 +324,208 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
 
     assert len(results) == 1
     assert captured["tool_call_timeout"] == 120
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("default_mode", "mode_arg", "expected_mode", "expected_state", "expected_source"),
+    [
+        ("silent", None, "silent", "子代理静默调用=开启", "source=default"),
+        ("silent", "normal", "normal", "子代理静默调用=未开启", "source=explicit"),
+    ],
+)
+async def test_execute_handoff_logs_silent_mode_state(
+    monkeypatch: pytest.MonkeyPatch,
+    default_mode: str,
+    mode_arg: str | None,
+    expected_mode: str,
+    expected_state: str,
+    expected_source: str,
+):
+    logs: list[str] = []
+
+    async def _fake_execute_handoff(cls, tool, run_context, **tool_args):
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="ok")]
+        )
+
+    def _fake_info(message, *args, **kwargs):
+        logs.append(message % args if args else str(message))
+
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_execute_handoff",
+        classmethod(_fake_execute_handoff),
+    )
+    monkeypatch.setattr("astrbot.core.astr_agent_tool_exec.logger.info", _fake_info)
+
+    tool = HandoffTool(
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        )
+    )
+    tool.set_default_handoff_mode(default_mode)
+    run_context = _build_run_context()
+
+    tool_args = {"input": "hello"}
+    if mode_arg is not None:
+        tool_args["mode"] = mode_arg
+
+    results = []
+    async for result in FunctionToolExecutor.execute(tool, run_context, **tool_args):
+        results.append(result)
+
+    assert len(results) == 1
+    assert any(
+        f"mode={expected_mode}" in log
+        and expected_state in log
+        and expected_source in log
+        for log in logs
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_silent_mode_removes_send_message_tool(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+    send_tool = SendMessageToUserTool()
+    helper_tool = FunctionTool(
+        name="helper_tool",
+        description="helper",
+        parameters={"type": "object", "properties": {}},
+        handler=None,
+    )
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[send_tool, helper_tool],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+        mode="silent",
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert isinstance(captured["tools"], ToolSet)
+    assert captured["tools"].names() == ["helper_tool"]
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_uses_tool_default_silent_mode(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+    send_tool = SendMessageToUserTool()
+    helper_tool = FunctionTool(
+        name="helper_tool",
+        description="helper",
+        parameters={"type": "object", "properties": {}},
+        handler=None,
+    )
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        default_handoff_mode="silent",
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[send_tool, helper_tool],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert isinstance(captured["tools"], ToolSet)
+    assert captured["tools"].names() == ["helper_tool"]
+
+
+@pytest.mark.asyncio
+async def test_format_handoff_response_text_includes_structured_chain_for_silent_mode():
+    llm_resp = SimpleNamespace(
+        completion_text="look at this",
+        result_chain=MessageChain()
+        .message("look at this")
+        .url_image("https://example.com/image.png"),
+    )
+
+    result = await FunctionToolExecutor._format_handoff_response_text(
+        llm_resp,
+        include_structured_chain=True,
+    )
+
+    assert json.loads(result) == {
+        "text": "look at this",
+        "components": [
+            {"type": "text", "data": {"text": "look at this"}},
+            {
+                "type": "image",
+                "data": {
+                    "file": "https://example.com/image.png",
+                    "url": "",
+                    "path": "",
+                },
+            },
+        ],
+    }
 
 
 @pytest.mark.asyncio
