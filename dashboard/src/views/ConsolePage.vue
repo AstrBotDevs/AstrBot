@@ -73,6 +73,11 @@ export default {
       status: ''
     }
   },
+  mounted() {
+    if (this.$refs.consoleDisplayer) {
+      this.$refs.consoleDisplayer.autoScroll = this.autoScrollEnabled;
+    }
+  },
   watch: {
     autoScrollEnabled(val) {
       localStorage.setItem('console_auto_scroll', val);
