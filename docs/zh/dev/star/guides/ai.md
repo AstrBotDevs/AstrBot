@@ -81,9 +81,18 @@ class MyPlugin(Star):
         tool_mgr.func_list.append(BilibiliTool())
 ```
 
+> [!WARNING]
+> `context.register_llm_tool()` 已被弃用，请勿在新插件中使用。
+>
+> 如需通过该方法注册（旧插件兼容），`func_args` 必须是 **字典列表**，格式为：
+> ```py
+> func_args = [{"type": "string", "name": "arg_name", "description": "参数描述"}, ...]
+> ```
+> 传入字符串列表或其他格式会导致 `AttributeError: 'str' object has no attribute 'pop'`。
+
 ### 通过装饰器定义 Tool 和注册 Tool
 
-除了上述的通过 `@dataclass` 定义 Tool 的方式之外，你也可以使用装饰器的方式注册 tool 到 AstrBot。如果请务必按照以下格式编写一个工具（包括函数注释，AstrBot 会解析该函数注释，请务必将注释格式写对）
+除了上述的通过 `@dataclass` 定义 Tool 的方式之外，你也可以使用装饰器的方式注册 tool 到 AstrBot。请务必按照以下格式编写一个工具（包括函数注释，AstrBot 会解析该函数注释，请务必将注释格式写对）：
 
 ```py{3,4,5,6,7}
 @filter.llm_tool(name="get_weather") # 如果 name 不填，将使用函数名
@@ -100,6 +109,13 @@ async def get_weather(self, event: AstrMessageEvent, location: str) -> MessageEv
 在 `location(string): 地点` 中，`location` 是参数名，`string` 是参数类型，`地点` 是参数描述。
 
 支持的参数类型有 `string`, `number`, `object`, `boolean`, `array`。在 v4.5.7 之后，支持对 `array` 类型参数指定子类型，例如 `array[string]`。
+
+> [!WARNING]
+> **`Args:` 段是必须的，且格式不能写错。**
+>
+> `@filter.llm_tool` 装饰器通过解析函数的 docstring 来生成工具的参数 schema，**不会**读取函数签名中的类型注解。如果 docstring 缺少 `Args:` 段，或格式不符合 `参数名(类型): 描述` 的规范，框架生成的参数 schema 将为空，LLM 传入的参数会被静默丢弃，最终导致函数因缺少参数而报错。
+>
+> 此外，装饰器**不支持**通过 `parameters=...` 显式传入参数 schema，该写法会被忽略。如需手动控制 schema，请使用上方的 `@dataclass` + `add_llm_tools()` 方式。
 
 ## 调用 Agent
 
