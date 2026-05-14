@@ -23,7 +23,11 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
-from astrbot.core.utils.io import get_local_ip_addresses
+from astrbot.core.utils.io import (
+    get_bundled_dashboard_dist_path,
+    get_local_ip_addresses,
+    should_use_bundled_dashboard_dist,
+)
 
 from .plugin_page_auth import PluginPageAuth
 from .routes import *
@@ -36,9 +40,6 @@ from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
-
-# Static assets shipped inside the wheel (built during `hatch build`).
-_BUNDLED_DIST = Path(__file__).parent / "dist"
 
 
 class _AddrWithPort(Protocol):
@@ -118,10 +119,14 @@ class AstrBotDashboard:
             self.data_path = os.path.abspath(webui_dir)
         else:
             user_dist = os.path.join(get_astrbot_data_path(), "dist")
-            if os.path.exists(user_dist):
+            bundled_dist = get_bundled_dashboard_dist_path()
+            if os.path.exists(user_dist) and not should_use_bundled_dashboard_dist(
+                user_dist,
+                VERSION,
+            ):
                 self.data_path = os.path.abspath(user_dist)
-            elif _BUNDLED_DIST.exists():
-                self.data_path = str(_BUNDLED_DIST)
+            elif bundled_dist.exists():
+                self.data_path = str(bundled_dist)
                 logger.info("Using bundled dashboard dist: %s", self.data_path)
             else:
                 # Fall back to expected user path (will fail gracefully later)
@@ -153,7 +158,7 @@ class AstrBotDashboard:
         self.cr = ConfigRoute(self.context, core_lifecycle)
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
         self.sfr = StaticFileRoute(self.context)
-        self.ar = AuthRoute(self.context)
+        self.ar = AuthRoute(self.context, db)
         self.api_key_route = ApiKeyRoute(self.context, db)
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
         self.open_api_route = OpenApiRoute(
@@ -241,15 +246,21 @@ class AstrBotDashboard:
             await self.db.touch_api_key(api_key.key_id)
             return None
 
-        allowed_endpoints = [
+        allowed_exact_endpoints = {
             "/api/auth/login",
             "/api/auth/logout",
+            "/api/auth/setup-status",
+            "/api/auth/setup",
+        }
+        allowed_endpoint_prefixes = [
             "/api/file",
             "/api/platform/webhook",
             "/api/stat/start-time",
             "/api/backup/download",  # 备份下载使用 URL 参数传递 token
         ]
-        if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
+        if request.path in allowed_exact_endpoints or any(
+            request.path.startswith(prefix) for prefix in allowed_endpoint_prefixes
+        ):
             return None
         is_plugin_page_path = PluginPageAuth.is_protected_path(request.path)
         token = self._extract_dashboard_jwt()
@@ -373,6 +384,20 @@ class AstrBotDashboard:
             logger.info("Initialized random JWT secret for dashboard.")
         self._jwt_secret = self.config["dashboard"]["jwt_secret"]
 
+    def _build_dashboard_credentials_display(self) -> str:
+        username = self.config["dashboard"].get("username", "astrbot")
+        generated_password = getattr(self.config, "_generated_dashboard_password", None)
+        if not generated_password:
+            return f"   ➜  Username: {username}\n ✨✨✨\n"
+
+        credentials_display = (
+            f"   ➜  Initial username: {username}\n"
+            f"   ➜  Initial password: {generated_password}\n"
+            "   ➜  Change it after logging in\n ✨✨✨\n"
+        )
+        object.__setattr__(self.config, "_generated_dashboard_password", None)
+        return credentials_display
+
     @staticmethod
     def _resolve_dashboard_ssl_config(
         ssl_config: dict,
@@ -492,7 +517,7 @@ class AstrBotDashboard:
         parts.append(f"   ➜  Local: {scheme}://localhost:{port}\n")
         for ip in ip_addr:
             parts.append(f"   ➜  Network: {scheme}://{ip}:{port}\n")
-        parts.append("   ➜  Default username/password: astrbot / astrbot\n ✨✨✨\n")
+        parts.append(self._build_dashboard_credentials_display())
         display = "".join(parts)
 
         if not ip_addr:

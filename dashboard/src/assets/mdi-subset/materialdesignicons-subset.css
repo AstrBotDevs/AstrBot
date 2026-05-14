@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 /* Auto-generated MDI subset – 264 icons */
+=======
+/* Auto-generated MDI subset – 263 icons */
+>>>>>>> upstream/master
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -26,6 +30,10 @@
 
 .mdi-account-circle::before {
   content: "\F0009";
+}
+
+.mdi-account-edit::before {
+  content: "\F06BC";
 }
 
 .mdi-account-edit-outline::before {
@@ -664,12 +672,20 @@
   content: "\F033E";
 }
 
+.mdi-lock-check::before {
+  content: "\F139A";
+}
+
 .mdi-lock-check-outline::before {
   content: "\F16A8";
 }
 
 .mdi-lock-outline::before {
   content: "\F0341";
+}
+
+.mdi-lock-plus::before {
+  content: "\F05FB";
 }
 
 .mdi-lock-plus-outline::before {
