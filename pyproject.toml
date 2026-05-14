@@ -65,6 +65,7 @@ dependencies = [
   "pysocks>=1.7.1",
   "packaging>=24.2",
   "python-ripgrep==0.0.8",
+  "pyotp>=2.9.0",
 ]
 
 [dependency-groups]

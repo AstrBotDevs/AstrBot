@@ -3,6 +3,7 @@ import hashlib
 import logging
 import os
 import socket
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol, cast
@@ -39,6 +40,37 @@ from .routes.t2i import T2iRoute
 
 # Static assets shipped inside the wheel (built during `hatch build`).
 _BUNDLED_DIST = Path(__file__).parent / "dist"
+_RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
+    {
+        "/api/auth/totp/disable",
+        "/api/auth/totp/setup",
+        "/api/auth/login",
+        "/api/auth/totp/verify-setup",
+    }
+)
+
+
+class _AuthRateLimiter:
+    def __init__(self, capacity: int, refill_rate: float):
+        self.capacity = capacity
+        self.refill_rate = refill_rate
+        self.tokens = float(capacity)
+        self.last_refill = time.monotonic()
+        self.lock = asyncio.Lock()
+
+    async def acquire(self) -> bool:
+        async with self.lock:
+            now = time.monotonic()
+            elapsed = now - self.last_refill
+            self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+            self.last_refill = now
+            if self.tokens >= 1:
+                self.tokens -= 1
+                return True
+            return False
+
+
+_rate_limiters: dict[str, _AuthRateLimiter] = {}
 
 
 class _AddrWithPort(Protocol):
@@ -240,6 +272,20 @@ class AstrBotDashboard:
             g.username = f"api_key:{api_key.key_id}"
             await self.db.touch_api_key(api_key.key_id)
             return None
+
+        if os.environ.get("ASTRBOT_TEST_MODE") != "true" and request.path in _RATE_LIMITED_ENDPOINTS:
+            limiter = _rate_limiters.get(request.path)
+            if limiter is None:
+                limiter = _AuthRateLimiter(capacity=3, refill_rate=1.0)
+                _rate_limiters[request.path] = limiter
+            if not await limiter.acquire():
+                r = jsonify(
+                    Response()
+                    .error("验证尝试过于频繁，系统可能正在遭受暴力破解")
+                    .__dict__
+                )
+                r.status_code = 429
+                return r
 
         allowed_exact_endpoints = {
             "/api/auth/login",

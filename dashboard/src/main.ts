@@ -128,6 +128,16 @@ axios.interceptors.request.use((config) => {
   return config;
 });
 
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 429 && error.response?.data?.message) {
+      return Promise.reject(error.response.data.message);
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Keep fetch() calls consistent with axios by automatically attaching the JWT.
 // Some parts of the UI use fetch directly; without this, those requests will 401.
 const _origFetch = window.fetch.bind(window);

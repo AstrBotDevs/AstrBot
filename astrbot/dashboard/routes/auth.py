@@ -3,6 +3,7 @@ import datetime
 import os
 
 import jwt
+import pyotp
 from quart import current_app, g, jsonify, make_response, request
 
 from astrbot import logger
@@ -12,6 +13,18 @@ from astrbot.core.utils.auth_password import (
     is_legacy_dashboard_password,
     validate_dashboard_password,
     verify_dashboard_password,
+)
+from astrbot.core.utils.totp import (
+    TOTP_TRUSTED_DEVICE_COOKIE_NAME,
+    TOTP_TRUSTED_DEVICE_MAX_AGE,
+    consume_configured_totp_code,
+    consume_totp_code,
+    generate_recovery_code,
+    is_totp_enabled,
+    is_totp_trusted_device_valid,
+    issue_totp_trusted_device,
+    revoke_user_trusted_devices,
+    verify_recovery_code,
 )
 from astrbot.dashboard.password_state import (
     get_dashboard_password_hash,
@@ -41,6 +54,9 @@ class AuthRoute(Route):
             "/auth/setup-status": ("GET", self.setup_status),
             "/auth/setup": ("POST", self.setup),
             "/auth/setup-authenticated": ("POST", self.setup_authenticated),
+            "/auth/totp/setup": ("POST", self.totp_setup),
+            "/auth/totp/verify-setup": ("POST", self.totp_verify_setup),
+            "/auth/totp/disable": ("POST", self.totp_disable),
             "/auth/account/edit": ("POST", self.edit_account),
         }
         self.register_routes()
@@ -60,6 +76,81 @@ class AuthRoute(Route):
             )
             .__dict__
         )
+
+    async def totp_setup(self):
+        is_rotation = is_totp_enabled(self.config)
+        if is_rotation:
+            post_data = await request.json
+            if not isinstance(post_data, dict):
+                return Response().error("Invalid request payload").__dict__
+            code = post_data.get("code")
+            if not isinstance(code, str) or not code.strip():
+                return Response().error("当前 TOTP 验证码是轮换所必需的").__dict__
+            if not await consume_configured_totp_code(self.config, code):
+                return Response().error("当前 TOTP 验证码无效").__dict__
+
+        secret = pyotp.random_base32()
+        return (
+            Response()
+            .ok(
+                {
+                    "secret": secret,
+                }
+            )
+            .__dict__
+        )
+
+    async def totp_verify_setup(self):
+        post_data = await request.json
+        if not isinstance(post_data, dict):
+            return Response().error("Invalid request payload").__dict__
+
+        secret = post_data.get("secret")
+        code = post_data.get("code")
+        if not isinstance(secret, str) or not secret.strip():
+            return Response().error("Invalid request payload").__dict__
+        if not isinstance(code, str) or not code.strip():
+            return Response().error("Invalid request payload").__dict__
+
+        if not await consume_totp_code(secret, code):
+            return Response().error("TOTP 验证码无效").__dict__
+
+        recovery_code, recovery_code_hash = generate_recovery_code()
+
+        return (
+            Response()
+            .ok(
+                {
+                    "recovery_code": recovery_code,
+                    "recovery_code_hash": recovery_code_hash,
+                },
+                "TOTP verified",
+            )
+            .__dict__
+        )
+
+    async def totp_disable(self):
+        post_data = await request.json
+        if not isinstance(post_data, dict):
+            return Response().error("Invalid request payload").__dict__
+
+        code = post_data.get("code")
+        if not isinstance(code, str) or not code.strip():
+            return Response().error("Invalid code").__dict__
+
+        if not await consume_configured_totp_code(
+            self.config, code
+        ) and not verify_recovery_code(self.config, code):
+            return Response().error("凭据无效").__dict__
+
+        self.config["dashboard"]["totp"] = {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        }
+        await revoke_user_trusted_devices(self.db)
+        self.config.save_config()
+        return Response().ok(None, "TOTP disabled").__dict__
 
     async def setup(self):
         if not self._can_skip_default_password_auth():
@@ -131,6 +222,12 @@ class AuthRoute(Route):
         req_password = (
             post_data.get("password") if isinstance(post_data, dict) else None
         )
+        totp_code = post_data.get("code") if isinstance(post_data, dict) else None
+        trust_device_flag = (
+            post_data.get("trust_device_flag") is True
+            if isinstance(post_data, dict)
+            else False
+        )
         if not isinstance(req_username, str) or not isinstance(req_password, str):
             return Response().error("Invalid request payload").__dict__
 
@@ -138,39 +235,92 @@ class AuthRoute(Route):
             password, req_password
         )
 
-        if login_verified:
-            change_pwd_hint = False
-            legacy_pwd_hint = is_legacy_dashboard_password(password)
-            password_change_required = await is_password_change_required(
-                self.db,
-                self.config,
+        if not login_verified:
+            await asyncio.sleep(3)
+            return await self._error_response(
+                "用户名或密码错误",
+                401,
             )
-            if (
-                storage_upgraded
-                and username == "astrbot"
-                and is_default_dashboard_password(password)
-                and not DEMO_MODE
+
+        totp_verified = False
+
+        if is_totp_enabled(self.config):
+            cookie_token = request.cookies.get(
+                TOTP_TRUSTED_DEVICE_COOKIE_NAME, ""
+            ).strip()
+            if not await is_totp_trusted_device_valid(
+                self.config, self.db, cookie_token
             ):
-                change_pwd_hint = True
-                legacy_pwd_hint = True
-                logger.warning("为了保证安全，请尽快修改默认密码。")
-            if password_change_required and not DEMO_MODE:
-                change_pwd_hint = True
-            token = self.generate_jwt(username)
-            payload = Response().ok(
-                {
-                    "token": token,
-                    "username": username,
-                    "change_pwd_hint": change_pwd_hint,
-                    "legacy_pwd_hint": legacy_pwd_hint,
-                    "password_upgrade_required": not storage_upgraded,
-                },
-            )
-            response = await make_response(jsonify(payload.__dict__))
-            self._set_dashboard_jwt_cookie(response, token)
-            return response
-        await asyncio.sleep(3)
-        return Response().error("用户名或密码错误").__dict__
+                if not isinstance(totp_code, str) or not totp_code.strip():
+                    response = await make_response(
+                        jsonify(
+                            {
+                                "status": "error",
+                                "message": "需要 TOTP 验证",
+                                "data": {"totp_required": True},
+                            }
+                        )
+                    )
+                    response.status_code = 401
+                    return response
+                if len(totp_code) == 6 and totp_code.isdigit():
+                    if await consume_configured_totp_code(self.config, totp_code):
+                        totp_verified = True
+                    else:
+                        return await self._error_response("TOTP 验证码无效", 401)
+                elif verify_recovery_code(self.config, totp_code):
+                    self.config["dashboard"]["totp"] = {
+                        "enable": False,
+                        "secret": "",
+                        "recovery_code_hash": "",
+                    }
+                    await revoke_user_trusted_devices(self.db)
+                    self.config.save_config()
+                else:
+                    return await self._error_response("恢复码无效", 401)
+
+        change_pwd_hint = False
+        legacy_pwd_hint = is_legacy_dashboard_password(password)
+        password_change_required = await is_password_change_required(
+            self.db,
+            self.config,
+        )
+        if (
+            storage_upgraded
+            and username == "astrbot"
+            and is_default_dashboard_password(password)
+            and not DEMO_MODE
+        ):
+            change_pwd_hint = True
+            legacy_pwd_hint = True
+            logger.warning("为了保证安全，请尽快修改默认密码。")
+        if password_change_required and not DEMO_MODE:
+            change_pwd_hint = True
+        token = self.generate_jwt(username)
+        login_data = {
+            "token": token,
+            "username": username,
+            "change_pwd_hint": change_pwd_hint,
+            "legacy_pwd_hint": legacy_pwd_hint,
+            "password_upgrade_required": not storage_upgraded,
+        }
+        payload = Response().ok(login_data)
+        response = await make_response(jsonify(payload.__dict__))
+        self._set_dashboard_jwt_cookie(response, token)
+
+        if totp_verified and trust_device_flag:
+            raw_token = await issue_totp_trusted_device(self.config, self.db)
+            if raw_token:
+                response.set_cookie(
+                    TOTP_TRUSTED_DEVICE_COOKIE_NAME,
+                    raw_token,
+                    max_age=TOTP_TRUSTED_DEVICE_MAX_AGE,
+                    httponly=True,
+                    samesite="Strict",
+                    secure=AuthRoute._use_secure_dashboard_jwt_cookie(),
+                    path="/api/auth",
+                )
+        return response
 
     async def logout(self):
         response = await make_response(
@@ -225,6 +375,8 @@ class AuthRoute(Route):
             set_dashboard_password_hashes(self.config, new_pwd)
             await set_password_storage_upgraded(self.db, self.config, True)
             await set_password_change_required(self.db, self.config, False)
+            if is_totp_enabled(self.config):
+                await revoke_user_trusted_devices(self.db)
         if new_username:
             self.config["dashboard"]["username"] = new_username
 
@@ -265,6 +417,12 @@ class AuthRoute(Route):
         ) == "astrbot" and is_default_dashboard_password(
             dashboard_config.get("pbkdf2_password", "")
         )
+
+    @staticmethod
+    async def _error_response(message: str, status_code: int):
+        response = await make_response(jsonify(Response().error(message).__dict__))
+        response.status_code = status_code
+        return response
 
     def _can_skip_default_password_auth(self) -> bool:
         if not self._env_flag_enabled(SKIP_DEFAULT_PASSWORD_AUTH_ENV):

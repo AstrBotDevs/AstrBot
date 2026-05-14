@@ -252,6 +252,11 @@ DEFAULT_CONFIG = {
         "host": "0.0.0.0",
         "port": 6185,
         "disable_access_log": True,
+        "totp": {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        },
         "ssl": {
             "enable": False,
             "cert_file": "",
@@ -4179,6 +4184,12 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "启用 WebUI HTTPS",
                         "type": "bool",
                         "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。",
+                    },
+                    "dashboard.totp.enable": {
+                        "description": "启用 WebUI TOTP 双因素认证",
+                        "type": "bool",
+                        "hint": "启用后，登录 WebUI 需要额外输入验证码。",
+                        "_special": "dashboard_totp_manager",
                     },
                     "dashboard.ssl.cert_file": {
                         "description": "SSL 证书文件路径",

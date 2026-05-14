@@ -280,6 +280,7 @@ function getSpecialSubtype(value) {
               v-else
               v-model="createSelectorModel(itemKey).value"
               :item-meta="itemMeta || null"
+              :config-root="iterable"
               :show-fullscreen-btn="!!itemMeta?.editor_mode"
               @open-fullscreen="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
             />
@@ -360,6 +361,7 @@ function getSpecialSubtype(value) {
                     v-else
                     v-model="createSelectorModel(itemKey).value"
                     :item-meta="itemMeta || null"
+                    :config-root="iterable"
                     :show-fullscreen-btn="!!itemMeta?.editor_mode"
                     @open-fullscreen="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
                   />
