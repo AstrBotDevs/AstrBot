@@ -1,6 +1,8 @@
 import base64
+import inspect
 import logging
 import os
+import re
 import shutil
 import socket
 import ssl
@@ -15,6 +17,7 @@ import psutil
 from PIL import Image
 
 from .astrbot_path import get_astrbot_data_path, get_astrbot_path, get_astrbot_temp_path
+from .version_comparator import VersionComparator
 
 logger = logging.getLogger("astrbot")
 
@@ -147,7 +150,20 @@ async def download_image_by_url(
         raise e
 
 
-async def download_file(url: str, path: str, show_progress: bool = False) -> None:
+async def _emit_download_progress(progress_callback, payload: dict) -> None:
+    if not progress_callback:
+        return
+    result = progress_callback(payload)
+    if inspect.isawaitable(result):
+        await result
+
+
+async def download_file(
+    url: str,
+    path: str,
+    show_progress: bool = False,
+    progress_callback=None,
+) -> None:
     """从指定 url 下载文件到指定路径 path"""
     try:
         ssl_context = ssl.create_default_context(
@@ -168,6 +184,16 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 start_time = time.time()
                 if show_progress:
                     print(f"Downloading: {url} | Size: {total_size / 1024:.2f} KB")
+                await _emit_download_progress(
+                    progress_callback,
+                    {
+                        "url": url,
+                        "downloaded": 0,
+                        "total": total_size,
+                        "percent": 0,
+                        "speed": 0,
+                    },
+                )
                 with open(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
@@ -175,17 +201,38 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                             break
                         f.write(chunk)
                         downloaded_size += len(chunk)
+                        elapsed_time = (
+                            time.time() - start_time
+                            if time.time() - start_time > 0
+                            else 1
+                        )
+                        speed = downloaded_size / 1024 / elapsed_time  # KB/s
+                        percent = downloaded_size / total_size if total_size > 0 else 0
+                        await _emit_download_progress(
+                            progress_callback,
+                            {
+                                "url": url,
+                                "downloaded": downloaded_size,
+                                "total": total_size,
+                                "percent": percent,
+                                "speed": speed,
+                            },
+                        )
                         if show_progress:
-                            elapsed_time = (
-                                time.time() - start_time
-                                if time.time() - start_time > 0
-                                else 1
-                            )
-                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             print(
-                                f"\rProgress: {downloaded_size / total_size:.2%} Speed: {speed:.2f} KB/s",
+                                f"\rProgress: {percent:.2%} Speed: {speed:.2f} KB/s",
                                 end="",
                             )
+                await _emit_download_progress(
+                    progress_callback,
+                    {
+                        "url": url,
+                        "downloaded": downloaded_size,
+                        "total": total_size,
+                        "percent": 1,
+                        "speed": 0,
+                    },
+                )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
@@ -208,6 +255,16 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 start_time = time.time()
                 if show_progress:
                     print(f"Size: {total_size / 1024:.2f} KB | URL: {url}")
+                await _emit_download_progress(
+                    progress_callback,
+                    {
+                        "url": url,
+                        "downloaded": 0,
+                        "total": total_size,
+                        "percent": 0,
+                        "speed": 0,
+                    },
+                )
                 with open(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
@@ -215,13 +272,38 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                             break
                         f.write(chunk)
                         downloaded_size += len(chunk)
+                        elapsed_time = (
+                            time.time() - start_time
+                            if time.time() - start_time > 0
+                            else 1
+                        )
+                        speed = downloaded_size / 1024 / elapsed_time  # KB/s
+                        percent = downloaded_size / total_size if total_size > 0 else 0
+                        await _emit_download_progress(
+                            progress_callback,
+                            {
+                                "url": url,
+                                "downloaded": downloaded_size,
+                                "total": total_size,
+                                "percent": percent,
+                                "speed": speed,
+                            },
+                        )
                         if show_progress:
-                            elapsed_time = time.time() - start_time
-                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             print(
-                                f"\rProgress: {downloaded_size / total_size:.2%} Speed: {speed:.2f} KB/s",
+                                f"\rProgress: {percent:.2%} Speed: {speed:.2f} KB/s",
                                 end="",
                             )
+                await _emit_download_progress(
+                    progress_callback,
+                    {
+                        "url": url,
+                        "downloaded": downloaded_size,
+                        "total": total_size,
+                        "percent": 1,
+                        "speed": 0,
+                    },
+                )
     if show_progress:
         print()
 
@@ -245,20 +327,67 @@ def get_local_ip_addresses():
     return network_ips
 
 
+def _read_dashboard_dist_version(dist_dir: str | Path) -> str | None:
+    version_file = Path(dist_dir) / "assets" / "version"
+    if version_file.exists():
+        return version_file.read_text(encoding="utf-8").strip()
+    return None
+
+
+def get_bundled_dashboard_dist_path() -> Path:
+    return Path(get_astrbot_path()) / "astrbot" / "dashboard" / "dist"
+
+
+def _normalize_dashboard_version(version: str) -> str:
+    version = version.strip()
+    if version[:1].lower() == "v":
+        version = version[1:]
+    if not re.match(
+        r"^[0-9]+(?:\.[0-9]+)*"
+        r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+        r"(?:\+.+)?$",
+        version,
+    ):
+        raise ValueError(f"invalid dashboard version: {version!r}")
+    return version
+
+
+def should_use_bundled_dashboard_dist(
+    user_dist: str | Path, current_version: str
+) -> bool:
+    user_version = _read_dashboard_dist_version(user_dist)
+    bundled_dist = get_bundled_dashboard_dist_path()
+    if user_version is None or not bundled_dist.exists():
+        return False
+    try:
+        return (
+            VersionComparator.compare_version(
+                _normalize_dashboard_version(current_version),
+                _normalize_dashboard_version(user_version),
+            )
+            > 0
+        )
+    except (TypeError, ValueError):
+        return False
+
+
 async def get_dashboard_version():
     # First check user data directory (manually updated / downloaded dashboard).
     dist_dir = os.path.join(get_astrbot_data_path(), "dist")
-    if not os.path.exists(dist_dir):
-        # Fall back to the dist bundled inside the installed wheel.
-        _bundled = Path(get_astrbot_path()) / "astrbot" / "dashboard" / "dist"
-        if _bundled.exists():
-            dist_dir = str(_bundled)
     if os.path.exists(dist_dir):
-        version_file = os.path.join(dist_dir, "assets", "version")
-        if os.path.exists(version_file):
-            with open(version_file, encoding="utf-8") as f:
-                v = f.read().strip()
-                return v
+        from astrbot.core.config.default import VERSION
+
+        if should_use_bundled_dashboard_dist(dist_dir, VERSION):
+            bundled_version = _read_dashboard_dist_version(
+                get_bundled_dashboard_dist_path()
+            )
+            if bundled_version is not None:
+                return bundled_version
+        return _read_dashboard_dist_version(dist_dir)
+
+    bundled = get_bundled_dashboard_dist_path()
+    if bundled.exists():
+        return _read_dashboard_dist_version(bundled)
     return None
 
 
@@ -268,6 +397,7 @@ async def download_dashboard(
     latest: bool = True,
     version: str | None = None,
     proxy: str | None = None,
+    progress_callback=None,
 ) -> None:
     """下载管理面板文件"""
     if path is None:
@@ -286,6 +416,7 @@ async def download_dashboard(
                 dashboard_release_url,
                 str(zip_path),
                 show_progress=True,
+                progress_callback=progress_callback,
             )
         except BaseException as _:
             if latest:
@@ -312,12 +443,18 @@ async def download_dashboard(
                 dashboard_release_url,
                 str(zip_path),
                 show_progress=True,
+                progress_callback=progress_callback,
             )
     else:
         url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
         logger.info(f"Downloading AstrBot WebUI from {url}")
         if proxy:
             url = f"{proxy}/{url}"
-        await download_file(url, str(zip_path), show_progress=True)
+        await download_file(
+            url,
+            str(zip_path),
+            show_progress=True,
+            progress_callback=progress_callback,
+        )
     with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(extract_path)

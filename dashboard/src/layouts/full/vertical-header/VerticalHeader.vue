@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "axios";
 import Logo from "@/components/shared/Logo.vue";
@@ -47,10 +47,54 @@ let hasNewVersion = ref(false);
 let botCurrVersion = ref("");
 let dashboardHasNewVersion = ref(false);
 let dashboardCurrentVersion = ref("");
-let version = ref("");
 let releases = ref([]);
+let releasesLoading = ref(false);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
+let showAdvancedUpdateSettings = ref(false);
+let restartWaiting = ref(false);
+let restartStartTime = ref<number | string | null>(null);
+let restartPollTimer: ReturnType<typeof setInterval> | null = null;
+type DownloadStageStatus = "pending" | "running" | "done" | "error";
+type DownloadStage = {
+  status: DownloadStageStatus;
+  downloaded: number;
+  total: number;
+  percent: number;
+  speed: number;
+};
+type UpdateProgress = {
+  id: string;
+  status: "idle" | "running" | "success" | "error";
+  stage: string;
+  version: string;
+  message: string;
+  overall_percent: number;
+  stages: Record<string, DownloadStage>;
+};
+const createEmptyDownloadStage = (
+  status: DownloadStageStatus = "pending",
+): DownloadStage => ({
+  status,
+  downloaded: 0,
+  total: 0,
+  percent: 0,
+  speed: 0,
+});
+const createEmptyUpdateProgress = (): UpdateProgress => ({
+  id: "",
+  status: "idle",
+  stage: "preparing",
+  version: "",
+  message: "",
+  overall_percent: 0,
+  stages: {
+    dashboard: createEmptyDownloadStage(),
+    core: createEmptyDownloadStage(),
+  },
+});
+let updateProgress = ref<UpdateProgress>(createEmptyUpdateProgress());
+let updateProgressTimer: ReturnType<typeof setInterval> | null = null;
 const isDesktopReleaseMode = ref(
   typeof window !== "undefined" && !!window.astrbotDesktop?.isDesktop,
 );
@@ -98,9 +142,49 @@ const releasesHeader = computed(() => [
     key: "published_at",
   },
   { title: t("core.header.updateDialog.table.content"), key: "body" },
-  { title: t("core.header.updateDialog.table.sourceUrl"), key: "zipball_url" },
   { title: t("core.header.updateDialog.table.actions"), key: "switch" },
 ]);
+const firstReleasePageItems = computed(() => releases.value.slice(0, 6));
+const firstReleasePageHasPreRelease = computed(() =>
+  firstReleasePageItems.value.some((item: any) => isPreRelease(item.tag_name)),
+);
+const updateStageItems = computed(() => [
+  {
+    key: "dashboard",
+    title: t("core.header.updateDialog.progress.dashboard"),
+    progress:
+      updateProgress.value.stages.dashboard || createEmptyDownloadStage(),
+  },
+  {
+    key: "core",
+    title: t("core.header.updateDialog.progress.core"),
+    progress: updateProgress.value.stages.core || createEmptyDownloadStage(),
+  },
+]);
+const updateProgressMessage = computed(() => {
+  if (updateProgress.value.status === "error") {
+    return (
+      updateProgress.value.message ||
+      t("core.header.updateDialog.progress.failed")
+    );
+  }
+  if (updateProgress.value.status === "success") {
+    return (
+      updateProgress.value.message ||
+      t("core.header.updateDialog.progress.completed")
+    );
+  }
+  if (updateProgress.value.stage === "dependencies") {
+    return t("core.header.updateDialog.progress.dependencies");
+  }
+  if (updateProgress.value.stage === "restart") {
+    return t("core.header.updateDialog.progress.restart");
+  }
+  return (
+    updateProgress.value.message ||
+    t("core.header.updateDialog.progress.preparing")
+  );
+});
 // Form validation
 const formValid = ref(true);
 const passwordRules = computed(() => [
@@ -262,7 +346,9 @@ function accountEdit() {
 
   const currentPasswordValue = password.value ? password.value : "";
   const newPasswordValue = newPassword.value ? newPassword.value : "";
-  const confirmPasswordValue = confirmPassword.value ? confirmPassword.value : "";
+  const confirmPasswordValue = confirmPassword.value
+    ? confirmPassword.value
+    : "";
 
   axios
     .post("/api/auth/account/edit", {
@@ -324,7 +410,10 @@ function getVersion() {
         accountWarningUpgrade.value = !!password_upgrade_required;
         accountWarningLegacy.value =
           !!legacy_pwd_hint && !password_upgrade_required;
-        if (change_pwd_hint || (legacy_pwd_hint && !password_upgrade_required)) {
+        if (
+          change_pwd_hint ||
+          (legacy_pwd_hint && !password_upgrade_required)
+        ) {
           localStorage.setItem("change_pwd_hint", "true");
         } else {
           localStorage.removeItem("change_pwd_hint");
@@ -396,6 +485,7 @@ function checkUpdate() {
 }
 
 function getReleases() {
+  releasesLoading.value = true;
   return axios
     .get("/api/update/releases")
     .then((res) => {
@@ -406,31 +496,210 @@ function getReleases() {
     })
     .catch((err) => {
       console.log(err);
+    })
+    .finally(() => {
+      releasesLoading.value = false;
     });
 }
 
-function switchVersion(version: string) {
+function formatDownloadSize(value: number) {
+  if (!value || value <= 0) {
+    return "-";
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatDownloadSpeed(value: number) {
+  if (!value || value <= 0) {
+    return "-";
+  }
+  if (value < 1024) {
+    return `${value.toFixed(1)} KB/s`;
+  }
+  return `${(value / 1024).toFixed(1)} MB/s`;
+}
+
+function getStageStatusColor(status: DownloadStageStatus) {
+  if (status === "done") {
+    return "success";
+  }
+  if (status === "running") {
+    return "primary";
+  }
+  if (status === "error") {
+    return "error";
+  }
+  return "grey";
+}
+
+function getStageStatusIcon(status: DownloadStageStatus) {
+  if (status === "done") {
+    return "mdi-check-circle";
+  }
+  if (status === "running") {
+    return "mdi-progress-download";
+  }
+  if (status === "error") {
+    return "mdi-alert-circle";
+  }
+  return "mdi-circle-outline";
+}
+
+function stopUpdateProgressPolling() {
+  if (updateProgressTimer) {
+    clearInterval(updateProgressTimer);
+    updateProgressTimer = null;
+  }
+}
+
+function stopRestartPolling() {
+  if (restartPollTimer) {
+    clearInterval(restartPollTimer);
+    restartPollTimer = null;
+  }
+}
+
+async function fetchAstrBotStartTime() {
+  const res = await axios.get("/api/stat/start-time", { timeout: 3000 });
+  const startTime = res.data?.data?.start_time ?? null;
+  commonStore.startTime = startTime;
+  return startTime;
+}
+
+function waitForAstrBotRestart(initialStartTime: number | string | null) {
+  if (restartWaiting.value) {
+    return;
+  }
+  stopRestartPolling();
+  restartWaiting.value = true;
+  restartStartTime.value = initialStartTime;
+  updateProgress.value = {
+    ...updateProgress.value,
+    stage: "restart",
+    status: "success",
+    message: t("core.header.updateDialog.progress.restarting"),
+    overall_percent: 100,
+  };
+
+  const poll = async () => {
+    try {
+      const currentStartTime = await fetchAstrBotStartTime();
+      if (
+        initialStartTime !== null &&
+        currentStartTime !== null &&
+        currentStartTime !== initialStartTime
+      ) {
+        stopRestartPolling();
+        restartWaiting.value = false;
+        window.location.reload();
+      }
+    } catch (_error) {
+      // Backend may be unavailable while the process is restarting.
+    }
+  };
+
+  restartPollTimer = setInterval(() => {
+    void poll();
+  }, 1000);
+}
+
+function applyUpdateProgress(payload: UpdateProgress) {
+  updateProgress.value = {
+    ...createEmptyUpdateProgress(),
+    ...payload,
+    stages: {
+      ...createEmptyUpdateProgress().stages,
+      ...(payload.stages || {}),
+    },
+  };
+  if (payload.status === "success" || payload.status === "error") {
+    stopUpdateProgressPolling();
+  }
+  if (payload.status === "success") {
+    waitForAstrBotRestart(restartStartTime.value);
+  }
+}
+
+function startUpdateProgressPolling(progressId: string) {
+  stopUpdateProgressPolling();
+  const poll = () => {
+    axios
+      .get("/api/update/progress", { params: { id: progressId } })
+      .then((res) => {
+        if (res.data?.data) {
+          applyUpdateProgress(res.data.data);
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+  };
+  poll();
+  updateProgressTimer = setInterval(poll, 800);
+}
+
+async function switchVersion(targetVersion: string) {
+  const progressId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  let initialStartTime: number | string | null = null;
+  updateProgress.value = {
+    ...createEmptyUpdateProgress(),
+    id: progressId,
+    status: "running",
+    version: targetVersion,
+    message: t("core.header.updateDialog.progress.preparing"),
+  } as UpdateProgress;
   updateStatus.value = t("core.header.updateDialog.status.switching");
   installLoading.value = true;
+
+  try {
+    initialStartTime = await fetchAstrBotStartTime();
+  } catch (_error) {
+    initialStartTime = commonStore.getStartTime();
+  }
+  restartStartTime.value = initialStartTime;
+  startUpdateProgressPolling(progressId);
+
   axios
     .post("/api/update/do", {
-      version: version,
+      version: targetVersion,
       proxy: getSelectedGitHubProxy(),
+      progress_id: progressId,
     })
     .then((res) => {
       updateStatus.value = res.data.message;
+      updateProgress.value = {
+        ...updateProgress.value,
+        status:
+          res.data.status === "ok" ? "success" : updateProgress.value.status,
+        message: res.data.message,
+        overall_percent:
+          res.data.status === "ok" ? 100 : updateProgress.value.overall_percent,
+      };
       if (res.data.status == "ok") {
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+        waitForAstrBotRestart(initialStartTime);
       }
     })
     .catch((err) => {
       console.log(err);
       updateStatus.value = err;
+      updateProgress.value = {
+        ...updateProgress.value,
+        status: "error",
+        message:
+          err?.response?.data?.message ||
+          err?.message ||
+          t("core.header.updateDialog.progress.failed"),
+      };
     })
     .finally(() => {
       installLoading.value = false;
+      stopUpdateProgressPolling();
     });
 }
 
@@ -485,6 +754,11 @@ initPasswordWarningFromStorage();
 
 commonStore.createEventSource(); // log
 commonStore.getStartTime();
+
+onUnmounted(() => {
+  stopUpdateProgressPolling();
+  stopRestartPolling();
+});
 
 // 视图模式切换
 onMounted(() => {
@@ -865,12 +1139,14 @@ onMounted(async () => {
     <!-- 更新对话框 -->
     <v-dialog
       v-model="updateStatusDialog"
-      :width="$vuetify.display.smAndDown ? '100%' : '1200'"
+      :width="$vuetify.display.smAndDown ? '100%' : '920'"
       :fullscreen="$vuetify.display.xs"
     >
       <v-card>
         <v-card-title class="mobile-card-title">
-          <span class="text-h5">{{ t("core.header.updateDialog.title") }}</span>
+          <span class="text-h3 pa-4">{{
+            t("core.header.updateDialog.title")
+          }}</span>
           <v-btn
             v-if="$vuetify.display.xs"
             icon
@@ -881,62 +1157,142 @@ onMounted(async () => {
         </v-card-title>
         <v-card-text>
           <v-container>
-            <v-progress-linear
-              v-show="installLoading"
-              class="mb-4"
-              indeterminate
-              color="primary"
-            ></v-progress-linear>
-
-            <div>
-              <h1 style="display: inline-block">{{ botCurrVersion }}</h1>
-              <small style="margin-left: 4px">{{ updateStatus }}</small>
+            <div class="update-summary">
+              <div>
+                <div class="text-caption text-medium-emphasis">
+                  {{ t("core.header.updateDialog.currentVersion") }}
+                </div>
+                <div class="text-h2 font-weight-bold">{{ botCurrVersion }}</div>
+              </div>
+              <v-chip
+                :color="hasNewVersion ? 'primary' : 'success'"
+                variant="tonal"
+                size="small"
+              >
+                {{
+                  hasNewVersion
+                    ? t("core.header.version.hasNewVersion")
+                    : updateStatus
+                }}
+              </v-chip>
             </div>
 
             <div
-              v-if="releaseMessage"
-              style="
-                background-color: #646cff24;
-                padding: 16px;
-                border-radius: 10px;
-                font-size: 14px;
-                max-height: 400px;
-                overflow-y: auto;
-              "
+              v-if="installLoading || updateProgress.status !== 'idle'"
+              class="update-progress-panel mt-5"
             >
-              <MarkdownRender
-                :content="releaseMessage"
-                :typewriter="false"
-                class="markdown-content"
-              />
+              <div v-if="restartWaiting" class="restart-waiting-panel">
+                <v-progress-circular
+                  indeterminate
+                  color="primary"
+                  size="42"
+                  width="4"
+                ></v-progress-circular>
+                <div class="text-subtitle-1 font-weight-medium">
+                  {{ t("core.header.updateDialog.progress.restarting") }}
+                </div>
+              </div>
+
+              <template v-else>
+                <div class="d-flex align-center justify-space-between mb-2">
+                  <div>
+                    <div class="text-subtitle-1 font-weight-medium">
+                      {{ updateProgressMessage }}
+                    </div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ t("core.header.updateDialog.progress.target") }}
+                      {{ updateProgress.version || "latest" }}
+                    </div>
+                  </div>
+                  <div class="text-h6 font-weight-bold">
+                    {{ updateProgress.overall_percent }}%
+                  </div>
+                </div>
+                <v-progress-linear
+                  :model-value="updateProgress.overall_percent"
+                  height="8"
+                  rounded
+                  color="primary"
+                ></v-progress-linear>
+
+                <div class="update-stage-list mt-4">
+                  <div
+                    v-for="stage in updateStageItems"
+                    :key="stage.key"
+                    class="update-stage-row"
+                  >
+                    <v-icon
+                      :icon="getStageStatusIcon(stage.progress.status)"
+                      :color="getStageStatusColor(stage.progress.status)"
+                      size="22"
+                    ></v-icon>
+                    <div class="update-stage-content">
+                      <div class="d-flex align-center justify-space-between">
+                        <span class="font-weight-medium">{{
+                          stage.title
+                        }}</span>
+                        <span class="text-caption">
+                          {{ stage.progress.percent }}%
+                        </span>
+                      </div>
+                      <v-progress-linear
+                        :model-value="stage.progress.percent"
+                        height="5"
+                        rounded
+                        :color="getStageStatusColor(stage.progress.status)"
+                        class="mt-2"
+                      ></v-progress-linear>
+                      <div class="update-stage-meta">
+                        <span>
+                          {{ formatDownloadSize(stage.progress.downloaded) }} /
+                          {{ formatDownloadSize(stage.progress.total) }}
+                        </span>
+                        <span>{{
+                          formatDownloadSpeed(stage.progress.speed)
+                        }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </template>
             </div>
 
-            <div class="mb-4 mt-4">
-              <small
-                >{{ t("core.header.updateDialog.tip") }}
-                {{ t("core.header.updateDialog.tipContinue") }}</small
-              >
+            <div v-if="releaseMessage && !installLoading" class="mt-5">
+              <div class="d-flex align-center justify-space-between mb-2">
+                <h3 class="text-subtitle-1 font-weight-medium">
+                  {{ t("core.header.updateDialog.releaseNotes.title") }}
+                </h3>
+                <v-btn
+                  variant="text"
+                  size="small"
+                  @click="
+                    openReleaseNotesDialog(
+                      releaseMessage,
+                      t('core.header.updateDialog.releaseNotes.latestLabel'),
+                    )
+                  "
+                >
+                  {{ t("core.header.updateDialog.table.view") }}
+                </v-btn>
+              </div>
+              <div class="release-message-preview">
+                <MarkdownRender
+                  :content="releaseMessage"
+                  :typewriter="false"
+                  class="markdown-content"
+                />
+              </div>
             </div>
 
             <!-- 发行版 -->
-            <div>
-              <div class="mb-4">
-                <small
-                  >{{ t("core.header.updateDialog.dockerTip") }}
-                  <a href="https://containrrr.dev/watchtower/usage-overview/">{{
-                    t("core.header.updateDialog.dockerTipLink")
-                  }}</a>
-                  {{ t("core.header.updateDialog.dockerTipContinue") }}</small
-                >
-              </div>
-
+            <div class="mt-5">
               <v-alert
-                v-if="
-                  releases.some((item: any) => isPreRelease(item['tag_name']))
-                "
+                v-if="!installLoading && firstReleasePageHasPreRelease"
                 type="warning"
                 variant="tonal"
                 border="start"
+                density="compact"
+                class="mb-4"
               >
                 <template v-slot:prepend>
                   <v-icon>mdi-alert-circle-outline</v-icon>
@@ -965,7 +1321,9 @@ onMounted(async () => {
                 :headers="releasesHeader"
                 :items="releases"
                 item-key="name"
-                :items-per-page="8"
+                :items-per-page="6"
+                density="comfortable"
+                :loading="releasesLoading"
               >
                 <template v-slot:item.tag_name="{ item }: { item: any }">
                   <div class="d-flex align-center">
@@ -1002,9 +1360,10 @@ onMounted(async () => {
                 >
                   <v-btn
                     @click="switchVersion(item.tag_name)"
-                    rounded="xl"
-                    variant="plain"
+                    variant="tonal"
                     color="primary"
+                    size="small"
+                    :disabled="installLoading"
                   >
                     {{ t("core.header.updateDialog.table.switch") }}
                   </v-btn>
@@ -1012,45 +1371,66 @@ onMounted(async () => {
               </v-data-table>
             </div>
 
-            <v-divider class="mt-4 mb-4"></v-divider>
-            <div style="margin-top: 16px">
-              <h3 class="mb-4">
-                {{ t("core.header.updateDialog.dashboardUpdate.title") }}
-              </h3>
-              <div class="mb-4">
-                <small
-                  >{{
-                    t("core.header.updateDialog.dashboardUpdate.currentVersion")
-                  }}
-                  {{ dashboardCurrentVersion }}</small
-                >
-                <br />
-              </div>
-
-              <div class="mb-4">
-                <p v-if="dashboardHasNewVersion">
-                  {{
-                    t("core.header.updateDialog.dashboardUpdate.hasNewVersion")
-                  }}
-                </p>
-                <p v-else="dashboardHasNewVersion">
-                  {{ t("core.header.updateDialog.dashboardUpdate.isLatest") }}
-                </p>
-              </div>
-
-              <v-btn
-                color="primary"
-                style="border-radius: 10px"
-                @click="updateDashboard()"
-                :disabled="!dashboardHasNewVersion"
-                :loading="updatingDashboardLoading"
+            <div v-if="!installLoading" class="advanced-update-settings mt-5">
+              <button
+                class="advanced-settings-toggle"
+                type="button"
+                @click="
+                  showAdvancedUpdateSettings = !showAdvancedUpdateSettings
+                "
               >
-                {{
-                  t(
-                    "core.header.updateDialog.dashboardUpdate.downloadAndUpdate",
-                  )
-                }}
-              </v-btn>
+                <span>{{
+                  t("core.header.updateDialog.advancedSettings")
+                }}</span>
+                <v-icon
+                  :icon="
+                    showAdvancedUpdateSettings
+                      ? 'mdi-chevron-down'
+                      : 'mdi-chevron-right'
+                  "
+                  size="20"
+                ></v-icon>
+              </button>
+
+              <div
+                v-if="showAdvancedUpdateSettings"
+                class="dashboard-update-banner mt-3"
+              >
+                <div>
+                  <div class="font-weight-medium">
+                    {{ t("core.header.updateDialog.dashboardUpdate.title") }}
+                  </div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{
+                      t(
+                        "core.header.updateDialog.dashboardUpdate.currentVersion",
+                      )
+                    }}
+                    {{ dashboardCurrentVersion }}
+                  </div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{
+                      dashboardHasNewVersion
+                        ? t(
+                            "core.header.updateDialog.dashboardUpdate.hasNewVersion",
+                          )
+                        : t("core.header.updateDialog.dashboardUpdate.fallback")
+                    }}
+                  </div>
+                </div>
+                <v-btn
+                  color="primary"
+                  variant="tonal"
+                  @click="updateDashboard()"
+                  :loading="updatingDashboardLoading"
+                >
+                  {{
+                    t(
+                      "core.header.updateDialog.dashboardUpdate.downloadAndUpdate",
+                    )
+                  }}
+                </v-btn>
+              </div>
             </div>
           </v-container>
         </v-card-text>
@@ -1070,7 +1450,7 @@ onMounted(async () => {
     <!-- Release Notes Modal -->
     <v-dialog v-model="releaseNotesDialog" max-width="800">
       <v-card>
-        <v-card-title class="text-h5">
+        <v-card-title class="text-h3 pa-4">
           {{ t("core.header.updateDialog.releaseNotes.title") }}:
           {{ selectedReleaseTag }}
         </v-card-title>
@@ -1463,6 +1843,102 @@ onMounted(async () => {
   align-items: center;
 }
 
+.update-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.update-progress-panel,
+.dashboard-update-banner,
+.release-message-preview {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.release-message-preview {
+  max-height: 220px;
+  overflow: hidden;
+  position: relative;
+}
+
+.release-message-preview::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 56px;
+  background: linear-gradient(
+    to bottom,
+    rgba(var(--v-theme-surface), 0),
+    rgb(var(--v-theme-surface))
+  );
+  pointer-events: none;
+}
+
+.dashboard-update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.advanced-settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  padding: 8px 0;
+  text-align: left;
+}
+
+.advanced-settings-toggle:hover {
+  color: rgb(var(--v-theme-primary));
+}
+
+.restart-waiting-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 0 22px;
+}
+
+.update-stage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.update-stage-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.update-stage-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.update-stage-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  font-size: 12px;
+}
+
 /* 移动端样式优化 */
 @media (max-width: 600px) {
   .logo-text {
@@ -1500,6 +1976,12 @@ onMounted(async () => {
 
   .v-btn-toggle .v-icon {
     font-size: 16px;
+  }
+
+  .update-summary,
+  .dashboard-update-banner {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>

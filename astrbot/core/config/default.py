@@ -5,7 +5,7 @@ import os
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.24.4"
+VERSION = "4.24.5"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -1831,6 +1831,34 @@ CONFIG_METADATA_2 = {
                         "embedding_model": "gemini-embedding-exp-03-07",
                         "embedding_dimensions": 768,
                         "timeout": 20,
+                        "proxy": "",
+                    },
+                    "NVIDIA Embedding": {
+                        "id": "nvidia_embedding",
+                        "type": "nvidia_embedding",
+                        "provider": "nvidia",
+                        "provider_type": "embedding",
+                        "hint": "provider_group.provider.nvidia_embedding.hint",
+                        "enable": True,
+                        "embedding_api_key": "",
+                        "embedding_api_base": "https://integrate.api.nvidia.com/v1",
+                        "embedding_model": "nvidia/llama-nemotron-embed-1b-v2",
+                        "input_type": "passage",
+                        "embedding_dimensions": 1024,
+                        "timeout": 20,
+                        "proxy": "",
+                    },
+                    "Ollama Embedding": {
+                        "id": "ollama_embedding",
+                        "type": "ollama_embedding",
+                        "provider": "ollama",
+                        "provider_type": "embedding",
+                        "hint": "provider_group.provider.ollama_embedding.hint",
+                        "enable": True,
+                        "embedding_api_base": "http://localhost:11434",
+                        "embedding_model": "nomic-embed-text",
+                        "embedding_dimensions": 768,
+                        "timeout": 60,
                         "proxy": "",
                     },
                     "vLLM Rerank": {
