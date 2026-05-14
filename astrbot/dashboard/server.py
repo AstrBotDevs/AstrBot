@@ -42,14 +42,12 @@ from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
 
-_RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
-    {
-        "/api/auth/totp/disable",
-        "/api/auth/totp/setup",
-        "/api/auth/login",
-        "/api/auth/totp/verify-setup",
-    }
-)
+_RATE_LIMITED_ENDPOINTS: frozenset = frozenset({
+    "/api/auth/totp/disable",
+    "/api/auth/totp/setup",
+    "/api/auth/login",
+    "/api/auth/totp/verify-setup",
+})
 
 
 class _AuthRateLimiter:
@@ -98,15 +96,13 @@ def _match_registered_web_api(registered_web_apis, subpath: str, method: str):
         if request_method not in allowed_methods:
             continue
 
-        url_map = Map(
-            [
-                Rule(
-                    _normalize_plugin_api_route(route),
-                    endpoint="plugin_api",
-                    methods=allowed_methods,
-                ),
-            ]
-        )
+        url_map = Map([
+            Rule(
+                _normalize_plugin_api_route(route),
+                endpoint="plugin_api",
+                methods=allowed_methods,
+            ),
+        ])
         try:
             _, path_values = url_map.bind("").match(
                 request_path,
@@ -279,7 +275,10 @@ class AstrBotDashboard:
             await self.db.touch_api_key(api_key.key_id)
             return None
 
-        if os.environ.get("ASTRBOT_TEST_MODE") != "true" and request.path in _RATE_LIMITED_ENDPOINTS:
+        if (
+            os.environ.get("ASTRBOT_TEST_MODE") != "true"
+            and request.path in _RATE_LIMITED_ENDPOINTS
+        ):
             limiter = _rate_limiters.get(request.path)
             if limiter is None:
                 limiter = _AuthRateLimiter(capacity=3, refill_rate=1.0)

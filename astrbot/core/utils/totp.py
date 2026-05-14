@@ -48,7 +48,7 @@ def _get_verified_totp_timecode(secret: str, code: str) -> int | None:
     code = code.strip()
     try:
         totp = pyotp.TOTP(secret.strip())
-        now = datetime.datetime.now()
+        now = datetime.datetime.now(datetime.timezone.utc)
         for offset in (-1, 0, 1):
             candidate_time = now + datetime.timedelta(seconds=offset * totp.interval)
             if hmac.compare_digest(str(totp.at(candidate_time)), code):
