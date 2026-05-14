@@ -216,6 +216,36 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
     return password
 
 
+def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+    tmp_path,
+):
+    data_dir = tmp_path / "data"
+    user_dist = data_dir / "dist"
+    bundled_dist = tmp_path / "bundled-dist"
+    user_dist.mkdir(parents=True)
+    bundled_dist.mkdir()
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        lambda: bundled_dist,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.should_use_bundled_dashboard_dist",
+        lambda *_args, **_kwargs: True,
+    )
+
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+
+    assert server.data_path == str(bundled_dist)
+
+
 async def _set_dashboard_password_change_required(
     core_lifecycle_td: AstrBotCoreLifecycle,
     required: bool,

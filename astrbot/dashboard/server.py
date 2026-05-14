@@ -23,7 +23,11 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
-from astrbot.core.utils.io import get_local_ip_addresses
+from astrbot.core.utils.io import (
+    get_bundled_dashboard_dist_path,
+    get_local_ip_addresses,
+    should_use_bundled_dashboard_dist,
+)
 
 from .plugin_page_auth import PluginPageAuth
 from .routes import *
@@ -36,9 +40,6 @@ from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
-
-# Static assets shipped inside the wheel (built during `hatch build`).
-_BUNDLED_DIST = Path(__file__).parent / "dist"
 
 
 class _AddrWithPort(Protocol):
@@ -118,10 +119,14 @@ class AstrBotDashboard:
             self.data_path = os.path.abspath(webui_dir)
         else:
             user_dist = os.path.join(get_astrbot_data_path(), "dist")
-            if os.path.exists(user_dist):
+            bundled_dist = get_bundled_dashboard_dist_path()
+            if os.path.exists(user_dist) and not should_use_bundled_dashboard_dist(
+                user_dist,
+                VERSION,
+            ):
                 self.data_path = os.path.abspath(user_dist)
-            elif _BUNDLED_DIST.exists():
-                self.data_path = str(_BUNDLED_DIST)
+            elif bundled_dist.exists():
+                self.data_path = str(bundled_dist)
                 logger.info("Using bundled dashboard dist: %s", self.data_path)
             else:
                 # Fall back to expected user path (will fail gracefully later)

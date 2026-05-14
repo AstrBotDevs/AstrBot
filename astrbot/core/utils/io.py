@@ -2,6 +2,7 @@ import base64
 import inspect
 import logging
 import os
+import re
 import shutil
 import socket
 import ssl
@@ -16,6 +17,7 @@ import psutil
 from PIL import Image
 
 from .astrbot_path import get_astrbot_data_path, get_astrbot_path, get_astrbot_temp_path
+from .version_comparator import VersionComparator
 
 logger = logging.getLogger("astrbot")
 
@@ -325,20 +327,67 @@ def get_local_ip_addresses():
     return network_ips
 
 
+def _read_dashboard_dist_version(dist_dir: str | Path) -> str | None:
+    version_file = Path(dist_dir) / "assets" / "version"
+    if version_file.exists():
+        return version_file.read_text(encoding="utf-8").strip()
+    return None
+
+
+def get_bundled_dashboard_dist_path() -> Path:
+    return Path(get_astrbot_path()) / "astrbot" / "dashboard" / "dist"
+
+
+def _normalize_dashboard_version(version: str) -> str:
+    version = version.strip()
+    if version[:1].lower() == "v":
+        version = version[1:]
+    if not re.match(
+        r"^[0-9]+(?:\.[0-9]+)*"
+        r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+        r"(?:\+.+)?$",
+        version,
+    ):
+        raise ValueError(f"invalid dashboard version: {version!r}")
+    return version
+
+
+def should_use_bundled_dashboard_dist(
+    user_dist: str | Path, current_version: str
+) -> bool:
+    user_version = _read_dashboard_dist_version(user_dist)
+    bundled_dist = get_bundled_dashboard_dist_path()
+    if user_version is None or not bundled_dist.exists():
+        return False
+    try:
+        return (
+            VersionComparator.compare_version(
+                _normalize_dashboard_version(current_version),
+                _normalize_dashboard_version(user_version),
+            )
+            > 0
+        )
+    except (TypeError, ValueError):
+        return False
+
+
 async def get_dashboard_version():
     # First check user data directory (manually updated / downloaded dashboard).
     dist_dir = os.path.join(get_astrbot_data_path(), "dist")
-    if not os.path.exists(dist_dir):
-        # Fall back to the dist bundled inside the installed wheel.
-        _bundled = Path(get_astrbot_path()) / "astrbot" / "dashboard" / "dist"
-        if _bundled.exists():
-            dist_dir = str(_bundled)
     if os.path.exists(dist_dir):
-        version_file = os.path.join(dist_dir, "assets", "version")
-        if os.path.exists(version_file):
-            with open(version_file, encoding="utf-8") as f:
-                v = f.read().strip()
-                return v
+        from astrbot.core.config.default import VERSION
+
+        if should_use_bundled_dashboard_dist(dist_dir, VERSION):
+            bundled_version = _read_dashboard_dist_version(
+                get_bundled_dashboard_dist_path()
+            )
+            if bundled_version is not None:
+                return bundled_version
+        return _read_dashboard_dist_version(dist_dir)
+
+    bundled = get_bundled_dashboard_dist_path()
+    if bundled.exists():
+        return _read_dashboard_dist_version(bundled)
     return None
 
 
