@@ -65,7 +65,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         self.audio_setting: dict = {
             "sample_rate": 32000,
             "bitrate": 128000,
-            "format": "mp3",
+            "format": "wav",
         }
 
         self.concat_base_url: str = f"{self.api_base}?GroupId={self.group_id}"
@@ -147,7 +147,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
-        path = os.path.join(temp_dir, f"minimax_tts_api_{uuid.uuid4()}.mp3")
+        path = os.path.join(temp_dir, f"minimax_tts_api_{uuid.uuid4()}.wav")
 
         try:
             # 直接将异步生成器传递给 _audio_play 方法

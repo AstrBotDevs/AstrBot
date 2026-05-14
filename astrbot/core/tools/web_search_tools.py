@@ -19,6 +19,8 @@ WEB_SEARCH_TOOL_NAMES = [
     "tavily_extract_web_page",
     "web_search_bocha",
     "web_search_brave",
+    "web_search_firecrawl",
+    "firecrawl_extract_web_page",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -31,6 +33,10 @@ _BOCHA_WEB_SEARCH_TOOL_CONFIG = {
 _BRAVE_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "brave",
+}
+_FIRECRAWL_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "firecrawl",
 }
 _BAIDU_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -69,6 +75,7 @@ class _KeyRotator:
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
 _BRAVE_KEY_ROTATOR = _KeyRotator("websearch_brave_key", "Brave")
+_FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
 
 
 def normalize_legacy_web_search_config(cfg) -> None:
@@ -91,6 +98,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
         "websearch_tavily_key",
         "websearch_bocha_key",
         "websearch_brave_key",
+        "websearch_firecrawl_key",
     ):
         value = provider_settings.get(setting_name)
         if isinstance(value, str):
@@ -256,6 +264,72 @@ async def _brave_search(
                 )
                 for item in rows
             ]
+
+
+async def _firecrawl_search(
+    provider_settings: dict,
+    payload: dict,
+) -> list[SearchResult]:
+    firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings)
+    header = {
+        "Authorization": f"Bearer {firecrawl_key}",
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            "https://api.firecrawl.dev/v2/search",
+            json=payload,
+            headers=header,
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    f"Firecrawl web search failed: {reason}, status: {response.status}",
+                )
+            data = await response.json()
+            rows = data.get("data", [])
+            if isinstance(rows, dict):
+                rows = rows.get("web", [])
+            return [
+                SearchResult(
+                    title=item.get("title", ""),
+                    url=item.get("url", ""),
+                    snippet=(
+                        item.get("description")
+                        or item.get("snippet")
+                        or item.get("markdown")
+                        or ""
+                    ),
+                )
+                for item in rows
+                if item.get("url")
+            ]
+
+
+async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
+    firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings)
+    header = {
+        "Authorization": f"Bearer {firecrawl_key}",
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            "https://api.firecrawl.dev/v2/scrape",
+            json=payload,
+            headers=header,
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    f"Firecrawl web scraper failed: {reason}, status: {response.status}",
+                )
+            data = await response.json()
+            result = data.get("data", {})
+            if not result:
+                raise ValueError(
+                    "Error: Firecrawl web scraper does not return any results."
+                )
+            return result
 
 
 async def _baidu_search(
@@ -546,6 +620,124 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
         if not results:
             return "Error: Brave web searcher does not return any results."
         return _search_result_payload(results)
+
+
+@builtin_tool(config=_FIRECRAWL_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "web_search_firecrawl"
+    description: str = (
+        "A web search tool based on Firecrawl Search API, used to retrieve web "
+        "pages related to the user's query."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "limit": {
+                    "type": "integer",
+                    "description": "Optional. Number of results to return. Range: 1-100. Default is 5.",
+                },
+                "location": {
+                    "type": "string",
+                    "description": "Optional. Geographic location for search results.",
+                },
+                "country": {
+                    "type": "string",
+                    "description": 'Optional. Country code for search results, for example "US" or "CN".',
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional. Request timeout in milliseconds.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_firecrawl_key", []):
+            return "Error: Firecrawl API key is not configured in AstrBot."
+
+        payload = {
+            "query": kwargs["query"],
+            "limit": kwargs.get("limit", 5),
+            "sources": ["web"],
+        }
+        for key in ("location", "country", "timeout"):
+            if kwargs.get(key):
+                payload[key] = kwargs[key]
+
+        results = await _firecrawl_search(provider_settings, payload)
+        if not results:
+            return "Error: Firecrawl web searcher does not return any results."
+        return _search_result_payload(results)
+
+
+@builtin_tool(config=_FIRECRAWL_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class FirecrawlExtractWebPageTool(FunctionTool[AstrAgentContext]):
+    name: str = "firecrawl_extract_web_page"
+    description: str = "Extract the content of a web page using Firecrawl."
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Required. A URL to extract content from.",
+                },
+                "format": {
+                    "type": "string",
+                    "description": 'Optional. Output format, one of "markdown", "html", "rawHtml", "summary". Default is "markdown".',
+                },
+                "only_main_content": {
+                    "type": "boolean",
+                    "description": "Optional. Whether to extract only the main page content. Default is true.",
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional. Request timeout in milliseconds.",
+                },
+                "max_age": {
+                    "type": "integer",
+                    "description": "Optional. Maximum cache age in milliseconds.",
+                },
+            },
+            "required": ["url"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_firecrawl_key", []):
+            return "Error: Firecrawl API key is not configured in AstrBot."
+
+        url = str(kwargs.get("url", "")).strip()
+        if not url:
+            return "Error: url must be a non-empty string."
+
+        output_format = kwargs.get("format", "markdown")
+        if output_format not in ["markdown", "html", "rawHtml", "summary"]:
+            output_format = "markdown"
+
+        payload = {
+            "url": url,
+            "formats": [output_format],
+            "onlyMainContent": kwargs.get("only_main_content", True),
+        }
+        if kwargs.get("timeout"):
+            payload["timeout"] = kwargs["timeout"]
+        if kwargs.get("max_age"):
+            payload["maxAge"] = kwargs["max_age"]
+
+        result = await _firecrawl_scrape(provider_settings, payload)
+        content = result.get(output_format, "")
+        result_url = result.get("url") or url
+        ret = f"URL: {result_url}\nContent: {content}" if content else ""
+        return ret or "Error: Firecrawl web scraper does not return any results."
 
 
 @builtin_tool(config=_BAIDU_WEB_SEARCH_TOOL_CONFIG)

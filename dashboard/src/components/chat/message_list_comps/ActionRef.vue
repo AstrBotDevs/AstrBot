@@ -22,7 +22,7 @@
       <span v-if="refs.used.length > 3" class="refs-more">
         +{{ refs.used.length - 3 }}
       </span>
-      <span class="ml-2" style="color: gray">
+      <span class="refs-label">
         {{ tm("refs.sources") }}
       </span>
     </div>
@@ -64,10 +64,13 @@ export default {
 .refs-container {
   display: flex;
   align-items: center;
-  margin-left: 8px;
-  padding: 4px 8px;
-  border-radius: 12px;
+  min-height: 24px;
+  padding: 0 6px;
+  border-radius: 8px;
+  color: inherit;
   cursor: pointer;
+  font-size: 12px;
+  line-height: 24px;
   transition: background-color;
 }
 
@@ -79,6 +82,7 @@ export default {
   display: flex;
   align-items: center;
   position: relative;
+  min-height: 24px;
 }
 
 .ref-avatar {
@@ -86,7 +90,6 @@ export default {
   height: 20px;
   border-radius: 50%;
   opacity: 0.9;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -117,5 +120,12 @@ export default {
   color: var(--v-theme-secondaryText);
   opacity: 0.7;
   font-weight: 500;
+}
+
+.refs-label {
+  margin-left: 6px;
+  color: inherit;
+  font-size: 12px;
+  line-height: 24px;
 }
 </style>

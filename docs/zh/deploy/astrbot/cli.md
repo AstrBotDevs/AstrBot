@@ -5,13 +5,12 @@
 >
 > 以下教程默认您的设备上已经安装 Python，并且版本 `>=3.10`
 
-
 ## 下载/克隆仓库
 
 如果你的电脑上安装了 `git`，你可以通过以下命令来下载源码：
 
 ```bash
-git clone https://github.com/AstrBotDevs/AstrBot.git
+git clone https://github.com/AstrBotDevs/AstrBot
 # 上面的代码默认会拉取最新的提交的源码，如果你需要拉取最新稳定发行版本的源码，可以使用以下命令：
 # git clone --depth=1 --branch $(git ls-remote --tags --sort='-v:refname' https://github.com/AstrBotDevs/AstrBot.git | head -n1 | awk -F/ '{print $3}') https://github.com/AstrBotDevs/AstrBot.git
 cd AstrBot
@@ -86,7 +85,7 @@ python main.py
 > [!TIP]
 > 如果你正在服务器上部署 AstrBot，需要将 `localhost` 替换为你的服务器 IP 地址。
 >
-> 默认用户名和密码是 `astrbot` 和 `astrbot`。
+> 首次登录请使用启动日志中打印的随机初始密码（用户名通常为 `astrbot`）。登录后请立即修改密码。
 
 
 接下来，你需要部署任何一个消息平台，才能够实现在消息平台上使用 AstrBot。

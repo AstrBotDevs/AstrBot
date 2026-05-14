@@ -53,6 +53,8 @@ class AstrMessageEvent(abc.ABC):
         self.is_at_or_wake_command = False
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras: dict[str, Any] = {}
+        self._force_stopped: bool = False
+        """独立的停止标志，不依赖 _result，不会被 clear_result() 重置"""
         message_type = getattr(message_obj, "type", None)
         if not isinstance(message_type, MessageType):
             try:
@@ -336,6 +338,7 @@ class AstrMessageEvent(abc.ABC):
 
     def stop_event(self) -> None:
         """终止事件传播。"""
+        self._force_stopped = True
         if self._result is None:
             self.set_result(MessageEventResult().stop_event())
         else:
@@ -343,6 +346,7 @@ class AstrMessageEvent(abc.ABC):
 
     def continue_event(self) -> None:
         """继续事件传播。"""
+        self._force_stopped = False
         if self._result is None:
             self.set_result(MessageEventResult().continue_event())
         else:
@@ -350,6 +354,8 @@ class AstrMessageEvent(abc.ABC):
 
     def is_stopped(self) -> bool:
         """是否终止事件传播。"""
+        if self._force_stopped:
+            return True
         if self._result is None:
             return False  # 默认是继续传播
         return self._result.is_stopped()

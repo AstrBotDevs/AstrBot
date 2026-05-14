@@ -1,6 +1,9 @@
 {
   "title": "Knowledge Base Details",
   "backToList": "Back to List",
+  "breadcrumb": {
+    "list": "Knowledge Bases"
+  },
   "tabs": {
     "overview": "Overview",
     "documents": "Documents",

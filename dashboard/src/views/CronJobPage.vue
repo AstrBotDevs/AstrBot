@@ -3,7 +3,6 @@
     <v-container fluid class="dashboard-shell pa-4 pa-md-6">
       <div class="dashboard-header">
         <div class="dashboard-header-main">
-          <div class="dashboard-eyebrow">{{ tm('header.eyebrow') }}</div>
           <div class="d-flex align-center flex-wrap" style="gap: 8px;">
             <h1 class="dashboard-title">{{ tm('page.title') }}</h1>
             <v-chip size="x-small" color="orange-darken-2" variant="tonal" label>
@@ -23,21 +22,6 @@
             {{ tm('actions.create') }}
           </v-btn>
         </div>
-      </div>
-
-      <div class="dashboard-overview-grid">
-        <section
-          v-for="card in overviewCards"
-          :key="card.label"
-          class="dashboard-card dashboard-overview-card"
-        >
-          <div class="dashboard-card-icon">
-            <v-icon size="18">{{ card.icon }}</v-icon>
-          </div>
-          <div class="dashboard-card-label">{{ card.label }}</div>
-          <div class="dashboard-card-value">{{ card.value }}</div>
-          <div class="dashboard-card-note">{{ card.note }}</div>
-        </section>
       </div>
 
       <div class="dashboard-section-head">
@@ -262,10 +246,6 @@ const proactivePlatformText = computed(() =>
   proactivePlatforms.value.map((p) => `${p.display_name || p.name}(${p.id})`).join(' / ')
 )
 
-const enabledJobsCount = computed(() => jobs.value.filter((job) => job.enabled).length)
-const runOnceCount = computed(() => jobs.value.filter((job) => job.run_once).length)
-const recurringCount = computed(() => jobs.value.filter((job) => !job.run_once).length)
-
 const sortedJobs = computed(() =>
   [...jobs.value].sort((a, b) => {
     if (a.enabled !== b.enabled) {
@@ -284,21 +264,6 @@ const sortedJobs = computed(() =>
     return String(a.name || '').localeCompare(String(b.name || ''))
   })
 )
-
-const overviewCards = computed(() => [
-  {
-    label: tm('overview.totalTasks'),
-    value: String(jobs.value.length),
-    note: tm('overview.totalTasksNote'),
-    icon: 'mdi-calendar-multiple'
-  },
-  {
-    label: tm('overview.enabledTasks'),
-    value: String(enabledJobsCount.value),
-    note: tm('overview.enabledTasksNote'),
-    icon: 'mdi-check-circle-outline'
-  }
-])
 
 const isEditing = computed(() => !!editingJobId.value)
 const dialogTitle = computed(() => tm(isEditing.value ? 'form.editTitle' : 'form.title'))
@@ -718,10 +683,6 @@ onMounted(() => {
   border-radius: 14px;
   color: var(--dashboard-muted);
   font-size: 14px;
-}
-
-.cron-page :deep(.dashboard-overview-grid) {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 @media (max-width: 900px) {

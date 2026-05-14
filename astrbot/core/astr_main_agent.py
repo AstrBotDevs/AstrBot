@@ -38,8 +38,13 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.register import llm_tools
-from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
+from astrbot.core.skills.skill_manager import (
+    SkillInfo,
+    SkillManager,
+    build_skills_prompt,
+)
 from astrbot.core.star.context import Context
+from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.tools.computer_tools import (
     AnnotateExecutionTool,
@@ -47,6 +52,9 @@ from astrbot.core.tools.computer_tools import (
     BrowserExecTool,
     CreateSkillCandidateTool,
     CreateSkillPayloadTool,
+    CuaKeyboardTypeTool,
+    CuaMouseClickTool,
+    CuaScreenshotTool,
     EvaluateSkillCandidateTool,
     ExecuteShellTool,
     FileDownloadTool,
@@ -77,6 +85,8 @@ from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
     BraveWebSearchTool,
+    FirecrawlExtractWebPageTool,
+    FirecrawlWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
     normalize_legacy_web_search_config,
@@ -147,6 +157,8 @@ class MainAgentBuildConfig:
     This enforce max turns before compression"""
     dequeue_context_length: int = 1
     """The number of oldest turns to remove when context length limit is reached."""
+    fallback_max_context_tokens: int = 128000
+    """Fallback max context tokens. When max_context_tokens is 0 and the model is not in LLM_METADATAS, use this value."""
     llm_safety_mode: bool = True
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
@@ -217,7 +229,7 @@ async def _apply_kb(
     config: MainAgentBuildConfig,
 ) -> None:
     if not config.kb_agentic_mode:
-        if req.prompt is None:
+        if req.prompt is None or not req.prompt.strip():
             return
         try:
             kb_result = await retrieve_knowledge_base(
@@ -368,6 +380,38 @@ def _build_local_mode_prompt() -> str:
     )
 
 
+def _filter_skills_for_current_config(
+    skills: list[SkillInfo],
+    cfg: dict,
+) -> list[SkillInfo]:
+    plugin_set = cfg.get("plugin_set", ["*"])
+    allowed_plugins = (
+        None
+        if not isinstance(plugin_set, list) or "*" in plugin_set
+        else {str(name) for name in plugin_set}
+    )
+    plugin_by_root_dir = {
+        metadata.root_dir_name: metadata
+        for metadata in star_registry
+        if metadata.root_dir_name
+    }
+    filtered: list[SkillInfo] = []
+    for skill in skills:
+        if skill.source_type != "plugin":
+            filtered.append(skill)
+            continue
+
+        plugin = plugin_by_root_dir.get(skill.plugin_name)
+        if not plugin or not plugin.activated:
+            continue
+        if plugin.reserved or allowed_plugins is None:
+            filtered.append(skill)
+            continue
+        if plugin.name is not None and plugin.name in allowed_plugins:
+            filtered.append(skill)
+    return filtered
+
+
 async def _ensure_persona_and_skills(
     req: ProviderRequest,
     cfg: dict,
@@ -394,6 +438,9 @@ async def _ensure_persona_and_skills(
         event, extract_persona_custom_error_message_from_persona(persona)
     )
 
+    if req.system_prompt is None:
+        req.system_prompt = ""
+
     if persona:
         # Inject persona system prompt
         if prompt := persona["prompt"]:
@@ -407,6 +454,7 @@ async def _ensure_persona_and_skills(
     runtime = cfg.get("computer_use_runtime", "local")
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
+    skills = _filter_skills_for_current_config(skills, cfg)
 
     if skills:
         if persona and persona.get("skills") is not None:
@@ -850,136 +898,6 @@ async def _decorate_llm_request(
     _apply_workspace_extra_prompt(event, req)
 
 
-def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
-    if req.image_urls:
-        provider_cfg = provider.provider_config.get("modalities", ["image"])
-        if "image" not in provider_cfg:
-            logger.debug(
-                "Provider %s does not support image, using placeholder.", provider
-            )
-            image_count = len(req.image_urls)
-            placeholder = " ".join(["[Image]"] * image_count)
-            if req.prompt:
-                req.prompt = f"{placeholder} {req.prompt}"
-            else:
-                req.prompt = placeholder
-            req.image_urls = []
-    if req.audio_urls:
-        provider_cfg = provider.provider_config.get("modalities", ["audio"])
-        if "audio" not in provider_cfg:
-            logger.debug(
-                "Provider %s does not support audio, using placeholder.", provider
-            )
-            audio_count = len(req.audio_urls)
-            placeholder = " ".join(["[Audio]"] * audio_count)
-            if req.prompt:
-                req.prompt = f"{placeholder} {req.prompt}"
-            else:
-                req.prompt = placeholder
-            req.audio_urls = []
-    if req.func_tool:
-        provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
-        if "tool_use" not in provider_cfg:
-            logger.debug(
-                "Provider %s does not support tool_use, clearing tools.", provider
-            )
-            req.func_tool = None
-
-
-def _sanitize_context_by_modalities(
-    config: MainAgentBuildConfig,
-    provider: Provider,
-    req: ProviderRequest,
-) -> None:
-    if not config.sanitize_context_by_modalities:
-        return
-    if not isinstance(req.contexts, list) or not req.contexts:
-        return
-    modalities = provider.provider_config.get("modalities", None)
-    if not modalities or not isinstance(modalities, list):
-        return
-    supports_image = bool("image" in modalities)
-    supports_audio = bool("audio" in modalities)
-    supports_tool_use = bool("tool_use" in modalities)
-    if supports_image and supports_audio and supports_tool_use:
-        return
-
-    sanitized_contexts: list[dict] = []
-    removed_image_blocks = 0
-    removed_audio_blocks = 0
-    removed_tool_messages = 0
-    removed_tool_calls = 0
-
-    for msg in req.contexts:
-        if not isinstance(msg, dict):
-            continue
-        role = msg.get("role")
-        if not role:
-            continue
-
-        new_msg = msg
-        if not supports_tool_use:
-            if role == "tool":
-                removed_tool_messages += 1
-                continue
-            if role == "assistant" and "tool_calls" in new_msg:
-                if "tool_calls" in new_msg:
-                    removed_tool_calls += 1
-                new_msg.pop("tool_calls", None)
-                new_msg.pop("tool_call_id", None)
-
-        if not supports_image or not supports_audio:
-            content = new_msg.get("content")
-            if isinstance(content, list):
-                filtered_parts: list = []
-                removed_any_multimodal = False
-                for part in content:
-                    if isinstance(part, dict):
-                        part_type = str(part.get("type", "")).lower()
-                        if not supports_image and part_type in {"image_url", "image"}:
-                            removed_any_multimodal = True
-                            removed_image_blocks += 1
-                            continue
-                        if not supports_audio and part_type in {
-                            "audio_url",
-                            "input_audio",
-                        }:
-                            removed_any_multimodal = True
-                            removed_audio_blocks += 1
-                            continue
-                    filtered_parts.append(part)
-                if removed_any_multimodal:
-                    new_msg["content"] = filtered_parts
-
-        if role == "assistant":
-            content = new_msg.get("content")
-            has_tool_calls = bool(new_msg.get("tool_calls"))
-            if not has_tool_calls:
-                if not content:
-                    continue
-                if isinstance(content, str) and not content.strip():
-                    continue
-
-        sanitized_contexts.append(new_msg)
-
-    if (
-        removed_image_blocks
-        or removed_audio_blocks
-        or removed_tool_messages
-        or removed_tool_calls
-    ):
-        logger.debug(
-            "sanitize_context_by_modalities applied: "
-            "removed_image_blocks=%s, removed_audio_blocks=%s, "
-            "removed_tool_messages=%s, removed_tool_calls=%s",
-            removed_image_blocks,
-            removed_audio_blocks,
-            removed_tool_messages,
-            removed_tool_calls,
-        )
-    req.contexts = sanitized_contexts
-
-
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
     """根据事件中的插件设置，过滤请求中的工具列表。
 
@@ -1143,6 +1061,22 @@ def _apply_sandbox_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
 
+    if booter == "cua":
+        req.system_prompt += (
+            "\n[CUA Desktop Control]\n"
+            "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
+            'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
+            "After each visible step, call `astrbot_cua_screenshot` with "
+            "`send_to_user=true` and `return_image_to_llm=true` so the user can "
+            "monitor progress. When typing, inspect the screenshot first and confirm "
+            "the target field is focused and empty or safe to append to. Use "
+            "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
+            "for text input; use text=`\\n` for Enter.\n"
+        )
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
+
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
 
@@ -1177,6 +1111,9 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BochaWebSearchTool))
     elif provider == "brave":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BraveWebSearchTool))
+    elif provider == "firecrawl":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlExtractWebPageTool))
     elif provider == "baidu_ai_search":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
 
@@ -1402,6 +1339,17 @@ async def build_main_agent(
 
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
+    thread_selected_text = event.get_extra("thread_selected_text")
+    if isinstance(thread_selected_text, str) and thread_selected_text.strip():
+        req.extra_user_content_parts.append(
+            TextPart(
+                text=(
+                    "The user is asking in a side thread about this selected "
+                    "excerpt from the previous assistant answer:\n"
+                    f"<selected_excerpt>{thread_selected_text.strip()}</selected_excerpt>"
+                )
+            )
+        )
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
 
@@ -1424,10 +1372,8 @@ async def build_main_agent(
     if not req.session_id:
         req.session_id = event.unified_msg_origin
 
-    _modalities_fix(provider, req)
     _plugin_tool_fix(event, req)
     await _apply_web_search_tools(event, req, plugin_context)
-    _sanitize_context_by_modalities(config, provider, req)
 
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
@@ -1461,6 +1407,11 @@ async def build_main_agent(
             provider.provider_config["max_context_tokens"] = model_info["limit"][
                 "context"
             ]
+        else:
+            # fallback: default to configured fallback value
+            provider.provider_config["max_context_tokens"] = (
+                config.fallback_max_context_tokens
+            )
 
     if event.get_platform_name() == "webchat":
         asyncio.create_task(_handle_webchat(event, req, provider))

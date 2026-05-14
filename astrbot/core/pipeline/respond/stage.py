@@ -246,9 +246,9 @@ class RespondStage(Stage):
                     await asyncio.sleep(i)
                     try:
                         if comp.type in need_separately:
-                            await event.send(MessageChain([comp]))
+                            await event.send(result.derive([comp]))
                         else:
-                            await event.send(MessageChain([*header_comps, comp]))
+                            await event.send(result.derive([*header_comps, comp]))
                             header_comps.clear()
                     except Exception as e:
                         logger.error(
@@ -271,7 +271,7 @@ class RespondStage(Stage):
                     modify_raw_chain=True,
                 )
                 for comp in sep_comps:
-                    chain = MessageChain([comp])
+                    chain = result.derive([comp])
                     try:
                         await event.send(chain)
                     except Exception as e:
@@ -279,7 +279,7 @@ class RespondStage(Stage):
                             f"发送消息链失败: chain = {chain}, error = {e}",
                             exc_info=True,
                         )
-                chain = MessageChain(result.chain)
+                chain = result.derive(result.chain)
                 if result.chain and len(result.chain) > 0:
                     try:
                         await event.send(chain)

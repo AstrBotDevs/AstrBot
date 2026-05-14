@@ -243,10 +243,12 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { useToast } from '@/utils/toast'
 import axios from 'axios'
 
 const { t } = useI18n()
 const { tm } = useModuleI18n('core.shared')
+const toast = useToast()
 
 // --- 响应式数据 ---
 const dialog = ref(false)
@@ -298,17 +300,82 @@ const syncPreviewVersion = async () => {
 
 const previewData = computed(() => ({
   text: tm('t2iTemplateEditor.previewText') || '这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。',
-  version: previewVersion.value 
+  version: previewVersion.value
 }))
+
+const injectShikiRuntime = (content) => {
+  if (content.includes('astrbot-t2i-shiki-runtime')) {
+    return content
+  }
+
+  const runtimeScript = getShikiRuntimeScript()
+  const headClose = content.search(/<\/head\s*>/i)
+  if (headClose >= 0) {
+    return `${content.slice(0, headClose)}  ${runtimeScript}\n${content.slice(headClose)}`
+  }
+
+  return `${runtimeScript}\n${content}`
+}
+
+const getShikiRuntimeScript = () => '<script id="astrbot-t2i-shiki-runtime" src="/t2i/shiki_runtime.iife.js"></scr' + 'ipt>'
+
+const hasMarkdownSource = (content) => /<[^>]+\bid=["']markdown-source["']/i.test(content)
+
+const insertMarkdownSource = (content) => {
+  const sourceElement = '  <textarea id="markdown-source" hidden>{{ text | safe }}</textarea>\n'
+  const markedScript = content.search(/^[ \t]*<script\s+src=["']https:\/\/cdn\.jsdelivr\.net\/npm\/marked\/marked\.min\.js["']><\/script>[ \t]*\r?\n?/im)
+  if (markedScript >= 0) {
+    return `${content.slice(0, markedScript)}${sourceElement}${content.slice(markedScript)}`
+  }
+
+  const bodyClose = content.search(/<\/body\s*>/i)
+  if (bodyClose >= 0) {
+    return `${content.slice(0, bodyClose)}${sourceElement}${content.slice(bodyClose)}`
+  }
+
+  return `${sourceElement}${content}`
+}
+
+const normalizeMarkdownSource = (content) => {
+  let normalized = content.replace(
+    /<script\s+id=["']markdown-source["']\s+type=["']text\/plain["']>\s*\{\{\s*text\s*\|\s*safe\s*\}\}\s*<\/script>/gi,
+    '<textarea id="markdown-source" hidden>{{ text | safe }}</textarea>'
+  )
+
+  normalized = normalized.replace(
+    /decodeBase64Utf8\("\{\{\s*text_base64\s*\}\}"\)/g,
+    'document.getElementById("markdown-source").value'
+  )
+  normalized = normalized.replace(
+    /document\.getElementById\(["']markdown-source["']\)\.textContent/g,
+    'document.getElementById("markdown-source").value'
+  )
+
+  if (/\{\{\s*text_base64\s*\}\}/.test(normalized) && !hasMarkdownSource(normalized)) {
+    normalized = insertMarkdownSource(normalized)
+  }
+
+  return normalized
+}
 
 const previewContent = computed(() => {
   try {
-    let content = templateContent.value
-    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, previewData.value.text)
-    content = content.replace(/\{\{\s*version\s*\}\}/g, previewData.value.version)
-    return content
+    let content = normalizeMarkdownSource(templateContent.value)
+    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, () => previewData.value.text)
+    content = content.replace(/\{\{\s*version\s*\}\}/g, () => previewData.value.version)
+    let usedLegacyShikiPlaceholder = false
+    content = content.replace(/<script\b[^>]*>\s*\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}\s*<\/script>/gi, () => {
+      usedLegacyShikiPlaceholder = true
+      return getShikiRuntimeScript()
+    })
+    content = content.replace(/\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}/g, () => {
+      usedLegacyShikiPlaceholder = true
+      return getShikiRuntimeScript()
+    })
+    return usedLegacyShikiPlaceholder ? content : injectShikiRuntime(content)
   } catch (error) {
-    return `<div style="color: red; padding: 20px;">模板渲染错误: ${error.message}</div>`
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    return `<div style="color: red; padding: 20px;">模板渲染错误: ${errorMessage}</div>`
   }
 })
 
@@ -383,8 +450,9 @@ const saveTemplate = async () => {
       })
     }
   } catch (error) {
-    console.error('保存模板失败:', error)
-    // 可以在此添加错误提示
+    const msg = error?.response?.data?.message || error?.message || String(error)
+    console.error('保存模板失败:', msg)
+    toast.error(msg)
   } finally {
     saveLoading.value = false
   }
@@ -396,7 +464,9 @@ const setActiveTemplate = async (name) => {
     await axios.post('/api/t2i/templates/set_active', { name })
     activeTemplate.value = name
   } catch (error) {
-    console.error(`应用模板 '${name}' 失败:`, error)
+    const msg = error?.response?.data?.message || error?.message || String(error)
+    console.error(`应用模板 '${name}' 失败:`, msg)
+    toast.error(msg)
   } finally {
     applyLoading.value = false
   }
@@ -417,7 +487,9 @@ const confirmDelete = async () => {
     await loadInitialData()
     selectedTemplate.value = 'base'
   } catch (error) {
-    console.error(`删除模板 '${selectedTemplate.value}' 失败:`, error)
+    const msg = error?.response?.data?.message || error?.message || String(error)
+    console.error(`删除模板失败:`, msg)
+    toast.error(msg)
   } finally {
     saveLoading.value = false
   }
@@ -435,7 +507,9 @@ const confirmReset = async () => {
         await setActiveTemplate('base')
     }
   } catch (error) {
-    console.error('重置模板失败:', error)
+    const msg = error?.response?.data?.message || error?.message || String(error)
+    console.error('重置模板失败:', msg)
+    toast.error(msg)
   } finally {
     resetLoading.value = false
   }
