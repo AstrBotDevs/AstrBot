@@ -18,6 +18,7 @@ import pytest_asyncio
 from quart import Quart, jsonify
 from werkzeug.datastructures import FileStorage
 
+import astrbot.dashboard.server as dashboard_server
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -359,6 +360,107 @@ async def test_auth_login_secure_cookie_override(
     assert jwt_cookie_header
     assert "Secure" in jwt_cookie_header
     assert "SameSite=Strict" in jwt_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_auth_rate_limit_uses_client_ip_bucket_across_paths(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
+    dashboard_server._rate_limiters.clear()
+    original_value = core_lifecycle_td.astrbot_config["dashboard"].get(
+        "trust_proxy_headers", False
+    )
+    core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = True
+
+    try:
+        test_client = app.test_client()
+        headers = {"X-Forwarded-For": "198.51.100.10"}
+        await test_client.post(
+            "/api/auth/login",
+            json={"username": "wrong", "password": "wrong"},
+            headers=headers,
+        )
+        await test_client.post("/api/auth/totp/setup", json={}, headers=headers)
+
+        assert len(dashboard_server._rate_limiters) == 1
+        assert "198.51.100.10" in dashboard_server._rate_limiters
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = (
+            original_value
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_rate_limit_separates_different_client_ips(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
+    dashboard_server._rate_limiters.clear()
+    original_value = core_lifecycle_td.astrbot_config["dashboard"].get(
+        "trust_proxy_headers", False
+    )
+    core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = True
+
+    try:
+        test_client = app.test_client()
+        await test_client.post(
+            "/api/auth/login",
+            json={"username": "wrong", "password": "wrong"},
+            headers={"X-Forwarded-For": "198.51.100.10"},
+        )
+        await test_client.post(
+            "/api/auth/login",
+            json={"username": "wrong", "password": "wrong"},
+            headers={"X-Forwarded-For": "198.51.100.11"},
+        )
+
+        assert len(dashboard_server._rate_limiters) == 2
+        assert "198.51.100.10" in dashboard_server._rate_limiters
+        assert "198.51.100.11" in dashboard_server._rate_limiters
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = (
+            original_value
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_rate_limit_ignores_proxy_headers_by_default(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
+    dashboard_server._rate_limiters.clear()
+    original_value = core_lifecycle_td.astrbot_config["dashboard"].get(
+        "trust_proxy_headers", False
+    )
+    core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = False
+
+    try:
+        test_client = app.test_client()
+        await test_client.post(
+            "/api/auth/login",
+            json={"username": "wrong", "password": "wrong"},
+            headers={"X-Forwarded-For": "198.51.100.20"},
+        )
+        await test_client.post(
+            "/api/auth/login",
+            json={"username": "wrong", "password": "wrong"},
+            headers={"X-Forwarded-For": "198.51.100.21"},
+        )
+
+        assert len(dashboard_server._rate_limiters) == 1
+        assert "198.51.100.20" not in dashboard_server._rate_limiters
+        assert "198.51.100.21" not in dashboard_server._rate_limiters
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = (
+            original_value
+        )
 
 
 @pytest.mark.asyncio

@@ -283,10 +283,11 @@ class AstrBotDashboard:
             os.environ.get("ASTRBOT_TEST_MODE") != "true"
             and request.path in _RATE_LIMITED_ENDPOINTS
         ):
-            limiter = _rate_limiters.get(request.path)
+            client_ip = self._get_request_client_ip()
+            limiter = _rate_limiters.get(client_ip)
             if limiter is None:
                 limiter = _AuthRateLimiter(capacity=3, refill_rate=1.0)
-                _rate_limiters[request.path] = limiter
+                _rate_limiters[client_ip] = limiter
             if not await limiter.acquire():
                 r = jsonify(
                     Response()
@@ -344,6 +345,26 @@ class AstrBotDashboard:
             r = jsonify(Response().error("Token 无效").__dict__)
             r.status_code = 401
             return r
+
+    def _get_request_client_ip(self) -> str:
+        trust_proxy_headers = bool(
+            self.config.get("dashboard", {}).get("trust_proxy_headers", False)
+        )
+        if trust_proxy_headers:
+            forwarded_for = request.headers.get("X-Forwarded-For", "").strip()
+            if forwarded_for:
+                first_ip = forwarded_for.split(",", 1)[0].strip()
+                if first_ip and first_ip.lower() != "unknown":
+                    return first_ip
+
+            real_ip = request.headers.get("X-Real-IP", "").strip()
+            if real_ip and real_ip.lower() != "unknown":
+                return real_ip
+
+        remote_addr = request.remote_addr
+        if remote_addr:
+            return str(remote_addr)
+        return "unknown"
 
     @staticmethod
     def _extract_dashboard_jwt() -> str | None:

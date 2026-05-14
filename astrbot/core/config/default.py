@@ -252,6 +252,7 @@ DEFAULT_CONFIG = {
         "host": "0.0.0.0",
         "port": 6185,
         "disable_access_log": True,
+        "trust_proxy_headers": False,
         "totp": {
             "enable": False,
             "secret": "",
@@ -2971,6 +2972,7 @@ CONFIG_METADATA_2 = {
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             },
             "dashboard.ssl.enable": {"type": "bool"},
+            "dashboard.trust_proxy_headers": {"type": "bool"},
             "dashboard.ssl.cert_file": {
                 "type": "string",
                 "condition": {"dashboard.ssl.enable": True},
@@ -4212,6 +4214,11 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "启用 WebUI HTTPS",
                         "type": "bool",
                         "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。",
+                    },
+                    "dashboard.trust_proxy_headers": {
+                        "description": "信任代理请求头获取客户端 IP",
+                        "type": "bool",
+                        "hint": "关闭时忽略 X-Forwarded-For/X-Real-IP，仅使用连接地址。",
                     },
                     "dashboard.totp.enable": {
                         "description": "启用 WebUI TOTP 双因素认证",

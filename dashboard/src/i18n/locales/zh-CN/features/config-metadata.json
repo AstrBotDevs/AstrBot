@@ -1090,6 +1090,10 @@
         "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。"
       },
       "dashboard": {
+        "trust_proxy_headers": {
+          "description": "信任代理请求头获取客户端 IP",
+          "hint": "关闭时忽略 X-Forwarded-For/X-Real-IP，仅使用连接地址。"
+        },
         "ssl": {
           "enable": {
             "description": "启用 WebUI HTTPS",

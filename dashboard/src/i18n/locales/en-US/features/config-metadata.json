@@ -1088,6 +1088,10 @@
         "hint": "When disabled, AstrBot will not upload anonymous usage statistics."
       },
       "dashboard": {
+        "trust_proxy_headers": {
+          "description": "Trust Proxy Headers for Client IP",
+          "hint": "When disabled, ignore X-Forwarded-For/X-Real-IP and use the connection address only."
+        },
         "ssl": {
           "enable": {
             "description": "Enable WebUI HTTPS",
