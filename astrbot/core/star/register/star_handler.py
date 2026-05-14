@@ -422,11 +422,11 @@ def register_on_llm_request(**kwargs):
     from astrbot.api.provider import ProviderRequest
 
     @on_llm_request()
-    async def test(self, event: AstrMessageEvent, request: ProviderRequest) -> None:
-        request.system_prompt += "你是一个猫娘..."
+    async def test(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
+        req.system_prompt += "你是一个猫娘..."
     ```
 
-    请务必接收两个参数：event, request
+    请务必接收两个参数：event, req
 
     """
 

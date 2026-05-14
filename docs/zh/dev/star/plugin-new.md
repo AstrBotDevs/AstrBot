@@ -104,8 +104,10 @@ support_platforms:
 
 - `aiocqhttp`
 - `qq_official`
+- `qq_official_webhook`
 - `telegram`
 - `wecom`
+- `wecom_ai_bot`
 - `lark`
 - `dingtalk`
 - `discord`
@@ -113,9 +115,12 @@ support_platforms:
 - `kook`
 - `vocechat`
 - `weixin_official_account`
+- `weixin_oc`
 - `satori`
 - `misskey`
 - `line`
+- `matrix`
+- `mattermost`
 
 ### 声明 AstrBot 版本范围（Optional）
 

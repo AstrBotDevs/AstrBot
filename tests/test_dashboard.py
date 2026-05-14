@@ -216,6 +216,36 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
     return password
 
 
+def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+    tmp_path,
+):
+    data_dir = tmp_path / "data"
+    user_dist = data_dir / "dist"
+    bundled_dist = tmp_path / "bundled-dist"
+    user_dist.mkdir(parents=True)
+    bundled_dist.mkdir()
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        lambda: bundled_dist,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.should_use_bundled_dashboard_dist",
+        lambda *_args, **_kwargs: True,
+    )
+
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+
+    assert server.data_path == str(bundled_dist)
+
+
 async def _set_dashboard_password_change_required(
     core_lifecycle_td: AstrBotCoreLifecycle,
     required: bool,
@@ -406,6 +436,48 @@ async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
             core_lifecycle_td.astrbot_config["dashboard"]["password"],
             changed_password,
         )
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_legacy_md5_login_failure_includes_upgrade_faq_hint(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    legacy_password = "AstrbotLegacy123"
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["username"] = "astrbot"
+        core_lifecycle_td.astrbot_config["dashboard"]["password"] = (
+            hash_legacy_dashboard_password(legacy_password)
+        )
+        core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
+        await set_password_storage_upgraded(
+            core_lifecycle_td.db,
+            core_lifecycle_td.astrbot_config,
+            False,
+        )
+
+        response = await test_client.post(
+            "/api/auth/login",
+            json={"username": "astrbot", "password": "WrongPassword123"},
+        )
+        data = await response.get_json()
+
+        assert data["status"] == "error"
+        assert data["message"].startswith("Incorrect username or password.")
+        assert "用户名或密码错误" in data["message"]
+        assert "https://docs.astrbot.app/en/faq.html" in data["message"]
+        assert "https://docs.astrbot.app/faq.html" in data["message"]
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,
@@ -1738,13 +1810,22 @@ async def test_do_update(
     # Use a temporary path for the mock update to avoid side effects
     temp_release_dir = tmp_path_factory.mktemp("release")
     release_path = temp_release_dir / "astrbot"
+    calls = []
 
     async def mock_update(*args, **kwargs):
         """Mocks the update process by creating a directory in the temp path."""
+        calls.append("core")
+        callback = kwargs.get("progress_callback")
+        if callback:
+            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
         os.makedirs(release_path, exist_ok=True)
 
     async def mock_download_dashboard(*args, **kwargs):
         """Mocks the dashboard download to prevent network access."""
+        calls.append("dashboard")
+        callback = kwargs.get("progress_callback")
+        if callback:
+            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
         return
 
     async def mock_pip_install(*args, **kwargs):
@@ -1764,12 +1845,22 @@ async def test_do_update(
     response = await test_client.post(
         "/api/update/do",
         headers=authenticated_header,
-        json={"version": "v3.4.0", "reboot": False},
+        json={"version": "v3.4.0", "reboot": False, "progress_id": "test-progress"},
     )
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
     assert os.path.exists(release_path)
+    assert calls[:2] == ["dashboard", "core"]
+
+    progress_response = await test_client.get(
+        "/api/update/progress?id=test-progress",
+        headers=authenticated_header,
+    )
+    progress_data = await progress_response.get_json()
+    assert progress_data["status"] == "ok"
+    assert progress_data["data"]["status"] == "success"
+    assert progress_data["data"]["overall_percent"] == 100
 
 
 @pytest.mark.asyncio

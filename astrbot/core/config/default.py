@@ -5,7 +5,7 @@ import os
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.24.2"
+VERSION = "4.24.5"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -3327,7 +3327,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.shipyard_neo_profile": {
                         "description": "Shipyard Neo Profile",
                         "type": "string",
-                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。",
+                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。留空时自动选择能力更完整的 profile。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "shipyard_neo",

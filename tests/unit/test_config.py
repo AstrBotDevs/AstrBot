@@ -229,6 +229,53 @@ class TestAstrBotConfigLoad:
             generated_password,
         )
 
+    def test_empty_dashboard_password_uses_initial_password_env(
+        self, temp_config_path, monkeypatch
+    ):
+        """Test that the generated dashboard password can be provided by env."""
+        env_password = "CustomInitial123"
+        monkeypatch.setenv("ASTRBOT_DASHBOARD_INITIAL_PASSWORD", env_password)
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+            },
+        }
+
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+
+        assert getattr(config, "_generated_dashboard_password", None) == env_password
+        assert verify_dashboard_password(
+            config["dashboard"]["pbkdf2_password"],
+            env_password,
+        )
+        assert verify_dashboard_password(
+            config["dashboard"]["password"],
+            env_password,
+        )
+        assert config["dashboard"]["password_change_required"] is True
+
+    def test_initial_dashboard_password_env_must_be_valid(
+        self, temp_config_path, monkeypatch
+    ):
+        """Test that weak env-provided initial passwords fail fast."""
+        monkeypatch.setenv("ASTRBOT_DASHBOARD_INITIAL_PASSWORD", "weak")
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+            },
+        }
+
+        with pytest.raises(ValueError, match="Password must be at least"):
+            AstrBotConfig(
+                config_path=temp_config_path,
+                default_config=default_config,
+            )
+
     def test_legacy_password_change_required_rotates_and_keeps_config_flag(
         self, temp_config_path
     ):

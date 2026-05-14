@@ -180,7 +180,7 @@
           },
           "shipyard_neo_profile": {
             "description": "Shipyard Neo Profile",
-            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default."
+            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default. Leave empty to auto-select the most capable profile."
           },
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox TTL",
