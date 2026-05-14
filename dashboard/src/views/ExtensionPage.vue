@@ -9,9 +9,14 @@ import SkillsSection from "@/components/extension/SkillsSection.vue";
 import ComponentPanel from "@/components/extension/componentPanel/index.vue";
 import InstalledPluginsTab from "./extension/InstalledPluginsTab.vue";
 import MarketPluginsTab from "./extension/MarketPluginsTab.vue";
+import PluginDetailPage from "./extension/PluginDetailPage.vue";
 import { useExtensionPage } from "./extension/useExtensionPage";
+import { computed } from "vue";
+import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const pageState = useExtensionPage();
+const { pluginName, pluginDesc } = usePluginI18n();
 
 const {
   commonStore,
@@ -40,12 +45,11 @@ const {
   extension_config,
   pluginMarketData,
   loadingDialog,
-  showPluginInfoDialog,
-  selectedPlugin,
   curr_namespace,
   updatingAll,
   readmeDialog,
   forceUpdateDialog,
+  updateConfirmDialog,
   updateAllConfirmDialog,
   changelogDialog,
   getInitialListViewMode,
@@ -84,7 +88,6 @@ const {
   normalizeStr,
   toPinyinText,
   toInitials,
-  plugin_handler_info_headers,
   pluginHeaders,
   filteredExtensions,
   filteredPlugins,
@@ -109,6 +112,8 @@ const {
   uninstallExtension,
   handleUninstallConfirm,
   updateExtension,
+  closeUpdateConfirmDialog,
+  confirmUpdatePlugin,
   showUpdateAllConfirm,
   confirmUpdateAll,
   cancelUpdateAll,
@@ -122,6 +127,8 @@ const {
   reloadPlugin,
   viewReadme,
   viewChangelog,
+  openInstallDialog,
+  closeInstallDialog,
   handleInstallPlugin,
   confirmDangerInstall,
   cancelDangerInstall,
@@ -145,15 +152,146 @@ const {
   getPlatformDisplayList,
   resolveSelectedInstallPlugin,
   selectedInstallPlugin,
+  selectedInstallDownloadUrl,
+  selectedInstallSourceUrl,
+  installUsesGithubSource,
+  selectedUpdateExtension,
+  selectedUpdateMarketPlugin,
+  selectedUpdateDownloadUrl,
+  selectedUpdateSourceUrl,
+  updateUsesGithubSource,
   checkInstallCompatibility,
   refreshPluginMarket,
   handleLocaleChange,
   searchDebounceTimer,
 } = pageState;
+
+const selectedPluginId = computed(() => {
+  const pluginId = route.params.pluginId;
+  return Array.isArray(pluginId) ? pluginId[0] : pluginId || "";
+});
+
+const selectedDetailTab = computed(
+  () => extractTabFromHash(route.hash) || "installed",
+);
+
+const selectedInstalledPlugin = computed(() => {
+  if (!selectedPluginId.value) return null;
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  return data.find((plugin) => plugin.name === selectedPluginId.value) || null;
+});
+
+const selectedMarketPlugin = computed(() => {
+  const market = Array.isArray(pluginMarketData.value)
+    ? pluginMarketData.value
+    : [];
+  const installedPlugin = selectedInstalledPlugin.value;
+  const repo = installedPlugin?.repo?.toLowerCase();
+  return (
+    market.find((item) => item.name === selectedPluginId.value) ||
+    market.find((item) => repo && item.repo?.toLowerCase() === repo) ||
+    null
+  );
+});
+
+const selectedDetailPlugin = computed(() => {
+  if (selectedDetailTab.value === "market" && selectedMarketPlugin.value) {
+    return selectedMarketPlugin.value;
+  }
+  return selectedInstalledPlugin.value || selectedMarketPlugin.value;
+});
+
+const installDialogPluginName = computed(() =>
+  selectedInstallPlugin.value ? pluginName(selectedInstallPlugin.value) : "",
+);
+
+const installDialogPluginDesc = computed(() =>
+  String(
+    selectedInstallPlugin.value
+      ? pluginDesc(
+          selectedInstallPlugin.value,
+          selectedInstallPlugin.value.desc ||
+            selectedInstallPlugin.value.description ||
+            "",
+        )
+      : "",
+  ).trim(),
+);
+
+const installDialogPluginAuthor = computed(() => {
+  const author = selectedInstallPlugin.value?.author;
+  if (Array.isArray(author)) return author.join(", ");
+  if (author && typeof author === "object") return author.name || "";
+  return typeof author === "string" ? author.trim() : "";
+});
+
+const installDialogPluginLogo = computed(() => {
+  const logo = selectedInstallPlugin.value?.logo;
+  return typeof logo === "string" && logo.trim() ? logo : defaultPluginIcon;
+});
+
+const updateDialogPlugin = computed(
+  () => selectedUpdateMarketPlugin.value || selectedUpdateExtension.value,
+);
+
+const updateDialogPluginName = computed(() =>
+  updateDialogPlugin.value ? pluginName(updateDialogPlugin.value) : "",
+);
+
+const updateDialogCurrentVersion = computed(() =>
+  String(selectedUpdateExtension.value?.version || "").trim(),
+);
+
+const updateDialogTargetVersion = computed(() =>
+  String(selectedUpdateMarketPlugin.value?.version || "").trim(),
+);
+
+const updateDialogPluginLogo = computed(() => {
+  const logo =
+    selectedUpdateMarketPlugin.value?.logo || selectedUpdateExtension.value?.logo;
+  return typeof logo === "string" && logo.trim() ? logo : defaultPluginIcon;
+});
 </script>
 
 <template>
-  <v-row class="extension-page">
+  <PluginDetailPage
+    v-if="selectedPluginId && selectedDetailPlugin"
+    :plugin="selectedDetailPlugin"
+    :market-plugin="selectedMarketPlugin"
+    :source-tab="selectedDetailTab"
+    :state="pageState"
+  />
+
+  <div v-else-if="selectedPluginId && loading_" class="pa-4">
+    <v-progress-linear indeterminate color="primary" />
+  </div>
+
+  <div v-else-if="selectedPluginId" class="pa-4">
+    <div class="d-flex align-center mb-6">
+      <v-btn
+        icon="mdi-arrow-left"
+        variant="text"
+        density="comfortable"
+        @click="
+          router.push({ name: 'Extensions', hash: `#${selectedDetailTab}` })
+        "
+      />
+      <h2 class="text-h3 mb-0 ml-2">
+        {{
+          selectedDetailTab === "market"
+            ? tm("tabs.market")
+            : tm("titles.installedAstrBotPlugins")
+        }}
+        <v-icon icon="mdi-chevron-right" size="24" class="mx-1" />
+        {{ selectedPluginId }}
+      </h2>
+    </div>
+    <v-alert type="warning" variant="tonal">
+      {{ tm("detail.notFound") }}
+    </v-alert>
+  </div>
+
+  <v-row v-else class="extension-page">
     <v-col cols="12" md="12">
       <v-card variant="flat" style="background-color: transparent">
         <!-- 标签页 -->
@@ -181,43 +319,54 @@ const {
 
           <!-- 已安装的 MCP 服务器标签页内容 -->
           <v-tab-item v-if="activeTab === 'mcp'">
-            <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.installedMcpServers") }}</h2>
+            <div class="extension-detail-width">
+              <div class="mb-4 pt-4 pb-4">
+                <div class="d-flex flex-column" style="gap: 6px">
+                  <h2 class="text-h2 mb-0">
+                    {{ tm("tabs.installedMcpServers") }}
+                  </h2>
+                  <div class="text-body-2 text-medium-emphasis">
+                    {{ t("features.tooluse.mcpServers.description") }}
+                  </div>
+                </div>
               </div>
+              <v-card
+                class="rounded-lg"
+                variant="flat"
+                style="background-color: transparent"
+              >
+                <v-card-text class="pa-0">
+                  <McpServersSection />
+                </v-card-text>
+              </v-card>
             </div>
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <McpServersSection />
-              </v-card-text>
-            </v-card>
           </v-tab-item>
 
           <!-- Skills 标签页内容 -->
           <v-tab-item v-if="activeTab === 'skills'">
-            <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
+            <div class="extension-detail-width">
+              <div class="mb-4 pt-4 pb-4">
+                <div class="d-flex flex-column" style="gap: 6px">
+                  <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
+                  <div class="text-body-2 text-medium-emphasis">
+                    {{ tm("skills.runtimeHint") }}
+                  </div>
+                </div>
               </div>
+              <v-card
+                class="rounded-lg"
+                variant="flat"
+                style="background-color: transparent"
+              >
+                <v-card-text class="pa-0">
+                  <SkillsSection />
+                </v-card-text>
+              </v-card>
             </div>
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <SkillsSection />
-              </v-card-text>
-            </v-card>
           </v-tab-item>
 
           <!-- 插件市场标签页内容 -->
           <MarketPluginsTab :state="pageState" />
-
         </v-card-text>
       </v-card>
     </v-col>
@@ -270,6 +419,7 @@ const {
             :iterable="extension_config.config"
             :metadataKey="curr_namespace"
             :pluginName="curr_namespace"
+            :pluginI18n="extension_config.i18n"
           />
           <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
         </div>
@@ -339,50 +489,6 @@ const {
     </v-card>
   </v-dialog>
 
-  <!-- 插件信息对话框 -->
-  <v-dialog v-model="showPluginInfoDialog" width="1200">
-    <v-card>
-      <v-card-title class="text-h5"
-        >{{ selectedPlugin.name }} {{ tm("buttons.viewInfo") }}</v-card-title
-      >
-      <v-card-text>
-        <v-data-table
-          style="font-size: 17px"
-          :headers="plugin_handler_info_headers"
-          :items="selectedPlugin.handlers"
-          item-key="name"
-        >
-          <template v-slot:header.id="{ column }">
-            <p style="font-weight: bold">{{ column.title }}</p>
-          </template>
-          <template v-slot:item.event_type="{ item }">
-            {{ item.event_type }}
-          </template>
-          <template v-slot:item.desc="{ item }">
-            {{ item.desc }}
-          </template>
-          <template v-slot:item.type="{ item }">
-            <v-chip color="success">
-              {{ item.type }}
-            </v-chip>
-          </template>
-          <template v-slot:item.cmd="{ item }">
-            <span style="font-weight: bold">{{ item.cmd }}</span>
-          </template>
-        </v-data-table>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn
-          color="blue-darken-1"
-          variant="text"
-          @click="showPluginInfoDialog = false"
-          >{{ tm("buttons.close") }}</v-btn
-        >
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
   <v-snackbar
     :timeout="2000"
     elevation="24"
@@ -422,24 +528,24 @@ const {
       </v-card-title>
       <v-card-text>
         <p class="text-body-1">
-          {{ tm("dialogs.updateAllConfirm.message", { count: updatableExtensions.length }) }}
+          {{
+            tm("dialogs.updateAllConfirm.message", {
+              count: updatableExtensions.length,
+            })
+          }}
         </p>
       </v-card-text>
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
-        <v-btn
-          variant="text"
-          @click="cancelUpdateAll"
-        >{{ tm("buttons.cancel") }}</v-btn>
-        <v-btn
-          color="warning"
-          variant="flat"
-          @click="confirmUpdateAll"
-        >{{ tm("dialogs.updateAllConfirm.confirm") }}</v-btn>
+        <v-btn variant="text" @click="cancelUpdateAll">{{
+          tm("buttons.cancel")
+        }}</v-btn>
+        <v-btn color="warning" variant="flat" @click="confirmUpdateAll">{{
+          tm("dialogs.updateAllConfirm.confirm")
+        }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
-
 
   <!-- 指令冲突提示对话框 -->
   <v-dialog v-model="conflictDialog.show" max-width="420">
@@ -531,136 +637,272 @@ const {
     <div
       class="v-card v-card--density-default rounded-lg v-card--variant-elevated"
     >
-      <div class="v-card__loader">
-        <v-progress-linear
-          :indeterminate="loading_"
-          color="primary"
-          height="2"
-          :active="loading_"
-        ></v-progress-linear>
-      </div>
-
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ tm("dialogs.install.title") }}
       </v-card-title>
 
       <div class="v-card-text">
-        <v-tabs v-model="uploadTab" color="primary">
-          <v-tab value="file">{{ tm("dialogs.install.fromFile") }}</v-tab>
-          <v-tab value="url">{{ tm("dialogs.install.fromUrl") }}</v-tab>
-        </v-tabs>
-
-        <v-window v-model="uploadTab" class="mt-4">
-          <v-window-item value="file">
-            <div class="d-flex flex-column align-center justify-center pa-4">
-              <v-file-input
-                ref="fileInput"
-                v-model="upload_file"
-                :label="tm('upload.selectFile')"
-                accept=".zip"
-                hide-details
-                hide-input
-                class="d-none"
-              ></v-file-input>
-
-              <v-btn
-                color="primary"
-                size="large"
-                prepend-icon="mdi-upload"
-                @click="$refs.fileInput.click()"
-                elevation="2"
-              >
-                {{ tm("buttons.selectFile") }}
-              </v-btn>
-
-              <div class="text-body-2 text-medium-emphasis mt-2">
-                {{ tm("messages.supportedFormats") }}
+        <div v-if="selectedMarketInstallPlugin" class="market-install-confirm">
+          <div class="market-install-confirm__header">
+            <img
+              :src="installDialogPluginLogo"
+              :alt="installDialogPluginName"
+              class="market-install-confirm__logo"
+            />
+            <div class="market-install-confirm__meta">
+              <div class="market-install-confirm__name">
+                {{ installDialogPluginName }}
               </div>
-
-              <div v-if="upload_file" class="mt-4 text-center">
-                <v-chip
-                  color="primary"
-                  size="large"
-                  closable
-                  @click:close="upload_file = null"
-                >
-                  {{ upload_file.name }}
-                  <template v-slot:append>
-                    <span class="text-caption ml-2"
-                      >({{ (upload_file.size / 1024).toFixed(1) }}KB)</span
-                    >
-                  </template>
-                </v-chip>
+              <div
+                v-if="installDialogPluginAuthor"
+                class="market-install-confirm__author"
+              >
+                {{ tm("detail.info.author") }}: {{ installDialogPluginAuthor }}
               </div>
             </div>
-          </v-window-item>
+          </div>
 
-          <v-window-item value="url">
-            <div class="pa-4">
-              <v-text-field
-                v-model="extension_url"
-                :label="tm('upload.enterUrl')"
-                variant="outlined"
-                prepend-inner-icon="mdi-link"
-                hide-details
-                class="rounded-lg mb-4"
-                placeholder="https://github.com/username/repo"
-              ></v-text-field>
+          <v-divider class="my-4" />
 
-              <div v-if="selectedInstallPlugin" class="mb-3">
-                <v-chip
-                  v-if="selectedInstallPlugin.astrbot_version"
-                  size="small"
-                  color="secondary"
-                  variant="outlined"
-                  class="mr-2 mb-2"
+          <div
+            v-if="installDialogPluginDesc"
+            class="market-install-confirm__section"
+          >
+            <div class="market-install-confirm__section-title">
+              {{ tm("table.headers.description") }}
+            </div>
+            <div class="market-install-confirm__desc">
+              {{ installDialogPluginDesc }}
+            </div>
+          </div>
+
+          <div v-if="selectedInstallPlugin" class="mt-4">
+            <v-chip
+              v-if="selectedInstallPlugin.astrbot_version"
+              size="small"
+              color="secondary"
+              variant="outlined"
+              class="mr-2 mb-2"
+            >
+              {{ tm("card.status.astrbotVersion") }}:
+              {{ selectedInstallPlugin.astrbot_version }}
+            </v-chip>
+            <v-chip
+              v-if="
+                normalizePlatformList(selectedInstallPlugin.support_platforms)
+                  .length
+              "
+              size="small"
+              color="info"
+              variant="outlined"
+              class="mb-2"
+            >
+              {{ tm("card.status.supportPlatform") }}:
+              {{
+                getPlatformDisplayList(
+                  selectedInstallPlugin.support_platforms,
+                ).join(", ")
+              }}
+            </v-chip>
+            <v-alert
+              v-if="
+                selectedInstallPlugin.astrbot_version &&
+                installCompat.checked &&
+                !installCompat.compatible
+              "
+              type="warning"
+              variant="tonal"
+              density="comfortable"
+              class="market-install-alert mt-2 mb-3"
+            >
+              {{ installCompat.message }}
+            </v-alert>
+          </div>
+
+          <div
+            v-if="selectedInstallSourceUrl"
+            class="market-install-confirm__section-title mt-4"
+          >
+            {{ tm("dialogs.install.sectionTitle") }}
+          </div>
+          <div
+            v-if="selectedInstallSourceUrl"
+            class="market-install-source text-caption text-medium-emphasis mb-3"
+          >
+            <div>{{ tm("dialogs.install.downloadSource") }}</div>
+            <div class="market-install-source__url">
+              {{ selectedInstallSourceUrl }}
+            </div>
+          </div>
+
+          <v-alert
+            v-if="installUsesGithubSource"
+            type="warning"
+            variant="tonal"
+            density="comfortable"
+            class="market-install-alert mt-4 mb-4"
+          >
+            {{ tm("dialogs.install.githubSecurityWarning") }}
+          </v-alert>
+
+          <ProxySelector v-if="!selectedInstallDownloadUrl" class="mt-4" />
+        </div>
+
+        <template v-else>
+          <v-tabs v-model="uploadTab" color="primary">
+            <v-tab value="file">{{ tm("dialogs.install.fromFile") }}</v-tab>
+            <v-tab value="url">{{ tm("dialogs.install.fromUrl") }}</v-tab>
+          </v-tabs>
+
+          <v-window v-model="uploadTab" class="mt-4">
+            <v-window-item value="file">
+              <div class="d-flex flex-column align-center justify-center pa-4">
+                <v-file-input
+                  ref="fileInput"
+                  v-model="upload_file"
+                  :label="tm('upload.selectFile')"
+                  accept=".zip"
+                  hide-details
+                  hide-input
+                  class="d-none"
+                ></v-file-input>
+
+                <v-btn
+                  color="primary"
+                  size="large"
+                  prepend-icon="mdi-upload"
+                  @click="$refs.fileInput.click()"
+                  elevation="2"
                 >
-                  {{ tm("card.status.astrbotVersion") }}:
-                  {{ selectedInstallPlugin.astrbot_version }}
-                </v-chip>
-                <v-chip
-                  v-if="normalizePlatformList(selectedInstallPlugin.support_platforms).length"
-                  size="small"
-                  color="info"
+                  {{ tm("buttons.selectFile") }}
+                </v-btn>
+
+                <div class="text-body-2 text-medium-emphasis mt-2">
+                  {{ tm("messages.supportedFormats") }}
+                </div>
+
+                <div v-if="upload_file" class="mt-4 text-center">
+                  <v-chip
+                    color="primary"
+                    size="large"
+                    closable
+                    @click:close="upload_file = null"
+                  >
+                    {{ upload_file.name }}
+                    <template v-slot:append>
+                      <span class="text-caption ml-2"
+                        >({{ (upload_file.size / 1024).toFixed(1) }}KB)</span
+                      >
+                    </template>
+                  </v-chip>
+                </div>
+              </div>
+            </v-window-item>
+
+            <v-window-item value="url">
+              <div class="pa-4">
+                <v-text-field
+                  v-model="extension_url"
+                  :label="tm('upload.enterUrl')"
                   variant="outlined"
-                  class="mb-2"
+                  prepend-inner-icon="mdi-link"
+                  hide-details
+                  class="rounded-lg mb-4"
+                  placeholder="https://github.com/username/repo"
+                ></v-text-field>
+
+                <div v-if="selectedInstallPlugin" class="mb-3">
+                  <v-chip
+                    v-if="selectedInstallPlugin.astrbot_version"
+                    size="small"
+                    color="secondary"
+                    variant="outlined"
+                    class="mr-2 mb-2"
+                  >
+                    {{ tm("card.status.astrbotVersion") }}:
+                    {{ selectedInstallPlugin.astrbot_version }}
+                  </v-chip>
+                  <v-chip
+                    v-if="
+                      normalizePlatformList(
+                        selectedInstallPlugin.support_platforms,
+                      ).length
+                    "
+                    size="small"
+                    color="info"
+                    variant="outlined"
+                    class="mb-2"
+                  >
+                    {{ tm("card.status.supportPlatform") }}:
+                    {{
+                      getPlatformDisplayList(
+                        selectedInstallPlugin.support_platforms,
+                      ).join(", ")
+                    }}
+                  </v-chip>
+                  <v-alert
+                    v-if="
+                      selectedInstallPlugin.astrbot_version &&
+                      installCompat.checked &&
+                      !installCompat.compatible
+                    "
+                    type="warning"
+                    variant="tonal"
+                    density="comfortable"
+                    class="market-install-alert mt-2 mb-3"
+                  >
+                    {{ installCompat.message }}
+                  </v-alert>
+                </div>
+
+                <div
+                  v-if="selectedInstallSourceUrl"
+                  class="market-install-confirm__section-title mt-4"
                 >
-                  {{ tm("card.status.supportPlatform") }}:
-                  {{
-                    getPlatformDisplayList(selectedInstallPlugin.support_platforms).join(
-                      ", ",
-                    )
-                  }}
-                </v-chip>
+                  {{ tm("dialogs.install.sectionTitle") }}
+                </div>
+                <div
+                  v-if="selectedInstallSourceUrl"
+                  class="market-install-source text-caption text-medium-emphasis mb-3"
+                >
+                  <div>{{ tm("dialogs.install.downloadSource") }}</div>
+                  <div class="market-install-source__url">
+                    {{ selectedInstallSourceUrl }}
+                  </div>
+                </div>
+
                 <v-alert
-                  v-if="
-                    selectedInstallPlugin.astrbot_version &&
-                    installCompat.checked &&
-                    !installCompat.compatible
-                  "
+                  v-if="installUsesGithubSource"
                   type="warning"
                   variant="tonal"
                   density="comfortable"
-                  class="mt-2"
+                  class="market-install-alert mb-4"
                 >
-                  {{ installCompat.message }}
+                  {{ tm("dialogs.install.githubSecurityWarning") }}
                 </v-alert>
-              </div>
 
-              <ProxySelector></ProxySelector>
-            </div>
-          </v-window-item>
-        </v-window>
+                <ProxySelector
+                  v-if="!selectedInstallDownloadUrl"
+                ></ProxySelector>
+              </div>
+            </v-window-item>
+          </v-window>
+        </template>
       </div>
 
       <div class="v-card-actions">
         <v-spacer></v-spacer>
-        <v-btn color="grey" variant="text" @click="dialog = false">{{
+        <v-btn color="grey" variant="text" @click="closeInstallDialog">{{
           tm("buttons.cancel")
         }}</v-btn>
-        <v-btn color="primary" variant="text" @click="newExtension">{{
-          tm("buttons.install")
-        }}</v-btn>
+        <v-btn
+          color="primary"
+          variant="text"
+          :loading="loading_"
+          :disabled="loading_"
+          @click="newExtension"
+          >{{ tm("buttons.install") }}</v-btn
+        >
       </div>
     </div>
   </v-dialog>
@@ -706,9 +948,15 @@ const {
             @click="selectPluginSource(null)"
           >
             <template v-slot:prepend>
-              <v-icon icon="mdi-shield-check" size="small" class="mr-2"></v-icon>
+              <v-icon
+                icon="mdi-shield-check"
+                size="small"
+                class="mr-2"
+              ></v-icon>
             </template>
-            <v-list-item-title>{{ tm("market.defaultSource") }}</v-list-item-title>
+            <v-list-item-title>{{
+              tm("market.defaultSource")
+            }}</v-list-item-title>
           </v-list-item>
 
           <v-list-item
@@ -720,7 +968,11 @@ const {
             @click="selectPluginSource(source.url)"
           >
             <template v-slot:prepend>
-              <v-icon icon="mdi-link-variant" size="small" class="mr-2"></v-icon>
+              <v-icon
+                icon="mdi-link-variant"
+                size="small"
+                class="mr-2"
+              ></v-icon>
             </template>
             <v-list-item-title>{{ source.name }}</v-list-item-title>
             <v-list-item-subtitle class="text-caption">{{
@@ -747,9 +999,12 @@ const {
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="primary" variant="text" @click="showSourceManagerDialog = false">{{
-          tm("buttons.close")
-        }}</v-btn>
+        <v-btn
+          color="primary"
+          variant="text"
+          @click="showSourceManagerDialog = false"
+          >{{ tm("buttons.close") }}</v-btn
+        >
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -827,6 +1082,84 @@ const {
     </v-card>
   </v-dialog>
 
+  <!-- Update plugin confirmation dialog -->
+  <v-dialog v-model="updateConfirmDialog.show" width="500">
+    <v-card class="rounded-lg">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+        {{ tm("dialogs.update.title") }}
+      </v-card-title>
+      <v-card-text>
+        <div class="market-install-confirm">
+          <div class="market-install-confirm__header">
+            <img
+              :src="updateDialogPluginLogo"
+              :alt="updateDialogPluginName"
+              class="market-install-confirm__logo"
+            />
+            <div class="market-install-confirm__meta">
+              <div class="market-install-confirm__name">
+                {{ updateDialogPluginName }}
+              </div>
+              <div
+                v-if="updateDialogCurrentVersion || updateDialogTargetVersion"
+                class="market-install-confirm__author"
+              >
+                <template v-if="updateDialogTargetVersion">
+                  {{ updateDialogCurrentVersion || tm("status.unknown") }}
+                  <v-icon icon="mdi-arrow-right" size="14" class="mx-1" />
+                  {{ updateDialogTargetVersion }}
+                </template>
+                <template v-else>
+                  {{ tm("detail.info.version") }}:
+                  {{ updateDialogCurrentVersion || tm("status.unknown") }}
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <v-divider class="my-4" />
+
+          <div
+            v-if="selectedUpdateSourceUrl"
+            class="market-install-confirm__section-title"
+          >
+            {{ tm("dialogs.update.sectionTitle") }}
+          </div>
+          <div
+            v-if="selectedUpdateSourceUrl"
+            class="market-install-source text-caption text-medium-emphasis mb-3"
+          >
+            <div>{{ tm("dialogs.update.downloadSource") }}</div>
+            <div class="market-install-source__url">
+              {{ selectedUpdateSourceUrl }}
+            </div>
+          </div>
+
+          <v-alert
+            v-if="updateUsesGithubSource"
+            type="warning"
+            variant="tonal"
+            density="comfortable"
+            class="market-install-alert mt-4 mb-4"
+          >
+            {{ tm("dialogs.install.githubSecurityWarning") }}
+          </v-alert>
+
+          <ProxySelector v-if="!selectedUpdateDownloadUrl" class="mt-4" />
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="grey" variant="text" @click="closeUpdateConfirmDialog">
+          {{ tm("buttons.cancel") }}
+        </v-btn>
+        <v-btn color="primary" variant="flat" @click="confirmUpdatePlugin">
+          {{ tm("dialogs.update.confirm") }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <!-- 强制更新确认对话框 -->
   <v-dialog v-model="forceUpdateDialog.show" max-width="420">
     <v-card class="rounded-lg">
@@ -866,6 +1199,70 @@ const {
 .fab-button:hover {
   transform: translateY(-4px) scale(1.05);
   box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
+}
+
+.extension-detail-width {
+  margin: 0 auto;
+  max-width: 1040px;
+  width: 100%;
+}
+
+.market-install-confirm {
+  padding: 8px;
+}
+
+.market-install-confirm__header {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+}
+
+.market-install-confirm__logo {
+  border-radius: 14px;
+  height: 64px;
+  object-fit: cover;
+  width: 64px;
+}
+
+.market-install-confirm__meta {
+  min-width: 0;
+}
+
+.market-install-confirm__name {
+  color: rgba(var(--v-theme-on-surface), 0.92);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-install-confirm__author,
+.market-install-confirm__desc {
+  color: rgba(var(--v-theme-on-surface), 0.64);
+  line-height: 1.55;
+  font-size: 0.875rem;
+}
+
+.market-install-confirm__section-title {
+  color: rgba(var(--v-theme-on-surface), 0.92);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.market-install-alert {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.market-install-source {
+  min-width: 0;
+}
+
+.market-install-source__url {
+  overflow-x: auto;
+  white-space: nowrap;
 }
 </style>
 

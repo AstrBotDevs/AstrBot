@@ -222,8 +222,9 @@ class QQOfficialPlatformAdapter(Platform):
         ):
             return
 
+        # 私聊主动推送不需要 msg_id，见 https://github.com/AstrBotDevs/AstrBot/issues/7904
         msg_id = self._session_last_message_id.get(session.session_id)
-        if not msg_id:
+        if not msg_id and session.message_type != MessageType.FRIEND_MESSAGE:
             logger.warning(
                 "[QQOfficial] No cached msg_id for session: %s, skip send_by_session",
                 session.session_id,

@@ -191,6 +191,8 @@ export default defineConfig({
                   { text: "接收消息事件", link: "/guides/listen-message-event" },
                   { text: "发送消息", link: "/guides/send-message" },
                   { text: "插件配置", link: "/guides/plugin-config" },
+                  { text: "插件 Pages", link: "/guides/plugin-pages" },
+                  { text: "插件国际化", link: "/guides/plugin-i18n" },
                   { text: "调用 AI", link: "/guides/ai" },
                   { text: "存储", link: "/guides/storage" },
                   { text: "文转图", link: "/guides/html-to-pic" },
@@ -341,6 +343,7 @@ export default defineConfig({
               { text: "Mattermost", link: "/mattermost" },
               { text: "Misskey", link: "/misskey" },
               { text: "Discord", link: "/discord" },
+              { text: "KOOK", link: "/kook" },
               {
                 text: "Satori",
                 base: "/en/platform/satori",
@@ -355,7 +358,6 @@ export default defineConfig({
                 collapsed: false,
                 items: [
                   { text: "Matrix", link: "/matrix" },
-                  { text: "KOOK", link: "/kook" },
                   { text: "VoceChat", link: "/vocechat" },
                 ],
               },
@@ -433,6 +435,8 @@ export default defineConfig({
                   { text: "Listen to Message Events", link: "/guides/listen-message-event" },
                   { text: "Send Messages", link: "/guides/send-message" },
                   { text: "Plugin Configuration", link: "/guides/plugin-config" },
+                  { text: "Plugin Pages", link: "/guides/plugin-pages" },
+                  { text: "Plugin Internationalization", link: "/guides/plugin-i18n" },
                   { text: "AI", link: "/guides/ai" },
                   { text: "Storage", link: "/guides/storage" },
                   { text: "HTML to Image", link: "/guides/html-to-pic" },

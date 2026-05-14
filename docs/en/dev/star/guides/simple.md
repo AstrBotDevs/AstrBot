@@ -40,19 +40,3 @@ Explanation:
 
 All handler functions must be written within the plugin class. To keep content concise, in subsequent sections, we may omit the plugin class definition.
 ```
-
-解释如下：
-
-- 插件需要继承 `Star` 类。
-- `Context` 类用于插件与 AstrBot Core 交互，可以由此调用 AstrBot Core 提供的各种 API。
-- 具体的处理函数 `Handler` 在插件类中定义，如这里的 `helloworld` 函数。
-- `AstrMessageEvent` 是 AstrBot 的消息事件对象，存储了消息发送者、消息内容等信息。
-- `AstrBotMessage` 是 AstrBot 的消息对象，存储了消息平台下发的消息的具体内容。可以通过 `event.message_obj` 获取。
-
-> [!TIP]
->
-> `Handler` 一定需要在插件类中注册，前两个参数必须为 `self` 和 `event`。如果文件行数过长，可以将服务写在外部，然后在 `Handler` 中调用。
->
-> 插件类所在的文件名需要命名为 `main.py`。
-
-所有的处理函数都需写在插件类中。为了精简内容，在之后的章节中，我们可能会忽略插件类的定义。

@@ -137,9 +137,9 @@
   },
   "stats": {
     "tokens": "Token",
-    "inputTokens": "输入 Token",
+    "inputTokens": "输入（其他）",
     "outputTokens": "输出 Token",
-    "cachedTokens": "缓存 Token",
+    "cachedTokens": "输入（缓存）",
     "duration": "耗时",
     "ttft": "首字时间"
   },
