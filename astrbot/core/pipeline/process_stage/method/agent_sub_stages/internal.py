@@ -49,6 +49,25 @@ from ...follow_up import (
 )
 
 
+def _count_conversation_turns(messages: list[Message]) -> int:
+    """Count persisted conversation turns by user messages.
+
+    A turn starts with a user message and may include assistant tool calls,
+    tool results, and the final assistant answer. Counting user messages avoids
+    treating tool call/result pairs as additional conversation turns.
+    """
+    return sum(1 for message in messages if message.role == "user")
+
+
+def _history_exceeds_turn_limit(messages: list[Message], max_turns: int) -> bool:
+    """Return whether persisted history exceeds the configured turn limit."""
+    if max_turns == -1:
+        return False
+    if max_turns <= 0:
+        return False
+    return _count_conversation_turns(messages) > max_turns
+
+
 class InternalAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
@@ -464,9 +483,10 @@ class InternalAgentSubStage(Stage):
             messages_to_save.append(message)
 
         # Persistent conversation compaction — either turn-based truncation OR
-        # LLM summary, mutually exclusive. We avoid running both in sequence
-        # (truncation would destroy prompt cache before the LLM summary runs).
-        if self.max_context_length > 0:
+        # LLM summary, mutually exclusive. Only compact persisted history when
+        # the configured turn limit is exceeded; request-time token guarding is
+        # handled separately by the agent runner.
+        if _history_exceeds_turn_limit(messages_to_save, self.max_context_length):
             compress_provider = None
             if (
                 self.context_limit_reached_strategy == "llm_compress"
