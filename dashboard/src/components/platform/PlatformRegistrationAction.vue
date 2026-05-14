@@ -1,7 +1,7 @@
 <template>
   <div v-if="action" class="platform-registration-panel">
     <div class="registration-scan-title">
-      {{ tm('registrationAction.scanTitle') }}
+      {{ tm(action.scanTitleKey) }}
     </div>
 
     <div class="registration-scan-content">
@@ -11,8 +11,8 @@
           :class="{ 'registration-qr-shell-created': flow.status === 'created' }"
         >
           <QrCodeViewer
-            v-if="flow.verification_uri_complete"
-            :value="flow.verification_uri_complete"
+            v-if="qrValue"
+            :value="qrValue"
             :alt="tm(action.titleKey)"
             :size="150"
             :margin="1"
@@ -55,6 +55,16 @@ const REGISTRATION_ACTIONS = {
     endpoint: '/api/platform/registration/lark',
     icon: 'mdi-qrcode',
     titleKey: 'registrationAction.lark.title',
+    scanTitleKey: 'registrationAction.lark.scanTitle',
+    successKey: 'registrationAction.created',
+  },
+  weixin_oc: {
+    endpoint: '/api/platform/registration/weixin_oc',
+    icon: 'mdi-qrcode',
+    titleKey: 'registrationAction.weixinOc.title',
+    scanTitleKey: 'registrationAction.weixinOc.scanTitle',
+    successKey: 'registrationAction.weixinOc.created',
+    statusKeyPrefix: 'registrationAction.weixinOc.status',
   },
 };
 
@@ -91,6 +101,12 @@ export default {
     },
     selectedDomain() {
       return this.platformConfig?.domain || FEISHU_DOMAIN;
+    },
+    qrValue() {
+      return this.flow.verification_uri_complete
+        || this.flow.qrcode_img_content
+        || this.flow.qrcode
+        || '';
     },
   },
   watch: {
@@ -196,7 +212,7 @@ export default {
           this.applyRegistrationResult(data);
           this.stopPolling();
           this.$emit('created', data);
-          this.$emit('success', this.tm('registrationAction.created'));
+          this.$emit('success', this.tm(this.action.successKey || 'registrationAction.created'));
           return;
         }
         if (this.flow.status === 'pending' || this.flow.status === 'slow_down') {
@@ -231,9 +247,26 @@ export default {
       if (data.domain) {
         this.platformConfig.domain = data.domain;
       }
+      if (data.weixin_oc_token) {
+        this.platformConfig.weixin_oc_token = data.weixin_oc_token;
+      }
+      if (data.weixin_oc_account_id) {
+        this.platformConfig.weixin_oc_account_id = data.weixin_oc_account_id;
+      }
+      if (data.weixin_oc_base_url) {
+        this.platformConfig.weixin_oc_base_url = data.weixin_oc_base_url;
+      }
     },
     getStatusText(status) {
-      return this.tm(`registrationAction.status.${status || 'idle'}`);
+      const normalizedStatus = status || 'idle';
+      if (this.action?.statusKeyPrefix) {
+        const platformStatusKey = `${this.action.statusKeyPrefix}.${normalizedStatus}`;
+        const platformStatusText = this.tm(platformStatusKey);
+        if (platformStatusText && platformStatusText !== platformStatusKey) {
+          return platformStatusText;
+        }
+      }
+      return this.tm(`registrationAction.status.${normalizedStatus}`);
     },
     getStatusColor(status) {
       switch (status) {

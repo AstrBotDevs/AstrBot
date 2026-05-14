@@ -30,30 +30,52 @@
 
                 </v-select>
                 <div class="mt-3" v-if="selectedPlatformConfig">
-                  <div v-if="isLarkPlatform" class="lark-creation-title mt-4 mb-1">
-                    {{ tm('registrationAction.mode.title') }}
-                  </div>
-                  <v-radio-group
-                    v-if="isLarkPlatform"
-                    v-model="larkCreationMode"
-                    class="lark-creation-mode"
-                    hide-details
-                  >
-                    <v-radio value="scan" :label="tm('registrationAction.mode.scan')"></v-radio>
-                    <v-radio value="manual" :label="tm('registrationAction.mode.manual')"></v-radio>
-                  </v-radio-group>
+                  <div v-if="isLarkPlatform">
+                    <div class="lark-creation-title mt-4 mb-1">
+                      {{ tm('registrationAction.mode.title') }}
+                    </div>
+                    <v-radio-group
+                      v-model="larkCreationMode"
+                      class="lark-creation-mode"
+                      hide-details
+                    >
+                      <v-radio value="scan" :label="tm('registrationAction.mode.scan')"></v-radio>
+                      <v-radio value="manual" :label="tm('registrationAction.mode.manual')"></v-radio>
+                    </v-radio-group>
 
-                  <div v-if="isLarkPlatform && larkCreationMode === 'scan'" class="lark-registration-inline mt-3">
+                    <div v-if="larkCreationMode === 'scan'" class="lark-registration-inline mt-3">
+                      <PlatformRegistrationAction
+                        :platform-config="selectedPlatformConfig"
+                        :active="larkCreationMode === 'scan'"
+                        @created="handlePlatformRegistrationCreated"
+                        @success="showSuccess"
+                        @error="showError"
+                      />
+                    </div>
+
+                    <div v-else-if="larkCreationMode === 'manual'" class="mt-2">
+                      <div class="platform-action-row">
+                        <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                          <v-icon start>mdi-book-open-variant</v-icon>
+                          {{ tm('dialog.viewTutorial') }}
+                        </v-btn>
+                      </div>
+                      <AstrBotConfig :iterable="selectedPlatformConfig" :metadata="metadata['platform_group']?.metadata"
+                        metadataKey="platform" />
+                    </div>
+                  </div>
+
+                  <div v-else-if="isWeixinOcPlatform" class="weixin-oc-registration-inline mt-4">
                     <PlatformRegistrationAction
                       :platform-config="selectedPlatformConfig"
-                      :active="larkCreationMode === 'scan'"
+                      :active="isWeixinOcPlatform"
                       @created="handlePlatformRegistrationCreated"
                       @success="showSuccess"
                       @error="showError"
                     />
                   </div>
 
-                  <div v-else-if="!isLarkPlatform || larkCreationMode === 'manual'" class="mt-2">
+                  <div v-else class="mt-2">
                     <div class="platform-action-row">
                       <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
                         <v-icon start>mdi-book-open-variant</v-icon>
@@ -447,6 +469,10 @@ export default {
         }
       }
 
+      if (this.isWeixinOcPlatform && !this.selectedPlatformConfig?.weixin_oc_token) {
+        return false;
+      }
+
       // 如果是使用现有配置文件模式
       if (this.aBConfigRadioVal === '0') {
         return !!this.selectedAbConfId;
@@ -482,13 +508,16 @@ export default {
     },
     isLarkPlatform() {
       return this.selectedPlatformConfig?.type === 'lark';
+    },
+    isWeixinOcPlatform() {
+      return this.selectedPlatformConfig?.type === 'weixin_oc';
     }
   },
   watch: {
     selectedPlatformType(newType) {
       if (newType && this.platformTemplates[newType]) {
         this.selectedPlatformConfig = JSON.parse(JSON.stringify(this.platformTemplates[newType]));
-        this.larkCreationMode = this.selectedPlatformConfig?.type === 'lark' ? '' : 'manual';
+        this.larkCreationMode = '';
       } else {
         this.selectedPlatformConfig = null;
         this.larkCreationMode = '';

@@ -134,8 +134,23 @@
     "lark": {
       "title": "Настройка по QR",
       "show": "Настройка по QR",
+      "scanTitle": "Отсканируйте в мобильном Feishu",
       "feishu": "Feishu China",
       "lark": "Lark Global"
+    },
+    "weixinOc": {
+      "title": "QR вход в WeChat",
+      "scanTitle": "Отсканируйте в мобильном WeChat",
+      "created": "Вход выполнен",
+      "status": {
+        "idle": "Не начато",
+        "starting": "Получение QR",
+        "pending": "Ожидание сканирования",
+        "created": "Вход выполнен - не забудьте нажать кнопку сохранения!",
+        "denied": "Отменено",
+        "expired": "Истекло",
+        "error": "Ошибка входа"
+      }
     },
     "start": "Начать настройку",
     "created": "Настройка завершена",

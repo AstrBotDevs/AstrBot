@@ -134,8 +134,23 @@
     "lark": {
       "title": "One-click QR Setup",
       "show": "One-click QR Setup",
+      "scanTitle": "Scan with Feishu on your phone",
       "feishu": "Feishu China",
       "lark": "Lark Global"
+    },
+    "weixinOc": {
+      "title": "Personal WeChat QR Login",
+      "scanTitle": "Scan with WeChat on your phone",
+      "created": "Login Complete",
+      "status": {
+        "idle": "Not Started",
+        "starting": "Getting QR Code",
+        "pending": "Waiting for Scan",
+        "created": "Login Complete - remember to click the save button!",
+        "denied": "Canceled",
+        "expired": "Expired",
+        "error": "Login Failed"
+      }
     },
     "start": "Start Setup",
     "created": "Setup Complete",
