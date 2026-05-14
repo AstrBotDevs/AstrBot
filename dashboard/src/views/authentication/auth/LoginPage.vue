@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router';
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
+import axios from 'axios';
 
 const cardVisible = ref(false);
 const router = useRouter();
@@ -32,6 +33,19 @@ onMounted(async () => {
       router.push('/welcome');
     }
     return;
+  }
+
+  try {
+    const setupStatus = await axios.get('/api/auth/setup-status');
+    if (
+      setupStatus.data?.data?.setup_required &&
+      setupStatus.data?.data?.skip_default_password_auth
+    ) {
+      router.push('/auth/setup');
+      return;
+    }
+  } catch {
+    // Keep the normal login flow if setup status is unavailable.
   }
 
   // 添加一个小延迟以获得更好的动画效果

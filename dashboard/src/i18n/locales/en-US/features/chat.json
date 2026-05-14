@@ -51,7 +51,7 @@
     "fullscreen": "Fullscreen Mode",
     "exitFullscreen": "Exit Fullscreen",
     "reply": "Reply",
-    "providerConfig": "AI Configuration",
+    "providerConfig": "Model Configuration",
     "toolsUsed": "Tool Used",
     "toolCallUsed": "Used {name} tool",
     "pythonCodeAnalysis": "Python Code Analysis Used"
@@ -137,9 +137,9 @@
   },
   "stats": {
     "tokens": "Tokens",
-    "inputTokens": "Input Tokens",
+    "inputTokens": "Input (other)",
     "outputTokens": "Output Tokens",
-    "cachedTokens": "Cached Tokens",
+    "cachedTokens": "Input (cached)",
     "duration": "Duration",
     "ttft": "Time to First Token"
   },

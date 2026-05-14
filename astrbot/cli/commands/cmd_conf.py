@@ -1,10 +1,15 @@
-import hashlib
 import json
 import zoneinfo
 from collections.abc import Callable
 from typing import Any
 
 import click
+
+from astrbot.core.utils.auth_password import (
+    hash_dashboard_password,
+    hash_legacy_dashboard_password,
+    validate_dashboard_password,
+)
 
 from ..utils import check_astrbot_root, get_astrbot_root
 
@@ -39,9 +44,11 @@ def _validate_dashboard_username(value: str) -> str:
 
 def _validate_dashboard_password(value: str) -> str:
     """Validate Dashboard password"""
-    if not value:
-        raise click.ClickException("Password cannot be empty")
-    return hashlib.md5(value.encode()).hexdigest()
+    try:
+        validate_dashboard_password(value)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    return value
 
 
 def _validate_timezone(value: str) -> str:
@@ -163,7 +170,19 @@ def set_config(key: str, value: str) -> None:
     try:
         old_value = _get_nested_item(config, key)
         validated_value = CONFIG_VALIDATORS[key](value)
-        _set_nested_item(config, key, validated_value)
+        if key == "dashboard.password":
+            _set_nested_item(
+                config,
+                "dashboard.pbkdf2_password",
+                hash_dashboard_password(validated_value),
+            )
+            _set_nested_item(
+                config,
+                "dashboard.password",
+                hash_legacy_dashboard_password(validated_value),
+            )
+        else:
+            _set_nested_item(config, key, validated_value)
         _save_config(config)
 
         click.echo(f"Config updated: {key}")

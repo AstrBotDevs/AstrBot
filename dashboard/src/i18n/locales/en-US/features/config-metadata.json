@@ -125,6 +125,10 @@
           "description": "Brave Search API Key",
           "hint": "Multiple keys can be added for rotation."
         },
+        "websearch_firecrawl_key": {
+          "description": "Firecrawl API Key",
+          "hint": "Multiple keys can be added for rotation."
+        },
         "websearch_baidu_app_builder_key": {
           "description": "Baidu Qianfan Smart Cloud APP Builder API Key",
           "hint": "Reference: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -176,11 +180,35 @@
           },
           "shipyard_neo_profile": {
             "description": "Shipyard Neo Profile",
-            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default."
+            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default. Leave empty to auto-select the most capable profile."
           },
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox TTL",
             "hint": "Sandbox time-to-live in seconds."
+          },
+          "cua_image": {
+            "description": "CUA Image",
+            "hint": "CUA sandbox image or OS type. Defaults to linux. Supported values depend on the installed CUA SDK."
+          },
+          "cua_os_type": {
+            "description": "CUA OS Type",
+            "hint": "CUA sandbox operating system type. Defaults to linux."
+          },
+          "cua_idle_timeout": {
+            "description": "CUA Idle Timeout",
+            "hint": "Idle timeout for CUA sandbox sessions in seconds. When greater than 0, AstrBot proactively shuts down an idle CUA sandbox after that amount of inactivity; 0 disables it."
+          },
+          "cua_telemetry_enabled": {
+            "description": "CUA Telemetry",
+            "hint": "Allow the CUA SDK to send telemetry data. Disabled by default."
+          },
+          "cua_local": {
+            "description": "CUA Local Sandbox",
+            "hint": "Prefer a local CUA sandbox. Enabled by default to avoid requiring CUA_API_KEY for cloud sandboxes. Disable this to use CUA cloud sandboxes."
+          },
+          "cua_api_key": {
+            "description": "CUA API Key",
+            "hint": "CUA cloud sandbox API key. Required only when local sandbox is disabled. You can also provide it via the CUA_API_KEY environment variable."
           },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
@@ -218,20 +246,20 @@
       "description": "Context Management Strategy",
       "provider_settings": {
         "max_context_length": {
-          "description": "Maximum Conversation Turns",
-          "hint": "Discards the oldest parts when this count is exceeded. One conversation round counts as 1, -1 means unlimited"
+          "description": "Max Turns Before Compression",
+          "hint": "Limits history turns before any compression strategy is applied; -1 means no turn-based limit"
         },
         "dequeue_context_length": {
-          "description": "Dequeue Conversation Turns",
-          "hint": "Number of conversation turns to discard at once when maximum context length is exceeded"
+          "description": "Turns to Discard When Limit Exceeded",
+          "hint": "Number of old conversation turns to discard at once when the turn limit is exceeded; also used as fallback when compression is unavailable"
         },
         "context_limit_reached_strategy": {
-          "description": "Handling When Model Context Window is Exceeded",
+          "description": "Handling When Context Approaches Model Limit",
           "labels": [
             "Truncate by Turns",
             "Compress by LLM"
           ],
-          "hint": "When 'Truncate by Turns' is selected, the oldest N conversation turns will be discarded based on the 'Dequeue Conversation Turns' setting above. When 'Compress by LLM' is selected, the specified model will be used for context compression."
+          "hint": "This strategy only triggers after turn-based limiting, when context tokens approach the model's window limit. When 'Truncate by Turns' is selected, the oldest N conversation turns will be discarded based on the 'Turns to Discard When Limit Exceeded' setting above. When 'Compress by LLM' is selected, the specified model will be used for context compression."
         },
         "llm_compress_instruction": {
           "description": "Context Compression Instruction",
@@ -244,6 +272,10 @@
         "llm_compress_provider_id": {
           "description": "Model Provider ID for Context Compression",
           "hint": "When left empty, will fall back to the 'Truncate by Turns' strategy."
+        },
+        "fallback_max_context_tokens": {
+          "description": "Fallback context window size",
+          "hint": "When max_context_tokens is 0 and the model is not in built-in metadata, use this value as the context window size. Default: 128000."
         }
       }
     },
@@ -1050,6 +1082,10 @@
       "callback_api_base": {
         "description": "Externally Accessible Callback API Address",
         "hint": "External services may access AstrBot's backend through callback links generated by AstrBot (such as file download links). Since AstrBot cannot automatically determine the externally accessible host address in the deployment environment, this configuration item is needed to explicitly specify how external services should access AstrBot's address. Examples: [http://localhost:6185](http://localhost:6185), [https://example.com](https://example.com), etc."
+      },
+      "disable_metrics": {
+        "description": "Disable Anonymous Usage Statistics",
+        "hint": "When disabled, AstrBot will not upload anonymous usage statistics."
       },
       "dashboard": {
         "ssl": {
