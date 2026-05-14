@@ -426,5 +426,37 @@
   },
   "pluginChangelog": {
     "menuTitle": "查看更新日志"
+  },
+  "exportImport": {
+    "exportPlugin": "导出插件",
+    "exportFiltered": "导出全部筛选出的插件",
+    "exportPinned": "导出置顶的插件",
+    "exportSelected": "挑选插件导出",
+    "importPlugin": "导入插件",
+    "pluginCode": "插件码",
+    "pasteCode": "粘贴插件码",
+    "securityHint": "导入下载的插件均来自 GitHub 仓库，请自行检查插件的安全性",
+    "parse": "解析",
+    "cancel": "取消",
+    "export": "导出",
+    "unnamed": "(未命名)",
+    "importSelected": "导入选中",
+    "importAll": "全部导入",
+    "importing": "导入中",
+    "completed": "完成",
+    "exportSummary": "共 {total} 个插件，已选 {selected} 个",
+    "importSummary": "共解析到 {total} 个插件，已选 {selected} 个",
+    "errors": {
+      "nothingToExport": "没有可导出的插件",
+      "needOneSelection": "请至少选择一个插件",
+      "copySuccess": "已复制到剪贴板",
+      "copyFailed": "复制失败",
+      "needCode": "请先粘贴插件码",
+      "parseFailedFormat": "插件码解析失败，请检查格式",
+      "parseFailedContent": "插件码内容格式错误",
+      "parseFailed": "插件码解析失败：{msg}",
+      "missingRepo": "缺少仓库地址",
+      "unknownError": "未知错误"
+    }
   }
 }

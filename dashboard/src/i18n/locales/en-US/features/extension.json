@@ -426,5 +426,37 @@
   },
   "pluginChangelog": {
     "menuTitle": "View Changelog"
+  },
+  "exportImport": {
+    "exportPlugin": "Export Plugins",
+    "exportFiltered": "Export All Filtered Plugins",
+    "exportPinned": "Export Pinned Plugins",
+    "exportSelected": "Pick Plugins to Export",
+    "importPlugin": "Import Plugins",
+    "pluginCode": "Plugin Code",
+    "pasteCode": "Paste Plugin Code",
+    "securityHint": "Imported plugins are downloaded from GitHub repositories. Please verify their security yourself.",
+    "parse": "Parse",
+    "cancel": "Cancel",
+    "export": "Export",
+    "unnamed": "(Unnamed)",
+    "importSelected": "Import Selected",
+    "importAll": "Import All",
+    "importing": "Importing",
+    "completed": "Completed",
+    "exportSummary": "{total} plugins, {selected} selected",
+    "importSummary": "Parsed {total} plugins, {selected} selected",
+    "errors": {
+      "nothingToExport": "Nothing to export",
+      "needOneSelection": "Please select at least one plugin",
+      "copySuccess": "Copied to clipboard",
+      "copyFailed": "Copy failed",
+      "needCode": "Please paste the plugin code first",
+      "parseFailedFormat": "Failed to parse plugin code, please check the format",
+      "parseFailedContent": "Invalid plugin code content format",
+      "parseFailed": "Failed to parse plugin code: {msg}",
+      "missingRepo": "Missing repository URL",
+      "unknownError": "Unknown error"
+    }
   }
 }

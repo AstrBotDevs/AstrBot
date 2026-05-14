@@ -1,6 +1,9 @@
 <script setup>
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
+import PluginImportDialog from "@/components/extension/PluginImportDialog.vue";
 import { normalizeTextInput } from "@/utils/inputValue";
+import LZString from 'lz-string';
+import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import {
   readPinnedExtensions,
   writePinnedExtensions,
@@ -202,6 +205,98 @@ const togglePinnedExtension = (extension) => {
   }
   pinnedExtensionNames.value = next;
 };
+
+
+const showExportCode = ref(false);
+const exportCode = ref("");
+
+const EXPORT_BLACKLIST = new Set(["astrbot", "builtin_commands"]);
+const exportablePlugins = computed(() =>
+  filteredPlugins.value.filter(
+    (p) => p?.name && !EXPORT_BLACKLIST.has(p.name),
+  ),
+);
+
+const exportPlugin = (pluginList) => {
+  if (!pluginList || pluginList.length === 0) {
+    toast(tm("exportImport.errors.nothingToExport"), "warning");
+    return;
+  }
+  showExportCode.value = true;
+  const jsonStr = JSON.stringify(
+    pluginList.map((plugin) => ({
+      name: plugin.name,
+      version: plugin.version,
+      repo: plugin.repo,
+      logo: plugin.logo,
+    })),
+  );
+  exportCode.value = LZString.compressToEncodedURIComponent(jsonStr);
+}
+
+const exportFiltered = () => {
+  exportPlugin(exportablePlugins.value);
+}
+
+const exportPinned = () => {
+  const pinnedNames = pinnedExtensionNames.value;
+  const pinned = exportablePlugins.value.filter((p) => pinnedNames.includes(p?.name));
+  exportPlugin(pinned);
+}
+
+const showExportSelectDialog = ref(false);
+const exportSelected = ref([]);
+
+const openExportSelectDialog = () => {
+  exportSelected.value = exportablePlugins.value.map(() => false);
+  showExportSelectDialog.value = true;
+}
+
+const selectedExportCount = computed(() =>
+  exportSelected.value.filter(Boolean).length,
+);
+
+const allExportSelected = computed(
+  () =>
+    exportablePlugins.value.length > 0 &&
+    selectedExportCount.value === exportablePlugins.value.length,
+);
+
+const someExportSelected = computed(
+  () => selectedExportCount.value > 0 && !allExportSelected.value,
+);
+
+const toggleExportSelectAll = () => {
+  const next = !allExportSelected.value;
+  exportSelected.value = exportablePlugins.value.map(() => next);
+}
+
+const confirmExportSelected = () => {
+  const picked = exportablePlugins.value.filter((_, i) => exportSelected.value[i]);
+  if (picked.length === 0) {
+    toast(tm("exportImport.errors.needOneSelection"), "warning");
+    return;
+  }
+  showExportSelectDialog.value = false;
+  exportPlugin(picked);
+}
+
+const copyExportCode = async () => {
+  try {
+    await navigator.clipboard.writeText(exportCode.value);
+    toast(tm("exportImport.errors.copySuccess"), "success");
+  } catch (err) {
+    console.error("Copy failed", err);
+    toast(tm("exportImport.errors.copyFailed"), "error");
+  }
+}
+
+const showImportDialog = ref(false);
+
+const openImportDialog = () => {
+  showImportDialog.value = true;
+}
+
 </script>
 
 <template>
@@ -211,6 +306,40 @@ const togglePinnedExtension = (extension) => {
         <h2 class="text-h2 mb-0">{{ tm("titles.installedAstrBotPlugins") }}</h2>
 
         <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
+
+          <v-menu>
+            <template #activator="{ props: menuProps }">
+              <v-btn
+                v-bind="menuProps"
+                color="primary"
+                variant="tonal"
+                prepend-icon="mdi-export-variant"
+                append-icon="mdi-menu-down"
+              >
+                {{ tm("exportImport.exportPlugin") }}
+              </v-btn>
+            </template>
+            <v-list density="compact">
+              <v-list-item prepend-icon="mdi-filter-variant" @click="exportFiltered">
+                <v-list-item-title>{{ tm("exportImport.exportFiltered") }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item prepend-icon="mdi-pin" @click="exportPinned">
+                <v-list-item-title>{{ tm("exportImport.exportPinned") }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item prepend-icon="mdi-cursor-default-click-outline" @click="openExportSelectDialog">
+                <v-list-item-title>{{ tm("exportImport.exportSelected") }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+
+          <v-btn
+            color="primary"
+            variant="tonal"
+            prepend-icon="mdi-import"
+            @click="openImportDialog"
+          >
+            {{ tm("exportImport.importPlugin") }}
+          </v-btn>
           <v-text-field
             :model-value="pluginSearch"
             @update:model-value="pluginSearch = normalizeTextInput($event)"
@@ -227,7 +356,122 @@ const togglePinnedExtension = (extension) => {
           </v-text-field>
         </div>
       </div>
+
+      <v-expand-transition>
+        <v-card v-if="showExportCode" class="mt-3 rounded-lg" variant="outlined">
+          <v-card-title class="d-flex align-center pa-3">
+            <v-icon class="mr-2" size="small">mdi-code-braces</v-icon>
+            <span class="text-body-1">{{ tm("exportImport.pluginCode") }}</span>
+            <v-spacer />
+            <v-btn icon="mdi-content-copy" variant="text" size="small" @click="copyExportCode" />
+            <v-btn icon="mdi-close" variant="text" size="small" @click="showExportCode = false" />
+          </v-card-title>
+          <v-card-text class="pt-0">
+            <v-textarea
+              :model-value="exportCode"
+              readonly
+              variant="outlined"
+              density="compact"
+              auto-grow
+              rows="3"
+              max-rows="8"
+              hide-details
+              class="export-code-textarea"
+            />
+          </v-card-text>
+        </v-card>
+      </v-expand-transition>
     </div>
+
+    <PluginImportDialog v-model="showImportDialog" :proxy="getSelectedGitHubProxy()" @done="getExtensions" />
+
+    <v-dialog v-model="showExportSelectDialog" max-width="640">
+      <v-card class="rounded-lg">
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon class="mr-2">mdi-cursor-default-click-outline</v-icon>
+          <span>{{ tm("exportImport.exportSelected") }}</span>
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="showExportSelectDialog = false" />
+        </v-card-title>
+        <v-card-text>
+          <div class="d-flex align-center mb-2">
+            <v-checkbox
+              :model-value="allExportSelected"
+              :indeterminate="someExportSelected"
+              density="compact"
+              hide-details
+              color="primary"
+              @update:model-value="toggleExportSelectAll"
+            />
+            <span class="text-body-2 ml-1">
+              {{ tm("exportImport.exportSummary", { total: exportablePlugins.length, selected: selectedExportCount }) }}
+            </span>
+          </div>
+          <v-list density="compact" style="max-height: 400px; overflow-y: auto;">
+            <v-list-item
+              v-for="(plugin, idx) in exportablePlugins"
+              :key="plugin.name || idx"
+              class="rounded-lg mb-1"
+              border
+            >
+              <template #prepend>
+                <v-checkbox
+                  :model-value="!!exportSelected[idx]"
+                  density="compact"
+                  hide-details
+                  color="primary"
+                  @update:model-value="exportSelected[idx] = !exportSelected[idx]"
+                />
+
+                <v-avatar size="32" class="mr-2" rounded="lg">
+                  <v-img
+                    :src="plugin.logo || defaultPluginIcon"
+                    :alt="plugin.name"
+                    cover
+                  >
+                    <template #error>
+                      <v-img :src="defaultPluginIcon" cover />
+                    </template>
+                  </v-img>
+                </v-avatar>
+              </template>
+              <v-list-item-title class="text-body-2 font-weight-medium">
+                {{ plugin.name || tm("exportImport.unnamed") }}
+                <span class="text-caption text-medium-emphasis ml-2">
+                  v{{ plugin.version || "?" }}
+                </span>
+              </v-list-item-title>
+              <v-list-item-subtitle v-if="plugin.repo" class="text-caption">
+                <a
+                  :href="plugin.repo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="repo-link"
+                  @click.stop
+                >
+                  {{ plugin.repo }}
+                </a>
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <v-btn variant="text" size="small" @click="showExportSelectDialog = false">
+            {{ tm("exportImport.cancel") }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            size="small"
+            :disabled="selectedExportCount === 0"
+            @click="confirmExportSelected"
+          >
+            {{ tm("exportImport.export") }} ({{ selectedExportCount }})
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-card
       v-if="failedPluginItems.length > 0"
@@ -397,6 +641,16 @@ const togglePinnedExtension = (extension) => {
 </template>
 
 <style scoped>
+.repo-link {
+  color: rgb(var(--v-theme-primary));
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.repo-link:hover {
+  text-decoration: underline;
+}
+
 .fab-button {
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
