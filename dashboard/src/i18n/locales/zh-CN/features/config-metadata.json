@@ -780,10 +780,19 @@
         },
         "empty_mention_waiting": {
           "description": "只 @ 机器人是否触发等待"
+        },
+        "ignore_unknown_prefix_command": {
+          "description": "忽略无法识别的指令",
+          "hint": "启用后，以指令前缀开头但不匹配任何已注册指令的消息将被忽略，不触发 LLM。"
         }
       },
       "wake_prefix": {
-        "description": "唤醒词"
+        "description": "唤醒词",
+        "hint": "触发 LLM 对话的前缀。"
+      },
+      "command_prefix": {
+        "description": "指令前缀",
+        "hint": "触发插件指令的前缀（如 /）。设为空时由唤醒词兜底。"
       },
       "disable_builtin_commands": {
         "description": "禁用自带指令",
