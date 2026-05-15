@@ -152,6 +152,11 @@
         "error": "Ошибка входа"
       }
     },
+    "dingtalk": {
+      "title": "Создание DingTalk по QR",
+      "scanTitle": "Отсканируйте в мобильном DingTalk",
+      "created": "Настройка завершена"
+    },
     "start": "Начать настройку",
     "created": "Настройка завершена",
     "startFailed": "Не удалось начать QR настройку",
@@ -159,7 +164,8 @@
     "mode": {
       "title": "Выберите способ создания",
       "scan": "Создать через QR",
-      "manual": "Создать вручную (поддерживает self-hosted Feishu)"
+      "manual": "Создать вручную",
+      "larkManual": "Создать вручную (поддерживает self-hosted Feishu)"
     },
     "scanTitle": "Отсканируйте в мобильном Feishu",
     "status": {
