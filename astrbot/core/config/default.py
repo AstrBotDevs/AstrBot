@@ -466,6 +466,10 @@ CONFIG_METADATA_2 = {
                         "misskey_enable_file_upload": True,
                         "misskey_upload_concurrency": 3,
                         "misskey_upload_folder": "",
+                        # 评论区原帖上下文注入
+                        "misskey_include_reply_context": True,
+                        "misskey_reply_context_max_depth": 1,
+                        "misskey_reply_context_max_text_length": 500,
                     },
                     "Slack": {
                         "id": "slack",
@@ -731,6 +735,21 @@ CONFIG_METADATA_2 = {
                         "description": "上传到网盘的目标文件夹 ID",
                         "type": "string",
                         "hint": "可选：填写 Misskey 网盘中目标文件夹的 ID，上传的文件将放置到该文件夹内。留空则使用账号网盘根目录。",
+                    },
+                    "misskey_include_reply_context": {
+                        "description": "在评论 @ 时注入原帖上下文",
+                        "type": "bool",
+                        "hint": "启用后，当用户在某条帖子下评论或回复并 @机器人时，机器人将拿到被回复/被引用的原帖文本作为上下文，从而做出针对原帖的有意义回复。",
+                    },
+                    "misskey_reply_context_max_depth": {
+                        "description": "原帖追溯最大层数",
+                        "type": "int",
+                        "hint": "向上追溯多少层 reply/renote 链。1 表示仅取直接父帖，最大允许 5。深度越大对 Misskey API 的串行调用越多，会拉高响应延迟。",
+                    },
+                    "misskey_reply_context_max_text_length": {
+                        "description": "单层原帖正文截断长度",
+                        "type": "int",
+                        "hint": "每层原帖正文超过该字符数时会被截断，避免过长帖子刷爆 LLM prompt。最小 50，建议 500。填 -1 表示不限制（完整保留原文）。",
                     },
                     "card_template_id": {
                         "description": "卡片模板 ID",
