@@ -24,16 +24,18 @@ SANDBOX_MODE_PROMPT = (
 
 TOOL_CALL_PROMPT = (
     "When using tools: "
-    "never return an empty response; "
-    "briefly explain the purpose before calling a tool; "
+    "you may return only tool calls when no user-facing message is needed; "
+    'do not emit placeholder text such as "No response"; '
+    "briefly explain the purpose before calling a tool only when it helps the user; "
     "follow the tool schema exactly and do not invent parameters; "
     "after execution, briefly summarize the result for the user; "
     "keep the conversation style consistent."
 )
 
 TOOL_CALL_PROMPT_SKILLS_LIKE_MODE = (
-    "You MUST NOT return an empty response, especially after invoking a tool."
-    " Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
+    "You may return only tool calls when no user-facing message is needed."
+    ' Do not emit placeholder text such as "No response".'
+    " Before calling any tool, provide a brief explanatory message to the user only when it helps."
     " Tool schemas are provided in two stages: first only name and description; "
     "if you decide to use a tool, the full parameter schema will be provided in "
     "a follow-up step. Do not guess arguments before you see the schema."
