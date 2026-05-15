@@ -62,5 +62,8 @@ GenieData/
 .opencode/
 .kilocode/
 .worktrees/
+CLAUDE.md
+.claude/
+
 
 dashboard/bun.lock

@@ -123,11 +123,17 @@ class _LoguruInterceptHandler(logging.Handler):
         )
 
 
+TRACE_CACHED_SIZE = 2000
+
+
 class LogBroker:
     """日志代理类，用于缓存和分发日志消息。"""
 
     def __init__(self) -> None:
         self.log_cache = deque(maxlen=CACHED_SIZE)
+        # Dedicated trace cache — isolated from regular logs so high log volume
+        # cannot evict trace entries.
+        self.trace_cache: deque[dict] = deque(maxlen=TRACE_CACHED_SIZE)
         self.subscribers: list[Queue] = []
 
     def register(self) -> Queue:
@@ -143,6 +149,19 @@ class LogBroker:
         for q in self.subscribers:
             try:
                 q.put_nowait(log_entry)
+            except asyncio.QueueFull:
+                pass
+
+    def publish_trace(self, trace_entry: dict) -> None:
+        """Publish a trace record.
+
+        Stores in the dedicated trace_cache (so regular logs cannot evict it)
+        and also forwards to all log subscribers for real-time WebUI streaming.
+        """
+        self.trace_cache.append(trace_entry)
+        for q in self.subscribers:
+            try:
+                q.put_nowait(trace_entry)
             except asyncio.QueueFull:
                 pass
 
@@ -385,8 +404,11 @@ class LogManager:
         if not config:
             return
 
+        # Enable file logging when either the explicit file flag or the master
+        # trace switch is turned on (trace_enable=True implies we want persistence).
         enable = bool(
             config.get("trace_log_enable")
+            or config.get("trace_enable", False)
             or (config.get("log_file", {}) or {}).get("trace_enable", False)
         )
         path = config.get("trace_log_path")
