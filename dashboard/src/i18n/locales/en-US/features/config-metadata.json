@@ -465,10 +465,6 @@
         "description": "WeChat Customer Service Account Name",
         "hint": "Optional. Customer service account name (not ID). Get it at https://kf.weixin.qq.com/kf/frame#/accounts"
       },
-      "lark_bot_name": {
-        "description": "Lark Bot Name",
-        "hint": "Must be correct; otherwise @ mentions will not wake the bot and only prefix wake will work."
-      },
       "lark_connection_mode": {
         "description": "Subscription Mode",
         "labels": [

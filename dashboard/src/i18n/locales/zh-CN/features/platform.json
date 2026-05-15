@@ -130,6 +130,49 @@
     "waiting": "等待二维码",
     "close": "关闭"
   },
+  "registrationAction": {
+    "lark": {
+      "title": "一键扫码创建",
+      "show": "一键扫码创建",
+      "scanTitle": "请使用手机飞书扫码",
+      "feishu": "飞书国内版",
+      "lark": "Lark 海外版"
+    },
+    "weixinOc": {
+      "title": "个人微信扫码登录",
+      "scanTitle": "请使用手机微信扫码",
+      "created": "登录成功",
+      "status": {
+        "idle": "未开始",
+        "starting": "正在获取二维码",
+        "pending": "等待扫码确认",
+        "created": "登录成功，记得点击下方保存按钮！",
+        "denied": "用户取消",
+        "expired": "已过期",
+        "error": "登录失败"
+      }
+    },
+    "start": "开始创建",
+    "created": "创建成功",
+    "startFailed": "发起扫码创建失败",
+    "pollFailed": "获取扫码创建状态失败",
+    "mode": {
+      "title": "选择创建方式",
+      "scan": "扫码一键创建",
+      "manual": "手动创建（支持企业自部署飞书平台）"
+    },
+    "scanTitle": "请使用手机飞书扫码",
+    "status": {
+      "idle": "未开始",
+      "starting": "正在发起",
+      "pending": "等待扫码确认",
+      "slow_down": "轮询降速",
+      "created": "创建成功，记得点击下方保存按钮！",
+      "denied": "用户取消",
+      "expired": "已过期",
+      "error": "创建失败"
+    }
+  },
   "errorDialog": {
     "title": "错误详情",
     "platformId": "平台 ID",

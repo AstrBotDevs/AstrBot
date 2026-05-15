@@ -25,6 +25,8 @@ AstrBot supports connecting a personal WeChat account through the `Personal WeCh
 2. Click `Bots` in the left sidebar.
 3. Click `+ Create Bot` in the upper-right corner.
 4. Select `Personal WeChat`.
+5. The login QR code is shown directly. Scan it with WeChat on your phone and confirm the login inside WeChat.
+6. After login succeeds, click `Save`.
 
 ## Configuration Notes
 
@@ -44,15 +46,12 @@ Leave the remaining options at their default values unless you explicitly know y
 
 ## QR Login
 
-1. Fill in the configuration and click `Save`.
-2. Return to the bot list. AstrBot will automatically request a login QR code from WeChat.
-3. On the bot card, click `View QR Code` to open the QR dialog.
-4. Scan it with WeChat on your phone, then confirm the login inside WeChat.
+After you select `Personal WeChat`, AstrBot automatically requests a login QR code from WeChat and shows it directly in the create-bot dialog. Scan it with WeChat on your phone and confirm the login. When the QR area shows the login-success state, click `Save` to finish creating the bot.
 
-After login succeeds, AstrBot will automatically persist the login state. On later restarts, if the session is still valid, you usually do not need to scan again.
+After login succeeds and the bot is saved, AstrBot will automatically persist the login state. On later restarts, if the session is still valid, you usually do not need to scan again.
 
 > [!NOTE]
-> If the QR code expires, AstrBot will automatically request a new one. Please scan the refreshed QR code instead of the old one.
+> If the QR code expires, close and reopen the create-bot dialog, or select `Personal WeChat` again to request a new QR code.
 
 ## Verification
 

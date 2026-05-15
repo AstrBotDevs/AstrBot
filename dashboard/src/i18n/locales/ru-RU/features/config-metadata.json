@@ -465,10 +465,6 @@
                 "description": "Имя аккаунта службы поддержки WeChat",
                 "hint": "Необязательно. См. https://kf.weixin.qq.com/kf/frame#/accounts"
             },
-            "lark_bot_name": {
-                "description": "Имя бота Lark",
-                "hint": "Должно быть точным для работы через @ упоминания."
-            },
             "lark_connection_mode": {
                 "description": "Режим подписки",
                 "labels": [

@@ -20,6 +20,31 @@
 
 ## 创建机器人
 
+飞书（Lark）支持两种创建方式：在 AstrBot 中扫码一键创建，或在飞书开发者后台手动创建企业自建应用。
+
+### 方式一：扫码一键创建
+
+需要版本 >4.25.0。
+
+进入 AstrBot 管理面板，点击左边栏 `机器人`，然后点击 `+ 创建机器人`，选择 `lark(飞书)`。
+
+在 `选择创建方式` 中选择 `扫码一键创建`，按需选择国内版或海外版，然后使用手机飞书扫描页面中的二维码并确认。创建成功后，AstrBot 会自动写入该应用的 `app_id`、`app_secret` 和域名配置。
+
+> [!IMPORTANT]
+> 通过扫码方式创建后，群聊下默认仅会接收 @ 机器人和通过唤醒前缀（例如 `/`）触发的消息。如果你希望机器人接收群聊中的所有消息，需要前往飞书开发者后台为应用开通额外权限。
+>
+> 可以将下面链接中的 `<APP_ID>` 替换为你的飞书应用 App ID 后打开，一键进入权限开通页：
+>
+> App ID 获取方式：回到 AstrBot 的 `机器人` 页，找到刚刚创建的飞书机器人，点击 `编辑`，弹出的对话框中可以看到 App ID。
+>
+> ```text
+> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message:send,im:message,im:message:send_as_bot,im:resource:upload,im:resource,cardkit:card:write,im:message.group_at_msg:readonly,im:message.group_msg&op_from=openapi&token_type=tenant
+> ```
+
+扫码创建完成后，建议继续检查后文的事件订阅、权限、版本发布和拉入群组步骤。
+
+### 方式二：手动创建
+
 前往 [开发者后台](https://open.feishu.cn/app) ，创建企业自建应用。
 
 ![创建企业自建应用](https://files.astrbot.app/docs/source/images/lark/image.png)
@@ -38,6 +63,7 @@
 2. 点击左边栏 `机器人`
 3. 然后在右边的界面中，点击 `+ 创建机器人` 
 4. 选择 `lark(飞书)`
+5. 如果使用扫码一键创建，选择 `扫码一键创建` 并完成扫码；如果使用自己创建的企业自建应用，选择 `手动创建`
 
 弹出的配置项填写：
 
@@ -45,7 +71,6 @@
 - 启用(enable): 勾选。
 - app_id: 获取的 app_id
 - app_secret: 获取的 app_secret
-- 飞书机器人的名字
 
 对于 domain，如果您使用国内版飞书，保持默认即可；如果您正在用国际版飞书，请设置为 `https://open.larksuite.com`；如果您使用企业自部署飞书，请填写您的飞书实例的域名。
 
@@ -93,6 +118,9 @@
 再次输入 `im:resource:upload,im:resource` 开通上传图片相关的权限。
 
 如果需要在群聊里使用，请额外开通 `im:message.group_at_msg:readonly` 和 `im:message.group_msg` 权限。
+
+> [!TIP]
+> 扫码一键创建的应用默认适合 @ 机器人和唤醒前缀触发。如果要接收群聊所有消息，请确认已经开通 `im:message.group_msg`。你也可以使用上文提供的权限开通链接快速进入对应页面。
 
 如果需要使用流式输出，请额外开通 `创建与更新卡片(cardkit:card:write)` 权限。
 

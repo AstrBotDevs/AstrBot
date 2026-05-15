@@ -318,7 +318,7 @@ CONFIG_METADATA_2 = {
                     "QQ 官方机器人(WebSocket)": {
                         "id": "default",
                         "type": "qq_official",
-                        "enable": False,
+                        "enable": True,
                         "appid": "",
                         "secret": "",
                         "enable_group_c2c": True,
@@ -327,7 +327,7 @@ CONFIG_METADATA_2 = {
                     "QQ 官方机器人(Webhook)": {
                         "id": "default",
                         "type": "qq_official_webhook",
-                        "enable": False,
+                        "enable": True,
                         "appid": "",
                         "secret": "",
                         "is_sandbox": False,
@@ -339,7 +339,7 @@ CONFIG_METADATA_2 = {
                     "OneBot v11": {
                         "id": "default",
                         "type": "aiocqhttp",
-                        "enable": False,
+                        "enable": True,
                         "ws_reverse_host": "0.0.0.0",
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
@@ -347,7 +347,7 @@ CONFIG_METADATA_2 = {
                     "微信公众平台": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
-                        "enable": False,
+                        "enable": True,
                         "appid": "",
                         "secret": "",
                         "token": "",
@@ -362,7 +362,7 @@ CONFIG_METADATA_2 = {
                     "企业微信(含微信客服)": {
                         "id": "wecom",
                         "type": "wecom",
-                        "enable": False,
+                        "enable": True,
                         "corpid": "",
                         "secret": "",
                         "token": "",
@@ -399,7 +399,7 @@ CONFIG_METADATA_2 = {
                     "个人微信": {
                         "id": "weixin_personal",
                         "type": "weixin_oc",
-                        "enable": False,
+                        "enable": True,
                         "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
                         "weixin_oc_bot_type": "3",
                         "weixin_oc_qr_poll_interval": 1,
@@ -409,8 +409,7 @@ CONFIG_METADATA_2 = {
                     "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
-                        "enable": False,
-                        "lark_bot_name": "",
+                        "enable": True,
                         "app_id": "",
                         "app_secret": "",
                         "domain": "https://open.feishu.cn",
@@ -422,7 +421,7 @@ CONFIG_METADATA_2 = {
                     "钉钉(DingTalk)": {
                         "id": "dingtalk",
                         "type": "dingtalk",
-                        "enable": False,
+                        "enable": True,
                         "client_id": "",
                         "client_secret": "",
                         "card_template_id": "",
@@ -430,7 +429,7 @@ CONFIG_METADATA_2 = {
                     "Telegram": {
                         "id": "telegram",
                         "type": "telegram",
-                        "enable": False,
+                        "enable": True,
                         "telegram_token": "your_bot_token",
                         "start_message": "Hello, I'm AstrBot!",
                         "telegram_api_base_url": "https://api.telegram.org/bot",
@@ -443,7 +442,7 @@ CONFIG_METADATA_2 = {
                     "Discord": {
                         "id": "discord",
                         "type": "discord",
-                        "enable": False,
+                        "enable": True,
                         "discord_token": "",
                         "discord_proxy": "",
                         "discord_command_register": True,
@@ -453,7 +452,7 @@ CONFIG_METADATA_2 = {
                     "Misskey": {
                         "id": "misskey",
                         "type": "misskey",
-                        "enable": False,
+                        "enable": True,
                         "misskey_instance_url": "https://misskey.example",
                         "misskey_token": "",
                         "misskey_default_visibility": "public",
@@ -471,7 +470,7 @@ CONFIG_METADATA_2 = {
                     "Slack": {
                         "id": "slack",
                         "type": "slack",
-                        "enable": False,
+                        "enable": True,
                         "bot_token": "",
                         "app_token": "",
                         "signing_secret": "",
@@ -485,7 +484,7 @@ CONFIG_METADATA_2 = {
                     "Line": {
                         "id": "line",
                         "type": "line",
-                        "enable": False,
+                        "enable": True,
                         "channel_access_token": "",
                         "channel_secret": "",
                         "unified_webhook_mode": True,
@@ -494,7 +493,7 @@ CONFIG_METADATA_2 = {
                     "Satori": {
                         "id": "satori",
                         "type": "satori",
-                        "enable": False,
+                        "enable": True,
                         "satori_api_base_url": "http://localhost:5140/satori/v1",
                         "satori_endpoint": "ws://localhost:5140/satori/v1/events",
                         "satori_token": "",
@@ -505,7 +504,7 @@ CONFIG_METADATA_2 = {
                     "KOOK": {
                         "id": "kook",
                         "type": "kook",
-                        "enable": False,
+                        "enable": True,
                         "kook_bot_token": "",
                         "kook_reconnect_delay": 1,
                         "kook_max_reconnect_delay": 60,
@@ -518,7 +517,7 @@ CONFIG_METADATA_2 = {
                     "Mattermost": {
                         "id": "mattermost",
                         "type": "mattermost",
-                        "enable": False,
+                        "enable": True,
                         "mattermost_url": "https://chat.example.com",
                         "mattermost_bot_token": "",
                         "mattermost_reconnect_delay": 5.0,
@@ -888,11 +887,6 @@ CONFIG_METADATA_2 = {
                         "condition": {
                             "wecom_ai_bot_connection_mode": "long_connection",
                         },
-                    },
-                    "lark_bot_name": {
-                        "description": "飞书机器人的名字",
-                        "type": "string",
-                        "hint": "请务必填写正确，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
                     },
                     "discord_token": {
                         "description": "Discord Bot Token",
