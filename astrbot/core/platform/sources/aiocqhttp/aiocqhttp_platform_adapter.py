@@ -130,6 +130,8 @@ class AiocqhttpAdapter(Platform):
 
         if event["post_type"] == "message":
             abm = await self._convert_handle_message_event(event)
+            if abm is None:
+                return None
             if abm.sender.user_id == "2854196310":
                 # 屏蔽 QQ 管家的消息
                 return None
@@ -165,7 +167,7 @@ class AiocqhttpAdapter(Platform):
         abm.raw_message = event
         return abm
 
-    async def _convert_handle_notice_event(self, event: Event) -> AstrBotMessage:
+    async def _convert_handle_notice_event(self, event: Event) -> AstrBotMessage | None:
         """OneBot V11 通知类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
@@ -193,13 +195,20 @@ class AiocqhttpAdapter(Platform):
             if event["sub_type"] == "poke" and "target_id" in event:
                 abm.message.append(Poke(id=str(event["target_id"])))
 
+        # Filter out notice events with no meaningful message content.
+        # e.g. mobile QQ sends an empty notice when the user taps the
+        # input box and then leaves the chat page.
+        if not abm.message:
+            logger.debug(f"[aiocqhttp] Ignored empty notice event: {event}")
+            return None
+
         return abm
 
     async def _convert_handle_message_event(
         self,
         event: Event,
         get_reply=True,
-    ) -> AstrBotMessage:
+    ) -> AstrBotMessage | None:
         """OneBot V11 消息类事件
 
         @param event: 事件对象
@@ -413,6 +422,12 @@ class AiocqhttpAdapter(Platform):
         abm.timestamp = int(time.time())
         abm.message_str = message_str
         abm.raw_message = event
+
+        # Filter out empty message events that some QQ protocol
+        # implementations push after certain operations (e.g. file sends).
+        if not abm.message and not message_str.strip():
+            logger.debug(f"[aiocqhttp] Ignored empty message event: {event}")
+            return None
 
         return abm
 
