@@ -111,19 +111,27 @@ class WakingCheckStage(Stage):
         messages = event.get_messages()
         is_wake = False
 
+        # 提取公共的 At 检查逻辑：群聊中首个消息段是 At 他人（非机器人/全体）时不唤醒
+        is_at_others = (
+            messages
+            and not event.is_private_chat()
+            and isinstance(messages[0], At)
+            and str(messages[0].qq) != str(event.get_self_id())
+            and str(messages[0].qq) != "all"
+        )
+        # 预计算前缀差异标记：command_prefix 非空且与 wake_prefix 不同时，唤醒词只触发 LLM。
+        # command_prefix=[] 时不标记，避免唤醒词触发的指令全部失效。
+        is_different_prefixes = bool(
+            command_prefixes and set(command_prefixes) != set(wake_prefixes)
+        )
+
         # 先检查是否以指令前缀开头（只匹配指令，不触发 LLM 闲聊）
         # command_prefix 与 wake_prefix 相同时，行为与原版一致。
         # command_prefix 与 wake_prefix 不同时，指令前缀只触发指令，唤醒词只触发 LLM。
         is_command_prefix_triggered = False
         for cmd_prefix in command_prefixes:
             if cmd_prefix and event.message_str.startswith(cmd_prefix):
-                if (
-                    messages
-                    and not event.is_private_chat()
-                    and isinstance(messages[0], At)
-                    and str(messages[0].qq) != str(event.get_self_id())
-                    and str(messages[0].qq) != "all"
-                ):
+                if is_at_others:
                     break
                 is_command_prefix_triggered = True
                 event.message_str = event.message_str[len(cmd_prefix) :].strip()
@@ -138,23 +146,14 @@ class WakingCheckStage(Stage):
         if not is_wake:
             for wake_prefix in wake_prefixes:
                 if wake_prefix and event.message_str.startswith(wake_prefix):
-                    if (
-                        messages
-                        and not event.is_private_chat()
-                        and isinstance(messages[0], At)
-                        and str(messages[0].qq) != str(event.get_self_id())
-                        and str(messages[0].qq) != "all"
-                    ):
+                    if is_at_others:
                         # 如果是群聊，且第一个消息段是 At 消息，但不是 At 机器人或 At 全体成员，则不唤醒
                         break
                     is_wake = True
                     event.is_wake = True
                     event.is_at_or_wake_command = True
                     event.message_str = event.message_str[len(wake_prefix) :].strip()
-                    # 标记为纯唤醒词触发：command_prefix 非空且与 wake_prefix 不同时，
-                    # 唤醒词只触发 LLM，不应匹配指令。
-                    # command_prefix=[] 时不标记，避免唤醒词触发的指令全部失效。
-                    if command_prefixes and set(command_prefixes) != set(wake_prefixes):
+                    if is_different_prefixes:
                         event.set_extra("matched_wake_prefix_only", True)
                     break
         if not is_wake:
@@ -284,7 +283,7 @@ class WakingCheckStage(Stage):
             # 检查是否有真正的指令 handler 被激活（含 CommandFilter 或 CommandGroupFilter）
             has_command_handler = any(
                 any(
-                    isinstance(f, CommandFilter | CommandGroupFilter)
+                    isinstance(f, (CommandFilter, CommandGroupFilter))
                     for f in handler.event_filters
                 )
                 for handler in activated_handlers
