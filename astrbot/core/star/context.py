@@ -55,6 +55,7 @@ RegisteredWebApi = tuple[str, WebApiHandler, list[str], str]
 
 class PlatformManagerProtocol(Protocol):
     platform_insts: list[Platform]
+    get_insts: Callable[[], list[Platform]]
 
 
 class Context:
