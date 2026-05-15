@@ -1,0 +1,17 @@
+## Summary
+
+Fixes #6661 - Streaming tool_call arguments lost when OpenAI-compatible proxy omits `index` field (e.g. Gemini)
+
+## Changes
+
+- Add missing `index` field to tool_call deltas before passing to `ChatCompletionStreamState.handle_chunk()`
+- Gemini and some OpenAI-compatible proxies (e.g. Continue) omit the `index` field
+- This caused `handle_chunk()` to reject the chunk and silently drop tool_call arguments
+
+## Testing
+
+✅ Docker sandbox test passed
+- Tool call without index: index=0 assigned
+- Tool call with existing index: original value preserved
+- Empty tool_calls handled
+- Empty choices handled
