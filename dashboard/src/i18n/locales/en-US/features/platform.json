@@ -152,6 +152,11 @@
         "error": "Login Failed"
       }
     },
+    "dingtalk": {
+      "title": "DingTalk QR Setup",
+      "scanTitle": "Scan with DingTalk on your phone",
+      "created": "Setup Complete"
+    },
     "start": "Start Setup",
     "created": "Setup Complete",
     "startFailed": "Failed to start QR setup",
@@ -159,7 +164,8 @@
     "mode": {
       "title": "Choose setup method",
       "scan": "One-click QR setup",
-      "manual": "Manual setup (supports self-hosted Feishu)"
+      "manual": "Manual setup",
+      "larkManual": "Manual setup (supports self-hosted Feishu)"
     },
     "scanTitle": "Scan with Feishu on your phone",
     "status": {
