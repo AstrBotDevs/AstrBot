@@ -182,6 +182,75 @@ class Provider(AbstractProvider):
         for idx in reversed(indexs_to_pop):
             context.pop(idx)
 
+        context[:] = self._fix_tool_call_pairs_in_dict_context(context)
+
+    @staticmethod
+    def _fix_tool_call_pairs_in_dict_context(context: list[dict]) -> list[dict]:
+        """Remove orphaned tool call chains from dict-based message history."""
+        if not context:
+            return context
+
+        fixed_context: list[dict] = []
+        pending_assistant: dict | None = None
+        pending_tools: list[dict] = []
+
+        def flush_pending_if_valid() -> None:
+            nonlocal pending_assistant, pending_tools
+            if pending_assistant is not None and Provider._is_complete_tool_chain(
+                pending_assistant,
+                pending_tools,
+            ):
+                fixed_context.append(pending_assistant)
+                fixed_context.extend(pending_tools)
+            pending_assistant = None
+            pending_tools = []
+
+        for message in context:
+            role = message.get("role")
+            if role == "tool":
+                if pending_assistant is not None:
+                    pending_tools.append(message)
+                continue
+
+            if role == "assistant" and message.get("tool_calls"):
+                flush_pending_if_valid()
+                pending_assistant = message
+                continue
+
+            flush_pending_if_valid()
+            fixed_context.append(message)
+
+        flush_pending_if_valid()
+        return fixed_context
+
+    @staticmethod
+    def _is_complete_tool_chain(
+        assistant_message: dict,
+        tool_messages: list[dict],
+    ) -> bool:
+        """Check whether a dict-based assistant/tool chain is fully paired."""
+        tool_calls = assistant_message.get("tool_calls") or []
+        expected_ids = [
+            tool_call.get("id")
+            for tool_call in tool_calls
+            if tool_call.get("id") is not None
+        ]
+        if not expected_ids or len(expected_ids) != len(tool_calls):
+            return False
+
+        seen_ids: set[str] = set()
+        for tool_message in tool_messages:
+            tool_call_id = tool_message.get("tool_call_id")
+            if (
+                tool_call_id is None
+                or tool_call_id not in expected_ids
+                or tool_call_id in seen_ids
+            ):
+                return False
+            seen_ids.add(tool_call_id)
+
+        return len(seen_ids) == len(expected_ids)
+
     def _ensure_message_to_dicts(
         self,
         messages: list[dict] | list[Message] | None,
