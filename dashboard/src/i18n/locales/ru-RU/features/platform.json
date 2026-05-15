@@ -130,6 +130,49 @@
     "waiting": "Ожидание QR",
     "close": "Закрыть"
   },
+  "registrationAction": {
+    "lark": {
+      "title": "Настройка по QR",
+      "show": "Настройка по QR",
+      "scanTitle": "Отсканируйте в мобильном Feishu",
+      "feishu": "Feishu China",
+      "lark": "Lark Global"
+    },
+    "weixinOc": {
+      "title": "QR вход в WeChat",
+      "scanTitle": "Отсканируйте в мобильном WeChat",
+      "created": "Вход выполнен",
+      "status": {
+        "idle": "Не начато",
+        "starting": "Получение QR",
+        "pending": "Ожидание сканирования",
+        "created": "Вход выполнен - не забудьте нажать кнопку сохранения!",
+        "denied": "Отменено",
+        "expired": "Истекло",
+        "error": "Ошибка входа"
+      }
+    },
+    "start": "Начать настройку",
+    "created": "Настройка завершена",
+    "startFailed": "Не удалось начать QR настройку",
+    "pollFailed": "Не удалось проверить статус QR настройки",
+    "mode": {
+      "title": "Выберите способ создания",
+      "scan": "Создать через QR",
+      "manual": "Создать вручную (поддерживает self-hosted Feishu)"
+    },
+    "scanTitle": "Отсканируйте в мобильном Feishu",
+    "status": {
+      "idle": "Не начато",
+      "starting": "Запуск",
+      "pending": "Ожидание сканирования",
+      "slow_down": "Опрос замедлен",
+      "created": "Настройка завершена - не забудьте нажать кнопку сохранения!",
+      "denied": "Отменено",
+      "expired": "Истекло",
+      "error": "Ошибка настройки"
+    }
+  },
   "errorDialog": {
         "title": "Детали ошибки",
         "platformId": "ID платформы",

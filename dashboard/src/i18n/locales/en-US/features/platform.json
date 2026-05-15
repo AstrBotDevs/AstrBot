@@ -130,6 +130,49 @@
     "waiting": "Waiting for QR",
     "close": "Close"
   },
+  "registrationAction": {
+    "lark": {
+      "title": "One-click QR Setup",
+      "show": "One-click QR Setup",
+      "scanTitle": "Scan with Feishu on your phone",
+      "feishu": "Feishu China",
+      "lark": "Lark Global"
+    },
+    "weixinOc": {
+      "title": "Personal WeChat QR Login",
+      "scanTitle": "Scan with WeChat on your phone",
+      "created": "Login Complete",
+      "status": {
+        "idle": "Not Started",
+        "starting": "Getting QR Code",
+        "pending": "Waiting for Scan",
+        "created": "Login Complete - remember to click the save button!",
+        "denied": "Canceled",
+        "expired": "Expired",
+        "error": "Login Failed"
+      }
+    },
+    "start": "Start Setup",
+    "created": "Setup Complete",
+    "startFailed": "Failed to start QR setup",
+    "pollFailed": "Failed to poll QR setup status",
+    "mode": {
+      "title": "Choose setup method",
+      "scan": "One-click QR setup",
+      "manual": "Manual setup (supports self-hosted Feishu)"
+    },
+    "scanTitle": "Scan with Feishu on your phone",
+    "status": {
+      "idle": "Not Started",
+      "starting": "Starting",
+      "pending": "Waiting for Scan",
+      "slow_down": "Polling Slowed",
+      "created": "Setup Complete - remember to click the save button!",
+      "denied": "Canceled",
+      "expired": "Expired",
+      "error": "Setup Failed"
+    }
+  },
   "errorDialog": {
     "title": "Error Details",
     "platformId": "Platform ID",

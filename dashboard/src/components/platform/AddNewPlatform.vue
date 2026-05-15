@@ -30,11 +30,58 @@
 
                 </v-select>
                 <div class="mt-3" v-if="selectedPlatformConfig">
-                  <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
-                    <v-icon start>mdi-book-open-variant</v-icon>
-                    {{ tm('dialog.viewTutorial') }}
-                  </v-btn>
-                  <div class="mt-2">
+                  <div v-if="isLarkPlatform">
+                    <div class="lark-creation-title mt-4 mb-1">
+                      {{ tm('registrationAction.mode.title') }}
+                    </div>
+                    <v-radio-group
+                      v-model="larkCreationMode"
+                      class="lark-creation-mode"
+                      hide-details
+                    >
+                      <v-radio value="scan" :label="tm('registrationAction.mode.scan')"></v-radio>
+                      <v-radio value="manual" :label="tm('registrationAction.mode.manual')"></v-radio>
+                    </v-radio-group>
+
+                    <div v-if="larkCreationMode === 'scan'" class="lark-registration-inline mt-3">
+                      <PlatformRegistrationAction
+                        :platform-config="selectedPlatformConfig"
+                        :active="larkCreationMode === 'scan'"
+                        @created="handlePlatformRegistrationCreated"
+                        @success="showSuccess"
+                        @error="showError"
+                      />
+                    </div>
+
+                    <div v-else-if="larkCreationMode === 'manual'" class="mt-2">
+                      <div class="platform-action-row">
+                        <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                          <v-icon start>mdi-book-open-variant</v-icon>
+                          {{ tm('dialog.viewTutorial') }}
+                        </v-btn>
+                      </div>
+                      <AstrBotConfig :iterable="selectedPlatformConfig" :metadata="metadata['platform_group']?.metadata"
+                        metadataKey="platform" />
+                    </div>
+                  </div>
+
+                  <div v-else-if="isWeixinOcPlatform" class="weixin-oc-registration-inline mt-4">
+                    <PlatformRegistrationAction
+                      :platform-config="selectedPlatformConfig"
+                      :active="isWeixinOcPlatform"
+                      @created="handlePlatformRegistrationCreated"
+                      @success="showSuccess"
+                      @error="showError"
+                    />
+                  </div>
+
+                  <div v-else class="mt-2">
+                    <div class="platform-action-row">
+                      <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                        <v-icon start>mdi-book-open-variant</v-icon>
+                        {{ tm('dialog.viewTutorial') }}
+                      </v-btn>
+                    </div>
                     <AstrBotConfig :iterable="selectedPlatformConfig" :metadata="metadata['platform_group']?.metadata"
                       metadataKey="platform" />
                   </div>
@@ -310,10 +357,11 @@ import { getPlatformIcon, getPlatformDescription, getTutorialLink } from '@/util
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 import ConfigPage from '@/views/ConfigPage.vue';
+import PlatformRegistrationAction from '@/components/platform/PlatformRegistrationAction.vue';
 
 export default {
   name: 'AddNewPlatform',
-  components: { AstrBotConfig, AstrBotCoreConfigWrapper, ConfigPage },
+  components: { AstrBotConfig, AstrBotCoreConfigWrapper, ConfigPage, PlatformRegistrationAction },
   emits: ['update:show', 'show-toast', 'refresh-config'],
   props: {
     show: {
@@ -341,6 +389,7 @@ export default {
     return {
       selectedPlatformType: null,
       selectedPlatformConfig: null,
+      larkCreationMode: '',
 
       aBConfigRadioVal: '0',
       selectedAbConfId: 'default',
@@ -410,6 +459,20 @@ export default {
         return false;
       }
 
+      if (this.isLarkPlatform && !this.larkCreationMode) {
+        return false;
+      }
+
+      if (this.isLarkPlatform && this.larkCreationMode === 'scan') {
+        if (!this.selectedPlatformConfig?.app_id || !this.selectedPlatformConfig?.app_secret) {
+          return false;
+        }
+      }
+
+      if (this.isWeixinOcPlatform && !this.selectedPlatformConfig?.weixin_oc_token) {
+        return false;
+      }
+
       // 如果是使用现有配置文件模式
       if (this.aBConfigRadioVal === '0') {
         return !!this.selectedAbConfId;
@@ -442,14 +505,22 @@ export default {
         { label: this.tm('createDialog.messageTypeOptions.group'), value: 'GroupMessage' },
         { label: this.tm('createDialog.messageTypeOptions.friend'), value: 'FriendMessage' },
       ];
+    },
+    isLarkPlatform() {
+      return this.selectedPlatformConfig?.type === 'lark';
+    },
+    isWeixinOcPlatform() {
+      return this.selectedPlatformConfig?.type === 'weixin_oc';
     }
   },
   watch: {
     selectedPlatformType(newType) {
       if (newType && this.platformTemplates[newType]) {
         this.selectedPlatformConfig = JSON.parse(JSON.stringify(this.platformTemplates[newType]));
+        this.larkCreationMode = '';
       } else {
         this.selectedPlatformConfig = null;
+        this.larkCreationMode = '';
       }
     },
     selectedAbConfId(newConfigId) {
@@ -534,6 +605,7 @@ export default {
     resetForm() {
       this.selectedPlatformType = null;
       this.selectedPlatformConfig = null;
+      this.larkCreationMode = '';
 
       this.aBConfigRadioVal = '0';
       this.selectedAbConfId = 'default';
@@ -838,6 +910,21 @@ export default {
       this.$emit('show-toast', { message: message, type: 'error' });
     },
 
+    handlePlatformRegistrationCreated(data) {
+      if (!this.selectedPlatformConfig || !data?.bot_name) {
+        return;
+      }
+      const currentId = String(this.selectedPlatformConfig.id || '').trim();
+      const safeBotName = String(data.bot_name || '').trim().replace(/[!:]/g, '_');
+      if (!currentId || !safeBotName) {
+        return;
+      }
+      const suffix = `-${safeBotName}`;
+      this.selectedPlatformConfig.id = currentId.endsWith(suffix)
+        ? currentId
+        : `${currentId}${suffix}`;
+    },
+
     isPlatformIdValid(id) {
       if (!id) {
         return false;
@@ -1085,5 +1172,29 @@ export default {
   flex: 1;
   overflow-y: auto;
   padding: 16px 16px 24px 16px;
+}
+
+.platform-action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lark-creation-mode .v-label {
+  opacity: 0.9;
+}
+
+.lark-creation-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.78);
+}
+
+.lark-registration-inline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: 320px;
 }
 </style>
