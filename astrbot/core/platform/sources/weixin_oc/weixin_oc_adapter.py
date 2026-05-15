@@ -96,6 +96,7 @@ class WeixinOCReplyMeta:
     support_streaming_message=False,
 )
 class WeixinOCAdapter(Platform):
+    SESSION_TIMEOUT_ERRCODE = -14
     IMAGE_ITEM_TYPE = 2
     VOICE_ITEM_TYPE = 3
     FILE_ITEM_TYPE = 4
@@ -951,6 +952,23 @@ class WeixinOCAdapter(Platform):
         errmsg = str(payload.get("errmsg", ""))
         return f"ret={ret}, errcode={errcode}, errmsg={errmsg}"
 
+    @staticmethod
+    def _api_errcode(payload: dict[str, Any]) -> int:
+        return int(payload.get("errcode") or 0)
+
+    async def _handle_inbound_session_timeout(self) -> None:
+        logger.warning(
+            "weixin_oc(%s): session timed out, clearing login state and waiting for QR login.",
+            self.meta().id,
+        )
+        self.token = None
+        self.account_id = None
+        self._sync_buf = ""
+        self._context_tokens = {}
+        self._context_tokens_dirty = False
+        self._login_session = None
+        await self._save_account_state()
+
     async def _send_media_segment(
         self,
         user_id: str,
@@ -1566,6 +1584,10 @@ class WeixinOCAdapter(Platform):
                 self.meta().id,
                 self._last_inbound_error,
             )
+            if self._api_errcode(data) == self.SESSION_TIMEOUT_ERRCODE:
+                await self._handle_inbound_session_timeout()
+                return
+            await asyncio.sleep(5)
             return
 
         should_save_state = self._context_tokens_dirty
