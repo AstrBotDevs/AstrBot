@@ -152,6 +152,11 @@
         "error": "登录失败"
       }
     },
+    "dingtalk": {
+      "title": "钉钉扫码创建",
+      "scanTitle": "请使用手机钉钉扫码",
+      "created": "创建成功"
+    },
     "start": "开始创建",
     "created": "创建成功",
     "startFailed": "发起扫码创建失败",
@@ -159,7 +164,8 @@
     "mode": {
       "title": "选择创建方式",
       "scan": "扫码一键创建",
-      "manual": "手动创建（支持企业自部署飞书平台）"
+      "manual": "手动创建",
+      "larkManual": "手动创建（支持企业自部署飞书平台）"
     },
     "scanTitle": "请使用手机飞书扫码",
     "status": {
