@@ -105,6 +105,38 @@ class TestAstrMessageEventInit:
         assert astr_message_event.span is not None
         assert astr_message_event.trace == astr_message_event.span
 
+    def test_init_preserves_supported_sender_role(self, platform_meta, astrbot_message):
+        """Test supported sender roles are kept during initialization."""
+        astrbot_message.sender = MessageMember(
+            user_id="user123",
+            nickname="TestUser",
+            role="admin",
+        )
+        event = ConcreteAstrMessageEvent(
+            message_str="Hello world",
+            message_obj=astrbot_message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        assert event.role == "admin"
+
+    def test_init_falls_back_to_member_for_invalid_sender_role(
+        self, platform_meta, astrbot_message
+    ):
+        """Test invalid sender roles fall back to member."""
+        astrbot_message.sender = MessageMember(
+            user_id="user123",
+            nickname="TestUser",
+            role="super-admin",
+        )
+        event = ConcreteAstrMessageEvent(
+            message_str="Hello world",
+            message_obj=astrbot_message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        assert event.role == "member"
+
 
 class TestUnifiedMsgOrigin:
     """Tests for unified_msg_origin property."""
@@ -491,6 +523,11 @@ class TestIsAdmin:
     def test_is_admin_when_admin(self, astr_message_event):
         """Test is_admin returns True when role is admin."""
         astr_message_event.role = "admin"
+        assert astr_message_event.is_admin() is True
+
+    def test_is_admin_when_owner(self, astr_message_event):
+        """Test is_admin returns True when role is owner."""
+        astr_message_event.role = "owner"
         assert astr_message_event.is_admin() is True
 
 
