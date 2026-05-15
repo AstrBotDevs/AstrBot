@@ -188,6 +188,13 @@ class RespondStage(Stage):
             if result.async_stream is None:
                 logger.warning("async_stream 为空，跳过发送。")
                 return
+            if event.get_platform_name() == "lark":
+                event.set_extra(
+                    "lark_streaming_footer",
+                    self.config.get("platform_specific", {})
+                    .get("lark", {})
+                    .get("footer", {}),
+                )
             # 流式结果直接交付平台适配器处理
             realtime_segmenting = (
                 self.config.get("provider_settings", {}).get(
