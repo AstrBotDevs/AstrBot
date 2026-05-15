@@ -1,5 +1,6 @@
 import copy
 import traceback
+from collections.abc import Iterable
 from sys import maxsize
 
 import astrbot.api.message_components as Comp
@@ -17,6 +18,13 @@ from astrbot.core.utils.session_waiter import (
 )
 
 from .long_term_memory import LongTermMemory
+
+
+def _iter_message_components(event: AstrMessageEvent):
+    messages = getattr(getattr(event, "message_obj", None), "message", None)
+    if not isinstance(messages, Iterable) or isinstance(messages, (str, bytes)):
+        return ()
+    return tuple(messages)
 
 
 class Main(star.Star):
@@ -134,8 +142,9 @@ class Main(star.Star):
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         """群聊记忆增强"""
+        message_components = _iter_message_components(event)
         has_image_or_plain = False
-        for comp in event.message_obj.message:
+        for comp in message_components:
             if isinstance(comp, Plain) or isinstance(comp, Image):
                 has_image_or_plain = True
                 break
@@ -177,6 +186,13 @@ class Main(star.Star):
                     )
 
                     prompt = event.message_str
+                    image_urls = []
+                    for comp in message_components:
+                        if isinstance(comp, Image):
+                            try:
+                                image_urls.append(await comp.convert_to_file_path())
+                            except Exception:
+                                logger.exception("主动回复处理图片失败")
 
                     if not conv:
                         logger.error("未找到对话，无法主动回复")
@@ -185,6 +201,7 @@ class Main(star.Star):
                     yield event.request_llm(
                         prompt=prompt,
                         session_id=event.session_id,
+                        image_urls=image_urls,
                         conversation=conv,
                     )
                 except BaseException as e:
