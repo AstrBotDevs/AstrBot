@@ -141,6 +141,20 @@
                             </div>
                         </template>
 
+                        <template v-slot:item.is_reset="{ item }">
+                            <v-chip
+                                v-if="item.is_reset"
+                                size="x-small"
+                                color="warning"
+                                variant="tonal"
+                                class="font-weight-medium"
+                            >
+                                <v-icon start size="12">mdi-restart</v-icon>
+                                Reset
+                            </v-chip>
+                            <span v-else class="text-caption text-disabled">—</span>
+                        </template>
+
                         <template v-slot:item.created_at="{ item }">
                             {{ formatTimestamp(item.created_at) }}
                         </template>
@@ -489,6 +503,7 @@ export default {
             return [
                 { title: this.tm('table.headers.title'), key: 'title', sortable: true, minWidth: '80px', width: '200px' },
                 { title: this.tm('table.headers.umo'), key: 'umo_source', sortable: false, minWidth: '280px', width: '360px' },
+                { title: this.tm('table.headers.isReset'), key: 'is_reset', sortable: true, width: '100px' },
                 { title: this.tm('table.headers.createdAt'), key: 'created_at', sortable: true, width: '180px' },
                 { title: this.tm('table.headers.updatedAt'), key: 'updated_at', sortable: true, width: '180px' },
                 { title: this.tm('table.headers.actions'), key: 'actions', sortable: false, align: 'center' }

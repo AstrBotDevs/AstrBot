@@ -171,6 +171,7 @@ class BaseDatabase(abc.ABC):
         cid: str | None = None,
         created_at: datetime.datetime | None = None,
         updated_at: datetime.datetime | None = None,
+        is_reset: bool = False,
     ) -> ConversationV2:
         """Create a new conversation."""
         ...
