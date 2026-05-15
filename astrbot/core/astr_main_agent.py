@@ -1133,12 +1133,6 @@ def _get_compress_provider(
             "指定的上下文压缩模型 %s 不可用",
             config.llm_compress_provider_id,
         )
-    # fallback: 使用主聊天 provider 进行压缩
-    if event:
-        provider = plugin_context.get_using_provider(umo=event.unified_msg_origin)
-        if provider:
-            logger.info("llm_compress 使用主聊天模型进行上下文压缩")
-            return provider
     return None
 
 
@@ -1452,7 +1446,6 @@ async def build_main_agent(
         llm_compress_keep_recent=config.llm_compress_keep_recent,
         llm_compress_provider=_get_compress_provider(config, plugin_context, event),
         truncate_turns=config.dequeue_context_length,
-        enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=_get_fallback_chat_providers(
             provider, plugin_context, config.provider_settings
