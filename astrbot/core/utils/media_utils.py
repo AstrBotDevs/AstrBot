@@ -15,6 +15,7 @@ from PIL import Image as PILImage
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
 
 IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1280
 IMAGE_COMPRESS_DEFAULT_QUALITY = 95
@@ -250,8 +251,16 @@ async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
     if not audio_path:
         return audio_path
 
-    if _get_audio_magic_type(audio_path) == "wav":
+    audio_type = _get_audio_magic_type(audio_path)
+    if audio_type == "wav":
         return audio_path
+
+    if audio_type == "silk":
+        if output_path is None:
+            temp_dir = get_astrbot_temp_path()
+            os.makedirs(temp_dir, exist_ok=True)
+            output_path = os.path.join(temp_dir, f"media_audio_{uuid.uuid4().hex}.wav")
+        return await tencent_silk_to_wav(audio_path, output_path)
 
     return await convert_audio_to_wav(audio_path, output_path)
 
@@ -291,7 +300,11 @@ def _get_audio_magic_type(audio_path: str) -> str:
     if header[:4] == b"ftyp" and b"mp4" in header[:8]:
         return "mp4"
 
-    if header[:8] == b"#!SILK_V3":
+    if header.startswith(b"#!SILK_V3"):
+        return "silk"
+
+    # Tencent SILK: leading \x02 byte before #!SILK_V3
+    if header.startswith(b"\x02#!SILK_V3"):
         return "silk"
 
     return ""
