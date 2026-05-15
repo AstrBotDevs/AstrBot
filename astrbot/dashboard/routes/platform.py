@@ -3,18 +3,11 @@
 提供统一的 webhook 回调入口，支持多个平台使用同一端口接收回调。
 """
 
-import secrets
-import string
-
 from quart import request
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform import Platform
-from astrbot.core.platform.sources.dingtalk.app_registration import (
-    poll_dingtalk_app_registration_once,
-    request_dingtalk_app_registration,
-)
 from astrbot.core.platform.sources.lark.app_registration import (
     poll_app_registration_once,
     request_app_registration,
@@ -26,10 +19,6 @@ from astrbot.core.platform.sources.weixin_oc.login_registration import (
 )
 
 from .route import Response, Route, RouteContext
-
-
-def _random_platform_id_suffix() -> str:
-    return "_" + "".join(secrets.choice(string.ascii_lowercase) for _ in range(4))
 
 
 class PlatformRoute(Route):
@@ -149,8 +138,6 @@ class PlatformRoute(Route):
                     payload,
                     platform_config,
                 )
-            if platform_type == "dingtalk":
-                return await self._handle_dingtalk_registration(action, payload)
 
             return Response().error(
                 f"Unsupported platform registration: {platform_type}"
@@ -213,39 +200,6 @@ class PlatformRoute(Route):
 
         return Response().error(f"Unsupported action: {action}").__dict__, 400
 
-    async def _handle_dingtalk_registration(self, action: str, payload: dict):
-        if action == "start":
-            registration = await request_dingtalk_app_registration()
-            return (
-                Response()
-                .ok(
-                    {
-                        "status": "pending",
-                        "device_code": registration.device_code,
-                        "registration_code": registration.device_code,
-                        "user_code": registration.user_code,
-                        "verification_uri": registration.verification_uri,
-                        "verification_uri_complete": registration.verification_uri_complete,
-                        "expires_in": registration.expires_in,
-                        "interval": registration.interval,
-                    }
-                )
-                .__dict__
-            )
-
-        if action == "poll":
-            device_code = str(
-                payload.get("device_code") or payload.get("registration_code") or ""
-            ).strip()
-            if not device_code:
-                return Response().error("Missing device_code").__dict__, 400
-            result = await poll_dingtalk_app_registration_once(device_code)
-            if result.get("status") == "created":
-                result["platform_id_suffix"] = _random_platform_id_suffix()
-            return Response().ok(result).__dict__
-
-        return Response().error(f"Unsupported action: {action}").__dict__, 400
-
     async def _handle_weixin_oc_registration(
         self,
         action: str,
@@ -278,8 +232,6 @@ class PlatformRoute(Route):
                 platform_config=platform_config,
                 qrcode=qrcode,
             )
-            if result.get("status") == "created":
-                result["platform_id_suffix"] = _random_platform_id_suffix()
             return Response().ok(result).__dict__
 
         return Response().error(f"Unsupported action: {action}").__dict__, 400

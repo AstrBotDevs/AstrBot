@@ -66,13 +66,6 @@ const REGISTRATION_ACTIONS = {
     successKey: 'registrationAction.weixinOc.created',
     statusKeyPrefix: 'registrationAction.weixinOc.status',
   },
-  dingtalk: {
-    endpoint: '/api/platform/registration/dingtalk',
-    icon: 'mdi-qrcode',
-    titleKey: 'registrationAction.dingtalk.title',
-    scanTitleKey: 'registrationAction.dingtalk.scanTitle',
-    successKey: 'registrationAction.dingtalk.created',
-  },
 };
 
 export default {
@@ -262,12 +255,6 @@ export default {
       }
       if (data.weixin_oc_base_url) {
         this.platformConfig.weixin_oc_base_url = data.weixin_oc_base_url;
-      }
-      if (data.client_id) {
-        this.platformConfig.client_id = data.client_id;
-      }
-      if (data.client_secret) {
-        this.platformConfig.client_secret = data.client_secret;
       }
     },
     getStatusText(status) {
