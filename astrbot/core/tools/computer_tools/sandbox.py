@@ -53,6 +53,21 @@ def _format_sandbox_for_agent(value):
     return formatted
 
 
+def _format_sandbox_error_for_agent(exc: Exception) -> str:
+    detail = str(exc) or type(exc).__name__
+    normalized = detail.lower()
+    docker_markers = (
+        "cannot connect to docker engine",
+        "failed to connect to docker daemon",
+        "docker is not installed or not running",
+        "docker daemon",
+        "docker.sock",
+    )
+    if any(marker in normalized for marker in docker_markers):
+        return "Docker is not installed or not running"
+    return detail
+
+
 def _sandbox_manager():
     return computer_client.sandbox_manager
 
@@ -288,7 +303,7 @@ class CreateSandboxTool(FunctionTool):
                 sandbox_name=sandbox_name.strip() or None,
             )
         except Exception as e:
-            detail = str(e) or type(e).__name__
+            detail = _format_sandbox_error_for_agent(e)
             return f"Error creating sandbox: {detail}"
 
         return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})

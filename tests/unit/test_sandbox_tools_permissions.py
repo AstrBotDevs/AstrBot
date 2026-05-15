@@ -421,6 +421,57 @@ async def test_create_sandbox_tool_accepts_explicit_provider_id(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_create_sandbox_tool_hides_docker_socket_details(monkeypatch):
+    class FakeManager:
+        providers = {"shipyard": object()}
+
+        async def create_sandbox(self, *args, **kwargs):
+            raise RuntimeError(
+                "[900] Cannot connect to Docker Engine via "
+                "unix:///Users/test/.docker/run/docker.sock "
+                "[Cannot connect to unix socket /Users/test/.docker/run/docker.sock "
+                "ssl:default [No such file or directory]]"
+            )
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
+    )
+
+    result = await CreateSandboxTool().call(
+        _member_context_with_sandbox_permissions(create=True),
+        sandbox_name="Fresh",
+        provider_id="shipyard",
+    )
+
+    assert (
+        str(result) == "Error creating sandbox: Docker is not installed or not running"
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_tool_keeps_docker_unavailable_message_short(monkeypatch):
+    class FakeManager:
+        providers = {"cua": object()}
+
+        async def create_sandbox(self, *args, **kwargs):
+            raise RuntimeError("Docker is not installed or not running")
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
+    )
+
+    result = await CreateSandboxTool().call(
+        _member_context_with_sandbox_permissions(create=True),
+        sandbox_name="Fresh",
+        provider_id="cua",
+    )
+
+    assert (
+        str(result) == "Error creating sandbox: Docker is not installed or not running"
+    )
+
+
+@pytest.mark.asyncio
 async def test_member_switch_sandbox_allows_idle_default_sandbox(monkeypatch):
     called = []
 
