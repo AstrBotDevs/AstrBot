@@ -1,6 +1,7 @@
 import asyncio
 import re
 import sys
+from pathlib import Path
 from typing import Any, cast
 
 import discord
@@ -9,7 +10,7 @@ from discord.channel import DMChannel
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain
+from astrbot.api.message_components import File, Image, Plain, Record
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -31,6 +32,11 @@ if sys.version_info >= (3, 12):
     from typing import override
 else:
     from typing_extensions import override
+
+
+DISCORD_AUDIO_ATTACHMENT_EXTENSIONS = frozenset(
+    {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}
+)
 
 
 # 注册平台适配器
@@ -195,6 +201,21 @@ class DiscordPlatformAdapter(Platform):
         """根据 channel 对象获取ID"""
         return str(getattr(channel, "id", None))
 
+    @staticmethod
+    def _get_attachment_content_type(attachment: Any) -> str:
+        content_type = getattr(attachment, "content_type", None)
+        if not content_type:
+            return ""
+        return str(content_type).split(";", maxsplit=1)[0].strip().lower()
+
+    @staticmethod
+    def _is_audio_attachment(attachment: Any, content_type: str) -> bool:
+        if content_type.startswith("audio/"):
+            return True
+
+        filename = str(getattr(attachment, "filename", "") or "")
+        return Path(filename.lower()).suffix in DISCORD_AUDIO_ATTACHMENT_EXTENSIONS
+
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
         message = data["message"]
@@ -242,11 +263,14 @@ class DiscordPlatformAdapter(Platform):
             message_chain.append(Plain(text=abm.message_str))
         if message.attachments:
             for attachment in message.attachments:
-                if attachment.content_type and attachment.content_type.startswith(
-                    "image/",
-                ):
+                content_type = self._get_attachment_content_type(attachment)
+                if content_type.startswith("image/"):
                     message_chain.append(
                         Image(file=attachment.url, filename=attachment.filename),
+                    )
+                elif self._is_audio_attachment(attachment, content_type):
+                    message_chain.append(
+                        Record(file=attachment.url, url=attachment.url),
                     )
                 else:
                     message_chain.append(

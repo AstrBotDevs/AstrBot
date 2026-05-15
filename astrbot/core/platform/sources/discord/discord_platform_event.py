@@ -16,6 +16,7 @@ from astrbot.api.message_components import (
     File,
     Image,
     Plain,
+    Record,
     Reply,
 )
 from astrbot.api.platform import AstrBotMessage, At, PlatformMetadata
@@ -248,6 +249,24 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         logger.warning(f"[Discord] 获取文件失败: {i.name}")
                 except Exception as e:
                     logger.warning(f"[Discord] 处理文件失败: {i.name}, 错误: {e}")
+            elif isinstance(i, Record):
+                try:
+                    file_path_str = await i.convert_to_file_path()
+                    path = Path(file_path_str)
+                    if await asyncio.to_thread(path.exists):
+                        file_bytes = await asyncio.to_thread(path.read_bytes)
+                        files.append(
+                            discord.File(
+                                BytesIO(file_bytes),
+                                filename=self._get_record_filename(i, path),
+                            ),
+                        )
+                    else:
+                        logger.warning(
+                            f"[Discord] 获取语音失败，路径不存在: {file_path_str}",
+                        )
+                except Exception as e:
+                    logger.warning(f"[Discord] 处理语音失败: {e}")
             elif isinstance(i, DiscordEmbed):
                 # Discord Embed消息
                 embeds.append(i.to_discord_embed())
@@ -266,6 +285,15 @@ class DiscordPlatformEvent(AstrMessageEvent):
             logger.warning("[Discord] 消息内容超过2000字符，将被截断。")
             content = content[:2000]
         return content, files, view, embeds, reference_message_id
+
+    @staticmethod
+    def _get_record_filename(record: Record, path: Path) -> str:
+        source = record.file or record.url or ""
+        if source.startswith(("http://", "https://")):
+            filename = Path(source.split("?", maxsplit=1)[0]).name
+            if filename:
+                return filename
+        return path.name
 
     async def react(self, emoji: str) -> None:
         """对原消息添加反应"""
