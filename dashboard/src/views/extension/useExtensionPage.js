@@ -14,7 +14,6 @@ import { getValidHashTab, replaceTabRoute } from "@/utils/hashRouteTabs.mjs";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-
 const buildFailedPluginItems = (raw) => {
   return Object.entries(raw || {}).map(([dirName, info]) => {
     const detail = info && typeof info === "object" ? info : {};
@@ -1234,19 +1233,15 @@ export const useExtensionPage = () => {
 
   const checkAlreadyInstalled = () => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
-    const installedRepos = new Set(
-      data
-        .filter((ext) => ext.repo)
-        .map((ext) => normalizeInstallUrl(ext.repo).toLowerCase()),
-    );
-    const installedNames = new Set(
-      data.map((ext) => normalizeStr(ext.name).replace(/_/g, "-")),
-    ); //统一格式，以防下面的匹配不生效
     const installedByRepo = new Map(
       data
         .filter((ext) => ext.repo)
         .map((ext) => [normalizeInstallUrl(ext.repo).toLowerCase(), ext]),
     );
+    const installedRepos = new Set(installedByRepo.keys());
+    const installedNames = new Set(
+      data.map((ext) => normalizeStr(ext.name).replace(/_/g, "-")),
+    ); //统一格式，以防下面的匹配不生效
     const installedByName = new Map(data.map((ext) => [ext.name, ext]));
 
     for (let i = 0; i < pluginMarketData.value.length; i++) {
