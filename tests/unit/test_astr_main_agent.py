@@ -89,6 +89,22 @@ def mock_conversation():
     return conv
 
 
+def test_provider_supports_modality_requires_explicit_list():
+    provider = MagicMock(spec=Provider)
+
+    provider.provider_config = {"modalities": ["text", "image"]}
+    assert ama._provider_supports_modality(provider, "image")
+
+    provider.provider_config = {"modalities": ["text"]}
+    assert not ama._provider_supports_modality(provider, "image")
+
+    provider.provider_config = {}
+    assert not ama._provider_supports_modality(provider, "image")
+
+    provider.provider_config = {"modalities": "image"}
+    assert not ama._provider_supports_modality(provider, "image")
+
+
 @pytest.fixture
 def sample_config():
     """Create a sample MainAgentBuildConfig."""
@@ -1056,6 +1072,119 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_uses_image_fallback_provider(
+        self, mock_event, mock_context
+    ):
+        """Test image requests use a fallback provider that supports images."""
+        module = ama
+        text_provider = MagicMock(spec=Provider)
+        text_provider.provider_config = {
+            "id": "text-provider",
+            "modalities": ["text", "tool_use"],
+            "max_context_tokens": 128000,
+        }
+        text_provider.get_model.return_value = "text-model"
+
+        image_provider = MagicMock(spec=Provider)
+        image_provider.provider_config = {
+            "id": "image-provider",
+            "modalities": ["text", "image", "tool_use"],
+            "max_context_tokens": 128000,
+        }
+        image_provider.get_model.return_value = "image-model"
+
+        req = ProviderRequest(
+            prompt="describe this",
+            image_urls=["/tmp/image.jpg"],
+            model="text-model",
+        )
+        mock_context.get_provider_by_id.side_effect = lambda provider_id: (
+            image_provider if provider_id == "image-provider" else None
+        )
+        mock_context.get_config.return_value = {}
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    llm_safety_mode=False,
+                    computer_use_runtime="none",
+                    add_cron_tools=False,
+                    provider_settings={
+                        "fallback_chat_models": ["image-provider"],
+                    },
+                ),
+                provider=text_provider,
+                req=req,
+            )
+
+        assert result is not None
+        assert result.provider is image_provider
+        assert result.provider_request.image_urls == ["/tmp/image.jpg"]
+        assert result.provider_request.model is None
+        assert mock_runner.reset.call_args.kwargs["provider"] is image_provider
+        assert mock_runner.reset.call_args.kwargs["fallback_providers"] == []
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_keeps_text_provider_without_image_fallback(
+        self, mock_event, mock_context
+    ):
+        """Test image requests fall back to existing sanitizing when no image provider exists."""
+        module = ama
+        text_provider = MagicMock(spec=Provider)
+        text_provider.provider_config = {
+            "id": "text-provider",
+            "modalities": ["text", "tool_use"],
+            "max_context_tokens": 128000,
+        }
+        text_provider.get_model.return_value = "text-model"
+
+        req = ProviderRequest(
+            prompt="describe this",
+            image_urls=["/tmp/image.jpg"],
+        )
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_config.return_value = {}
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    llm_safety_mode=False,
+                    computer_use_runtime="none",
+                    add_cron_tools=False,
+                    provider_settings={
+                        "fallback_chat_models": ["missing-provider"],
+                    },
+                ),
+                provider=text_provider,
+                req=req,
+            )
+
+        assert result is not None
+        assert result.provider is text_provider
+        assert result.provider_request.image_urls == ["/tmp/image.jpg"]
+        assert mock_runner.reset.call_args.kwargs["provider"] is text_provider
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_video_attachment(
