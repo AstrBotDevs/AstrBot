@@ -1270,7 +1270,7 @@ class PluginRoute(Route):
                 logo_url = await self.get_plugin_logo_token(plugin.logo_path)
             _t = {
                 "name": plugin.name,
-                "repo": "" if plugin.repo is None else plugin.repo,
+                "repo": "" if plugin.repo is None else str(plugin.repo),
                 "author": plugin.author,
                 "desc": plugin.desc,
                 "version": plugin.version,
@@ -1320,7 +1320,7 @@ class PluginRoute(Route):
                 .ok(
                     {
                         "name": plugin.name,
-                        "repo": "" if plugin.repo is None else plugin.repo,
+                        "repo": "" if plugin.repo is None else str(plugin.repo),
                         "author": plugin.author,
                         "desc": plugin.desc,
                         "version": plugin.version,
