@@ -1,4 +1,5 @@
 import asyncio
+import pathlib
 import re
 from collections.abc import AsyncGenerator
 
@@ -32,10 +33,29 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         self.bot = bot
 
     @staticmethod
-    async def _from_segment_to_dict(segment: BaseMessageComponent) -> dict:
-        """修复部分字段"""
+    def _remote_image_url(segment: Image, use_remote_image_url: bool) -> str | None:
+        if not use_remote_image_url:
+            return None
+        raw = segment.url or segment.file
+        if raw and raw.startswith(("http://", "https://")):
+            return raw
+        return None
+
+    @staticmethod
+    async def _from_segment_to_dict(
+        segment: BaseMessageComponent,
+        use_remote_image_url: bool = False,
+    ) -> dict:
+        if isinstance(segment, Image):
+            remote_image_url = AiocqhttpMessageEvent._remote_image_url(
+                segment, use_remote_image_url
+            )
+            if remote_image_url is not None:
+                return {
+                    "type": "image",
+                    "data": {"file": remote_image_url},
+                }
         if isinstance(segment, Image | Record):
-            # For Image and Record segments, we convert them to base64
             bs64 = await segment.convert_to_base64()
             return {
                 "type": segment.type.lower(),
@@ -44,20 +64,14 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 },
             }
         if isinstance(segment, File):
-            # For File segments, we need to handle the file differently
             d = await segment.to_dict()
             file_val = d.get("data", {}).get("file", "")
             if file_val:
-                import pathlib
-
                 try:
-                    # 使用 pathlib 处理路径，能更好地处理 Windows/Linux 差异
                     path_obj = pathlib.Path(file_val)
-                    # 如果是绝对路径且不包含协议头 (://)，则转换为标准的 file: URI
                     if path_obj.is_absolute() and "://" not in file_val:
                         d["data"]["file"] = path_obj.as_uri()
                 except Exception:
-                    # 如果不是合法路径（例如已经是特定的特殊字符串），则跳过转换
                     pass
             return d
         if isinstance(segment, Video):
@@ -70,19 +84,26 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
     async def _parse_onebot_json(message_chain: MessageChain):
         """解析成 OneBot json 格式"""
         ret = []
+        use_remote_image_url = message_chain.use_remote_image_url_
         for segment in message_chain.chain:
             if isinstance(segment, At):
                 # At 组件后插入一个空格，避免与后续文本粘连
-                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(
+                    segment, use_remote_image_url=use_remote_image_url
+                )
                 ret.append(d)
                 ret.append({"type": "text", "data": {"text": " "}})
             elif isinstance(segment, Plain):
                 if not segment.text.strip():
                     continue
-                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(
+                    segment, use_remote_image_url=use_remote_image_url
+                )
                 ret.append(d)
             else:
-                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(
+                    segment, use_remote_image_url=use_remote_image_url
+                )
                 ret.append(d)
         return ret
 
@@ -159,7 +180,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 d = await cls._from_segment_to_dict(seg)
                 await cls._dispatch_send(bot, event, is_group, session_id, [d])
             else:
-                messages = await cls._parse_onebot_json(MessageChain([seg]))
+                messages = await cls._parse_onebot_json(message_chain.derive([seg]))
                 if not messages:
                     continue
                 await cls._dispatch_send(bot, event, is_group, session_id, messages)
@@ -210,7 +231,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         if any(p in buffer for p in "。？！~…"):
                             buffer = await self.process_buffer(buffer, pattern)
                     else:
-                        await self.send(MessageChain(chain=[comp]))
+                        await self.send(chain.derive([comp]))
                         await asyncio.sleep(1.5)  # 限速
 
         if buffer.strip():
