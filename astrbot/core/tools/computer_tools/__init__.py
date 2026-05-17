@@ -11,6 +11,7 @@ from .fs import (
     FileWriteTool,
     GrepTool,
 )
+from .robust_edit import RobustFileEditTool
 from .python import LocalPythonTool, PythonTool
 from .shell import ExecuteShellTool
 from .shipyard_neo import (
@@ -55,6 +56,7 @@ __all__ = [
     "LocalPythonTool",
     "PromoteSkillCandidateTool",
     "PythonTool",
+    "RobustFileEditTool",
     "RollbackSkillReleaseTool",
     "RunBrowserSkillTool",
     "SyncSkillReleaseTool",
