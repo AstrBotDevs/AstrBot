@@ -3,6 +3,9 @@
 提供统一的 webhook 回调入口，支持多个平台使用同一端口接收回调。
 """
 
+import secrets
+import string
+
 from quart import request
 
 from astrbot.core import logger
@@ -23,6 +26,10 @@ from astrbot.core.platform.sources.weixin_oc.login_registration import (
 )
 
 from .route import Response, Route, RouteContext
+
+
+def _random_platform_id_suffix() -> str:
+    return "_" + "".join(secrets.choice(string.ascii_lowercase) for _ in range(4))
 
 
 class PlatformRoute(Route):
@@ -233,6 +240,8 @@ class PlatformRoute(Route):
             if not device_code:
                 return Response().error("Missing device_code").__dict__, 400
             result = await poll_dingtalk_app_registration_once(device_code)
+            if result.get("status") == "created":
+                result["platform_id_suffix"] = _random_platform_id_suffix()
             return Response().ok(result).__dict__
 
         return Response().error(f"Unsupported action: {action}").__dict__, 400
@@ -269,6 +278,8 @@ class PlatformRoute(Route):
                 platform_config=platform_config,
                 qrcode=qrcode,
             )
+            if result.get("status") == "created":
+                result["platform_id_suffix"] = _random_platform_id_suffix()
             return Response().ok(result).__dict__
 
         return Response().error(f"Unsupported action: {action}").__dict__, 400
