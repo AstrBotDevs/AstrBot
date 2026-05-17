@@ -39,8 +39,18 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         # Optional language hint + prompt to guide Whisper transcription.
         # Default empty = let Whisper auto-detect (preserves existing behavior).
         # Users can configure these for higher accuracy on non-English speech.
-        self.language = provider_config.get("language", "")
-        self.prompt = provider_config.get("prompt", "")
+        # `.strip() or ""` handles accidental whitespace in YAML config and
+        # accepts a `None` value gracefully (treated as "not configured").
+        self.language = (provider_config.get("language") or "").strip()
+        self.prompt = (provider_config.get("prompt") or "").strip()
+        # Whisper API defaults to 0 (deterministic). Operators can override
+        # via `temperature` in the provider config; values are clamped by the
+        # API itself (0–1.0 for most models).
+        temp_raw = provider_config.get("temperature", 0)
+        try:
+            self.temperature = float(temp_raw)
+        except (TypeError, ValueError):
+            self.temperature = 0.0
 
         self.set_model(provider_config["model"])
 
@@ -121,12 +131,19 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
                 audio_url = output_path
 
+        # Read the audio bytes inside a context manager so the file handle is
+        # closed before the subsequent `os.remove(audio_url)`. The previous
+        # `open(audio_url, "rb")` left a dangling handle that on Windows kept
+        # `os.remove` from succeeding (EBUSY) and on POSIX accumulated FDs
+        # under high-concurrency usage.
+        with open(audio_url, "rb") as audio_file:
+            audio_bytes = audio_file.read()
         result = await self.client.audio.transcriptions.create(
             model=self.model_name,
-            file=("audio.wav", open(audio_url, "rb")),
+            file=("audio.wav", audio_bytes),
             language=self.language or NOT_GIVEN,
             prompt=self.prompt or NOT_GIVEN,
-            temperature=0,
+            temperature=self.temperature,
         )
 
         # remove temp file
