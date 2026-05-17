@@ -1514,6 +1514,11 @@
         "description": "Timeout",
         "hint": "Timeout in seconds."
       },
+"max_retries": {
+        "description": "Max Retries",
+        "type": "int",
+        "hint": "Maximum number of retries when API call fails, range 1-50, default is 10."
+      },
       "mimo-stt-system-prompt": {
         "description": "System prompt",
         "hint": "System prompt used to guide MiMo STT transcription behavior."

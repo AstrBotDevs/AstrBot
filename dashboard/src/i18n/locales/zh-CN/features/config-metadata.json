@@ -1516,6 +1516,11 @@
         "description": "超时时间",
         "hint": "超时时间，单位为秒。"
       },
+"max_retries": {
+        "description": "最大重试次数",
+        "type": "int",
+        "hint": "API 调用失败时的最大重试次数，范围 1-50，默认为 10。"
+      },
       "mimo-stt-system-prompt": {
         "description": "系统提示词",
         "hint": "用于指导 MiMo STT 转录行为的 system prompt。"

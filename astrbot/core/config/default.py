@@ -1149,6 +1149,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.openai.com/v1",
                         "timeout": 120,
+                        "max_retries": 10,
                         "proxy": "",
                         "custom_headers": {},
                     },
@@ -2536,6 +2537,11 @@ CONFIG_METADATA_2 = {
                         "description": "超时时间",
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
+                    },
+                    "max_retries": {
+                        "description": "最大重试次数",
+                        "type": "int",
+                        "hint": "API 调用失败时的最大重试次数，范围 1-50，默认为 10。",
                     },
                     "mimo-stt-system-prompt": {
                         "description": "系统提示词",
