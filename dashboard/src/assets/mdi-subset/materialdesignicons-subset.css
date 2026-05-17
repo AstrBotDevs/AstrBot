@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 260 icons */
+/* Auto-generated MDI subset – 266 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -26,6 +26,10 @@
 
 .mdi-account-circle::before {
   content: "\F0009";
+}
+
+.mdi-account-edit::before {
+  content: "\F06BC";
 }
 
 .mdi-account-edit-outline::before {
@@ -210,6 +214,10 @@
 
 .mdi-circle::before {
   content: "\F0765";
+}
+
+.mdi-circle-outline::before {
+  content: "\F0766";
 }
 
 .mdi-circle-small::before {
@@ -652,12 +660,20 @@
   content: "\F033E";
 }
 
+.mdi-lock-check::before {
+  content: "\F139A";
+}
+
 .mdi-lock-check-outline::before {
   content: "\F16A8";
 }
 
 .mdi-lock-outline::before {
   content: "\F0341";
+}
+
+.mdi-lock-plus::before {
+  content: "\F05FB";
 }
 
 .mdi-lock-plus-outline::before {
@@ -810,6 +826,10 @@
 
 .mdi-progress-check::before {
   content: "\F0995";
+}
+
+.mdi-progress-download::before {
+  content: "\F0997";
 }
 
 .mdi-puzzle::before {
@@ -986,6 +1006,10 @@
 
 .mdi-timer-outline::before {
   content: "\F051B";
+}
+
+.mdi-timer-sand::before {
+  content: "\F051F";
 }
 
 .mdi-tools::before {
