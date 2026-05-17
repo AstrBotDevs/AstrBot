@@ -54,6 +54,14 @@ class SparseRetriever:
             os.path.join(os.path.dirname(__file__), "hit_stopwords.txt"),
         )
 
+    def invalidate_cache(self, kb_id: str) -> None:
+        """清除指定 KB 的 BM25 索引缓存。
+
+        当 KB 的 enabled 状态切换或内容增删改时调用,确保下次检索使用
+        最新的索引。pop 用 default=None 保证未缓存的 kb_id 调用安全 (no-op)。
+        """
+        self._index_cache.pop(kb_id, None)
+
     async def retrieve(
         self,
         query: str,
