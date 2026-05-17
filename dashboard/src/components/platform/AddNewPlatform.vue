@@ -961,16 +961,48 @@ export default {
       this.$emit('show-toast', { message: message, type: 'error' });
     },
 
+    buildRandomPlatformIdSuffix() {
+      const letters = 'abcdefghijklmnopqrstuvwxyz';
+      let suffix = '_';
+      for (let i = 0; i < 4; i += 1) {
+        suffix += letters[Math.floor(Math.random() * letters.length)];
+      }
+      return suffix;
+    },
+
     handlePlatformRegistrationCreated(data) {
-      if (!this.selectedPlatformConfig || !data?.bot_name) {
+      if (!this.selectedPlatformConfig || !data) {
         return;
       }
       const currentId = String(this.selectedPlatformConfig.id || '').trim();
-      const safeBotName = String(data.bot_name || '').trim().replace(/[!:]/g, '_');
-      if (!currentId || !safeBotName) {
+      const platformType = this.selectedPlatformConfig.type;
+      if (!currentId) {
         return;
       }
-      const suffix = `-${safeBotName}`;
+
+      let suffix = '';
+      const explicitSuffix = String(data.platform_id_suffix || '').trim().replace(/[!:]/g, '_');
+      if (explicitSuffix) {
+        suffix = explicitSuffix.startsWith('_') || explicitSuffix.startsWith('-')
+          ? explicitSuffix
+          : `_${explicitSuffix}`;
+      } else if (data.bot_name) {
+        const safeBotName = String(data.bot_name || '').trim().replace(/[!:]/g, '_');
+        if (safeBotName) {
+          suffix = `-${safeBotName}`;
+        }
+      } else if (platformType === 'weixin_oc' || platformType === 'dingtalk') {
+        suffix = this.buildRandomPlatformIdSuffix();
+      }
+
+      if (!suffix) {
+        return;
+      }
+
+      if ((platformType === 'weixin_oc' || platformType === 'dingtalk') && /_[a-z]{4}$/.test(currentId)) {
+        return;
+      }
+
       this.selectedPlatformConfig.id = currentId.endsWith(suffix)
         ? currentId
         : `${currentId}${suffix}`;
