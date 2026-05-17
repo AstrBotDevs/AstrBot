@@ -59,6 +59,21 @@ def _is_plugin_path(pathname: str | None) -> bool:
     return ("data/plugins" in norm_path) or ("astrbot/builtin_stars/" in norm_path)
 
 
+def _get_plugin_tag(pathname: str | None) -> str:
+    if not pathname:
+        return "[Core]"
+    norm_path = os.path.normpath(pathname)
+    for prefix in (
+        "data" + os.sep + "plugins" + os.sep,
+        "astrbot" + os.sep + "builtin_stars" + os.sep,
+    ):
+        if prefix in norm_path:
+            idx = norm_path.index(prefix) + len(prefix)
+            plugin_name = norm_path[idx:].split(os.sep)[0]
+            return f"[{plugin_name}]"
+    return "[Core]"
+
+
 def _get_short_level_name(level_name: str) -> str:
     level_map = {
         "DEBUG": "DBUG",
@@ -81,7 +96,7 @@ def _build_source_file(pathname: str | None) -> str:
 
 def _patch_record(record: "Record") -> None:
     extra = record["extra"]
-    extra.setdefault("plugin_tag", "[Core]")
+    extra.setdefault("plugin_tag", _get_plugin_tag(record["file"].path))
     extra.setdefault("short_levelname", _get_short_level_name(record["level"].name))
     level_no = record["level"].no
     extra.setdefault("astrbot_version_tag", f" [v{VERSION}]" if level_no >= 30 else "")
