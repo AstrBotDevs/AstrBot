@@ -157,6 +157,16 @@ In the example below, we define a Main Agent responsible for delegating tasks to
 Define Tools:
 
 ```py
+from mcp.types import CallToolResult
+
+from astrbot.api import logger
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_agent_context import AstrAgentContext
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+
+
 @dataclass
 class AssignAgentTool(FunctionTool[AstrAgentContext]):
     """Main agent uses this tool to decide which sub-agent to delegate a task to."""
@@ -334,6 +344,30 @@ class Conversation:
 ```
 
 :::
+
+### Quickly Adding LLM Records to a Conversation `add_message_pair`
+
+```py
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    UserMessageSegment,
+    TextPart,
+)
+
+curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
+user_msg = UserMessageSegment(content=[TextPart(text="hi")])
+llm_resp = await self.context.llm_generate(
+    chat_provider_id=provider_id,  # Chat model ID
+    contexts=[user_msg],  # When prompt is not specified, contexts is used as input; if both prompt and contexts are provided, prompt is appended to the end of the LLM input
+)
+await conv_mgr.add_message_pair(
+    cid=curr_cid,
+    user_message=user_msg,
+    assistant_message=AssistantMessageSegment(
+        content=[TextPart(text=llm_resp.completion_text)]
+    ),
+)
+```
 
 ### Main Methods
 
