@@ -25,6 +25,27 @@ from astrbot.core.computer.olayer.interactive_shell import (
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_root
 
+_BLOCKED_COMMAND_PATTERNS = [
+    " rm -rf ",
+    " rm -fr ",
+    " rm -r ",
+    " mkfs",
+    " dd if=",
+    " shutdown",
+    " reboot",
+    " poweroff",
+    " halt",
+    " sudo ",
+    ":(){:|:&};:",
+    " kill -9 ",
+    " killall ",
+]
+
+
+def _is_safe_command(command: str) -> bool:
+    cmd = f" {command.strip().lower()} "
+    return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
+
 
 @dataclass
 class _LocalInteractiveSession:
@@ -58,25 +79,87 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
         self._sessions: dict[str, _LocalInteractiveSession] = {}
         self._session_lock = threading.Lock()
         self._cleanup_task: asyncio.Task | None = None
+        self._eof_queue: asyncio.Queue[str] = asyncio.Queue()
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._max_sessions = 10
         self._session_timeout_seconds = 1800  # 30 minutes
 
     async def _ensure_cleanup_task(self) -> None:
         """Ensure the periodic cleanup task is running."""
         if self._cleanup_task is None or self._cleanup_task.done():
+            # Capture the running loop so reader threads can safely
+            # post EOF notifications back via call_soon_threadsafe.
+            self._loop = asyncio.get_running_loop()
             self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def _cleanup_loop(self) -> None:
-        """Periodically clean up terminated and idle sessions."""
+        """Periodically clean up terminated and idle sessions.
+
+        Also reacts immediately when a reader thread signals EOF via
+        :attr:`_eof_queue`, so that exited sessions are reclaimed
+        without waiting for the next 60-second sweep.
+        """
         while True:
             try:
-                await asyncio.sleep(60)  # Check every minute
-                self._cleanup_terminated()
-                self._cleanup_idle_sessions()
+                # Wait up to 60 s for an EOF signal; if none arrives,
+                # fall through to the periodic sweep.
+                session_id = await asyncio.wait_for(self._eof_queue.get(), timeout=60)
+                self._cleanup_session_by_id(session_id)
+            except asyncio.TimeoutError:
+                pass
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.warning("[InteractiveShell] Cleanup error: %s", e)
+                continue
+
+            # Periodic scans run regardless of whether an EOF arrived.
+            try:
+                self._cleanup_terminated()
+                self._cleanup_idle_sessions()
+            except Exception as e:
+                logger.warning("[InteractiveShell] Cleanup error: %s", e)
+
+    def _cleanup_session_by_id(self, session_id: str) -> None:
+        """Remove a single session identified by *session_id*.
+
+        Used by :meth:`_cleanup_loop` when a reader thread signals EOF.
+        The session may already have been removed by a concurrent
+        :meth:`terminate` call, so missing entries are silently ignored.
+        """
+        session: _LocalInteractiveSession | None = None
+        with self._session_lock:
+            session = self._sessions.get(session_id)
+
+        if session is None:
+            return
+
+        # Avoid racing with an explicit terminate() that is already
+        # in the middle of cleaning the same session.
+        session.stop_reading.set()
+        for t in session.read_threads:
+            if t.is_alive():
+                t.join(timeout=1.0)
+
+        # Close pipes to release file descriptors promptly.
+        for pipe in [
+            session.process.stdin,
+            session.process.stdout,
+            session.process.stderr,
+        ]:
+            if pipe:
+                try:
+                    pipe.close()
+                except Exception:
+                    pass
+
+        with self._session_lock:
+            removed = self._sessions.pop(session_id, None)
+
+        if removed is not None:
+            logger.info(
+                "[InteractiveShell] Cleaned up terminated session: %s", session_id
+            )
 
     def _cleanup_terminated(self) -> None:
         """Remove sessions for processes that have exited."""
@@ -135,11 +218,17 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
         """Start background threads to read process output (binary mode)."""
 
         def _read_stream(stream, is_stderr: bool) -> None:
-            """Continuously read from a stream into the buffer."""
+            """Continuously read from a stream into the buffer.
+
+            When EOF is reached (empty chunk) the session is queued for
+            immediate cleanup by the asyncio cleanup loop.
+            """
+            eof_reached = False
             try:
                 while not session.stop_reading.is_set():
                     chunk = stream.read(4096)
                     if not chunk:
+                        eof_reached = True
                         break
                     with session.lock:
                         if is_stderr:
@@ -149,6 +238,18 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                         session.last_activity = time.time()
             except Exception:
                 pass
+            finally:
+                if eof_reached:
+                    loop = self._loop
+                    if loop is not None and not loop.is_closed():
+                        try:
+                            loop.call_soon_threadsafe(
+                                self._eof_queue.put_nowait, session.session_id
+                            )
+                        except RuntimeError:
+                            # Loop has been closed between the check above
+                            # and the call_soon_threadsafe invocation.
+                            pass
 
         if session.process.stdout:
             t = threading.Thread(
@@ -175,6 +276,8 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
         env: dict[str, str] | None = None,
         shell: bool = True,
     ) -> InteractiveSession:
+        if not _is_safe_command(command):
+            raise PermissionError("Blocked unsafe shell command.")
         """Start an interactive shell session."""
         await self._ensure_cleanup_task()
 
@@ -209,7 +312,9 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
 
             actual_command = command
             if sys.platform == "win32":
-                popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+                popen_kwargs["creationflags"] = (
+                    subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+                )
                 # For cmd.exe on Windows, prefix with chcp to set UTF-8 code page
                 if shell and actual_command.strip().lower().startswith("cmd"):
                     actual_command = f"chcp 65001 >nul && {actual_command}"
@@ -311,10 +416,7 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                     if not chunk:
                         continue
 
-                    try:
-                        text = chunk.decode("utf-8", errors="replace")
-                    except Exception:
-                        text = chunk.decode("utf-8", errors="replace")
+                    text = chunk.decode("utf-8", errors="replace")
 
                     # On Windows, also try system encoding if UTF-8 produces all replacement chars
                     if sys.platform == "win32" and "\ufffd" in text and len(text) > 1:
@@ -364,19 +466,6 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
             return "".join(result_parts)
 
         return await asyncio.to_thread(_read)
-
-    async def interact(
-        self,
-        session_id: str,
-        input_data: str,
-        timeout: float = 5.0,
-        max_chars: int | None = None,
-    ) -> str:
-        """Send input and read output atomically."""
-        await self.send(session_id, input_data)
-        # Allow process time to react
-        await asyncio.sleep(0.1)
-        return await self.read(session_id, timeout=timeout, max_chars=max_chars)
 
     async def terminate(
         self,
