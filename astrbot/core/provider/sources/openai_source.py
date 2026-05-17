@@ -901,6 +901,9 @@ class ProviderOpenAIOfficial(Provider):
                             args = {}
                     else:
                         args = tool_call.function.arguments
+                    # Some API may return None for tools with no parameters
+                    if args is None:
+                        args = {}
                     args_ls.append(args)
                     func_name_ls.append(tool_call.function.name)
                     tool_call_ids.append(tool_call.id)
