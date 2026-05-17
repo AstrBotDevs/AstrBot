@@ -111,17 +111,26 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                 # Detect by Content-Type and surface the actual API error so callers
                 # see the real status_code / status_msg instead of a confusing
                 # parsing failure later in the SSE loop.
-                content_type = response.headers.get("Content-Type", "")
-                if "text/event-stream" not in content_type:
+                # MIME types are case-insensitive (RFC 7231 §3.1.1.1), and some
+                # error responses include parameters like "application/json; charset=utf-8".
+                # Lower-case the value and compare against the bare media-type prefix.
+                content_type = response.headers.get("Content-Type", "").lower().split(";", 1)[0].strip()
+                if content_type != "text/event-stream":
                     body = await response.text()
+                    err_msg = body[:200] or "empty response body"
+                    err_code = "unknown"
                     try:
                         err_data = json.loads(body)
-                        base_resp = err_data.get("base_resp", {})
-                        err_msg = base_resp.get("status_msg", body[:200])
-                        err_code = base_resp.get("status_code", "unknown")
+                        # Guard against `base_resp: null`, missing key, or a JSON
+                        # array root — all of which would have raised
+                        # AttributeError on `.get(...)` before this change.
+                        if isinstance(err_data, dict):
+                            base_resp = err_data.get("base_resp")
+                            if isinstance(base_resp, dict):
+                                err_msg = base_resp.get("status_msg", err_msg)
+                                err_code = base_resp.get("status_code", err_code)
                     except json.JSONDecodeError:
-                        err_msg = body[:200]
-                        err_code = "unknown"
+                        pass
                     raise RuntimeError(
                         f"MiniMax TTS API error (code={err_code}): {err_msg}"
                     )
