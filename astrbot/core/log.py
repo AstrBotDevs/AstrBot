@@ -415,3 +415,8 @@ class LogManager:
             backup_count=3,
             trace=True,
         )
+
+
+def get_loguru_logger():
+    """Returns the patched loguru logger for plugin use."""
+    return _loguru
