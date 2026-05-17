@@ -71,8 +71,8 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
         while True:
             try:
                 await asyncio.sleep(60)  # Check every minute
-                self._cleanup_terminated()
-                self._cleanup_idle_sessions()
+                await asyncio.to_thread(self._cleanup_terminated)
+                await asyncio.to_thread(self._cleanup_idle_sessions)
             except asyncio.CancelledError:
                 break
             except Exception as e:
