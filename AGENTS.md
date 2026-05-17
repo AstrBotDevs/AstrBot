@@ -52,3 +52,10 @@ ruff check .
 
 1. Title format: use conventional commit messages
 2. Use English to write PR title and descriptions.
+
+## Release versions
+
+1. Replace current version name to specific version name.
+2. Write changelog in `changelogs/`, you can refer to the full commit messages between the latest tag to the latest commit.
+3. Make and push a commit into master branch with message format like: `chore: bump version to 4.25.0`
+4. Create a tag and push the tag. For example: `git tag v4.25.0 && git push origin v4.25.0`
