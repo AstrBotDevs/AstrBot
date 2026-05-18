@@ -569,18 +569,24 @@ def _build_segments(raw_lines: list[str]) -> list[dict]:
             tc_data = _parse_tool_call(line)
             if tc_data:
                 tool_calls_buf.append(tc_data)
+            else:
+                user_buf.append(line)  # defensive: treat as user message
         elif line.startswith(TOOL_RES_PREFIX):
             flush_user()
             flush_tool_calls()
             tool_msg = _parse_tool_result(line)
             if tool_msg:
                 segments.append(tool_msg)
+            else:
+                user_buf.append(line)  # defensive: treat as user message
         elif line.startswith(BOT_MARKER):
             flush_user()
             flush_tool_calls()
             content = _extract_bot_content(line)
             if content:
                 segments.append({"role": "assistant", "content": content})
+            else:
+                user_buf.append(line)  # defensive: treat as user message
         else:
             user_buf.append(line)
 
