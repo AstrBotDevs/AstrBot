@@ -41,8 +41,10 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         # Users can configure these for higher accuracy on non-English speech.
         # `.strip() or ""` handles accidental whitespace in YAML config and
         # accepts a `None` value gracefully (treated as "not configured").
-        self.language = (provider_config.get("language") or "").strip()
-        self.prompt = (provider_config.get("prompt") or "").strip()
+        # Cast to str before strip() so non-string config values (e.g. an int or
+        # bool a YAML editor accidentally typed) don't AttributeError on init.
+        self.language = str(provider_config.get("language") or "").strip()
+        self.prompt = str(provider_config.get("prompt") or "").strip()
         # Whisper API defaults to 0 (deterministic). Operators can override
         # via `temperature` in the provider config; values are clamped by the
         # API itself (0–1.0 for most models).
@@ -76,6 +78,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         """Only supports mp3, mp4, mpeg, m4a, wav, webm"""
         is_tencent = False
         output_path = None
+        downloaded_path = None  # set when audio_url is fetched from http
 
         if audio_url.startswith("http"):
             if "multimedia.nt.qq.com.cn" in audio_url:
@@ -88,6 +91,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             )
             await download_file(audio_url, path)
             audio_url = path
+            downloaded_path = path
 
         if not os.path.exists(audio_url):
             raise FileNotFoundError(f"文件不存在: {audio_url}")
@@ -150,12 +154,17 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         finally:
             audio_file.close()
 
-        # remove temp file
-        if output_path and os.path.exists(output_path):
-            try:
-                os.remove(audio_url)
-            except Exception as e:
-                logger.error(f"Failed to remove temp file {audio_url}: {e}")
+        # Remove any temp files we created: the downloaded source (if any) and
+        # the format-converted output (if any). Previously only `output_path`
+        # was cleaned, leaking the downloaded temp file when no format
+        # conversion was required (e.g. an mp3 / wav URL with no opus/silk/
+        # amr suffix). See gemini-code-assist review on this PR.
+        for tmp in (output_path, downloaded_path):
+            if tmp and os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception as e:
+                    logger.error(f"Failed to remove temp file {tmp}: {e}")
         return result.text
 
     async def terminate(self):
