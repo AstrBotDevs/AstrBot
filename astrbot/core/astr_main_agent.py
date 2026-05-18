@@ -369,7 +369,7 @@ def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> Non
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(LocalPythonTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
+    # req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(RobustFileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellStartTool))

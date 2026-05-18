@@ -785,7 +785,6 @@ const DEFAULT_INHERENT = [
   'astrbot_execute_python',
   'astrbot_file_read_tool',
   'astrbot_file_write_tool',
-  'astrbot_file_edit_tool',
   'astrbot_robust_file_edit_tool',
   'astrbot_grep_tool'
 ]
