@@ -254,6 +254,17 @@ class SandboxManager:
         is_default: bool = False,
         status: str = SandboxStatus.RUNNING,
     ) -> dict:
+        provider = self.get_provider(provider_id)
+        retention_policy = getattr(provider, "default_retention_policy", "temporary")
+        if retention_policy not in {"temporary", "persistent"}:
+            retention_policy = "temporary"
+        if retention_policy == "persistent" and not getattr(
+            provider, "supports_persistent_reconnect", False
+        ):
+            retention_policy = "temporary"
+        if retention_policy == "persistent":
+            idle_timeout = 0
+            expires_at = None
         return {
             "sandbox_id": sandbox_id,
             "sandbox_name": sandbox_name,
@@ -272,6 +283,7 @@ class SandboxManager:
             "is_default": is_default,
             "idle_timeout": idle_timeout,
             "expires_at": expires_at,
+            "retention_policy": retention_policy,
             "status": status,
         }
 

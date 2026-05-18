@@ -22,6 +22,8 @@ class SandboxProvider(Protocol):
             provider is fully initialized at construction time.
         auto_sync_skills: If ``False``, core will skip automatic skill sync after
             booting a sandbox for this provider. Defaults to ``True``.
+        default_retention_policy: Default lifecycle policy for new managed
+            sandboxes. Defaults to ``temporary``.
     """
 
     provider_id: str
@@ -32,6 +34,7 @@ class SandboxProvider(Protocol):
     provider_api_version: str = "1.0"
     auto_sync_skills: bool = True
     supports_persistent_reconnect: bool = False
+    default_retention_policy: str = "temporary"
 
     def build_create_config(self, context: Context, session_id: str) -> dict: ...
 
