@@ -414,6 +414,7 @@ class SandboxManager:
                     status = current_record.get("status") if current_record else None
             if status in {
                 SandboxStatus.CREATING,
+                SandboxStatus.RESTORING,
                 SandboxStatus.STOPPING,
                 SandboxStatus.ERROR,
             }:
@@ -1030,7 +1031,7 @@ class SandboxManager:
                 }
             ):
                 previous_status = current.get("status") or SandboxStatus.UNKNOWN
-                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.CREATING)
+                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.RESTORING)
                 await self.save_registry_async()
                 try:
                     client = await provider.create_booter(
@@ -1043,7 +1044,7 @@ class SandboxManager:
                     latest = self.registry.get_sandbox(sandbox_id)
                     if (
                         latest is not None
-                        and latest.get("status") == SandboxStatus.CREATING
+                        and latest.get("status") == SandboxStatus.RESTORING
                     ):
                         self.registry.update_sandbox_status(sandbox_id, previous_status)
                         await self.save_registry_async()
@@ -1166,6 +1167,8 @@ class SandboxManager:
         status = record.get("status")
         if status == SandboxStatus.CREATING:
             raise RuntimeError(f"Sandbox {sandbox_id} is still being created")
+        if status == SandboxStatus.RESTORING:
+            raise RuntimeError(f"Sandbox {sandbox_id} is being restored")
         if status == SandboxStatus.STOPPING:
             raise RuntimeError(f"Sandbox {sandbox_id} is being destroyed")
         if status == SandboxStatus.STOPPED:
@@ -1219,6 +1222,8 @@ class SandboxManager:
         if booter is None:
             if status == SandboxStatus.CREATING:
                 raise RuntimeError(f"Sandbox {sandbox_id} is still being created")
+            if status == SandboxStatus.RESTORING:
+                raise RuntimeError(f"Sandbox {sandbox_id} is being restored")
             if status == SandboxStatus.STOPPING:
                 raise RuntimeError(f"Sandbox {sandbox_id} is being destroyed")
             if status == SandboxStatus.STOPPED:
@@ -1375,6 +1380,8 @@ class SandboxManager:
         if booter is None:
             if status == SandboxStatus.CREATING:
                 raise RuntimeError(f"Sandbox {sandbox_id} is still being created")
+            if status == SandboxStatus.RESTORING:
+                raise RuntimeError(f"Sandbox {sandbox_id} is being restored")
             if status == SandboxStatus.STOPPING:
                 raise RuntimeError(f"Sandbox {sandbox_id} is being destroyed")
             if status == SandboxStatus.STOPPED:

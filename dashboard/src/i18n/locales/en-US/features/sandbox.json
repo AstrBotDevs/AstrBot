@@ -33,6 +33,7 @@
         "temporary": "Temporary",
         "persistent": "Persistent",
         "creating": "Creating",
+        "restoring": "Restoring",
         "running": "Running",
         "error": "Error",
         "stopping": "Stopping",

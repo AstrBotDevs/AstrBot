@@ -130,13 +130,16 @@ def test_sandbox_management_page_does_not_show_legacy_provider_hint():
     assert "tm('create.providerHint')" not in content
 
 
-def test_sandbox_management_page_does_not_allow_configure_while_creating():
+def test_sandbox_management_page_does_not_allow_configure_while_creating_or_restoring():
     content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
         encoding="utf-8"
     )
 
     assert "case 'configure':" in content
-    assert "return status !== 'creating' && status !== 'stopping'" in content
+    assert (
+        "return status !== 'creating' && status !== 'restoring' && status !== 'stopping'"
+        in content
+    )
 
 
 def test_sandbox_management_page_does_not_toast_running_after_create():

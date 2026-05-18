@@ -1417,6 +1417,37 @@ async def test_manager_persistent_reconnect_failure_restores_previous_status(tmp
 
 
 @pytest.mark.asyncio
+async def test_manager_marks_persistent_reconnect_as_restoring(tmp_path):
+    provider = RecordCapturingProvider()
+    manager, _provider = _manager(tmp_path, provider)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="unknown",
+        retention_policy="persistent",
+    )
+
+    task = asyncio.create_task(
+        manager.get_observer_booter_by_id(
+            "generic-1", "dashboard", require_lease=False, context=object()
+        )
+    )
+    await asyncio.wait_for(provider.boot_started.wait(), timeout=1)
+
+    assert manager.registry.get_sandbox("generic-1")["status"] == "restoring"
+
+    provider.allow_boot.set()
+    await task
+    assert manager.registry.get_sandbox("generic-1")["status"] == "running"
+
+
+@pytest.mark.asyncio
 async def test_manager_treats_base_available_stub_as_available(tmp_path):
     manager, _provider = _manager(tmp_path)
     assert await manager.booter_available(BaseDefaultAvailableBooter()) is True

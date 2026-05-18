@@ -475,6 +475,7 @@ function statusLabel(item?: SandboxRecord | string | null) {
   const key = displayStatusKey(item)
   const labels: Record<string, string> = {
     creating: tm('labels.creating'),
+    restoring: tm('labels.restoring'),
     running: tm('labels.running'),
     busy: tm('labels.busy'),
     available: tm('labels.available'),
@@ -490,6 +491,7 @@ function statusColor(item?: SandboxRecord | string | null) {
   const key = displayStatusKey(item)
   const colors: Record<string, string> = {
     creating: 'amber',
+    restoring: 'info',
     running: 'success',
     busy: 'warning',
     available: 'success',
@@ -502,7 +504,7 @@ function statusColor(item?: SandboxRecord | string | null) {
 }
 
 function isCreatePendingStatus(status?: string | null) {
-  return status === 'creating'
+  return status === 'creating' || status === 'restoring'
 }
 
 function canUseAction(item: SandboxRecord, action: SandboxAction) {
@@ -512,7 +514,7 @@ function canUseAction(item: SandboxRecord, action: SandboxAction) {
     case 'setDefault':
       return !item.is_default && status !== 'stopping'
     case 'configure':
-      return status !== 'creating' && status !== 'stopping'
+      return status !== 'creating' && status !== 'restoring' && status !== 'stopping'
     case 'console':
       return status === 'running' && hasCapability(item, 'shell')
     case 'release':

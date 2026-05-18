@@ -340,11 +340,15 @@ class SandboxRegistry:
             if record.get("retention_policy") == "persistent":
                 if record.get("status") == SandboxStatus.RUNNING:
                     record["status"] = SandboxStatus.UNKNOWN.value
-                elif record.get("status") == SandboxStatus.CREATING:
+                elif record.get("status") in {
+                    SandboxStatus.CREATING,
+                    SandboxStatus.RESTORING,
+                }:
                     record["status"] = SandboxStatus.ERROR.value
             elif record.get("status") in {
                 SandboxStatus.RUNNING,
                 SandboxStatus.CREATING,
+                SandboxStatus.RESTORING,
                 SandboxStatus.UNKNOWN,
             }:
                 record["status"] = SandboxStatus.ERROR.value

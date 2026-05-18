@@ -33,6 +33,7 @@
         "temporary": "临时",
         "persistent": "持久",
         "creating": "创建中",
+        "restoring": "恢复中",
         "running": "运行中",
         "error": "异常",
         "stopping": "销毁中",

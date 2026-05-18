@@ -162,7 +162,9 @@ def test_registry_loads_non_object_payload_as_empty_registry(tmp_path):
     assert registry.list_sandboxes() == []
 
 
-def test_registry_reconcile_startup_marks_non_persistent_creating_records_error(tmp_path):
+def test_registry_reconcile_startup_marks_non_persistent_creating_records_error(
+    tmp_path,
+):
     registry = _registry(tmp_path)
     registry.upsert_sandbox(
         sandbox_id="generic-1",
@@ -205,6 +207,29 @@ def test_registry_reconcile_startup_retains_temporary_records_as_error(tmp_path)
     assert record["status"] == "error"
     assert record["controller_session_id"] is None
     assert record["lease_expires_at"] is None
+
+
+def test_registry_reconcile_startup_marks_non_persistent_restoring_records_error(
+    tmp_path,
+):
+    registry = _registry(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Sandbox generic-1",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-1",
+        owner_session_id="session-1",
+        connect_info={"name": "generic-1"},
+        status="restoring",
+    )
+
+    registry.reconcile_startup()
+
+    record = registry.get_sandbox("generic-1")
+    assert record is not None
+    assert record["status"] == "error"
 
 
 def test_registry_reconcile_startup_marks_persistent_running_unknown(tmp_path):
