@@ -2000,8 +2000,9 @@ class TestApplySandboxTools:
         assert "sandboxed environment" in req.system_prompt
         assert "check the current sandbox first" in req.system_prompt
         assert "listing sandbox providers" in req.system_prompt
-        assert "list sandboxes and prefer reusing" in req.system_prompt
-        assert "idle default sandbox" in req.system_prompt
+        assert "inspect each sandbox's access field" in req.system_prompt
+        assert "Never treat status=running alone as reusable" in req.system_prompt
+        assert "access.status=occupied" in req.system_prompt
         assert "fresh or separate environment" in req.system_prompt
         assert "send screenshots to the user to show progress" not in req.system_prompt
 

@@ -127,14 +127,14 @@ def _sandbox_status_for_session(record: dict, session_id: str) -> str:
 
 
 def _redact_sandbox_for_session(record: dict, session_id: str, *, admin: bool) -> dict:
-    if admin:
-        return record
     visible = dict(record)
     visible["access"] = {
         "status": _sandbox_status_for_session(record, session_id),
         "can_switch": _visible_to_session(record, session_id),
         "occupied": not _is_idle_sandbox(record),
     }
+    if admin:
+        return visible
     visible.pop("connect_info", None)
     visible["owner_session_id"] = None
     visible["owner_user_id"] = None
@@ -161,7 +161,12 @@ def _sandbox_access_denied(
 @dataclass
 class ListSandboxesTool(FunctionTool):
     name: str = "astrbot_list_sandboxes"
-    description: str = "List all managed sandboxes. Use this before creating a new sandbox when you need to find a reusable or default sandbox."
+    description: str = (
+        "List all managed sandboxes with an explicit access.status for this session: "
+        "current means this session controls it, idle means it is reusable, and "
+        "occupied means another active session controls it and you must not switch to it unless taking over is intended. "
+        "Use this before creating a new sandbox when you need to find a reusable or default sandbox."
+    )
     parameters: dict = field(
         default_factory=lambda: {"type": "object", "properties": {}}
     )
@@ -298,7 +303,11 @@ class CreateSandboxTool(FunctionTool):
 @dataclass
 class SwitchSandboxTool(FunctionTool):
     name: str = "astrbot_switch_sandbox"
-    description: str = "Switch this session to an existing running sandbox by sandbox_id. Use this after listing sandboxes when you want to reuse an existing sandbox instead of creating a new one."
+    description: str = (
+        "Switch this session to an existing running sandbox by sandbox_id. "
+        "Only switch to sandboxes whose list result has access.can_switch=true, normally access.status=current or idle. "
+        "Do not treat status=running alone as reusable; access.status=occupied means another active session controls it."
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",

@@ -39,6 +39,17 @@ def _context():
     )
 
 
+def _admin_context_without_admin_requirement():
+    event = FakeEvent()
+    event.role = "admin"
+    plugin_context = SimpleNamespace(
+        get_config=lambda umo=None: {
+            "provider_settings": {"computer_use_require_admin": False}
+        }
+    )
+    return ContextWrapper(context=SimpleNamespace(event=event, context=plugin_context))
+
+
 def _member_context_without_admin_requirement():
     plugin_context = SimpleNamespace(
         get_config=lambda umo=None: {
@@ -295,6 +306,60 @@ async def test_member_list_sandboxes_includes_all_sandboxes_with_status(
     assert by_id["other-idle"]["access"]["can_switch"] is True
     assert by_id["other-busy"]["access"]["status"] == "occupied"
     assert by_id["other-busy"]["access"]["can_switch"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_sandboxes_includes_access_status_for_admin(monkeypatch):
+    class FakeManager:
+        def list_sandboxes(self):
+            return [
+                {
+                    "sandbox_id": "current",
+                    "controller_session_id": "session-a",
+                    "controller_user_id": "user-a",
+                    "connect_info": {"secret": "current-secret"},
+                    "status": "running",
+                },
+                {
+                    "sandbox_id": "occupied",
+                    "controller_session_id": "session-b",
+                    "controller_user_id": "user-b",
+                    "lease_expires_at": time.time() + 60,
+                    "connect_info": {"secret": "occupied-secret"},
+                    "status": "running",
+                },
+                {
+                    "sandbox_id": "idle",
+                    "controller_session_id": None,
+                    "connect_info": {"secret": "idle-secret"},
+                    "status": "running",
+                },
+            ]
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
+    )
+
+    result = await ListSandboxesTool().call(_admin_context_without_admin_requirement())
+    payload = json.loads(str(result))
+    by_id = {item["sandbox_id"]: item for item in payload["sandboxes"]}
+
+    assert by_id["current"]["access"] == {
+        "status": "current",
+        "can_switch": True,
+        "occupied": True,
+    }
+    assert by_id["occupied"]["access"] == {
+        "status": "occupied",
+        "can_switch": False,
+        "occupied": True,
+    }
+    assert by_id["idle"]["access"] == {
+        "status": "idle",
+        "can_switch": True,
+        "occupied": False,
+    }
+    assert by_id["occupied"]["connect_info"]["secret"] == "occupied-secret"
 
 
 @pytest.mark.asyncio
