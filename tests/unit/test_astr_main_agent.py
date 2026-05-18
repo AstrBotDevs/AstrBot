@@ -2005,9 +2005,7 @@ class TestApplySandboxTools:
         assert "fresh or separate environment" in req.system_prompt
         assert "send screenshots to the user to show progress" not in req.system_prompt
 
-    def test_apply_sandbox_tools_adds_all_provider_tools_with_scoped_descriptions(
-        self, mock_context
-    ):
+    def test_apply_sandbox_tools_does_not_scan_provider_tool_names(self, mock_context):
         module = ama
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
@@ -2016,13 +2014,6 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
         req.session_id = "session-a"
-
-        provider_tool = FunctionTool(
-            name="provider_a_screenshot",
-            parameters={"type": "object", "properties": {}},
-            description="Provider A screenshot",
-        )
-        provider_tool.sandbox_provider_id = "provider_a"
 
         with (
             patch(
@@ -2036,28 +2027,20 @@ class TestApplySandboxTools:
             ),
             patch(
                 "astrbot.core.provider.register.llm_tools.get_func",
-                return_value=provider_tool,
+                side_effect=AssertionError("provider tools must be registered once"),
             ),
         ):
             module._apply_sandbox_tools(config, req)
 
-        tool = req.func_tool.get_tool("provider_a_screenshot")
-        assert tool is not None
-        assert "Sandbox provider-specific tool: provider_a" in tool.description
-        assert "current sandbox uses provider 'provider_a'" in tool.description
+        assert "provider_a_screenshot" not in req.func_tool.names()
         assert "send screenshots to the user to show progress" not in req.system_prompt
 
-    def test_apply_sandbox_tools_includes_provider_tools_without_current_sandbox(
+    def test_registered_provider_tools_are_included_by_persona_toolset(
         self, mock_context
     ):
         module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={"booter": "provider_a"},
-        )
-        req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
-        req.session_id = "session-a"
+        cfg = {"computer_use_runtime": "sandbox"}
+        toolset = ToolSet()
 
         provider_tool = FunctionTool(
             name="provider_a_screenshot",
@@ -2065,27 +2048,13 @@ class TestApplySandboxTools:
             description="Provider A screenshot",
         )
         provider_tool.sandbox_provider_id = "provider_a"
+        toolset.add_tool(provider_tool)
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.list_sandbox_providers",
-                return_value=[
-                    {
-                        "provider_id": "provider_a",
-                        "tool_names": ["provider_a_screenshot"],
-                    }
-                ],
-            ),
-            patch(
-                "astrbot.core.provider.register.llm_tools.get_func",
-                return_value=provider_tool,
-            ),
-        ):
-            module._apply_sandbox_tools(config, req)
+        filtered = module._filter_tools_for_current_config(
+            toolset, cfg, "session-a"
+        )
 
-        assert "provider_a_screenshot" in req.func_tool.names()
-        assert "[provider_a provider]" not in req.system_prompt
-        assert "send screenshots to the user to show progress" not in req.system_prompt
+        assert "provider_a_screenshot" in filtered.names()
 
     def test_handoff_runtime_computer_tools_include_sandbox_lifecycle_tools(self):
         tool_mgr = MagicMock()
@@ -2134,18 +2103,13 @@ class TestApplySandboxTools:
         tool_mgr.get_func.side_effect = lambda name: None
         ama.FunctionToolExecutor._runtime_computer_tools_cache.clear()
 
-        with patch(
-            "astrbot.core.computer.computer_client.list_sandbox_providers",
-            return_value=[],
-        ) as provider_info:
-            first = ama.FunctionToolExecutor._get_runtime_computer_tools(
-                "sandbox", tool_mgr, "provider_a"
-            )
-            call_count = tool_mgr.get_builtin_tool.call_count
-            second = ama.FunctionToolExecutor._get_runtime_computer_tools(
-                "sandbox", tool_mgr, "provider_a"
-            )
+        first = ama.FunctionToolExecutor._get_runtime_computer_tools(
+            "sandbox", tool_mgr, "provider_a"
+        )
+        call_count = tool_mgr.get_builtin_tool.call_count
+        second = ama.FunctionToolExecutor._get_runtime_computer_tools(
+            "sandbox", tool_mgr, "provider_a"
+        )
 
         assert first is second
         assert tool_mgr.get_builtin_tool.call_count == call_count
-        provider_info.assert_called_once()

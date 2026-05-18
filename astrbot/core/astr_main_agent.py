@@ -29,10 +29,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.computer import computer_client
-from astrbot.core.computer.sandbox_tool_binding import (
-    resolve_all_sandbox_provider_bindings,
-    tool_available_in_runtime,
-)
+from astrbot.core.computer.sandbox_tool_binding import tool_available_in_runtime
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
@@ -1047,13 +1044,6 @@ def _apply_sandbox_tools(
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    provider_tools = resolve_all_sandbox_provider_bindings(
-        tool_mgr,
-        computer_client.list_sandbox_providers,
-    )
-    for tool in provider_tools:
-        req.func_tool.add_tool(tool)
-
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
 

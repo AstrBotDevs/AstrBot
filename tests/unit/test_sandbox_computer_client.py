@@ -116,6 +116,36 @@ def test_register_sandbox_provider_tags_provider_tools(monkeypatch, tmp_path):
     computer_client.register_sandbox_provider(FakeProvider(), tools=[tool])
 
     assert tool.sandbox_provider_id == "generic"
+    assert "Sandbox provider-specific tool: generic" in tool.description
+    assert "current sandbox uses provider 'generic'" in tool.description
+
+
+def test_register_sandbox_provider_does_not_duplicate_provider_tool_description(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.agent.tool import FunctionTool
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={},
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    monkeypatch.setattr(computer_client, "sandbox_registry", manager.registry)
+    tool = FunctionTool(
+        name="generic_tool",
+        parameters={"type": "object", "properties": {}},
+        description=(
+            "[Sandbox provider-specific tool: generic] This tool only works when "
+            "the current sandbox uses provider 'generic'. generic"
+        ),
+    )
+
+    computer_client.register_sandbox_provider(FakeProvider(), tools=[tool])
+
+    assert tool.description.count("Sandbox provider-specific tool: generic") == 1
 
 
 @pytest.mark.asyncio
@@ -284,19 +314,11 @@ def test_register_provider_can_replace_when_requested(monkeypatch, tmp_path):
     }
 
 
-def test_unregister_provider_clears_runtime_tool_cache(monkeypatch, tmp_path):
+def test_unregister_provider_removes_registered_provider_tools(monkeypatch, tmp_path):
+    from astrbot.core.agent.tool import FunctionTool
     from astrbot.core.computer import computer_client
     from astrbot.core.computer.sandbox_manager import SandboxManager
     from astrbot.core.computer.sandbox_registry import SandboxRegistry
-
-    class NamedTool:
-        def __init__(self, name):
-            self.name = name
-            self.active = True
-
-    tool_mgr = type("ToolMgr", (), {})()
-    tool_mgr.get_builtin_tool = lambda cls, **kwargs: cls()
-    tool_mgr.get_func = lambda name: NamedTool(name)
 
     manager = SandboxManager(
         registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
@@ -305,20 +327,19 @@ def test_unregister_provider_clears_runtime_tool_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(computer_client, "sandbox_manager", manager)
     monkeypatch.setattr(computer_client, "sandbox_registry", manager.registry)
     FunctionToolExecutor.clear_runtime_computer_tools_cache()
-
-    computer_client.register_sandbox_provider(FakeProvider())
-
-    first = FunctionToolExecutor._get_runtime_computer_tools(
-        "sandbox", tool_mgr, "generic"
+    tool = FunctionTool(
+        name="generic_tool_unregister_once",
+        parameters={"type": "object", "properties": {}},
+        description="generic",
     )
-    assert "generic_tool" in first
+
+    computer_client.register_sandbox_provider(FakeProvider(), tools=[tool])
+
+    assert computer_client.llm_tools.get_func("generic_tool_unregister_once") is tool
 
     computer_client.unregister_sandbox_provider("generic")
 
-    second = FunctionToolExecutor._get_runtime_computer_tools(
-        "sandbox", tool_mgr, "generic"
-    )
-    assert "generic_tool" not in second
+    assert computer_client.llm_tools.get_func("generic_tool_unregister_once") is None
 
 
 def test_current_sandbox_provider_ignores_terminal_status(monkeypatch, tmp_path):

@@ -20,11 +20,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
-from astrbot.core.computer import computer_client
-from astrbot.core.computer.sandbox_tool_binding import (
-    resolve_all_sandbox_provider_bindings,
-    tool_available_in_runtime,
-)
+from astrbot.core.computer.sandbox_tool_binding import tool_available_in_runtime
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -280,12 +276,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 edit_tool.name: edit_tool,
                 grep_tool.name: grep_tool,
             }
-            provider_tools = resolve_all_sandbox_provider_bindings(
-                tool_mgr,
-                computer_client.list_sandbox_providers,
-            )
-            for provider_tool in provider_tools:
-                tools[provider_tool.name] = provider_tool
             cls._runtime_computer_tools_cache[cache_key] = tools
             return tools
         if runtime == "local":

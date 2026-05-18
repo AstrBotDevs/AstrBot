@@ -20,6 +20,7 @@ from .sandbox_manager import SandboxManager
 from .sandbox_models import SandboxStatus
 from .sandbox_provider import SandboxProvider
 from .sandbox_registry import SandboxRegistry
+from .sandbox_tool_binding import mark_tool_as_sandbox_provider_tool
 
 local_booter: LocalBooter | None = None
 sandbox_registry = SandboxRegistry()
@@ -78,7 +79,7 @@ def register_sandbox_provider(
     if tools:
         registered: list[FunctionTool] = []
         for tool in tools:
-            tool.sandbox_provider_id = provider.provider_id
+            mark_tool_as_sandbox_provider_tool(tool, provider.provider_id)
             llm_tools.func_list.append(tool)
             registered.append(tool)
         _provider_tools[provider.provider_id] = registered
@@ -109,8 +110,11 @@ def unregister_sandbox_provider(provider_id: str, *, force: bool = False) -> Non
 
 def _unregister_provider_tools(provider_id: str) -> None:
     registered = _provider_tools.pop(provider_id, [])
-    for tool in registered:
-        llm_tools.remove_func(tool.name)
+    if registered:
+        registered_ids = {id(tool) for tool in registered}
+        llm_tools.func_list = [
+            tool for tool in llm_tools.func_list if id(tool) not in registered_ids
+        ]
     from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 
     FunctionToolExecutor.clear_runtime_computer_tools_cache(provider_id)
