@@ -392,9 +392,12 @@ class KnowledgeBaseRoute(Route):
                 )
             try:
                 vec = await prv.get_embedding("astrbot")
-                if len(vec) != prv.get_dim():
+                actual_dim = len(vec)
+                configured_dim = prv.get_dim()
+                # configured_dim == 0 表示未配置维度，使用实际维度
+                if configured_dim != 0 and actual_dim != configured_dim:
                     raise ValueError(
-                        f"嵌入向量维度不匹配，实际是 {len(vec)}，然而配置是 {prv.get_dim()}",
+                        f"嵌入向量维度不匹配，实际是 {actual_dim}，然而配置是 {configured_dim}",
                     )
             except Exception as e:
                 return Response().error(f"测试嵌入模型失败: {e!s}").__dict__

@@ -16,6 +16,7 @@ class EmbeddingStorage:
         self.index = None
         if path and os.path.exists(path):
             self.index = faiss.read_index(path)
+            self.dimension = self.index.d
         else:
             base_index = faiss.IndexFlatL2(dimension)
             self.index = faiss.IndexIDMap(base_index)

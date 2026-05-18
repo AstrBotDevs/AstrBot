@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
+from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
@@ -34,6 +35,11 @@ class CronJobManager:
     def __init__(self, db: BaseDatabase) -> None:
         self.db = db
         self.scheduler = AsyncIOScheduler()
+        # Bypass add_executor isinstance check — directly set the executor
+        # to avoid TypeError in certain packaged environments where
+        # _create_default_executor() fails the type check.
+        self._default_executor = AsyncIOExecutor()
+        self.scheduler._executors["default"] = self._default_executor
         self._basic_handlers: dict[str, Callable[..., Any]] = {}
         self._lock = asyncio.Lock()
         self._started = False
@@ -151,6 +157,10 @@ class CronJobManager:
 
     def _schedule_job(self, job: CronJob) -> None:
         if not self._started:
+            # Ensure default executor exists before starting
+            if "default" not in self.scheduler._executors:
+                self._default_executor = AsyncIOExecutor()
+                self.scheduler._executors["default"] = self._default_executor
             self.scheduler.start()
             self._started = True
         try:
