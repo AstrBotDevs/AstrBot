@@ -247,6 +247,9 @@ class LongTermMemory:
             final_message = "".join(parts)
             logger.debug(f"ltm | {umo} | {final_message}")
             self.raw_records[umo].append(final_message)
+            self._trim_raw_records(
+                umo, max_bytes=cfg.get("ltm_raw_records_max_bytes", MAX_RAW_BYTES)
+            )
 
     # =========================================================================
     # LLM 请求前（on_llm_request 钩子 → decorate_llm_req 调用）
