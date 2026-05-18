@@ -1069,6 +1069,10 @@
         "description": "Trace 日志大小上限 (MB)",
         "hint": "超过大小后自动轮转，默认 20MB。"
       },
+      "trace_log_format": {
+        "description": "Trace 日志格式",
+        "hint": "\"prefixed\" 为带时间戳前缀的格式（默认），适用于人工阅读；\"jsonl\" 为纯 JSON Lines 格式，每行一个 JSON 对象，适用于被 jq、Python json.loads、ELK 等工具解析。"
+      },
       "pip_install_arg": {
         "description": "pip 安装额外参数",
         "hint": "安装插件依赖时,会使用 Python 的 pip 工具。这里可以填写额外的参数,如 `--break-system-package` 等。"
