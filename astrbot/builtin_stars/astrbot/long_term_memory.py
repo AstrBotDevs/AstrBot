@@ -558,10 +558,10 @@ class LongTermMemory:
         self._raw_cursor[umo] = cursor
 
         # 2. 按大小继续从前面淘汰（限制极端情况的总内存）
-        total = sum(len(s.encode()) for s in dq)
+        total = sum(len(s) for s in dq)
         while total > max_bytes and dq:
             removed = dq.popleft()
-            total -= len(removed.encode())
+            total -= len(removed)
             if cursor > 0:
                 cursor -= 1
         self._raw_cursor[umo] = max(0, cursor)
