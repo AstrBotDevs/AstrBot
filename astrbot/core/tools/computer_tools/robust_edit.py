@@ -4,13 +4,13 @@ Enhanced FileEditTool for AstrBot with robust multi-strategy matching.
 This tool registers as `astrbot_robust_file_edit_tool` (distinct from the
 default `astrbot_file_edit_tool`), and is inspired by opencode's edit tool.
 It features:
-- 9-layer fuzzy replacer chain (exact → line-trimmed → block-anchor → whitespace-normalized → indentation-flexible → escape-normalized → trimmed-boundary → context-aware → multi-occurrence)
+- 9-layer fuzzy replacer chain (exact → escape-normalized → line-trimmed → block-anchor → whitespace-normalized → indentation-flexible → trimmed-boundary → context-aware → multi-occurrence)
 - File-level asyncio locks to prevent concurrent edits
 - BOM and line-ending preservation
 - Unified diff output for transparency
 
 Author: AstrBot Agent Harness Development Expert
-Date: 2026-05-15
+Date: 2026-05-18 (refactored)
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 
 from .fs import (
-    _decode_escaped_text,
     _is_restricted_env,
     _normalize_rw_path,
     _COMPUTER_RUNTIME_TOOL_CONFIG,
@@ -48,9 +47,9 @@ class RobustFileEditTool(FunctionTool):
     name: str = "astrbot_robust_file_edit_tool"
     description: str = (
         "Editing files with robust fuzzy matching. "
-        "Supports exact match, line-trimmed match, block-anchor match, "
+        "Supports exact match, escape-normalized match, line-trimmed match, block-anchor match, "
         "whitespace-normalized match, indentation-flexible match, "
-        "escape-normalized match, trimmed-boundary match, context-aware match, "
+        "trimmed-boundary match, context-aware match, "
         "and multi-occurrence replacement. "
         "When editing text from Read tool output, preserve the exact indentation "
         "(tabs/spaces) as it appears AFTER the line number prefix. "
@@ -123,15 +122,16 @@ class RobustFileEditTool(FunctionTool):
             if not normalized_path:
                 raise ValueError("`path` must be a non-empty string.")
 
-            # Decode escaped text (same as original fs.py)
-            normalized_old = _decode_escaped_text(old)
-            normalized_new = _decode_escaped_text(new)
+            # Note: We do NOT call _decode_escaped_text here anymore.
+            # The robust_edit_engine now handles escape sequences internally
+            # via its _escape_normalized_replacer, which avoids double-decoding
+            # issues and provides more comprehensive escape handling.
 
             # Use robust edit engine
             result = await edit_file(
                 path=normalized_path,
-                old_string=normalized_old,
-                new_string=normalized_new,
+                old_string=old,
+                new_string=new,
                 replace_all=replace_all,
                 encoding="utf-8",
             )
