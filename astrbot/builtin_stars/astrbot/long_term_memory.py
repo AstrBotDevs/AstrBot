@@ -277,7 +277,15 @@ class LongTermMemory:
                 ctxs.append(
                     {
                         "role": "system",
-                        "content": ("Long-term group memory summary:\n" + summary),
+                        "content": (
+                            "[System note: The following is a compressed summary of "
+                            "older messages in this group chat, generated to help you "
+                            "maintain context. Prioritise facts from recent verbatim "
+                            "messages over this summary if they conflict.]\n"
+                            "--- BEGIN GROUP CHAT MEMORY SUMMARY ---\n"
+                            + summary
+                            + "\n--- END GROUP CHAT MEMORY SUMMARY ---"
+                        ),
                     }
                 )
 
@@ -433,18 +441,30 @@ class LongTermMemory:
 
         old_text = _rounds_to_text(old_rounds)
         existing_summary = self.summaries.get(umo, "")
+
+        logger.info(
+            "LTM summary: starting compaction (umo=%s, rounds=%d, old=%d)",
+            umo,
+            len(rounds),
+            len(old_rounds),
+        )
+
         instruction = prompt or (
             "Merge the older conversation rounds below into the existing "
-            "group-chat memory summary. Preserve stable facts about users, "
-            "preferences, decisions, recurring topics, and unresolved tasks. "
-            "Drop transient chatter, greetings, and irrelevant details. "
-            "Output only the updated summary, no preamble."
+            "group-chat memory summary. "
+            "Preserve: user identities (names, nicknames, roles), recurring topics, "
+            "decisions made, preferences expressed, and unresolved tasks or questions. "
+            "Drop: transient greetings, small talk, and redundant confirmations. "
+            "Keep the summary concise and factual. "
+            "Output only the updated summary text, with no preamble or meta-commentary."
         )
 
         summary_prompt = (
             f"{instruction}\n\n"
             f"Existing memory summary:\n{existing_summary or '(none)'}\n\n"
-            f"Older conversation rounds to merge:\n{old_text}"
+            "--- BEGIN OLDER CONVERSATION ROUNDS ---\n"
+            f"{old_text}\n"
+            "--- END OLDER CONVERSATION ROUNDS ---"
         )
 
         try:
@@ -464,8 +484,12 @@ class LongTermMemory:
                 return
             self.summaries[umo] = summary_text
             self.contexts[umo] = [seg for rnd in recent_rounds for seg in rnd]
-            # 成功后清除冷却，下次按正常 trigger 走
             self._summary_next_retry.pop(umo, None)
+            logger.info(
+                "LTM summary: compaction completed (umo=%s, summary_len=%d)",
+                umo,
+                len(summary_text),
+            )
         except Exception:
             logger.warning("LTM LLM summary 失败，保留原始 contexts", exc_info=True)
             self._summary_next_retry[umo] = len(rounds) + SUMMARY_RETRY_COOLDOWN
