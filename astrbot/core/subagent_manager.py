@@ -19,7 +19,7 @@ from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.astr_main_agent_resources import LLM_SAFETY_MODE_SYSTEM_PROMPT
 from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
-
+from astrbot.core.star.star import star_registry
 
 @dataclass
 class SubAgentConfig:
@@ -364,6 +364,51 @@ Create sub-agents ONLY when:
         return parts
 
     @classmethod
+    def _filter_skills_for_current_config(cls, skills: list) -> list:
+        """Filter skills based on plugin activation status and plugin_set config.
+
+        Mirrors the logic in astr_main_agent._filter_skills_for_current_config
+        but avoids circular imports by accessing config directly.
+        """
+        try:
+            from astrbot.core.star.context import Context
+            ctx = Context.get_instance() if hasattr(Context, 'get_instance') else None
+            cfg = ctx.get_config() if ctx else {}
+        except Exception:
+            return skills
+
+        plugin_set = cfg.get("plugin_set", ["*"])
+        allowed_plugins = (
+            None
+            if not isinstance(plugin_set, list) or "*" in plugin_set
+            else {str(name) for name in plugin_set}
+        )
+
+        plugin_by_root_dir = {
+            metadata.root_dir_name: metadata
+            for metadata in star_registry
+            if metadata.root_dir_name
+        }
+
+        filtered = []
+        for skill in skills:
+            if getattr(skill, 'source_type', '') != "plugin":
+                filtered.append(skill)
+                continue
+
+            plugin_name = getattr(skill, 'plugin_name', '')
+            plugin = plugin_by_root_dir.get(plugin_name)
+            if not plugin or not plugin.activated:
+                continue
+            if plugin.reserved or allowed_plugins is None:
+                filtered.append(skill)
+                continue
+            if plugin.name is not None and plugin.name in allowed_plugins:
+                filtered.append(skill)
+
+        return filtered
+
+    @classmethod
     def _build_subagent_skills_prompt(
         cls, session_id: str, agent_name: str, runtime: str = "local"
     ) -> str:
@@ -378,27 +423,26 @@ Create sub-agents ONLY when:
 
         # 获取子代理被分配的技能列表
         assigned_skills = config.skills
-        if not assigned_skills:
+
+        from astrbot.core.skills import SkillManager, build_skills_prompt
+
+        skill_manager = SkillManager()
+        all_skills = skill_manager.list_skills(active_only=True, runtime=runtime)
+        all_skills = cls._filter_skills_for_current_config(all_skills)
+        if all_skills:
+            if assigned_skills is None:
+                filtered_skills = all_skills
+            else:
+                # 过滤只保留分配的技能
+                filtered_skills = [
+                    s for s in all_skills if s.name in set(assigned_skills)
+                ]
+        else:
             return ""
-
-        try:
-            from astrbot.core.skills import SkillManager, build_skills_prompt
-
-            skill_manager = SkillManager()
-            all_skills = skill_manager.list_skills(active_only=True, runtime=runtime)
-
-            # 过滤只保留分配的技能
-            allowed = set(assigned_skills)
-            filtered_skills = [s for s in all_skills if s.name in allowed]
-
-            if filtered_skills:
-                return build_skills_prompt(filtered_skills)
-        except Exception as e:
-            from astrbot import logger
-
-            logger.warning(f"[SubAgentSkills] Failed to build skills prompt: {e}")
-
-        return ""
+        if filtered_skills:
+            return build_skills_prompt(filtered_skills)
+        else:
+            return ""
 
     @classmethod
     def get_subagent_tools(cls, session_id: str, agent_name: str) -> list | None:
@@ -870,8 +914,8 @@ Create sub-agents ONLY when:
         config = SubAgentConfig(
             name=agent.name,
             system_prompt=agent.instructions or "",
-            tools=set(agent.tools) if agent.tools else set(),
-            skills=skills or set(),
+            tools=agent.tools,
+            skills=skills,
             provider_id=getattr(handoff_tool, "provider_id", None),
             description=f"Delegate to {agent.name} agent",
             workdir=workdir,
@@ -882,6 +926,8 @@ Create sub-agents ONLY when:
             config.name not in session.subagents
         ):  # if the static agent already exists, pass
             if config.tools is None:
+                config.tools = None
+            if config.tools is not None and not config.tools:
                 config.tools = set()
             if session.shared_context_enabled:
                 config.tools.add("send_shared_context")
@@ -889,7 +935,7 @@ Create sub-agents ONLY when:
             agent = Agent(
                 name=config.name,
                 instructions=config.system_prompt,
-                tools=list(config.tools),
+                tools=config.tools,
             )
             handoff_tool = HandoffTool(
                 agent=agent,
