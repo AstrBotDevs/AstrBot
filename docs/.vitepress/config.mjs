@@ -287,6 +287,7 @@ export default defineConfig({
             collapsed: false,
             items: [
               { text: "Package Manager", link: "/astrbot/package" },
+              { text: "Desktop Client", link: "/astrbot/desktop" },
               { text: "One-click Launcher", link: "/astrbot/launcher" },
               { text: "Docker", link: "/astrbot/docker" },
               { text: "Kubernetes", link: "/astrbot/kubernetes" },
