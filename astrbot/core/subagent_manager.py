@@ -18,8 +18,9 @@ from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.astr_main_agent_resources import LLM_SAFETY_MODE_SYSTEM_PROMPT
-from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
 from astrbot.core.star.star import star_registry
+from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
+
 
 @dataclass
 class SubAgentConfig:
@@ -372,7 +373,8 @@ Create sub-agents ONLY when:
         """
         try:
             from astrbot.core.star.context import Context
-            ctx = Context.get_instance() if hasattr(Context, 'get_instance') else None
+
+            ctx = Context.get_instance() if hasattr(Context, "get_instance") else None
             cfg = ctx.get_config() if ctx else {}
         except Exception:
             return skills
@@ -392,11 +394,11 @@ Create sub-agents ONLY when:
 
         filtered = []
         for skill in skills:
-            if getattr(skill, 'source_type', '') != "plugin":
+            if getattr(skill, "source_type", "") != "plugin":
                 filtered.append(skill)
                 continue
 
-            plugin_name = getattr(skill, 'plugin_name', '')
+            plugin_name = getattr(skill, "plugin_name", "")
             plugin = plugin_by_root_dir.get(plugin_name)
             if not plugin or not plugin.activated:
                 continue
