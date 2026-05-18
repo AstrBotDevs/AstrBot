@@ -19,6 +19,19 @@ def _is_sandbox_limit_error(error: Exception) -> bool:
     )
 
 
+def _is_sandbox_user_error(error: Exception) -> bool:
+    if not isinstance(error, (RuntimeError, ValueError)):
+        return False
+    message = str(error)
+    return (
+        _is_sandbox_name_conflict(error)
+        or _is_sandbox_limit_error(error)
+        or "does not support persistent sandboxes" in message
+        or "retention_policy must be" in message
+        or "sandbox_name must be" in message
+    )
+
+
 class SandboxRoute(Route):
     def __init__(
         self,
@@ -274,7 +287,10 @@ class SandboxRoute(Route):
             )
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
         except Exception as e:
-            logger.error(traceback.format_exc())
+            if _is_sandbox_user_error(e):
+                logger.info("Failed to update sandbox: %s", e)
+            else:
+                logger.error(traceback.format_exc())
             return jsonify(
                 Response().error(f"Failed to update sandbox: {e!s}").__dict__
             )

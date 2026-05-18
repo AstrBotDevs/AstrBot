@@ -239,6 +239,13 @@ class ContextCapturingProvider(FakeProvider):
         return await super().create_booter(context, session_id, sandbox_id, config)
 
 
+class ConnectInfoAfterBootProvider(FakeProvider):
+    def update_connect_info_after_boot(self, record, booter):
+        info = dict(record.get("connect_info") or {})
+        info["runtime_id"] = getattr(booter, "runtime_id", "runtime-1")
+        return info
+
+
 def _manager(tmp_path, provider=None):
     provider = provider or FakeProvider()
     manager = SandboxManager(
@@ -427,6 +434,18 @@ async def test_create_sandbox_uncontrolled_passes_sandbox_id_to_connect_info(tmp
     assert sandbox["sandbox_name"] == "Display Name"
     assert sandbox["connect_info"]["name"] == "Display Name"
     assert sandbox["connect_info"]["sandbox_id"] == sandbox["sandbox_id"]
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_updates_connect_info_after_boot(tmp_path):
+    provider = ConnectInfoAfterBootProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    sandbox = await manager.create_sandbox_uncontrolled(
+        None, "session-a", "generic", "Display Name"
+    )
+
+    assert sandbox["connect_info"]["runtime_id"] == "runtime-1"
 
 
 @pytest.mark.asyncio

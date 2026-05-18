@@ -44,6 +44,10 @@ class SandboxProvider(Protocol):
 
     def update_connect_info(self, record: dict, *, sandbox_name: str) -> dict: ...
 
+    def update_connect_info_after_boot(
+        self, record: dict, booter: ComputerBooter
+    ) -> dict | None: ...
+
     async def create_booter(
         self,
         context: Context,

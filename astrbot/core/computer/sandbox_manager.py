@@ -596,6 +596,16 @@ class SandboxManager:
     ) -> None:
         """Common post-creation steps: persist, idle cleanup, skill sync, hooks."""
         booter = self.session_booter.get(sandbox_id)
+        record = self.registry.get_sandbox(sandbox_id) or {}
+        update_connect_info_after_boot = getattr(
+            provider, "update_connect_info_after_boot", None
+        )
+        if booter is not None and callable(update_connect_info_after_boot):
+            connect_info = update_connect_info_after_boot(record, booter)
+            if connect_info is not None:
+                self.registry.update_sandbox_config(
+                    sandbox_id, connect_info=connect_info
+                )
         self.registry.touch_sandbox(sandbox_id)
         self.registry.update_sandbox_status(sandbox_id, SandboxStatus.RUNNING)
         if session_id is not None:
