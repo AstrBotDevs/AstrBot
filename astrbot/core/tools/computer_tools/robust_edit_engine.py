@@ -9,7 +9,7 @@ Implements 9 fallback replacers to handle LLM-generated edits that may have:
 - block-level fuzzy matching via Levenshtein similarity
 
 Author: AstrBot Agent Harness Development Expert
-Date: 2026-05-15
+Date: 2026-05-18 (refactored)
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import difflib
 import os
+import weakref
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,24 +25,54 @@ from typing import Callable, Literal
 
 Replacer = Callable[[str, str], Iterator[str]]
 
-# File-level locks to prevent concurrent edits on the same file
-_locks: dict[str, asyncio.Lock] = {}
+# File-level locks to prevent concurrent edits on the same file.
+# Use WeakValueDictionary so locks for deleted files can be garbage-collected.
+_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
+_locks_lock = asyncio.Lock()
 
 
-def _get_lock(path: str) -> asyncio.Lock:
+async def _get_lock(path: str) -> asyncio.Lock:
     """Get or create an asyncio.Lock for the given file path."""
     resolved = str(Path(path).resolve())
-    if resolved not in _locks:
-        _locks[resolved] = asyncio.Lock()
-    return _locks[resolved]
+    async with _locks_lock:
+        lock = _locks.get(resolved)
+        if lock is None:
+            lock = asyncio.Lock()
+            _locks[resolved] = lock
+        return lock
 
 
 # ---------------------------------------------------------------------------
 # Line-ending / BOM helpers (mirrors opencode src/tool/edit.ts)
 # ---------------------------------------------------------------------------
 
+
 def _normalize_line_endings(text: str) -> str:
-    return text.replace("\r\n", "\n")
+    """
+    Normalize line endings in text.
+
+    Handles both actual CRLF (\r\n) and escaped CRLF (\\r\\n) sequences.
+    The escaped version may appear when LLM sends \\r\\n in the tool argument.
+    """
+    # First handle escaped CRLF/LF (\r\n -> \n, \n -> \n)
+    # These are literal backslash sequences that the LLM might send
+    text = text.replace("\\r\\n", "\n")
+    text = text.replace("\\n", "\n")
+    text = text.replace("\\r", "\r")
+    # Then handle actual CRLF
+    text = text.replace("\r\n", "\n")
+    return text
+
+
+def _normalize_escapes(text: str) -> str:
+    """
+    Normalize common escape sequences in text.
+
+    This applies _unescape to convert literal escape sequences (like \\t)
+    into actual control characters. It complements _normalize_line_endings
+    which only handles newline-related sequences.
+    """
+    return _unescape(text)
 
 
 def _detect_line_ending(text: str) -> Literal["\n", "\r\n"]:
@@ -51,12 +82,16 @@ def _detect_line_ending(text: str) -> Literal["\n", "\r\n"]:
 def _convert_to_line_ending(text: str, ending: Literal["\n", "\r\n"]) -> str:
     if ending == "\n":
         return text
+    # Convert standalone \n to \r\n, but avoid converting existing \r\n to \r\r\n
+    # by first normalizing any existing \r\n to \n, then converting all \n to \r\n
+    text = text.replace("\r\n", "\n")
     return text.replace("\n", "\r\n")
 
 
 # ---------------------------------------------------------------------------
 # Levenshtein distance (for BlockAnchorReplacer)
 # ---------------------------------------------------------------------------
+
 
 def _levenshtein(a: str, b: str) -> int:
     if a == "" or b == "":
@@ -74,16 +109,117 @@ def _levenshtein(a: str, b: str) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Escape helpers
+# ---------------------------------------------------------------------------
+
+
+def _unescape(s: str) -> str:
+    """
+    Unescape common escape sequences in a string.
+
+    Handles: \\n, \\t, \\r, \\b, \\f, \\v, \\\\, \\", \\', \\`, \\$
+    Also handles \\xNN hex and \\uNNNN unicode escapes.
+    """
+    result = []
+    i = 0
+    while i < len(s):
+        if s[i] == "\\" and i + 1 < len(s):
+            nxt = s[i + 1]
+            if nxt == "n":
+                result.append("\n")
+            elif nxt == "t":
+                result.append("\t")
+            elif nxt == "r":
+                result.append("\r")
+            elif nxt == "b":
+                result.append("\b")
+            elif nxt == "f":
+                result.append("\f")
+            elif nxt == "v":
+                result.append("\v")
+            elif nxt == "x" and i + 3 < len(s):
+                # \xNN hex escape
+                try:
+                    val = int(s[i + 2 : i + 4], 16)
+                    result.append(chr(val))
+                    i += 4
+                    continue
+                except ValueError:
+                    result.append(s[i])
+                    result.append(nxt)
+            elif nxt == "u" and i + 5 < len(s):
+                # \uNNNN unicode escape
+                try:
+                    val = int(s[i + 2 : i + 6], 16)
+                    result.append(chr(val))
+                    i += 6
+                    continue
+                except ValueError:
+                    result.append(s[i])
+                    result.append(nxt)
+            elif nxt in ("'", '"', "`", "\\", "$"):
+                result.append(nxt)
+            else:
+                # Unknown escape: preserve both characters
+                result.append(s[i])
+                result.append(nxt)
+            i += 2
+        else:
+            result.append(s[i])
+            i += 1
+    return "".join(result)
+
+
+# ---------------------------------------------------------------------------
 # Replacer implementations
 # ---------------------------------------------------------------------------
 
+
 def _simple_replacer(content: str, find: str) -> Iterator[str]:
     """Exact match."""
+    if not find:
+        return
     yield find
+
+
+def _escape_normalized_replacer(content: str, find: str) -> Iterator[str]:
+    """
+    Handle escaped sequences like \\n, \\t in the find string.
+
+    This replacer tries two approaches:
+    1. Unescape the find string and look for it in content
+    2. If find contains literal backslash sequences, try matching content
+       blocks after unescaping them
+
+    Results are deduplicated to avoid yielding the same block twice.
+    """
+    if not find:
+        return
+
+    yielded = set()
+
+    # Approach 1: unescape find and search in content
+    unescaped_find = _unescape(find)
+    if unescaped_find != find and unescaped_find in content:
+        yielded.add(unescaped_find)
+        yield unescaped_find
+
+    # Approach 2: if find contains literal backslash sequences,
+    # try matching against content blocks after unescaping
+    if "\\" in find:
+        lines = content.split("\n")
+        find_lines = unescaped_find.split("\n")
+        for i in range(len(lines) - len(find_lines) + 1):
+            block = "\n".join(lines[i : i + len(find_lines)])
+            if block not in yielded and _unescape(block) == unescaped_find:
+                yielded.add(block)
+                yield block
 
 
 def _line_trimmed_replacer(content: str, find: str) -> Iterator[str]:
     """Match blocks where each line matches after trim."""
+    if not find:
+        return
     original_lines = content.split("\n")
     search_lines = find.split("\n")
     if search_lines and search_lines[-1] == "":
@@ -104,6 +240,8 @@ def _block_anchor_replacer(content: str, find: str) -> Iterator[str]:
     Single candidate threshold: 0.0 (accept if anchors match)
     Multiple candidates threshold: 0.3 (pick best)
     """
+    if not find:
+        return
     original_lines = content.split("\n")
     search_lines = find.split("\n")
     if len(search_lines) < 3:
@@ -145,8 +283,6 @@ def _block_anchor_replacer(content: str, find: str) -> Iterator[str]:
                 continue
             dist = _levenshtein(ol, sl)
             sim += (1 - dist / max_len) / lines_to_check
-            if sim >= 0.0:  # early break for single candidate
-                pass
         return sim
 
     if len(candidates) == 1:
@@ -170,6 +306,8 @@ def _block_anchor_replacer(content: str, find: str) -> Iterator[str]:
 
 def _whitespace_normalized_replacer(content: str, find: str) -> Iterator[str]:
     """Collapse all whitespace sequences to a single space before matching."""
+    if not find:
+        return
 
     def _norm(t: str) -> str:
         return " ".join(t.split())
@@ -194,7 +332,15 @@ def _whitespace_normalized_replacer(content: str, find: str) -> Iterator[str]:
 
 
 def _indentation_flexible_replacer(content: str, find: str) -> Iterator[str]:
-    """Remove common indentation from both content block and find before matching."""
+    """
+    Match blocks where removing common indentation makes them equal to find.
+
+    Important: yields the ORIGINAL block (with original indentation),
+    not the de-indented version. This preserves the file's indentation
+    during replacement.
+    """
+    if not find:
+        return
 
     def _remove_indent(text: str) -> str:
         lines = text.split("\n")
@@ -217,48 +363,10 @@ def _indentation_flexible_replacer(content: str, find: str) -> Iterator[str]:
             yield block
 
 
-def _escape_normalized_replacer(content: str, find: str) -> Iterator[str]:
-    """Handle escaped sequences like \\n, \\t in the find string."""
-
-    def _unescape(s: str) -> str:
-        # Simple unescape for common sequences
-        result = []
-        i = 0
-        while i < len(s):
-            if s[i] == "\\" and i + 1 < len(s):
-                nxt = s[i + 1]
-                if nxt == "n":
-                    result.append("\n")
-                elif nxt == "t":
-                    result.append("\t")
-                elif nxt == "r":
-                    result.append("\r")
-                elif nxt in ("'", '"', "`", "\\", "$"):
-                    result.append(nxt)
-                else:
-                    result.append(s[i])
-                    result.append(nxt)
-                i += 2
-            else:
-                result.append(s[i])
-                i += 1
-        return "".join(result)
-
-    unescaped_find = _unescape(find)
-    if unescaped_find in content:
-        yield unescaped_find
-
-    # Also try matching escaped content against unescaped find
-    lines = content.split("\n")
-    find_lines = unescaped_find.split("\n")
-    for i in range(len(lines) - len(find_lines) + 1):
-        block = "\n".join(lines[i : i + len(find_lines)])
-        if _unescape(block) == unescaped_find:
-            yield block
-
-
 def _trimmed_boundary_replacer(content: str, find: str) -> Iterator[str]:
     """Match if the trimmed version of find exists in content."""
+    if not find:
+        return
     trimmed = find.strip()
     if trimmed == find:
         return
@@ -277,6 +385,8 @@ def _context_aware_replacer(content: str, find: str) -> Iterator[str]:
     """
     Use first and last line as context anchors, accept if >= 50% of middle lines match.
     """
+    if not find:
+        return
     find_lines = find.split("\n")
     if len(find_lines) < 3:
         return
@@ -315,6 +425,8 @@ def _context_aware_replacer(content: str, find: str) -> Iterator[str]:
 
 def _multi_occurrence_replacer(content: str, find: str) -> Iterator[str]:
     """Yield all exact matches (used with replace_all)."""
+    if not find:
+        return
     start = 0
     while True:
         idx = content.find(find, start)
@@ -324,14 +436,16 @@ def _multi_occurrence_replacer(content: str, find: str) -> Iterator[str]:
         start = idx + len(find)
 
 
-# Ordered chain: most specific first, most lenient last
+# Ordered chain: most specific first, most lenient last.
+# Escape-normalized is placed early because it handles a common LLM issue
+# (using \\n instead of actual newlines) before more aggressive fuzzy matchers.
 _REPLACERS: list[Replacer] = [
     _simple_replacer,
+    _escape_normalized_replacer,
     _line_trimmed_replacer,
     _block_anchor_replacer,
     _whitespace_normalized_replacer,
     _indentation_flexible_replacer,
-    _escape_normalized_replacer,
     _trimmed_boundary_replacer,
     _context_aware_replacer,
     _multi_occurrence_replacer,
@@ -349,9 +463,12 @@ def robust_replace(
     new_string: str,
     *,
     replace_all: bool = False,
-) -> str:
+) -> tuple[str, int]:
     """
     Replace old_string with new_string using the multi-strategy replacer chain.
+
+    Returns:
+        A tuple of (new_content, replacements_count).
 
     Raises:
         ValueError: If old_string cannot be found, or if multiple non-unique
@@ -363,18 +480,45 @@ def robust_replace(
     not_found = True
 
     for replacer in _REPLACERS:
-        for match in replacer(content, old_string):
-            idx = content.find(match)
-            if idx == -1:
-                continue
-            not_found = False
-            if replace_all:
-                return content.replace(match, new_string)
-            last_idx = content.rfind(match)
-            if idx != last_idx:
-                # Multiple matches - fall through to try more specific replacer
-                continue
-            return content[:idx] + new_string + content[idx + len(match) :]
+        matches = list(replacer(content, old_string))
+        if not matches:
+            continue
+
+        # Collect all unique match positions
+        match_positions: list[tuple[int, str]] = []
+        for match in matches:
+            start = 0
+            while True:
+                idx = content.find(match, start)
+                if idx == -1:
+                    break
+                # Avoid duplicate positions from overlapping matches
+                if not any(pos <= idx < pos + len(m) for pos, m in match_positions):
+                    match_positions.append((idx, match))
+                start = idx + 1
+
+        if not match_positions:
+            continue
+
+        not_found = False
+
+        if replace_all:
+            # Replace all occurrences, from end to start to preserve indices
+            new_content = content
+            replacements = 0
+            for idx, match in sorted(match_positions, key=lambda x: x[0], reverse=True):
+                new_content = new_content[:idx] + new_string + new_content[idx + len(match):]
+                replacements += 1
+            return new_content, replacements
+
+        # Single replacement mode: require exactly one match
+        if len(match_positions) == 1:
+            idx, match = match_positions[0]
+            return content[:idx] + new_string + content[idx + len(match):], 1
+
+        # Multiple matches found in single-replacement mode: continue to next replacer
+        # to try a more specific strategy
+        continue
 
     if not_found:
         raise ValueError(
@@ -421,11 +565,11 @@ async def edit_file(
 
     Features:
     - File-level asyncio lock prevents concurrent edits
-    - Preserves original line endings (\\n vs \\r\\n)
+    - Preserves original line endings (\n vs \r\n)
     - Preserves BOM if present
     - Returns unified diff of changes
     """
-    lock = _get_lock(path)
+    lock = await _get_lock(path)
     async with lock:
         try:
             # Read file
@@ -438,12 +582,19 @@ async def edit_file(
             original_ending = _detect_line_ending(old_content)
 
             # Normalize for matching
-            normalized_old = _normalize_line_endings(old_string)
-            normalized_new = _normalize_line_endings(new_string)
+            # First apply escape normalization (\t -> tab, etc.)
+            normalized_old = _normalize_escapes(old_string)
+            normalized_new = _normalize_escapes(new_string)
+            # Then normalize line endings
+            normalized_old = _normalize_line_endings(normalized_old)
+            normalized_new = _normalize_line_endings(normalized_new)
+
+            # Normalize file content to LF for matching (replacers work on LF)
+            normalized_content = _normalize_line_endings(old_content)
 
             # Perform replacement
-            new_content = robust_replace(
-                old_content, normalized_old, normalized_new, replace_all=replace_all
+            new_content, replacements = robust_replace(
+                normalized_content, normalized_old, normalized_new, replace_all=replace_all
             )
 
             # Convert back to original line endings
@@ -467,7 +618,7 @@ async def edit_file(
 
             return EditResult(
                 success=True,
-                replacements=1 if not replace_all else old_content.count(normalized_old),
+                replacements=replacements,
                 diff=diff,
                 old_content=old_content,
                 new_content=new_content,
