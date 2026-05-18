@@ -196,6 +196,7 @@ class LongTermMemory:
             self._persisted_tool_result_ids.pop(umo, None)
             self._summary_next_retry.pop(umo, None)
             self.summaries.pop(umo, None)
+            self._locks.pop(umo, None)
             return cnt
 
     # =========================================================================
@@ -323,14 +324,16 @@ class LongTermMemory:
                         if tc_id in self._persisted_tool_call_ids[umo]:
                             continue
                         self._persisted_tool_call_ids[umo].add(tc_id)
+                        args = tc_dict["function"]["arguments"]
+                        if isinstance(args, str):
+                            try:
+                                args = json.loads(args)
+                            except (json.JSONDecodeError, TypeError):
+                                pass  # keep raw string if JSON is malformed
                         call_entry = {
                             "id": tc_id,
                             "name": tc_dict["function"]["name"],
-                            "args": (
-                                json.loads(tc_dict["function"]["arguments"])
-                                if isinstance(tc_dict["function"]["arguments"], str)
-                                else tc_dict["function"]["arguments"]
-                            ),
+                            "args": args,
                         }
                         self.raw_records[umo].append(
                             f"<T:CALL>{json.dumps(call_entry, ensure_ascii=False)}</T:CALL>"
