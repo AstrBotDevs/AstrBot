@@ -230,6 +230,26 @@ def test_sandbox_management_page_displays_console_cwd_relative_to_sandbox_home()
     assert "return suffix ? `~${suffix}` : '~'" in content
 
 
+def test_sandbox_management_page_strips_console_cwd_markers_from_output():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "function stripConsoleCwdMarkers" in content
+    assert "stripConsoleCwdMarkers(stdout)" in content
+    assert "stripConsoleCwdMarkers(visibleStdout)" in content
+    assert "!line.trimStart().startsWith('__ASTRBOT_CWD__')" in content
+
+
+def test_sandbox_management_page_console_cwd_prefix_does_not_hide_failed_cd():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "? `cd ${quoteForShell(cwd)}; `" in content
+    assert "? `cd ${quoteForShell(cwd)} && `" not in content
+
+
 def test_sandbox_management_page_surfaces_unknown_status_key():
     content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
         encoding="utf-8"

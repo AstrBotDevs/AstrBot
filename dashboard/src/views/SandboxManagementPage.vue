@@ -1129,17 +1129,24 @@ function quoteForShell(value: string) {
 }
 
 function buildConsoleShellCommand(command: string, cwd: string) {
-  const prefix = cwd && cwd !== '~' ? `cd ${quoteForShell(cwd)} && ` : ''
+  const prefix = cwd && cwd !== '~' ? `cd ${quoteForShell(cwd)}; ` : ''
   return `${prefix}{ ${command}; __astrbot_status=$?; }; printf '\n__ASTRBOT_CWD__%s\n' "$PWD"; exit $__astrbot_status`
 }
 
 function parseConsoleShellResult(stdout: string, fallbackCwd: string) {
   const marker = '\n__ASTRBOT_CWD__'
   const markerIndex = stdout.lastIndexOf(marker)
-  if (markerIndex === -1) return { stdout, nextCwd: fallbackCwd }
+  if (markerIndex === -1) return { stdout: stripConsoleCwdMarkers(stdout), nextCwd: fallbackCwd }
   const visibleStdout = stdout.slice(0, markerIndex).replace(/\n$/, '')
   const nextCwd = stdout.slice(markerIndex + marker.length).trim() || fallbackCwd
-  return { stdout: visibleStdout, nextCwd }
+  return { stdout: stripConsoleCwdMarkers(visibleStdout), nextCwd }
+}
+
+function stripConsoleCwdMarkers(stdout: string) {
+  return stdout
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('__ASTRBOT_CWD__'))
+    .join('\n')
 }
 
 function normalizeTerminalOutput(value: string) {

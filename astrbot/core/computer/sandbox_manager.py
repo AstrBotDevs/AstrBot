@@ -1033,6 +1033,9 @@ class SandboxManager:
         existing_runtime_id = connect_info.get("sandbox_id")
         if existing_runtime_id:
             create_config["sandbox_id"] = existing_runtime_id
+        existing_host_port = connect_info.get("host_port")
+        if existing_host_port:
+            create_config["host_port"] = existing_host_port
 
         async with self._sandbox_boot_lock(sandbox_id):
             current = self.registry.get_sandbox(sandbox_id)

@@ -1032,6 +1032,33 @@ async def test_get_or_create_booter_revives_persistent_unknown_default(tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_get_or_create_booter_passes_persistent_host_port(tmp_path):
+    manager, provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-persistent",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={
+            "name": "Persistent",
+            "persistent_name": "persist-1",
+            "host_port": 23456,
+        },
+        status="unknown",
+        retention_policy="persistent",
+        is_default=True,
+    )
+    manager.registry.set_default_sandbox_id("generic-persistent")
+
+    await manager.get_or_create_booter(object(), "session-a", "generic")
+
+    assert provider.created[0][3]["host_port"] == 23456
+
+
+@pytest.mark.asyncio
 async def test_get_or_create_booter_defaults_to_temporary_retention(tmp_path):
     manager, _provider = _manager(tmp_path)
 
