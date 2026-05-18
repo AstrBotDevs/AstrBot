@@ -22,6 +22,10 @@ class SandboxProvider(Protocol):
             provider is fully initialized at construction time.
         auto_sync_skills: If ``False``, core will skip automatic skill sync after
             booting a sandbox for this provider. Defaults to ``True``.
+        prune_missing_persistent_records: If ``True``, startup reconciliation may
+            delete persistent registry records when the provider confirms the
+            external sandbox is missing. Defaults to ``False`` to avoid data loss
+            from transient reconnect failures.
     """
 
     provider_id: str
@@ -32,6 +36,7 @@ class SandboxProvider(Protocol):
     provider_api_version: str = "1.0"
     auto_sync_skills: bool = True
     supports_persistent_reconnect: bool = False
+    prune_missing_persistent_records: bool = False
 
     def build_create_config(self, context: Context, session_id: str) -> dict: ...
 

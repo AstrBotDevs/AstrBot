@@ -220,6 +220,10 @@ class MissingPersistentProvider(FakeProvider):
         return False
 
 
+class PruningMissingPersistentProvider(MissingPersistentProvider):
+    prune_missing_persistent_records = True
+
+
 class ExistingPersistentProvider(FakeProvider):
     async def check_persistent_sandbox_exists(self, record):
         return True
@@ -1499,7 +1503,7 @@ async def test_manager_restores_persistent_sandboxes_on_startup(tmp_path):
 async def test_manager_reconcile_on_startup_removes_stale_persistent_records(
     tmp_path,
 ):
-    provider = MissingPersistentProvider()
+    provider = PruningMissingPersistentProvider()
     manager, provider = _manager(tmp_path, provider)
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
@@ -1518,6 +1522,34 @@ async def test_manager_reconcile_on_startup_removes_stale_persistent_records(
     await manager.reconcile_on_startup()
 
     assert manager.registry.get_sandbox("generic-1") is None
+    assert len(provider.created) == 0
+
+
+@pytest.mark.asyncio
+async def test_manager_reconcile_on_startup_keeps_unconfirmed_persistent_records_by_default(
+    tmp_path,
+):
+    provider = MissingPersistentProvider()
+    manager, provider = _manager(tmp_path, provider)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    manager.registry.save()
+    await manager.reconcile_on_startup()
+
+    record = manager.registry.get_sandbox("generic-1")
+    assert record is not None
+    assert record["status"] == "unknown"
     assert len(provider.created) == 0
 
 

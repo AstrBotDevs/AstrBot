@@ -1456,6 +1456,16 @@ class SandboxManager:
                 continue
             if not exists:
                 sandbox_id = record["sandbox_id"]
+                if not getattr(provider, "prune_missing_persistent_records", False):
+                    logger.info(
+                        "[Computer] Persistent sandbox %s was not confirmed externally; keeping registry record as unknown",
+                        sandbox_id,
+                    )
+                    self.clear_runtime_state_and_drop_lock(sandbox_id)
+                    self.registry.update_sandbox_status(
+                        sandbox_id, SandboxStatus.UNKNOWN
+                    )
+                    continue
                 logger.info(
                     "[Computer] Persistent sandbox %s no longer exists externally; removing registry record",
                     sandbox_id,
