@@ -554,32 +554,6 @@ async def test_cleanup_registered_sandbox_manager(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_cleanup_managed_sandboxes_preserves_provider_default_persistent_records(
-    monkeypatch, tmp_path
-):
-    from astrbot.core.computer import computer_client
-    from astrbot.core.computer.sandbox_manager import SandboxManager
-    from astrbot.core.computer.sandbox_registry import SandboxRegistry
-
-    provider = FakeProvider()
-    provider.default_retention_policy = "persistent"
-    provider.supports_persistent_reconnect = True
-    manager = SandboxManager(
-        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
-        providers={provider.provider_id: provider},
-    )
-    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
-
-    await manager.create_sandbox(None, "session-a", "generic")
-    sandbox_id = manager.list_sandboxes()[0]["sandbox_id"]
-
-    await computer_client.cleanup_managed_sandboxes()
-
-    assert manager.registry.get_sandbox(sandbox_id) is not None
-    assert manager.registry.get_sandbox(sandbox_id)["retention_policy"] == "persistent"
-
-
-@pytest.mark.asyncio
 async def test_cleanup_sandbox_provider_destroys_temporary_and_preserves_persistent_records(
     monkeypatch, tmp_path
 ):

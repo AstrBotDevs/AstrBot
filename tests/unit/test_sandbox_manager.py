@@ -67,10 +67,6 @@ class FakeProvider:
         await booter.shutdown()
 
 
-class PersistentDefaultProvider(FakeProvider):
-    default_retention_policy = "persistent"
-
-
 class FakeContext:
     def __init__(self, sandbox_config=None):
         self._sandbox_config = sandbox_config or {}
@@ -981,30 +977,8 @@ async def test_get_or_create_booter_revives_persistent_unknown_default(tmp_path)
 
 
 @pytest.mark.asyncio
-async def test_get_or_create_booter_uses_provider_default_retention_policy(tmp_path):
-    provider = PersistentDefaultProvider()
-    manager = SandboxManager(
-        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
-        providers={provider.provider_id: provider},
-    )
-
-    await manager.get_or_create_booter(None, "session-a", "generic")
-
-    sandbox_id = manager.get_current_sandbox("session-a")["current_sandbox_id"]
-    record = manager.registry.get_sandbox(sandbox_id)
-    assert record["retention_policy"] == "persistent"
-    assert record["idle_timeout"] == 0
-    assert record["expires_at"] is None
-
-
-@pytest.mark.asyncio
-async def test_provider_default_persistent_requires_reconnect_support(tmp_path):
-    provider = PersistentDefaultProvider()
-    provider.supports_persistent_reconnect = False
-    manager = SandboxManager(
-        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
-        providers={provider.provider_id: provider},
-    )
+async def test_get_or_create_booter_defaults_to_temporary_retention(tmp_path):
+    manager, _provider = _manager(tmp_path)
 
     await manager.get_or_create_booter(None, "session-a", "generic")
 
