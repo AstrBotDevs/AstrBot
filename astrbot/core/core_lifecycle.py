@@ -255,11 +255,6 @@ class AstrBotCoreLifecycle:
                 exc_info=True,
             )
 
-        self._persistent_restore_task = asyncio.create_task(
-            self._restore_persistent_sandboxes_background(),
-            name="persistent-sandbox-restore",
-        )
-
         # 根据配置实例化各个 Provider
         self._default_chat_provider_warning_emitted = False
         await self.provider_manager.initialize()
@@ -296,6 +291,10 @@ class AstrBotCoreLifecycle:
 
     async def _restore_persistent_sandboxes_background(self) -> None:
         try:
+            # Do not let persistent sandbox recovery compete with the main
+            # startup path.  Recovery is best-effort and should never delay the
+            # process becoming ready.
+            await asyncio.sleep(0)
             (
                 restored,
                 deleted,
@@ -316,6 +315,14 @@ class AstrBotCoreLifecycle:
                 e,
                 exc_info=True,
             )
+
+    def _schedule_persistent_sandbox_restore(self) -> None:
+        if self._persistent_restore_task is not None:
+            return
+        self._persistent_restore_task = asyncio.create_task(
+            self._restore_persistent_sandboxes_background(),
+            name="persistent-sandbox-restore",
+        )
 
     def _load(self) -> None:
         """加载事件总线和任务并初始化."""
@@ -380,6 +387,7 @@ class AstrBotCoreLifecycle:
         """
         self._load()
         logger.info("AstrBot started.")
+        self._schedule_persistent_sandbox_restore()
 
         # 执行启动完成事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
