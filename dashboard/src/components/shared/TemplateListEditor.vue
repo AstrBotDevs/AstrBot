@@ -60,8 +60,8 @@
             <v-list-item-subtitle class="property-hint entry-display-text" v-if="templateDisplayText(entry)">
               {{ templateDisplayText(entry) }}
             </v-list-item-subtitle>
-            <v-list-item-subtitle class="property-hint" v-if="getTemplate(entry)?.hint || getTemplate(entry)?.description">
-              {{ templateText(entry.__template_key, 'hint', getTemplate(entry)?.hint || getTemplate(entry)?.description) }}
+            <v-list-item-subtitle class="property-hint" v-if="templateHintText(entry)">
+              {{ templateHintText(entry) }}
             </v-list-item-subtitle>
           </div>
         </div>
@@ -350,6 +350,12 @@ function getTemplate(entry) {
   const key = entry.__template_key
   if (!key) return null
   return props.templates?.[key] || null
+}
+
+function templateHintText(entry) {
+  const template = getTemplate(entry)
+  if (!template || template.hide_hint_in_list) return ''
+  return templateText(entry.__template_key, 'hint', template.hint || template.description || '')
 }
 
 function getItemMetaBySelector(itemsMeta = {}, selector = '') {
