@@ -2,7 +2,7 @@
 
 `AstrBot-desktop` is designed for quick local deployment of AstrBot on your personal computer, supporting Windows, macOS, and Linux.
 
-Among the various deployment options, the desktop client is best suited for personal local use. It is not recommended for long-term server operation or production environments. For production deployments, consider [Docker](/deploy/astrbot/docker) or [Kubernetes](/deploy/astrbot/kubernetes) instead.
+Among the various deployment options, the desktop client is best suited for personal local use. It is not recommended for long-term server operation or production environments. For production deployments, consider [Docker](/en/deploy/astrbot/docker) or [Kubernetes](/en/deploy/astrbot/kubernetes) instead.
 
 Compared to command-line or container-based solutions, the desktop client offers an out-of-the-box experience, ideal for users who want to get started without dealing with environment setup.
 
@@ -30,4 +30,4 @@ Repository: [AstrBotDevs/AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot
 
 - Desktop client: focuses on an out-of-the-box GUI experience.
 - Launcher deployment: focuses on automated script-based startup, suitable for users who prefer a traditional deployment workflow.
-- See [Launcher Deployment](/deploy/astrbot/launcher).
+- See [Launcher Deployment](/en/deploy/astrbot/launcher).
