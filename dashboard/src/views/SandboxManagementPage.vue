@@ -1145,7 +1145,7 @@ function parseConsoleShellResult(stdout: string, fallbackCwd: string) {
 function stripConsoleCwdMarkers(stdout: string) {
   return stdout
     .split('\n')
-    .filter((line) => !line.trimStart().startsWith('__ASTRBOT_CWD__'))
+    .filter((line) => !line.includes('__ASTRBOT_CWD__'))
     .join('\n')
 }
 

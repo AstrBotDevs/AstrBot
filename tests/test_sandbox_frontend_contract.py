@@ -238,7 +238,7 @@ def test_sandbox_management_page_strips_console_cwd_markers_from_output():
     assert "function stripConsoleCwdMarkers" in content
     assert "stripConsoleCwdMarkers(stdout)" in content
     assert "stripConsoleCwdMarkers(visibleStdout)" in content
-    assert "!line.trimStart().startsWith('__ASTRBOT_CWD__')" in content
+    assert "!line.includes('__ASTRBOT_CWD__')" in content
 
 
 def test_sandbox_management_page_console_cwd_prefix_does_not_hide_failed_cd():
