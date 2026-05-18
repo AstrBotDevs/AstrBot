@@ -1659,14 +1659,18 @@ class TestLLMSummaryErrorPath:
         original_len = len(ltm.contexts[umo])
 
         rounds = _split_into_rounds(ctxs)
-        await ltm._compact_with_llm_summary(
-            event=mock_event,
-            provider=MagicMock(spec=Provider),
-            keep_recent=5,
-            prompt="",
-            rounds=rounds,
-        )
-        # 1 round < 5 keep_recent → no-op
+        keep_recent = 5
+        compact_ctx = {
+            "provider": MagicMock(spec=Provider),
+            "prompt": "",
+            "old_rounds": rounds[:-keep_recent] if len(rounds) > keep_recent else [],
+            "recent_rounds": rounds[-keep_recent:] if len(rounds) > keep_recent else rounds,
+            "existing_summary": ltm.summaries.get(umo, ""),
+            "snapshot_round_count": len(rounds),
+        }
+        compact_ctx["summary_text"] = await ltm._generate_llm_summary(umo, compact_ctx)
+        ltm._apply_llm_summary(umo, compact_ctx)
+        # 1 round < 5 keep_recent → _generate_llm_summary returns None → no-op
         assert len(ltm.contexts[umo]) == original_len
 
     @pytest.mark.asyncio
@@ -1703,13 +1707,17 @@ class TestLLMSummaryErrorPath:
         rounds = _split_into_rounds(old_ctxs)  # 2 rounds
 
         # keep_recent=1 → old_rounds has 1 round, provider will be called
-        await ltm._compact_with_llm_summary(
-            event=mock_event,
-            provider=fake_provider,
-            keep_recent=1,
-            prompt="",
-            rounds=rounds,
-        )
+        keep_recent = 1
+        compact_ctx = {
+            "provider": fake_provider,
+            "prompt": "",
+            "old_rounds": rounds[:-keep_recent],
+            "recent_rounds": rounds[-keep_recent:],
+            "existing_summary": ltm.summaries.get(umo, ""),
+            "snapshot_round_count": len(rounds),
+        }
+        compact_ctx["summary_text"] = await ltm._generate_llm_summary(umo, compact_ctx)
+        ltm._apply_llm_summary(umo, compact_ctx)
 
         # Both must be untouched
         assert ltm.contexts[umo] is old_ctxs
@@ -1747,13 +1755,17 @@ class TestLLMSummaryErrorPath:
 
         rounds = _split_into_rounds(ctxs)  # 2 rounds
 
-        await ltm._compact_with_llm_summary(
-            event=mock_event,
-            provider=fake_provider,
-            keep_recent=1,
-            prompt="",
-            rounds=rounds,
-        )
+        keep_recent = 1
+        compact_ctx = {
+            "provider": fake_provider,
+            "prompt": "",
+            "old_rounds": rounds[:-keep_recent],
+            "recent_rounds": rounds[-keep_recent:],
+            "existing_summary": ltm.summaries.get(umo, ""),
+            "snapshot_round_count": len(rounds),
+        }
+        compact_ctx["summary_text"] = await ltm._generate_llm_summary(umo, compact_ctx)
+        ltm._apply_llm_summary(umo, compact_ctx)
 
         assert ltm.contexts[umo] is ctxs
         assert ltm.summaries[umo] == "existing summary"
@@ -1788,13 +1800,17 @@ class TestLLMSummaryErrorPath:
         ]
         rounds = _split_into_rounds(ctxs)  # 2 rounds
 
-        await ltm._compact_with_llm_summary(
-            event=mock_event,
-            provider=fake_provider,
-            keep_recent=1,
-            prompt="",
-            rounds=rounds,
-        )
+        keep_recent = 1
+        compact_ctx = {
+            "provider": fake_provider,
+            "prompt": "",
+            "old_rounds": rounds[:-keep_recent],
+            "recent_rounds": rounds[-keep_recent:],
+            "existing_summary": ltm.summaries.get(umo, ""),
+            "snapshot_round_count": len(rounds),
+        }
+        compact_ctx["summary_text"] = await ltm._generate_llm_summary(umo, compact_ctx)
+        ltm._apply_llm_summary(umo, compact_ctx)
 
         # Cooldown cleared
         assert umo not in ltm._summary_next_retry

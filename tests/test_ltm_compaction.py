@@ -290,13 +290,17 @@ class TestLTMSummaryCompaction:
         mock_event = MagicMock()
         mock_event.unified_msg_origin = umo
 
-        await ltm._compact_with_llm_summary(
-            event=mock_event,
-            provider=mock_provider,
-            keep_recent=30,
-            prompt="",
-            rounds=rounds,
-        )
+        keep_recent = 30
+        compact_ctx = {
+            "provider": mock_provider,
+            "prompt": "",
+            "old_rounds": rounds[:-keep_recent],
+            "recent_rounds": rounds[-keep_recent:],
+            "existing_summary": ltm.summaries.get(umo, ""),
+            "snapshot_round_count": len(rounds),
+        }
+        compact_ctx["summary_text"] = await ltm._generate_llm_summary(umo, compact_ctx)
+        ltm._apply_llm_summary(umo, compact_ctx)
 
         # Summary should be stored
         assert ltm.summaries[umo] == "Summary: users discussed various topics."
@@ -331,13 +335,17 @@ class TestLTMSummaryCompaction:
         mock_event = MagicMock()
         mock_event.unified_msg_origin = umo
 
-        await ltm._compact_with_llm_summary(
-            event=mock_event,
-            provider=mock_provider,
-            keep_recent=30,
-            prompt="",
-            rounds=rounds,
-        )
+        keep_recent = 30
+        compact_ctx = {
+            "provider": mock_provider,
+            "prompt": "",
+            "old_rounds": rounds[:-keep_recent],
+            "recent_rounds": rounds[-keep_recent:],
+            "existing_summary": ltm.summaries.get(umo, ""),
+            "snapshot_round_count": len(rounds),
+        }
+        compact_ctx["summary_text"] = await ltm._generate_llm_summary(umo, compact_ctx)
+        ltm._apply_llm_summary(umo, compact_ctx)
 
         # Contexts should NOT have been modified
         assert ltm.contexts[umo] == original_contexts
@@ -367,13 +375,17 @@ class TestLTMSummaryCompaction:
         mock_event = MagicMock()
         mock_event.unified_msg_origin = umo
 
-        await ltm._compact_with_llm_summary(
-            event=mock_event,
-            provider=mock_provider,
-            keep_recent=30,
-            prompt="",
-            rounds=rounds,
-        )
+        keep_recent = 30
+        compact_ctx = {
+            "provider": mock_provider,
+            "prompt": "",
+            "old_rounds": rounds[:-keep_recent] if len(rounds) > keep_recent else [],
+            "recent_rounds": rounds[-keep_recent:] if len(rounds) > keep_recent else rounds,
+            "existing_summary": ltm.summaries.get(umo, ""),
+            "snapshot_round_count": len(rounds),
+        }
+        compact_ctx["summary_text"] = await ltm._generate_llm_summary(umo, compact_ctx)
+        ltm._apply_llm_summary(umo, compact_ctx)
 
         # old_rounds empty → early return before text_chat
         mock_provider.text_chat.assert_not_called()

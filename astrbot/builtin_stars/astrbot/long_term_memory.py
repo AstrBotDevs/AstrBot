@@ -64,6 +64,9 @@ class LongTermMemory:
         self._summary_next_retry: dict[str, int] = defaultdict(int)
         """LLM 摘要失败后，下次允许重试的 rounds 数下限（冷却期内跳过）。"""
 
+        self._summary_in_progress: set[str] = set()
+        """正在生成 LLM summary 的 session，防止重复触发。"""
+
     def _get_lock(self, umo: str) -> asyncio.Lock:
         """Return the per-session lock for a unified message origin."""
         lock = self._locks.get(umo)
@@ -197,6 +200,7 @@ class LongTermMemory:
             self._summary_next_retry.pop(umo, None)
             self.summaries.pop(umo, None)
             self._locks.pop(umo, None)
+            self._summary_in_progress.discard(umo)
             return cnt
 
     # =========================================================================
@@ -306,17 +310,23 @@ class LongTermMemory:
         run_context,  # ContextWrapper
         resp: LLMResponse,
     ) -> None:
-        """记录工具链 + bot 回复到 raw_records，闭合段，裁剪。"""
+        """记录工具链 + bot 回复到 raw_records，闭合段，裁剪。
+
+        LLM summary 的 LLM 调用在锁外进行，避免持锁期间阻塞
+        handle_message / on_req_llm。
+        """
         umo = event.unified_msg_origin
         cfg = self.cfg(event)
+        compact_ctx: dict | None = None
 
+        # === Phase 1: record data + detect compaction (LOCK) ===
         async with self._get_lock(umo):
             if umo not in self.raw_records:
                 return
 
             time_str = datetime.datetime.now().strftime("%H:%M:%S")
 
-            # 1. 提取工具链 → raw_records（按 tool_call_id 去重，避免历史重复注入）
+            # Record tool calls
             for msg in run_context.messages:
                 if msg.role == "assistant" and msg.tool_calls:
                     for tc in msg.tool_calls:
@@ -356,34 +366,29 @@ class LongTermMemory:
                         f"<T:RES id={msg.tool_call_id}>{content}</T:RES>"
                     )
 
-            # 最终文本回复
+            # Record bot response
             if resp and resp.completion_text:
                 self.raw_records[umo].append(
                     f"<BOT/{time_str}>: {resp.completion_text}"
                 )
 
-            # 2. 构建本轮全部未消费 raw 为 contexts 段（含 @bot prompt）
+            # Build segments from remaining raw lines
             raw_list = list(self.raw_records[umo])
             cursor = self._raw_cursor[umo]
-            remaining = raw_list[cursor:]  # 从 prompt_idx 开始，含 @bot 行
+            remaining = raw_list[cursor:]
             if remaining:
                 new_segs = _build_segments(remaining)
                 self.contexts[umo].extend(new_segs)
                 self._raw_cursor[umo] = len(raw_list)
 
-            # 2b. LTM persistent compaction — either turn-based truncation OR
-            # LLM summary, mutually exclusive.  Both use high-water / low-water
-            # to avoid per-round churn.
+            # Detect compaction need
             strategy = cfg.get("ltm_compaction_strategy", "truncate")
             rounds = _split_into_rounds(self.contexts[umo])
 
             if strategy == "llm_summary":
-                provider_id = cfg.get("ltm_summary_provider_id", "")
                 trigger = cfg.get("ltm_summary_trigger_rounds", 80)
-                keep_recent = cfg.get("ltm_summary_keep_recent_rounds", 30)
-                if len(rounds) > trigger:
-                    # Resolve provider: explicit ID first, fallback to
-                    # current chat model for this group (umo).
+                if len(rounds) > trigger and umo not in self._summary_in_progress:
+                    provider_id = cfg.get("ltm_summary_provider_id", "")
                     if provider_id:
                         provider = self.context.get_provider_by_id(provider_id)
                     else:
@@ -404,13 +409,19 @@ class LongTermMemory:
                                 next_retry,
                             )
                         else:
-                            await self._compact_with_llm_summary(
-                                event,
-                                provider,
-                                keep_recent,
-                                cfg.get("ltm_summary_prompt", ""),
-                                rounds,
-                            )
+                            keep_recent = cfg.get("ltm_summary_keep_recent_rounds", 30)
+                            old_rounds = rounds[:-keep_recent]
+                            recent_rounds = rounds[-keep_recent:]
+                            if old_rounds:
+                                self._summary_in_progress.add(umo)
+                                compact_ctx = {
+                                    "provider": provider,
+                                    "prompt": cfg.get("ltm_summary_prompt", ""),
+                                    "old_rounds": old_rounds,
+                                    "recent_rounds": recent_rounds,
+                                    "existing_summary": self.summaries.get(umo, ""),
+                                    "snapshot_round_count": len(rounds),
+                                }
             else:
                 max_rounds = cfg.get("ltm_max_rounds", 80)
                 drop_rounds = cfg.get("ltm_truncate_drop_rounds", 50)
@@ -419,41 +430,51 @@ class LongTermMemory:
                     kept = rounds[safe_drop:]
                     self.contexts[umo] = [seg for rnd in kept for seg in rnd]
 
-            # 3. 裁剪 raw_records
-            self._trim_raw_records(
-                umo, max_bytes=cfg.get("ltm_raw_records_max_bytes", MAX_RAW_BYTES)
+            if not compact_ctx:
+                self._trim_raw_records(
+                    umo,
+                    max_bytes=cfg.get("ltm_raw_records_max_bytes", MAX_RAW_BYTES),
+                )
+
+        # === Phase 2: LLM summary (NO LOCK) ===
+        if compact_ctx:
+            logger.info(
+                "LTM summary: starting compaction (umo=%s, rounds=%d, old=%d)",
+                umo,
+                compact_ctx["snapshot_round_count"],
+                len(compact_ctx["old_rounds"]),
             )
+            compact_ctx["summary_text"] = await self._generate_llm_summary(
+                umo, compact_ctx
+            )
+
+        # === Phase 3: apply summary + trim (LOCK) ===
+        if compact_ctx:
+            async with self._get_lock(umo):
+                self._apply_llm_summary(umo, compact_ctx)
+                self._trim_raw_records(
+                    umo,
+                    max_bytes=cfg.get("ltm_raw_records_max_bytes", MAX_RAW_BYTES),
+                )
+                self._summary_in_progress.discard(umo)
 
     # =========================================================================
     # LTM compaction
     # =========================================================================
 
-    async def _compact_with_llm_summary(
-        self,
-        event: AstrMessageEvent,
-        provider: Provider,
-        keep_recent: int,
-        prompt: str,
-        rounds: list[list[dict]],
-    ) -> None:
-        """Compress old rounds into a persistent summary using an LLM."""
-        umo = event.unified_msg_origin
-        old_rounds = rounds[:-keep_recent]
-        recent_rounds = rounds[-keep_recent:]
-        if not old_rounds:
-            return
+    async def _generate_llm_summary(self, umo: str, ctx: dict) -> str | None:
+        """Generate summary via LLM. Does NOT mutate any LTM state.
 
-        old_text = _rounds_to_text(old_rounds)
-        existing_summary = self.summaries.get(umo, "")
+        Must be called WITHOUT the per-session lock held, as it may
+        block for seconds waiting on the summary provider.
+        """
+        if not ctx.get("old_rounds"):
+            return None
 
-        logger.info(
-            "LTM summary: starting compaction (umo=%s, rounds=%d, old=%d)",
-            umo,
-            len(rounds),
-            len(old_rounds),
-        )
+        old_text = _rounds_to_text(ctx["old_rounds"])
+        existing_summary = ctx["existing_summary"]
 
-        instruction = prompt or (
+        instruction = ctx["prompt"] or (
             "Merge the older conversation rounds below into the existing "
             "group-chat memory summary. "
             "Preserve: user identities (names, nicknames, roles), recurring topics, "
@@ -472,7 +493,7 @@ class LongTermMemory:
         )
 
         try:
-            resp = await provider.text_chat(
+            resp = await ctx["provider"].text_chat(
                 prompt=summary_prompt,
                 session_id=uuid.uuid4().hex,
                 persist=False,
@@ -482,21 +503,41 @@ class LongTermMemory:
                 logger.warning(
                     "LTM LLM summary 返回空文本，跳过本次压缩 (umo=%s, provider=%s)",
                     umo,
-                    provider,
+                    ctx["provider"],
                 )
-                self._summary_next_retry[umo] = len(rounds) + SUMMARY_RETRY_COOLDOWN
-                return
-            self.summaries[umo] = summary_text
-            self.contexts[umo] = [seg for rnd in recent_rounds for seg in rnd]
-            self._summary_next_retry.pop(umo, None)
+                return None
             logger.info(
                 "LTM summary: compaction completed (umo=%s, summary_len=%d)",
                 umo,
                 len(summary_text),
             )
+            return summary_text
         except Exception:
             logger.warning("LTM LLM summary 失败，保留原始 contexts", exc_info=True)
-            self._summary_next_retry[umo] = len(rounds) + SUMMARY_RETRY_COOLDOWN
+            return None
+
+    def _apply_llm_summary(self, umo: str, ctx: dict) -> None:
+        """Apply a completed LLM summary to LTM state.
+
+        Must be called WITH the per-session lock held.
+        Merges recent rounds from the snapshot with any rounds that
+        accumulated during summary generation.
+        """
+        summary_text = ctx.get("summary_text")
+        if not summary_text:
+            current_rounds = _split_into_rounds(self.contexts[umo])
+            self._summary_next_retry[umo] = len(current_rounds) + SUMMARY_RETRY_COOLDOWN
+            return
+
+        self.summaries[umo] = summary_text
+        # Merge: snapshot recent rounds + rounds added during summary generation
+        current_rounds = _split_into_rounds(self.contexts[umo])
+        snapshot_count = ctx["snapshot_round_count"]
+        new_rounds = current_rounds[snapshot_count:]
+        self.contexts[umo] = [seg for rnd in ctx["recent_rounds"] for seg in rnd] + [
+            seg for rnd in new_rounds for seg in rnd
+        ]
+        self._summary_next_retry.pop(umo, None)
 
     # =========================================================================
     # 裁剪
