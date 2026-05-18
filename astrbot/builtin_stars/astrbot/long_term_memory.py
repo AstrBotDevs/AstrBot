@@ -293,7 +293,8 @@ class LongTermMemory:
             ctxs.extend(self.contexts[umo])
             req.contexts = ctxs
             req.conversation = None
-            req.system_prompt += CHATROOM_SYSTEM_NOTE
+            if CHATROOM_SYSTEM_NOTE not in req.system_prompt:
+                req.system_prompt += CHATROOM_SYSTEM_NOTE
 
     # =========================================================================
     # Agent 完成后（on_agent_done 钩子 → main.py 调用）
