@@ -1035,6 +1035,14 @@
           "description": "原始消息缓冲区内存上限",
           "hint": "每个群聊的未消费消息缓冲区的最大字节数。用于防止长期未 @bot 的群内存溢出，默认 500000 (500KB)。"
         },
+        "ltm_max_msgs_per_user_segment": {
+          "description": "用户段最大消息数",
+          "hint": "两次 @bot 之间积累的群聊消息合并为一个 user segment 时，最多保留多少条，默认 50。与字符上限同时生效，先到先停，至少保留一条。"
+        },
+        "ltm_max_chars_per_user_segment": {
+          "description": "用户段最大字符数",
+          "hint": "两次 @bot 之间积累的群聊消息合并为一个 user segment 时，最多保留多少字符，默认 3000。与条数上限同时生效，先到先停，至少保留一条。"
+        },
         "active_reply": {
           "enable": {
             "description": "主动回复"

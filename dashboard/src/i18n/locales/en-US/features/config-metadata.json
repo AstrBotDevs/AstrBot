@@ -1033,6 +1033,14 @@
           "description": "Raw Message Buffer Memory Limit",
           "hint": "Maximum bytes for the unprocessed message buffer per group. Prevents memory overflow in groups where the bot hasn't been @-mentioned for a long time. Default 500000 (500KB)."
         },
+        "ltm_max_msgs_per_user_segment": {
+          "description": "User segment max messages",
+          "hint": "Maximum number of group messages between two @-mentions to retain when merging into one user segment. Default 50. Works simultaneously with the character cap — first limit hit stops accumulation. At least one message is always kept."
+        },
+        "ltm_max_chars_per_user_segment": {
+          "description": "User segment max characters",
+          "hint": "Maximum characters of group messages between two @-mentions to retain when merging into one user segment. Default 3000. Works simultaneously with the message cap — first limit hit stops accumulation. At least one message is always kept."
+        },
         "active_reply": {
           "enable": {
             "description": "Active Reply"

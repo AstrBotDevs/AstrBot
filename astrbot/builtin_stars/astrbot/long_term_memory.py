@@ -109,6 +109,14 @@ class LongTermMemory:
         )
         ltm_summary_provider_id = ltm_cfg.get("ltm_summary_provider_id", "")
         ltm_summary_prompt = ltm_cfg.get("ltm_summary_prompt", "")
+        ltm_max_msgs_per_user_segment = int(
+            ltm_cfg.get("ltm_max_msgs_per_user_segment", MAX_MSGS_PER_USER_SEGMENT)
+            or MAX_MSGS_PER_USER_SEGMENT
+        )
+        ltm_max_chars_per_user_segment = int(
+            ltm_cfg.get("ltm_max_chars_per_user_segment", MAX_CHARS_PER_USER_SEGMENT)
+            or MAX_CHARS_PER_USER_SEGMENT
+        )
         return {
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
@@ -130,6 +138,8 @@ class LongTermMemory:
             "ltm_raw_records_max_bytes": ltm_cfg.get(
                 "ltm_raw_records_max_bytes", MAX_RAW_BYTES
             ),
+            "ltm_max_msgs_per_user_segment": max(1, ltm_max_msgs_per_user_segment),
+            "ltm_max_chars_per_user_segment": max(1, ltm_max_chars_per_user_segment),
         }
 
     # =========================================================================
@@ -266,12 +276,18 @@ class LongTermMemory:
             if umo not in self.raw_records:
                 return
 
+            cfg = self.cfg(event)
+
             raw_list = list(self.raw_records[umo])
             cursor = self._raw_cursor[umo]
             new_raw = raw_list[cursor:prompt_idx] if prompt_idx > cursor else []
 
             if new_raw:
-                new_segs = _build_segments(new_raw)
+                new_segs = _build_segments(
+                    new_raw,
+                    max_msgs=cfg["ltm_max_msgs_per_user_segment"],
+                    max_chars=cfg["ltm_max_chars_per_user_segment"],
+                )
                 self.contexts[umo].extend(new_segs)
                 self._raw_cursor[umo] = prompt_idx
 
@@ -380,7 +396,11 @@ class LongTermMemory:
             cursor = self._raw_cursor[umo]
             remaining = raw_list[cursor:]
             if remaining:
-                new_segs = _build_segments(remaining)
+                new_segs = _build_segments(
+                    remaining,
+                    max_msgs=cfg["ltm_max_msgs_per_user_segment"],
+                    max_chars=cfg["ltm_max_chars_per_user_segment"],
+                )
                 self.contexts[umo].extend(new_segs)
                 self._raw_cursor[umo] = len(raw_list)
 
@@ -572,14 +592,18 @@ class LongTermMemory:
 # =============================================================================
 
 
-def _build_segments(raw_lines: list[str]) -> list[dict]:
+def _build_segments(
+    raw_lines: list[str],
+    max_msgs: int = MAX_MSGS_PER_USER_SEGMENT,
+    max_chars: int = MAX_CHARS_PER_USER_SEGMENT,
+) -> list[dict]:
     """从 raw strings 构建 OpenAI 格式 contexts 段。
 
     规则：
     1. <T:CALL>json</T:CALL> → 连续多条合并为一个 assistant(tool_calls)
     2. <T:RES id=xxx>content</T:RES> → tool 消息，tool_call_id 配对
     3. <BOT/时间>: content → assistant（纯文本）
-    4. 其它行 → user（合并为段，段内裁剪 MAX_MSGS/MAX_CHARS）
+    4. 其它行 → user（合并为段，段内裁剪 max_msgs/max_chars）
     """
     if not raw_lines:
         return []
@@ -591,7 +615,7 @@ def _build_segments(raw_lines: list[str]) -> list[dict]:
     def flush_user():
         if not user_buf:
             return
-        truncated = _truncate_user_segment(user_buf)
+        truncated = _truncate_user_segment(user_buf, max_msgs, max_chars)
         segments.append({"role": "user", "content": "\n".join(truncated)})
         user_buf.clear()
 
@@ -711,14 +735,23 @@ def _extract_tag_content(line: str, start_tag: str, end_tag: str) -> str | None:
     return line[len(start_tag) : -len(end_tag)].strip()
 
 
-def _truncate_user_segment(lines: list[str]) -> list[str]:
-    """段内裁剪：保留最近 N 条，不超字符上限。从段内最早的消息开始丢弃。"""
+def _truncate_user_segment(
+    lines: list[str],
+    max_msgs: int = MAX_MSGS_PER_USER_SEGMENT,
+    max_chars: int = MAX_CHARS_PER_USER_SEGMENT,
+) -> list[str]:
+    """段内裁剪：保留最近 N 条，不超字符上限。从段内最早的消息开始丢弃。
+
+    Both limits are active simultaneously — whichever cap is hit first
+    (by count or by chars) stops accumulation. At least one message is
+    always retained even if it alone exceeds max_chars.
+    """
     result: list[str] = []
     total = 0
     for line in reversed(lines):
-        if len(result) >= MAX_MSGS_PER_USER_SEGMENT:
+        if len(result) >= max_msgs:
             break
-        if total + len(line) > MAX_CHARS_PER_USER_SEGMENT and result:
+        if total + len(line) > max_chars and result:
             break
         result.append(line)
         total += len(line) + 1  # +1 for \n

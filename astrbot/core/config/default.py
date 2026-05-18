@@ -229,6 +229,12 @@ DEFAULT_CONFIG = {
         "ltm_summary_provider_id": "",
         "ltm_summary_prompt": "",
         "ltm_raw_records_max_bytes": 500000,
+        # When building user segments, both limits are active simultaneously:
+        # whichever cap is hit first (by count or by chars) stops accumulation.
+        # At least one message is always retained even if it alone exceeds the
+        # character limit.
+        "ltm_max_msgs_per_user_segment": 50,
+        "ltm_max_chars_per_user_segment": 3000,
         "active_reply": {
             "enable": False,
             "method": "possibility_reply",
@@ -4198,6 +4204,16 @@ CONFIG_METADATA_3 = {
                         "description": "Raw Records 最大内存字节",
                         "type": "int",
                         "hint": "每个群聊允许 raw_records 占用的最大字节数，默认 500000 (500KB)。",
+                    },
+                    "provider_ltm_settings.ltm_max_msgs_per_user_segment": {
+                        "description": "用户段最大消息数",
+                        "type": "int",
+                        "hint": "两次 @bot 之间积累的群聊消息合并为一个 user segment 时，最多保留多少条，默认 50。与字符上限同时生效，先到先停，至少保留一条。",
+                    },
+                    "provider_ltm_settings.ltm_max_chars_per_user_segment": {
+                        "description": "用户段最大字符数",
+                        "type": "int",
+                        "hint": "两次 @bot 之间积累的群聊消息合并为一个 user segment 时，最多保留多少字符，默认 3000。与条数上限同时生效，先到先停，至少保留一条。",
                     },
                     "provider_ltm_settings.active_reply.enable": {
                         "description": "主动回复",
