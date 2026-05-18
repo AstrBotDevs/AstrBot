@@ -347,7 +347,10 @@ class SandboxManager:
                 provider_id=provider_id,
                 idle_timeout=idle_timeout,
                 expires_at=expires_at,
-                connect_info=provider.build_connect_info(sandbox_id, create_config),
+                connect_info=provider.build_connect_info(
+                    sandbox_id,
+                    {**create_config, "sandbox_id": sandbox_id},
+                ),
             )
         )
         await self.save_registry_async()
@@ -487,7 +490,8 @@ class SandboxManager:
                     idle_timeout=idle_timeout,
                     expires_at=expires_at,
                     connect_info=provider.build_connect_info(
-                        target_sandbox_id, create_config
+                        target_sandbox_id,
+                        {**create_config, "sandbox_id": target_sandbox_id},
                     ),
                     is_default=True,
                 )
@@ -708,7 +712,8 @@ class SandboxManager:
                     idle_timeout=idle_timeout,
                     expires_at=expires_at,
                     connect_info=provider.build_connect_info(
-                        sandbox_name, create_config
+                        sandbox_name,
+                        {**create_config, "sandbox_id": sandbox_id},
                     ),
                     status=SandboxStatus.CREATING,
                 )
@@ -754,7 +759,8 @@ class SandboxManager:
                     idle_timeout=idle_timeout,
                     expires_at=expires_at,
                     connect_info=provider.build_connect_info(
-                        sandbox_name, create_config
+                        sandbox_name,
+                        {**create_config, "sandbox_id": sandbox_id},
                     ),
                     status=SandboxStatus.CREATING,
                 )

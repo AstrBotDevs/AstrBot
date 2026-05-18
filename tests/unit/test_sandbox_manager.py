@@ -417,6 +417,38 @@ async def test_create_sandbox_uncontrolled_blank_name_falls_back_to_sandbox_id(
 
 
 @pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_passes_sandbox_id_to_connect_info(tmp_path):
+    manager, _provider = _manager(tmp_path)
+
+    sandbox = await manager.create_sandbox_uncontrolled(
+        None, "session-a", "generic", "Display Name"
+    )
+
+    assert sandbox["sandbox_name"] == "Display Name"
+    assert sandbox["connect_info"]["name"] == "Display Name"
+    assert sandbox["connect_info"]["sandbox_id"] == sandbox["sandbox_id"]
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_deferred_passes_sandbox_id_to_connect_info(
+    tmp_path,
+):
+    provider = DeferredBootProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    sandbox = await manager.create_sandbox_uncontrolled_deferred(
+        None, "session-a", "generic", "Display Name"
+    )
+
+    assert sandbox["sandbox_name"] == "Display Name"
+    assert sandbox["connect_info"]["name"] == "Display Name"
+    assert sandbox["connect_info"]["sandbox_id"] == sandbox["sandbox_id"]
+
+    provider.allow_boot.set()
+    await asyncio.wait_for(manager.pending_boot_tasks[sandbox["sandbox_id"]], timeout=1)
+
+
+@pytest.mark.asyncio
 async def test_create_sandbox_uncontrolled_deferred_returns_creating_then_running(
     tmp_path,
 ):
