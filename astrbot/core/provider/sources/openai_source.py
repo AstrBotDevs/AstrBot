@@ -1154,7 +1154,7 @@ class ProviderOpenAIOfficial(Provider):
         # logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
 
         if "tool" in str(e).lower() and "support" in str(e).lower():
-            logger.error("疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
+            logger.error("疑似该模型不支持函数调用工具调用。请在 WebUI 中关闭工具调用功能。")
 
         if is_connection_error(e):
             proxy = self.provider_config.get("proxy", "")
