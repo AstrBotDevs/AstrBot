@@ -201,6 +201,7 @@ const defaultValueMap = {
   string: '',
   text: '',
   list: [],
+  file: [],
   object: {},
   template_list: []
 }
