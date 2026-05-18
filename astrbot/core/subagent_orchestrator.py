@@ -26,6 +26,7 @@ class SubAgentOrchestrator:
         self._tool_mgr = tool_mgr
         self._persona_mgr = persona_mgr
         self.handoffs: list[HandoffTool] = []
+        self.handoff_skills: list[Any] = []
 
     async def reload_from_config(self, cfg: dict[str, Any]) -> None:
         from astrbot.core.astr_agent_context import AstrAgentContext
@@ -36,6 +37,7 @@ class SubAgentOrchestrator:
             return
 
         handoffs: list[HandoffTool] = []
+        handoff_skills: list[Any] = []
         for item in agents:
             if not isinstance(item, dict):
                 continue
@@ -73,6 +75,7 @@ class SubAgentOrchestrator:
                     persona_data.get("_begin_dialogs_processed")
                 )
                 tools = persona_data.get("tools")
+                skills = persona_data.get("skills")
                 if public_description == "" and prompt:
                     public_description = prompt[:120]
             if tools is None:
@@ -83,12 +86,11 @@ class SubAgentOrchestrator:
                 tools = [str(t).strip() for t in tools if str(t).strip()]
 
             if skills is None:
-                skills = []
+                skills = None
             elif not isinstance(skills, list):
                 skills = []
             else:
                 skills = [str(s).strip() for s in skills if str(s).strip()]
-
             agent = Agent[AstrAgentContext](
                 name=name,
                 instructions=instructions,
@@ -106,11 +108,13 @@ class SubAgentOrchestrator:
             handoff.provider_id = provider_id
 
             handoffs.append(handoff)
+            handoff_skills.append(skills)
 
         for handoff in handoffs:
             logger.info(f"Registered subagent handoff tool: {handoff.name}")
 
         self.handoffs = handoffs
+        self.handoff_skills = handoff_skills
 
     def register_static_subagents_to_manager(self, session_id: str) -> None:
         """Register all static subagents (from config) into SubAgentManager.
@@ -127,10 +131,8 @@ class SubAgentOrchestrator:
         except ImportError:
             return
 
-        for handoff in self.handoffs:
+        for handoff, skills in zip(self.handoffs, self.handoff_skills):
             try:
-                # Extract skills from the agent's config if available
-                skills = set()
                 workdir = None
                 # Try to get skills from the handoff tool or agent
                 agent = handoff.agent
