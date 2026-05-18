@@ -167,6 +167,31 @@ class KBSQLiteDatabase:
 
                 await session.commit()
 
+    async def migrate_to_v2(self) -> None:
+        """Add enabled column to knowledge_bases table.
+
+        SQLite has no IF NOT EXISTS for ALTER TABLE ADD COLUMN, so the
+        re-run case raises OperationalError("duplicate column name"). That
+        specific failure is the expected idempotent path; anything else
+        is logged at debug so a real schema problem is not lost.
+        """
+        async with self.get_db() as session:
+            try:
+                await session.execute(
+                    text("ALTER TABLE knowledge_bases ADD COLUMN enabled BOOLEAN NOT NULL DEFAULT 1")
+                )
+                await session.commit()
+            except Exception as e:
+                msg = str(e).lower()
+                if "duplicate column" in msg or "already exists" in msg:
+                    # Column already present from a prior migration run — expected.
+                    return
+                # Real schema failure — let it propagate so the manager surfaces
+                # a broken-knowledge-base state on startup instead of silently
+                # running with the old schema.
+                logger.error(f"知识库 v2 迁移失败: {e!r}")
+                raise
+
     async def close(self) -> None:
         """关闭数据库连接"""
         await self.engine.dispose()

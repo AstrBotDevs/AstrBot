@@ -40,6 +40,7 @@ class KnowledgeBase(BaseKBModel, table=True):
     top_k_dense: int | None = Field(default=50, nullable=True)
     top_k_sparse: int | None = Field(default=50, nullable=True)
     top_m_final: int | None = Field(default=5, nullable=True)
+    enabled: bool = Field(default=True, nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
