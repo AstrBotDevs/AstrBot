@@ -78,12 +78,6 @@ class KBSQLiteDatabase:
             await conn.execute(text("PRAGMA optimize"))
             await conn.commit()
 
-        # v2 schema migration: add the `enabled` column to knowledge_bases.
-        # Idempotent and re-entrant — safe to call on every startup; the
-        # method swallows the "duplicate column" path quietly and logs anything
-        # else at debug. See migrate_to_v2 docstring.
-        await self.migrate_to_v2()
-
         self.inited = True
 
     async def migrate_to_v1(self) -> None:
@@ -192,7 +186,11 @@ class KBSQLiteDatabase:
                 if "duplicate column" in msg or "already exists" in msg:
                     # Column already present from a prior migration run — expected.
                     return
-                logger.debug(f"知识库 v2 迁移跳过 (非重复列错误): {e!r}")
+                # Real schema failure — let it propagate so the manager surfaces
+                # a broken-knowledge-base state on startup instead of silently
+                # running with the old schema.
+                logger.error(f"知识库 v2 迁移失败: {e!r}")
+                raise
 
     async def close(self) -> None:
         """关闭数据库连接"""
