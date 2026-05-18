@@ -102,18 +102,16 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                     timeout=aiohttp.ClientTimeout(total=60),
                 ) as response,
             ):
-                response.raise_for_status()
-
-                # MiniMax returns a JSON error body (not SSE) for cases like:
-                #   - quota / rate limit exceeded
-                #   - invalid voice_id / model
-                #   - API key issues
-                # Detect by Content-Type and surface the actual API error so callers
-                # see the real status_code / status_msg instead of a confusing
-                # parsing failure later in the SSE loop.
-                # MIME types are case-insensitive (RFC 7231 §3.1.1.1), and some
-                # error responses include parameters like "application/json; charset=utf-8".
-                # Lower-case the value and compare against the bare media-type prefix.
+                # MiniMax returns a JSON error body (not SSE) for cases like quota /
+                # rate-limit exceeded, invalid voice_id / model, API key issues.
+                # Some of those come with 4xx HTTP status, others with 200 + a
+                # JSON error body. Check Content-Type *before* raise_for_status
+                # so we surface the structured `base_resp.status_code /
+                # status_msg` even on 4xx responses, instead of an opaque
+                # aiohttp.ClientResponseError. MIME types are case-insensitive
+                # (RFC 7231 §3.1.1.1) and may include parameters like
+                # `application/json; charset=utf-8` — lower-case the value and
+                # strip parameters before comparing.
                 content_type = response.headers.get("Content-Type", "").lower().split(";", 1)[0].strip()
                 if content_type != "text/event-stream":
                     body = await response.text()
@@ -134,6 +132,10 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                     raise RuntimeError(
                         f"MiniMax TTS API error (code={err_code}): {err_msg}"
                     )
+
+                # Non-SSE error path is exhausted — only here do we treat a
+                # non-2xx status as a transport-level error.
+                response.raise_for_status()
 
                 buffer = b""
                 while True:
