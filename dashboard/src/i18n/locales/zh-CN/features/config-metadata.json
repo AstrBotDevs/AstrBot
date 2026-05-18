@@ -249,19 +249,19 @@
       "provider_settings": {
         "max_context_length": {
           "description": "压缩前最多保留对话轮数",
-          "hint": "无论选择截断还是 LLM 压缩，都会先按该值限制历史轮数；-1 表示不按轮数限制"
+          "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。"
         },
         "dequeue_context_length": {
           "description": "轮次超限时一次丢弃轮数",
-          "hint": "当超过\"压缩前最多保留对话轮数\"时，一次丢弃多少轮旧对话；同时也可能作为压缩不可用时的回退截断参数"
+          "hint": "当超过\"压缩前最多保留对话轮数\"且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。"
         },
         "context_limit_reached_strategy": {
-          "description": "模型上下文接近上限后的处理方式",
+          "description": "历史超限或上下文接近上限时的处理方式",
           "labels": [
             "按对话轮数截断",
             "由 LLM 压缩上下文"
           ],
-          "hint": "该策略只会在完成轮次限制后，且上下文 token 接近模型窗口上限时触发。当按对话轮数截断时，会根据上面\"轮次超限时一次丢弃轮数\"的配置丢弃最旧的 N 轮对话。当由 LLM 压缩上下文时，会使用指定的模型进行上下文压缩。"
+          "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
         },
         "llm_compress_instruction": {
           "description": "上下文压缩提示词",
@@ -273,7 +273,7 @@
         },
         "llm_compress_provider_id": {
           "description": "用于上下文压缩的模型提供商 ID",
-          "hint": "留空时将降级为\"按对话轮数截断\"的策略。"
+          "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为\"按对话轮数截断\"的策略。"
         },
         "fallback_max_context_tokens": {
           "description": "上下文窗口兜底值",
@@ -987,9 +987,6 @@
         "group_icl_enable": {
           "description": "启用群聊上下文感知"
         },
-        "group_message_max_cnt": {
-          "description": "最大消息数量"
-        },
         "image_caption": {
           "description": "自动理解图片",
           "hint": "需要设置群聊图片转述模型。"
@@ -997,6 +994,46 @@
         "image_caption_provider_id": {
           "description": "群聊图片转述模型",
           "hint": "用于群聊上下文感知的图片理解，与默认图片转述模型分开配置。"
+        },
+        "history_tool_result_truncate": {
+          "description": "截断历史工具输出",
+          "hint": "仅影响群聊 LTM 历史轮，不影响当前工具调用轮的完整推理。"
+        },
+        "history_tool_result_max_chars": {
+          "description": "历史工具输出截断上限",
+          "hint": "单条工具输出写入群聊历史时的最大字符数，默认 8192。"
+        },
+        "ltm_compaction_strategy": {
+          "description": "LTM 上下文压缩策略",
+          "hint": "truncate: 按轮截断; llm_summary: 调用 LLM 做长期摘要。"
+        },
+        "ltm_max_rounds": {
+          "description": "LTM 最大保留轮数",
+          "hint": "truncate 策略生效时的截断上限，默认 80。"
+        },
+        "ltm_truncate_drop_rounds": {
+          "description": "截断时丢弃轮数",
+          "hint": "truncate 策略触发截断时，从前面丢弃的轮数。默认 50。"
+        },
+        "ltm_summary_trigger_rounds": {
+          "description": "摘要触发轮数",
+          "hint": "超过多少轮时触发 LLM 摘要压缩，默认 80。"
+        },
+        "ltm_summary_keep_recent_rounds": {
+          "description": "摘要时保留最近轮数",
+          "hint": "llm_summary 策略下保留最近 N 轮精确上下文，默认 30。"
+        },
+        "ltm_summary_provider_id": {
+          "description": "LTM 摘要模型",
+          "hint": "llm_summary 策略使用的模型，留空使用当前聊天模型。"
+        },
+        "ltm_summary_prompt": {
+          "description": "LTM 摘要提示词",
+          "hint": "llm_summary 策略的自定义摘要 prompt，留空使用内置默认。"
+        },
+        "ltm_raw_records_max_bytes": {
+          "description": "原始消息缓冲区内存上限",
+          "hint": "每个群聊的未消费消息缓冲区的最大字节数。用于防止长期未 @bot 的群内存溢出，默认 500000 (500KB)。"
         },
         "active_reply": {
           "enable": {

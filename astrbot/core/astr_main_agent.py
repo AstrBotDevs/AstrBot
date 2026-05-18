@@ -1119,26 +1119,21 @@ async def _apply_web_search_tools(
 
 
 def _get_compress_provider(
-    config: MainAgentBuildConfig, plugin_context: Context
+    config: MainAgentBuildConfig,
+    plugin_context: Context,
+    event: AstrMessageEvent | None = None,
 ) -> Provider | None:
-    if not config.llm_compress_provider_id:
-        return None
     if config.context_limit_reached_strategy != "llm_compress":
         return None
-    provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
-    if provider is None:
+    if config.llm_compress_provider_id:
+        provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
+        if provider and isinstance(provider, Provider):
+            return provider
         logger.warning(
-            "未找到指定的上下文压缩模型 %s，将跳过压缩。",
+            "指定的上下文压缩模型 %s 不可用",
             config.llm_compress_provider_id,
         )
-        return None
-    if not isinstance(provider, Provider):
-        logger.warning(
-            "指定的上下文压缩模型 %s 不是对话模型，将跳过压缩。",
-            config.llm_compress_provider_id,
-        )
-        return None
-    return provider
+    return None
 
 
 def _get_fallback_chat_providers(
@@ -1449,9 +1444,8 @@ async def build_main_agent(
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent=config.llm_compress_keep_recent,
-        llm_compress_provider=_get_compress_provider(config, plugin_context),
+        llm_compress_provider=_get_compress_provider(config, plugin_context, event),
         truncate_turns=config.dequeue_context_length,
-        enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=_get_fallback_chat_providers(
             provider, plugin_context, config.provider_settings
