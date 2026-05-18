@@ -352,6 +352,8 @@ from astrbot.core.agent.message import (
     TextPart,
 )
 
+conv_mgr = self.context.conversation_manager
+provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
 curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
 user_msg = UserMessageSegment(content=[TextPart(text="hi")])
 llm_resp = await self.context.llm_generate(
