@@ -335,6 +335,7 @@ class SandboxManager:
     async def _upsert_new_sandbox_record(
         self, context: Context, session_id: str, provider_id: str, create_config: dict
     ) -> str:
+        self._ensure_under_max_sandboxes(context, session_id)
         provider = self.get_provider(provider_id)
         sandbox_id = self.new_sandbox_id(provider_id)
         idle_timeout, expires_at = self._sandbox_policy_timeouts(context, session_id)
@@ -473,6 +474,7 @@ class SandboxManager:
             target_sandbox_id = None
 
         if target_sandbox_id is None:
+            self._ensure_under_max_sandboxes(context, session_id)
             target_sandbox_id = self.new_sandbox_id(provider_id)
             created_target_record = True
             record = self.registry.upsert_sandbox(
@@ -649,9 +651,8 @@ class SandboxManager:
         """
         if not hasattr(provider, "on_sandbox_created"):
             async with self._sandbox_boot_lock(sandbox_id):
-                raw = self.registry._payload["sandboxes"].get(sandbox_id)
-                if raw is not None and not raw.get("created_hook_fired"):
-                    raw["created_hook_fired"] = True
+                if not self.registry.has_created_hook_fired(sandbox_id):
+                    self.registry.mark_created_hook_fired(sandbox_id)
                     await self.save_registry_async()
             return
 
@@ -678,9 +679,8 @@ class SandboxManager:
         finally:
             async with self._sandbox_boot_lock(sandbox_id):
                 if should_mark_fired:
-                    raw = self.registry._payload["sandboxes"].get(sandbox_id)
-                    if raw is not None and not raw.get("created_hook_fired"):
-                        raw["created_hook_fired"] = True
+                    if not self.registry.has_created_hook_fired(sandbox_id):
+                        self.registry.mark_created_hook_fired(sandbox_id)
                         await self.save_registry_async()
                 self.created_hook_inflight.discard(sandbox_id)
 
@@ -1212,7 +1212,7 @@ class SandboxManager:
         if record is None or not record.get("managed"):
             raise RuntimeError(f"Sandbox {sandbox_id} not found")
         record = await self._revive_persistent_booter_if_needed(
-            record, sandbox_id, session_id, None
+            record, sandbox_id, session_id, context
         )
         booter = self.session_booter.get(sandbox_id)
         status = record.get("status")
@@ -1499,12 +1499,12 @@ class SandboxManager:
             except asyncio.TimeoutError:
                 self.session_booter.pop(sandbox_id, None)
                 self.clear_idle_state(sandbox_id)
-                self.registry.delete_sandbox(sandbox_id)
+                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.UNKNOWN)
                 self.drop_boot_lock(sandbox_id)
                 await self.save_registry_async()
                 deleted += 1
                 logger.warning(
-                    "[Computer] Persistent sandbox restore timed out; removed stale record: %s",
+                    "[Computer] Persistent sandbox restore timed out; keeping registry record as unknown: %s",
                     sandbox_id,
                 )
             except Exception as exc:

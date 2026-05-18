@@ -2,7 +2,7 @@ from astrbot.core.computer.sandbox_tool_binding import (
     resolve_all_sandbox_provider_bindings,
     resolve_effective_sandbox_provider_id,
     resolve_sandbox_provider_bindings,
-    tool_matches_sandbox_provider,
+    tool_available_in_runtime,
 )
 
 
@@ -90,8 +90,15 @@ def test_resolve_effective_sandbox_provider_id_falls_back_to_configured_provider
     )
 
 
-def test_tool_matches_sandbox_provider_normalizes_provider_id():
+def test_provider_scoped_tool_is_available_to_any_sandbox_runtime():
     tool = FakeTool("sandbox_tool", sandbox_provider_id="Generic")
 
-    assert tool_matches_sandbox_provider(tool, "sandbox", "  generic  ")
-    assert not tool_matches_sandbox_provider(tool, "local", "generic")
+    assert tool_available_in_runtime(tool, "sandbox")
+    assert not tool_available_in_runtime(tool, "local")
+
+
+def test_unscoped_tool_is_available_to_every_runtime():
+    tool = FakeTool("regular_tool")
+
+    assert tool_available_in_runtime(tool, "sandbox")
+    assert tool_available_in_runtime(tool, "local")

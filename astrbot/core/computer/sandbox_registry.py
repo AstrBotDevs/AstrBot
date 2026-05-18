@@ -153,6 +153,7 @@ class SandboxRegistry:
             "capabilities": [],
             "tool_names": [],
             "notes": None,
+            "created_hook_fired": False,
         }
         updates = {
             "controller_user_id": controller_user_id,
@@ -170,6 +171,7 @@ class SandboxRegistry:
             else _UNSET,
             "tool_names": sorted(tool_names) if tool_names is not _UNSET else _UNSET,
             "notes": notes,
+            "created_hook_fired": _UNSET,
         }
         for field_name, default_value in defaults.items():
             value = updates[field_name]
@@ -261,6 +263,17 @@ class SandboxRegistry:
         if record is None:
             return None
         record["status"] = getattr(status, "value", status)
+        return deepcopy(record)
+
+    def has_created_hook_fired(self, sandbox_id: str) -> bool:
+        record = self._payload["sandboxes"].get(sandbox_id)
+        return bool(record and record.get("created_hook_fired"))
+
+    def mark_created_hook_fired(self, sandbox_id: str) -> dict[str, Any] | None:
+        record = self._payload["sandboxes"].get(sandbox_id)
+        if record is None:
+            return None
+        record["created_hook_fired"] = True
         return deepcopy(record)
 
     def acquire_lease(

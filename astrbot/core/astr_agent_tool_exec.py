@@ -23,7 +23,7 @@ from astrbot.core.astr_main_agent_resources import (
 from astrbot.core.computer import computer_client
 from astrbot.core.computer.sandbox_tool_binding import (
     resolve_all_sandbox_provider_bindings,
-    tool_matches_sandbox_provider,
+    tool_available_in_runtime,
 )
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
@@ -335,8 +335,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             for registered_tool in llm_tools.func_list:
                 if isinstance(registered_tool, HandoffTool):
                     continue
-                if registered_tool.active and tool_matches_sandbox_provider(
-                    registered_tool, runtime, None
+                if registered_tool.active and tool_available_in_runtime(
+                    registered_tool, runtime
                 ):
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
@@ -606,11 +606,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             message_type=session.message_type,
         )
         cron_event.role = event.role
+        session_config = ctx.get_config(umo=event.unified_msg_origin)
+        provider_settings = session_config.get("provider_settings", {})
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
-            streaming_response=ctx.get_config()
-            .get("provider_settings", {})
-            .get("stream", False),
+            streaming_response=provider_settings.get("stream", False),
+            computer_use_runtime=str(
+                provider_settings.get("computer_use_runtime", "local")
+            ),
+            sandbox_cfg=provider_settings.get("sandbox", {}),
+            provider_settings=provider_settings,
         )
 
         req = ProviderRequest()

@@ -31,7 +31,7 @@ from astrbot.core.astr_main_agent_resources import (
 from astrbot.core.computer import computer_client
 from astrbot.core.computer.sandbox_tool_binding import (
     resolve_all_sandbox_provider_bindings,
-    tool_matches_sandbox_provider,
+    tool_available_in_runtime,
 )
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Record, Reply, Video
@@ -412,12 +412,9 @@ def _filter_skills_for_current_config(
     return filtered
 
 
-def _tool_matches_current_sandbox_provider(
-    tool: FunctionTool, cfg: dict, session_id: str
-) -> bool:
+def _tool_available_for_current_runtime(tool: FunctionTool, cfg: dict) -> bool:
     runtime = str(cfg.get("computer_use_runtime", "local"))
-    del session_id
-    return tool_matches_sandbox_provider(tool, runtime, None)
+    return tool_available_in_runtime(tool, runtime)
 
 
 def _filter_tools_for_current_config(
@@ -425,7 +422,7 @@ def _filter_tools_for_current_config(
 ) -> ToolSet:
     filtered = ToolSet()
     for tool in toolset:
-        if _tool_matches_current_sandbox_provider(tool, cfg, session_id):
+        if _tool_available_for_current_runtime(tool, cfg):
             filtered.add_tool(tool)
     return filtered
 
@@ -514,7 +511,7 @@ async def _ensure_persona_and_skills(
                 if (
                     tool
                     and tool.active
-                    and _tool_matches_current_sandbox_provider(tool, cfg, session_id)
+                    and _tool_available_for_current_runtime(tool, cfg)
                 ):
                     persona_toolset.add_tool(tool)
     if not req.func_tool:
@@ -553,9 +550,7 @@ async def _ensure_persona_and_skills(
                             tool.name
                             for tool in tmgr.func_list
                             if not isinstance(tool, HandoffTool)
-                            and _tool_matches_current_sandbox_provider(
-                                tool, cfg, session_id
-                            )
+                            and _tool_available_for_current_runtime(tool, cfg)
                         ]
                     )
                     continue

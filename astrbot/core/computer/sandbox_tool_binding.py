@@ -56,9 +56,14 @@ def resolve_effective_sandbox_provider_id(
     return _normalize_provider_id(fallback_provider_id)
 
 
-def tool_matches_sandbox_provider(
-    tool: Any, runtime: str, provider_id: str | None
-) -> bool:
+def tool_available_in_runtime(tool: Any, runtime: str) -> bool:
+    """Return whether a tool should be exposed for the computer-use runtime.
+
+    Provider-specific sandbox tools are intentionally exposed to all sandbox
+    sessions. They may bootstrap or switch their own provider-specific sandbox,
+    so filtering them by the current sandbox provider would make dynamic
+    provider tools unavailable until a new chat session is built.
+    """
     tool_provider = getattr(tool, "sandbox_provider_id", None)
     if not tool_provider:
         return True

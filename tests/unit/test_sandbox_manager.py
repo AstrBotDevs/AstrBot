@@ -225,6 +225,16 @@ class ExistingPersistentProvider(FakeProvider):
         return True
 
 
+class ContextCapturingProvider(FakeProvider):
+    def __init__(self):
+        super().__init__()
+        self.contexts = []
+
+    async def create_booter(self, context, session_id, sandbox_id, config):
+        self.contexts.append(context)
+        return await super().create_booter(context, session_id, sandbox_id, config)
+
+
 def _manager(tmp_path, provider=None):
     provider = provider or FakeProvider()
     manager = SandboxManager(
@@ -365,6 +375,17 @@ async def test_create_sandbox_respects_global_max_sandboxes(tmp_path):
 
     with pytest.raises(RuntimeError, match="Sandbox limit reached"):
         await manager.create_sandbox(context, "session-b", "generic")
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_booter_respects_global_max_sandboxes(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    context = FakeContext({"max_sandboxes": 1})
+
+    await manager.get_or_create_booter(context, "session-a", "generic")
+
+    with pytest.raises(RuntimeError, match="Sandbox limit reached"):
+        await manager.get_or_create_booter(context, "session-b", "generic")
 
 
 @pytest.mark.asyncio
@@ -1570,6 +1591,30 @@ async def test_manager_takeover_rejects_non_running_sandbox(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_manager_takeover_revives_persistent_sandbox_with_context(tmp_path):
+    provider = ContextCapturingProvider()
+    manager, provider = _manager(tmp_path, provider)
+    context = FakeContext({})
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="unknown",
+        retention_policy="persistent",
+    )
+
+    await manager.takeover_sandbox("session-b", "generic-1", context=context)
+
+    assert provider.contexts == [context]
+    assert "generic-1" in manager.session_booter
+
+
+@pytest.mark.asyncio
 async def test_manager_reconcile_on_startup_keeps_valid_persistent_records(
     tmp_path,
 ):
@@ -1598,7 +1643,7 @@ async def test_manager_reconcile_on_startup_keeps_valid_persistent_records(
 
 
 @pytest.mark.asyncio
-async def test_manager_restore_persistent_sandboxes_times_out_and_deletes_record(
+async def test_manager_restore_persistent_sandboxes_times_out_and_keeps_record(
     tmp_path,
 ):
     provider = FailingReconnectProvider()
@@ -1626,10 +1671,16 @@ async def test_manager_restore_persistent_sandboxes_times_out_and_deletes_record
         retention_policy="persistent",
     )
 
-    await manager.restore_persistent_sandboxes(object(), per_sandbox_timeout=0.01)
+    restored, timed_out = await manager.restore_persistent_sandboxes(
+        object(), per_sandbox_timeout=0.01
+    )
 
     assert restore_started.is_set()
-    assert manager.registry.get_sandbox("generic-1") is None
+    assert restored == 0
+    assert timed_out == 1
+    record = manager.registry.get_sandbox("generic-1")
+    assert record is not None
+    assert record["status"] == "unknown"
 
 
 def test_manager_reconcile_on_startup_marks_temporary_records_error(tmp_path):

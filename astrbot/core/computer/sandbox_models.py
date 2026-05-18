@@ -46,6 +46,7 @@ class SandboxRecord:
     tool_names: list[str] = field(default_factory=list)
     labels: dict[str, Any] = field(default_factory=dict)
     notes: str | None = None
+    created_hook_fired: bool = False
 
     @staticmethod
     def _required_string(data: dict[str, Any], field_name: str) -> str:
@@ -95,6 +96,7 @@ class SandboxRecord:
             tool_names=sorted(str(item) for item in data.get("tool_names", []) if item),
             labels=dict(data.get("labels") or {}),
             notes=data.get("notes"),
+            created_hook_fired=bool(data.get("created_hook_fired", False)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -122,6 +124,7 @@ class SandboxRecord:
             "tool_names": list(self.tool_names),
             "labels": dict(self.labels),
             "notes": self.notes,
+            "created_hook_fired": self.created_hook_fired,
         }
 
     def has_active_lease(self, *, now: float | None = None) -> bool:
