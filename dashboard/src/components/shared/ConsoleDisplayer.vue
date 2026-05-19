@@ -29,22 +29,36 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
 </template>
 
 <script>
+import { useCustomizerStore } from '@/stores/customizer';
+
+const lightColorAnsiMap = {
+  '\u001b[1;34m': 'color: #39C5BB; font-weight: bold;',
+  '\u001b[1;36m': 'color: #00FFFF; font-weight: bold;',
+  '\u001b[1;33m': 'color: #FFFF00; font-weight: bold;',
+  '\u001b[31m': 'color: #FF0000;',
+  '\u001b[1;31m': 'color: #FF0000; font-weight: bold;',
+  '\u001b[0m': 'color: inherit; font-weight: normal;',
+  '\u001b[32m': 'color: #00FF00;',
+  'default': 'color: #FFFFFF;'
+};
+
+const darkColorAnsiMap = {
+  '\u001b[1;34m': 'color: #6cb6d9; font-weight: bold;',
+  '\u001b[1;36m': 'color: #72c4cc; font-weight: bold;',
+  '\u001b[1;33m': 'color: #d4b95e; font-weight: bold;',
+  '\u001b[31m': 'color: #d46a6a;',
+  '\u001b[1;31m': 'color: #e06060; font-weight: bold;',
+  '\u001b[0m': 'color: inherit; font-weight: normal;',
+  '\u001b[32m': 'color: #6cc070;',
+  'default': 'color: #c8c8c8;'
+};
+
 export default {
   name: 'ConsoleDisplayer',
   data() {
     return {
       autoScroll: true,
       isFullscreen: false,
-      logColorAnsiMap: {
-        '\u001b[1;34m': 'color: #6cb6d9; font-weight: bold;',
-        '\u001b[1;36m': 'color: #72c4cc; font-weight: bold;',
-        '\u001b[1;33m': 'color: #d4b95e; font-weight: bold;',
-        '\u001b[31m': 'color: #d46a6a;',
-        '\u001b[1;31m': 'color: #e06060; font-weight: bold;',
-        '\u001b[0m': 'color: inherit; font-weight: normal;',
-        '\u001b[32m': 'color: #6cc070;',
-        'default': 'color: #c8c8c8;'
-      },
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
       selectedLevels: [0, 1, 2, 3, 4],
       levelColors: {
@@ -57,15 +71,19 @@ export default {
       localLogCache: [],
       eventSource: null,
       retryTimer: null,
-      retryAttempts: 0,           
-      maxRetryAttempts: 10,       
-      baseRetryDelay: 1000,       
-      lastEventId: null,          
+      retryAttempts: 0,
+      maxRetryAttempts: 10,
+      baseRetryDelay: 1000,
+      lastEventId: null,
     }
   },
   computed: {
     commonStore() {
       return useCommonStore();
+    },
+    logColorAnsiMap() {
+      const customizerStore = useCustomizerStore();
+      return customizerStore.uiTheme === 'PurpleThemeDark' ? darkColorAnsiMap : lightColorAnsiMap;
     },
   },
   props: {
@@ -84,6 +102,9 @@ export default {
         this.refreshDisplay();
       },
       deep: true
+    },
+    logColorAnsiMap() {
+      this.refreshDisplay();
     }
   },
   async mounted() {
@@ -111,15 +132,15 @@ export default {
       }
 
       console.log(`正在连接日志流... (尝试次数: ${this.retryAttempts})`);
-      
+
       const token = localStorage.getItem('token');
 
       this.eventSource = new EventSourcePolyfill('/api/live-log', {
         headers: {
             'Authorization': token ? `Bearer ${token}` : ''
         },
-        heartbeatTimeout: 300000, 
-        withCredentials: true 
+        heartbeatTimeout: 300000,
+        withCredentials: true
       });
 
       this.eventSource.onopen = () => {
@@ -152,7 +173,7 @@ export default {
         } else {
             console.warn('日志流连接错误:', err);
         }
-        
+
         if (this.eventSource) {
             this.eventSource.close();
             this.eventSource = null;
@@ -160,14 +181,14 @@ export default {
 
         if (this.retryAttempts >= this.maxRetryAttempts) {
             console.error('❌ 已达到最大重试次数，停止重连。请刷新页面重试。');
-            return; 
+            return;
         }
 
         const delay = Math.min(
             this.baseRetryDelay * Math.pow(2, this.retryAttempts),
             30000
         );
-        
+
         console.log(`⏳ ${delay}ms 后尝试第 ${this.retryAttempts + 1} 次重连...`);
 
         if (this.retryTimer) {
@@ -177,11 +198,11 @@ export default {
 
         this.retryTimer = setTimeout(async () => {
           this.retryAttempts++;
-          
+
           if (!this.lastEventId) {
              await this.fetchLogHistory();
           }
-          
+
           this.connectSSE();
         }, delay);
       };
@@ -194,16 +215,16 @@ export default {
 
       newLogs.forEach(log => {
 
-        const exists = this.localLogCache.some(existing => 
-          existing.time === log.time && 
+        const exists = this.localLogCache.some(existing =>
+          existing.time === log.time &&
           existing.data === log.data &&
           existing.level === log.level
         );
-        
+
         if (!exists) {
             this.localLogCache.push(log);
             hasUpdate = true;
-            
+
             if (this.isLevelSelected(log.level)) {
               this.printLog(log.data);
             }
@@ -212,7 +233,7 @@ export default {
 
       if (hasUpdate) {
         this.localLogCache.sort((a, b) => a.time - b.time);
-        
+
         const maxSize = this.commonStore.log_cache_max_len || 200;
         if (this.localLogCache.length > maxSize) {
            this.localLogCache.splice(0, this.localLogCache.length - maxSize);
@@ -230,7 +251,7 @@ export default {
         console.error('Failed to fetch log history:', err);
       }
     },
-    
+
     getLevelColor(level) {
       return this.levelColors[level] || 'grey';
     },
@@ -249,7 +270,7 @@ export default {
       const termElement = document.getElementById('term');
       if (termElement) {
         termElement.innerHTML = '';
-        
+
         if (this.localLogCache && this.localLogCache.length > 0) {
           this.localLogCache.forEach(logItem => {
             if (this.isLevelSelected(logItem.level)) {
@@ -314,7 +335,7 @@ export default {
       if (!ele) {
         return;
       }
-      
+
       let span = document.createElement('pre')
       let style = this.logColorAnsiMap['default']
       for (let key in this.logColorAnsiMap) {
@@ -367,7 +388,7 @@ export default {
 }
 
 .fullscreen-btn {
-    color: rgba(255, 255, 255, 0.7) !important; /* 提高在深色背景下的对比度 */
+    color: rgba(255, 255, 255, 0.7) !important;
 }
 
 :deep(.console-log-line) {
