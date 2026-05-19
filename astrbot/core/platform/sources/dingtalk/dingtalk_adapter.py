@@ -774,7 +774,11 @@ class DingtalkPlatformAdapter(Platform):
                     self._shutdown_event = threading.Event()
                     task = loop.create_task(self.client_.start())
                     # 当 task 完成时唤醒线程（无论是正常退出还是异常退出）
-                    task.add_done_callback(lambda _: self._shutdown_event.set())
+                    task.add_done_callback(
+                        lambda _: (
+                            self._shutdown_event.set() if self._shutdown_event else None
+                        )
+                    )
                     self._shutdown_event.wait()
                     if task.done():
                         try:

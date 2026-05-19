@@ -1548,7 +1548,7 @@ class PluginRoute(Route):
             self._build_command_group_child(sub_filter)
             for sub_filter in command_group_filter.sub_command_filters
         ]
-        component = {
+        component: dict[str, object] = {
             "type": "command",
             "name": parts[-1],
             "description": self._get_command_description(
