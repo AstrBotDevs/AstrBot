@@ -29,4 +29,3 @@ def test_sanitize_upload_filename_removes_embedded_null_bytes():
     assert _sanitize_upload_filename("\x00leading.txt") == "leading.txt"
     assert _sanitize_upload_filename("trailing\x00.txt\x00") == "trailing.txt"
     assert _sanitize_upload_filename("mid\x00dle.txt") == "middle.txt"
-

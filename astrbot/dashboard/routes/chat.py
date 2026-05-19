@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import re
 import uuid
 from contextlib import asynccontextmanager
 from copy import deepcopy
@@ -26,7 +25,9 @@ from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queu
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
+from astrbot.core.utils.web_search_utils import build_web_search_refs
 
+from .message_events import build_message_saved_event
 from .route import Response, Route, RouteContext
 
 # SSE heartbeat message to keep the connection alive during long-running operations
@@ -411,66 +412,13 @@ class ChatRoute(Route):
     def _extract_web_search_refs(
         self, accumulated_text: str, accumulated_parts: list
     ) -> dict:
-        """从消息中提取 web_search_tavily 的引用
-
-        Args:
-            accumulated_text: 累积的文本内容
-            accumulated_parts: 累积的消息部分列表
-
-        Returns:
-            包含 used 列表的字典，记录被引用的搜索结果
-        """
-        supported = [
-            "web_search_baidu",
-            "web_search_tavily",
-            "web_search_bocha",
-            "web_search_brave",
-        ]
-        # 从 accumulated_parts 中找到所有 web_search_tavily 的工具调用结果
-        web_search_results = {}
-        tool_call_parts = [
-            p
-            for p in accumulated_parts
-            if p.get("type") == "tool_call" and p.get("tool_calls")
-        ]
-
-        for part in tool_call_parts:
-            for tool_call in part["tool_calls"]:
-                if tool_call.get("name") not in supported or not tool_call.get(
-                    "result"
-                ):
-                    continue
-                try:
-                    result_data = json.loads(tool_call["result"])
-                    for item in result_data.get("results", []):
-                        if idx := item.get("index"):
-                            web_search_results[idx] = {
-                                "url": item.get("url"),
-                                "title": item.get("title"),
-                                "snippet": item.get("snippet"),
-                            }
-                except (json.JSONDecodeError, KeyError):
-                    pass
-
-        if not web_search_results:
-            return {}
-
-        # 从文本中提取所有 <ref>xxx</ref> 标签并去重
-        ref_indices = {
-            m.strip() for m in re.findall(r"<ref>(.*?)</ref>", accumulated_text)
-        }
-
-        # 构建被引用的结果列表
-        used_refs = []
-        for ref_index in ref_indices:
-            if ref_index not in web_search_results:
-                continue
-            payload = {"index": ref_index, **web_search_results[ref_index]}
-            if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
-                payload["favicon"] = favicon
-            used_refs.append(payload)
-
-        return {"used": used_refs} if used_refs else {}
+        """从消息中提取网页搜索引用。"""
+        favicon_cache = sp.temporary_cache.get("_ws_favicon", {})
+        return build_web_search_refs(
+            accumulated_text,
+            accumulated_parts,
+            favicon_cache,
+        )
 
     def _sanitize_message_content(self, content: dict) -> dict:
         """Normalize editable WebChat message content before persisting."""
@@ -817,7 +765,7 @@ class ChatRoute(Route):
                 message_accumulator = BotMessageAccumulator()
                 agent_stats = {}
                 refs = {}
-                return saved_record
+                return saved_record, extracted_refs
 
             def build_attachment_saved_event(part: dict | None) -> str | None:
                 if not part or not part.get("attachment_id") or not part.get("type"):
@@ -967,19 +915,15 @@ class ChatRoute(Route):
                                 should_save = True
 
                         if should_save:
-                            saved_record = await flush_pending_bot_message()
+                            flush_result = await flush_pending_bot_message()
                             # 发送保存的消息信息给前端
-                            if saved_record and not client_disconnected:
-                                saved_info = {
-                                    "type": "message_saved",
-                                    "data": {
-                                        "id": saved_record.id,
-                                        "created_at": to_utc_isoformat(
-                                            saved_record.created_at
-                                        ),
-                                        "llm_checkpoint_id": llm_checkpoint_id,
-                                    },
-                                }
+                            if flush_result and not client_disconnected:
+                                saved_record, saved_refs = flush_result
+                                saved_info = build_message_saved_event(
+                                    saved_record,
+                                    saved_refs,
+                                    llm_checkpoint_id=llm_checkpoint_id,
+                                )
                                 try:
                                     yield f"data: {json.dumps(saved_info, ensure_ascii=False)}\n\n"
                                 except Exception:
