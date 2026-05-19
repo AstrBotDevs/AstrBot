@@ -14,6 +14,7 @@ import botpy
 import botpy.message
 from botpy import Client
 from botpy.gateway import BotWebSocket
+from botpy.types.message import MarkdownPayload
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -231,7 +232,11 @@ class QQOfficialPlatformAdapter(Platform):
             )
             return
 
-        payload: dict[str, Any] = {"content": plain_text, "msg_id": msg_id}
+        payload: dict[str, Any] = {
+            "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
+            "msg_type": 2,
+            "msg_id": msg_id,
+        }
         ret: Any = None
         send_helper = SimpleNamespace(bot=self.client)
 
@@ -248,6 +253,8 @@ class QQOfficialPlatformAdapter(Platform):
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
+                    payload.pop("markdown", None)
+                    payload["content"] = plain_text or None
                 if record_file_path:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                         send_helper,  # type: ignore
@@ -258,6 +265,8 @@ class QQOfficialPlatformAdapter(Platform):
                     if media:
                         payload["media"] = media
                         payload["msg_type"] = 7
+                        payload.pop("markdown", None)
+                        payload["content"] = plain_text or None
                 if video_file_source:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                         send_helper,  # type: ignore
@@ -268,6 +277,8 @@ class QQOfficialPlatformAdapter(Platform):
                     if media:
                         payload["media"] = media
                         payload["msg_type"] = 7
+                        payload.pop("markdown", None)
+                        payload["content"] = plain_text or None
                         payload.pop("msg_id", None)
                 if file_source:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
@@ -280,6 +291,8 @@ class QQOfficialPlatformAdapter(Platform):
                     if media:
                         payload["media"] = media
                         payload["msg_type"] = 7
+                        payload.pop("markdown", None)
+                        payload["content"] = plain_text or None
                         payload.pop("msg_id", None)
                 ret = await self.client.api.post_group_message(
                     group_openid=session.session_id,
@@ -307,6 +320,8 @@ class QQOfficialPlatformAdapter(Platform):
                 )
                 payload["media"] = media
                 payload["msg_type"] = 7
+                payload.pop("markdown", None)
+                payload["content"] = plain_text or None
             if record_file_path:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                     send_helper,  # type: ignore
@@ -317,6 +332,8 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
+                    payload.pop("markdown", None)
+                    payload["content"] = plain_text or None
             if video_file_source:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                     send_helper,  # type: ignore
@@ -327,6 +344,8 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
+                    payload.pop("markdown", None)
+                    payload["content"] = plain_text or None
             if file_source:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                     send_helper,  # type: ignore
@@ -338,6 +357,8 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
+                    payload.pop("markdown", None)
+                    payload["content"] = plain_text or None
 
             ret = await QQOfficialMessageEvent.post_c2c_message(
                 send_helper,  # type: ignore
