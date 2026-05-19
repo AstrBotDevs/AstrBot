@@ -111,6 +111,39 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                     timeout=aiohttp.ClientTimeout(total=60),
                 ) as response,
             ):
+                # MiniMax returns a JSON error body (not SSE) for cases like quota /
+                # rate-limit exceeded, invalid voice_id / model, API key issues.
+                # Some of those come with 4xx HTTP status, others with 200 + a
+                # JSON error body. Check Content-Type *before* raise_for_status
+                # so we surface the structured `base_resp.status_code /
+                # status_msg` even on 4xx responses, instead of an opaque
+                # aiohttp.ClientResponseError. MIME types are case-insensitive
+                # (RFC 7231 §3.1.1.1) and may include parameters like
+                # `application/json; charset=utf-8` — lower-case the value and
+                # strip parameters before comparing.
+                content_type = response.headers.get("Content-Type", "").lower().split(";", 1)[0].strip()
+                if content_type != "text/event-stream":
+                    body = await response.text()
+                    err_msg = body[:200] or "empty response body"
+                    err_code = "unknown"
+                    try:
+                        err_data = json.loads(body)
+                        # Guard against `base_resp: null`, missing key, or a JSON
+                        # array root — all of which would have raised
+                        # AttributeError on `.get(...)` before this change.
+                        if isinstance(err_data, dict):
+                            base_resp = err_data.get("base_resp")
+                            if isinstance(base_resp, dict):
+                                err_msg = base_resp.get("status_msg", err_msg)
+                                err_code = base_resp.get("status_code", err_code)
+                    except json.JSONDecodeError:
+                        pass
+                    raise RuntimeError(
+                        f"MiniMax TTS API error (code={err_code}): {err_msg}"
+                    )
+
+                # Non-SSE error path is exhausted — only here do we treat a
+                # non-2xx status as a transport-level error.
                 response.raise_for_status()
 
                 buffer = b""
