@@ -1,3 +1,6 @@
 node_modules/
 .DS_Store
 dist/
+bun.lock
+pnpm-lock.yaml
+worker.js

@@ -3,9 +3,11 @@ import re
 import shutil
 import traceback
 from collections.abc import Awaitable, Callable
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+import anyio
 from quart import request, send_file
 
 from astrbot.core import DEMO_MODE, logger
@@ -109,7 +111,7 @@ class SkillsRoute(Route):
         skill_mgr = SkillManager()
         if skill_mgr.is_sandbox_only_skill(skill_name):
             raise PermissionError(
-                "Sandbox preset skill cannot be opened from local skill files."
+                "Sandbox preset skill cannot be opened from local skill files.",
             )
 
         plugin_skill_dir = skill_mgr._get_plugin_skill_dir(skill_name)
@@ -195,17 +197,23 @@ class SkillsRoute(Route):
         if not endpoint or not access_token:
             raise ValueError(
                 "Shipyard Neo endpoint or access token not configured. "
-                "Set them in Dashboard or ensure Bay's credentials.json is accessible."
+                "Set them in Dashboard or ensure Bay's credentials.json is accessible.",
             )
         return endpoint, access_token
 
     async def _delete_neo_release(
-        self, client: Any, release_id: str, reason: str | None
+        self,
+        client: Any,
+        release_id: str,
+        reason: str | None,
     ):
         return await client.skills.delete_release(release_id, reason=reason)
 
     async def _delete_neo_candidate(
-        self, client: Any, candidate_id: str, reason: str | None
+        self,
+        client: Any,
+        candidate_id: str,
+        reason: str | None,
     ):
         return await client.skills.delete_candidate(candidate_id, reason=reason)
 
@@ -226,42 +234,45 @@ class SkillsRoute(Route):
         except ValueError as e:
             # Config not ready — expected when Neo isn't set up yet
             logger.debug("[Neo] %s", e)
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def get_skills(self):
         try:
             provider_settings = self.core_lifecycle.astrbot_config.get(
-                "provider_settings", {}
+                "provider_settings",
+                {},
             )
             runtime = provider_settings.get("computer_use_runtime", "local")
             skill_mgr = SkillManager()
             skills = skill_mgr.list_skills(
-                active_only=False, runtime=runtime, show_sandbox_path=False
+                active_only=False,
+                runtime=runtime,
+                show_sandbox_path=False,
             )
             return (
                 Response()
                 .ok(
                     {
-                        "skills": [skill.__dict__ for skill in skills],
+                        "skills": [asdict(skill) for skill in skills],
                         "runtime": runtime,
                         "sandbox_cache": skill_mgr.get_sandbox_skills_cache_status(),
-                    }
+                    },
                 )
-                .__dict__
+                .to_json()
             )
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def upload_skill(self):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
 
         temp_path = None
@@ -269,10 +280,10 @@ class SkillsRoute(Route):
             files = await request.files
             file = files.get("file")
             if not file:
-                return Response().error("Missing file").__dict__
+                return Response().error("Missing file").to_json()
             filename = os.path.basename(file.filename or "skill.zip")
             if not filename.lower().endswith(".zip"):
-                return Response().error("Only .zip files are supported").__dict__
+                return Response().error("Only .zip files are supported").to_json()
 
             temp_dir = get_astrbot_temp_path()
             os.makedirs(temp_dir, exist_ok=True)
@@ -283,12 +294,15 @@ class SkillsRoute(Route):
             try:
                 try:
                     skill_name = skill_mgr.install_skill_from_zip(
-                        temp_path, overwrite=False, skill_name_hint=Path(filename).stem
+                        temp_path,
+                        overwrite=False,
+                        skill_name_hint=Path(filename).stem,
                     )
                 except TypeError:
                     # Backward compatibility for callers that do not accept skill_name_hint
                     skill_name = skill_mgr.install_skill_from_zip(
-                        temp_path, overwrite=False
+                        temp_path,
+                        overwrite=False,
                     )
             except Exception:
                 # Keep behavior consistent with previous implementation
@@ -303,15 +317,15 @@ class SkillsRoute(Route):
             return (
                 Response()
                 .ok({"name": skill_name}, "Skill uploaded successfully.")
-                .__dict__
+                .to_json()
             )
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
         finally:
-            if temp_path and os.path.exists(temp_path):
+            if temp_path and await anyio.Path(temp_path).exists():
                 try:
-                    os.remove(temp_path)
+                    await anyio.Path(temp_path).unlink()
                 except Exception:
                     logger.warning(f"Failed to remove temp skill file: {temp_path}")
 
@@ -321,7 +335,7 @@ class SkillsRoute(Route):
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
 
         try:
@@ -329,7 +343,7 @@ class SkillsRoute(Route):
             file_list = files.getlist("files")
 
             if not file_list:
-                return Response().error("No files provided").__dict__
+                return Response().error("No files provided").to_json()
 
             succeeded = []
             failed = []
@@ -348,7 +362,7 @@ class SkillsRoute(Route):
                             {
                                 "filename": filename,
                                 "error": "Only .zip files are supported",
-                            }
+                            },
                         )
                         continue
 
@@ -365,7 +379,8 @@ class SkillsRoute(Route):
                         # Backward compatibility for monkeypatched implementations in tests
                         try:
                             skill_name = skill_mgr.install_skill_from_zip(
-                                temp_path, overwrite=False
+                                temp_path,
+                                overwrite=False,
                             )
                         except FileExistsError:
                             skipped.append(
@@ -373,7 +388,7 @@ class SkillsRoute(Route):
                                     "filename": filename,
                                     "name": Path(filename).stem,
                                     "error": "Skill already exists.",
-                                }
+                                },
                             )
                             skill_name = None
                     except FileExistsError:
@@ -382,7 +397,7 @@ class SkillsRoute(Route):
                                 "filename": filename,
                                 "name": Path(filename).stem,
                                 "error": "Skill already exists.",
-                            }
+                            },
                         )
                         skill_name = None
 
@@ -393,9 +408,9 @@ class SkillsRoute(Route):
                 except Exception as e:
                     failed.append({"filename": filename, "error": str(e)})
                 finally:
-                    if temp_path and os.path.exists(temp_path):
+                    if temp_path and await anyio.Path(temp_path).exists():
                         try:
-                            os.remove(temp_path)
+                            await anyio.Path(temp_path).unlink()
                         except Exception:
                             pass
 
@@ -404,7 +419,7 @@ class SkillsRoute(Route):
                     await sync_skills_to_active_sandboxes()
                 except Exception:
                     logger.warning(
-                        "Failed to sync uploaded skills to active sandboxes."
+                        "Failed to sync uploaded skills to active sandboxes.",
                     )
 
             total = len(file_list)
@@ -425,7 +440,7 @@ class SkillsRoute(Route):
                         },
                         message,
                     )
-                    .__dict__
+                    .to_json()
                 )
             if failed_count == 0 and success_count == 0:
                 message = f"All {total} file(s) were skipped."
@@ -440,7 +455,7 @@ class SkillsRoute(Route):
                         },
                         message,
                     )
-                    .__dict__
+                    .to_json()
                 )
             if success_count == 0 and skipped_count == 0:
                 message = f"Upload failed for all {total} file(s)."
@@ -451,7 +466,7 @@ class SkillsRoute(Route):
                     "failed": failed,
                     "skipped": skipped,
                 }
-                return resp.__dict__
+                return resp.to_json()
 
             message = f"Partial success: {success_count}/{total} skill(s) uploaded."
             return (
@@ -465,35 +480,35 @@ class SkillsRoute(Route):
                     },
                     message,
                 )
-                .__dict__
+                .to_json()
             )
 
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def download_skill(self):
         try:
             name = str(request.args.get("name") or "").strip()
             if not name:
-                return Response().error("Missing skill name").__dict__
+                return Response().error("Missing skill name").to_json()
             if not _SKILL_NAME_RE.match(name):
-                return Response().error("Invalid skill name").__dict__
+                return Response().error("Invalid skill name").to_json()
 
             skill_mgr = SkillManager()
             if skill_mgr.is_sandbox_only_skill(name):
                 return (
                     Response()
                     .error(
-                        "Sandbox preset skill cannot be downloaded from local skill files."
+                        "Sandbox preset skill cannot be downloaded from local skill files.",
                     )
-                    .__dict__
+                    .to_json()
                 )
             if skill_mgr.is_plugin_skill(name):
                 return (
                     Response()
                     .error(
-                        "Plugin-provided skill cannot be downloaded from local skill files."
+                        "Plugin-provided skill cannot be downloaded from local skill files.",
                     )
                     .__dict__
                 )
@@ -501,7 +516,7 @@ class SkillsRoute(Route):
             skill_dir = Path(skill_mgr.skills_root) / name
             skill_md = skill_dir / "SKILL.md"
             if not skill_dir.is_dir() or not skill_md.exists():
-                return Response().error("Local skill not found").__dict__
+                return Response().error("Local skill not found").to_json()
 
             export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
             export_dir.mkdir(parents=True, exist_ok=True)
@@ -525,7 +540,7 @@ class SkillsRoute(Route):
             )
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def list_skill_files(self):
         try:
@@ -557,7 +572,7 @@ class SkillsRoute(Route):
                         skill_dir,
                         resolved,
                         readonly=readonly,
-                    )
+                    ),
                 )
 
             return (
@@ -567,7 +582,7 @@ class SkillsRoute(Route):
                         "name": name,
                         "path": self._skill_relative_path(skill_dir, target_dir),
                         "entries": entries,
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -606,7 +621,7 @@ class SkillsRoute(Route):
                         "content": content,
                         "size": size,
                         "editable": not SkillManager().is_plugin_skill(name),
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -659,7 +674,7 @@ class SkillsRoute(Route):
                         "name": name,
                         "path": self._skill_relative_path(skill_dir, target_file),
                         "size": len(encoded),
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -672,41 +687,41 @@ class SkillsRoute(Route):
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
         try:
             data = await request.get_json()
             name = data.get("name")
             active = data.get("active", True)
             if not name:
-                return Response().error("Missing skill name").__dict__
+                return Response().error("Missing skill name").to_json()
             SkillManager().set_skill_active(name, bool(active))
-            return Response().ok({"name": name, "active": bool(active)}).__dict__
+            return Response().ok({"name": name, "active": bool(active)}).to_json()
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def delete_skill(self):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
         try:
             data = await request.get_json()
             name = data.get("name")
             if not name:
-                return Response().error("Missing skill name").__dict__
+                return Response().error("Missing skill name").to_json()
             SkillManager().delete_skill(name)
             try:
                 await sync_skills_to_active_sandboxes()
             except Exception:
                 logger.warning("Failed to sync deleted skills to active sandboxes.")
-            return Response().ok({"name": name}).__dict__
+            return Response().ok({"name": name}).to_json()
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def get_neo_candidates(self):
         logger.info("[Neo] GET /skills/neo/candidates requested.")
@@ -725,7 +740,7 @@ class SkillsRoute(Route):
             result = _to_jsonable(candidates)
             total = result.get("total", "?") if isinstance(result, dict) else "?"
             logger.info(f"[Neo] Candidates fetched: total={total}")
-            return Response().ok(result).__dict__
+            return Response().ok(result).to_json()
 
         return await self._with_neo_client(_do)
 
@@ -748,7 +763,7 @@ class SkillsRoute(Route):
             result = _to_jsonable(releases)
             total = result.get("total", "?") if isinstance(result, dict) else "?"
             logger.info(f"[Neo] Releases fetched: total={total}")
-            return Response().ok(result).__dict__
+            return Response().ok(result).to_json()
 
         return await self._with_neo_client(_do)
 
@@ -756,12 +771,12 @@ class SkillsRoute(Route):
         logger.info("[Neo] GET /skills/neo/payload requested.")
         payload_ref = request.args.get("payload_ref", "")
         if not payload_ref:
-            return Response().error("Missing payload_ref").__dict__
+            return Response().error("Missing payload_ref").to_json()
 
         async def _do(client):
             payload = await client.skills.get_payload(payload_ref)
             logger.info(f"[Neo] Payload fetched: ref={payload_ref}")
-            return Response().ok(_to_jsonable(payload)).__dict__
+            return Response().ok(_to_jsonable(payload)).to_json()
 
         return await self._with_neo_client(_do)
 
@@ -770,14 +785,14 @@ class SkillsRoute(Route):
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
         logger.info("[Neo] POST /skills/neo/evaluate requested.")
         data = await request.get_json()
         candidate_id = data.get("candidate_id")
         passed_value = data.get("passed")
         if not candidate_id or passed_value is None:
-            return Response().error("Missing candidate_id or passed").__dict__
+            return Response().error("Missing candidate_id or passed").to_json()
         passed = _to_bool(passed_value, False)
 
         async def _do(client):
@@ -789,9 +804,9 @@ class SkillsRoute(Route):
                 report=data.get("report"),
             )
             logger.info(
-                f"[Neo] Candidate evaluated: id={candidate_id}, passed={passed}"
+                f"[Neo] Candidate evaluated: id={candidate_id}, passed={passed}",
             )
-            return Response().ok(_to_jsonable(result)).__dict__
+            return Response().ok(_to_jsonable(result)).to_json()
 
         return await self._with_neo_client(_do)
 
@@ -800,7 +815,7 @@ class SkillsRoute(Route):
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
         logger.info("[Neo] POST /skills/neo/promote requested.")
         data = await request.get_json()
@@ -808,9 +823,9 @@ class SkillsRoute(Route):
         stage = data.get("stage", "canary")
         sync_to_local = _to_bool(data.get("sync_to_local"), True)
         if not candidate_id:
-            return Response().error("Missing candidate_id").__dict__
+            return Response().error("Missing candidate_id").to_json()
         if stage not in {"canary", "stable"}:
-            return Response().error("Invalid stage, must be canary/stable").__dict__
+            return Response().error("Invalid stage, must be canary/stable").to_json()
 
         async def _do(client):
             sync_mgr = NeoSkillSyncManager()
@@ -823,23 +838,23 @@ class SkillsRoute(Route):
             release_json = result.get("release")
             logger.info(f"[Neo] Candidate promoted: id={candidate_id}, stage={stage}")
 
-            sync_json = result.get("sync")
+            sync_json = result.get("sync") or {}
             did_sync_to_local = bool(sync_json)
             if did_sync_to_local:
                 logger.info(
-                    f"[Neo] Stable release synced to local: skill={sync_json.get('local_skill_name', '')}"
+                    f"[Neo] Stable release synced to local: skill={sync_json.get('local_skill_name', '')}",
                 )
 
             if result.get("sync_error"):
                 resp = Response().error(
                     "Stable promote synced failed and has been rolled back. "
-                    f"sync_error={result['sync_error']}"
+                    f"sync_error={result['sync_error']}",
                 )
                 resp.data = {
                     "release": release_json,
                     "rollback": result.get("rollback"),
                 }
-                return resp.__dict__
+                return resp.to_json()
 
             # Try to push latest local skills to all active sandboxes.
             if not did_sync_to_local:
@@ -848,7 +863,7 @@ class SkillsRoute(Route):
                 except Exception:
                     logger.warning("Failed to sync skills to active sandboxes.")
 
-            return Response().ok({"release": release_json, "sync": sync_json}).__dict__
+            return Response().ok({"release": release_json, "sync": sync_json}).to_json()
 
         return await self._with_neo_client(_do)
 
@@ -857,18 +872,18 @@ class SkillsRoute(Route):
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
         logger.info("[Neo] POST /skills/neo/rollback requested.")
         data = await request.get_json()
         release_id = data.get("release_id")
         if not release_id:
-            return Response().error("Missing release_id").__dict__
+            return Response().error("Missing release_id").to_json()
 
         async def _do(client):
             result = await client.skills.rollback_release(release_id)
             logger.info(f"[Neo] Release rolled back: id={release_id}")
-            return Response().ok(_to_jsonable(result)).__dict__
+            return Response().ok(_to_jsonable(result)).to_json()
 
         return await self._with_neo_client(_do)
 
@@ -877,7 +892,7 @@ class SkillsRoute(Route):
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
         logger.info("[Neo] POST /skills/neo/sync requested.")
         data = await request.get_json()
@@ -885,7 +900,7 @@ class SkillsRoute(Route):
         skill_key = data.get("skill_key")
         require_stable = _to_bool(data.get("require_stable"), True)
         if not release_id and not skill_key:
-            return Response().error("Missing release_id or skill_key").__dict__
+            return Response().error("Missing release_id or skill_key").to_json()
 
         async def _do(client):
             sync_mgr = NeoSkillSyncManager()
@@ -897,7 +912,7 @@ class SkillsRoute(Route):
             )
             logger.info(
                 f"[Neo] Release synced to local: skill={result.local_skill_name}, "
-                f"release_id={result.release_id}"
+                f"release_id={result.release_id}",
             )
             return (
                 Response()
@@ -910,9 +925,9 @@ class SkillsRoute(Route):
                         "payload_ref": result.payload_ref,
                         "map_path": result.map_path,
                         "synced_at": result.synced_at,
-                    }
+                    },
                 )
-                .__dict__
+                .to_json()
             )
 
         return await self._with_neo_client(_do)
@@ -922,19 +937,19 @@ class SkillsRoute(Route):
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
         logger.info("[Neo] POST /skills/neo/delete-candidate requested.")
         data = await request.get_json()
         candidate_id = data.get("candidate_id")
         reason = data.get("reason")
         if not candidate_id:
-            return Response().error("Missing candidate_id").__dict__
+            return Response().error("Missing candidate_id").to_json()
 
         async def _do(client):
             result = await self._delete_neo_candidate(client, candidate_id, reason)
             logger.info(f"[Neo] Candidate deleted: id={candidate_id}")
-            return Response().ok(_to_jsonable(result)).__dict__
+            return Response().ok(_to_jsonable(result)).to_json()
 
         return await self._with_neo_client(_do)
 
@@ -943,18 +958,18 @@ class SkillsRoute(Route):
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
         logger.info("[Neo] POST /skills/neo/delete-release requested.")
         data = await request.get_json()
         release_id = data.get("release_id")
         reason = data.get("reason")
         if not release_id:
-            return Response().error("Missing release_id").__dict__
+            return Response().error("Missing release_id").to_json()
 
         async def _do(client):
             result = await self._delete_neo_release(client, release_id, reason)
             logger.info(f"[Neo] Release deleted: id={release_id}")
-            return Response().ok(_to_jsonable(result)).__dict__
+            return Response().ok(_to_jsonable(result)).to_json()
 
         return await self._with_neo_client(_do)

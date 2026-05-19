@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 
 export function useRecording() {
     const isRecording = ref(false);

@@ -26,7 +26,8 @@ class KookApiPaths:
 
 class KookMentionTagName(str, Enum):
     """用来匹配 `(tagName)value(tagName)` 格式里的tagName , 例如: `(met)all(met)`
-    定义参见KMarkdown语法文档: https://developer.kookapp.cn/doc/kmarkdown"""
+    定义参见KMarkdown语法文档: https://developer.kookapp.cn/doc/kmarkdown
+    """
 
     MENTION = "met"
     ROLE = "rol"
@@ -74,11 +75,18 @@ class KookRoleExtraType(str, Enum):
 
 
 ThemeType = Literal[
-    "primary", "success", "danger", "warning", "info", "secondary", "none", "invisible"
+    "primary",
+    "success",
+    "danger",
+    "warning",
+    "info",
+    "secondary",
+    "none",
+    "invisible",
 ]
-"""主题，可选的值为：primary, success, danger, warning, info, secondary, none.默认为 primary，为 none 时不显示侧边框。"""
+"""主题,可选的值为:primary, success, danger, warning, info, secondary, none.默认为 primary,为 none 时不显示侧边框｡"""
 SizeType = Literal["xs", "sm", "md", "lg"]
-"""大小，可选值为：xs, sm, md, lg, 一般默认为 lg"""
+"""大小,可选值为:xs, sm, md, lg, 一般默认为 lg"""
 
 SectionMode = Literal["left", "right"]
 CountdownMode = Literal["day", "hour", "second"]
@@ -109,7 +117,8 @@ class KookBaseReceiveDataClass(BaseModel):
         exclude_unset=True,
     ) -> dict:
         """默认配置预期场景为尽量原样输出,若需要使用此数据类发送json数据,
-        请`exclude_none=True, exclude_unset=False`"""
+        请`exclude_none=True, exclude_unset=False`
+        """
         return self.model_dump(
             by_alias=by_alias,
             exclude_none=exclude_none,
@@ -126,7 +135,8 @@ class KookBaseReceiveDataClass(BaseModel):
         exclude_unset=True,
     ) -> str:
         """默认配置预期场景为尽量原样输出,若需要使用此数据类发送json数据,
-        请`exclude_none=True, exclude_unset=False`"""
+        请`exclude_none=True, exclude_unset=False`
+        """
         return self.model_dump_json(
             indent=indent,
             ensure_ascii=ensure_ascii,
@@ -147,7 +157,8 @@ class KookBaseSendDataClass(KookBaseReceiveDataClass):
         exclude_unset=False,
     ) -> dict:
         """默认配置预期场景为发送数据,若需要使用此数据类接收数据并尽量原样json输出,
-        请`exclude_none=False, exclude_unset=True`"""
+        请`exclude_none=False, exclude_unset=True`
+        """
         return self.model_dump(
             by_alias=by_alias,
             exclude_none=exclude_none,
@@ -164,7 +175,8 @@ class KookBaseSendDataClass(KookBaseReceiveDataClass):
         exclude_unset=False,
     ) -> str:
         """默认配置预期场景为发送数据,若需要使用此数据类接收数据并尽量原样json输出,
-        请`exclude_none=False, exclude_unset=True`"""
+        请`exclude_none=False, exclude_unset=True`
+        """
         return self.model_dump_json(
             indent=indent,
             ensure_ascii=ensure_ascii,
@@ -205,10 +217,10 @@ class ButtonElement(KookCardModelBase):
     type: Literal[KookModuleType.BUTTON] = KookModuleType.BUTTON
     theme: ThemeType = "primary"
     value: str = ""
-    """当为 link 时，会跳转到 value 代表的链接;
-当为 return-val 时，系统会通过系统消息将消息 id,点击用户 id 和 value 发回给发送者，发送者可以根据自己的需求进行处理,消息事件参见button 点击事件。私聊和频道内均可使用按钮点击事件。"""
+    """当为 link 时,会跳转到 value 代表的链接;
+当为 return-val 时,系统会通过系统消息将消息 id,点击用户 id 和 value 发回给发送者,发送者可以根据自己的需求进行处理,消息事件参见button 点击事件｡私聊和频道内均可使用按钮点击事件｡"""
     click: Literal["", "link", "return-val"] = ""
-    """click 代表用户点击的事件,默认为""，代表无任何事件。"""
+    """click 代表用户点击的事件,默认为"",代表无任何事件｡"""
 
 
 AnyElement = PlainTextElement | KmarkdownElement | ImageElement | ButtonElement | str
@@ -241,7 +253,7 @@ class ImageGroupModule(KookCardModelBase):
 
 
 class ContainerModule(KookCardModelBase):
-    """1 到多张图片的组合，与图片组模块(ImageGroupModule)不同，图片并不会裁切为正方形。多张图片会纵向排列。"""
+    """1 到多张图片的组合,与图片组模块(ImageGroupModule)不同,图片并不会裁切为正方形｡多张图片会纵向排列｡"""
 
     elements: list[ImageElement]
     type: Literal[KookModuleType.CONTAINER] = KookModuleType.CONTAINER
@@ -277,7 +289,7 @@ class FileModule(KookCardModelBase):
 
 
 class CountdownModule(KookCardModelBase):
-    """startTime 和 endTime 为毫秒时间戳，startTime 和 endTime 不能小于服务器当前时间戳。"""
+    """startTime 和 endTime 为毫秒时间戳,startTime 和 endTime 不能小于服务器当前时间戳｡"""
 
     endTime: int
     """毫秒时间戳"""
@@ -341,7 +353,7 @@ class KookCardMessage(KookBaseSendDataClass):
     color: str | None = None
     """16 进制色值"""
     modules: list[AnyModule] = Field(default_factory=list)
-    """单个 card 模块数量不限制，但是一条消息中所有卡片的模块数量之和最多是 50"""
+    """单个 card 模块数量不限制,但是一条消息中所有卡片的模块数量之和最多是 50"""
 
     def add_module(self, module: AnyModule):
         self.modules.append(module)
@@ -382,7 +394,8 @@ class KookCardMessageContainer(list[KookCardMessage]):
         exclude_unset=False,
     ) -> list[dict]:
         """默认配置预期场景为发送数据,若需要使用此数据类接收数据并尽量原样json输出,
-        请`exclude_none=False, exclude_unset=True`"""
+        请`exclude_none=False, exclude_unset=True`
+        """
         return [
             i.to_dict(
                 by_alias=by_alias,
@@ -401,7 +414,8 @@ class KookCardMessageContainer(list[KookCardMessage]):
         exclude_unset=False,
     ) -> str:
         """默认配置预期场景为发送数据,若需要使用此数据类接收数据并尽量原样json输出,
-        请`exclude_none=False, exclude_unset=True`"""
+        请`exclude_none=False, exclude_unset=True`
+        """
         return json.dumps(
             [
                 i.to_dict(
@@ -429,16 +443,17 @@ class OrderMessage(BaseModel):
 
 class KookMessageSignal(IntEnum):
     """KOOK WebSocket 信令类型
-    ws文档: https://developer.kookapp.cn/doc/websocket"""
+    ws文档: https://developer.kookapp.cn/doc/websocket
+    """
 
     MESSAGE = 0
     """server->client  消息(s包含聊天和通知消息)"""
     HELLO = 1
     """server->client  客户端连接 ws 时, 服务端返回握手结果"""
     PING = 2
-    """client->server  心跳，ping"""
+    """client->server  心跳,ping"""
     PONG = 3
-    """server->client  心跳，pong"""
+    """server->client  心跳,pong"""
     RESUME = 4
     """client->server  resume, 恢复会话"""
     RECONNECT = 5
@@ -467,9 +482,7 @@ class KookAuthor(KookBaseReceiveDataClass):
 
 
 class KookMarkdownMentionPart(KookBaseReceiveDataClass):
-    """
-    文档参考: https://developer.kookapp.cn/doc/event/message
-    """
+    """文档参考: https://developer.kookapp.cn/doc/event/message"""
 
     id: str
     username: str
@@ -478,9 +491,7 @@ class KookMarkdownMentionPart(KookBaseReceiveDataClass):
 
 
 class KookMarkdownMentionRolePart(KookBaseReceiveDataClass):
-    """
-    文档参考: https://developer.kookapp.cn/doc/event/message
-    """
+    """文档参考: https://developer.kookapp.cn/doc/event/message"""
 
     role_id: int
     name: str
@@ -512,8 +523,7 @@ class KookRole(KookBaseReceiveDataClass):
 
 
 class KookRoleEventBody(KookBaseReceiveDataClass):
-    """
-    服务器角色相关事件 (added_role, updated_role, deleted_role) 的 Body 部分
+    """服务器角色相关事件 (added_role, updated_role, deleted_role) 的 Body 部分
     文档参考: https://developer.kookapp.cn/doc/event/guild-role
     """
 
@@ -530,7 +540,8 @@ class KookRoleEventBody(KookBaseReceiveDataClass):
 
 class KookExtra(KookBaseReceiveDataClass):
     """事件结构定义
-    文档参考 : https://developer.kookapp.cn/doc/event/event-introduction"""
+    文档参考 : https://developer.kookapp.cn/doc/event/event-introduction
+    """
 
     type: KookRoleExtraType | str | int
     """当 type 非系统消息(255)时, type为int
@@ -571,7 +582,8 @@ class KookExtra(KookBaseReceiveDataClass):
 
 class KookMessageEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.MESSAGE] = Field(
-        KookMessageSignal.MESSAGE, exclude=True
+        KookMessageSignal.MESSAGE,
+        exclude=True,
     )
     """only for type hint"""
 
@@ -589,7 +601,8 @@ class KookMessageEventData(KookBaseReceiveDataClass):
 
 class KookHelloEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.HELLO] = Field(
-        KookMessageSignal.HELLO, exclude=True
+        KookMessageSignal.HELLO,
+        exclude=True,
     )
     """only for type hint"""
 
@@ -599,28 +612,32 @@ class KookHelloEventData(KookBaseReceiveDataClass):
 
 class KookPingEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.PING] = Field(
-        KookMessageSignal.PING, exclude=True
+        KookMessageSignal.PING,
+        exclude=True,
     )
     """only for type hint"""
 
 
 class KookPongEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.PONG] = Field(
-        KookMessageSignal.PONG, exclude=True
+        KookMessageSignal.PONG,
+        exclude=True,
     )
     """only for type hint"""
 
 
 class KookResumeEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.RESUME] = Field(
-        KookMessageSignal.RESUME, exclude=True
+        KookMessageSignal.RESUME,
+        exclude=True,
     )
     """only for type hint"""
 
 
 class KookReconnectEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.RECONNECT] = Field(
-        KookMessageSignal.RECONNECT, exclude=True
+        KookMessageSignal.RECONNECT,
+        exclude=True,
     )
     """only for type hint"""
 
@@ -630,7 +647,8 @@ class KookReconnectEventData(KookBaseReceiveDataClass):
 
 class KookResumeAckEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.RESUME_ACK] = Field(
-        KookMessageSignal.RESUME_ACK, exclude=True
+        KookMessageSignal.RESUME_ACK,
+        exclude=True,
     )
     """only for type hint"""
 
@@ -641,7 +659,9 @@ class KookWebsocketEvent(KookBaseReceiveDataClass):
     """KOOK WebSocket 原始推送结构"""
 
     signal: KookMessageSignal = Field(
-        ..., validation_alias="s", serialization_alias="s"
+        ...,
+        validation_alias="s",
+        serialization_alias="s",
     )
     """信令类型"""
     data: Annotated[
@@ -657,13 +677,13 @@ class KookWebsocketEvent(KookBaseReceiveDataClass):
     ] = Field(None, validation_alias="d", serialization_alias="d")
     """数据事件主体,对应原字段是'd'"""
     sn: int | None = None
-    """消息序号 , 用来确定消息顺序和ws重连时使用  
-    详见ws连接流程文档: https://developer.kookapp.cn/doc/websocket#%E8%BF%9E%E6%8E%A5%E6%B5%81%E7%A8%8B"""  # noqa: W291
+    """消息序号 , 用来确定消息顺序和ws重连时使用
+    详见ws连接流程文档: https://developer.kookapp.cn/doc/websocket#%E8%BF%9E%E6%8E%A5%E6%B5%81%E7%A8%8B"""
 
     @model_validator(mode="before")
     @classmethod
     def _inject_signal_into_data(cls, data: Any) -> Any:
-        """在解析前，把外层的 s 同步到内层的 d 中，供 discriminator 使用"""
+        """在解析前,把外层的 s 同步到内层的 d 中,供 discriminator 使用"""
         if isinstance(data, dict):
             s_value = data.get("s")
             d_value = data.get("d")

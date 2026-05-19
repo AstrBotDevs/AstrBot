@@ -1,62 +1,216 @@
-/*This is for the logo*/
-.leftSidebar {
-  border: 0px;
-  border-right: 1px solid rgba(var(--v-theme-borderLight), 0.45);
-  box-shadow: none !important;
+@use '../variables' as *;
+
+/* ================================================
+   LATTICE FLUX DESIGN — Sidebar
+   Core: Magnetic constraint field aesthetics
+   No glass, no shadow — energy flows through gaps
+   ================================================ */
+
+/* ---- Dark Mode: Cherenkov Energy Lattice ---- */
+.v-theme--bluebusinessdarktheme {
+  .leftSidebar {
+    /* Remove glass — use lattice grid background */
+    border: 0px;
+    border-right: 1px dashed rgba(0, 242, 255, 0.18) !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+
+    /* Lattice grid: dense precision dots on deep black titanium */
+    background-color: #050507 !important;
+    background-image:
+      radial-gradient(rgba(0, 242, 255, 0.06) 1px, transparent 0);
+    background-size: 20px 20px;
+    background-position: 0 0;
+  }
+
+  /* Inner glow seam — energy leaking from the gap */
+  .leftSidebar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 1px;
+    height: 100%;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0, 242, 255, 0.25) 20%,
+      rgba(0, 242, 255, 0.4) 50%,
+      rgba(0, 242, 255, 0.25) 80%,
+      transparent 100%
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* Low-contrast resting state: base-level energy */
+  .listitem {
+    .v-list-item {
+      /* Resting: low-contrast, like degenerate matter at ground state */
+      color: rgba(226, 226, 231, 0.5) !important;
+
+      .v-list-item-title {
+        color: inherit !important;
+        opacity: 0.7;
+      }
+
+      .v-icon {
+        color: rgba(0, 242, 255, 0.4) !important;
+        transition: color 0.15s step-end;
+      }
+
+      /* Hover: quantum leap to excited state — instant collapse */
+      &:hover {
+        color: rgba(0, 242, 255, 0.9) !important;
+        background: transparent !important;
+
+        .v-list-item-title {
+          color: inherit !important;
+          opacity: 1;
+        }
+
+        .v-icon {
+          color: rgb(var(--v-theme-primary)) !important;
+        }
+      }
+
+      /* Active: fully collapsed high-energy state */
+      &.v-list-item--active {
+        color: rgb(var(--v-theme-primary)) !important;
+
+        .v-list-item-title {
+          color: inherit !important;
+          opacity: 1;
+        }
+
+        .v-icon {
+          color: rgb(var(--v-theme-primary)) !important;
+        }
+      }
+    }
+
+    .v-list-item--density-default.v-list-item--one-line {
+      min-height: 40px;
+    }
+  }
+
+  /* Footer buttons: low-opacity resting, brighten on hover */
+  .sidebar-footer-btn {
+    color: rgba(226, 226, 231, 0.4) !important;
+    border-color: rgba(0, 242, 255, 0.1) !important;
+    background: transparent !important;
+    transition: all 0.15s step-end;
+
+    &:hover {
+      color: rgba(0, 242, 255, 0.9) !important;
+      border-color: rgba(0, 242, 255, 0.35) !important;
+      background: rgba(0, 242, 255, 0.05) !important;
+    }
+  }
 }
+
+/* ---- Light Mode: Blueprint Lattice ---- */
+.v-theme--bluebusinesstheme {
+  .leftSidebar {
+    border: 0px;
+    /* Dashed border: blueprint precision lines */
+    border-right: 1px dashed rgba(0, 49, 83, 0.15) !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+
+    /* Subtle lattice on cold titanium white */
+    background-color: #F2F5F8 !important;
+    background-image:
+      radial-gradient(rgba(0, 49, 83, 0.04) 1px, transparent 0);
+    background-size: 20px 20px;
+  }
+
+  /* Blueprint seam glow — faint Prussian Blue leaking from gap */
+  .leftSidebar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 1px;
+    height: 100%;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0, 49, 83, 0.2) 20%,
+      rgba(0, 49, 83, 0.3) 50%,
+      rgba(0, 49, 83, 0.2) 80%,
+      transparent 100%
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* Blueprint: readable but airy */
+  .listitem {
+    .v-list-item {
+      color: rgba(0, 49, 83, 0.65) !important;
+
+      .v-list-item-title {
+        color: inherit !important;
+      }
+
+      .v-icon {
+        color: rgba(0, 49, 83, 0.45) !important;
+        transition: color 0.15s step-end;
+      }
+
+      &:hover {
+        background: transparent !important;
+        color: rgba(0, 49, 83, 0.95) !important;
+
+        .v-icon {
+          color: #003153 !important;
+        }
+      }
+
+      &.v-list-item--active {
+        background: rgba(0, 49, 83, 0.06) !important;
+        color: #003153 !important;
+        border-left: 2px solid #003153;
+
+        .v-icon {
+          color: #003153 !important;
+        }
+      }
+    }
+
+    .v-list-item--density-default.v-list-item--one-line {
+      min-height: 40px;
+    }
+  }
+
+  .sidebar-footer-btn {
+    color: rgba(0, 49, 83, 0.55) !important;
+    border-color: rgba(0, 49, 83, 0.12) !important;
+    background: transparent !important;
+    transition: all 0.15s step-end;
+
+    &:hover {
+      color: #003153 !important;
+      border-color: rgba(0, 49, 83, 0.3) !important;
+      background: rgba(0, 49, 83, 0.04) !important;
+    }
+  }
+}
+
+/* Common layout */
 .listitem {
   overflow-y: auto;
-  .v-list {
-    color: rgb(var(--v-theme-secondaryText));
-  }
   .v-list-group__items .v-list-item,
   .v-list-item {
     border-radius: $border-radius-root;
     padding-inline-start: calc(12px + var(--indent-padding) / 2) !important;
-    &:hover {
-      color: rgb(var(--v-theme-secondary));
-    }
   }
   .v-list-item--density-default.v-list-item--one-line {
     min-height: 40px;
   }
 }
 
-// 深色主题下的侧边栏悬停和选中样式
-.v-theme--PurpleThemeDark .leftSidebar {
-  .listitem {
-    .v-list-group__items .v-list-item,
-    .v-list-item {
-      &:hover {
-        color: rgb(var(--v-theme-primary)) !important;
-        
-        .v-list-item-title {
-          color: rgb(var(--v-theme-primary)) !important;
-        }
-        
-        .v-icon {
-          color: rgb(var(--v-theme-primary)) !important;
-        }
-      }
-      
-      // 选中状态的样式
-      &.v-list-item--active {
-        color: rgb(var(--v-theme-primary)) !important;
-        
-        .v-list-item-title {
-          color: rgb(var(--v-theme-primary)) !important;
-        }
-        
-        .v-icon {
-          color: rgb(var(--v-theme-primary)) !important;
-        }
-      }
-    }
-  }
-  .v-list-item--density-default.v-list-item--one-line {
-    min-height: 40px;
-  }
-}
 .v-navigation-drawer--rail {
   .scrollnavbar .v-list .v-list-group__items,
   .hide-menu {
@@ -66,6 +220,7 @@
     margin-left: 0px;
   }
 }
+
 @media only screen and (min-width: 1170px) {
   .mini-sidebar {
     .logo {
@@ -87,18 +242,18 @@
   }
 }
 
-// 新的flex布局样式
+/* Flex layout */
 .leftSidebar {
   .sidebar-container {
     display: flex;
     flex-direction: column;
     height: 100%;
-    
+
     .flex-grow-1 {
       flex: 1 1 auto;
       overflow-y: auto;
     }
-    
+
     .sidebar-footer {
       padding: 16px;
       background: inherit;
@@ -108,7 +263,7 @@
       font-size: 13px;
       text-align: center;
       flex-shrink: 0;
-      
+
       .v-btn {
         width: 100%;
         max-width: 180px;
@@ -121,4 +276,9 @@
       }
     }
   }
+}
+
+/* Resize handle — step transition */
+.sidebar-resize-handle {
+  transition: background-color 0.15s step-end;
 }

@@ -14,7 +14,7 @@
   "fileType": "Unsupported file type",
   "required_field": "Please fill in the required field",
   "invalid_format": "Invalid format",
-  "password_too_short": "Password must be at least 8 characters",
+  "password_too_short": "Password must be at least 12 characters",
   "password_too_weak": "Password is too weak",
   "invalid_phone": "Please enter a valid phone number",
   "invalid_date": "Please enter a valid date",

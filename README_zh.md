@@ -78,7 +78,10 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 ```bash
 uv tool install astrbot --python 3.12
 astrbot init # 仅首次执行此命令以初始化环境
-astrbot run
+astrbot run # astrbot run --backend-only 仅启动后端服务
+
+# 安装开发版本（更多修复，新功能，但不够稳定，适合开发者）
+uv tool install git+https://github.com/AstrBotDevs/AstrBot@dev
 ```
 
 > 需要安装 [uv](https://docs.astral.sh/uv/)。
@@ -204,13 +207,25 @@ yay -S astrbot-git
 | Xiaomi MiMo TTS | 文本转语音 |
 | 火山引擎 TTS | 文本转语音 |
 
+## ❤️ Sponsors
+
+<p align="center">
+  <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+</p>
+
+
 ## ❤️ 贡献
 
-欢迎任何 Issues/Pull Requests！只需要将你的更改提交到此项目 ：)
+欢迎任何 Issues/Pull Requests！只需要将你的更改提交到此项目 :)
 
 ### 如何贡献
 
 你可以通过查看问题或帮助审核 PR（拉取请求）来贡献。任何问题或 PR 都欢迎参与，以促进社区贡献。当然，这些只是建议，你可以以任何方式进行贡献。对于新功能的添加，请先通过 Issue 讨论。
+建议将功能性PR合并至dev分支，将在测试修改后合并到主分支并发布新版本。
+为了减少冲突，建议如下：
+1. 工作分支最好基于 `dev` 分支创建，避免直接在 `main` 分支上工作。
+2. 提交 PR 时，选择 `dev` 分支作为目标分支。
+3. 定期同步 `dev` 分支到本地，多使用git pull。
 
 ### 开发环境
 
@@ -218,11 +233,23 @@ AstrBot 使用 `ruff` 进行代码格式化和检查。
 
 ```bash
 git clone https://github.com/AstrBotDevs/AstrBot
-pip install pre-commit
+git switch dev # 切换到开发分支
+pip install pre-commit # 或者uv tool install pre-commit
 pre-commit install
 ```
-
-## 🌍 社区
+推荐使用uv本地安装，进行测试
+```bash
+uv tool install -e . --force
+astrbot init 
+astrbot run
+```
+调试前端
+```bash
+astrbot run --backend-only
+cd dashboard
+bun install # 或者pnpm 等
+bun dev
+```
 
 ### QQ 群组
 

@@ -12,6 +12,7 @@ from pydantic import (
     model_validator,
 )
 from pydantic_core import core_schema
+from typing_extensions import Self
 
 ContentPartT = TypeVar("ContentPartT", bound="ContentPart")
 
@@ -37,7 +38,9 @@ class ContentPart(BaseModel):
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source_type: Any, handler: GetCoreSchemaHandler
+        cls,
+        source_type: Any,
+        handler: GetCoreSchemaHandler,
     ) -> core_schema.CoreSchema:
         # If we're dealing with the base ContentPart class, use custom validation
         if cls.__name__ == "ContentPart":
@@ -49,12 +52,12 @@ class ContentPart(BaseModel):
 
                 # if it's a dict with a type field, dispatch to the appropriate subclass
                 if isinstance(value, dict) and "type" in value:
-                    type_value: Any | None = cast(dict[str, Any], value).get("type")
+                    type_value: Any | None = cast("dict[str, Any]", value).get("type")
                     if not isinstance(type_value, str):
                         raise ValueError(f"Cannot validate {value} as ContentPart")
                     target_class = cls.__content_part_registry[type_value]
                     part = target_class.model_validate(value)
-                    if cast(dict[str, Any], value).get("_no_save"):
+                    if cast("dict[str, Any]", value).get("_no_save"):
                         part._no_save = True
                     return part
 
@@ -65,7 +68,7 @@ class ContentPart(BaseModel):
         # for subclasses, use the default schema
         return handler(source_type)
 
-    def mark_as_temp(self: ContentPartT) -> ContentPartT:
+    def mark_as_temp(self) -> Self:
         """Mark this content part as provider-facing only, not persisted."""
         self._no_save = True
         return self
@@ -78,8 +81,7 @@ class ContentPart(BaseModel):
 
 
 class TextPart(ContentPart):
-    """
-    >>> TextPart(text="Hello, world!").model_dump()
+    """TextPart(text="Hello, world!").model_dump()
     {'type': 'text', 'text': 'Hello, world!'}
     """
 
@@ -88,8 +90,7 @@ class TextPart(ContentPart):
 
 
 class ThinkPart(ContentPart):
-    """
-    >>> ThinkPart(think="I think I need to think about this.").model_dump()
+    """ThinkPart(think="I think I need to think about this.").model_dump()
     {'type': 'think', 'think': 'I think I need to think about this.', 'encrypted': None}
     """
 
@@ -110,8 +111,7 @@ class ThinkPart(ContentPart):
 
 
 class ImageURLPart(ContentPart):
-    """
-    >>> ImageURLPart(image_url="http://example.com/image.jpg").model_dump()
+    """ImageURLPart(image_url="http://example.com/image.jpg").model_dump()
     {'type': 'image_url', 'image_url': 'http://example.com/image.jpg'}
     """
 
@@ -126,8 +126,7 @@ class ImageURLPart(ContentPart):
 
 
 class AudioURLPart(ContentPart):
-    """
-    >>> AudioURLPart(audio_url=AudioURLPart.AudioURL(url="https://example.com/audio.mp3")).model_dump()
+    """AudioURLPart(audio_url=AudioURLPart.AudioURL(url="https://example.com/audio.mp3")).model_dump()
     {'type': 'audio_url', 'audio_url': {'url': 'https://example.com/audio.mp3', 'id': None}}
     """
 
@@ -142,10 +141,9 @@ class AudioURLPart(ContentPart):
 
 
 class ToolCall(BaseModel):
-    """
-    A tool call requested by the assistant.
+    """A tool call requested by the assistant.
 
-    >>> ToolCall(
+    ToolCall(
     ...     id="123",
     ...     function=ToolCall.FunctionBody(
     ...         name="function",
@@ -232,7 +230,7 @@ class Message(BaseModel):
         # other all cases: content is required
         if self.content is None:
             raise ValueError(
-                "content is required unless role='assistant' and tool_calls is not None"
+                "content is required unless role='assistant' and tool_calls is not None",
             )
         return self
 
@@ -356,6 +354,8 @@ def dump_messages_with_checkpoints(messages: list[Message]) -> list[dict]:
         dumped.append(message_data)
         if message._checkpoint_after is not None:
             dumped.append(
-                CheckpointMessageSegment(content=message._checkpoint_after).model_dump()
+                CheckpointMessageSegment(
+                    content=message._checkpoint_after,
+                ).model_dump(),
             )
     return dumped

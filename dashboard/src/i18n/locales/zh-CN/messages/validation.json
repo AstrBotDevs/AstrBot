@@ -14,7 +14,7 @@
   "fileType": "不支持的文件类型",
   "required_field": "请填写必填字段",
   "invalid_format": "格式无效",
-  "password_too_short": "密码至少需要8个字符",
+  "password_too_short": "密码至少需要12个字符",
   "password_too_weak": "密码强度太弱",
   "invalid_phone": "请输入有效的手机号码",
   "invalid_date": "请输入有效的日期",

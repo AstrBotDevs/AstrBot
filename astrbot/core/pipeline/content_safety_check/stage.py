@@ -2,10 +2,10 @@ from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
 from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
-from ..context import PipelineContext
-from ..stage import Stage, register_stage
 from .strategies.strategy import StrategySelector
 
 
@@ -13,7 +13,7 @@ from .strategies.strategy import StrategySelector
 class ContentSafetyCheckStage(Stage):
     """检查内容安全
 
-    当前只会检查文本的。
+    当前只会检查文本的｡
     """
 
     async def initialize(self, ctx: PipelineContext) -> None:
@@ -23,19 +23,25 @@ class ContentSafetyCheckStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-        check_text: str | None = None,
+    ) -> AsyncGenerator[None, None]:
+        async for item in self.process_text(event, event.get_message_str()):
+            yield item
+
+    async def process_text(
+        self,
+        event: AstrMessageEvent,
+        check_text: str,
     ) -> AsyncGenerator[None, None]:
         """检查内容安全"""
-        text = check_text if check_text else event.get_message_str()
-        ok, info = self.strategy_selector.check(text)
+        ok, info = self.strategy_selector.check(check_text)
         if not ok:
             if event.is_at_or_wake_command:
                 event.set_result(
                     MessageEventResult().message(
-                        "你的消息或者大模型的响应中包含不适当的内容，已被屏蔽。",
+                        "你的消息或者大模型的响应中包含不适当的内容,已被屏蔽｡",
                     ),
                 )
-                yield
+                yield None
             event.stop_event()
-            logger.info(f"内容安全检查不通过，原因：{info}")
+            logger.info(f"内容安全检查不通过,原因:{info}")
             return

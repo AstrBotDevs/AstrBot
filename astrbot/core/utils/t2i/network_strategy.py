@@ -2,7 +2,6 @@ import asyncio
 import logging
 import random
 import re
-from functools import lru_cache
 from pathlib import Path
 
 import aiohttp
@@ -21,27 +20,24 @@ JINJA_SYNTAX_PATTERN = re.compile(r"\{[{%#]")
 JINJA_RAW_OPEN_PATTERN = re.compile(r"{%-?\s*raw\s*-?%}")
 JINJA_RAW_CLOSE_PATTERN = re.compile(r"{%-?\s*endraw\s*-?%}")
 
+_RUNTIME_PATH = Path(__file__).resolve().parent / "template" / "shiki_runtime.iife.js"
+
 logger = logging.getLogger("astrbot")
 
 
-@lru_cache(maxsize=1)
-def get_shiki_runtime() -> str:
-    runtime_path = (
-        Path(__file__).resolve().parent / "template" / "shiki_runtime.iife.js"
-    )
-    if not runtime_path.exists():
-        logger.error(
-            "T2I Shiki runtime not found at %s. Run `cd dashboard && pnpm run build:t2i-shiki-runtime` to regenerate it. Continuing without code highlighting.",
-            runtime_path,
-        )
-        return ""
+def _get_aiohttp():
+    import aiohttp
 
+    return aiohttp
+
+
+def get_shiki_runtime() -> str:
     try:
-        runtime = runtime_path.read_text(encoding="utf-8")
+        runtime = _RUNTIME_PATH.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as err:
         logger.warning(
             "Failed to load T2I Shiki runtime from %s: %s. Continuing without code highlighting.",
-            runtime_path,
+            _RUNTIME_PATH,
             err,
         )
         return ""
@@ -98,20 +94,24 @@ class NetworkRenderStrategy(RenderStrategy):
             self.BASE_RENDER_URL = ASTRBOT_T2I_DEFAULT_ENDPOINT
         else:
             self.BASE_RENDER_URL = self._clean_url(base_url)
-
+        self.tasks: set[asyncio.Task[None]] = set()
         self.endpoints = [self.BASE_RENDER_URL]
         self.template_manager = TemplateManager()
 
     async def initialize(self) -> None:
         if self.BASE_RENDER_URL == ASTRBOT_T2I_DEFAULT_ENDPOINT:
-            asyncio.create_task(self.get_official_endpoints())
+            _get_official_endpoints_task = asyncio.create_task(
+                self.get_official_endpoints(),
+            )
+            self.tasks.add(_get_official_endpoints_task)
+            _get_official_endpoints_task.add_done_callback(self.tasks.discard)
 
     async def get_template(self, name: str = "base") -> str:
         """通过名称获取文转图 HTML 模板"""
         return self.template_manager.get_template(name)
 
     async def get_official_endpoints(self) -> None:
-        """获取官方的 t2i 端点列表。"""
+        """获取官方的 t2i 端点列表｡"""
         try:
             async with aiohttp.ClientSession(
                 trust_env=True,
@@ -124,7 +124,7 @@ class NetworkRenderStrategy(RenderStrategy):
                         data = await resp.json()
                         all_endpoints: list[dict] = data.get("data", [])
                         self.endpoints = [
-                            ep.get("url")
+                            ep["url"]
                             for ep in all_endpoints
                             if ep.get("active") and ep.get("url")
                         ]

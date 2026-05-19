@@ -1,6 +1,5 @@
 <template>
   <div
-    v-if="props.active"
     class="chat-ui"
     :class="{ 'is-dark': isDark, 'sidebar-collapsed': isSidebarCollapsed }"
   >
@@ -36,25 +35,6 @@
         </div>
 
         <v-btn
-          class="new-chat-btn sidebar-provider-btn"
-          :class="{
-            'icon-only': isSidebarCollapsed,
-            'sidebar-workspace-btn--active': isProviderWorkspace,
-          }"
-          variant="text"
-          :icon="isSidebarCollapsed"
-          @click="openProviderWorkspace"
-        >
-          <v-icon
-            size="20"
-            class="sidebar-action-icon"
-            :class="{ 'mr-2': !isSidebarCollapsed }"
-            >mdi-creation</v-icon
-          >
-          <span v-if="!isSidebarCollapsed">{{ tm("actions.providerConfig") }}</span>
-        </v-btn>
-
-        <v-btn
           class="new-chat-btn"
           :class="{ 'icon-only': isSidebarCollapsed }"
           variant="text"
@@ -86,7 +66,7 @@
           v-for="session in sessions"
           :key="session.session_id"
           class="session-item"
-          :class="{ active: !isProviderWorkspace && currSessionId === session.session_id }"
+          :class="{ active: currSessionId === session.session_id }"
           role="button"
           tabindex="0"
           @click="selectSession(session.session_id)"
@@ -266,6 +246,19 @@
             <v-list-item
               class="styled-menu-item"
               rounded="md"
+              @click="providerDialog = true"
+            >
+              <template #prepend>
+                <v-icon size="18">mdi-robot-outline</v-icon>
+              </template>
+              <v-list-item-title>{{
+                tm("actions.providerConfig")
+              }}</v-list-item-title>
+            </v-list-item>
+
+            <v-list-item
+              class="styled-menu-item"
+              rounded="md"
               @click="toggleTheme"
             >
               <template #prepend>
@@ -285,19 +278,12 @@
     <main
       class="chat-main"
       :class="{
-        'empty-chat': !isProviderWorkspace &&
+        'empty-chat':
           !selectedProject && !loadingMessages && !activeMessages.length,
       }"
     >
-      <section v-if="isProviderWorkspace" class="provider-workspace-shell">
-        <ProviderChatCompletionPanel
-          class="provider-workspace-page"
-          :show-border="false"
-        />
-      </section>
-
       <ProjectView
-        v-else-if="selectedProject"
+        v-if="selectedProject"
         :project="selectedProject"
         :sessions="projectSessions"
         @select-session="selectProjectSession"
@@ -382,7 +368,6 @@
               @regenerate-with-model="handleRegenerateMessage"
               @select-bot-text="handleBotTextSelection"
               @open-thread="openThreadPanel"
-              @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
             />
           </div>
@@ -438,6 +423,7 @@
       </button>
     </div>
 
+    <ProviderConfigDialog v-model="providerDialog" />
     <ProjectDialog
       v-model="projectDialogOpen"
       :project="editingProject"
@@ -481,11 +467,6 @@
       :deleting="deletingThread"
       @delete="deleteThread"
     />
-    <ReasoningSidebar
-      v-model="reasoningPanelOpen"
-      :parts="activeReasoningParts"
-      :is-dark="isDark"
-    />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
   </div>
 </template>
@@ -505,6 +486,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
 import axios from "axios";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
 import ProjectDialog, {
   type ProjectFormData,
 } from "@/components/chat/ProjectDialog.vue";
@@ -513,12 +495,10 @@ import ProjectView from "@/components/chat/ProjectView.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
-import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
-  messageBlocks as buildMessageBlocks,
   useMessages,
   type ChatRecord,
   type ChatThread,
@@ -528,7 +508,6 @@ import {
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useProjects } from "@/composables/useProjects";
 import { useCustomizerStore } from "@/stores/customizer";
-import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import {
   useI18n,
   useLanguageSwitcher,
@@ -538,9 +517,8 @@ import type { Locale } from "@/i18n/types";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import { useToast } from "@/utils/toast";
 
-const props = withDefaults(defineProps<{ chatboxMode?: boolean; active?: boolean }>(), {
+const props = withDefaults(defineProps<{ chatboxMode?: boolean }>(), {
   chatboxMode: false,
-  active: true,
 });
 
 const route = useRoute();
@@ -588,10 +566,8 @@ const {
   cleanupMediaCache,
 } = useMediaHandling();
 
-type WorkspaceView = "chat" | "providers";
-
 const sidebarCollapsed = ref(false);
-const activeWorkspace = ref<WorkspaceView>("chat");
+const providerDialog = ref(false);
 const projectDialogOpen = ref(false);
 const editingProject = ref<Project | null>(null);
 const sessionTitleDialogOpen = ref(false);
@@ -611,14 +587,9 @@ const shouldStickToBottom = ref(true);
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
-const reasoningPanelOpen = ref(false);
-const activeReasoningTarget = ref<{
-  message: ChatRecord;
-  blockIndex: number;
-} | null>(null);
 const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
-const selectedRefs = ref<Record<string, unknown> | null>(null);
+const selectedRefs = ref<Record<string, unknown> | undefined>(undefined);
 const threadSelection = reactive<{
   visible: boolean;
   left: number;
@@ -646,23 +617,6 @@ const chatSidebarDrawer = computed({
 const isSidebarCollapsed = computed(() =>
   lgAndUp.value ? sidebarCollapsed.value : !customizer.chatSidebarOpen,
 );
-const isProviderWorkspace = computed(
-  () => activeWorkspace.value === "providers",
-);
-const activeReasoningParts = computed<MessagePart[]>(() => {
-  if (!activeReasoningTarget.value) return [];
-  const blocks = buildMessageBlocks(
-    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
-  );
-  const block = blocks[activeReasoningTarget.value.blockIndex];
-  return block?.kind === "thinking" ? block.parts : [];
-});
-
-watch(reasoningPanelOpen, (open) => {
-  if (!open) {
-    activeReasoningTarget.value = null;
-  }
-});
 
 const {
   loadingMessages,
@@ -753,9 +707,7 @@ onMounted(async () => {
   try {
     await Promise.all([getSessions(), getProjects()]);
     const routeSessionId = getRouteSessionId();
-    if (routeSessionId === "models") {
-      activeWorkspace.value = "providers";
-    } else if (routeSessionId) {
+    if (routeSessionId) {
       await selectSession(routeSessionId, false);
     }
   } finally {
@@ -771,16 +723,10 @@ watch(
   () => route.params.conversationId,
   async () => {
     const routeSessionId = getRouteSessionId();
-    if (routeSessionId === "models") {
-      activeWorkspace.value = "providers";
-      return;
-    }
     if (routeSessionId && routeSessionId !== currSessionId.value) {
-      showChatWorkspace();
       selectedProjectId.value = null;
       await selectSession(routeSessionId, false);
     } else if (!routeSessionId && currSessionId.value) {
-      showChatWorkspace();
       currSessionId.value = "";
     }
   },
@@ -807,36 +753,11 @@ function closeMobileSidebar() {
   }
 }
 
-function closeSecondaryPanels() {
-  threadSelection.visible = false;
-  threadPanelOpen.value = false;
-  activeThread.value = null;
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
-  refsSidebarOpen.value = false;
-  selectedRefs.value = null;
-}
-
-function showChatWorkspace() {
-  activeWorkspace.value = "chat";
-}
-
-async function openProviderWorkspace() {
-  closeSecondaryPanels();
-  activeWorkspace.value = "providers";
-  const targetPath = `${basePath()}/models`;
-  if (route.path !== targetPath) {
-    await router.push(targetPath);
-  }
-  closeMobileSidebar();
-}
-
 function sessionTitle(session: Session) {
   return session.display_name?.trim() || tm("conversation.newConversation");
 }
 
 async function startNewChat() {
-  showChatWorkspace();
   selectedProjectId.value = null;
   replyTarget.value = null;
   newChat();
@@ -854,7 +775,6 @@ function openEditProjectDialog(project: Project) {
 }
 
 async function selectProject(projectId: string) {
-  showChatWorkspace();
   selectedProjectId.value = projectId;
   currSessionId.value = "";
   replyTarget.value = null;
@@ -963,7 +883,6 @@ async function saveProject(formData: ProjectFormData, projectId?: string) {
 }
 
 async function selectSession(sessionId: string, pushRoute = true) {
-  showChatWorkspace();
   selectedProjectId.value = null;
   currSessionId.value = sessionId;
   replyTarget.value = null;
@@ -1227,33 +1146,14 @@ async function createThreadFromSelection() {
 }
 
 function openThreadPanel(thread: ChatThread) {
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
-  refsSidebarOpen.value = false;
   activeThread.value = thread;
   threadPanelOpen.value = true;
 }
 
 function openRefsSidebar(refs: unknown) {
-  threadPanelOpen.value = false;
-  activeThread.value = null;
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
   selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : undefined;
   refsSidebarOpen.value = true;
-}
-
-function openReasoningPanel(payload: {
-  message: ChatRecord;
-  blockIndex: number;
-}) {
-  threadPanelOpen.value = false;
-  activeThread.value = null;
-  refsSidebarOpen.value = false;
-  selectedRefs.value = null;
-  activeReasoningTarget.value = payload;
-  reasoningPanelOpen.value = true;
 }
 
 async function deleteThread(thread: ChatThread) {
@@ -1429,10 +1329,6 @@ function toggleTheme() {
   font-weight: 500;
 }
 
-.sidebar-provider-btn {
-  margin-bottom: 8px;
-}
-
 .new-chat-btn:not(.icon-only),
 .settings-btn:not(.icon-only) {
   padding-inline: 12px;
@@ -1456,11 +1352,6 @@ function toggleTheme() {
 .new-chat-btn:hover,
 .settings-btn:hover {
   background: var(--chat-session-active-bg);
-}
-
-.sidebar-workspace-btn--active {
-  background: var(--chat-session-active-bg);
-  color: rgb(var(--v-theme-on-surface));
 }
 
 .chevron-collapsed {
@@ -1573,17 +1464,6 @@ function toggleTheme() {
 
 .chat-main.empty-chat {
   justify-content: center;
-}
-
-.provider-workspace-shell {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.provider-workspace-page {
-  height: 100%;
-  min-height: 0;
 }
 
 .messages-panel {
@@ -1702,23 +1582,6 @@ kbd {
   border-radius: 4px;
   background: rgba(var(--v-theme-on-surface), 0.08);
   font: inherit;
-}
-
-:deep(.hr-node) {
-    margin-top: 1.25rem;
-    margin-bottom: 1.25rem;
-    opacity: 0.5;
-    border-top-width: .3px;
-}
-
-:deep(.paragraph-node) {
-    margin: .5rem 0;
-    line-height: 1.7;
-}
-
-:deep(.list-node) {
-    margin-top: .5rem;
-    margin-bottom: .5rem;
 }
 
 @media (max-width: 760px) {

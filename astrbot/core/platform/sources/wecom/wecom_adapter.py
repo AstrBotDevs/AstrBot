@@ -66,7 +66,7 @@ def _extract_wecom_media_filename(disposition: str | None) -> str | None:
 class WecomServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict) -> None:
         self.server = quart.Quart(__name__)
-        self.port = int(cast(str, config.get("port")))
+        self.port = int(cast("str", config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.server.add_url_rule(
             "/callback/command",
@@ -101,6 +101,7 @@ class WecomServer:
 
         Returns:
             验证响应
+
         """
         logger.info(f"验证请求有效性: {request.args}")
         args = request.args
@@ -129,6 +130,7 @@ class WecomServer:
 
         Returns:
             响应内容
+
         """
         data = await request.get_data()
         msg_signature = request.args.get("msg_signature")
@@ -140,7 +142,7 @@ class WecomServer:
             logger.error("解密失败，签名异常，请检查配置。")
             raise
         else:
-            msg = cast(BaseMessage, parse_message(xml))
+            msg = cast("BaseMessage", parse_message(xml))
             logger.info(f"解析成功: {msg}")
 
             if self.callback:
@@ -355,8 +357,7 @@ class WecomPlatformAdapter(Platform):
         # 根据请求方法分发到不同的处理函数
         if request.method == "GET":
             return await self.server.handle_verify(request)
-        else:
-            return await self.server.handle_callback(request)
+        return await self.server.handle_callback(request)
 
     async def convert_message(self, msg: BaseMessage) -> AstrBotMessage | None:
         abm = AstrBotMessage()
@@ -366,11 +367,11 @@ class WecomPlatformAdapter(Platform):
             abm.message = [Plain(msg.content)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                cast(str, msg.source),
-                cast(str, msg.source),
+                cast("str", msg.source),
+                cast("str", msg.source),
             )
             abm.message_id = str(msg.id)
-            abm.timestamp = int(cast(int | str, msg.time))
+            abm.timestamp = int(cast("int | str", msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         elif isinstance(msg, ImageMessage):
@@ -379,11 +380,11 @@ class WecomPlatformAdapter(Platform):
             abm.message = [Image(file=msg.image, url=msg.image)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                cast(str, msg.source),
-                cast(str, msg.source),
+                cast("str", msg.source),
+                cast("str", msg.source),
             )
             abm.message_id = str(msg.id)
-            abm.timestamp = int(cast(int | str, msg.time))
+            abm.timestamp = int(cast("int | str", msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         elif isinstance(msg, VoiceMessage):
@@ -410,11 +411,11 @@ class WecomPlatformAdapter(Platform):
             abm.message = [Record(file=path_wav, url=path_wav)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                cast(str, msg.source),
-                cast(str, msg.source),
+                cast("str", msg.source),
+                cast("str", msg.source),
             )
             abm.message_id = str(msg.id)
-            abm.timestamp = int(cast(int | str, msg.time))
+            abm.timestamp = int(cast("int | str", msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         else:
@@ -427,7 +428,7 @@ class WecomPlatformAdapter(Platform):
 
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
         msgtype = msg.get("msgtype")
-        external_userid = cast(str, msg.get("external_userid"))
+        external_userid = cast("str", msg.get("external_userid"))
         abm = AstrBotMessage()
         abm.raw_message = msg
         abm.raw_message["_wechat_kf_flag"] = None  # 方便处理

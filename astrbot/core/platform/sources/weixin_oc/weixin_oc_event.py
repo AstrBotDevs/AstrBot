@@ -29,7 +29,7 @@ class WeixinOCMessageEvent(AstrMessageEvent):
         platform: WeixinOCAdapter,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
-        self.platform = platform
+        self.adapter = platform
         self._typing_owner_id: str | None = None
 
     def _get_typing_owner_id(self) -> str:
@@ -62,17 +62,17 @@ class WeixinOCMessageEvent(AstrMessageEvent):
     async def send(self, message: MessageChain) -> None:
         if not message.chain:
             return
-        await self.platform.send_by_session(self.session, message)
+        await self.adapter.send_by_session(self.session, message)
         await super().send(message)
 
     async def send_typing(self) -> None:
-        await self.platform.start_typing(
+        await self.adapter.start_typing(
             self.session.session_id,
             self._get_typing_owner_id(),
         )
 
     async def stop_typing(self) -> None:
-        await self.platform.stop_typing(
+        await self.adapter.stop_typing(
             self.session.session_id,
             self._get_typing_owner_id(),
         )

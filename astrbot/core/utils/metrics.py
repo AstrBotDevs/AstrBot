@@ -81,7 +81,7 @@ class Metric:
                 (key, Metric._format_group_value(value))
                 for key, value in kwargs.items()
                 if key not in Metric._counter_fields
-            )
+            ),
         )
 
     @staticmethod

@@ -1,17 +1,17 @@
 /**
  * 指令过滤逻辑 Composable
  */
-import { ref, computed, type Ref } from 'vue';
-import type { CommandItem, FilterState } from '../types';
-import { normalizeTextInput } from '@/utils/inputValue';
+import { ref, computed, type Ref } from "vue";
+import type { CommandItem, FilterState } from "../types";
+import { normalizeTextInput } from "@/utils/inputValue";
 
 export function useCommandFilters(commands: Ref<CommandItem[]>) {
   // 过滤状态
-  const searchQuery = ref('');
-  const pluginFilter = ref('all');
-  const permissionFilter = ref('all');
-  const statusFilter = ref('all');
-  const typeFilter = ref('all');
+  const searchQuery = ref("");
+  const pluginFilter = ref("all");
+  const permissionFilter = ref("all");
+  const statusFilter = ref("all");
+  const typeFilter = ref("all");
   const showSystemPlugins = ref(false);
 
   // 展开的指令组
@@ -21,7 +21,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
    * 检查是否有涉及系统插件的冲突
    */
   const hasSystemPluginConflict = computed(() => {
-    return commands.value.some(cmd => cmd.has_conflict && cmd.reserved);
+    return commands.value.some((cmd) => cmd.has_conflict && cmd.reserved);
   });
 
   /**
@@ -37,8 +37,8 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
   const availablePlugins = computed(() => {
     const plugins = new Set(
       commands.value
-        .filter(cmd => effectiveShowSystemPlugins.value || !cmd.reserved)
-        .map(cmd => cmd.plugin)
+        .filter((cmd) => effectiveShowSystemPlugins.value || !cmd.reserved)
+        .map((cmd) => cmd.plugin),
     );
     return Array.from(plugins).sort();
   });
@@ -54,7 +54,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
 
     // 搜索过滤
     if (query) {
-      const matchesSearch = 
+      const matchesSearch =
         cmd.effective_command?.toLowerCase().includes(query) ||
         cmd.description?.toLowerCase().includes(query) ||
         cmd.plugin?.toLowerCase().includes(query);
@@ -62,31 +62,34 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
     }
 
     // 插件过滤
-    if (pluginFilter.value !== 'all' && cmd.plugin !== pluginFilter.value) {
+    if (pluginFilter.value !== "all" && cmd.plugin !== pluginFilter.value) {
       return false;
     }
 
     // 权限过滤
-    if (permissionFilter.value !== 'all') {
-      if (permissionFilter.value === 'everyone') {
-        if (cmd.permission !== 'everyone' && cmd.permission !== 'member') return false;
+    if (permissionFilter.value !== "all") {
+      if (permissionFilter.value === "everyone") {
+        if (cmd.permission !== "everyone" && cmd.permission !== "member")
+          return false;
       } else if (cmd.permission !== permissionFilter.value) {
         return false;
       }
     }
 
     // 状态过滤
-    if (statusFilter.value !== 'all') {
-      if (statusFilter.value === 'enabled' && !cmd.enabled) return false;
-      if (statusFilter.value === 'disabled' && cmd.enabled) return false;
-      if (statusFilter.value === 'conflict' && !cmd.has_conflict) return false;
+    if (statusFilter.value !== "all") {
+      if (statusFilter.value === "enabled" && !cmd.enabled) return false;
+      if (statusFilter.value === "disabled" && cmd.enabled) return false;
+      if (statusFilter.value === "conflict" && !cmd.has_conflict) return false;
     }
 
     // 类型过滤
-    if (typeFilter.value !== 'all') {
-      if (typeFilter.value === 'group' && cmd.type !== 'group') return false;
-      if (typeFilter.value === 'command' && cmd.type !== 'command') return false;
-      if (typeFilter.value === 'sub_command' && cmd.type !== 'sub_command') return false;
+    if (typeFilter.value !== "all") {
+      if (typeFilter.value === "group" && cmd.type !== "group") return false;
+      if (typeFilter.value === "command" && cmd.type !== "command")
+        return false;
+      if (typeFilter.value === "sub_command" && cmd.type !== "sub_command")
+        return false;
     }
 
     return true;
@@ -104,8 +107,10 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
       // 对于指令组，检查组本身或子指令是否匹配
       if (cmd.is_group) {
         const groupMatches = matchesFilters(cmd, query);
-        const matchingSubCmds = (cmd.sub_commands || []).filter(sub => matchesFilters(sub, query));
-        
+        const matchingSubCmds = (cmd.sub_commands || []).filter((sub) =>
+          matchesFilters(sub, query),
+        );
+
         // 如果组匹配或有匹配的子指令，则包含它
         if (groupMatches || matchingSubCmds.length > 0) {
           if (cmd.has_conflict) {
@@ -113,10 +118,10 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
           } else {
             normalCmds.push(cmd);
           }
-          
+
           // 如果组已展开，添加匹配的子指令
           if (expandedGroups.value.has(cmd.handler_full_name)) {
-            const subsToShow = query ? matchingSubCmds : (cmd.sub_commands || []);
+            const subsToShow = query ? matchingSubCmds : cmd.sub_commands || [];
             for (const sub of subsToShow) {
               if (sub.has_conflict) {
                 conflictCmds.push(sub);
@@ -126,7 +131,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
             }
           }
         }
-      } else if (cmd.type !== 'sub_command') {
+      } else if (cmd.type !== "sub_command") {
         // 普通指令（子指令通过组处理）
         if (matchesFilters(cmd, query)) {
           if (cmd.has_conflict) {
@@ -139,7 +144,9 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
     }
 
     // 按 effective_command 排序冲突指令，使其分组在一起
-    conflictCmds.sort((a, b) => (a.effective_command || '').localeCompare(b.effective_command || ''));
+    conflictCmds.sort((a, b) =>
+      (a.effective_command || "").localeCompare(b.effective_command || ""),
+    );
 
     return [...conflictCmds, ...normalCmds];
   });
@@ -172,16 +179,16 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
     typeFilter,
     showSystemPlugins,
     expandedGroups,
-    
+
     // 计算属性
     hasSystemPluginConflict,
     effectiveShowSystemPlugins,
     availablePlugins,
     filteredCommands,
-    
+
     // 方法
     matchesFilters,
     toggleGroupExpand,
-    isGroupExpanded
+    isGroupExpanded,
   };
 }

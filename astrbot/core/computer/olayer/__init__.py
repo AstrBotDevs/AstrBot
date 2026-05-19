@@ -5,9 +5,11 @@ from .python import PythonComponent
 from .shell import ShellComponent
 
 __all__ = [
+    "BrowserComponent",
+    "BrowserComponent",
+    "FileSystemComponent",
+    "FileSystemComponent",
+    "GUIComponent",
     "PythonComponent",
     "ShellComponent",
-    "FileSystemComponent",
-    "BrowserComponent",
-    "GUIComponent",
 ]

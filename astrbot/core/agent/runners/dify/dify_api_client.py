@@ -3,7 +3,8 @@ import json
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from aiohttp import ClientResponse, ClientSession, FormData
+import anyio
+from aiohttp import ClientResponse, ClientSession, ClientTimeout, FormData
 
 from astrbot.core import logger
 
@@ -35,66 +36,74 @@ class DifyAPIClient:
         self.api_key = api_key
         self.api_base = api_base
         self.session = ClientSession(trust_env=True)
-        self.headers = {
+        self.headers: dict[str, str] = {
             "Authorization": f"Bearer {self.api_key}",
         }
 
     async def chat_messages(
         self,
-        inputs: dict,
+        inputs: dict[str, object],
         query: str,
         user: str,
         response_mode: str = "streaming",
         conversation_id: str = "",
-        files: list[dict[str, Any]] | None = None,
-        timeout: float = 60,
+        files: list[dict[str, object]] | None = None,
+        request_timeout: float = 60,
     ) -> AsyncGenerator[dict[str, Any], None]:
         if files is None:
             files = []
         url = f"{self.api_base}/chat-messages"
-        payload = locals()
-        payload.pop("self")
-        payload.pop("timeout")
+        payload: dict[str, object] = {
+            "inputs": inputs,
+            "query": query,
+            "user": user,
+            "response_mode": response_mode,
+            "conversation_id": conversation_id,
+            "files": files,
+        }
         logger.info(f"chat_messages payload: {payload}")
         async with self.session.post(
             url,
             json=payload,
             headers=self.headers,
-            timeout=timeout,
+            timeout=ClientTimeout(total=request_timeout),
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
                 raise Exception(
-                    f"Dify /chat-messages 接口请求失败：{resp.status}. {text}",
+                    f"Dify /chat-messages 接口请求失败:{resp.status}. {text}",
                 )
             async for event in _stream_sse(resp):
                 yield event
 
     async def workflow_run(
         self,
-        inputs: dict,
+        inputs: dict[str, object],
         user: str,
         response_mode: str = "streaming",
-        files: list[dict[str, Any]] | None = None,
-        timeout: float = 60,
+        files: list[dict[str, object]] | None = None,
+        request_timeout: float = 60,
     ):
         if files is None:
             files = []
         url = f"{self.api_base}/workflows/run"
-        payload = locals()
-        payload.pop("self")
-        payload.pop("timeout")
+        payload: dict[str, object] = {
+            "inputs": inputs,
+            "user": user,
+            "response_mode": response_mode,
+            "files": files,
+        }
         logger.info(f"workflow_run payload: {payload}")
         async with self.session.post(
             url,
             json=payload,
             headers=self.headers,
-            timeout=timeout,
+            timeout=ClientTimeout(total=request_timeout),
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
                 raise Exception(
-                    f"Dify /workflows/run 接口请求失败：{resp.status}. {text}",
+                    f"Dify /workflows/run 接口请求失败:{resp.status}. {text}",
                 )
             async for event in _stream_sse(resp):
                 yield event
@@ -114,8 +123,10 @@ class DifyAPIClient:
             file_path: The path to the file to upload.
             file_data: The file data in bytes.
             file_name: Optional file name when using file_data.
+
         Returns:
             A dictionary containing the uploaded file information.
+
         """
         url = f"{self.api_base}/files/upload"
 
@@ -134,8 +145,8 @@ class DifyAPIClient:
             # 使用文件路径
             import os
 
-            with open(file_path, "rb") as f:
-                file_content = f.read()
+            async with await anyio.open_file(file_path, "rb") as f:
+                file_content = await f.read()
                 form.add_field(
                     "file",
                     file_content,
@@ -148,11 +159,11 @@ class DifyAPIClient:
         async with self.session.post(
             url,
             data=form,
-            headers=self.headers,  # 不包含 Content-Type，让 aiohttp 自动设置
+            headers=self.headers,  # 不包含 Content-Type,让 aiohttp 自动设置
         ) as resp:
             if resp.status != 200 and resp.status != 201:
                 text = await resp.text()
-                raise Exception(f"Dify 文件上传失败：{resp.status}. {text}")
+                raise Exception(f"Dify 文件上传失败:{resp.status}. {text}")
             return await resp.json()  # {"id": "xxx", ...}
 
     async def close(self) -> None:
@@ -161,11 +172,11 @@ class DifyAPIClient:
     async def get_chat_convs(self, user: str, limit: int = 20):
         # conversations. GET
         url = f"{self.api_base}/conversations"
-        payload = {
+        params: dict[str, str | int] = {
             "user": user,
             "limit": limit,
         }
-        async with self.session.get(url, params=payload, headers=self.headers) as resp:
+        async with self.session.get(url, params=params, headers=self.headers) as resp:
             return await resp.json()
 
     async def delete_chat_conv(self, user: str, conversation_id: str):

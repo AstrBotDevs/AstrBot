@@ -1,59 +1,75 @@
-import { defineStore } from 'pinia';
-import { router } from '@/router';
-import axios from 'axios';
+import { defineStore } from "pinia";
+import { router } from "@/router";
+import axios from "@/utils/request";
+import { createLoginProof, type LoginChallenge } from "@/utils/authLoginProof";
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
-    // @ts-ignore
-    username: '',
-    returnUrl: null
+    username: "",
+    returnUrl: null as string | null,
   }),
   actions: {
     async finishAuthenticatedSession(data: any): Promise<void> {
       this.username = data.username;
-      localStorage.setItem('user', this.username);
-      localStorage.setItem('token', data.token);
+      localStorage.setItem("user", this.username);
+      localStorage.setItem("token", data.token);
       const passwordUpgradeRequired = !!data?.password_upgrade_required;
       const passwordWarning =
         !!data?.change_pwd_hint ||
         (!!data?.legacy_pwd_hint && !passwordUpgradeRequired);
       if (passwordWarning) {
-        localStorage.setItem('change_pwd_hint', 'true');
+        localStorage.setItem("change_pwd_hint", "true");
         if (data?.legacy_pwd_hint && !passwordUpgradeRequired) {
-          localStorage.setItem('legacy_pwd_hint', 'true');
+          localStorage.setItem("legacy_pwd_hint", "true");
         } else {
-          localStorage.removeItem('legacy_pwd_hint');
+          localStorage.removeItem("legacy_pwd_hint");
         }
       } else {
-        localStorage.removeItem('change_pwd_hint');
-        localStorage.removeItem('legacy_pwd_hint');
+        localStorage.removeItem("change_pwd_hint");
+        localStorage.removeItem("legacy_pwd_hint");
       }
       if (passwordUpgradeRequired) {
-        localStorage.setItem('password_upgrade_required', 'true');
+        localStorage.setItem("password_upgrade_required", "true");
       } else {
-        localStorage.removeItem('password_upgrade_required');
+        localStorage.removeItem("password_upgrade_required");
       }
 
       const onboardingCompleted = await this.checkOnboardingCompleted();
       this.returnUrl = null;
       if (passwordWarning) {
-        router.push('/auth/setup');
+        router.push("/auth/setup");
         return;
       }
       if (onboardingCompleted) {
-        router.push('/dashboard/default');
+        router.push("/dashboard/default");
       } else {
-        router.push('/welcome');
+        router.push("/welcome");
       }
     },
     async login(username: string, password: string): Promise<void> {
       try {
-        const res = await axios.post('/api/auth/login', {
-          username: username,
-          password: password
-        });
-    
-        if (res.data.status === 'error') {
+        const challengeRes = await axios.post("/api/auth/login/challenge");
+        const challenge = challengeRes.data?.data as LoginChallenge | undefined;
+        if (!challenge) {
+          return Promise.reject("Failed to initialize secure login");
+        }
+
+        let res;
+        if (challenge.algorithm === "argon2") {
+          res = await axios.post("/api/auth/login", {
+            username: username,
+            password: password,
+          });
+        } else {
+          const passwordProof = await createLoginProof(password, challenge);
+          res = await axios.post("/api/auth/login", {
+            username: username,
+            challenge_id: challenge.challenge_id,
+            password_proof: passwordProof,
+          });
+        }
+
+        if (res.data.status === "error") {
           return Promise.reject(res.data.message);
         }
 
@@ -64,14 +80,14 @@ export const useAuthStore = defineStore("auth", {
     },
     async setup(username: string, password: string, confirmPassword: string): Promise<void> {
       try {
-        const setupEndpoint = this.has_token() ? '/api/auth/setup-authenticated' : '/api/auth/setup';
+        const setupEndpoint = this.has_token() ? "/api/auth/setup-authenticated" : "/api/auth/setup";
         const res = await axios.post(setupEndpoint, {
           username: username,
           password: password,
-          confirm_password: confirmPassword
+          confirm_password: confirmPassword,
         });
 
-        if (res.data.status === 'error') {
+        if (res.data.status === "error") {
           return Promise.reject(res.data.message);
         }
 
@@ -83,44 +99,46 @@ export const useAuthStore = defineStore("auth", {
     async checkOnboardingCompleted(): Promise<boolean> {
       try {
         // 1. 检查平台配置
-        const platformRes = await axios.get('/api/config/get');
-        const hasPlatform = (platformRes.data.data.config.platform || []).length > 0;
+        const platformRes = await axios.get("/api/config/get");
+        const hasPlatform =
+          (platformRes.data.data.config.platform || []).length > 0;
         if (!hasPlatform) return false;
 
         // 2. 检查提供者配置
-        const providerRes = await axios.get('/api/config/provider/template');
+        const providerRes = await axios.get("/api/config/provider/template");
         const providers = providerRes.data.data?.providers || [];
         const sources = providerRes.data.data?.provider_sources || [];
         const sourceMap = new Map();
         sources.forEach((s: any) => sourceMap.set(s.id, s.provider_type));
-        
+
         const hasProvider = providers.some((provider: any) => {
-          if (provider.provider_type) return provider.provider_type === 'chat_completion';
+          if (provider.provider_type)
+            return provider.provider_type === "chat_completion";
           if (provider.provider_source_id) {
             const type = sourceMap.get(provider.provider_source_id);
-            if (type === 'chat_completion') return true;
+            if (type === "chat_completion") return true;
           }
-          return String(provider.type || '').includes('chat_completion');
+          return String(provider.type || "").includes("chat_completion");
         });
 
         return hasProvider;
       } catch (e) {
-        console.error('Failed to check onboarding status:', e);
+        console.error("Failed to check onboarding status:", e);
         return false;
       }
     },
     logout() {
-      this.username = '';
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
-      localStorage.removeItem('change_pwd_hint');
-      localStorage.removeItem('legacy_pwd_hint');
-      localStorage.removeItem('password_upgrade_required');
-      void axios.post('/api/auth/logout').catch(() => undefined);
-      router.push('/auth/login');
+      this.username = "";
+      localStorage.removeItem("user");
+      localStorage.removeItem("token");
+      localStorage.removeItem("change_pwd_hint");
+      localStorage.removeItem("legacy_pwd_hint");
+      localStorage.removeItem("password_upgrade_required");
+      void axios.post("/api/auth/logout").catch(() => undefined);
+      router.push("/auth/login");
     },
     has_token(): boolean {
-      return !!localStorage.getItem('token');
-    }
-  }
+      return !!localStorage.getItem("token");
+    },
+  },
 });

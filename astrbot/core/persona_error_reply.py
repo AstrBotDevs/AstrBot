@@ -35,7 +35,8 @@ def extract_persona_custom_error_message_from_event(event: Any) -> str | None:
 
 
 def set_persona_custom_error_message_on_event(
-    event: Any, message: object
+    event: Any,
+    message: object,
 ) -> str | None:
     """Normalize and store persona custom error reply text into event extras."""
     normalized = normalize_persona_custom_error_message(message)
@@ -70,16 +71,18 @@ async def resolve_persona_custom_error_message(
 
 
 async def resolve_event_conversation_persona_id(
-    event: Any, conversation_manager: Any
+    event: Any,
+    conversation_manager: Any,
 ) -> str | None:
     """Resolve current conversation persona_id from event and conversation manager."""
     curr_cid = await conversation_manager.get_curr_conversation_id(
-        event.unified_msg_origin
+        event.unified_msg_origin,
     )
     if not curr_cid:
         return None
     conversation = await conversation_manager.get_conversation(
-        event.unified_msg_origin, curr_cid
+        event.unified_msg_origin,
+        curr_cid,
     )
     if not conversation:
         return None

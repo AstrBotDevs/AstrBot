@@ -11,7 +11,7 @@ class PluginPageAuth:
     @staticmethod
     def is_protected_path(path: str) -> bool:
         return path.startswith(PLUGIN_PAGE_CONTENT_PREFIX) or path.startswith(
-            PLUGIN_PAGE_BRIDGE_PATH
+            PLUGIN_PAGE_BRIDGE_PATH,
         )
 
     @staticmethod

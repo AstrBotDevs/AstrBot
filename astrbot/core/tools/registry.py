@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
-from typing import Any, TypeVar
+from typing import Any, TypeVar, overload
 
 from astrbot.core.agent.tool import FunctionTool
 
@@ -44,7 +44,7 @@ class BuiltinToolConfigCondition:
             matched = bool(self.expected)
         else:
             raise ValueError(
-                f"Unsupported builtin tool config operator: {self.operator}"
+                f"Unsupported builtin tool config operator: {self.operator}",
             )
 
         return {
@@ -126,7 +126,7 @@ def _evaluate_send_message_tool(config: dict[str, Any]) -> list[dict[str, Any]]:
                 "platform",
                 matched=False,
                 message="No enabled platform in this config supports proactive messaging.",
-            )
+            ),
         ]
 
     for platform_cfg in platform_configs:
@@ -169,7 +169,7 @@ def _evaluate_send_message_tool(config: dict[str, Any]) -> list[dict[str, Any]]:
                 message=(
                     f"Enabled platform `{platform_id}` (`{platform_type}`) supports proactive messaging."
                 ),
-            )
+            ),
         ]
 
     return [
@@ -177,7 +177,7 @@ def _evaluate_send_message_tool(config: dict[str, Any]) -> list[dict[str, Any]]:
             "platform",
             matched=False,
             message="No enabled platform in this config supports proactive messaging.",
-        )
+        ),
     ]
 
 
@@ -211,6 +211,16 @@ def _resolve_builtin_tool_name(tool_cls: type[FunctionTool]) -> str:
     raise ValueError(
         f"Builtin tool class {tool_cls.__module__}.{tool_cls.__name__} does not define a valid name.",
     )
+
+
+@overload
+def builtin_tool(tool_cls: TFunctionTool) -> TFunctionTool: ...
+
+
+@overload
+def builtin_tool(
+    *, config: dict[str, Any] | None = None,
+) -> Callable[[TFunctionTool], TFunctionTool]: ...
 
 
 def builtin_tool(
@@ -300,7 +310,7 @@ def get_builtin_tool_config_statuses(
                     for condition in conditions
                     if not condition.get("matched")
                 ],
-            }
+            },
         )
     return statuses
 
@@ -319,10 +329,10 @@ def get_builtin_tool_config_tags(
 __all__ = [
     "builtin_tool",
     "ensure_builtin_tools_loaded",
+    "get_builtin_tool_class",
     "get_builtin_tool_config_rule",
     "get_builtin_tool_config_statuses",
     "get_builtin_tool_config_tags",
-    "get_builtin_tool_class",
     "get_builtin_tool_name",
     "iter_builtin_tool_classes",
 ]

@@ -3,15 +3,17 @@
     <div class="project-header">
       <div class="project-header-info">
         <span class="project-header-emoji">{{ project?.emoji || "📁" }}</span>
-        <h2 class="project-header-title">{{ project?.title }}</h2>
+        <h2 class="project-header-title">
+          {{ project?.title }}
+        </h2>
       </div>
-      <p class="project-header-description" v-if="project?.description">
+      <p v-if="project?.description" class="project-header-description">
         {{ project.description }}
       </p>
     </div>
 
     <div class="project-input-slot">
-      <slot></slot>
+      <slot />
     </div>
 
     <v-card flat class="project-sessions-list">
@@ -19,9 +21,9 @@
         <v-list-item
           v-for="session in sessions"
           :key="session.session_id"
-          @click="$emit('selectSession', session.session_id)"
           class="project-session-item"
           rounded="lg"
+          @click="$emit('selectSession', session.session_id)"
         >
           <v-list-item-title>
             {{ session.display_name || tm("conversation.newConversation") }}
@@ -29,7 +31,7 @@
           <v-list-item-subtitle>
             {{ formatDate(session.updated_at) }}
           </v-list-item-subtitle>
-          <template v-slot:append>
+          <template #append>
             <div class="session-actions">
               <v-btn
                 icon="mdi-pencil"
@@ -58,10 +60,10 @@
       </v-list>
       <div v-else class="no-sessions-in-project">
         <v-icon
-          icon="mdi-message-outline"
+          icon="mdi-message-off-outline"
           size="large"
           color="grey-lighten-1"
-        ></v-icon>
+        />
         <p>{{ tm("project.noSessions") }}</p>
       </div>
     </v-card>
