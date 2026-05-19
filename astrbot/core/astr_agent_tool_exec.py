@@ -237,6 +237,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         Returns:
             Dict mapping tool name to FunctionTool instance.
+
         """
         from astrbot.core.computer.computer_tool_provider import (
             ComputerToolProvider,

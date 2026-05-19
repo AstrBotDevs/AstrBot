@@ -201,7 +201,8 @@ class PluginRoute(Route):
     async def get_plugin_page_bridge_sdk(self):
         if not await aio_ospath.isfile(str(_PLUGIN_PAGE_BRIDGE_FILE)):
             return await self._plugin_page_error_response(
-                404, "Plugin Page bridge SDK not found"
+                404,
+                "Plugin Page bridge SDK not found",
             )
         bridge_js = await self._read_plugin_page_text(_PLUGIN_PAGE_BRIDGE_FILE)
         initial_context = self._get_plugin_page_initial_context()
@@ -211,9 +212,10 @@ class PluginRoute(Route):
                 f"\n;window.AstrBotPluginPage?.__setInitialContext({context_json});\n"
             )
         response = cast(
-            QuartResponse,
+            "QuartResponse",
             await make_response(
-                bridge_js, {"Content-Type": "application/javascript; charset=utf-8"}
+                bridge_js,
+                {"Content-Type": "application/javascript; charset=utf-8"},
             ),
         )
         return self._apply_plugin_page_security_headers(response)
@@ -346,7 +348,7 @@ class PluginRoute(Route):
         base_dir = Path(
             self.plugin_manager.reserved_plugin_path
             if plugin.reserved
-            else self.plugin_manager.plugin_store_path
+            else self.plugin_manager.plugin_store_path,
         ).resolve(strict=False)
         plugin_root = (base_dir / plugin.root_dir_name).resolve(strict=False)
         plugin_root.relative_to(base_dir)
@@ -393,7 +395,7 @@ class PluginRoute(Route):
                     name=page_name,
                     title=page_name,
                     entry_file=_PLUGIN_PAGE_ENTRY_FILE_NAME,
-                )
+                ),
             )
         return pages
 
@@ -454,7 +456,7 @@ class PluginRoute(Route):
                 "mailto:",
                 "tel:",
                 "blob:",
-            )
+            ),
         ):
             return False
         return True
@@ -500,7 +502,7 @@ class PluginRoute(Route):
                 path,
                 query,
                 original_fragment,
-            )
+            ),
         )
 
     @staticmethod
@@ -539,7 +541,7 @@ class PluginRoute(Route):
                 "/api/plugin/page/bridge-sdk.js",
                 query,
                 "",
-            )
+            ),
         )
 
     @staticmethod
@@ -608,7 +610,9 @@ class PluginRoute(Route):
             bridge_tag = f'<script src="{self._get_plugin_page_bridge_sdk_url(extra_query_params)}"></script>'
             if "</body>" in rewritten_html:
                 rewritten_html = rewritten_html.replace(
-                    "</body>", f"{bridge_tag}</body>", 1
+                    "</body>",
+                    f"{bridge_tag}</body>",
+                    1,
                 )
             else:
                 rewritten_html += bridge_tag
@@ -776,7 +780,7 @@ class PluginRoute(Route):
             "iat": now,
             "exp": now + timedelta(seconds=_PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS),
         }
-        return cast(str, jwt.encode(payload, jwt_secret, algorithm="HS256"))
+        return cast("str", jwt.encode(payload, jwt_secret, algorithm="HS256"))
 
     def _prepare_plugin_page_query_params(
         self,
@@ -830,9 +834,10 @@ class PluginRoute(Route):
             extra_query_params=extra_query_params,
         )
         response = cast(
-            QuartResponse,
+            "QuartResponse",
             await make_response(
-                rewritten_html, {"Content-Type": "text/html; charset=utf-8"}
+                rewritten_html,
+                {"Content-Type": "text/html; charset=utf-8"},
             ),
         )
         return self._apply_plugin_page_security_headers(response)
@@ -854,9 +859,10 @@ class PluginRoute(Route):
             extra_query_params=extra_query_params,
         )
         response = cast(
-            QuartResponse,
+            "QuartResponse",
             await make_response(
-                rewritten_css, {"Content-Type": "text/css; charset=utf-8"}
+                rewritten_css,
+                {"Content-Type": "text/css; charset=utf-8"},
             ),
         )
         return self._apply_plugin_page_security_headers(response)
@@ -878,7 +884,7 @@ class PluginRoute(Route):
             extra_query_params=extra_query_params,
         )
         response = cast(
-            QuartResponse,
+            "QuartResponse",
             await make_response(
                 rewritten_js,
                 {"Content-Type": "application/javascript; charset=utf-8"},
@@ -889,7 +895,7 @@ class PluginRoute(Route):
     async def _serve_plugin_page_static_asset(self, file_path: Path):
         raw_bytes = await self._read_plugin_page_binary(file_path)
         response = cast(
-            QuartResponse,
+            "QuartResponse",
             await make_response(
                 raw_bytes,
                 {"Content-Type": self._guess_plugin_page_mime_type(file_path)},
@@ -918,7 +924,8 @@ class PluginRoute(Route):
             )
         except (FileNotFoundError, ValueError):
             return await self._plugin_page_error_response(
-                404, "Plugin Page asset not found"
+                404,
+                "Plugin Page asset not found",
             )
 
         extra_query_params = self._prepare_plugin_page_query_params(
@@ -1184,7 +1191,7 @@ class PluginRoute(Route):
             remote_md5 = await self._fetch_remote_md5(source.md5_url)
             if remote_md5 is None:
                 logger.warning(
-                    "Cannot fetch remote MD5, using cache without validation"
+                    "Cannot fetch remote MD5, using cache without validation",
                 )
                 return True  # 如果无法获取远程MD5,认为缓存有效
 
@@ -1357,7 +1364,7 @@ class PluginRoute(Route):
                         "astrbot_version": plugin.astrbot_version,
                         "installed_at": self._get_plugin_installed_at(plugin),
                         "i18n": plugin.i18n,
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -1432,7 +1439,7 @@ class PluginRoute(Route):
                         component_type = "command"
                         info["display_type"] = "指令"
                         info["cmd"] = self._get_command_filter_display_name(
-                            event_filter
+                            event_filter,
                         )
                         component = self._build_command_filter_component(
                             event_filter,
@@ -1525,7 +1532,7 @@ class PluginRoute(Route):
                     "name": skill.name,
                     "description": skill.description or "无描述",
                     "path": skill.path,
-                }
+                },
             )
         return components
 
@@ -1820,7 +1827,9 @@ class PluginRoute(Route):
         try:
             logger.info(f"正在更新插件 {plugin_name}")
             await self.plugin_manager.update_plugin(
-                plugin_name, proxy, download_url=download_url
+                plugin_name,
+                proxy,
+                download_url=download_url,
             )
             # self.core_lifecycle.restart()
             await self.plugin_manager.reload(plugin_name)
@@ -1858,7 +1867,9 @@ class PluginRoute(Route):
                     logger.info(f"批量更新插件 {name}")
                     download_url = str(download_urls.get(name) or "").strip()
                     await self.plugin_manager.update_plugin(
-                        name, proxy, download_url=download_url
+                        name,
+                        proxy,
+                        download_url=download_url,
                     )
                     return {"name": name, "status": "ok", "message": "更新成功"}
                 except Exception as e:

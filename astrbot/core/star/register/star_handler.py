@@ -283,7 +283,11 @@ def register_platform_adapter_type(
     """注册一个 PlatformAdapterType"""
 
     def decorator(awaitable):
-        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
+        handler_md = get_handler_or_create(
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
+        )
         handler_md.event_filters.append(
             PlatformAdapterTypeFilter(platform_adapter_type),
         )
@@ -307,7 +311,11 @@ def register_regex(regex: str | re.Pattern, **kwargs):
     return decorator
 
 
-def register_permission_type(permission_type: PermissionType, raise_error: bool = True):
+def register_permission_type(
+    permission_type: PermissionType,
+    raise_error: bool = True,
+    **kwargs,
+):
     """注册一个 PermissionType
 
     Args:
@@ -317,7 +325,11 @@ def register_permission_type(permission_type: PermissionType, raise_error: bool 
     """
 
     def decorator(awaitable):
-        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
+        handler_md = get_handler_or_create(
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
+        )
         handler_md.event_filters.append(
             PermissionTypeFilter(permission_type, raise_error),
         )
@@ -432,11 +444,11 @@ def register_on_llm_request(**kwargs):
     from astrbot.api.provider import ProviderRequest
 
     @on_llm_request()
-    async def test(self, event: AstrMessageEvent, request: ProviderRequest) -> None:
-        request.system_prompt += "你是一个猫娘..."
+    async def test(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
+        req.system_prompt += "你是一个猫娘..."
     ```
 
-    请务必接收两个参数:event, request
+    请务必接收两个参数：event, req
 
     """
 

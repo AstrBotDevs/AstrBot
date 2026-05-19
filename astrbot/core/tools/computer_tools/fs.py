@@ -83,7 +83,7 @@ def _restricted_env_path_labels(umo: str, *, include_plugin_skills: bool) -> lis
             f"data/workspaces/{normalized_umo}",
             get_astrbot_system_tmp_path(),
             get_astrbot_temp_path(),
-        ]
+        ],
     )
     return labels
 
@@ -195,12 +195,12 @@ def _normalize_rw_path(
         allowed_roots=allowed_roots,
     ):
         allowed = ", ".join(
-            _restricted_env_path_labels(umo, include_plugin_skills=not write)
+            _restricted_env_path_labels(umo, include_plugin_skills=not write),
         )
         access = "Write" if write else "Read"
         raise PermissionError(
             f"{access} access is restricted for this user. "
-            f"Allowed directories: {allowed}. Blocked path: {normalized_path}."
+            f"Allowed directories: {allowed}. Blocked path: {normalized_path}.",
         )
     return normalized_path
 
@@ -589,7 +589,7 @@ class GrepTool(FunctionTool):
             ]
             if disallowed:
                 allowed = ", ".join(
-                    _restricted_env_path_labels(umo, include_plugin_skills=True)
+                    _restricted_env_path_labels(umo, include_plugin_skills=True),
                 )
                 blocked = ", ".join(disallowed)
                 raise PermissionError(
@@ -793,7 +793,7 @@ class FileDownloadTool(FunctionTool):
                         message_component = File(name=name, file=local_path)
                         sent_as = "file"
                     await context.context.event.send(
-                        MessageChain(chain=[message_component])
+                        MessageChain(chain=[message_component]),
                     )
                 except Exception as e:
                     logger.error(f"Error sending file message: {e}")

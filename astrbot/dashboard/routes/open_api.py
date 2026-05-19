@@ -461,7 +461,7 @@ class OpenApiRoute(Route):
                 should_save = False
                 if msg_type == "end":
                     should_save = bool(
-                        message_accumulator.has_content() or refs or agent_stats
+                        message_accumulator.has_content() or refs or agent_stats,
                     )
                 elif (streaming and msg_type == "complete") or not streaming:
                     if chain_type not in ("tool_call", "tool_call_result"):
@@ -469,10 +469,10 @@ class OpenApiRoute(Route):
 
                 if should_save:
                     message_parts_to_save = message_accumulator.build_message_parts(
-                        include_pending_tool_calls=True
+                        include_pending_tool_calls=True,
                     )
                     plain_text = collect_plain_text_from_message_parts(
-                        message_parts_to_save
+                        message_parts_to_save,
                     )
                     try:
                         refs = self.chat_route._extract_web_search_refs(

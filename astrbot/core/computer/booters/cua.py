@@ -58,7 +58,7 @@ async def _write_base64_via_shell(
         "pathlib.Path(sys.argv[1]).write_bytes(base64.b64decode(sys.stdin.read()))"
     )
     return await shell.exec(
-        f"python3 -c {shlex.quote(decoder)} {shlex.quote(path)} <<'EOF'\n{encoded}\nEOF"
+        f"python3 -c {shlex.quote(decoder)} {shlex.quote(path)} <<'EOF'\n{encoded}\nEOF",
     )
 
 
@@ -223,7 +223,7 @@ def _missing_component_method_error(
     candidates = ", ".join(f"{component_name}.{name}" for name in names)
     return RuntimeError(
         f"CUA sandbox does not provide any of: {candidates}. "
-        "Please check the installed CUA SDK version and sandbox backend."
+        "Please check the installed CUA SDK version and sandbox backend.",
     )
 
 
@@ -344,7 +344,9 @@ class CuaPythonComponent(PythonComponent):
         self._python_exec = None
         if python is not None:
             self._python_exec = getattr(python, "exec", None) or getattr(
-                python, "run", None
+                python,
+                "run",
+                None,
             )
 
     async def exec(
@@ -394,7 +396,9 @@ def _write_result(path: str, result: dict[str, Any]) -> dict[str, Any]:
 
 class CuaFileSystemComponent(FileSystemComponent):
     def __init__(
-        self, sandbox: Any, os_type: str = CUA_DEFAULT_CONFIG["os_type"]
+        self,
+        sandbox: Any,
+        os_type: str = CUA_DEFAULT_CONFIG["os_type"],
     ) -> None:
         self._shell = CuaShellComponent(sandbox, os_type=os_type)
         self._fs_components = _resolve_files_components(sandbox)
@@ -420,19 +424,21 @@ class CuaFileSystemComponent(FileSystemComponent):
         limit: int | None = None,
     ) -> dict[str, Any]:
         read_file = _resolve_files_method(
-            self._fs_components, ("read_file", "read_text")
+            self._fs_components,
+            ("read_file", "read_text"),
         )
         if read_file is None:
             return await self._fallback.read_file(path, encoding, offset, limit)
-        else:
-            content = await _maybe_await(read_file(path))
+        content = await _maybe_await(read_file(path))
         if isinstance(content, bytes):
             content = content.decode(encoding, errors="replace")
         return {
             "success": True,
             "path": path,
             "content": _slice_content_by_lines(
-                str(content), offset=offset, limit=limit
+                str(content),
+                offset=offset,
+                limit=limit,
             ),
         }
 
@@ -445,22 +451,22 @@ class CuaFileSystemComponent(FileSystemComponent):
     ) -> dict[str, Any]:
         _ = mode
         write_file = _resolve_files_method(
-            self._fs_components, ("write_file", "write_text")
+            self._fs_components,
+            ("write_file", "write_text"),
         )
         if write_file is None:
             return await self._fallback.write_file(path, content, mode, encoding)
-        else:
-            await _maybe_await(write_file(path, content))
+        await _maybe_await(write_file(path, content))
         return {"success": True, "path": path}
 
     async def delete_file(self, path: str) -> dict[str, Any]:
         delete = _resolve_files_method(
-            self._fs_components, ("delete", "delete_file", "remove")
+            self._fs_components,
+            ("delete", "delete_file", "remove"),
         )
         if delete is None:
             return await self._fallback.delete_file(path)
-        else:
-            await _maybe_await(delete(path))
+        await _maybe_await(delete(path))
         return {"success": True, "path": path}
 
     async def list_dir(
@@ -547,7 +553,9 @@ class _PosixShellFileSystem(FileSystemComponent):
             "success": True,
             "path": path,
             "content": _slice_content_by_lines(
-                str(result.get("stdout", "")), offset=offset, limit=limit
+                str(result.get("stdout", "")),
+                offset=offset,
+                limit=limit,
             ),
         }
 
@@ -562,7 +570,9 @@ class _PosixShellFileSystem(FileSystemComponent):
         if error := self._ensure_posix(path):
             return error
         result = await _write_base64_via_shell(
-            self._shell, path, content.encode(encoding)
+            self._shell,
+            path,
+            content.encode(encoding),
         )
         return _write_result(path, result)
 
@@ -628,7 +638,8 @@ class CuaGUIComponent(GUIComponent):
         self._click = _resolve_component_method(mouse, "click")
         self._type_text = _resolve_component_method(keyboard, "type")
         self._press_key = _resolve_component_method(
-            keyboard, ("press", "key_press", "press_key")
+            keyboard,
+            ("press", "key_press", "press_key"),
         )
 
     async def screenshot(self, path: str | None = None) -> dict[str, Any]:
@@ -661,7 +672,8 @@ class CuaGUIComponent(GUIComponent):
     async def press_key(self, key: str) -> dict[str, Any]:
         if self._press_key is None:
             raise _missing_component_method_error(
-                "keyboard", ("press", "key_press", "press_key")
+                "keyboard",
+                ("press", "key_press", "press_key"),
             )
         result = await _maybe_await(self._press_key(key))
         payload = _maybe_model_dump(result)
@@ -733,7 +745,7 @@ class CuaBooter(ComputerBooter):
         except ImportError as exc:
             raise RuntimeError(
                 "CUA sandbox support requires the optional `cua` package. "
-                "Install it with `pip install cua` in the AstrBot environment."
+                "Install it with `pip install cua` in the AstrBot environment.",
             ) from exc
 
         image_obj = self._build_image(Image)
@@ -839,7 +851,7 @@ class CuaBooter(ComputerBooter):
         sandbox = None if self._runtime is None else self._runtime.sandbox
         if sandbox is not None and hasattr(sandbox, "upload_file"):
             return _maybe_model_dump(
-                await sandbox.upload_file(str(local_path), file_name)
+                await sandbox.upload_file(str(local_path), file_name),
             )
         files_components = () if sandbox is None else _resolve_files_components(sandbox)
         upload = _resolve_files_method(files_components, "upload")
@@ -853,7 +865,9 @@ class CuaBooter(ComputerBooter):
         if not _is_posix_os_type(self.os_type):
             return _non_posix_filesystem_result(file_name, self.os_type)
         result = await _write_base64_via_shell(
-            self.shell, file_name, local_path.read_bytes()
+            self.shell,
+            file_name,
+            local_path.read_bytes(),
         )
         return {
             "success": not bool(result.get("stderr")),

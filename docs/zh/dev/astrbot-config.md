@@ -116,7 +116,7 @@ AstrBot 默认配置如下：
     "dashboard": {
         "enable": True,
         "username": "astrbot",
-        "password": "77b90590a8945a7d36c963981a307dc9",
+        "password": "<your_password_md5>",
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
@@ -492,11 +492,11 @@ HTTP 代理。如 `http://localhost:7890`。
 
 AstrBot WebUI 配置。
 
-请不要随意修改 `password` 的值。它是一个经过 `md5` 编码的密码。请在控制面板修改密码。
+请不要随意修改 `password` 的值。它是随机初始密码经过 `md5` 编码后的值。首次启动时请在日志中获取初始密码，并在控制面板中修改。
 
 - `enable`: 是否启用 AstrBot WebUI。默认为 `true`。
-- `username`: AstrBot WebUI 的用户名。默认为 `astrbot`。
-- `password`: AstrBot WebUI 的密码。默认为 `astrbot` 的 `md5` 编码值。请勿直接修改，除非您知道自己在做什么。
+- `username`: AstrBot WebUI 的用户名。
+- `password`: AstrBot WebUI 的密码。首次启动会随机生成初始密码（已在日志中打印），这里保存的是该密码的 `md5` 值。请勿直接修改，除非您知道自己在做什么。
 - `jwt_secret`: JWT 的密钥。AstrBot 会在初始化时随机生成。请勿修改，除非您知道自己在做什么。
 - `host`: AstrBot WebUI 监听的地址。默认为 `0.0.0.0`。
 - `port`: AstrBot WebUI 监听的端口。默认为 `6185`。

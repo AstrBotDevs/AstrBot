@@ -20,6 +20,31 @@ The Lark client version must be >= 7.20. Lower versions only display the title a
 
 ## Creating a Bot
 
+Lark supports two setup methods: one-click QR creation in AstrBot, or manually creating a custom enterprise app in the Lark Developer Console.
+
+### Option 1: One-click QR Creation
+
+AstrBot version requirement: >= 4.25.0.
+
+Open the AstrBot management panel, click `Bots` in the left sidebar, click `+ Create Bot`, and select `lark`.
+
+Under `Creation Method`, select `One-click QR Creation`, choose the China or international edition as needed, then scan the QR code with the Lark mobile app and confirm. After creation succeeds, AstrBot automatically fills in the app's `app_id`, `app_secret`, and domain configuration.
+
+> [!IMPORTANT]
+> After an app is created through QR scanning, group chats receive only messages that @ mention the bot or messages triggered by a wake prefix such as `/` by default. If you need the bot to receive all group messages, enable the additional permissions in the Lark Developer Console.
+>
+> Replace `<APP_ID>` in the URL below with your Lark app ID, then open it to jump to the permission enablement page:
+>
+> To find the App ID, go back to AstrBot's `Bots` page, find the Lark bot you just created, click `Edit`, and check the dialog that opens.
+>
+> ```text
+> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message:send,im:message,im:message:send_as_bot,im:resource:upload,im:resource,cardkit:card:write,im:message.group_at_msg:readonly,im:message.group_msg&op_from=openapi&token_type=tenant
+> ```
+
+After QR creation succeeds, continue checking the event subscription, permissions, version release, and group installation steps below.
+
+### Option 2: Manual Creation
+
 Navigate to the [Developer Console](https://open.feishu.cn/app) and create a custom enterprise application.
 
 ![Create Custom Enterprise Application](https://files.astrbot.app/docs/source/images/lark/image.png)
@@ -38,6 +63,7 @@ Click on "Credentials & Basic Info" to obtain your app_id and app_secret.
 2. Click on `Bots` in the left sidebar
 3. In the right panel, click `+ Create Bot`
 4. Select `lark`
+5. If you want AstrBot to create the app for you, select `One-click QR Creation` and complete the scan. If you already created the app yourself, select `Manual Creation`
 
 Fill in the configuration fields as follows:
 
@@ -45,7 +71,6 @@ Fill in the configuration fields as follows:
 - Enable: Check this option
 - app_id: The app_id you obtained earlier
 - app_secret: The app_secret you obtained earlier
-- Bot name: Your Lark bot's name
 
 For the domain field, if you're using Lark China, keep the default value. If you're using Lark International, set it to `https://open.larksuite.com`. If you're using a self-hosted enterprise Lark instance, enter your Lark instance's domain.
 
@@ -91,6 +116,11 @@ Then click the `Save` button at the top.
 Next, click on "Permission Management," click "Enable Permissions," and enter `im:message:send,im:message,im:message:send_as_bot`. Add the filtered permissions.
 
 Enter `im:resource:upload,im:resource` again to enable image upload permissions.
+
+If you want to use the bot in group chats, additionally enable `im:message.group_at_msg:readonly` and `im:message.group_msg`.
+
+> [!TIP]
+> Apps created through one-click QR creation are suitable for @ mentions and wake-prefix triggers by default. To receive every group message, make sure `im:message.group_msg` is enabled. You can also use the permission URL above to quickly open the corresponding page.
 
 If you want to use streaming output, additionally enable `Create and update cards (cardkit:card:write)`.
 

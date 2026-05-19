@@ -111,7 +111,7 @@ class SkillsRoute(Route):
         skill_mgr = SkillManager()
         if skill_mgr.is_sandbox_only_skill(skill_name):
             raise PermissionError(
-                "Sandbox preset skill cannot be opened from local skill files."
+                "Sandbox preset skill cannot be opened from local skill files.",
             )
 
         plugin_skill_dir = skill_mgr._get_plugin_skill_dir(skill_name)
@@ -508,7 +508,7 @@ class SkillsRoute(Route):
                 return (
                     Response()
                     .error(
-                        "Plugin-provided skill cannot be downloaded from local skill files."
+                        "Plugin-provided skill cannot be downloaded from local skill files.",
                     )
                     .__dict__
                 )
@@ -572,7 +572,7 @@ class SkillsRoute(Route):
                         skill_dir,
                         resolved,
                         readonly=readonly,
-                    )
+                    ),
                 )
 
             return (
@@ -582,7 +582,7 @@ class SkillsRoute(Route):
                         "name": name,
                         "path": self._skill_relative_path(skill_dir, target_dir),
                         "entries": entries,
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -621,7 +621,7 @@ class SkillsRoute(Route):
                         "content": content,
                         "size": size,
                         "editable": not SkillManager().is_plugin_skill(name),
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -674,7 +674,7 @@ class SkillsRoute(Route):
                         "name": name,
                         "path": self._skill_relative_path(skill_dir, target_file),
                         "size": len(encoded),
-                    }
+                    },
                 )
                 .__dict__
             )

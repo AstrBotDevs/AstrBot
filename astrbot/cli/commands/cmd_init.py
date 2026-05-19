@@ -13,6 +13,18 @@ from astrbot.core.utils.astrbot_path import astrbot_paths
 
 from .cmd_conf import ensure_config_file, set_dashboard_credentials
 
+DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
+
+
+def _initialize_config_from_env(astrbot_root: Path) -> None:
+    if DASHBOARD_INITIAL_PASSWORD_ENV not in os.environ:
+        return
+
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+
+    AstrBotConfig(config_path=str(astrbot_root / "data" / "cmd_config.json"))
+    click.echo("Initialized data/cmd_config.json with dashboard initial password.")
+
 
 async def initialize_astrbot(
     astrbot_root: Path,
@@ -51,6 +63,9 @@ async def initialize_astrbot(
         path.mkdir(parents=True, exist_ok=True)
         status = "Created" if not path.exists() else "Exists"
         click.echo(f"  [{status}] {name.title()}: {path}")
+
+    _initialize_config_from_env(astrbot_root)
+
     config_path = astrbot_root / "data" / "cmd_config.json"
     if not config_path.exists():
         config_path.write_text(

@@ -73,6 +73,7 @@ async def _clear_third_party_agent_runner_state(
         context: 星尘上下文。
         session_id: 会话 ID (unified_msg_origin)。
         provider_type: 提供商类型 (如 deerflow)。
+
     """
     provider_config = context.provider_manager.get_provider_config_by_id(
         provider_type,
@@ -349,7 +350,7 @@ class ConversationCommands:
         if not cid:
             message.set_result(
                 MessageEventResult().message(
-                    "❌ You are not in a conversation. Use /new to create one."
+                    "❌ You are not in a conversation. Use /new to create one.",
                 ),
             )
             return
@@ -373,14 +374,14 @@ class ConversationCommands:
                 ).where(
                     col(ProviderStat.agent_type) == "internal",
                     col(ProviderStat.conversation_id) == cid,
-                )
+                ),
             )
             stats = result.one()
 
         if stats.record_count == 0:
             message.set_result(
                 MessageEventResult().message(
-                    "📊 No stats available for this conversation yet."
+                    "📊 No stats available for this conversation yet.",
                 ),
             )
             return

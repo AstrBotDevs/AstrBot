@@ -56,7 +56,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         self.model = await asyncio.get_running_loop().run_in_executor(
             None,
             lambda: cast(
-                SenseVoiceModel,
+                "SenseVoiceModel",
                 SenseVoiceSmall(self.model_name, quantize=True, batch_size=16),
             ),
         )

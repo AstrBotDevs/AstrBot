@@ -283,35 +283,37 @@ async def _firecrawl_search(
         "Authorization": f"Bearer {firecrawl_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
             "https://api.firecrawl.dev/v2/search",
             json=payload,
             headers=header,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Firecrawl web search failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            rows = data.get("data", [])
-            if isinstance(rows, dict):
-                rows = rows.get("web", [])
-            return [
-                SearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    snippet=(
-                        item.get("description")
-                        or item.get("snippet")
-                        or item.get("markdown")
-                        or ""
-                    ),
-                )
-                for item in rows
-                if item.get("url")
-            ]
+        ) as response,
+    ):
+        if response.status != 200:
+            reason = await response.text()
+            raise Exception(
+                f"Firecrawl web search failed: {reason}, status: {response.status}",
+            )
+        data = await response.json()
+        rows = data.get("data", [])
+        if isinstance(rows, dict):
+            rows = rows.get("web", [])
+        return [
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                snippet=(
+                    item.get("description")
+                    or item.get("snippet")
+                    or item.get("markdown")
+                    or ""
+                ),
+            )
+            for item in rows
+            if item.get("url")
+        ]
 
 
 async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
@@ -320,24 +322,26 @@ async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
         "Authorization": f"Bearer {firecrawl_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
             "https://api.firecrawl.dev/v2/scrape",
             json=payload,
             headers=header,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Firecrawl web scraper failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            result = data.get("data", {})
-            if not result:
-                raise ValueError(
-                    "Error: Firecrawl web scraper does not return any results."
-                )
-            return result
+        ) as response,
+    ):
+        if response.status != 200:
+            reason = await response.text()
+            raise Exception(
+                f"Firecrawl web scraper failed: {reason}, status: {response.status}",
+            )
+        data = await response.json()
+        result = data.get("data", {})
+        if not result:
+            raise ValueError(
+                "Error: Firecrawl web scraper does not return any results.",
+            )
+        return result
 
 
 async def _baidu_search(
@@ -661,7 +665,7 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -715,7 +719,7 @@ class FirecrawlExtractWebPageTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["url"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:

@@ -42,7 +42,7 @@ async def _get_gui_component(context: ContextWrapper[AstrAgentContext]) -> Any:
     if gui is None:
         raise RuntimeError(
             "Current sandbox booter does not support CUA GUI capability. "
-            "Please switch sandbox booter to cua."
+            "Please switch sandbox booter to cua.",
         )
     return gui
 
@@ -69,7 +69,7 @@ class CuaScreenshotTool(FunctionTool):
                     "default": True,
                 },
             },
-        }
+        },
     )
 
     async def call(
@@ -91,7 +91,7 @@ class CuaScreenshotTool(FunctionTool):
                 payload["sent_to_user"] = True
             image_data = payload.pop("base64", "")
             content: list[ContentBlock] = [
-                mcp.types.TextContent(type="text", text=_to_json(payload))
+                mcp.types.TextContent(type="text", text=_to_json(payload)),
             ]
             if return_image_to_llm:
                 content.append(
@@ -99,7 +99,7 @@ class CuaScreenshotTool(FunctionTool):
                         type="image",
                         data=str(image_data),
                         mimeType=str(payload.get("mime_type", "image/png")),
-                    )
+                    ),
                 )
             return mcp.types.CallToolResult(content=content)
         except Exception as e:
@@ -124,7 +124,7 @@ class CuaMouseClickTool(FunctionTool):
                 },
             },
             "required": ["x", "y"],
-        }
+        },
     )
 
     async def call(
@@ -156,7 +156,7 @@ class CuaKeyboardTypeTool(FunctionTool):
                 "text": {"type": "string", "description": "Text to type."},
             },
             "required": ["text"],
-        }
+        },
     )
 
     async def call(

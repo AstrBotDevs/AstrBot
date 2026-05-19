@@ -58,7 +58,6 @@ class ComputerBooter(abc.ABC):
         ShipyardNeoBooter).  The default implementation ignores
         them.
         """
-        ...
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         """Upload file to the computer.

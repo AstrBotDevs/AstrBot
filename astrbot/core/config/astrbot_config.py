@@ -6,12 +6,16 @@ from typing import Any
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
-    normalize_dashboard_password_hash,
+    generate_dashboard_password,
+    hash_dashboard_password,
+    hash_legacy_dashboard_password,
+    validate_dashboard_password,
 )
 
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
+DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
 logger = logging.getLogger("astrbot")
 
 
@@ -59,21 +63,64 @@ class AstrBotConfig(dict):
             # Handle UTF-8 BOM if present
             conf_str = conf_str.removeprefix("\ufeff")
             conf = json.loads(conf_str) if conf_str.strip() else {}
-
+        dashboard_conf = conf.get("dashboard")
+        legacy_dashboard_password_change_required = bool(
+            isinstance(dashboard_conf, dict)
+            and dashboard_conf.get("password_change_required", False),
+        )
+        if legacy_dashboard_password_change_required:
+            object.__setattr__(
+                self,
+                "_dashboard_password_change_required_from_config",
+                True,
+            )
         # 检查配置完整性,并插入
         has_new = self.check_config_integrity(default_config, conf)
         if (
             "dashboard" in conf
             and isinstance(conf["dashboard"], dict)
+            and not conf["dashboard"].get("pbkdf2_password")
             and not conf["dashboard"].get("password")
+        ) or (
+            "dashboard" in conf
+            and isinstance(conf["dashboard"], dict)
+            and legacy_dashboard_password_change_required
+            and conf["dashboard"].get("pbkdf2_password")
         ):
-            conf["dashboard"]["password"] = normalize_dashboard_password_hash("")
+            self._reset_generated_dashboard_password(conf)
             has_new = True
         self.update(conf)
         if has_new:
             self.save_config()
 
-        self.update(conf)
+    def _reset_generated_dashboard_password(self, conf: dict) -> None:
+        generated_password = self._resolve_initial_dashboard_password()
+        conf["dashboard"]["pbkdf2_password"] = hash_dashboard_password(
+            generated_password,
+        )
+        conf["dashboard"]["password"] = hash_legacy_dashboard_password(
+            generated_password,
+        )
+        conf["dashboard"]["password_storage_upgraded"] = True
+        conf["dashboard"]["password_change_required"] = True
+        object.__setattr__(
+            self,
+            "_generated_dashboard_password",
+            generated_password,
+        )
+        object.__setattr__(
+            self,
+            "_generated_dashboard_password_change_required",
+            True,
+        )
+
+    @staticmethod
+    def _resolve_initial_dashboard_password() -> str:
+        env_password = os.environ.get(DASHBOARD_INITIAL_PASSWORD_ENV)
+        if env_password is None:
+            return generate_dashboard_password()
+        validate_dashboard_password(env_password)
+        return env_password
 
     def _config_schema_to_default_config(self, schema: dict) -> dict:
         """将 Schema 转换成 Config"""

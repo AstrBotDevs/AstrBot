@@ -25,6 +25,10 @@ export default {
       type: Number,
       default: 260,
     },
+    margin: {
+      type: Number,
+      default: 2,
+    },
     emptyHint: {
       type: String,
       default: "暂无可用二维码",
@@ -51,7 +55,7 @@ export default {
 
       try {
         this.imageSrc = await QRCode.toDataURL(value, {
-          margin: 2,
+          margin: this.margin,
           width: this.size,
           errorCorrectionLevel: "M",
         });

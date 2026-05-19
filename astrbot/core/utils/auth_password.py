@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import re
 import secrets
+import string
 from typing import Any
 
 try:
@@ -20,7 +21,24 @@ _PBKDF2_ALGORITHM = "pbkdf2_sha256"
 _PBKDF2_FORMAT = f"{_PBKDF2_ALGORITHM}$"
 _LEGACY_MD5_LENGTH = 32
 _DASHBOARD_PASSWORD_MIN_LENGTH = 12
+_GENERATED_DASHBOARD_PASSWORD_LENGTH = 24
 DEFAULT_DASHBOARD_PASSWORD = "astrbot"
+
+
+def generate_dashboard_password() -> str:
+    """Generate a strong dashboard password that satisfies the complexity policy."""
+    alphabet = string.ascii_letters + string.digits
+    password_chars = [
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.ascii_lowercase),
+        secrets.choice(string.digits),
+        *(
+            secrets.choice(alphabet)
+            for _ in range(_GENERATED_DASHBOARD_PASSWORD_LENGTH - 3)
+        ),
+    ]
+    secrets.SystemRandom().shuffle(password_chars)
+    return "".join(password_chars)
 
 
 def hash_dashboard_password(raw_password: str) -> str:
@@ -42,6 +60,13 @@ def hash_dashboard_password(raw_password: str) -> str:
         _PBKDF2_ITERATIONS,
     ).hex()
     return f"{_PBKDF2_FORMAT}{_PBKDF2_ITERATIONS}${salt}${digest}"
+
+
+def hash_legacy_dashboard_password(raw_password: str) -> str:
+    """Return legacy MD5 hash for downgrade compatibility only."""
+    if not isinstance(raw_password, str) or raw_password == "":
+        raise ValueError("Password cannot be empty")
+    return hashlib.md5(raw_password.encode("utf-8")).hexdigest()
 
 
 def validate_dashboard_password(raw_password: str) -> None:

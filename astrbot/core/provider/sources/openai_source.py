@@ -551,7 +551,7 @@ class ProviderOpenAIOfficial(Provider):
             if not isinstance(msg, dict):
                 cleaned.append(msg)
                 continue
-            msg = cast(dict[str, Any], msg)
+            msg = cast("dict[str, Any]", msg)
             if msg.get("role") != "assistant":
                 cleaned.append(msg)
                 continue
@@ -913,6 +913,9 @@ class ProviderOpenAIOfficial(Provider):
                             args = {}
                     else:
                         args = func.arguments
+                    # Some API may return None for tools with no parameters
+                    if args is None:
+                        args = {}
                     args_ls.append(args)
                     func_name_ls.append(func.name)
                     tool_call_ids.append(tool_call.id)
@@ -1026,7 +1029,7 @@ class ProviderOpenAIOfficial(Provider):
                     if part.get("type") == "think":
                         reasoning_content_present = True
                         reasoning_content = (reasoning_content or "") + str(
-                            part.get("think")
+                            part.get("think"),
                         )
                     else:
                         new_content.append(part)

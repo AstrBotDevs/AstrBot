@@ -98,7 +98,7 @@ sudo docker logs -f astrbot
 > [!TIP]
 > 由于 Docker 隔离了网络环境，所以不能使用 `localhost` 访问管理面板。
 >
-> 默认用户名和密码是 `astrbot` 和 `astrbot`。
+> 首次登录请使用启动日志中打印的随机初始密码（用户名通常为 `astrbot`）。登录后请立即修改密码。
 >
 > 如果部署在云服务器上，需要在相应厂商控制台里放行对应端口。
 

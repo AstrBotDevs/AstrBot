@@ -141,7 +141,9 @@ class BotMessageAccumulator:
         self.parts.append(part)
 
     def build_message_parts(
-        self, *, include_pending_tool_calls: bool = False
+        self,
+        *,
+        include_pending_tool_calls: bool = False,
     ) -> list[dict]:
         self._flush_pending_text()
         if include_pending_tool_calls and self.pending_tool_calls:
@@ -261,20 +263,24 @@ class ChatRoute(Route):
             file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
             real_file_path = await asyncio.to_thread(os.path.realpath, file_path)
             real_imgs_dir = await asyncio.to_thread(
-                os.path.realpath, self.attachments_dir
+                os.path.realpath,
+                self.attachments_dir,
             )
 
             if not await asyncio.to_thread(os.path.exists, real_file_path):
                 # try legacy
                 file_path = os.path.join(
-                    self.legacy_img_dir, os.path.basename(filename)
+                    self.legacy_img_dir,
+                    os.path.basename(filename),
                 )
                 if await asyncio.to_thread(os.path.exists, file_path):
                     real_file_path = await asyncio.to_thread(
-                        os.path.realpath, file_path
+                        os.path.realpath,
+                        file_path,
                     )
                     real_imgs_dir = await asyncio.to_thread(
-                        os.path.realpath, self.legacy_img_dir
+                        os.path.realpath,
+                        self.legacy_img_dir,
                     )
 
             if not real_file_path.startswith(real_imgs_dir):
@@ -351,7 +357,7 @@ class ChatRoute(Route):
                     "attachment_id": attachment.attachment_id,
                     "filename": filename,
                     "type": attach_type,
-                }
+                },
             )
             .__dict__
         )
@@ -365,7 +371,9 @@ class ChatRoute(Route):
         )
 
     async def _create_attachment_from_file(
-        self, filename: str, attach_type: str
+        self,
+        filename: str,
+        attach_type: str,
     ) -> dict | None:
         """从本地文件创建 attachment 并返回消息部分。"""
         return await create_attachment_part_from_existing_file(
@@ -377,7 +385,9 @@ class ChatRoute(Route):
         )
 
     def _extract_web_search_refs(
-        self, accumulated_text: str, accumulated_parts: list
+        self,
+        accumulated_text: str,
+        accumulated_parts: list,
     ) -> dict:
         """从消息中提取 web_search_tavily 的引用
 
@@ -387,6 +397,7 @@ class ChatRoute(Route):
 
         Returns:
             包含 used 列表的字典，记录被引用的搜索结果
+
         """
         supported = [
             "web_search_baidu",
@@ -405,7 +416,7 @@ class ChatRoute(Route):
         for part in tool_call_parts:
             for tool_call in part["tool_calls"]:
                 if tool_call.get("name") not in supported or not tool_call.get(
-                    "result"
+                    "result",
                 ):
                     continue
                 try:
@@ -500,7 +511,8 @@ class ChatRoute(Route):
     async def _delete_threads_by_ids(self, thread_ids: list[str], creator: str) -> None:
         for thread_id in thread_ids:
             unified_msg_origin = self._build_thread_unified_msg_origin(
-                creator, thread_id
+                creator,
+                thread_id,
             )
             active_event_registry.request_agent_stop_all(unified_msg_origin)
             await self.conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
@@ -515,7 +527,7 @@ class ChatRoute(Route):
     async def _load_current_conversation_history(self, session) -> tuple[str, list]:
         unified_msg_origin = self._build_webchat_unified_msg_origin(session)
         conversation_id = await self.conv_mgr.get_curr_conversation_id(
-            unified_msg_origin
+            unified_msg_origin,
         )
         if not conversation_id:
             return "", []
@@ -534,7 +546,9 @@ class ChatRoute(Route):
         return conversation_id, history if isinstance(history, list) else []
 
     def _find_checkpoint_index(
-        self, history: list[dict], checkpoint_id: str
+        self,
+        history: list[dict],
+        checkpoint_id: str,
     ) -> int | None:
         for index, message in enumerate(history):
             if get_checkpoint_id(message) == checkpoint_id:
@@ -542,7 +556,9 @@ class ChatRoute(Route):
         return None
 
     def _find_turn_range(
-        self, history: list[dict], checkpoint_id: str
+        self,
+        history: list[dict],
+        checkpoint_id: str,
     ) -> tuple[int, int] | None:
         checkpoint_index = self._find_checkpoint_index(history, checkpoint_id)
         if checkpoint_index is None:
@@ -626,7 +642,10 @@ class ChatRoute(Route):
         return result
 
     def _find_turn_user_index(
-        self, history: list[dict], start: int, end: int
+        self,
+        history: list[dict],
+        start: int,
+        end: int,
     ) -> int | None:
         for index in range(start, end):
             message = history[index]
@@ -635,7 +654,10 @@ class ChatRoute(Route):
         return None
 
     def _find_turn_final_assistant_index(
-        self, history: list[dict], start: int, end: int
+        self,
+        history: list[dict],
+        start: int,
+        end: int,
     ) -> int | None:
         for index in range(end - 1, start - 1, -1):
             message = history[index]
@@ -657,7 +679,9 @@ class ChatRoute(Route):
         return history_list
 
     async def _delete_platform_history_after(
-        self, session, message_id: int
+        self,
+        session,
+        message_id: int,
     ) -> list[int]:
         history_list = await self._get_sorted_platform_history(session)
         should_delete = False
@@ -778,7 +802,7 @@ class ChatRoute(Route):
                         "data": {
                             "id": saved_user_record.id,
                             "created_at": to_utc_isoformat(
-                                saved_user_record.created_at
+                                saved_user_record.created_at,
                             ),
                             "llm_checkpoint_id": llm_checkpoint_id,
                         },
@@ -788,7 +812,8 @@ class ChatRoute(Route):
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
                         result, should_break = await _poll_webchat_stream_result(
-                            back_queue, username
+                            back_queue,
+                            username,
                         )
                         if should_break:
                             client_disconnected = True
@@ -829,7 +854,7 @@ class ChatRoute(Route):
                         except Exception as e:
                             if not client_disconnected:
                                 logger.debug(
-                                    f"[WebChat] 用户 {username} 断开聊天长连接。 {e}"
+                                    f"[WebChat] 用户 {username} 断开聊天长连接。 {e}",
                                 )
                             client_disconnected = True
 
@@ -849,7 +874,7 @@ class ChatRoute(Route):
                                 if accumulated_text:
                                     # 如果累积了文本，则先保存文本
                                     accumulated_parts.append(
-                                        {"type": "plain", "text": accumulated_text}
+                                        {"type": "plain", "text": accumulated_text},
                                     )
                                     accumulated_text = ""
                             elif chain_type == "tool_call_result":
@@ -862,7 +887,7 @@ class ChatRoute(Route):
                                         {
                                             "type": "tool_call",
                                             "tool_calls": [tool_calls[tc_id]],
-                                        }
+                                        },
                                     )
                                     tool_calls.pop(tc_id, None)
                             elif chain_type == "reasoning":
@@ -874,14 +899,16 @@ class ChatRoute(Route):
                         elif msg_type == "image":
                             filename = result_text.replace("[IMAGE]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "image"
+                                filename,
+                                "image",
                             )
                             if part:
                                 accumulated_parts.append(part)
                         elif msg_type == "record":
                             filename = result_text.replace("[RECORD]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "record"
+                                filename,
+                                "record",
                             )
                             if part:
                                 accumulated_parts.append(part)
@@ -889,7 +916,8 @@ class ChatRoute(Route):
                             # 格式: [FILE]filename
                             filename = result_text.replace("[FILE]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "file"
+                                filename,
+                                "file",
                             )
                             if part:
                                 accumulated_parts.append(part)
@@ -936,7 +964,7 @@ class ChatRoute(Route):
                                     "data": {
                                         "id": saved_record.id,
                                         "created_at": to_utc_isoformat(
-                                            saved_record.created_at
+                                            saved_record.created_at,
                                         ),
                                         "llm_checkpoint_id": llm_checkpoint_id,
                                     },
@@ -987,7 +1015,7 @@ class ChatRoute(Route):
             )
 
         response = cast(
-            QuartResponse,
+            "QuartResponse",
             await make_response(
                 stream(),
                 {
@@ -1136,7 +1164,7 @@ class ChatRoute(Route):
                     "deleted_count": deleted_count,
                     "failed_count": len(failed_items),
                     "failed_items": failed_items,
-                }
+                },
             )
             .__dict__
         )
@@ -1165,7 +1193,7 @@ class ChatRoute(Route):
                     await asyncio.to_thread(os.remove, attachment.path)
                 except OSError as e:
                     logger.warning(
-                        f"Failed to delete attachment file {attachment.path}: {e}"
+                        f"Failed to delete attachment file {attachment.path}: {e}",
                     )
         except Exception as e:
             logger.warning(f"Failed to get attachments: {e}")
@@ -1196,7 +1224,7 @@ class ChatRoute(Route):
                 data={
                     "session_id": session.session_id,
                     "platform_id": session.platform_id,
-                }
+                },
             )
             .__dict__
         )
@@ -1230,7 +1258,7 @@ class ChatRoute(Route):
                     "is_group": session.is_group,
                     "created_at": to_utc_isoformat(session.created_at),
                     "updated_at": to_utc_isoformat(session.updated_at),
-                }
+                },
             )
 
         return Response().ok(data=sessions_data).__dict__
@@ -1248,7 +1276,8 @@ class ChatRoute(Route):
         # 获取项目信息（如果会话属于某个项目）
         username = g.get("username", "guest")
         project_info = await self.db.get_project_by_session(
-            session_id=session_id, creator=username
+            session_id=session_id,
+            creator=username,
         )
 
         # Get platform message history using session_id
@@ -1310,7 +1339,7 @@ class ChatRoute(Route):
             return Response().error("Permission denied").__dict__
 
         parent_record = await self.db.get_platform_message_history_by_id(
-            parent_message_id
+            parent_message_id,
         )
         if (
             not parent_record
@@ -1339,7 +1368,7 @@ class ChatRoute(Route):
             return Response().ok(data=self._serialize_thread(existing)).__dict__
 
         conversation_id, history = await self._load_current_conversation_history(
-            session
+            session,
         )
         turn_range = self._find_turn_range(history, checkpoint_id)
         if not conversation_id or not turn_range:
@@ -1390,7 +1419,7 @@ class ChatRoute(Route):
                     "thread": self._serialize_thread(thread),
                     "history": [history.model_dump() for history in history_ls],
                     "is_running": self.running_convs.get(thread_id, False),
-                }
+                },
             )
             .__dict__
         )
@@ -1421,7 +1450,7 @@ class ChatRoute(Route):
                 "selected_model": post_data.get("selected_model"),
                 "_platform_history_id": "webchat_thread",
                 "_thread_selected_text": thread.selected_text,
-            }
+            },
         )
 
     async def delete_thread(self):
@@ -1507,7 +1536,7 @@ class ChatRoute(Route):
             )
 
         conversation_id, history = await self._load_current_conversation_history(
-            session
+            session,
         )
         turn_range = self._find_turn_range(history, checkpoint_id)
         if not conversation_id or not turn_range:
@@ -1529,7 +1558,8 @@ class ChatRoute(Route):
             llm_checkpoint_id=new_checkpoint_id,
         )
         deleted_message_ids = await self._delete_platform_history_after(
-            session, message_id
+            session,
+            message_id,
         )
         thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
             session_id,
@@ -1550,7 +1580,7 @@ class ChatRoute(Route):
                     "message": updated.model_dump() if updated else None,
                     "needs_regenerate": True,
                     "truncated_after_message": True,
-                }
+                },
             )
             .__dict__
         )
@@ -1598,7 +1628,7 @@ class ChatRoute(Route):
             return Response().error("Message is not linked to LLM history").__dict__
 
         conversation_id, history = await self._load_current_conversation_history(
-            session
+            session,
         )
         turn_range = self._find_turn_range(history, checkpoint_id)
         if not conversation_id or not turn_range:
@@ -1668,7 +1698,7 @@ class ChatRoute(Route):
                 "selected_model": post_data.get("selected_model"),
                 "_skip_user_history": True,
                 "_llm_checkpoint_id": new_checkpoint_id,
-            }
+            },
         )
 
     async def update_session_display_name(self):

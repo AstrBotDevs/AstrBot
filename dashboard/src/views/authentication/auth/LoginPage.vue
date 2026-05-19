@@ -12,6 +12,7 @@ import { useTheme } from "vuetify";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useToast } from "@/utils/toast";
 import { getApiBaseUrlValidationError, normalizeConfiguredApiBaseUrl } from "@/utils/request";
+import axios from "@/utils/request";
 
 const vuetifyTheme = useTheme();
 const isDark = computed(
@@ -104,7 +105,7 @@ function toggleTheme() {
   customizer.TOGGLE_DARK_MODE();
 }
 
-onMounted(() => {
+onMounted(async () => {
   // 应用URL参数（用于分享预设配置）
   applyUrlParams();
 
@@ -112,6 +113,19 @@ onMounted(() => {
   if (authStore.has_token()) {
     router.push(authStore.returnUrl || "/");
     return;
+  }
+
+  try {
+    const setupStatus = await axios.get("/api/auth/setup-status");
+    if (
+      setupStatus.data?.data?.setup_required &&
+      setupStatus.data?.data?.skip_default_password_auth
+    ) {
+      router.push("/auth/setup");
+      return;
+    }
+  } catch {
+    // Keep the normal login flow if setup status is unavailable.
   }
 
   // 添加一个小延迟以获得更好的动画效果

@@ -107,13 +107,18 @@ class ShipyardShellWrapper:
 
 class ShipyardFileSystemWrapper:
     def __init__(
-        self, _shipyard_fs: FileSystemComponent, _shipyard_shell: ShellComponent
+        self,
+        _shipyard_fs: FileSystemComponent,
+        _shipyard_shell: ShellComponent,
     ):
         self._fs = _shipyard_fs
         self._shell = _shipyard_shell
 
     async def create_file(
-        self, path: str, content: str = "", mode: int = 420
+        self,
+        path: str,
+        content: str = "",
+        mode: int = 420,
     ) -> dict[str, Any]:
         return await self._fs.create_file(path=path, content=content, mode=mode)
 
@@ -125,18 +130,30 @@ class ShipyardFileSystemWrapper:
         limit: int | None = None,
     ) -> dict[str, Any]:
         return await self._fs.read_file(
-            path=path, encoding=encoding, offset=offset, limit=limit
+            path=path,
+            encoding=encoding,
+            offset=offset,
+            limit=limit,
         )
 
     async def write_file(
-        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
     ) -> dict[str, Any]:
         return await self._fs.write_file(
-            path=path, content=content, mode=mode, encoding=encoding
+            path=path,
+            content=content,
+            mode=mode,
+            encoding=encoding,
         )
 
     async def list_dir(
-        self, path: str = ".", show_hidden: bool = False
+        self,
+        path: str = ".",
+        show_hidden: bool = False,
     ) -> dict[str, Any]:
         return await self._fs.list_dir(path=path, show_hidden=show_hidden)
 

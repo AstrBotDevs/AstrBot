@@ -71,16 +71,98 @@
                   </template>
                 </v-select>
                 <div v-if="selectedPlatformConfig" class="mt-3">
-                  <v-btn
-                    color="info"
-                    variant="tonal"
-                    class="mt-2"
-                    @click="openTutorial"
-                  >
-                    <v-icon start> mdi-book-open-variant </v-icon>
-                    {{ tm("dialog.viewTutorial") }}
-                  </v-btn>
-                  <div class="mt-2">
+                  <div v-if="isLarkPlatform">
+                    <div class="creation-mode-title mt-4 mb-1">
+                      {{ tm("registrationAction.mode.title") }}
+                    </div>
+                    <v-radio-group
+                      v-model="larkCreationMode"
+                      class="creation-mode-group"
+                      hide-details
+                    >
+                      <v-radio value="scan" :label="tm('registrationAction.mode.scan')"></v-radio>
+                      <v-radio value="manual" :label="tm('registrationAction.mode.larkManual')"></v-radio>
+                    </v-radio-group>
+
+                    <div v-if="larkCreationMode === 'scan'" class="registration-inline mt-3">
+                      <PlatformRegistrationAction
+                        :platform-config="selectedPlatformConfig"
+                        :active="larkCreationMode === 'scan'"
+                        @created="handlePlatformRegistrationCreated"
+                        @success="showSuccess"
+                        @error="showError"
+                      />
+                    </div>
+
+                    <div v-else-if="larkCreationMode === 'manual'" class="mt-2">
+                      <div class="platform-action-row">
+                        <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                          <v-icon start>mdi-book-open-variant</v-icon>
+                          {{ tm("dialog.viewTutorial") }}
+                        </v-btn>
+                      </div>
+                      <AstrBotConfig
+                        :iterable="selectedPlatformConfig"
+                        :metadata="metadata['platform_group']?.metadata"
+                        metadata-key="platform"
+                      />
+                    </div>
+                  </div>
+
+                  <div v-else-if="isDingtalkPlatform">
+                    <div class="creation-mode-title mt-4 mb-1">
+                      {{ tm("registrationAction.mode.title") }}
+                    </div>
+                    <v-radio-group
+                      v-model="dingtalkCreationMode"
+                      class="creation-mode-group"
+                      hide-details
+                    >
+                      <v-radio value="scan" :label="tm('registrationAction.mode.scan')"></v-radio>
+                      <v-radio value="manual" :label="tm('registrationAction.mode.manual')"></v-radio>
+                    </v-radio-group>
+
+                    <div v-if="dingtalkCreationMode === 'scan'" class="registration-inline mt-3">
+                      <PlatformRegistrationAction
+                        :platform-config="selectedPlatformConfig"
+                        :active="dingtalkCreationMode === 'scan'"
+                        @success="showSuccess"
+                        @error="showError"
+                      />
+                    </div>
+
+                    <div v-else-if="dingtalkCreationMode === 'manual'" class="mt-2">
+                      <div class="platform-action-row">
+                        <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                          <v-icon start>mdi-book-open-variant</v-icon>
+                          {{ tm("dialog.viewTutorial") }}
+                        </v-btn>
+                      </div>
+                      <AstrBotConfig
+                        :iterable="selectedPlatformConfig"
+                        :metadata="metadata['platform_group']?.metadata"
+                        metadata-key="platform"
+                      />
+                    </div>
+                  </div>
+
+                  <div v-else-if="isWeixinOcPlatform" class="weixin-oc-registration-inline mt-4">
+                    <PlatformRegistrationAction
+                      :platform-config="selectedPlatformConfig"
+                      :active="isWeixinOcPlatform"
+                      @created="handlePlatformRegistrationCreated"
+                      @success="showSuccess"
+                      @error="showError"
+                    />
+                  </div>
+
+                  <div v-else class="mt-2">
+                    <div class="platform-action-row">
+                      <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                        <v-icon start>mdi-book-open-variant</v-icon>
+                        {{ tm("dialog.viewTutorial") }}
+                      </v-btn>
+                    </div>
                     <AstrBotConfig
                       :iterable="selectedPlatformConfig"
                       :metadata="metadata['platform_group']?.metadata"
@@ -548,6 +630,7 @@ import {
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
 import ConfigPage from "@/views/ConfigPage.vue";
+import PlatformRegistrationAction from "@/components/platform/PlatformRegistrationAction.vue";
 
 interface RouteEntry {
   umop: string | null;
@@ -569,7 +652,7 @@ interface ToastPayload {
 
 export default {
   name: "AddNewPlatform",
-  components: { AstrBotConfig, AstrBotCoreConfigWrapper, ConfigPage },
+  components: { AstrBotConfig, AstrBotCoreConfigWrapper, ConfigPage, PlatformRegistrationAction },
   emits: ["update:show", "show-toast", "refresh-config"],
   props: {
     show: {
@@ -601,6 +684,8 @@ export default {
     return {
       selectedPlatformType: null as string | null,
       selectedPlatformConfig: null as Record<string, unknown> | null,
+      larkCreationMode: "",
+      dingtalkCreationMode: "",
 
       aBConfigRadioVal: "0",
       selectedAbConfId: null as string | null,
@@ -667,6 +752,39 @@ export default {
       if (!this.isPlatformIdValid(cfg?.id as string | undefined)) {
         return false;
       }
+
+      if (this.isLarkPlatform && !this.larkCreationMode) {
+        return false;
+      }
+
+      if (this.isLarkPlatform && this.larkCreationMode === "scan") {
+        const cfg = this.selectedPlatformConfig as Record<string, unknown> | null;
+        const appId = cfg?.app_id as string | undefined;
+        const appSecret = cfg?.app_secret as string | undefined;
+        if (!appId || !appSecret) {
+          return false;
+        }
+      }
+
+      if (this.isDingtalkPlatform && !this.dingtalkCreationMode) {
+        return false;
+      }
+
+      if (this.isDingtalkPlatform && this.dingtalkCreationMode === "scan") {
+        const cfg = this.selectedPlatformConfig as Record<string, unknown> | null;
+        const clientId = cfg?.client_id as string | undefined;
+        const clientSecret = cfg?.client_secret as string | undefined;
+        if (!clientId || !clientSecret) {
+          return false;
+        }
+      }
+
+      const weixinOcToken = this.selectedPlatformConfig?.weixin_oc_token as string | undefined;
+      if (this.isWeixinOcPlatform && !weixinOcToken) {
+        return false;
+      }
+
+      // 如果是使用现有配置文件模式
       if (this.aBConfigRadioVal === "0") {
         return !!this.selectedAbConfId;
       }
@@ -725,16 +843,28 @@ export default {
         },
       ];
     },
+    isLarkPlatform(): boolean {
+      return this.selectedPlatformConfig?.type === "lark";
+    },
+    isWeixinOcPlatform(): boolean {
+      return this.selectedPlatformConfig?.type === "weixin_oc";
+    },
+    isDingtalkPlatform(): boolean {
+      return this.selectedPlatformConfig?.type === "dingtalk";
+    }
   },
   watch: {
     selectedPlatformType(newType: string | null) {
-      const templates = this.platformTemplates as Record<string, unknown>;
-      if (newType && templates[newType]) {
+      if (newType && this.platformTemplates[newType]) {
         this.selectedPlatformConfig = JSON.parse(
-          JSON.stringify(templates[newType]),
+          JSON.stringify(this.platformTemplates[newType]),
         ) as Record<string, unknown>;
+        this.larkCreationMode = "";
+        this.dingtalkCreationMode = "";
       } else {
         this.selectedPlatformConfig = null;
+        this.larkCreationMode = "";
+        this.dingtalkCreationMode = "";
       }
     },
     selectedAbConfId(newConfigId: string | null) {
@@ -838,6 +968,8 @@ export default {
     resetForm(): void {
       this.selectedPlatformType = null;
       this.selectedPlatformConfig = null;
+      this.larkCreationMode = "";
+      this.dingtalkCreationMode = "";
 
       this.aBConfigRadioVal = "0";
       this.selectedAbConfId = "default";
@@ -1144,6 +1276,56 @@ export default {
       this.$emit("show-toast", { message, type: "error" } as ToastPayload);
     },
 
+    buildRandomPlatformIdSuffix(): string {
+      const letters = "abcdefghijklmnopqrstuvwxyz";
+      let suffix = "_";
+      for (let i = 0; i < 4; i += 1) {
+        suffix += letters[Math.floor(Math.random() * letters.length)];
+      }
+      return suffix;
+    },
+
+    handlePlatformRegistrationCreated(data: Record<string, unknown>): void {
+      if (!this.selectedPlatformConfig || !data) {
+        return;
+      }
+      const rawId = this.selectedPlatformConfig.id as string | undefined;
+      const currentId = String(rawId || "").trim();
+      const platformType = this.selectedPlatformConfig.type as string | undefined;
+      if (!currentId) {
+        return;
+      }
+
+      let suffix = "";
+      const platformIdSuffix = data.platform_id_suffix as string | undefined;
+      const explicitSuffix = String(platformIdSuffix || "").trim().replace(/[!:]/g, "_");
+      const botName = data.bot_name as string | undefined;
+      if (explicitSuffix) {
+        suffix = explicitSuffix.startsWith("_") || explicitSuffix.startsWith("-")
+          ? explicitSuffix
+          : `_${explicitSuffix}`;
+      } else if (botName) {
+        const safeBotName = String(botName || "").trim().replace(/[!:]/g, "_");
+        if (safeBotName) {
+          suffix = `-${safeBotName}`;
+        }
+      } else if (platformType === "weixin_oc" || platformType === "dingtalk") {
+        suffix = this.buildRandomPlatformIdSuffix();
+      }
+
+      if (!suffix) {
+        return;
+      }
+
+      if ((platformType === "weixin_oc" || platformType === "dingtalk") && /_[a-z]{4}$/.test(currentId)) {
+        return;
+      }
+
+      this.selectedPlatformConfig.id = currentId.endsWith(suffix)
+        ? currentId
+        : `${currentId}${suffix}`;
+    },
+
     isPlatformIdValid(id: string | null | undefined): boolean {
       if (!id) {
         return false;
@@ -1414,6 +1596,30 @@ export default {
   flex: 1;
   overflow-y: auto;
   padding: 16px 16px 24px 16px;
+}
+
+.platform-action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.creation-mode-group .v-label {
+  opacity: 0.9;
+}
+
+.creation-mode-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.78);
+}
+
+.registration-inline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: 320px;
 }
 
 @media (max-width: 700px) {

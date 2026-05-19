@@ -9,7 +9,7 @@ from astrbot.builtin_stars.web_searcher.provider_constants import (
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.24.2"
+VERSION = "4.25.1"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -181,7 +181,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "shipyard_neo_ttl": 3600,
             "cua_image": CUA_DEFAULT_CONFIG["image"],
             "cua_os_type": CUA_DEFAULT_CONFIG["os_type"],
-            "cua_ttl": CUA_DEFAULT_CONFIG["ttl"],
+            "cua_idle_timeout": CUA_DEFAULT_CONFIG["idle_timeout"],
             "cua_telemetry_enabled": CUA_DEFAULT_CONFIG["telemetry_enabled"],
             "cua_local": CUA_DEFAULT_CONFIG["local"],
             "cua_api_key": CUA_DEFAULT_CONFIG["api_key"],
@@ -248,6 +248,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "enable": True,
         "username": "astrbot",
         "password": "",
+        "pbkdf2_password": "",
+        "password_storage_upgraded": False,
+        "password_change_required": False,
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
@@ -318,7 +321,7 @@ CONFIG_METADATA_2: Any = {
                     "QQ 官方机器人(WebSocket)": {
                         "id": "default",
                         "type": "qq_official",
-                        "enable": False,
+                        "enable": True,
                         "appid": "",
                         "secret": "",
                         "enable_group_c2c": True,
@@ -327,7 +330,7 @@ CONFIG_METADATA_2: Any = {
                     "QQ 官方机器人(Webhook)": {
                         "id": "default",
                         "type": "qq_official_webhook",
-                        "enable": False,
+                        "enable": True,
                         "appid": "",
                         "secret": "",
                         "is_sandbox": False,
@@ -339,7 +342,7 @@ CONFIG_METADATA_2: Any = {
                     "OneBot v11": {
                         "id": "default",
                         "type": "aiocqhttp",
-                        "enable": False,
+                        "enable": True,
                         "ws_reverse_host": "0.0.0.0",
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
@@ -347,7 +350,7 @@ CONFIG_METADATA_2: Any = {
                     "微信公众平台": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
-                        "enable": False,
+                        "enable": True,
                         "appid": "",
                         "secret": "",
                         "token": "",
@@ -362,7 +365,7 @@ CONFIG_METADATA_2: Any = {
                     "企业微信(含微信客服)": {
                         "id": "wecom",
                         "type": "wecom",
-                        "enable": False,
+                        "enable": True,
                         "corpid": "",
                         "secret": "",
                         "token": "",
@@ -399,7 +402,7 @@ CONFIG_METADATA_2: Any = {
                     "个人微信": {
                         "id": "weixin_personal",
                         "type": "weixin_oc",
-                        "enable": False,
+                        "enable": True,
                         "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
                         "weixin_oc_bot_type": "3",
                         "weixin_oc_qr_poll_interval": 1,
@@ -409,8 +412,7 @@ CONFIG_METADATA_2: Any = {
                     "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
-                        "enable": False,
-                        "lark_bot_name": "",
+                        "enable": True,
                         "app_id": "",
                         "app_secret": "",
                         "domain": "https://open.feishu.cn",
@@ -422,7 +424,7 @@ CONFIG_METADATA_2: Any = {
                     "钉钉(DingTalk)": {
                         "id": "dingtalk",
                         "type": "dingtalk",
-                        "enable": False,
+                        "enable": True,
                         "client_id": "",
                         "client_secret": "",
                         "card_template_id": "",
@@ -430,7 +432,7 @@ CONFIG_METADATA_2: Any = {
                     "Telegram": {
                         "id": "telegram",
                         "type": "telegram",
-                        "enable": False,
+                        "enable": True,
                         "telegram_token": "your_bot_token",
                         "start_message": "Hello, I'm AstrBot!",
                         "telegram_api_base_url": "https://api.telegram.org/bot",
@@ -443,7 +445,7 @@ CONFIG_METADATA_2: Any = {
                     "Discord": {
                         "id": "discord",
                         "type": "discord",
-                        "enable": False,
+                        "enable": True,
                         "discord_token": "",
                         "discord_proxy": "",
                         "discord_command_register": True,
@@ -452,7 +454,7 @@ CONFIG_METADATA_2: Any = {
                     "Misskey": {
                         "id": "misskey",
                         "type": "misskey",
-                        "enable": False,
+                        "enable": True,
                         "misskey_instance_url": "https://misskey.example",
                         "misskey_token": "",
                         "misskey_default_visibility": "public",
@@ -470,7 +472,7 @@ CONFIG_METADATA_2: Any = {
                     "Slack": {
                         "id": "slack",
                         "type": "slack",
-                        "enable": False,
+                        "enable": True,
                         "bot_token": "",
                         "app_token": "",
                         "signing_secret": "",
@@ -484,7 +486,7 @@ CONFIG_METADATA_2: Any = {
                     "Line": {
                         "id": "line",
                         "type": "line",
-                        "enable": False,
+                        "enable": True,
                         "channel_access_token": "",
                         "channel_secret": "",
                         "unified_webhook_mode": True,
@@ -493,7 +495,7 @@ CONFIG_METADATA_2: Any = {
                     "Satori": {
                         "id": "satori",
                         "type": "satori",
-                        "enable": False,
+                        "enable": True,
                         "satori_api_base_url": "http://localhost:5140/satori/v1",
                         "satori_endpoint": "ws://localhost:5140/satori/v1/events",
                         "satori_token": "",
@@ -504,7 +506,7 @@ CONFIG_METADATA_2: Any = {
                     "kook": {
                         "id": "kook",
                         "type": "kook",
-                        "enable": False,
+                        "enable": True,
                         "kook_bot_token": "",
                         "kook_reconnect_delay": 1,
                         "kook_max_reconnect_delay": 60,
@@ -513,6 +515,14 @@ CONFIG_METADATA_2: Any = {
                         "kook_heartbeat_timeout": 6,
                         "kook_max_heartbeat_failures": 3,
                         "kook_max_consecutive_failures": 5,
+                    },
+                    "Mattermost": {
+                        "id": "mattermost",
+                        "type": "mattermost",
+                        "enable": True,
+                        "mattermost_url": "https://chat.example.com",
+                        "mattermost_bot_token": "",
+                        "mattermost_reconnect_delay": 5.0,
                     },
                     # "WebChat": {
                     #     "id": "webchat",
@@ -864,11 +874,6 @@ CONFIG_METADATA_2: Any = {
                         "condition": {
                             "wecom_ai_bot_connection_mode": "long_connection",
                         },
-                    },
-                    "lark_bot_name": {
-                        "description": "飞书机器人的名字",
-                        "type": "string",
-                        "hint": "请务必填写正确，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
                     },
                     "discord_token": {
                         "description": "Discord Bot Token",
@@ -1768,6 +1773,34 @@ CONFIG_METADATA_2: Any = {
                         "embedding_model": "gemini-embedding-exp-03-07",
                         "embedding_dimensions": 768,
                         "timeout": 20,
+                        "proxy": "",
+                    },
+                    "NVIDIA Embedding": {
+                        "id": "nvidia_embedding",
+                        "type": "nvidia_embedding",
+                        "provider": "nvidia",
+                        "provider_type": "embedding",
+                        "hint": "provider_group.provider.nvidia_embedding.hint",
+                        "enable": True,
+                        "embedding_api_key": "",
+                        "embedding_api_base": "https://integrate.api.nvidia.com/v1",
+                        "embedding_model": "nvidia/llama-nemotron-embed-1b-v2",
+                        "input_type": "passage",
+                        "embedding_dimensions": 1024,
+                        "timeout": 20,
+                        "proxy": "",
+                    },
+                    "Ollama Embedding": {
+                        "id": "ollama_embedding",
+                        "type": "ollama_embedding",
+                        "provider": "ollama",
+                        "provider_type": "embedding",
+                        "hint": "provider_group.provider.ollama_embedding.hint",
+                        "enable": True,
+                        "embedding_api_base": "http://localhost:11434",
+                        "embedding_model": "nomic-embed-text",
+                        "embedding_dimensions": 768,
+                        "timeout": 60,
                         "proxy": "",
                     },
                     "vLLM Rerank": {
@@ -3276,7 +3309,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.shipyard_neo_profile": {
                         "description": "Shipyard Neo Profile",
                         "type": "string",
-                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。",
+                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。留空时自动选择能力更完整的 profile。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "shipyard_neo",
@@ -3311,10 +3344,10 @@ CONFIG_METADATA_3 = {
                             "provider_settings.sandbox.booter": "cua",
                         },
                     },
-                    "provider_settings.sandbox.cua_ttl": {
-                        "description": "CUA Sandbox TTL",
+                    "provider_settings.sandbox.cua_idle_timeout": {
+                        "description": "CUA Idle Timeout",
                         "type": "int",
-                        "hint": "CUA 沙箱生存时间（秒）。当前作为会话配置保存，具体生效取决于 CUA SDK。",
+                        "hint": "Idle timeout for CUA sandbox sessions in seconds. When greater than 0, AstrBot proactively shuts down an idle CUA sandbox after that amount of inactivity; 0 disables it.",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "cua",

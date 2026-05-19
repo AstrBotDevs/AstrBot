@@ -18,7 +18,7 @@ def _normalize_session_plugin_config(value: object) -> dict[str, dict[str, list[
     for session_id, raw_settings in value.items():
         if not isinstance(session_id, str) or not isinstance(raw_settings, dict):
             continue
-        raw_settings = cast(dict[str, Any], raw_settings)
+        raw_settings = cast("dict[str, Any]", raw_settings)
         settings: dict[str, list[str]] = {}
         enabled_plugins = raw_settings.get("enabled_plugins")
         if isinstance(enabled_plugins, list) and all(

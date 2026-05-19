@@ -106,8 +106,8 @@ class CoreConstraintsProvider:
                 (
                     *_get_core_constraints(self._core_dist_name),
                     *get_desktop_core_lock_constraints(),
-                )
-            )
+                ),
+            ),
         )
         if not constraints:
             yield None
@@ -151,8 +151,8 @@ class CoreConstraintsProvider:
                 (
                     *_get_core_constraints(self._core_dist_name),
                     *get_desktop_core_lock_constraints(),
-                )
-            )
+                ),
+            ),
         )
         if not constraints:
             yield None

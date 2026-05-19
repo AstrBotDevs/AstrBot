@@ -1,5 +1,5 @@
 {
-  "logoTitle": "AstrBot 仪表盘",
+  "logoTitle": "AstrBot WebUI",
   "version": {
     "hasNewVersion": "AstrBot 有新版本！",
     "dashboardHasNewVersion": "AstrBot 面板有新版本！"
@@ -24,6 +24,7 @@
     "tabs": {
       "release": "😊 正式版"
     },
+    "advancedSettings": "高级设置",
     "updateToLatest": "更新到最新版本",
     "preRelease": "预发布",
     "preReleaseWarning": {
@@ -46,7 +47,19 @@
       "switch": "切换"
     },
     "releaseNotes": {
-      "title": "更新日志"
+      "title": "更新日志",
+      "latestLabel": "最新版本"
+    },
+    "progress": {
+      "target": "目标版本：",
+      "preparing": "正在准备更新...",
+      "dashboard": "下载 WebUI",
+      "core": "下载项目代码",
+      "dependencies": "正在更新依赖...",
+      "restart": "正在准备重启...",
+      "restarting": "正在重启 AstrBot",
+      "completed": "更新完成",
+      "failed": "更新失败"
     },
     "redirectConfirm": {
       "title": "即将跳转",
@@ -76,6 +89,7 @@
       "currentVersion": "当前版本",
       "hasNewVersion": "有新版本！",
       "isLatest": "已经是最新版本了。",
+      "fallback": "完整更新异常时，可仅重新下载 WebUI 作为兜底。",
       "downloadAndUpdate": "下载并更新"
     }
   },
@@ -83,6 +97,7 @@
     "title": "修改账户",
     "securityWarning": "安全提醒: 请修改密码以确保账户安全",
     "securityWarningLegacy": "新的 AstrBot 版本强化了安全策略，请重新修改密码",
+    "securityWarningUpgrade": "检测到旧版本密码存储方式，请修改密码以完成安全升级",
     "form": {
       "currentPassword": "当前密码",
       "newPassword": "新密码",
@@ -91,7 +106,7 @@
       "passwordHint": "长度至少 12 位，且包含大写字母、小写字母和数字",
       "confirmPasswordHint": "请再次输入新密码以确认",
       "usernameHint": "留空表示不修改用户名",
-      "defaultCredentials": "首次登录的用户将自动成为管理员。如需修改或重置密码，请使用终端命令行工具。"
+      "defaultCredentials": "默认用户名为 astrbot，初始密码会在首次启动时自动生成并显示在控制台中。"
     },
     "validation": {
       "passwordRequired": "请输入密码",

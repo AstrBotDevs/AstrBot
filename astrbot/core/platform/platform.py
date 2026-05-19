@@ -141,7 +141,7 @@ class Platform(abc.ABC):
         异步方法｡
         """
         asyncio.create_task(
-            Metric.upload(msg_event_tick=1, adapter_name=self.meta().name)
+            Metric.upload(msg_event_tick=1, adapter_name=self.meta().name),
         )
 
     def commit_event(self, event: AstrMessageEvent) -> None:

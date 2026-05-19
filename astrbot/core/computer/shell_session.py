@@ -92,6 +92,7 @@ class PersistentShellSession:
         -------
         dict with keys ``stdout``, ``stderr``, ``exit_code`` and (when
         background) ``background_task``.
+
         """
         await self._ensure_running()
 

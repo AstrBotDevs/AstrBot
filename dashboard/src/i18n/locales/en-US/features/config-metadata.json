@@ -188,7 +188,7 @@
           },
           "shipyard_neo_profile": {
             "description": "Shipyard Neo Profile",
-            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default."
+            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default. Leave empty to auto-select the most capable profile."
           },
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox TTL",
@@ -202,9 +202,9 @@
             "description": "CUA OS Type",
             "hint": "CUA sandbox operating system type. Defaults to linux."
           },
-          "cua_ttl": {
-            "description": "CUA Sandbox TTL",
-            "hint": "CUA sandbox time-to-live in seconds. Actual behavior depends on the installed CUA SDK."
+          "cua_idle_timeout": {
+            "description": "CUA Idle Timeout",
+            "hint": "Idle timeout for CUA sandbox sessions in seconds. When greater than 0, AstrBot proactively shuts down an idle CUA sandbox after that amount of inactivity; 0 disables it."
           },
           "cua_telemetry_enabled": {
             "description": "CUA Telemetry",
@@ -476,10 +476,6 @@
       "kf_name": {
         "description": "WeChat Customer Service Account Name",
         "hint": "Optional. Customer service account name (not ID). Get it at https://kf.weixin.qq.com/kf/frame#/accounts"
-      },
-      "lark_bot_name": {
-        "description": "Lark Bot Name",
-        "hint": "Must be correct; otherwise @ mentions will not wake the bot and only prefix wake will work."
       },
       "lark_connection_mode": {
         "description": "Subscription Mode",

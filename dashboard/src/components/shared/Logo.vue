@@ -50,7 +50,7 @@ const formatTitle = (title: string) => {
 <style scoped>
 .logo-container {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   width: 100%;
   margin-bottom: 10px;
@@ -58,9 +58,9 @@ const formatTitle = (title: string) => {
 
 .logo-content {
   display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 10px;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 10px 0;
   max-width: 100%;
   overflow: visible;
 }
@@ -162,7 +162,7 @@ const formatTitle = (title: string) => {
 
 @media (max-width: 520px) {
   .logo-content {
-    gap: 15px;
+    gap: 8px;
   }
 
   .logo-title {

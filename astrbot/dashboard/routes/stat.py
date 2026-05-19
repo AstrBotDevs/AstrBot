@@ -28,6 +28,11 @@ from astrbot.core.utils.auth_password import (
 from astrbot.core.utils.io import get_dashboard_version
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 from astrbot.core.utils.version_comparator import VersionComparator
+from astrbot.dashboard.password_state import (
+    get_dashboard_password_hash,
+    is_password_change_required,
+    is_password_storage_upgraded,
+)
 
 from .route import Response, Route, RouteContext
 
@@ -75,17 +80,37 @@ class StatRoute(Route):
         hours, minutes = divmod(minutes, 60)
         return {"hours": hours, "minutes": minutes, "seconds": seconds}
 
-    def is_default_cred(self):
-        username = self.config["dashboard"]["username"]
-        password = self.config["dashboard"]["password"]
-        return (
-            username == "astrbot"
-            and is_default_dashboard_password(password)
-            and not DEMO_MODE
+    async def is_default_cred(self):
+        password_change_required = await is_password_change_required(
+            self.db_helper,
+            self.config,
         )
+        if password_change_required:
+            return not DEMO_MODE
+
+        storage_upgraded = await is_password_storage_upgraded(
+            self.db_helper,
+            self.config,
+        )
+        if not storage_upgraded:
+            return False
+
+        username = self.config["dashboard"]["username"]
+        password = get_dashboard_password_hash(self.config, upgraded=True)
+        return (
+            username == "astrbot" and is_default_dashboard_password(password)
+        ) and not DEMO_MODE
 
     async def get_version(self):
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
+        storage_upgraded = await is_password_storage_upgraded(
+            self.db_helper,
+            self.config,
+        )
+        password = get_dashboard_password_hash(
+            self.config,
+            upgraded=storage_upgraded,
+        )
 
         return (
             Response()
@@ -93,10 +118,9 @@ class StatRoute(Route):
                 {
                     "version": VERSION,
                     "dashboard_version": await get_dashboard_version(),
-                    "change_pwd_hint": self.is_default_cred(),
-                    "legacy_pwd_hint": is_legacy_dashboard_password(
-                        self.config["dashboard"]["password"],
-                    ),
+                    "change_pwd_hint": await self.is_default_cred(),
+                    "legacy_pwd_hint": is_legacy_dashboard_password(password),
+                    "password_upgrade_required": not storage_upgraded,
                     "need_migration": need_migration,
                 },
             )

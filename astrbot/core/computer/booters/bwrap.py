@@ -297,7 +297,10 @@ class HostBackedFileSystemComponent(FileSystemComponent):
 
             cmd = ["grep", "-r", pattern, p]
             result = await asyncio.to_thread(
-                subprocess.run, cmd, capture_output=True, text=True
+                subprocess.run,
+                cmd,
+                capture_output=True,
+                text=True,
             )
             return {
                 "success": True,

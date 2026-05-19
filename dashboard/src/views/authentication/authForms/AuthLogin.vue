@@ -90,13 +90,13 @@ async function validate(_values: any, { setErrors }: any) {
       required
       variant="outlined"
       hide-details="auto"
-      :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
+      :append-inner-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
       :type="show1 ? 'text' : 'password'"
       class="pwd-input"
       prepend-inner-icon="mdi-lock"
       :disabled="loading"
       autocomplete="current-password"
-      @click:append="show1 = !show1"
+      @click:append-inner="show1 = !show1"
     />
 
     <div class="mt-2">

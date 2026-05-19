@@ -5,16 +5,12 @@ import subprocess
 import tempfile
 import wave
 from io import BytesIO
-from typing import TYPE_CHECKING
 
 import anyio
 import pysilk  # requires silk-python (core dependency)
 
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-if TYPE_CHECKING:
-    pass  # pilk/p Moffmpeg are runtime optional deps
 
 
 async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:

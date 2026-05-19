@@ -117,11 +117,14 @@ def create_proxy_client(
 
     Returns:
         An httpx.AsyncClient created with the hybrid SSL context (system store + certifi); the proxy is applied only if one is provided.
+
     """
     resolved_verify = _SYSTEM_SSL_CTX if verify is None else verify
     if proxy:
         logger.info(f"[{provider_label}] 使用代理: {proxy}")
         return httpx_module.AsyncClient(
-            proxy=proxy, verify=resolved_verify, headers=headers
+            proxy=proxy,
+            verify=resolved_verify,
+            headers=headers,
         )
     return httpx_module.AsyncClient(verify=resolved_verify, headers=headers)

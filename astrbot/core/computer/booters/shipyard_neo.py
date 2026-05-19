@@ -27,7 +27,7 @@ try:
     from shipyard_neo.sandbox import Sandbox
 except ImportError:
     logger.warning(
-        "shipyard_neo_sdk is not installed. ShipyardNeoBooter will not work without it."
+        "shipyard_neo_sdk is not installed. ShipyardNeoBooter will not work without it.",
     )
 
 
@@ -278,12 +278,12 @@ class ShipyardNeoBooter(ComputerBooter):
         self,
         endpoint_url: str,
         access_token: str,
-        profile: str = DEFAULT_PROFILE,
+        profile: str = "",
         ttl: int = 3600,
     ) -> None:
         self._endpoint_url = endpoint_url
         self._access_token = access_token
-        self._profile = profile
+        self._profile = profile.strip() if profile else ""
         self._ttl = ttl
         self._client: Any = None
         self._sandbox: Any = None
@@ -350,6 +350,10 @@ class ShipyardNeoBooter(ComputerBooter):
             access_token=self._access_token,
         )
         await self._client.__aenter__()
+
+        # Resolve profile: user-specified > smart selection > default.
+        # An empty profile means auto-select; any non-empty profile must be
+        # honoured as an explicit choice, including "python-default".
         resolved_profile = await self._resolve_profile(self._client)
         self._sandbox = await self._client.create_sandbox(
             profile=resolved_profile,
@@ -414,7 +418,7 @@ class ShipyardNeoBooter(ComputerBooter):
                         del_err,
                     )
                 raise RuntimeError(
-                    f"Sandbox {sandbox_id} is in terminal state: {status}"
+                    f"Sandbox {sandbox_id} is in terminal state: {status}",
                 )
 
             remaining = deadline - asyncio.get_running_loop().time()
@@ -436,7 +440,7 @@ class ShipyardNeoBooter(ComputerBooter):
                     )
                 raise TimeoutError(
                     f"Sandbox {sandbox_id} did not become ready within "
-                    f"{READINESS_TIMEOUT}s (last status: {status})"
+                    f"{READINESS_TIMEOUT}s (last status: {status})",
                 )
 
             logger.debug(
@@ -450,7 +454,7 @@ class ShipyardNeoBooter(ComputerBooter):
         """Pick the best profile for this session.
 
         Resolution order:
-        1. User-specified profile (non-empty, non-default) ￫ use as-is.
+        1. User-specified profile (non-empty) → use as-is.
         2. Query ``GET /v1/profiles`` and pick the profile with the most
            capabilities, preferring profiles that include ``"browser"``.
         3. Fall back to :attr:`DEFAULT_PROFILE`.
@@ -459,11 +463,9 @@ class ShipyardNeoBooter(ComputerBooter):
         misconfigured token, and silently falling back would just delay the
         real failure to ``create_sandbox``.
         """
-        if self._profile and self._profile != self.DEFAULT_PROFILE:
-            logger.info(
-                "[Computer] profile_selected mode=user profile=%s",
-                self._profile,
-            )
+        # User explicitly set a profile → honour it.
+        if self._profile:
+            logger.info("[Computer] Using user-specified profile: %s", self._profile)
             return self._profile
         from shipyard_neo.errors import ForbiddenError, UnauthorizedError
 
@@ -509,11 +511,13 @@ class ShipyardNeoBooter(ComputerBooter):
             if delete_sandbox and self._sandbox is not None:
                 try:
                     logger.info(
-                        "[Computer] Deleting Shipyard Neo sandbox: id=%s", sandbox_id
+                        "[Computer] Deleting Shipyard Neo sandbox: id=%s",
+                        sandbox_id,
                     )
                     await self._sandbox.delete()
                     logger.info(
-                        "[Computer] Shipyard Neo sandbox deleted: id=%s", sandbox_id
+                        "[Computer] Shipyard Neo sandbox deleted: id=%s",
+                        sandbox_id,
                     )
                 except Exception as e:
                     logger.warning(

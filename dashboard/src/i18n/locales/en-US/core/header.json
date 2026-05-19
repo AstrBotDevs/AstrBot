@@ -24,6 +24,7 @@
     "tabs": {
       "release": "😊 Release"
     },
+    "advancedSettings": "Advanced settings",
     "updateToLatest": "Update to Latest Version",
     "preRelease": "Pre-release",
     "preReleaseWarning": {
@@ -46,7 +47,19 @@
       "switch": "Switch"
     },
     "releaseNotes": {
-      "title": "Release Notes"
+      "title": "Release Notes",
+      "latestLabel": "Latest version"
+    },
+    "progress": {
+      "target": "Target version: ",
+      "preparing": "Preparing update...",
+      "dashboard": "Download WebUI",
+      "core": "Download project code",
+      "dependencies": "Updating dependencies...",
+      "restart": "Preparing restart...",
+      "restarting": "Restarting AstrBot",
+      "completed": "Update complete",
+      "failed": "Update failed"
     },
     "redirectConfirm": {
       "title": "Leaving AstrBot",
@@ -76,6 +89,7 @@
       "currentVersion": "Current Version",
       "hasNewVersion": "New version available!",
       "isLatest": "Already the latest version.",
+      "fallback": "Use this to re-download the WebUI if the full update path fails.",
       "downloadAndUpdate": "Download and Update"
     }
   },
@@ -83,6 +97,7 @@
     "title": "Modify Account",
     "securityWarning": "Security Reminder: Please change your password to secure your account",
     "securityWarningLegacy": "The new AstrBot version has improved security. Please change your password.",
+    "securityWarningUpgrade": "Legacy password storage detected. Please change your password to complete the security upgrade.",
     "form": {
       "currentPassword": "Current Password",
       "newPassword": "New Password",
@@ -91,7 +106,7 @@
       "passwordHint": "At least 12 characters, including uppercase, lowercase letters, and digits",
       "confirmPasswordHint": "Please enter new password again to confirm",
       "usernameHint": "Leave blank to keep current username",
-      "defaultCredentials": "The first user to log in automatically becomes the administrator. Passwords can be reset via the CLI tool if forgotten."
+      "defaultCredentials": "The default username is astrbot. An initial password is generated on first startup and shown in the console."
     },
     "validation": {
       "passwordRequired": "Please enter password",

@@ -23,6 +23,7 @@ from astrbot.core.utils.auth_password import (
     _is_argon2_hash,
     _is_pbkdf2_hash,
     hash_dashboard_password,
+    hash_legacy_dashboard_password,
     is_legacy_dashboard_password,
     validate_dashboard_password,
 )
@@ -71,8 +72,8 @@ def _validate_dashboard_password(value: str) -> str:
         validate_dashboard_password(value)
     except ValueError as e:
         raise click.ClickException(str(e)) from e
-    # Return the canonical stored representation.
-    return hash_dashboard_password(value)
+    # Return the plaintext value; callers hash it before storage.
+    return value
 
 
 def _validate_timezone(value: str) -> str:
@@ -200,10 +201,16 @@ def set_dashboard_credentials(
                     "Please provide the plaintext password (it will be hashed securely), "
                     "or provide an Argon2-encoded hash string.",
                 )
+            validated = _validate_dashboard_password(password_hash)
+            _set_nested_item(
+                config,
+                "dashboard.pbkdf2_password",
+                hash_dashboard_password(validated),
+            )
             _set_nested_item(
                 config,
                 "dashboard.password",
-                _validate_dashboard_password(password_hash),
+                hash_legacy_dashboard_password(validated),
             )
 
 
@@ -237,7 +244,19 @@ def set_config(key: str, value: str) -> None:
             old_value = "<not set>"
 
         validated_value = CONFIG_VALIDATORS[key](value)
-        _set_nested_item(config, key, validated_value)
+        if key == "dashboard.password":
+            _set_nested_item(
+                config,
+                "dashboard.pbkdf2_password",
+                hash_dashboard_password(validated_value),
+            )
+            _set_nested_item(
+                config,
+                "dashboard.password",
+                hash_legacy_dashboard_password(validated_value),
+            )
+        else:
+            _set_nested_item(config, key, validated_value)
         _save_config(config)
 
         click.echo(f"Config updated: {key}")

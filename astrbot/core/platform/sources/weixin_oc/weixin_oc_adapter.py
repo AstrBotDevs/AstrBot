@@ -61,6 +61,7 @@ class TypingSessionState:
 
 @register_platform_adapter("weixin_oc", "个人微信", support_streaming_message=False)
 class WeixinOCAdapter(Platform):
+    SESSION_TIMEOUT_ERRCODE = -14
     IMAGE_ITEM_TYPE = 2
     VOICE_ITEM_TYPE = 3
     FILE_ITEM_TYPE = 4
@@ -775,6 +776,50 @@ class WeixinOCAdapter(Platform):
         )
         return True
 
+    def _build_cache_components_from_items(
+        self,
+        item_list: list[dict[str, Any]],
+    ) -> list[Any]:
+        components: list[Any] = []
+        for item in item_list:
+            item_type = int(item.get("type") or 0)
+            if item_type != 1:
+                continue
+            text = str(item.get("text_item", {}).get("text", "")).strip()
+            if text:
+                components.append(Plain(text))
+        return components
+
+    @staticmethod
+    def _is_successful_api_payload(payload: dict[str, Any]) -> bool:
+        ret = payload.get("ret", 0)
+        errcode = payload.get("errcode", 0)
+        return int(ret or 0) == 0 and int(errcode or 0) == 0
+
+    @staticmethod
+    def _format_api_error(payload: dict[str, Any]) -> str:
+        ret = int(payload.get("ret") or 0)
+        errcode = int(payload.get("errcode") or 0)
+        errmsg = str(payload.get("errmsg", ""))
+        return f"ret={ret}, errcode={errcode}, errmsg={errmsg}"
+
+    @staticmethod
+    def _api_errcode(payload: dict[str, Any]) -> int:
+        return int(payload.get("errcode") or 0)
+
+    async def _handle_inbound_session_timeout(self) -> None:
+        logger.warning(
+            "weixin_oc(%s): session timed out, clearing login state and waiting for QR login.",
+            self.meta().id,
+        )
+        self.token = None
+        self.account_id = None
+        self._sync_buf = ""
+        self._context_tokens = {}
+        self._context_tokens_dirty = False
+        self._login_session = None
+        await self._save_account_state()
+
     async def _send_media_segment(
         self,
         user_id: str,
@@ -816,7 +861,12 @@ class WeixinOCAdapter(Platform):
                 file_name,
             )
         except Exception as e:
-            logger.error("weixin_oc(%s): prepare media failed: %s", self.meta().id, e)
+            logger.error(
+                "weixin_oc(%s): prepare media failed: %s",
+                self.meta().id,
+                e,
+                exc_info=True,
+            )
             return False
         if text:
             await self._send_items_to_session(
@@ -1065,6 +1115,10 @@ class WeixinOCAdapter(Platform):
                 self.meta().id,
                 self._last_inbound_error,
             )
+            if self._api_errcode(data) == self.SESSION_TIMEOUT_ERRCODE:
+                await self._handle_inbound_session_timeout()
+                return
+            await asyncio.sleep(5)
             return
 
         should_save_state = self._context_tokens_dirty
@@ -1115,17 +1169,20 @@ class WeixinOCAdapter(Platform):
         target_user = session.session_id
         pending_text = ""
         has_supported_segment = False
+        failed_segments = 0
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
                 pending_text += segment.text
                 continue
             if isinstance(segment, (Image, Video, File)):
                 has_supported_segment = True
-                await self._send_media_segment(
+                sent = await self._send_media_segment(
                     target_user,
                     segment,
                     text=pending_text.strip() or None,
                 )
+                if not sent:
+                    failed_segments += 1
                 pending_text = ""
                 continue
             logger.debug(
@@ -1135,11 +1192,18 @@ class WeixinOCAdapter(Platform):
             )
         if pending_text:
             has_supported_segment = True
-            await self._send_to_session(target_user, pending_text.strip())
+            sent = await self._send_to_session(target_user, pending_text.strip())
+            if not sent:
+                failed_segments += 1
         if not has_supported_segment:
             logger.warning(
                 "weixin_oc(%s): outbound message ignored, no supported segments",
                 self.meta().id,
+            )
+        if failed_segments:
+            raise RuntimeError(
+                f"weixin_oc({self.meta().id}, target_user={target_user}) "
+                f"failed to send {failed_segments} message segment(s)",
             )
         await super().send_by_session(session, message_chain)
 
