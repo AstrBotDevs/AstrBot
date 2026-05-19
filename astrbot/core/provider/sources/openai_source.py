@@ -1420,12 +1420,4 @@ class ProviderOpenAIOfficial(Provider):
 
     async def terminate(self):
         if self.client:
-        try:
-            final_completion = state.get_final_completion()
-            llm_response = await self._parse_openai_completion(final_completion, tools)
-            yield llm_response
-        except Exception as e:
-            logger.error("get_final_completion error: " + str(e))
-            # 流式内容已通过 yield 发出，记录错误后正常结束即可
-            return
             await self.client.close()
