@@ -221,6 +221,25 @@ import {
 import UnsavedChangesConfirmDialog from '@/components/config/UnsavedChangesConfirmDialog.vue';
 import { normalizeTextInput } from '@/utils/inputValue';
 
+const RUNTIME_LOG_CONFIG_KEYS = [
+  'log_level',
+  'log_file_enable',
+  'log_file_path',
+  'log_file_max_mb',
+  'trace_log_enable',
+  'trace_log_path',
+  'trace_log_max_mb'
+];
+
+const LEGACY_RUNTIME_LOG_FILE_KEYS = [
+  'enable',
+  'path',
+  'max_mb',
+  'trace_enable',
+  'trace_path',
+  'trace_max_mb'
+];
+
 export default {
   name: 'ConfigPage',
   components: {
@@ -264,7 +283,12 @@ export default {
       } else if (confirmed) {
         const result = await this.updateConfig();
         if (this.isSystemConfig) {
-          next(false);
+          if (result?.success && !result?.restarted) {
+            await new Promise(resolve => setTimeout(resolve, 800));
+            next();
+          } else {
+            next(false);
+          }
         } else {
           if (result?.success) {
             await new Promise(resolve => setTimeout(resolve, 800));
@@ -540,18 +564,30 @@ export default {
         postData.conf_id = this.selectedConfigID;
       }
 
+      const previousConfig = this.parseConfigSnapshot(this.lastSavedConfigSnapshot);
+      const localShouldRestart = this.isSystemConfig && this.shouldRestartAfterSystemConfigSave(
+        previousConfig,
+        postData.config
+      );
+
       return axios.post('/api/config/astrbot/update', postData).then((res) => {
         if (res.data.status === "ok") {
+          const responseData = res.data.data || {};
+          const shouldRestart = this.isSystemConfig && (
+            typeof responseData.requires_restart === 'boolean'
+              ? responseData.requires_restart
+              : localShouldRestart
+          );
           this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
           this.save_message = res.data.message || this.messages.saveSuccess;
           this.save_message_snack = true;
           this.save_message_success = "success";
           this.onConfigSaved();
 
-          if (this.isSystemConfig) {
+          if (shouldRestart) {
             restartAstrBotRuntime(this.$refs.wfr).catch(() => {})
           }
-          return { success: true };
+          return { success: true, restarted: shouldRestart };
         } else {
           this.save_message = res.data.message || this.messages.saveError;
           this.save_message_snack = true;
@@ -880,6 +916,37 @@ export default {
     },
     getConfigSnapshot(config) {
       return JSON.stringify(config ?? {});
+    },
+    parseConfigSnapshot(snapshot) {
+      if (!snapshot) {
+        return {};
+      }
+      try {
+        return JSON.parse(snapshot);
+      } catch (_error) {
+        return {};
+      }
+    },
+    getConfigWithoutRuntimeLogConfig(config) {
+      const cloned = JSON.parse(JSON.stringify(config ?? {}));
+      for (const key of RUNTIME_LOG_CONFIG_KEYS) {
+        delete cloned[key];
+      }
+      if (cloned.log_file && typeof cloned.log_file === 'object') {
+        for (const key of LEGACY_RUNTIME_LOG_FILE_KEYS) {
+          delete cloned.log_file[key];
+        }
+        if (Object.keys(cloned.log_file).length === 0) {
+          delete cloned.log_file;
+        }
+      }
+      return cloned;
+    },
+    shouldRestartAfterSystemConfigSave(previousConfig, nextConfig) {
+      const previousWithoutLog = this.getConfigWithoutRuntimeLogConfig(previousConfig);
+      const nextWithoutLog = this.getConfigWithoutRuntimeLogConfig(nextConfig);
+
+      return this.getConfigSnapshot(previousWithoutLog) !== this.getConfigSnapshot(nextWithoutLog);
     }
   },
 }
