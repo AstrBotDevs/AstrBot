@@ -51,7 +51,7 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
   },
 ```
 
-删除 `username`, `password`, `pbkdf2_password`, `password_storage_upgraded`, `password_change_required`, `jwt_secret` 五个字段（连同值一起），然后保存。上述片段修改类似如下：
+删除 `username`, `password`, `pbkdf2_password`, `password_storage_upgraded`, `password_change_required`, `jwt_secret` 六个字段（连同值一起），然后保存。上述片段修改类似如下：
 
 
 ```json
