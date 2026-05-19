@@ -218,9 +218,13 @@ class LLMSummaryCompressor:
         # generate summary
         try:
             response = await self.provider.text_chat(contexts=llm_payload)
-            summary_content = response.completion_text
+            summary_content = (response.completion_text or "").strip()
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")
+            return messages
+
+        if not summary_content:
+            logger.warning("LLM context compression returned an empty summary.")
             return messages
 
         # build result

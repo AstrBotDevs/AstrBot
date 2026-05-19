@@ -94,6 +94,25 @@ class TestContextManager:
 
         assert isinstance(manager.compressor, TruncateByTurnsCompressor)
 
+    @pytest.mark.asyncio
+    async def test_llm_compressor_keeps_history_when_summary_is_empty(self):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        provider.text_chat = AsyncMock(
+            return_value=LLMResponse(role="assistant", completion_text="  ")
+        )
+        compressor = LLMSummaryCompressor(provider=provider, keep_recent=2)  # type: ignore[arg-type]
+        messages = self.create_messages(6)
+
+        with patch("astrbot.core.agent.context.compressor.logger") as mock_logger:
+            result = await compressor(messages)
+
+        assert result == messages
+        mock_logger.warning.assert_called_once_with(
+            "LLM context compression returned an empty summary."
+        )
+
     # ==================== Empty and Edge Cases ====================
 
     @pytest.mark.asyncio
