@@ -706,20 +706,12 @@ class ProviderOpenAIOfficial(Provider):
 
         try:
             final_completion = state.get_final_completion()
+            llm_response = await self._parse_openai_completion(final_completion, tools)
+            yield llm_response
         except Exception as e:
             logger.error("get_final_completion error: " + str(e))
-            # fallback: 构造空 ChatCompletion（内容已通过流式 yield 发出）
-            from openai.types.chat.chat_completion import ChatCompletion
-            final_completion = ChatCompletion(
-                id='',
-                choices=[],
-                created=0,
-                model='',
-                object='chat.completion',
-            )
-        llm_response = await self._parse_openai_completion(final_completion, tools)
-
-        yield llm_response
+            # 流式内容已通过 yield 发出，记录错误后正常结束即可
+            return
 
     def _extract_reasoning_content(
         self,
