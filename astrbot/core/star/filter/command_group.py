@@ -117,6 +117,10 @@ class CommandGroupFilter(HandlerFilter):
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         if not event.is_at_or_wake_command:
             return False
+        # 若消息仅通过唤醒词触发（非指令前缀），且唤醒词与指令前缀已分开配置，
+        # 则不匹配指令，只允许 LLM 处理。
+        if event.get_extra("matched_wake_prefix_only", default=False):
+            return False
 
         # 判断当前指令组的自定义过滤器
         if not self.custom_filter_ok(event, cfg):
