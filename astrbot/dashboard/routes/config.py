@@ -330,6 +330,28 @@ def save_config(
     config.save_config(post_config)
 
 
+def _merge_registered_providers_into(config_template: dict) -> None:
+    """Inject providers registered via ``@register_provider_adapter`` into
+    a config_template dict, in-place.
+
+    Used by both ``GET /api/config/get`` and ``GET /api/config/provider/template``
+    so the two endpoints expose a consistent set of providers in the WebUI's
+    "Add Provider" picker.
+
+    - Uses ``is not None`` (not truthiness) so providers that intentionally
+      register an empty default template still appear.
+    - Uses ``setdefault`` so a plugin cannot silently shadow a core static
+      template that happens to share the same key.
+
+    The caller owns ``config_template`` and is responsible for handing in a
+    non-shared dict (both call sites operate on already-deep-copied metadata
+    so mutating it here does not pollute ``CONFIG_METADATA_2``).
+    """
+    for provider in provider_registry:
+        if provider.default_config_tmpl is not None:
+            config_template.setdefault(provider.type, provider.default_config_tmpl)
+
+
 class ConfigRoute(Route):
     def __init__(
         self,
@@ -507,20 +529,21 @@ class ConfigRoute(Route):
         return Response().ok(message="更新 provider source 成功").__dict__
 
     async def get_provider_template(self):
+        # Deep-copy the static schema first; the merge below mutates the
+        # config_template dict and we don't want plugin providers leaking
+        # into the global CONFIG_METADATA_2 across requests.
+        provider_section = copy.deepcopy(
+            CONFIG_METADATA_2["provider_group"]["metadata"]["provider"]
+        )
         provider_metadata = ConfigMetadataI18n.convert_to_i18n_keys(
-            {
-                "provider_group": {
-                    "metadata": {
-                        "provider": CONFIG_METADATA_2["provider_group"]["metadata"][
-                            "provider"
-                        ]
-                    }
-                }
-            }
+            {"provider_group": {"metadata": {"provider": provider_section}}}
         )
         config_schema = {
             "provider": provider_metadata["provider_group"]["metadata"]["provider"]
         }
+        _merge_registered_providers_into(
+            config_schema["provider"].setdefault("config_template", {})
+        )
         data = {
             "config_schema": config_schema,
             "providers": astrbot_config["provider"],
@@ -1479,12 +1502,9 @@ class ConfigRoute(Route):
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
 
         # 服务提供商的默认配置模板注入
-        provider_default_tmpl = metadata["provider_group"]["metadata"]["provider"][
-            "config_template"
-        ]
-        for provider in provider_registry:
-            if provider.default_config_tmpl:
-                provider_default_tmpl[provider.type] = provider.default_config_tmpl
+        _merge_registered_providers_into(
+            metadata["provider_group"]["metadata"]["provider"]["config_template"]
+        )
 
         return {
             "metadata": metadata,
