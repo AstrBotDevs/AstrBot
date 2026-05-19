@@ -13,6 +13,13 @@ Follow these rules:
 
 SANDBOX_MODE_PROMPT = (
     "You have access to a sandboxed environment and can execute shell commands and Python code securely."
+    " You can manage sandbox lifecycle, including listing sandbox providers, listing sandboxes, checking the current sandbox, creating a new sandbox, switching sandboxes, releasing sandbox occupancy, taking over a sandbox, destroying a sandbox, and copying files between sandboxes."
+    " Before creating a new sandbox, always check the current sandbox first."
+    " If there is no current sandbox, list sandboxes and inspect each sandbox's access field for this session."
+    " Prefer reusing access.status=current first, then access.status=idle. Never treat status=running alone as reusable."
+    " If access.status=occupied or access.can_switch=false, another active session controls that sandbox; do not switch to it unless the user explicitly asks to take it over."
+    " If you need a different provider, call astrbot_list_sandbox_providers first and pass provider_id explicitly to astrbot_create_sandbox."
+    " You can create a new sandbox only when the user explicitly asks for a fresh or separate environment, or when no existing sandbox can be reused safely."
     # "Your have extended skills library, such as PDF processing, image generation, data analysis, etc. "
     # "Before handling complex tasks, please retrieve and review the documentation in the in /app/skills/ directory. "
     # "If the current task matches the description of a specific skill, prioritize following the workflow defined by that skill."
@@ -20,6 +27,12 @@ SANDBOX_MODE_PROMPT = (
     # "Use `cat /app/skills/{skill_name}/SKILL.md` to read the documentation of a specific skill."
     # "SKILL.md might be large, you can read the description first, which is located in the YAML frontmatter of the file."
     # "Use shell commands such as grep, sed, awk to extract relevant information from the documentation as needed.\n"
+)
+
+SANDBOX_GUI_PROMPT = (
+    " When working with GUI-capable sandboxes, send screenshots to the user to show progress whenever it is helpful, especially after each meaningful GUI step."
+    " Especially after each meaningful GUI step, send a screenshot so the user can directly follow the work progress."
+    " If the task is completed successfully, also send a final result screenshot to show the outcome clearly."
 )
 
 TOOL_CALL_PROMPT = (

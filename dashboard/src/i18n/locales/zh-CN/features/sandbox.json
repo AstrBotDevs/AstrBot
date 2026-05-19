@@ -1,0 +1,126 @@
+{
+    "title": "沙盒管理",
+    "subtitle": "统一查看和操作不同 provider 的托管沙盒。",
+    "actions": {
+        "create": "创建",
+        "refresh": "刷新",
+        "inspect": "查看",
+        "setDefault": "设为默认",
+        "configure": "配置",
+        "switch": "切换",
+        "takeover": "接管",
+        "console": "控制台",
+        "release": "释放",
+        "screenshot": "截图",
+        "destroy": "销毁",
+        "cancel": "取消",
+        "close": "关闭",
+        "save": "保存"
+    },
+    "metrics": {
+        "total": "托管沙盒",
+        "providers": "Provider 数量",
+        "busy": "占用中",
+        "default": "Provider 默认"
+    },
+    "labels": {
+        "default": "默认",
+        "busy": "占用中",
+        "available": "空闲",
+        "noController": "无控制者",
+        "unknown": "未知",
+        "none": "无",
+        "temporary": "临时",
+        "persistent": "持久",
+        "creating": "创建中",
+        "restoring": "恢复中",
+        "running": "运行中",
+        "error": "异常",
+        "stopping": "销毁中",
+        "stopped": "已停止",
+        "unknownStatus": "未知状态：{status}"
+    },
+    "headers": {
+        "sandbox": "沙盒",
+        "provider": "Provider",
+        "capabilities": "能力",
+        "status": "状态",
+        "lastUsed": "最后使用",
+        "actions": "操作"
+    },
+    "fields": {
+        "provider": "Provider",
+        "capabilities": "能力",
+        "toolNames": "工具",
+        "status": "状态",
+        "owner": "所属会话",
+        "controller": "控制会话",
+        "retentionPolicy": "保留策略",
+        "occupiedUntil": "占用到期时间",
+        "idleCleanupAt": "空闲清理时间",
+        "expiresAt": "到期清理时间",
+        "connectInfo": "连接信息"
+    },
+    "empty": {
+        "title": "暂无托管沙盒",
+        "subtitle": "可以创建新的托管沙盒，或等待 provider 注册可管理的沙盒。"
+    },
+    "create": {
+        "title": "创建沙盒",
+        "name": "沙盒名称",
+        "providerHint": "该 provider 已纳入通用页面模型，但本阶段尚未接入创建能力。"
+    },
+    "screenshot": {
+        "title": "沙盒截图",
+        "noPreview": "截图已完成。预览渲染将在后续补齐。"
+    },
+    "console": {
+        "title": "沙盒控制台",
+        "notice": "控制台不会改变沙盒的占用状态，但命令会直接影响该沙盒环境。",
+        "command": "Shell 命令",
+        "run": "执行命令",
+        "output": "执行结果",
+        "empty": "尚未执行命令。",
+        "running": "执行中...",
+        "dangerConfirm": "该命令可能破坏沙盒数据：{command}\n确定继续执行吗？"
+    },
+    "config": {
+        "title": "沙盒配置",
+        "name": "沙盒名称",
+        "nameRequired": "沙盒名称不能为空",
+        "idleTimeout": "空闲超时（秒）",
+        "idleTimeoutHint": "临时策略下，沙盒在空闲达到该时间后可被清理，0 或空表示不启用空闲清理。",
+        "expiresAt": "固定过期时间",
+        "expiresAtHint": "可选。到达该时间后沙盒可被清理。"
+    },
+    "tooltips": {
+        "takeover": "将当前 dashboard 会话绑定到这个沙盒并获得控制权；如果已有控制者，会转移控制权。",
+        "console": "打开命令行控制台，不改变沙盒占用状态。"
+    },
+    "destroyConfirm": {
+        "title": "确认销毁沙盒",
+        "message": "确定要销毁 {name} 吗？该操作会关闭沙盒并移除托管记录。"
+    },
+    "messages": {
+        "loadFailed": "加载沙盒失败。",
+        "operationFailed": "沙盒操作失败。",
+        "created": "沙盒已创建。",
+        "createSubmitted": "创建请求已提交。",
+        "createReady": "沙盒已进入运行中。",
+        "createFailed": "沙盒创建失败。",
+        "createUnknown": "沙盒状态未知，请手动刷新或检查后端。",
+        "createRefreshUnstable": "创建期间刷新状态不稳定，请稍后手动刷新确认。",
+        "createNotVisible": "沙盒 {sandboxId} 暂未出现在列表中，请稍后手动刷新确认。",
+        "createTimedOut": "沙盒 {sandboxId} 仍在处理中，请稍后手动刷新确认。",
+        "createUnexpectedStatus": "沙盒创建流程结束，当前状态：{status}。",
+        "maxSandboxesReached": "已达到最大沙箱数量：{max}。请先释放或销毁不需要的沙箱。",
+        "defaultSet": "默认沙盒已更新。",
+        "configSaved": "沙盒配置已保存。",
+        "released": "沙盒占用已释放。",
+        "takeover": "当前会话已接管此沙盒。",
+        "destroyed": "沙盒已销毁。",
+        "destroyRefreshUnstable": "销毁期间刷新状态不稳定，请稍后手动刷新确认。",
+        "destroyTimedOut": "沙盒 {sandboxId} 仍在销毁中，请稍后手动刷新确认。",
+        "screenshot": "截图已完成。"
+    }
+}

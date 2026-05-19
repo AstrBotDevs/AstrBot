@@ -6,14 +6,25 @@ import pytest
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
+from astrbot.core.provider.register import llm_tools
 
 
 class _DummyEvent:
     def __init__(self, message_components: list[object] | None = None) -> None:
         self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
         self.message_obj = SimpleNamespace(message=message_components or [])
+        self.role = "member"
 
     def get_extra(self, _key: str):
+        return None
+
+
+class _NoopRunner:
+    async def step_until_done(self, _limit: int):
+        if False:
+            yield None
+
+    def get_final_llm_resp(self):
         return None
 
 
@@ -222,6 +233,129 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
 
     assert len(results) == 1
     assert captured["image_urls"] == ["https://example.com/raw.png"]
+
+
+@pytest.mark.asyncio
+async def test_build_handoff_toolset_uses_registered_provider_tools_only(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.agent.tool import FunctionTool
+    from astrbot.core.computer import computer_client
+
+    registered_provider_tool = FunctionTool(
+        name="provider_a_screenshot",
+        parameters={"type": "object", "properties": {}},
+        description="Provider A screenshot",
+    )
+    registered_provider_tool.sandbox_provider_id = "provider_a"
+    unregistered_provider_tool = FunctionTool(
+        name="provider_b_tool",
+        parameters={"type": "object", "properties": {}},
+        description="Provider B tool",
+    )
+    unregistered_provider_tool.sandbox_provider_id = "provider_b"
+
+    previous_tools = list(llm_tools.func_list)
+    FunctionToolExecutor._runtime_computer_tools_cache.clear()
+    llm_tools.func_list = [registered_provider_tool]
+
+    tool_mgr = SimpleNamespace(
+        get_builtin_tool=lambda cls, **kwargs: cls(**kwargs),
+        get_func=lambda name: {
+            "provider_a_screenshot": registered_provider_tool,
+            "provider_b_tool": unregistered_provider_tool,
+        }.get(name),
+    )
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "provider_a"},
+            }
+        },
+        get_llm_tool_manager=lambda: tool_mgr,
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    monkeypatch.setattr(
+        computer_client,
+        "list_sandbox_providers",
+        lambda: [
+            {"provider_id": "provider_b", "tool_names": ["provider_b_tool"]},
+        ],
+    )
+
+    try:
+        toolset = FunctionToolExecutor._build_handoff_toolset(run_context, None)
+        assert toolset is not None
+        assert "astrbot_list_sandbox_providers" in toolset.names()
+        assert "provider_a_screenshot" in toolset.names()
+        assert "provider_b_tool" not in toolset.names()
+    finally:
+        llm_tools.func_list = previous_tools
+        FunctionToolExecutor._runtime_computer_tools_cache.clear()
+
+
+@pytest.mark.asyncio
+async def test_background_wake_preserves_computer_runtime_config(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    async def _fake_get_session_conv(**_kwargs):
+        return SimpleNamespace(history="[]")
+
+    async def _fake_build_main_agent(**kwargs):
+        captured["config"] = kwargs["config"]
+        return SimpleNamespace(agent_runner=_NoopRunner())
+
+    async def _fake_persist_agent_history(*_args, **_kwargs):
+        return None
+
+    provider_settings = {
+        "computer_use_runtime": "sandbox",
+        "sandbox": {"booter": "generic", "max_sandboxes": 2},
+        "stream": True,
+    }
+    context = SimpleNamespace(
+        conversation_manager=SimpleNamespace(),
+        get_config=lambda **_kwargs: {"provider_settings": provider_settings},
+        get_llm_tool_manager=lambda: SimpleNamespace(
+            get_builtin_tool=lambda _cls: SimpleNamespace(
+                name="send_message_to_user", active=True
+            )
+        ),
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=_DummyEvent([]), context=context),
+        tool_call_timeout=17,
+    )
+
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent._get_session_conv", _fake_get_session_conv
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent.build_main_agent", _fake_build_main_agent
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+        _fake_persist_agent_history,
+    )
+
+    await FunctionToolExecutor._wake_main_agent_for_background_result(
+        run_context,
+        task_id="task-id",
+        tool_name="tool",
+        result_text="result",
+        tool_args={},
+        note="note",
+        summary_name="tool",
+    )
+
+    config = captured["config"]
+    assert config.computer_use_runtime == "sandbox"
+    assert config.sandbox_cfg == {"booter": "generic", "max_sandboxes": 2}
+    assert config.provider_settings == provider_settings
 
 
 @pytest.mark.asyncio

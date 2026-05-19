@@ -20,6 +20,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
+from astrbot.core.computer.sandbox_tool_binding import tool_available_in_runtime
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -31,18 +32,27 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
-    CuaKeyboardTypeTool,
-    CuaMouseClickTool,
-    CuaScreenshotTool,
+    CopyFileBetweenSandboxesTool,
+    CreateSandboxTool,
+    DestroySandboxTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
     FileReadTool,
     FileUploadTool,
     FileWriteTool,
+    GetCurrentSandboxTool,
     GrepTool,
+    KeepAliveSandboxTool,
+    ListSandboxesTool,
+    ListSandboxProvidersTool,
     LocalPythonTool,
     PythonTool,
+    ReleaseSandboxTool,
+    ScreenshotSandboxTool,
+    SetSandboxRetentionPolicyTool,
+    SwitchSandboxTool,
+    TakeoverSandboxTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -52,6 +62,28 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
+    _runtime_computer_tools_cache: dict[
+        tuple[int, str, str], dict[str, FunctionTool]
+    ] = {}
+
+    @classmethod
+    def clear_runtime_computer_tools_cache(cls, provider_id: str | None = None) -> None:
+        if provider_id is None:
+            cls._runtime_computer_tools_cache.clear()
+            return
+
+        normalized_provider_id = str(provider_id).strip().lower()
+        if not normalized_provider_id:
+            return
+
+        keys_to_remove = [
+            key
+            for key in cls._runtime_computer_tools_cache
+            if key[2] == normalized_provider_id
+        ]
+        for key in keys_to_remove:
+            cls._runtime_computer_tools_cache.pop(key, None)
+
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
@@ -192,8 +224,29 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         booter: str | None = None,
     ) -> dict[str, FunctionTool]:
         booter = "" if booter is None else str(booter).lower()
+        cache_key = (id(tool_mgr), runtime, booter)
+        if cache_key in cls._runtime_computer_tools_cache:
+            return cls._runtime_computer_tools_cache[cache_key]
         if runtime == "sandbox":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
+            list_sandboxes_tool = tool_mgr.get_builtin_tool(ListSandboxesTool)
+            list_sandbox_providers_tool = tool_mgr.get_builtin_tool(
+                ListSandboxProvidersTool
+            )
+            get_current_sandbox_tool = tool_mgr.get_builtin_tool(GetCurrentSandboxTool)
+            create_sandbox_tool = tool_mgr.get_builtin_tool(CreateSandboxTool)
+            switch_sandbox_tool = tool_mgr.get_builtin_tool(SwitchSandboxTool)
+            keep_alive_sandbox_tool = tool_mgr.get_builtin_tool(KeepAliveSandboxTool)
+            release_sandbox_tool = tool_mgr.get_builtin_tool(ReleaseSandboxTool)
+            set_sandbox_retention_policy_tool = tool_mgr.get_builtin_tool(
+                SetSandboxRetentionPolicyTool
+            )
+            takeover_sandbox_tool = tool_mgr.get_builtin_tool(TakeoverSandboxTool)
+            destroy_sandbox_tool = tool_mgr.get_builtin_tool(DestroySandboxTool)
+            screenshot_sandbox_tool = tool_mgr.get_builtin_tool(ScreenshotSandboxTool)
+            copy_between_sandboxes_tool = tool_mgr.get_builtin_tool(
+                CopyFileBetweenSandboxesTool
+            )
             python_tool = tool_mgr.get_builtin_tool(PythonTool)
             upload_tool = tool_mgr.get_builtin_tool(FileUploadTool)
             download_tool = tool_mgr.get_builtin_tool(FileDownloadTool)
@@ -203,6 +256,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             grep_tool = tool_mgr.get_builtin_tool(GrepTool)
             tools = {
                 shell_tool.name: shell_tool,
+                list_sandboxes_tool.name: list_sandboxes_tool,
+                list_sandbox_providers_tool.name: list_sandbox_providers_tool,
+                get_current_sandbox_tool.name: get_current_sandbox_tool,
+                create_sandbox_tool.name: create_sandbox_tool,
+                switch_sandbox_tool.name: switch_sandbox_tool,
+                keep_alive_sandbox_tool.name: keep_alive_sandbox_tool,
+                release_sandbox_tool.name: release_sandbox_tool,
+                set_sandbox_retention_policy_tool.name: set_sandbox_retention_policy_tool,
+                takeover_sandbox_tool.name: takeover_sandbox_tool,
+                destroy_sandbox_tool.name: destroy_sandbox_tool,
+                screenshot_sandbox_tool.name: screenshot_sandbox_tool,
+                copy_between_sandboxes_tool.name: copy_between_sandboxes_tool,
                 python_tool.name: python_tool,
                 upload_tool.name: upload_tool,
                 download_tool.name: download_tool,
@@ -211,17 +276,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 edit_tool.name: edit_tool,
                 grep_tool.name: grep_tool,
             }
-            if booter == "cua":
-                screenshot_tool = tool_mgr.get_builtin_tool(CuaScreenshotTool)
-                mouse_click_tool = tool_mgr.get_builtin_tool(CuaMouseClickTool)
-                keyboard_type_tool = tool_mgr.get_builtin_tool(CuaKeyboardTypeTool)
-                tools.update(
-                    {
-                        screenshot_tool.name: screenshot_tool,
-                        mouse_click_tool.name: mouse_click_tool,
-                        keyboard_type_tool.name: keyboard_type_tool,
-                    }
-                )
+            cls._runtime_computer_tools_cache[cache_key] = tools
             return tools
         if runtime == "local":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
@@ -230,7 +285,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
             edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
             grep_tool = tool_mgr.get_builtin_tool(GrepTool)
-            return {
+            tools = {
                 shell_tool.name: shell_tool,
                 python_tool.name: python_tool,
                 read_tool.name: read_tool,
@@ -238,6 +293,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 edit_tool.name: edit_tool,
                 grep_tool.name: grep_tool,
             }
+            cls._runtime_computer_tools_cache[cache_key] = tools
+            return tools
         return {}
 
     @classmethod
@@ -259,7 +316,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
             tool_mgr,
-            provider_settings.get("sandbox", {}).get("booter"),
         )
 
         # Keep persona semantics aligned with the main agent: tools=None means
@@ -269,7 +325,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             for registered_tool in llm_tools.func_list:
                 if isinstance(registered_tool, HandoffTool):
                     continue
-                if registered_tool.active:
+                if registered_tool.active and tool_available_in_runtime(
+                    registered_tool, runtime
+                ):
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)
@@ -538,11 +596,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             message_type=session.message_type,
         )
         cron_event.role = event.role
+        session_config = ctx.get_config(umo=event.unified_msg_origin)
+        provider_settings = session_config.get("provider_settings", {})
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
-            streaming_response=ctx.get_config()
-            .get("provider_settings", {})
-            .get("stream", False),
+            streaming_response=provider_settings.get("stream", False),
+            computer_use_runtime=str(
+                provider_settings.get("computer_use_runtime", "local")
+            ),
+            sandbox_cfg=provider_settings.get("sandbox", {}),
+            provider_settings=provider_settings,
         )
 
         req = ProviderRequest()

@@ -6,6 +6,7 @@ import re
 import shlex
 import shutil
 import tempfile
+import threading
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -29,6 +30,11 @@ SANDBOX_WORKSPACE_ROOT = "/workspace"
 _SANDBOX_SKILLS_CACHE_VERSION = 1
 
 _SKILL_NAME_RE = re.compile(r"^[\w.-]+$")
+_SANDBOX_SKILLS_CACHE_LOCK = threading.RLock()
+
+
+def _normalize_cache_provider_id(provider_id: str | None) -> str:
+    return str(provider_id or "").strip().lower()
 
 
 def _normalize_skill_name(name: str | None) -> str:
@@ -353,22 +359,38 @@ class SkillManager:
 
     def _load_sandbox_skills_cache(self) -> dict:
         if not os.path.exists(self.sandbox_skills_cache_path):
-            return {"version": _SANDBOX_SKILLS_CACHE_VERSION, "skills": []}
+            return {
+                "version": _SANDBOX_SKILLS_CACHE_VERSION,
+                "skills": [],
+                "providers": {},
+            }
         try:
             with open(self.sandbox_skills_cache_path, encoding="utf-8") as f:
                 data = json.load(f)
             if not isinstance(data, dict):
-                return {"version": _SANDBOX_SKILLS_CACHE_VERSION, "skills": []}
+                return {
+                    "version": _SANDBOX_SKILLS_CACHE_VERSION,
+                    "skills": [],
+                    "providers": {},
+                }
             skills = data.get("skills", [])
             if not isinstance(skills, list):
                 skills = []
+            providers = data.get("providers", {})
+            if not isinstance(providers, dict):
+                providers = {}
             return {
                 "version": int(data.get("version", _SANDBOX_SKILLS_CACHE_VERSION)),
                 "skills": skills,
+                "providers": providers,
                 "updated_at": data.get("updated_at"),
             }
         except Exception:
-            return {"version": _SANDBOX_SKILLS_CACHE_VERSION, "skills": []}
+            return {
+                "version": _SANDBOX_SKILLS_CACHE_VERSION,
+                "skills": [],
+                "providers": {},
+            }
 
     def _save_sandbox_skills_cache(self, cache: dict) -> None:
         cache["version"] = _SANDBOX_SKILLS_CACHE_VERSION
@@ -376,7 +398,11 @@ class SkillManager:
         with open(self.sandbox_skills_cache_path, "w", encoding="utf-8") as f:
             json.dump(cache, f, ensure_ascii=False, indent=2)
 
-    def set_sandbox_skills_cache(self, skills: list[dict]) -> None:
+    def set_sandbox_skills_cache(
+        self,
+        skills: list[dict],
+        provider_id: str | None = None,
+    ) -> None:
         """Persist sandbox skill metadata discovered from runtime side."""
         deduped: dict[str, dict[str, str]] = {}
         for item in skills:
@@ -394,16 +420,72 @@ class SkillManager:
                 "description": description,
                 "path": path,
             }
-        cache = {
-            "version": _SANDBOX_SKILLS_CACHE_VERSION,
-            "skills": [deduped[name] for name in sorted(deduped)],
-        }
-        self._save_sandbox_skills_cache(cache)
+        provider_key = _normalize_cache_provider_id(provider_id)
+        skills_payload = [deduped[name] for name in sorted(deduped)]
+        with _SANDBOX_SKILLS_CACHE_LOCK:
+            cache = self._load_sandbox_skills_cache()
+            providers = cache.get("providers", {})
+            if not isinstance(providers, dict):
+                providers = {}
+            if provider_key:
+                providers[provider_key] = {
+                    "skills": skills_payload,
+                }
+            else:
+                cache["skills"] = skills_payload
+                providers["default"] = {
+                    "skills": skills_payload,
+                }
+            cache = {
+                "version": _SANDBOX_SKILLS_CACHE_VERSION,
+                "skills": cache.get("skills", []),
+                "providers": providers,
+            }
+            self._save_sandbox_skills_cache(cache)
+
+    def _sandbox_cache_skills_for_provider(
+        self, cache: dict, provider_id: str | None
+    ) -> list[dict]:
+        provider_key = _normalize_cache_provider_id(provider_id)
+        providers = cache.get("providers", {})
+        if provider_key and isinstance(providers, dict):
+            provider_cache = providers.get(provider_key)
+            if isinstance(provider_cache, dict):
+                skills = provider_cache.get("skills", [])
+                return skills if isinstance(skills, list) else []
+            return []
+
+        skills = cache.get("skills", [])
+        if isinstance(skills, list):
+            return skills
+        return []
 
     def get_sandbox_skills_cache_status(self) -> dict[str, object]:
         cache = self._load_sandbox_skills_cache()
-        skills = cache.get("skills", [])
-        count = len(skills) if isinstance(skills, list) else 0
+        count = 0
+        seen: set[str] = set()
+        for item in cache.get("skills", []):
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", "")).strip()
+            if name and name not in seen:
+                seen.add(name)
+                count += 1
+        providers = cache.get("providers", {})
+        if isinstance(providers, dict):
+            for provider_cache in providers.values():
+                if not isinstance(provider_cache, dict):
+                    continue
+                skills = provider_cache.get("skills", [])
+                if not isinstance(skills, list):
+                    continue
+                for item in skills:
+                    if not isinstance(item, dict):
+                        continue
+                    name = str(item.get("name", "")).strip()
+                    if name and name not in seen:
+                        seen.add(name)
+                        count += 1
         return {
             "exists": os.path.exists(self.sandbox_skills_cache_path),
             "ready": count > 0,
@@ -416,6 +498,7 @@ class SkillManager:
         *,
         active_only: bool = False,
         runtime: str = "local",
+        provider_id: str | None = None,
         show_sandbox_path: bool = True,
     ) -> list[SkillInfo]:
         """List all skills.
@@ -432,7 +515,9 @@ class SkillManager:
         sandbox_cached_paths: dict[str, str] = {}
         sandbox_cached_descriptions: dict[str, str] = {}
         cache_for_paths = self._load_sandbox_skills_cache()
-        for item in cache_for_paths.get("skills", []):
+        for item in self._sandbox_cache_skills_for_provider(
+            cache_for_paths, provider_id
+        ):
             if not isinstance(item, dict):
                 continue
             name = str(item.get("name", "") or "").strip()
@@ -527,8 +612,10 @@ class SkillManager:
             )
 
         if runtime == "sandbox":
-            cache = self._load_sandbox_skills_cache()
-            for item in cache.get("skills", []):
+            cache = self._sandbox_cache_skills_for_provider(
+                self._load_sandbox_skills_cache(), provider_id
+            )
+            for item in cache:
                 if not isinstance(item, dict):
                     continue
                 skill_name = str(item.get("name", "")).strip()
@@ -574,14 +661,24 @@ class SkillManager:
         if skill_md_exists:
             return False
         cache = self._load_sandbox_skills_cache()
-        skills = cache.get("skills", [])
-        if not isinstance(skills, list):
-            return False
-        for item in skills:
+        for item in cache.get("skills", []):
             if not isinstance(item, dict):
                 continue
             if str(item.get("name", "")).strip() == name:
                 return True
+        providers = cache.get("providers", {})
+        if isinstance(providers, dict):
+            for provider_cache in providers.values():
+                if not isinstance(provider_cache, dict):
+                    continue
+                skills = provider_cache.get("skills", [])
+                if not isinstance(skills, list):
+                    continue
+                for item in skills:
+                    if not isinstance(item, dict):
+                        continue
+                    if str(item.get("name", "")).strip() == name:
+                        return True
         return False
 
     def is_plugin_skill(self, name: str) -> bool:
@@ -598,22 +695,47 @@ class SkillManager:
         self._save_config(config)
 
     def _remove_skill_from_sandbox_cache(self, name: str) -> None:
-        cache = self._load_sandbox_skills_cache()
-        skills = cache.get("skills", [])
-        if not isinstance(skills, list):
-            return
+        with _SANDBOX_SKILLS_CACHE_LOCK:
+            cache = self._load_sandbox_skills_cache()
+            changed = False
+            skills = cache.get("skills", [])
+            if isinstance(skills, list):
+                filtered = [
+                    item
+                    for item in skills
+                    if not (
+                        isinstance(item, dict)
+                        and str(item.get("name", "")).strip() == name
+                    )
+                ]
+                if len(filtered) != len(skills):
+                    cache["skills"] = filtered
+                    changed = True
 
-        filtered = [
-            item
-            for item in skills
-            if not (
-                isinstance(item, dict) and str(item.get("name", "")).strip() == name
-            )
-        ]
+            providers = cache.get("providers", {})
+            if isinstance(providers, dict):
+                for provider_key, provider_cache in list(providers.items()):
+                    if not isinstance(provider_cache, dict):
+                        continue
+                    provider_skills = provider_cache.get("skills", [])
+                    if not isinstance(provider_skills, list):
+                        continue
+                    filtered = [
+                        item
+                        for item in provider_skills
+                        if not (
+                            isinstance(item, dict)
+                            and str(item.get("name", "")).strip() == name
+                        )
+                    ]
+                    if len(filtered) != len(provider_skills):
+                        provider_cache["skills"] = filtered
+                        providers[provider_key] = provider_cache
+                        changed = True
 
-        if len(filtered) != len(skills):
-            cache["skills"] = filtered
-            self._save_sandbox_skills_cache(cache)
+            if changed:
+                cache["providers"] = providers
+                self._save_sandbox_skills_cache(cache)
 
     def delete_skill(self, name: str) -> None:
         if self.is_sandbox_only_skill(name):
