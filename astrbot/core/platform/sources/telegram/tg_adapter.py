@@ -506,7 +506,7 @@ class TelegramPlatformAdapter(Platform):
             reply_abm = await self.convert_message(reply_update, context, False)
 
             if reply_abm:
-                reply_sender_id = str(reply_abm.sender.user_id)
+                reply_sender_id = reply_abm.sender.user_id
                 if reply_sender_id == str(context.bot.id):
                     reply_sender_id = message.self_id
 
