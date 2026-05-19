@@ -5,7 +5,7 @@ import shutil
 import time
 import zipfile
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
 import certifi
 import httpx
