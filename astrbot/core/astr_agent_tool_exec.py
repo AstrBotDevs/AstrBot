@@ -53,6 +53,113 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
+    def _build_handoff_error_result(
+        cls,
+        *,
+        tool_name: str,
+        error_type: str,
+        fix_hint: str,
+        action_hint: str,
+    ) -> mcp.types.CallToolResult:
+        guidance = (
+            "[handoff CALL FAILED - IMMEDIATE RETRY REQUIRED]\n"
+            f"error_type: {error_type}\n"
+            f"fix: {fix_hint}\n"
+            f"action: {action_hint}\n"
+            "example:\n"
+            "{\n"
+            '  "input": "Summarize the user request, constraints, and expected output.",\n'
+            '  "background_task": false\n'
+            "}"
+        )
+        return mcp.types.CallToolResult(
+            content=[
+                mcp.types.TextContent(
+                    type="text",
+                    text=f"error: {tool_name} rejected invalid handoff request.\n{guidance}",
+                )
+            ]
+        )
+
+    @classmethod
+    def _parse_background_task_arg(
+        cls,
+        tool_name: str,
+        value: T.Any,
+    ) -> tuple[bool, mcp.types.CallToolResult | None]:
+        if value is None:
+            return False, None
+        if isinstance(value, bool):
+            return value, None
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "on"}:
+                return True, None
+            if normalized in {"false", "0", "no", "off", ""}:
+                return False, None
+
+        return False, cls._build_handoff_error_result(
+            tool_name=tool_name,
+            error_type="invalid_background_task",
+            fix_hint=(
+                "`background_task` must be a boolean (`true` or `false`) or a string "
+                'equivalent such as `"1"`/`"0"`, `"yes"`/`"no"`, or '
+                '`"on"`/`"off"`.'
+            ),
+            action_hint=(
+                "Retry the same handoff with `background_task` set to a boolean or one "
+                'of the supported string equivalents (`"true"`, `"false"`, '
+                '`"1"`, `"0"`, `"yes"`, `"no"`, `"on"`, `"off"`).'
+            ),
+        )
+
+    @classmethod
+    def _normalize_handoff_input(
+        cls,
+        tool_name: str,
+        input_value: T.Any,
+    ) -> tuple[str | None, mcp.types.CallToolResult | None]:
+        if not isinstance(input_value, str) or not input_value.strip():
+            return None, cls._build_handoff_error_result(
+                tool_name=tool_name,
+                error_type="missing_or_empty_input",
+                fix_hint=(
+                    "Provide a non-empty `input` string that clearly describes the delegated task."
+                ),
+                action_hint=("Retry now with a concise task statement in `input`."),
+            )
+        return input_value.strip(), None
+
+    @classmethod
+    async def _resolve_handoff_provider_id(
+        cls,
+        tool: HandoffTool,
+        *,
+        ctx: T.Any,
+        umo: str,
+    ) -> str:
+        configured_provider_id = str(getattr(tool, "provider_id", "") or "").strip()
+        if not configured_provider_id:
+            return await ctx.get_current_chat_provider_id(umo)
+
+        provider_mgr = getattr(ctx, "provider_manager", None)
+        if provider_mgr is None or not hasattr(provider_mgr, "get_provider_by_id"):
+            return configured_provider_id
+
+        provider_inst = await provider_mgr.get_provider_by_id(configured_provider_id)
+        if provider_inst is not None:
+            return configured_provider_id
+
+        fallback_provider_id = await ctx.get_current_chat_provider_id(umo)
+        logger.warning(
+            "Subagent %s configured provider `%s` not found, fallback to `%s`.",
+            tool.name,
+            configured_provider_id,
+            fallback_provider_id,
+        )
+        return fallback_provider_id
+
+    @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
             return []
@@ -138,7 +245,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         """
         if isinstance(tool, HandoffTool):
-            is_bg = tool_args.pop("background_task", False)
+            is_bg, bg_error = cls._parse_background_task_arg(
+                tool.name,
+                tool_args.pop("background_task", None),
+            )
+            if bg_error is not None:
+                yield bg_error
+                return
             if is_bg:
                 async for r in cls._execute_handoff_background(
                     tool, run_context, **tool_args
@@ -302,7 +415,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         **tool_args: T.Any,
     ):
         tool_args = dict(tool_args)
-        input_ = tool_args.get("input")
+        input_, input_error = cls._normalize_handoff_input(
+            tool.name,
+            tool_args.get("input"),
+        )
+        if input_error is not None:
+            yield input_error
+            return
+        tool_args["input"] = input_
         if image_urls_prepared:
             prepared_image_urls = tool_args.get("image_urls")
             if isinstance(prepared_image_urls, list):
@@ -329,9 +449,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         # Use per-subagent provider override if configured; otherwise fall back
         # to the current/default provider resolution.
-        prov_id = getattr(
-            tool, "provider_id", None
-        ) or await ctx.get_current_chat_provider_id(umo)
+        prov_id = await cls._resolve_handoff_provider_id(
+            tool,
+            ctx=ctx,
+            umo=umo,
+        )
 
         # prepare begin dialogs
         contexts = None
