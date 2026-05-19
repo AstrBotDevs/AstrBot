@@ -669,9 +669,14 @@ class ProviderOpenAIOfficial(Provider):
                     # Gemini and some OpenAI-compatible proxies omit this field
                     if not hasattr(tc, "index") or tc.index is None:
                         tc.index = idx
-            try:
-                state.handle_chunk(chunk)
-            except Exception as e:
+            # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
+            # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
+            # refs: AstrBot#6689 / openai-python#5069 / #5047
+            if delta is not None:
+                try:
+                    state.handle_chunk(chunk)
+                except Exception as e:
+                    logger.error("Saving chunk state error: " + str(e))
                 logger.error("Saving chunk state error: " + str(e))
             # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
@@ -700,7 +705,19 @@ class ProviderOpenAIOfficial(Provider):
             if _y:
                 yield llm_response
 
-        final_completion = state.get_final_completion()
+        try:
+            final_completion = state.get_final_completion()
+        except Exception as e:
+            logger.error("get_final_completion error: " + str(e))
+            # fallback: 构造空 ChatCompletion（内容已通过流式 yield 发出）
+            from openai.types.chat.chat_completion import ChatCompletion
+            final_completion = ChatCompletion(
+                id='',
+                choices=[],
+                created=0,
+                model='',
+                object='chat.completion',
+            )
         llm_response = await self._parse_openai_completion(final_completion, tools)
 
         yield llm_response
@@ -901,6 +918,9 @@ class ProviderOpenAIOfficial(Provider):
                             args = {}
                     else:
                         args = tool_call.function.arguments
+                    # Some API may return None for tools with no parameters
+                    if args is None:
+                        args = {}
                     args_ls.append(args)
                     func_name_ls.append(tool_call.function.name)
                     tool_call_ids.append(tool_call.id)
