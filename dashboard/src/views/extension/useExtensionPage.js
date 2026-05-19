@@ -640,14 +640,14 @@ export const useExtensionPage = () => {
 
     pluginMarketData.value.forEach((plugin) => {
       if (plugin.repo) {
-        onlinePluginsMap.set(plugin.repo.toLowerCase(), plugin);
+        onlinePluginsMap.set(normalizeInstallUrl(plugin.repo).toLowerCase(), plugin);
       }
       onlinePluginsNameMap.set(plugin.name, plugin);
     });
 
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
     data.forEach((extension) => {
-      const repoKey = extension.repo?.toLowerCase();
+      const repoKey = extension.repo ? normalizeInstallUrl(extension.repo).toLowerCase() : undefined;
       const onlinePlugin = repoKey ? onlinePluginsMap.get(repoKey) : null;
       const onlinePluginByName = onlinePluginsNameMap.get(extension.name);
       const matchedPlugin = onlinePlugin || onlinePluginByName;
@@ -1233,21 +1233,21 @@ export const useExtensionPage = () => {
 
   const checkAlreadyInstalled = () => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
-    const installedRepos = new Set(data.map((ext) => ext.repo?.toLowerCase()));
-    const installedNames = new Set(
-      data.map((ext) => normalizeStr(ext.name).replace(/_/g, "-")),
-    ); //统一格式，以防下面的匹配不生效
     const installedByRepo = new Map(
       data
         .filter((ext) => ext.repo)
-        .map((ext) => [ext.repo.toLowerCase(), ext]),
+        .map((ext) => [normalizeInstallUrl(ext.repo).toLowerCase(), ext]),
     );
+    const installedRepos = new Set(installedByRepo.keys());
+    const installedNames = new Set(
+      data.map((ext) => normalizeStr(ext.name).replace(/_/g, "-")),
+    ); //统一格式，以防下面的匹配不生效
     const installedByName = new Map(data.map((ext) => [ext.name, ext]));
 
     for (let i = 0; i < pluginMarketData.value.length; i++) {
       const plugin = pluginMarketData.value[i];
       const matchedInstalled =
-        (plugin.repo && installedByRepo.get(plugin.repo.toLowerCase())) ||
+        (plugin.repo && installedByRepo.get(normalizeInstallUrl(plugin.repo).toLowerCase())) ||
         installedByName.get(plugin.name);
 
       // 兜底：市场源未提供字段时，回填本地已安装插件中的元数据，便于在市场页直接展示
@@ -1265,7 +1265,7 @@ export const useExtensionPage = () => {
       }
 
       plugin.installed =
-        installedRepos.has(plugin.repo?.toLowerCase()) ||
+        (plugin.repo && installedRepos.has(normalizeInstallUrl(plugin.repo).toLowerCase())) ||
         installedNames.has(normalizeStr(plugin.name).replace(/_/g, "-")); //统一格式，防止匹配失败
     }
 
