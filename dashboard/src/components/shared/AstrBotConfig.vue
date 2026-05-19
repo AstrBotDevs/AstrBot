@@ -102,6 +102,21 @@ function saveEditedContent() {
   dialog.value = false
 }
 
+function getNumericEmbeddingDimension(value) {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const trimmedValue = value.trim()
+    if (/^\d+$/.test(trimmedValue)) {
+      return Number(trimmedValue)
+    }
+  }
+
+  return null
+}
+
 async function getEmbeddingDimensions(providerConfig) {
   if (loadingEmbeddingDim.value) return
   loadingEmbeddingDim.value = true
@@ -110,11 +125,17 @@ async function getEmbeddingDimensions(providerConfig) {
       provider_config: providerConfig
     })
     if (response.data.status != "error" && response.data.data?.embedding_dimensions) {
-      console.log(response.data.data.embedding_dimensions)
-      //[已禁用] 不再自动写入配置文件，仅显示提示
-      // providerConfig.embedding_dimensions = response.data.data.embedding_dimensions
-      useToast().success("获取成功: " + response.data.data.embedding_dimensions)
-      useToast().info(`检测到维度: ${response.data.data.embedding_dimensions}。如需保存，请手动填入后点保存。`)
+      const detectedDimension = response.data.data.embedding_dimensions
+      const numericDimension = getNumericEmbeddingDimension(detectedDimension)
+
+      console.log(detectedDimension)
+
+      if (numericDimension !== null) {
+        providerConfig.embedding_dimensions = numericDimension
+        useToast().success("获取成功: " + numericDimension)
+      } else {
+        useToast().info(`检测到维度: ${detectedDimension}。如需保存，请手动填入后点保存。`)
+      }
     } else {
       useToast().error(response.data.message)
     }

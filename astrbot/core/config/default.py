@@ -1835,7 +1835,7 @@ CONFIG_METADATA_2 = {
                         "embedding_api_key": "",
                         "embedding_api_base": "",
                         "embedding_model": "",
-                        "embedding_dimensions": "",
+                        "embedding_dimensions": 0,
                         "timeout": 20,
                         "proxy": "",
                     },

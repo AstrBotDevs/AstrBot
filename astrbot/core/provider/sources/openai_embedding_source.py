@@ -1,9 +1,15 @@
 import httpx
 from openai import AsyncOpenAI
+
 from astrbot import logger
+
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
 from ..register import register_provider_adapter
+from .embedding_utils import (
+    infer_embedding_dimension_from_model,
+    parse_configured_embedding_dimension,
+)
 
 
 @register_provider_adapter(
@@ -80,80 +86,85 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     async def get_embedding(self, text: str) -> list[float]:
         """获取文本的嵌入"""
         kwargs = self._embedding_kwargs()
-        try:
-            embedding = await self.client.embeddings.create(
-                input=text,
-                model=self.model,
-                **kwargs,
-            )
-            return embedding.data[0].embedding
-        except Exception as e:
-            # 如果包含"matryoshka"或"dimensions"相关的错误，说明vLLM不支持该参数
-            # 尝试不带dimensions重试
-            error_msg = str(e).lower()
-            if ("matryoshka" in error_msg or "dimensions" in error_msg) and kwargs.get("dimensions"):
-                logger.warning(
-                    f"[OpenAI Embedding] Detected vLLM dimensions error, retrying without dimensions parameter: {e}"
-                )
-                kwargs_retry = {k: v for k, v in kwargs.items() if k != "dimensions"}
-                try:
-                    embedding = await self.client.embeddings.create(
-                        input=text,
-                        model=self.model,
-                        **kwargs_retry,
-                    )
-                    logger.info(
-                        "[OpenAI Embedding] Successfully retrieved embedding without dimensions parameter, marking as vLLM"
-                    )
-                    # 标记为vLLM以便后续调用也跳过dimensions
-                    self._mark_as_vllm()
-                    return embedding.data[0].embedding
-                except Exception as retry_error:
-                    logger.error(
-                        f"[OpenAI Embedding] Retry without dimensions also failed: {retry_error}"
-                    )
-                    raise retry_error
-            else:
-                raise
+        embedding = await self._request_with_vllm_retry(text, kwargs, batch=False)
+        return embedding.data[0].embedding
 
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
         """批量获取文本的嵌入"""
         kwargs = self._embedding_kwargs()
+        embeddings = await self._request_with_vllm_retry(text, kwargs, batch=True)
+        return [item.embedding for item in embeddings.data]
+
+    async def _request_with_vllm_retry(
+        self,
+        input_data: str | list[str],
+        kwargs: dict,
+        *,
+        batch: bool,
+    ):
         try:
-            embeddings = await self.client.embeddings.create(
-                input=text,
+            return await self.client.embeddings.create(
+                input=input_data,
                 model=self.model,
                 **kwargs,
             )
-            return [item.embedding for item in embeddings.data]
-        except Exception as e:
-            # 如果包含"matryoshka"或"dimensions"相关的错误，说明vLLM不支持该参数
-            # 尝试不带dimensions重试
-            error_msg = str(e).lower()
-            if ("matryoshka" in error_msg or "dimensions" in error_msg) and kwargs.get("dimensions"):
+        except Exception as exc:
+            if not self._should_retry_without_dimensions(exc, kwargs):
+                raise
+
+            if batch:
                 logger.warning(
-                    f"[OpenAI Embedding] Detected vLLM dimensions error in batch mode, retrying without dimensions: {e}"
+                    f"[OpenAI Embedding] Detected vLLM dimensions error in batch mode, retrying without dimensions: {exc}"
                 )
-                kwargs_retry = {k: v for k, v in kwargs.items() if k != "dimensions"}
-                try:
-                    embeddings = await self.client.embeddings.create(
-                        input=text,
-                        model=self.model,
-                        **kwargs_retry,
-                    )
-                    logger.info(
-                        "[OpenAI Embedding] Successfully retrieved batch embeddings without dimensions parameter"
-                    )
-                    # 标记为vLLM以便后续调用也跳过dimensions
-                    self._mark_as_vllm()
-                    return [item.embedding for item in embeddings.data]
-                except Exception as retry_error:
+            else:
+                logger.warning(
+                    f"[OpenAI Embedding] Detected vLLM dimensions error, retrying without dimensions parameter: {exc}"
+                )
+
+            kwargs_retry = {k: v for k, v in kwargs.items() if k != "dimensions"}
+            try:
+                embeddings = await self.client.embeddings.create(
+                    input=input_data,
+                    model=self.model,
+                    **kwargs_retry,
+                )
+            except Exception as retry_error:
+                if batch:
                     logger.error(
                         f"[OpenAI Embedding] Batch retry without dimensions also failed: {retry_error}"
                     )
-                    raise retry_error
-            else:
+                else:
+                    logger.error(
+                        f"[OpenAI Embedding] Retry without dimensions also failed: {retry_error}"
+                    )
                 raise
+
+            if batch:
+                logger.info(
+                    "[OpenAI Embedding] Successfully retrieved batch embeddings without dimensions parameter"
+                )
+            else:
+                logger.info(
+                    "[OpenAI Embedding] Successfully retrieved embedding without dimensions parameter, marking as vLLM"
+                )
+
+            self._mark_as_vllm()
+            return embeddings
+
+    def _should_retry_without_dimensions(self, exc: Exception, kwargs: dict) -> bool:
+        if not kwargs.get("dimensions"):
+            return False
+
+        error_msg = str(exc).lower()
+        return "matryoshka" in error_msg or "dimensions" in error_msg
+
+    def _configured_dimension(self) -> int | None:
+        provider_id = self.provider_config.get("id", "unknown")
+        return parse_configured_embedding_dimension(
+            self.provider_config.get("embedding_dimensions", ""),
+            provider_label="OpenAI Embedding",
+            provider_id=provider_id,
+        )
 
     def _embedding_kwargs(self) -> dict:
         """构建嵌入请求的可选参数"""
@@ -168,18 +179,13 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             )
             return kwargs
         # 非vLLM服务（OpenAI等）支持dimensions，读取配置
-        if embedding_dim_config and embedding_dim_config != "":
-            try:
-                dim_value = int(embedding_dim_config)
-                kwargs["dimensions"] = dim_value
-                logger.info(
-                    f"[OpenAI Embedding] {provider_id}: Added dimensions parameter: {dim_value}"
-                )
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"[OpenAI Embedding] {provider_id}: embedding_dimensions is not a valid integer: '{embedding_dim_config}', ignored."
-                )
-        else:
+        configured_dim = self._configured_dimension()
+        if configured_dim is not None:
+            kwargs["dimensions"] = configured_dim
+            logger.info(
+                f"[OpenAI Embedding] {provider_id}: Added dimensions parameter: {configured_dim}"
+            )
+        elif embedding_dim_config in (None, ""):
             logger.info(
                 f"[OpenAI Embedding] {provider_id}: No embedding_dimensions configured, API will use default"
             )
@@ -188,40 +194,25 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def get_dim(self) -> int:
         """获取向量的维度"""
         provider_id = self.provider_config.get("id", "unknown")
-        # 首先尝试从config读取
         embedding_dim_config = self.provider_config.get("embedding_dimensions", "")
-        if embedding_dim_config and embedding_dim_config != "":
-            try:
-                dim = int(embedding_dim_config)
-                if dim > 0:
-                    logger.info(
-                        f"[OpenAI Embedding] {provider_id}: Dimension from config: {dim}"
-                    )
-                    return dim
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"[OpenAI Embedding] {provider_id}: embedding_dimensions is not a valid integer: '{embedding_dim_config}', trying model inference"
-                )
-        # config为空或无效时根据模型名推断维度
-        # 这样Living Memory可以在自动检测后匹配正确的维度
-        model = self.provider_config.get("embedding_model", "").lower()
-        model_dims = {
-            "bge-m3": 1024,
-            "bge-large-en-v1.5": 1024,
-            "bge-large-zh-v1.5": 1024,
-            "text-embedding-3-small": 1536,
-            "text-embedding-3-large": 3072,
-            "text-embedding-ada-002": 1536,
-        }
-        for model_key, dim in model_dims.items():
-            if model_key in model:
-                logger.info(
-                    f"[OpenAI Embedding] {provider_id}: Inferred dimension {dim} from model: {model}"
-                )
-                return dim
-        # 无法推断时返回0（Living Memory会检测实际维度）
+
+        configured_dim = self._configured_dimension()
+        if configured_dim is not None:
+            logger.info(
+                f"[OpenAI Embedding] {provider_id}: Dimension from config: {configured_dim}"
+            )
+            return configured_dim
+
+        model = self.provider_config.get("embedding_model", "")
+        inferred_dim = infer_embedding_dimension_from_model(model)
+        if inferred_dim:
+            logger.info(
+                f"[OpenAI Embedding] {provider_id}: Inferred dimension {inferred_dim} from model: {str(model).lower()}"
+            )
+            return inferred_dim
+
         logger.warning(
-            f"[OpenAI Embedding] {provider_id}: Could not determine dimension (model: {model}, config: '{embedding_dim_config}')"
+            f"[OpenAI Embedding] {provider_id}: Could not determine dimension (model: {str(model).lower()}, config: '{embedding_dim_config}')"
         )
         return 0
 

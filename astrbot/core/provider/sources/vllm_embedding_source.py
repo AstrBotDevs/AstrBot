@@ -12,16 +12,10 @@ from astrbot import logger
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
 from ..register import register_provider_adapter
-
-
-_COMMON_MODEL_DIMENSIONS = {
-    "bge-m3": 1024,
-    "bge-large-en-v1.5": 1024,
-    "bge-large-zh-v1.5": 1024,
-    "text-embedding-3-small": 1536,
-    "text-embedding-3-large": 3072,
-    "text-embedding-ada-002": 1536,
-}
+from .embedding_utils import (
+    infer_embedding_dimension_from_model,
+    parse_configured_embedding_dimension,
+)
 
 
 @register_provider_adapter(
@@ -211,26 +205,14 @@ class VLLMEmbeddingProvider(EmbeddingProvider):
         return None
 
     def _configured_dimension(self) -> int | None:
-        raw_dimension = self.provider_config.get("embedding_dimensions", "")
-        if raw_dimension in (None, ""):
-            return None
-        try:
-            dimension = int(raw_dimension)
-        except (TypeError, ValueError):
-            logger.warning(
-                "[vLLM Embedding] %s 的 embedding_dimensions 不是有效整数: %r",
-                self._provider_id(),
-                raw_dimension,
-            )
-            return None
-        return dimension if dimension > 0 else None
+        return parse_configured_embedding_dimension(
+            self.provider_config.get("embedding_dimensions", ""),
+            provider_label="vLLM Embedding",
+            provider_id=self._provider_id(),
+        )
 
     def _infer_dimension_from_model(self, model_name: Any) -> int | None:
-        normalized_model = str(model_name or "").strip().lower()
-        for model_key, dimension in _COMMON_MODEL_DIMENSIONS.items():
-            if model_key in normalized_model:
-                return dimension
-        return None
+        return infer_embedding_dimension_from_model(model_name)
 
     def _cache_detected_dimension(self, dimension: int) -> None:
         if isinstance(dimension, int) and dimension > 0:
