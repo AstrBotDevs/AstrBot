@@ -1,0 +1,15 @@
+{
+  "help_language": {
+    "description": "指令回复语言",
+    "type": "string",
+    "hint": "选择 /help 等指令的回复语言",
+    "default": "zh-CN",
+    "options": ["en-US", "zh-CN", "zh-TW", "ru-RU"],
+    "labels": {
+      "en-US": "English",
+      "zh-CN": "简体中文",
+      "zh-TW": "繁体中文",
+      "ru-RU": "俄语"
+    }
+  }
+}

@@ -2,5 +2,20 @@
   "metadata": {
     "display_name": "内置指令",
     "desc": "AstrBot 自带插件，提供 /reset、/help、/sid 等内置指令。"
+  },
+  "config": {
+    "builtin_commands": {
+      "配置": "配置"
+    },
+    "help_language": {
+      "description": "指令回复语言",
+      "hint": "选择 /help 等指令的回复语言",
+      "labels": {
+        "en-US": "英语",
+        "zh-CN": "简体中文",
+        "zh-TW": "繁体中文",
+        "ru-RU": "俄语"
+      }
+    }
   }
 }

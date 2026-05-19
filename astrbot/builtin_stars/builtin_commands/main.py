@@ -12,12 +12,13 @@ from .commands import (
 
 
 class Main(star.Star):
-    def __init__(self, context: star.Context) -> None:
+    def __init__(self, context: star.Context, config: dict | None = None) -> None:
         self.context = context
+        self.config = config or {}
 
         self.admin_c = AdminCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
-        self.help_c = HelpCommand(self.context)
+        self.help_c = HelpCommand(self.context, self.config)
         self.provider_c = ProviderCommands(self.context)
         self.setunset_c = SetUnsetCommands(self.context)
         self.sid_c = SIDCommand(self.context)
