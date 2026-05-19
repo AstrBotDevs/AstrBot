@@ -94,3 +94,4 @@ class PipelineScheduler:
         finally:
             event.cleanup_temporary_local_files()
             active_event_registry.unregister(event)
+            event._pipeline_finished.set()

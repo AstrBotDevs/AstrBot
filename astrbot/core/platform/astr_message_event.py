@@ -97,6 +97,9 @@ class AstrMessageEvent(abc.ABC):
         self.plugins_name: list[str] | None = None
         """该事件启用的插件名称列表。None 表示所有插件都启用。空列表表示没有启用任何插件。"""
 
+        self._pipeline_finished = asyncio.Event()
+        """事件的 pipeline 处理完毕（包含异常退出）时触发。供需要"等待事件处理完成"的适配器使用。"""
+
         # back_compability
         self.platform = platform_meta
 
@@ -299,6 +302,16 @@ class AstrMessageEvent(abc.ABC):
         """停止输入中状态。
 
         默认实现为空，由具体平台按需重写。
+        """
+
+    async def ack_interaction(self, code: int = 0) -> None:
+        """对平台交互回调（如按钮点击）进行 ack。
+
+        默认实现为空，由具体平台按需重写。
+
+        code 的语义由各平台自行定义。
+        QQ 官方:
+        0=成功, 1=操作失败, 2=操作频繁, 3=重复操作, 4=没有权限, 5=仅管理员。
         """
 
     async def _pre_send(self) -> None:
