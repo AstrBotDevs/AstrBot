@@ -333,9 +333,12 @@ class Attachment(TimestampMixin, SQLModel, table=True):
         unique=True,
         default_factory=lambda: str(uuid.uuid4()),
     )
-    path: str = Field(nullable=False)  # Path to the file on disk
+    path: str = Field(nullable=False)  # Relative path to the file (e.g., 2026/01/06/xxxx.jpg)
     type: str = Field(nullable=False)  # Type of the file (e.g., 'image', 'file')
     mime_type: str = Field(nullable=False)  # MIME type of the file
+    original_filename: str = Field(nullable=True, max_length=255)  # Original filename before renaming
+    creator: str | None = Field(default=None, max_length=255)  # Username of the uploader
+    session_id: str | None = Field(default=None, max_length=100)  # Session ID that created this attachment
 
     __table_args__ = (
         UniqueConstraint(

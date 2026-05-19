@@ -322,6 +322,10 @@ class BaseDatabase(abc.ABC):
         path: str,
         type: str,
         mime_type: str,
+        *,
+        original_filename: str | None = None,
+        creator: str | None = None,
+        session_id: str | None = None,
     ):
         """Insert a new attachment record."""
         ...

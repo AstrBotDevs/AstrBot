@@ -19,7 +19,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 
 AttachmentGetter = Callable[[str], Awaitable[Attachment | None]]
-AttachmentInserter = Callable[[str, str, str], Awaitable[Attachment | None]]
+AttachmentInserter = Callable[..., Awaitable[Attachment | None]]
 ReplyHistoryGetter = Callable[
     [Any],
     Awaitable[tuple[list[dict], str | None, str | None] | None],
@@ -166,6 +166,7 @@ async def build_webchat_message_parts(
     *,
     get_attachment_by_id: AttachmentGetter,
     strict: bool = False,
+    attachments_dir: str | Path | None = None,
 ) -> list[dict]:
     if isinstance(message_payload, str):
         text = message_payload.strip()
@@ -223,11 +224,15 @@ async def build_webchat_message_parts(
             continue
 
         attachment_path = Path(attachment.path)
+        display_name = attachment.original_filename or attachment_path.name
+        # Resolve relative paths to absolute for runtime usage
+        if attachments_dir is not None and not attachment_path.is_absolute():
+            attachment_path = Path(attachments_dir) / attachment_path
         message_parts.append(
             {
                 "type": attachment.type,
                 "attachment_id": attachment.attachment_id,
-                "filename": attachment_path.name,
+                "filename": display_name,
                 "path": str(attachment_path),
             }
         )
@@ -312,11 +317,13 @@ async def build_message_chain_from_payload(
     *,
     get_attachment_by_id: AttachmentGetter,
     strict: bool = True,
+    attachments_dir: str | Path | None = None,
 ) -> MessageChain:
     message_parts = await build_webchat_message_parts(
         message_payload,
         get_attachment_by_id=get_attachment_by_id,
         strict=strict,
+        attachments_dir=attachments_dir,
     )
     components, _, has_content = await parse_webchat_message_parts(
         message_parts,
@@ -334,20 +341,36 @@ async def create_attachment_part_from_existing_file(
     insert_attachment: AttachmentInserter,
     attachments_dir: str | Path,
     fallback_dirs: Sequence[str | Path] = (),
+    creator: str | None = None,
+    session_id: str | None = None,
 ) -> dict | None:
     basename = Path(filename).name
-    candidate_paths = [Path(attachments_dir) / basename]
+    attachments_dir = Path(attachments_dir)
+
+    # Search in attachments_dir (including subdirectories) and fallback_dirs
+    candidate_paths: list[Path] = []
+    if attachments_dir.exists():
+        candidate_paths.extend(attachments_dir.rglob(basename))
     candidate_paths.extend(Path(p) / basename for p in fallback_dirs)
 
     file_path = next((path for path in candidate_paths if path.exists()), None)
     if not file_path:
         return None
 
+    # Compute relative path if inside attachments_dir, otherwise absolute
+    try:
+        rel_path = str(file_path.relative_to(attachments_dir))
+    except ValueError:
+        rel_path = str(file_path)
+
     mime_type, _ = mimetypes.guess_type(str(file_path))
     attachment = await insert_attachment(
-        str(file_path),
+        rel_path,
         attach_type,
         mime_type or "application/octet-stream",
+        original_filename=basename,
+        creator=creator,
+        session_id=session_id,
     )
     if not attachment:
         return None
@@ -355,7 +378,7 @@ async def create_attachment_part_from_existing_file(
     return {
         "type": attach_type,
         "attachment_id": attachment.attachment_id,
-        "filename": file_path.name,
+        "filename": basename,
     }
 
 
@@ -364,6 +387,7 @@ async def message_chain_to_storage_message_parts(
     *,
     insert_attachment: AttachmentInserter,
     attachments_dir: str | Path,
+    conversation_id: str,
 ) -> list[dict]:
     target_dir = Path(attachments_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -388,6 +412,7 @@ async def message_chain_to_storage_message_parts(
                 attach_type="image",
                 insert_attachment=insert_attachment,
                 attachments_dir=target_dir,
+                session_id=conversation_id,
             )
             if attachment_part:
                 parts.append(attachment_part)
@@ -400,6 +425,7 @@ async def message_chain_to_storage_message_parts(
                 attach_type="record",
                 insert_attachment=insert_attachment,
                 attachments_dir=target_dir,
+                session_id=conversation_id,
             )
             if attachment_part:
                 parts.append(attachment_part)
@@ -412,6 +438,7 @@ async def message_chain_to_storage_message_parts(
                 attach_type="video",
                 insert_attachment=insert_attachment,
                 attachments_dir=target_dir,
+                session_id=conversation_id,
             )
             if attachment_part:
                 parts.append(attachment_part)
@@ -425,6 +452,7 @@ async def message_chain_to_storage_message_parts(
                 insert_attachment=insert_attachment,
                 attachments_dir=target_dir,
                 display_name=comp.name,
+                session_id=conversation_id,
             )
             if attachment_part:
                 parts.append(attachment_part)
@@ -440,20 +468,33 @@ async def _copy_file_to_attachment_part(
     insert_attachment: AttachmentInserter,
     attachments_dir: Path,
     display_name: str | None = None,
+    creator: str | None = None,
+    session_id: str | None = None,
 ) -> dict | None:
+    import datetime
+
     src_path = Path(file_path)
     if not src_path.exists() or not src_path.is_file():
         return None
 
     suffix = src_path.suffix
-    target_path = attachments_dir / f"{uuid.uuid4().hex}{suffix}"
+    random_name = f"{uuid.uuid4().hex}{suffix}"
+    date_dir = datetime.datetime.now().strftime("%Y/%m/%d")
+    target_dir = attachments_dir / date_dir
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    target_path = target_dir / random_name
     shutil.copy2(src_path, target_path)
 
+    rel_path = str(Path(date_dir) / random_name)
     mime_type, _ = mimetypes.guess_type(target_path.name)
     attachment = await insert_attachment(
-        str(target_path),
+        rel_path,
         attach_type,
         mime_type or "application/octet-stream",
+        original_filename=display_name or src_path.name,
+        creator=creator,
+        session_id=session_id,
     )
     if not attachment:
         return None

@@ -329,7 +329,7 @@
             @remove-file="removeFile"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
-            @paste-image="handlePaste"
+            @paste-image="(e: ClipboardEvent) => handlePaste(e, currSessionId)"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
           />
@@ -413,7 +413,7 @@
             @remove-file="removeFile"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
-            @paste-image="handlePaste"
+            @paste-image="(e: ClipboardEvent) => handlePaste(e, currSessionId)"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
           />
@@ -1289,9 +1289,9 @@ async function handleFilesSelected(files: FileList) {
   const selectedFiles = Array.from(files || []);
   for (const file of selectedFiles) {
     if (file.type.startsWith("image/")) {
-      await processAndUploadImage(file);
+      await processAndUploadImage(file, currSessionId.value);
     } else {
-      await processAndUploadFile(file);
+      await processAndUploadFile(file, currSessionId.value);
     }
   }
 }

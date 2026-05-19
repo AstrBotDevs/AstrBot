@@ -119,6 +119,8 @@ export function useMessages(options: UseMessagesOptions) {
   const sessionProjects = reactive<Record<string, ChatSessionProject | null>>(
     {},
   );
+  let chatWidgetApi = false;
+  let chatWidgetApiPackage: Record<string, string> | null = null;
 
   const activeMessages = computed(() =>
     options.currentSessionId.value
@@ -169,10 +171,22 @@ export function useMessages(options: UseMessagesOptions) {
     let cacheKey: string;
     if (part.attachment_id) {
       cacheKey = `att:${part.attachment_id}`;
-      url = `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
+      if (chatWidgetApi) {
+        const params = new URLSearchParams(chatWidgetApiPackage ?? {});
+        params.append('attachment_id', part.attachment_id)
+        url = '/api/widget/file?' + params.toString();
+      } else {
+        url = `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
+      }
     } else if (part.filename) {
       cacheKey = `file:${part.filename}`;
-      url = `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+      if (chatWidgetApi) {
+        const params = new URLSearchParams(chatWidgetApiPackage ?? {});
+        params.append('filename', part.filename)
+        url = '/api/widget/filename?' + params.toString();
+      } else {
+        url = `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+      }
     } else {
       return;
     }
@@ -208,9 +222,12 @@ export function useMessages(options: UseMessagesOptions) {
     if (!sessionId) return;
     loadingMessages.value = true;
     try {
-      const response = await axios.get("/api/chat/get_session", {
-        params: { session_id: sessionId },
-      });
+      const response = await axios.get(
+        chatWidgetApi ? "/api/widget/history" : "/api/chat/get_session",
+        {
+          params: chatWidgetApi ? Object.assign({ session_id: sessionId }, chatWidgetApiPackage) : { session_id: sessionId },
+        }
+      );
       const payload = response.data?.data || {};
       const history = payload.history || [];
       const records = history.map(normalizeHistoryRecord);
@@ -445,7 +462,11 @@ export function useMessages(options: UseMessagesOptions) {
 
   async function stopSession(sessionId: string) {
     if (!sessionId) return;
-    await axios.post("/api/chat/stop", { session_id: sessionId });
+    if (chatWidgetApi) {
+      await axios.post("/api/widget/stop", Object.assign({ session_id: sessionId }, chatWidgetApiPackage));
+    } else {
+      await axios.post("/api/chat/stop", { session_id: sessionId });
+    }
   }
 
   function cleanupConnections() {
@@ -508,22 +529,26 @@ export function useMessages(options: UseMessagesOptions) {
       transport: "sse",
       abort,
     };
-
-    fetch("/api/chat/send", {
+    const headers: Record<string, string> = {"Content-Type": "application/json",};
+    if (!chatWidgetApi) headers.Authorization = `Bearer ${localStorage.getItem("token") || ""}`;
+    const body: Record<string, any> = {
+      session_id: sessionId,
+      message: parts.map(partToPayload),
+      enable_streaming: enableStreaming,
+      selected_provider: selectedProvider,
+      selected_model: selectedModel,
+      _skip_user_history: skipUserHistory,
+      _llm_checkpoint_id: llmCheckpointId || undefined,
+    };
+    if (chatWidgetApi) {
+      for (const k in chatWidgetApiPackage) {
+        body[k] = chatWidgetApiPackage[k];
+      }
+    }
+    fetch(chatWidgetApi ? "/api/widget/send" : "/api/chat/send", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-      },
-      body: JSON.stringify({
-        session_id: sessionId,
-        message: parts.map(partToPayload),
-        enable_streaming: enableStreaming,
-        selected_provider: selectedProvider,
-        selected_model: selectedModel,
-        _skip_user_history: skipUserHistory,
-        _llm_checkpoint_id: llmCheckpointId || undefined,
-      }),
+      headers: headers,
+      body: JSON.stringify(body),
       signal: abort.signal,
     })
       .then(async (response) => {
@@ -698,6 +723,11 @@ export function useMessages(options: UseMessagesOptions) {
     }
   }
 
+  function widgetSetApiPackage(apiPackage: Record<string, string>) {
+    chatWidgetApi = true;
+    chatWidgetApiPackage = apiPackage
+  }
+
   return {
     loadingMessages,
     sending,
@@ -718,6 +748,8 @@ export function useMessages(options: UseMessagesOptions) {
     regenerateMessage,
     stopSession,
     cleanupConnections,
+    widgetSetApiPackage,
+    startSseStream,
   };
 }
 

@@ -190,6 +190,7 @@
       "inactive": "Inactive"
     },
     "table": {
+      "id": "NO",
       "name": "Name",
       "prefix": "Prefix",
       "scopes": "Scopes",

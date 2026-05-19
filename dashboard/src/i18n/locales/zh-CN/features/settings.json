@@ -190,6 +190,7 @@
       "inactive": "无效"
     },
     "table": {
+      "id": "编号",
       "name": "名称",
       "prefix": "前缀",
       "scopes": "权限",

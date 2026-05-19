@@ -4,10 +4,12 @@ import json
 from uuid import uuid4
 
 from quart import g, request, websocket
+from sqlmodel import select
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.po import ProviderStat
 from astrbot.core.platform.message_session import MessageSesion
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_message_chain_from_payload,
@@ -50,6 +52,7 @@ class OpenApiRoute(Route):
             ],
             "/v1/im/message": ("POST", self.send_message),
             "/v1/im/bots": ("GET", self.get_bots),
+            "/v1/stats/provider": ("GET", self.get_provider_stats),
         }
         self.register_routes()
         self.app.websocket("/api/v1/chat/ws")(self.chat_ws)
@@ -142,8 +145,10 @@ class OpenApiRoute(Route):
 
         return None
 
-    async def chat_send(self):
-        post_data = await request.get_json(silent=True) or {}
+    async def chat_send(self, post_data: dict | None = None):
+        if post_data is None:
+            post_data = await request.get_json(silent=True) or {}
+
         effective_username, username_err = self._resolve_open_username(
             post_data.get("username")
         )
@@ -605,6 +610,7 @@ class OpenApiRoute(Route):
             message_payload,
             get_attachment_by_id=self.db.get_attachment_by_id,
             strict=True,
+            attachments_dir=self.chat_route.attachments_dir,
         )
 
     async def send_message(self):
@@ -661,3 +667,56 @@ class OpenApiRoute(Route):
             ):
                 bot_ids.append(platform_id)
         return Response().ok(data={"bot_ids": bot_ids}).__dict__
+
+    async def get_provider_stats(self):
+        try:
+            start_id = int(request.args.get("start_id", 0))
+        except (TypeError, ValueError):
+            return Response().error("start_id must be an integer").__dict__
+
+        try:
+            size = int(request.args.get("size", 20))
+        except (TypeError, ValueError):
+            return Response().error("size must be an integer").__dict__
+
+        if size < 1:
+            size = 1
+        if size > 1000:
+            size = 1000
+
+        try:
+            async with self.db.get_db() as session:
+                result = await session.execute(
+                    select(ProviderStat)
+                    .where(ProviderStat.id > start_id)
+                    .order_by(ProviderStat.id.asc())
+                    .limit(size)
+                )
+                records = result.scalars().all()
+
+            data = []
+            for record in records:
+                data.append(
+                    {
+                        "id": record.id,
+                        "agent_type": record.agent_type,
+                        "status": record.status,
+                        "umo": record.umo,
+                        "conversation_id": record.conversation_id,
+                        "provider_id": record.provider_id,
+                        "provider_model": record.provider_model,
+                        "token_input_other": record.token_input_other,
+                        "token_input_cached": record.token_input_cached,
+                        "token_output": record.token_output,
+                        "start_time": record.start_time,
+                        "end_time": record.end_time,
+                        "time_to_first_token": record.time_to_first_token,
+                        "created_at": to_utc_isoformat(record.created_at),
+                        "updated_at": to_utc_isoformat(record.updated_at),
+                    }
+                )
+
+            return Response().ok(data={"records": data, "count": len(data)}).__dict__
+        except Exception as e:
+            logger.error("Failed to get provider stats: %s", e, exc_info=True)
+            return Response().error(f"Failed to get provider stats: {e}").__dict__
