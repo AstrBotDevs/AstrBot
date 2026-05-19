@@ -227,7 +227,15 @@ DEFAULT_CONFIG = {
         "ltm_summary_trigger_rounds": 80,
         "ltm_summary_keep_recent_rounds": 30,
         "ltm_summary_provider_id": "",
-        "ltm_summary_prompt": "",
+        "ltm_summary_prompt": (
+            "Merge the older conversation rounds below into the existing "
+            "group-chat memory summary. "
+            "Preserve: user identities (names, nicknames, roles), recurring topics, "
+            "decisions made, preferences expressed, and unresolved tasks or questions. "
+            "Drop: transient greetings, small talk, and redundant confirmations. "
+            "Keep the summary concise and factual. "
+            "Output only the updated summary text, with no preamble or meta-commentary."
+        ),
         "ltm_raw_records_max_bytes": 500000,
         # When building user segments, both limits are active simultaneously:
         # whichever cap is hit first (by count or by chars) stops accumulation.
@@ -4195,7 +4203,7 @@ CONFIG_METADATA_3 = {
                     "provider_ltm_settings.ltm_summary_prompt": {
                         "description": "LTM 摘要提示词",
                         "type": "string",
-                        "hint": "llm_summary 策略的自定义摘要 prompt，留空使用内置默认。",
+                        "hint": "llm_summary 策略的自定义摘要 prompt，不更改以使用内置默认。",
                         "condition": {
                             "provider_ltm_settings.ltm_compaction_strategy": "llm_summary",
                         },
