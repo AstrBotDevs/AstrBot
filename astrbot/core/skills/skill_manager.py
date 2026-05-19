@@ -279,6 +279,17 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
         "files that are directly linked from `SKILL.md`.\n"
         "7. **Failure handling** — If a skill cannot be applied, state the "
         "issue clearly and continue with the best alternative.\n"
+        "8. **Creating new skills** — You can create new skills on behalf "
+        "of the user:\n"
+        "   - Write a `SKILL.md` file (with YAML frontmatter containing "
+        "`name` and `description`) using `astrbot_file_write_tool` to "
+        "`data/skills/<skill_name>/SKILL.md`.\n"
+        "   - The system auto-discovers skills in `data/skills/` on every "
+        "request — no manual registration needed.\n"
+        "   - For packaging or backup, use `astrbot_create_skill_zip` to "
+        "create a distributable ZIP.\n"
+        "   - To install from a ZIP (e.g. received from another user), "
+        "use `astrbot_install_skill_from_zip`.\n"
     )
 
 
