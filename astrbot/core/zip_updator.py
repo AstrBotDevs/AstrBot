@@ -178,7 +178,7 @@ class RepoZipUpdator:
     def unzip(self) -> NoReturn:
         raise NotImplementedError
 
-    async def update(self) -> NoReturn:
+    async def update(self, **kwargs: Any) -> None:
         raise NotImplementedError
 
     def compare_version(self, v1: str, v2: str) -> int:

@@ -48,10 +48,9 @@ from astrbot.core.provider.modalities import (
 )
 from astrbot.core.provider.provider import Provider
 
-from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
 from ..context.manager import ContextManager
-from ..context.token_counter import EstimateTokenCounter, TokenCounter
+from ..context.token_counter import EstimateTokenCounter
 from ..hooks import BaseAgentRunHooks
 from ..message import (
     AssistantMessageSegment,
@@ -187,7 +186,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.reasoning_content or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
-                    think=llm_resp.reasoning_content,
+                    think=llm_resp.reasoning_content or "",
                     encrypted=llm_resp.reasoning_signature,
                 ),
             )
@@ -222,10 +221,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # truncate by turns compressor
         truncate_turns: int = 1,
         # customize
-        custom_token_counter: TokenCounter | None = None,
-        custom_compressor: ContextCompressor | None = None,
+        custom_token_counter: T.Any = None,
+        custom_compressor: T.Any = None,
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
+        provider_config: dict | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
         **kwargs: T.Any,
@@ -462,22 +462,29 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         include_model: bool = True,
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
-        payload = {
-            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
-            "func_tool": self._func_tool_for_provider(),
-            "session_id": self.req.session_id,
-            "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
-            "abort_signal": self._abort_signal,
-        }
-        if include_model:
-            # For primary provider we keep explicit model selection if provided.
-            payload["model"] = self.req.model
+        contexts = self._sanitize_contexts_for_provider(self.run_context.messages)
+        func_tool = self._func_tool_for_provider()
+        model = self.req.model if include_model else None
         if self.streaming:
-            stream = self.provider.text_chat_stream(**payload)
-            async for resp in stream:  # type: ignore
+            stream = self.provider.text_chat_stream(
+                contexts=contexts,
+                func_tool=func_tool,
+                session_id=self.req.session_id,
+                extra_user_content_parts=self.req.extra_user_content_parts,
+                abort_signal=self._abort_signal,
+                model=model,
+            )
+            async for resp in stream:
                 yield resp
         else:
-            yield await self.provider.text_chat(**payload)
+            yield await self.provider.text_chat(
+                contexts=contexts,
+                func_tool=func_tool,
+                session_id=self.req.session_id,
+                extra_user_content_parts=self.req.extra_user_content_parts,
+                abort_signal=self._abort_signal,
+                model=model,
+            )
 
     async def _iter_llm_responses_with_fallback(
         self,
@@ -865,7 +872,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if llm_resp.reasoning_content or llm_resp.reasoning_signature:
                 parts.append(
                     ThinkPart(
-                        think=llm_resp.reasoning_content,
+                        think=llm_resp.reasoning_content or "",
                         encrypted=llm_resp.reasoning_signature,
                     ),
                 )
@@ -1360,7 +1367,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.reasoning_content or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
-                    think=llm_resp.reasoning_content,
+                    think=llm_resp.reasoning_content or "",
                     encrypted=llm_resp.reasoning_signature,
                 ),
             )
@@ -1387,6 +1394,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         with suppress(asyncio.CancelledError, RuntimeError, StopAsyncIteration):
             await close_executor()
 
+    async def _anext_coro(
+        self,
+        ait: AsyncIterator[ToolExecutorResultT],
+    ) -> ToolExecutorResultT:
+        return await anext(ait)
+
     async def _iter_tool_executor_results(
         self,
         executor: AsyncIterator[ToolExecutorResultT],
@@ -1398,7 +1411,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "Tool execution interrupted before reading the next tool result.",
                 )
 
-            next_result_task = asyncio.create_task(anext(executor))
+            next_result_task = asyncio.create_task(self._anext_coro(executor))
             abort_task = asyncio.create_task(self._abort_signal.wait())
             try:
                 done, _ = await asyncio.wait(
