@@ -844,17 +844,23 @@ class TestDecorateLlmRequest:
 class TestPluginToolFix:
     """Tests for _plugin_tool_fix function."""
 
-    def test_plugin_tool_fix_none_plugins(self, mock_event):
+    @pytest.mark.asyncio
+    async def test_plugin_tool_fix_none_plugins(self, mock_event):
         """Test plugin tool fix when no plugins specified."""
         module = ama
         req = ProviderRequest(func_tool=ToolSet())
         mock_event.plugins_name = None
 
-        module._plugin_tool_fix(mock_event, req)
+        with patch(
+            "astrbot.core.astr_main_agent.SessionPluginManager.get_session_plugin_config",
+            new=AsyncMock(return_value={}),
+        ):
+            await module._plugin_tool_fix(mock_event, req)
 
         assert req.func_tool is not None
 
-    def test_plugin_tool_fix_filters_by_plugin(self, mock_event):
+    @pytest.mark.asyncio
+    async def test_plugin_tool_fix_filters_by_plugin(self, mock_event):
         """Test plugin tool fix filters tools by enabled plugins."""
         module = ama
         mcp_tool = MagicMock(spec=MCPTool)
@@ -878,12 +884,17 @@ class TestPluginToolFix:
             mock_plugin.reserved = False
             mock_star_map.get.return_value = mock_plugin
 
-            module._plugin_tool_fix(mock_event, req)
+            with patch(
+                "astrbot.core.astr_main_agent.SessionPluginManager.get_session_plugin_config",
+                new=AsyncMock(return_value={}),
+            ):
+                await module._plugin_tool_fix(mock_event, req)
 
         assert "mcp_tool" in req.func_tool.names()
         assert "plugin_tool" in req.func_tool.names()
 
-    def test_plugin_tool_fix_mcp_preserved(self, mock_event):
+    @pytest.mark.asyncio
+    async def test_plugin_tool_fix_mcp_preserved(self, mock_event):
         """Test that MCP tools are always preserved."""
         module = ama
         mcp_tool = MagicMock(spec=MCPTool)
@@ -897,11 +908,18 @@ class TestPluginToolFix:
         mock_event.plugins_name = ["other_plugin"]
 
         with patch("astrbot.core.astr_main_agent.star_map"):
-            module._plugin_tool_fix(mock_event, req)
+            with patch(
+                "astrbot.core.astr_main_agent.SessionPluginManager.get_session_plugin_config",
+                new=AsyncMock(return_value={}),
+            ):
+                await module._plugin_tool_fix(mock_event, req)
 
         assert "mcp_tool" in req.func_tool.names()
 
-    def test_plugin_tool_fix_preserves_tools_without_plugin_origin(self, mock_event):
+    @pytest.mark.asyncio
+    async def test_plugin_tool_fix_preserves_tools_without_plugin_origin(
+        self, mock_event
+    ):
         """Tools without handler_module_path should not be filtered out."""
         module = ama
         handoff_tool = FunctionTool(
@@ -919,9 +937,43 @@ class TestPluginToolFix:
         mock_event.plugins_name = ["other_plugin"]
 
         with patch("astrbot.core.astr_main_agent.star_map"):
-            module._plugin_tool_fix(mock_event, req)
+            with patch(
+                "astrbot.core.astr_main_agent.SessionPluginManager.get_session_plugin_config",
+                new=AsyncMock(return_value={}),
+            ):
+                await module._plugin_tool_fix(mock_event, req)
 
         assert "transfer_to_demo_agent" in req.func_tool.names()
+
+    @pytest.mark.asyncio
+    async def test_plugin_tool_fix_filters_session_disabled_plugin(self, mock_event):
+        """Session-disabled plugin tools should not enter the request toolset."""
+        module = ama
+        plugin_tool = FunctionTool(
+            name="memorix_search",
+            description="memorix tool",
+            parameters={"type": "object", "properties": {}},
+            handler_module_path="test_plugin",
+            active=True,
+        )
+        req = ProviderRequest(func_tool=ToolSet([plugin_tool]))
+        mock_event.plugins_name = ["*"]
+
+        with patch("astrbot.core.astr_main_agent.star_map") as mock_star_map:
+            mock_plugin = MagicMock()
+            mock_plugin.name = "astrbot_plugin_memorix"
+            mock_plugin.reserved = False
+            mock_star_map.get.return_value = mock_plugin
+
+            with patch(
+                "astrbot.core.astr_main_agent.SessionPluginManager.get_session_plugin_config",
+                new=AsyncMock(
+                    return_value={"disabled_plugins": ["astrbot_plugin_memorix"]}
+                ),
+            ):
+                await module._plugin_tool_fix(mock_event, req)
+
+        assert "memorix_search" not in req.func_tool.names()
 
 
 class TestBuildMainAgent:

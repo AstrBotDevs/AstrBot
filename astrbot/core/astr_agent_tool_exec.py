@@ -30,6 +30,8 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
+from astrbot.core.star.star import star_map
 from astrbot.core.tools.computer_tools import (
     CuaKeyboardTypeTool,
     CuaMouseClickTool,
@@ -52,6 +54,26 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
+    @classmethod
+    def _tool_enabled_for_session(
+        cls,
+        tool: FunctionTool,
+        session_config: dict | None,
+    ) -> bool:
+        mp = tool.handler_module_path
+        if not mp:
+            return True
+
+        plugin = star_map.get(mp)
+        if not plugin:
+            return True
+
+        return SessionPluginManager.is_plugin_enabled_for_session_config(
+            plugin.name,
+            session_config,
+            reserved=plugin.reserved,
+        )
+
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
@@ -241,7 +263,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         return {}
 
     @classmethod
-    def _build_handoff_toolset(
+    async def _build_handoff_toolset(
         cls,
         run_context: ContextWrapper[AstrAgentContext],
         tools: list[str | FunctionTool] | None,
@@ -249,6 +271,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         ctx = run_context.context.context
         event = run_context.context.event
         cfg = ctx.get_config(umo=event.unified_msg_origin)
+        session_config = await SessionPluginManager.get_session_plugin_config(
+            event.unified_msg_origin
+        )
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
         tool_mgr = (
@@ -269,7 +294,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             for registered_tool in llm_tools.func_list:
                 if isinstance(registered_tool, HandoffTool):
                     continue
-                if registered_tool.active:
+                if registered_tool.active and cls._tool_enabled_for_session(
+                    registered_tool,
+                    session_config,
+                ):
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)
@@ -282,14 +310,19 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         for tool_name_or_obj in tools:
             if isinstance(tool_name_or_obj, str):
                 registered_tool = llm_tools.get_func(tool_name_or_obj)
-                if registered_tool and registered_tool.active:
+                if (
+                    registered_tool
+                    and registered_tool.active
+                    and cls._tool_enabled_for_session(registered_tool, session_config)
+                ):
                     toolset.add_tool(registered_tool)
                     continue
                 runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
                 if runtime_tool:
                     toolset.add_tool(runtime_tool)
             elif isinstance(tool_name_or_obj, FunctionTool):
-                toolset.add_tool(tool_name_or_obj)
+                if cls._tool_enabled_for_session(tool_name_or_obj, session_config):
+                    toolset.add_tool(tool_name_or_obj)
         return None if toolset.empty() else toolset
 
     @classmethod
@@ -321,7 +354,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool_args["image_urls"] = image_urls
 
         # Build handoff toolset from registered tools plus runtime computer tools.
-        toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
+        toolset = await cls._build_handoff_toolset(run_context, tool.agent.tools)
 
         ctx = run_context.context.context
         event = run_context.context.event
