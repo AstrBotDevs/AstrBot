@@ -5,6 +5,7 @@ import typing as T
 from astrbot import logger
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.raw_platform_event import RawPlatformEvent
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
@@ -102,6 +103,46 @@ async def call_event_hook(
         if event.is_stopped():
             logger.info(
                 f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。",
+            )
+            return True
+
+    return event.is_stopped()
+
+
+async def call_raw_platform_event_hook(
+    event: RawPlatformEvent,
+    hook_type: EventType = EventType.OnRawPlatformEvent,
+) -> bool:
+    """调用原始平台事件钩子函数。"""
+    handlers = star_handlers_registry.get_handlers_by_event_type(
+        hook_type,
+        plugins_name=event.plugins_name,
+    )
+    for handler in handlers:
+        raw_platform_name = handler.extras_configs.get("raw_platform_name")
+        if raw_platform_name and raw_platform_name != event.platform_name:
+            continue
+
+        raw_platform_id = handler.extras_configs.get("raw_platform_id")
+        if raw_platform_id and raw_platform_id != event.platform_id:
+            continue
+
+        raw_event_type = handler.extras_configs.get("raw_event_type")
+        if raw_event_type and raw_event_type != event.event_type:
+            continue
+
+        try:
+            assert inspect.iscoroutinefunction(handler.handler)
+            logger.debug(
+                f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+            )
+            await handler.handler(event)
+        except BaseException:
+            logger.error(traceback.format_exc())
+
+        if event.is_stopped():
+            logger.info(
+                f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了原始平台事件传播。",
             )
             return True
 
