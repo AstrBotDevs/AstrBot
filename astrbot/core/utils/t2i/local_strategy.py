@@ -424,15 +424,20 @@ class HeaderElement(MarkdownElement):
     ) -> int:
         header_font_size = 42 - (self.level - 1) * 4
         font = FontManager.get_font(header_font_size)
+        lines = TextMeasurer.split_text_to_fit_width(
+            self.content, font, image_width - 20
+        )
 
         y += 10  # 上间距
-        draw.text((x, y), self.content, font=font, fill=(0, 0, 0))
+        for line in lines:
+            draw.text((x, y), line, font=font, fill=(0, 0, 0))
+            y += header_font_size
 
         # 添加分隔线
-        y += header_font_size + 8
+        y += 8
         draw.line((x, y, image_width - 10, y), fill=(230, 230, 230), width=3)
 
-        return y + 10  # 返回包含下间距的新y坐标
+        return y + 12  # 返回包含下间距的新y坐标
 
 
 class QuoteElement(MarkdownElement):
@@ -583,8 +588,21 @@ class CodeBlockElement(MarkdownElement):
 class InlineCodeElement(MarkdownElement):
     """行内代码元素"""
 
+    _PADDING = 4
+    _LINE_HEIGHT_EXTRA = 16
+
+    def _wrapped_lines(
+        self, image_width: int, font: ImageFont.FreeTypeFont | ImageFont.ImageFont
+    ) -> list[str]:
+        max_text_width = max(image_width - 20 - self._PADDING * 2, 1)
+        return TextMeasurer.split_text_to_fit_width(
+            self.content, font, max_text_width
+        )
+
     def calculate_height(self, image_width: int, font_size: int) -> int:
-        return font_size + 16  # 包含内边距和上下间距
+        font = FontManager.get_font(font_size)
+        lines = self._wrapped_lines(image_width, font)
+        return max(len(lines), 1) * (font_size + self._LINE_HEIGHT_EXTRA)
 
     def render(
         self,
@@ -596,26 +614,36 @@ class InlineCodeElement(MarkdownElement):
         font_size: int,
     ) -> int:
         font = FontManager.get_font(font_size)
+        padding = self._PADDING
+        line_height = font_size + self._LINE_HEIGHT_EXTRA
+        lines = self._wrapped_lines(image_width, font)
 
-        # 计算文本大小
-        text_width, _ = TextMeasurer.get_text_size(self.content, font)
-        text_height = font_size
+        for index, line in enumerate(lines):
+            line_y = y + index * line_height
+            text_width, _ = TextMeasurer.get_text_size(line, font)
 
-        # 绘制背景
-        padding = 4
-        draw.rounded_rectangle(
-            (x, y + 4, x + text_width + padding * 2, y + text_height + padding * 2 + 4),
-            radius=5,
-            fill=(230, 230, 230),
-            width=1,
-        )
+            # 绘制背景
+            draw.rounded_rectangle(
+                (
+                    x,
+                    line_y + 4,
+                    x + text_width + padding * 2,
+                    line_y + font_size + padding * 2 + 4,
+                ),
+                radius=5,
+                fill=(230, 230, 230),
+                width=1,
+            )
 
-        # 绘制文本
-        draw.text(
-            (x + padding, y + padding + 4), self.content, font=font, fill=(0, 0, 0)
-        )
+            # 绘制文本
+            draw.text(
+                (x + padding, line_y + padding + 4),
+                line,
+                font=font,
+                fill=(0, 0, 0),
+            )
 
-        return y + text_height + 16  # 返回新的y坐标
+        return y + max(len(lines), 1) * line_height  # 返回新的y坐标
 
 
 class ImageElement(MarkdownElement):
