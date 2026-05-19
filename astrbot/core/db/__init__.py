@@ -409,6 +409,7 @@ class BaseDatabase(abc.ABC):
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
         skills: list[str] | None = None,
+        subagents: list[str] | None = None,
         custom_error_message: str | None = None,
         folder_id: str | None = None,
         sort_order: int = 0,
@@ -421,6 +422,7 @@ class BaseDatabase(abc.ABC):
             begin_dialogs: Optional list of initial dialog strings
             tools: Optional list of tool names (None means all tools, [] means no tools)
             skills: Optional list of skill names (None means all skills, [] means no skills)
+            subagents: Optional list of subagent names (None means all subagents, [] means no subagents)
             custom_error_message: Optional persona-level fallback error message
             folder_id: Optional folder ID to place the persona in (None means root)
             sort_order: Sort order within the folder (default 0)
@@ -445,6 +447,7 @@ class BaseDatabase(abc.ABC):
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
         skills: list[str] | None = None,
+        subagents: list[str] | None = None,
         custom_error_message: str | None = None,
     ) -> Persona | None:
         """Update a persona's system prompt or begin dialogs."""
