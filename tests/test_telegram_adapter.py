@@ -79,6 +79,77 @@ def _build_context() -> MagicMock:
     return context
 
 
+def _find_reply_component(message) -> Comp.Reply:
+    return next(
+        component for component in message.message if isinstance(component, Comp.Reply)
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_reply_to_bot_normalizes_sender_id_to_self_id():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    reply_to_message = create_mock_update(
+        message_text="机器人上一条回复",
+        user_id=12345678,
+        username="test_bot",
+        message_id=10,
+    ).message
+    document = create_mock_file("https://api.telegram.org/file/test/report.md")
+    document.file_name = "report.md"
+    update = create_mock_update(
+        message_text=None,
+        chat_type="group",
+        document=document,
+        caption="请继续分析",
+        reply_to_message=reply_to_message,
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = _find_reply_component(result)
+    assert result.self_id == "test_bot"
+    assert reply.sender_id == result.self_id
+    assert reply.qq == 12345678
+
+
+@pytest.mark.asyncio
+async def test_telegram_reply_to_user_keeps_sender_id_as_user_id():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    reply_to_message = create_mock_update(
+        message_text="普通用户消息",
+        user_id=87654321,
+        username="alice",
+        message_id=11,
+    ).message
+    document = create_mock_file("https://api.telegram.org/file/test/report.md")
+    document.file_name = "report.md"
+    update = create_mock_update(
+        message_text=None,
+        chat_type="group",
+        document=document,
+        caption="请看附件",
+        reply_to_message=reply_to_message,
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = _find_reply_component(result)
+    assert reply.sender_id == "87654321"
+    assert reply.qq == 87654321
+
+
 @pytest.mark.asyncio
 async def test_telegram_document_caption_populates_message_text_and_plain():
     TelegramPlatformAdapter = _load_telegram_adapter()
