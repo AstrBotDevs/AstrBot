@@ -1,0 +1,67 @@
+{
+  "title": "知識庫管理",
+  "subtitle": "統一管理與搜尋知識庫內容",
+  "list": {
+    "title": "我的知識庫",
+    "subtitle": "管理你所有的知識庫集合",
+    "create": "建立知識庫",
+    "refresh": "重新整理列表",
+    "empty": "暫無知識庫",
+    "loading": "載入中...",
+    "documents": "文件",
+    "chunks": "Chunk",
+    "sessionConfig": "工作階段設定"
+  },
+  "card": {
+    "edit": "編輯",
+    "delete": "刪除",
+    "open": "開啟",
+    "docCount": "{count} 個文件",
+    "chunkCount": "{count} 個 Chunk"
+  },
+  "create": {
+    "title": "建立知識庫",
+    "nameLabel": "知識庫名稱",
+    "namePlaceholder": "為知識庫命名",
+    "descriptionLabel": "描述",
+    "descriptionPlaceholder": "簡單描述此知識庫的用途...",
+    "emojiLabel": "圖示",
+    "embeddingModelLabel": "Embedding 模型",
+    "rerankModelLabel": "Rerank 模型 (選填)",
+    "providerInfo": "供應商: {id} | 維度: {dimensions}",
+    "rerankProviderInfo": "供應商: {id}",
+    "cancel": "取消",
+    "submit": "建立",
+    "nameRequired": "請輸入知識庫名稱"
+  },
+  "edit": {
+    "title": "編輯知識庫",
+    "submit": "儲存"
+  },
+  "delete": {
+    "title": "刪除知識庫",
+    "confirmText": "確定要刪除知識庫「{name}」？",
+    "warning": "此操作無法復原，所有文件、Chunk 與相關設定將被永久刪除。",
+    "cancel": "取消",
+    "confirm": "刪除"
+  },
+  "emoji": {
+    "title": "選擇圖示",
+    "close": "關閉",
+    "categories": {
+      "books": "書籍與文件",
+      "emotions": "表情與情感",
+      "objects": "物件與工具",
+      "symbols": "符號與標誌"
+    }
+  },
+  "messages": {
+    "createSuccess": "知識庫建立成功",
+    "createFailed": "建立失敗",
+    "updateSuccess": "知識庫更新成功",
+    "updateFailed": "更新失敗",
+    "deleteSuccess": "知識庫刪除成功",
+    "deleteFailed": "刪除失敗",
+    "loadError": "載入知識庫列表失敗"
+  }
+}

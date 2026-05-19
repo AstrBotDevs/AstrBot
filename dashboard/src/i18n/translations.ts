@@ -43,6 +43,88 @@ import zhCNErrors from './locales/zh-CN/messages/errors.json';
 import zhCNSuccess from './locales/zh-CN/messages/success.json';
 import zhCNValidation from './locales/zh-CN/messages/validation.json';
 
+// Traditional Chinese translation (Hong Kong)
+import zhHKCommon from './locales/zh-HK/core/common.json';
+import zhHKActions from './locales/zh-HK/core/actions.json';
+import zhHKStatus from './locales/zh-HK/core/status.json';
+import zhHKNavigation from './locales/zh-HK/core/navigation.json';
+import zhHKHeader from './locales/zh-HK/core/header.json';
+import zhHKShared from './locales/zh-HK/core/shared.json';
+
+import zhHKChat from './locales/zh-HK/features/chat.json';
+import zhHKExtension from './locales/zh-HK/features/extension.json';
+import zhHKConversation from './locales/zh-HK/features/conversation.json';
+import zhHKSessionManagement from './locales/zh-HK/features/session-management.json';
+import zhHKToolUse from './locales/zh-HK/features/tool-use.json';
+import zhHKProvider from './locales/zh-HK/features/provider.json';
+import zhHKPlatform from './locales/zh-HK/features/platform.json';
+import zhHKConfig from './locales/zh-HK/features/config.json';
+import zhHKConfigMetadata from './locales/zh-HK/features/config-metadata.json';
+import zhHKConsole from './locales/zh-HK/features/console.json';
+import zhHKTrace from './locales/zh-HK/features/trace.json';
+import zhHKAbout from './locales/zh-HK/features/about.json';
+import zhHKSettings from './locales/zh-HK/features/settings.json';
+import zhHKAuth from './locales/zh-HK/features/auth.json';
+import zhHKChart from './locales/zh-HK/features/chart.json';
+import zhHKDashboard from './locales/zh-HK/features/dashboard.json';
+import zhHKCron from './locales/zh-HK/features/cron.json';
+import zhHKAlkaidIndex from './locales/zh-HK/features/alkaid/index.json';
+import zhHKAlkaidKnowledgeBase from './locales/zh-HK/features/alkaid/knowledge-base.json';
+import zhHKAlkaidMemory from './locales/zh-HK/features/alkaid/memory.json';
+import zhHKKnowledgeBaseIndex from './locales/zh-HK/features/knowledge-base/index.json';
+import zhHKKnowledgeBaseDetail from './locales/zh-HK/features/knowledge-base/detail.json';
+import zhHKKnowledgeBaseDocument from './locales/zh-HK/features/knowledge-base/document.json';
+import zhHKPersona from './locales/zh-HK/features/persona.json';
+import zhHKMigration from './locales/zh-HK/features/migration.json';
+import zhHKCommand from './locales/zh-HK/features/command.json';
+import zhHKSubagent from './locales/zh-HK/features/subagent.json';
+import zhHKWelcome from './locales/zh-HK/features/welcome.json';
+
+import zhHKErrors from './locales/zh-HK/messages/errors.json';
+import zhHKSuccess from './locales/zh-HK/messages/success.json';
+import zhHKValidation from './locales/zh-HK/messages/validation.json';
+
+// Traditional Chinese translation (Taiwan)
+import zhTWCommon from './locales/zh-TW/core/common.json';
+import zhTWActions from './locales/zh-TW/core/actions.json';
+import zhTWStatus from './locales/zh-TW/core/status.json';
+import zhTWNavigation from './locales/zh-TW/core/navigation.json';
+import zhTWHeader from './locales/zh-TW/core/header.json';
+import zhTWShared from './locales/zh-TW/core/shared.json';
+
+import zhTWChat from './locales/zh-TW/features/chat.json';
+import zhTWExtension from './locales/zh-TW/features/extension.json';
+import zhTWConversation from './locales/zh-TW/features/conversation.json';
+import zhTWSessionManagement from './locales/zh-TW/features/session-management.json';
+import zhTWToolUse from './locales/zh-TW/features/tool-use.json';
+import zhTWProvider from './locales/zh-TW/features/provider.json';
+import zhTWPlatform from './locales/zh-TW/features/platform.json';
+import zhTWConfig from './locales/zh-TW/features/config.json';
+import zhTWConfigMetadata from './locales/zh-TW/features/config-metadata.json';
+import zhTWConsole from './locales/zh-TW/features/console.json';
+import zhTWTrace from './locales/zh-TW/features/trace.json';
+import zhTWAbout from './locales/zh-TW/features/about.json';
+import zhTWSettings from './locales/zh-TW/features/settings.json';
+import zhTWAuth from './locales/zh-TW/features/auth.json';
+import zhTWChart from './locales/zh-TW/features/chart.json';
+import zhTWDashboard from './locales/zh-TW/features/dashboard.json';
+import zhTWCron from './locales/zh-TW/features/cron.json';
+import zhTWAlkaidIndex from './locales/zh-TW/features/alkaid/index.json';
+import zhTWAlkaidKnowledgeBase from './locales/zh-TW/features/alkaid/knowledge-base.json';
+import zhTWAlkaidMemory from './locales/zh-TW/features/alkaid/memory.json';
+import zhTWKnowledgeBaseIndex from './locales/zh-TW/features/knowledge-base/index.json';
+import zhTWKnowledgeBaseDetail from './locales/zh-TW/features/knowledge-base/detail.json';
+import zhTWKnowledgeBaseDocument from './locales/zh-TW/features/knowledge-base/document.json';
+import zhTWPersona from './locales/zh-TW/features/persona.json';
+import zhTWMigration from './locales/zh-TW/features/migration.json';
+import zhTWCommand from './locales/zh-TW/features/command.json';
+import zhTWSubagent from './locales/zh-TW/features/subagent.json';
+import zhTWWelcome from './locales/zh-TW/features/welcome.json';
+
+import zhTWErrors from './locales/zh-TW/messages/errors.json';
+import zhTWSuccess from './locales/zh-TW/messages/success.json';
+import zhTWValidation from './locales/zh-TW/messages/validation.json';
+
 // English translation
 import enUSCommon from './locales/en-US/core/common.json';
 import enUSActions from './locales/en-US/core/actions.json';
@@ -177,6 +259,104 @@ export const translations = {
       errors: zhCNErrors,
       success: zhCNSuccess,
       validation: zhCNValidation
+    }
+  },
+  'zh-HK': {
+    core: {
+      common: zhHKCommon,
+      actions: zhHKActions,
+      status: zhHKStatus,
+      navigation: zhHKNavigation,
+      header: zhHKHeader,
+      shared: zhHKShared
+    },
+    features: {
+      chat: zhHKChat,
+      extension: zhHKExtension,
+      conversation: zhHKConversation,
+      'session-management': zhHKSessionManagement,
+      tooluse: zhHKToolUse,
+      provider: zhHKProvider,
+      platform: zhHKPlatform,
+      config: zhHKConfig,
+      'config-metadata': zhHKConfigMetadata,
+      console: zhHKConsole,
+      trace: zhHKTrace,
+      about: zhHKAbout,
+      settings: zhHKSettings,
+      auth: zhHKAuth,
+      chart: zhHKChart,
+      dashboard: zhHKDashboard,
+      cron: zhHKCron,
+      alkaid: {
+        index: zhHKAlkaidIndex,
+        'knowledge-base': zhHKAlkaidKnowledgeBase,
+        memory: zhHKAlkaidMemory
+      },
+      'knowledge-base': {
+        index: zhHKKnowledgeBaseIndex,
+        detail: zhHKKnowledgeBaseDetail,
+        document: zhHKKnowledgeBaseDocument
+      },
+      persona: zhHKPersona,
+      migration: zhHKMigration,
+      command: zhHKCommand,
+      subagent: zhHKSubagent,
+      welcome: zhHKWelcome
+    },
+    messages: {
+      errors: zhHKErrors,
+      success: zhHKSuccess,
+      validation: zhHKValidation
+    }
+  },
+  'zh-TW': {
+    core: {
+      common: zhTWCommon,
+      actions: zhTWActions,
+      status: zhTWStatus,
+      navigation: zhTWNavigation,
+      header: zhTWHeader,
+      shared: zhTWShared
+    },
+    features: {
+      chat: zhTWChat,
+      extension: zhTWExtension,
+      conversation: zhTWConversation,
+      'session-management': zhTWSessionManagement,
+      tooluse: zhTWToolUse,
+      provider: zhTWProvider,
+      platform: zhTWPlatform,
+      config: zhTWConfig,
+      'config-metadata': zhTWConfigMetadata,
+      console: zhTWConsole,
+      trace: zhTWTrace,
+      about: zhTWAbout,
+      settings: zhTWSettings,
+      auth: zhTWAuth,
+      chart: zhTWChart,
+      dashboard: zhTWDashboard,
+      cron: zhTWCron,
+      alkaid: {
+        index: zhTWAlkaidIndex,
+        'knowledge-base': zhTWAlkaidKnowledgeBase,
+        memory: zhTWAlkaidMemory
+      },
+      'knowledge-base': {
+        index: zhTWKnowledgeBaseIndex,
+        detail: zhTWKnowledgeBaseDetail,
+        document: zhTWKnowledgeBaseDocument
+      },
+      persona: zhTWPersona,
+      migration: zhTWMigration,
+      command: zhTWCommand,
+      subagent: zhTWSubagent,
+      welcome: zhTWWelcome
+    },
+    messages: {
+      errors: zhTWErrors,
+      success: zhTWSuccess,
+      validation: zhTWValidation
     }
   },
   'en-US': {

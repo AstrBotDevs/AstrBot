@@ -1,0 +1,146 @@
+{
+  "page": {
+    "description": "管理人格角色設定"
+  },
+  "buttons": {
+    "create": "建立人格",
+    "createFirst": "建立第一個人格",
+    "edit": "編輯",
+    "delete": "刪除",
+    "cancel": "取消",
+    "save": "儲存",
+    "move": "移動",
+    "addDialogPair": "新增對話組合"
+  },
+  "labels": {
+    "presetDialogs": "預設對話 ({count} 組)",
+    "createdAt": "建立時間",
+    "updatedAt": "更新時間"
+  },
+  "form": {
+    "personaId": "人格 ID",
+    "systemPrompt": "System Prompt",
+    "customErrorMessage": "自訂錯誤回覆訊息 (選填)",
+    "customErrorMessageHelp": "當此人格的 LLM 請求失敗（例如連線失敗）時，會優先發送此錯誤訊息；留空則會發送預設錯誤訊息。",
+    "presetDialogs": "預設對話",
+    "presetDialogsHelp": "加入一些預設對話，以協助機械人理解角色設定。",
+    "userMessage": "用戶訊息 (User Message)",
+    "assistantMessage": "AI 回覆 (Assistant Message)",
+    "tools": "工具 / MCP 工具選擇",
+    "toolsHelp": "為此人格選擇可使用的外部工具。外部工具賦予了 AI 接觸外部環境的能力，例如搜尋、計算、獲取資訊等。",
+    "toolsSelection": "工具選擇操作",
+    "selectAllTools": "全選工具",
+    "clearAllTools": "清除選擇",
+    "allSelected": "全選",
+    "mcpServersQuickSelect": "MCP Server 快速選擇",
+    "searchTools": "搜尋工具",
+    "selectedTools": "已選工具",
+    "noToolsAvailable": "暫無可用工具",
+    "noToolsFound": "找不到符合的工具",
+    "loadingTools": "正在載入工具...",
+    "allToolsAvailable": "使用所有可用工具",
+    "noToolsSelected": "未選擇任何工具",
+    "skills": "Skills 選擇",
+    "skillsHelp": "為此人格選擇可使用的Skills。Skills 會為 AI 提供可重複使用的流程與規格。",
+    "skillsAllAvailable": "預設使用所有 Skills",
+    "skillsSelectSpecific": "選擇指定 Skills",
+    "searchSkills": "搜尋 Skills",
+    "selectedSkills": "已選 Skills",
+    "noSkillsAvailable": "暫無可用 Skills",
+    "noSkillsFound": "找不到符合的 Skills",
+    "loadingSkills": "正在載入 Skills...",
+    "allSkillsAvailable": "使用所有可用 Skills",
+    "noSkillsSelected": "未選擇任何 Skills",
+    "skillsRuntimeNoneWarning": "Computer Use 的運行環境未設定，Skills 可能無法讓 Agent 正常運行，因為未啟用運行環境。",
+    "createInFolder": "將會在「{folder}」中建立",
+    "rootFolder": "全部人格"
+  },
+  "dialog": {
+    "create": {
+      "title": "建立新人格"
+    },
+    "edit": {
+      "title": "編輯人格"
+    }
+  },
+  "empty": {
+    "title": "暫無人格設定",
+    "description": "請立即建立一個！",
+    "folderEmpty": "此資料夾是空的",
+    "folderEmptyDescription": "建立新人格或資料夾以開始"
+  },
+  "validation": {
+    "required": "此欄位為必填",
+    "minLength": "最少需要 {min} 個字元",
+    "alphanumeric": "僅容許字母、數字、底線與破折號",
+    "dialogRequired": "欄位 {type} 不能為空",
+    "personaIdExists": "此人格名稱已經存在"
+  },
+  "messages": {
+    "loadError": "載入人格列表失敗",
+    "saveSuccess": "儲存成功",
+    "saveError": "儲存失敗",
+    "deleteConfirm": "確定要刪除人格 \"{id}\"？此操作無法復原。",
+    "deleteSuccess": "刪除成功",
+    "deleteError": "刪除失敗"
+  },
+  "persona": {
+    "personasTitle": "人格",
+    "toolsCount": "個工具",
+    "skillsCount": "個 Skills",
+    "contextMenu": {
+      "moveTo": "移動至..."
+    },
+    "messages": {
+      "moveSuccess": "人格移動成功",
+      "moveError": "移動人格失敗"
+    }
+  },
+  "folder": {
+    "sidebarTitle": "資料夾",
+    "rootFolder": "根目錄",
+    "foldersTitle": "資料夾",
+    "noFolders": "暫無資料夾",
+    "createButton": "建立資料夾",
+    "searchPlaceholder": "搜尋資料夾...",
+    "form": {
+      "name": "資料夾名稱",
+      "description": "描述 (選填)"
+    },
+    "validation": {
+      "nameRequired": "資料夾名稱不能為空"
+    },
+    "contextMenu": {
+      "open": "開啟",
+      "rename": "重新命名",
+      "moveTo": "移動至...",
+      "delete": "刪除"
+    },
+    "createDialog": {
+      "title": "建立新資料夾",
+      "createButton": "建立"
+    },
+    "renameDialog": {
+      "title": "重新命名資料夾"
+    },
+    "deleteDialog": {
+      "title": "刪除資料夾",
+      "message": "確定要刪除資料夾 \"{name}\"？",
+      "warning": "資料夾內的所有人格將會移至根目錄。"
+    },
+    "messages": {
+      "createSuccess": "資料夾建立成功",
+      "createError": "建立資料夾失敗",
+      "renameSuccess": "資料夾重新命名成功",
+      "renameError": "重新命名資料夾失敗",
+      "deleteSuccess": "資料夾刪除成功",
+      "deleteError": "刪除資料夾失敗"
+    }
+  },
+  "moveDialog": {
+    "title": "移動至資料夾",
+    "description": "為 \"{name}\" 選擇目標資料夾",
+    "success": "移動成功",
+    "error": "移動失敗"
+  }
+}
