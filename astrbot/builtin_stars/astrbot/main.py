@@ -238,5 +238,7 @@ class Main(star.Star):
                 clean_session = event.get_extra("_clean_ltm_session", False)
                 if clean_session:
                     await self.ltm.remove_session(event)
+                else:
+                    await self.ltm.record_bot_message(event)
             except Exception as e:
                 logger.error(f"ltm: {e}")
