@@ -129,6 +129,10 @@
                     "description": "API-ключ Firecrawl",
                     "hint": "Можно добавить несколько ключей для ротации."
                 },
+                "websearch_metaso_key": {
+                    "description": "API-ключ Metaso",
+                    "hint": "Можно добавить несколько ключей для ротации. Встроенный ключ даёт 100 бесплатных запросов/день; укажите свой для более высоких квот."
+                },
                 "websearch_baidu_app_builder_key": {
                     "description": "API-ключ Baidu Qianfan APP Builder",
                     "hint": "Ссылка: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"

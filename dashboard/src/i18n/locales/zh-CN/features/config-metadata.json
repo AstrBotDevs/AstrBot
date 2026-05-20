@@ -131,6 +131,10 @@
           "description": "Firecrawl API Key",
           "hint": "可添加多个 Key 进行轮询。"
         },
+        "websearch_metaso_key": {
+          "description": "Metaso API Key",
+          "hint": "可添加多个 Key 进行轮询。内置 Key 每天 100 次免费查询，配置自己的 Key 可提升配额。"
+        },
         "websearch_baidu_app_builder_key": {
           "description": "百度千帆智能云 APP Builder API Key",
           "hint": "参考:[https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
