@@ -17,7 +17,6 @@
 
     python main_bg.py
 
-作者: AstrBot Agent Harness 开发专家
 时间: 2026-05-13 22:06 (CST)
 """
 
@@ -91,11 +90,35 @@ logo_tmpl = r"""
 
 """
 
-# 托盘图标路径（用户指定）
-TRAY_ICON_PATH = Path(r"F:\github\Astrbot\docs\public\logo.png")
+# 托盘图标路径
+TRAY_ICON_PATH = Path(__file__).parent / "docs" / "public" / "logo.png"
 
-# 默认 WebUI 地址（AstrBot 默认面板端口为 6185）
-DEFAULT_WEBUI_URL = "http://localhost:6185"
+# 命令行配置路径（需从中读取 dashboard host/port）
+_CMD_CONFIG_PATH = Path(__file__).parent / "data" / "cmd_config.json"
+
+
+def _get_default_webui_url() -> str:
+    """从 cmd_config.json 读取 dashboard 的 host 和 port，构造 WebUI 地址。
+
+     fallback 到硬编码默认值，避免因配置文件缺失或字段不全导致托盘异常。
+    """
+    import json
+    try:
+        with open(_CMD_CONFIG_PATH, encoding="utf-8-sig") as f:
+            conf_str = f.read()
+            # Handle UTF-8 BOM if present
+            if conf_str.startswith("\ufeff"):
+                conf_str = conf_str[1:]
+            conf = json.loads(conf_str)
+            dashboard = conf.get("dashboard")
+            host = dashboard.get("host", "127.0.0.1")
+            port = dashboard.get("port", 6185)
+            return f"http://{host}:{port}"
+    except Exception:
+        # 读取失败时回退到默认值，不阻断托盘功能
+        pass
+
+    return "http://127.0.0.1:6185"
 
 
 # =============================================================================
@@ -290,7 +313,7 @@ class AstrBotBackground:
             image = Image.new("RGBA", (64, 64), (66, 133, 244, 255))
 
         def on_open_webui(icon, item):  # noqa: ARG001
-            webbrowser.open(DEFAULT_WEBUI_URL)
+            webbrowser.open(_get_default_webui_url())
 
         def on_open_log(icon, item):  # noqa: ARG001
             try:
