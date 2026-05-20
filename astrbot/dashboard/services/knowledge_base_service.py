@@ -8,7 +8,7 @@ from typing import Any
 
 import aiofiles
 
-from astrbot.core import logger
+from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -28,6 +28,35 @@ class KnowledgeBaseService:
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    async def _remove_kb_from_session_configs(kb_id: str) -> int:
+        prefs = await sp.session_get(None, "kb_config")
+        if not isinstance(prefs, list):
+            return 0
+
+        updated = 0
+        for pref in prefs:
+            scope_id = getattr(pref, "scope_id", None)
+            if not isinstance(scope_id, str):
+                continue
+
+            value = await sp.session_get(scope_id, "kb_config")
+            if not isinstance(value, dict):
+                continue
+
+            kb_ids = value.get("kb_ids")
+            if not isinstance(kb_ids, list) or kb_id not in kb_ids:
+                continue
+
+            new_value = {
+                **value,
+                "kb_ids": [item for item in kb_ids if item != kb_id],
+            }
+            await sp.session_put(scope_id, "kb_config", new_value)
+            updated += 1
+
+        return updated
 
     def get_kb_manager(self):
         return self.core_lifecycle.kb_manager
@@ -407,6 +436,9 @@ class KnowledgeBaseService:
         success = await self.get_kb_manager().delete_kb(kb_id)
         if not success:
             raise KnowledgeBaseServiceError("知识库不存在")
+        updated_sessions = await self._remove_kb_from_session_configs(kb_id)
+        if updated_sessions:
+            logger.info(f"已从 {updated_sessions} 个会话配置中移除已删除知识库 {kb_id}")
         return None, "删除知识库成功"
 
     async def get_kb_stats(self, kb_id: str | None) -> dict[str, Any]:
