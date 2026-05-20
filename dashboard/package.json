@@ -4,13 +4,12 @@
   "private": true,
   "author": "CodedThemes",
   "scripts": {
-    "dev": "vite --host",
-    "subset-icons": "node scripts/subset-mdi-font.mjs",
+    "dev": "node scripts/subset-mdi-font.mjs && vite --host",
     "build:t2i-shiki-runtime": "node scripts/build-t2i-shiki-runtime.mjs",
-    "build": "vue-tsc --noEmit && vite build",
-    "build-stage": "vue-tsc --noEmit && vite build --base=/vue/free/stage/",
-    "build-prod": "vue-tsc --noEmit && vite build --base=/vue/free/",
-    "preview": "vite preview --port 5050",
+    "build": "node scripts/subset-mdi-font.mjs && vue-tsc --noEmit && vite build",
+    "build-stage": "node scripts/subset-mdi-font.mjs && vue-tsc --noEmit && vite build --base=/vue/free/stage/",
+    "build-prod": "node scripts/subset-mdi-font.mjs && vue-tsc --noEmit && vite build --base=/vue/free/",
+    "preview": "node scripts/subset-mdi-font.mjs && vite preview --port 5050",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
   },
