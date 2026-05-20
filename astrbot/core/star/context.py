@@ -15,6 +15,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.group_message_flow_mgr import GroupMessageFlowManager
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
@@ -80,6 +81,7 @@ class Context:
         knowledge_base_manager: KnowledgeBaseManager,
         cron_manager: CronJobManager,
         subagent_orchestrator: SubAgentOrchestrator | None = None,
+        group_message_flow_manager: GroupMessageFlowManager | None = None,
     ) -> None:
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
@@ -95,6 +97,10 @@ class Context:
         """会话管理器"""
         self.message_history_manager = message_history_manager
         """平台消息历史管理器"""
+        self.group_message_flow_manager = group_message_flow_manager or (
+            GroupMessageFlowManager(db)
+        )
+        """群聊消息流管理器"""
         self.persona_manager = persona_manager
         """人格角色设定管理器"""
         self.astrbot_config_mgr = astrbot_config_mgr

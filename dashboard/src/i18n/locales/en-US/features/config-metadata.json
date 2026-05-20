@@ -985,8 +985,33 @@
         "group_icl_enable": {
           "description": "Enable Group Chat Context Awareness"
         },
+        "group_context_mode": {
+          "description": "Group Chat Context Mode",
+          "hint": "sliding_window keeps the existing sliding-window behavior; flow uses persisted group message flow and conversation cursors.",
+          "labels": [
+            "Sliding Window",
+            "Message Flow"
+          ]
+        },
         "group_message_max_cnt": {
-          "description": "Maximum Message Count"
+          "description": "Maximum Message Count",
+          "hint": "Only used by sliding_window mode."
+        },
+        "group_flow_max_records": {
+          "description": "Group Message Flow Retention",
+          "hint": "Only used by flow mode. Maximum records retained per group message flow. 0 disables cleanup."
+        },
+        "group_flow_max_delta_messages": {
+          "description": "Injected Message Count Limit",
+          "hint": "Only used by flow mode. Each request injects only the latest N group messages after the cursor and before the current trigger message. 0 disables this limit."
+        },
+        "group_flow_max_message_chars": {
+          "description": "Per-message Character Limit",
+          "hint": "Only used by flow mode. Each injected group message keeps at most the first N characters. 0 disables this limit."
+        },
+        "group_flow_record_bot_messages": {
+          "description": "Record General Bot Messages",
+          "hint": "Only used by flow mode. The current LLM reply is never written to group message flow; this only affects general bot messages from commands or plugins."
         },
         "image_caption": {
           "description": "Auto-understand Images",

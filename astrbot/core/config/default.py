@@ -217,7 +217,12 @@ DEFAULT_CONFIG = {
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
+        "group_context_mode": "sliding_window",
         "group_message_max_cnt": 300,
+        "group_flow_max_records": 5000,
+        "group_flow_max_delta_messages": 200,
+        "group_flow_max_message_chars": 1000,
+        "group_flow_record_bot_messages": False,
         "image_caption": False,
         "image_caption_provider_id": "",
         "active_reply": {
@@ -2884,8 +2889,24 @@ CONFIG_METADATA_2 = {
                     "group_icl_enable": {
                         "type": "bool",
                     },
+                    "group_context_mode": {
+                        "type": "string",
+                        "options": ["sliding_window", "flow"],
+                    },
                     "group_message_max_cnt": {
                         "type": "int",
+                    },
+                    "group_flow_max_records": {
+                        "type": "int",
+                    },
+                    "group_flow_max_delta_messages": {
+                        "type": "int",
+                    },
+                    "group_flow_max_message_chars": {
+                        "type": "int",
+                    },
+                    "group_flow_record_bot_messages": {
+                        "type": "bool",
                     },
                     "image_caption": {
                         "type": "bool",
@@ -4100,9 +4121,60 @@ CONFIG_METADATA_3 = {
                         "description": "启用群聊上下文感知",
                         "type": "bool",
                     },
+                    "provider_ltm_settings.group_context_mode": {
+                        "description": "群聊上下文模式",
+                        "type": "string",
+                        "options": ["sliding_window", "flow"],
+                        "labels": ["滑动窗口", "消息流"],
+                        "hint": "sliding_window 保持旧的滑动窗口行为；flow 使用持久化群聊消息流和对话游标。",
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                        },
+                    },
                     "provider_ltm_settings.group_message_max_cnt": {
                         "description": "最大消息数量",
                         "type": "int",
+                        "hint": "仅用于 sliding_window 模式。",
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                            "provider_ltm_settings.group_context_mode": "sliding_window",
+                        },
+                    },
+                    "provider_ltm_settings.group_flow_max_records": {
+                        "description": "群聊消息流保留数量",
+                        "type": "int",
+                        "hint": "仅用于 flow 模式。每个群聊消息流最多保留的历史消息数，0 表示不清理。",
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                            "provider_ltm_settings.group_context_mode": "flow",
+                        },
+                    },
+                    "provider_ltm_settings.group_flow_max_delta_messages": {
+                        "description": "单次注入消息数量上限",
+                        "type": "int",
+                        "hint": "仅用于 flow 模式。每次只注入游标之后、当前触发消息之前的最近 N 条群聊消息；0 表示不限制。",
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                            "provider_ltm_settings.group_context_mode": "flow",
+                        },
+                    },
+                    "provider_ltm_settings.group_flow_max_message_chars": {
+                        "description": "单条消息字符上限",
+                        "type": "int",
+                        "hint": "仅用于 flow 模式。每条注入的群聊消息最多保留前 N 个字符；0 表示不限制。",
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                            "provider_ltm_settings.group_context_mode": "flow",
+                        },
+                    },
+                    "provider_ltm_settings.group_flow_record_bot_messages": {
+                        "description": "记录普通机器人消息",
+                        "type": "bool",
+                        "hint": "仅用于 flow 模式。LLM 本次回复始终不会写入群聊消息流；此项只影响命令或插件产生的普通机器人消息。",
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                            "provider_ltm_settings.group_context_mode": "flow",
+                        },
                     },
                     "provider_ltm_settings.image_caption": {
                         "description": "自动理解图片",

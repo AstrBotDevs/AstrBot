@@ -247,6 +247,50 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     llm_checkpoint_id: str | None = Field(default=None, index=True)
 
 
+class GroupMessageFlowRecord(TimestampMixin, SQLModel, table=True):
+    """Persisted group chat messages for long-context group flow."""
+
+    __tablename__: str = "group_message_flow_records"
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    platform_id: str = Field(nullable=False, index=True)
+    flow_session_id: str = Field(nullable=False, index=True)
+    group_id: str | None = Field(default=None, index=True)
+    sender_id: str | None = Field(default=None, index=True)
+    sender_name: str | None = Field(default=None)
+    role: str = Field(default="user", nullable=False, index=True)
+    content: list = Field(default_factory=list, sa_type=JSON, nullable=False)
+    rendered_text: str = Field(default="", sa_type=Text, nullable=False)
+
+
+class GroupMessageFlowCursor(TimestampMixin, SQLModel, table=True):
+    """Per-conversation cursor into a group message flow."""
+
+    __tablename__: str = "group_message_flow_cursors"
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    platform_id: str = Field(nullable=False, index=True)
+    flow_session_id: str = Field(nullable=False, index=True)
+    conversation_id: str = Field(nullable=False, index=True)
+    last_record_id: int = Field(default=0, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "flow_session_id",
+            "conversation_id",
+            name="uix_group_message_flow_cursor",
+        ),
+    )
+
+
 class WebChatThread(TimestampMixin, SQLModel, table=True):
     """A side thread created from a selected WebChat assistant response."""
 

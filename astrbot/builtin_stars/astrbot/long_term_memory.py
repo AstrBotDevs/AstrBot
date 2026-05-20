@@ -1,4 +1,5 @@
 import datetime
+import inspect
 import random
 import uuid
 from collections import defaultdict
@@ -10,6 +11,7 @@ from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import LLMResponse, Provider, ProviderRequest
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.message.message_event_result import ResultContentType
 
 """
 聊天记忆增强
@@ -25,26 +27,50 @@ class LongTermMemory:
 
     def cfg(self, event: AstrMessageEvent):
         cfg = self.context.get_config(umo=event.unified_msg_origin)
+        ltm_cfg = cfg["provider_ltm_settings"]
         try:
-            max_cnt = int(cfg["provider_ltm_settings"]["group_message_max_cnt"])
+            max_cnt = int(ltm_cfg["group_message_max_cnt"])
         except BaseException as e:
             logger.error(e)
             max_cnt = 300
+        try:
+            flow_max_records = int(ltm_cfg.get("group_flow_max_records", 5000))
+        except BaseException as e:
+            logger.error(e)
+            flow_max_records = 5000
+        try:
+            flow_max_delta_messages = int(
+                ltm_cfg.get("group_flow_max_delta_messages", 200)
+            )
+        except BaseException as e:
+            logger.error(e)
+            flow_max_delta_messages = 200
+        try:
+            flow_max_message_chars = int(
+                ltm_cfg.get("group_flow_max_message_chars", 1000)
+            )
+        except BaseException as e:
+            logger.error(e)
+            flow_max_message_chars = 1000
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
-        image_caption_provider_id = cfg["provider_ltm_settings"].get(
-            "image_caption_provider_id"
-        )
-        image_caption = cfg["provider_ltm_settings"]["image_caption"] and bool(
-            image_caption_provider_id
-        )
-        active_reply = cfg["provider_ltm_settings"]["active_reply"]
+        image_caption_provider_id = ltm_cfg.get("image_caption_provider_id")
+        image_caption = ltm_cfg["image_caption"] and bool(image_caption_provider_id)
+        active_reply = ltm_cfg["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
         ar_method = active_reply["method"]
         ar_possibility = active_reply["possibility_reply"]
         ar_prompt = active_reply.get("prompt", "")
         ar_whitelist = active_reply.get("whitelist", [])
         ret = {
+            "group_icl_enable": ltm_cfg.get("group_icl_enable", False),
+            "group_context_mode": ltm_cfg.get("group_context_mode", "sliding_window"),
             "max_cnt": max_cnt,
+            "flow_max_records": flow_max_records,
+            "flow_max_delta_messages": flow_max_delta_messages,
+            "flow_max_message_chars": flow_max_message_chars,
+            "flow_record_bot_messages": ltm_cfg.get(
+                "group_flow_record_bot_messages", False
+            ),
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
             "image_caption_provider_id": image_caption_provider_id,
@@ -56,12 +82,56 @@ class LongTermMemory:
         }
         return ret
 
+    def _is_flow_mode(self, event: AstrMessageEvent, cfg: dict | None = None) -> bool:
+        cfg = cfg or self.cfg(event)
+        return (
+            bool(cfg.get("group_icl_enable"))
+            and cfg.get("group_context_mode") == "flow"
+            and event.get_message_type() == MessageType.GROUP_MESSAGE
+        )
+
+    def _flow_session_id(self, event: AstrMessageEvent) -> str:
+        group_id = event.get_group_id()
+        if group_id:
+            return f"{event.get_platform_id()}:{MessageType.GROUP_MESSAGE.value}:{group_id}"
+        return event.unified_msg_origin
+
+    def _append_sliding_message(
+        self,
+        event: AstrMessageEvent,
+        message: str,
+        max_cnt: int,
+    ) -> None:
+        logger.debug(f"ltm | {event.unified_msg_origin} | {message}")
+        self.session_chats[event.unified_msg_origin].append(message)
+        if len(self.session_chats[event.unified_msg_origin]) > max_cnt:
+            self.session_chats[event.unified_msg_origin].pop(0)
+
     async def remove_session(self, event: AstrMessageEvent) -> int:
         cnt = 0
         if event.unified_msg_origin in self.session_chats:
             cnt = len(self.session_chats[event.unified_msg_origin])
             del self.session_chats[event.unified_msg_origin]
+        if self._is_flow_mode(event):
+            await self.reset_flow_cursor(event)
         return cnt
+
+    async def reset_flow_cursor(self, event: AstrMessageEvent) -> None:
+        curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
+            event.unified_msg_origin
+        )
+        if not curr_cid:
+            return
+        flow_session_id = self._flow_session_id(event)
+        latest_id = await self.context.group_message_flow_manager.get_latest_record_id(
+            flow_session_id
+        )
+        await self.context.group_message_flow_manager.set_cursor(
+            platform_id=event.get_platform_id(),
+            flow_session_id=flow_session_id,
+            conversation_id=curr_cid,
+            last_record_id=latest_id,
+        )
 
     async def get_image_caption(
         self,
@@ -111,52 +181,217 @@ class LongTermMemory:
 
         return False
 
+    async def _render_group_message(
+        self,
+        event: AstrMessageEvent,
+        cfg: dict,
+        sender_name: str | None = None,
+    ) -> str:
+        """Render one group message in the legacy LTM style."""
+        datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
+        display_name = sender_name or event.get_sender_name() or event.get_sender_id()
+        parts = [f"[{display_name}/{datetime_str}]: "]
+
+        for comp in event.get_messages():
+            if isinstance(comp, Plain):
+                parts.append(f" {comp.text}")
+            elif isinstance(comp, Image):
+                if cfg["image_caption"]:
+                    try:
+                        url = comp.url if comp.url else comp.file
+                        if not url:
+                            raise Exception("图片 URL 为空")
+                        caption = await self.get_image_caption(
+                            url,
+                            cfg["image_caption_provider_id"],
+                            cfg["image_caption_prompt"],
+                        )
+                        parts.append(f" [Image: {caption}]")
+                    except Exception as e:
+                        logger.error(f"获取图片描述失败: {e}")
+                        parts.append(" [Image]")
+                else:
+                    parts.append(" [Image]")
+            elif isinstance(comp, At):
+                parts.append(f" [At: {comp.name or comp.qq}]")
+            else:
+                comp_type = getattr(comp, "type", comp.__class__.__name__)
+                parts.append(f" [{comp_type}]")
+
+        return "".join(parts)
+
+    async def _components_to_dict(self, components) -> list[dict]:
+        content = []
+        for comp in components:
+            try:
+                content.append(await self._component_to_json_safe_dict(comp))
+            except Exception as e:
+                logger.warning(f"Failed to serialize group flow message component: {e}")
+        return content
+
+    async def _component_to_json_safe_dict(self, comp) -> dict:
+        if hasattr(comp, "to_dict"):
+            data = comp.to_dict()
+            if inspect.isawaitable(data):
+                data = await data
+        elif hasattr(comp, "toDict"):
+            data = comp.toDict()
+        else:
+            data = {"type": comp.__class__.__name__, "data": {}}
+        return await self._json_safe(data)
+
+    async def _json_safe(self, value):
+        if hasattr(value, "to_dict"):
+            return await self._component_to_json_safe_dict(value)
+        if hasattr(value, "toDict"):
+            return await self._json_safe(value.toDict())
+        if isinstance(value, dict):
+            return {k: await self._json_safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [await self._json_safe(item) for item in value]
+        return value
+
+    async def _message_content_to_dict(self, event: AstrMessageEvent) -> list[dict]:
+        return await self._components_to_dict(event.get_messages())
+
+    def _truncate_flow_message_text(self, message: str, max_chars: int) -> str:
+        if max_chars <= 0:
+            return message
+        return message[:max_chars]
+
+    async def _record_flow_message(
+        self,
+        event: AstrMessageEvent,
+        rendered_text: str,
+        role: str = "user",
+        content: list[dict] | None = None,
+    ) -> int | None:
+        cfg = self.cfg(event)
+        if not self._is_flow_mode(event, cfg):
+            return None
+        flow_session_id = self._flow_session_id(event)
+        record = await self.context.group_message_flow_manager.insert_record(
+            platform_id=event.get_platform_id(),
+            flow_session_id=flow_session_id,
+            group_id=event.get_group_id() or None,
+            sender_id=event.get_sender_id() if role == "user" else event.get_self_id(),
+            sender_name=event.get_sender_name() if role == "user" else "You",
+            role=role,
+            content=content
+            if content is not None
+            else await self._message_content_to_dict(event),
+            rendered_text=rendered_text,
+        )
+        await self.context.group_message_flow_manager.prune_records(
+            flow_session_id,
+            cfg["flow_max_records"],
+        )
+        return record.id
+
     async def handle_message(self, event: AstrMessageEvent) -> None:
         """仅支持群聊"""
         if event.get_message_type() == MessageType.GROUP_MESSAGE:
-            datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
-
-            parts = [f"[{event.message_obj.sender.nickname}/{datetime_str}]: "]
-
             cfg = self.cfg(event)
+            final_message = await self._render_group_message(event, cfg)
 
-            for comp in event.get_messages():
-                if isinstance(comp, Plain):
-                    parts.append(f" {comp.text}")
-                elif isinstance(comp, Image):
-                    if cfg["image_caption"]:
-                        try:
-                            url = comp.url if comp.url else comp.file
-                            if not url:
-                                raise Exception("图片 URL 为空")
-                            caption = await self.get_image_caption(
-                                url,
-                                cfg["image_caption_provider_id"],
-                                cfg["image_caption_prompt"],
-                            )
-                            parts.append(f" [Image: {caption}]")
-                        except Exception as e:
-                            logger.error(f"获取图片描述失败: {e}")
-                    else:
-                        parts.append(" [Image]")
-                elif isinstance(comp, At):
-                    parts.append(f" [At: {comp.name}]")
+            if cfg["enable_active_reply"] or not self._is_flow_mode(event, cfg):
+                self._append_sliding_message(event, final_message, cfg["max_cnt"])
 
-            final_message = "".join(parts)
-            logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
-            self.session_chats[event.unified_msg_origin].append(final_message)
-            if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:
-                self.session_chats[event.unified_msg_origin].pop(0)
+            if self._is_flow_mode(event, cfg):
+                record_id = await self._record_flow_message(event, final_message)
+                if record_id:
+                    event.set_extra("_group_message_flow_record_id", record_id)
+
+    async def _inject_flow_delta(
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+        cfg: dict,
+    ) -> None:
+        if not req.conversation:
+            return
+        flow_session_id = self._flow_session_id(event)
+        cursor = await self.context.group_message_flow_manager.get_cursor(
+            flow_session_id,
+            req.conversation.cid,
+        )
+        after_id = cursor.last_record_id if cursor else 0
+        current_record_id = event.get_extra("_group_message_flow_record_id")
+        if isinstance(current_record_id, int) and current_record_id > 0:
+            before_id = current_record_id
+            next_cursor_id = current_record_id
+        else:
+            before_id = None
+            next_cursor_id = (
+                await self.context.group_message_flow_manager.get_latest_record_id(
+                    flow_session_id
+                )
+            )
+
+        records = await self.context.group_message_flow_manager.get_records_after(
+            flow_session_id=flow_session_id,
+            after_id=after_id,
+            before_id=before_id,
+            limit=cfg["flow_max_delta_messages"],
+        )
+        if records:
+            chats_str = "\n---\n".join(
+                self._truncate_flow_message_text(
+                    record.rendered_text,
+                    cfg["flow_max_message_chars"],
+                )
+                for record in records
+            )
+            req.system_prompt += (
+                "\n<group_messages_delta>\n"
+                "You are now in a chatroom. New group messages since the last turn:\n"
+                f"{chats_str}\n"
+                "</group_messages_delta>"
+            )
+
+        event.set_extra(
+            "_group_message_flow_pending_cursor",
+            {
+                "platform_id": event.get_platform_id(),
+                "flow_session_id": flow_session_id,
+                "conversation_id": req.conversation.cid,
+                "last_record_id": next_cursor_id,
+            },
+        )
+
+    async def _commit_pending_flow_cursor(
+        self,
+        event: AstrMessageEvent,
+        llm_resp: LLMResponse,
+    ) -> None:
+        if not llm_resp or llm_resp.role == "err":
+            return
+
+        pending = event.get_extra("_group_message_flow_pending_cursor")
+        if not isinstance(pending, dict):
+            return
+
+        platform_id = str(pending.get("platform_id") or "")
+        flow_session_id = str(pending.get("flow_session_id") or "")
+        conversation_id = str(pending.get("conversation_id") or "")
+        last_record_id = int(pending.get("last_record_id") or 0)
+        if not platform_id or not flow_session_id or not conversation_id:
+            return
+
+        await self.context.group_message_flow_manager.set_cursor(
+            platform_id=platform_id,
+            flow_session_id=flow_session_id,
+            conversation_id=conversation_id,
+            last_record_id=last_record_id,
+        )
 
     async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
         """当触发 LLM 请求前，调用此方法修改 req"""
-        if event.unified_msg_origin not in self.session_chats:
-            return
-
-        chats_str = "\n---\n".join(self.session_chats[event.unified_msg_origin])
-
         cfg = self.cfg(event)
         if cfg["enable_active_reply"]:
+            if event.unified_msg_origin not in self.session_chats:
+                return
+            chats_str = "\n---\n".join(self.session_chats[event.unified_msg_origin])
             prompt = req.prompt
             req.prompt = (
                 f"You are now in a chatroom. The chat history is as follows:\n{chats_str}"
@@ -165,7 +400,12 @@ class LongTermMemory:
                 "You MUST use the SAME language as the chatroom is using."
             )
             req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
+        elif self._is_flow_mode(event, cfg):
+            await self._inject_flow_delta(event, req, cfg)
         else:
+            if event.unified_msg_origin not in self.session_chats:
+                return
+            chats_str = "\n---\n".join(self.session_chats[event.unified_msg_origin])
             req.system_prompt += (
                 "You are now in a chatroom. The chat history is as follows: \n"
             )
@@ -174,6 +414,10 @@ class LongTermMemory:
     async def after_req_llm(
         self, event: AstrMessageEvent, llm_resp: LLMResponse
     ) -> None:
+        cfg = self.cfg(event)
+        if self._is_flow_mode(event, cfg) and not cfg["enable_active_reply"]:
+            await self._commit_pending_flow_cursor(event, llm_resp)
+            return
         if event.unified_msg_origin not in self.session_chats:
             return
 
@@ -182,7 +426,30 @@ class LongTermMemory:
             logger.debug(
                 f"Recorded AI response: {event.unified_msg_origin} | {final_message}"
             )
-            self.session_chats[event.unified_msg_origin].append(final_message)
-            cfg = self.cfg(event)
-            if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:
-                self.session_chats[event.unified_msg_origin].pop(0)
+            self._append_sliding_message(event, final_message, cfg["max_cnt"])
+
+    async def record_bot_message(self, event: AstrMessageEvent) -> None:
+        cfg = self.cfg(event)
+        if not self._is_flow_mode(event, cfg):
+            return
+        if not cfg["flow_record_bot_messages"]:
+            return
+
+        result = event.get_result()
+        if not result or not result.chain:
+            return
+        if result.result_content_type in {
+            ResultContentType.LLM_RESULT,
+            ResultContentType.STREAMING_RESULT,
+            ResultContentType.STREAMING_FINISH,
+        }:
+            return
+
+        datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
+        rendered_text = f"[You/{datetime_str}]: {result.get_plain_text(True)}"
+        await self._record_flow_message(
+            event,
+            rendered_text,
+            role="bot",
+            content=await self._components_to_dict(result.chain),
+        )

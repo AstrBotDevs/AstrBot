@@ -15,6 +15,8 @@ from astrbot.core.db.po import (
     CommandConflict,
     ConversationV2,
     CronJob,
+    GroupMessageFlowCursor,
+    GroupMessageFlowRecord,
     Persona,
     PersonaFolder,
     PlatformMessageHistory,
@@ -252,6 +254,69 @@ class BaseDatabase(abc.ABC):
         message_id: int,
     ) -> PlatformMessageHistory | None:
         """Get a platform message history record by its ID."""
+        ...
+
+    @abc.abstractmethod
+    async def insert_group_message_flow_record(
+        self,
+        platform_id: str,
+        flow_session_id: str,
+        content: list,
+        rendered_text: str,
+        group_id: str | None = None,
+        sender_id: str | None = None,
+        sender_name: str | None = None,
+        role: str = "user",
+    ) -> GroupMessageFlowRecord:
+        """Insert a persisted group message flow record."""
+        ...
+
+    @abc.abstractmethod
+    async def get_group_message_flow_records_after(
+        self,
+        flow_session_id: str,
+        after_id: int,
+        before_id: int | None = None,
+        limit: int = 0,
+    ) -> list[GroupMessageFlowRecord]:
+        """Get recent group message flow records after a cursor, ordered oldest first."""
+        ...
+
+    @abc.abstractmethod
+    async def get_latest_group_message_flow_record_id(
+        self,
+        flow_session_id: str,
+    ) -> int:
+        """Get the latest record ID for a group message flow."""
+        ...
+
+    @abc.abstractmethod
+    async def get_group_message_flow_cursor(
+        self,
+        flow_session_id: str,
+        conversation_id: str,
+    ) -> GroupMessageFlowCursor | None:
+        """Get a conversation cursor for a group message flow."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_group_message_flow_cursor(
+        self,
+        platform_id: str,
+        flow_session_id: str,
+        conversation_id: str,
+        last_record_id: int,
+    ) -> GroupMessageFlowCursor:
+        """Create or update a conversation cursor for a group message flow."""
+        ...
+
+    @abc.abstractmethod
+    async def prune_group_message_flow_records(
+        self,
+        flow_session_id: str,
+        max_records: int,
+    ) -> None:
+        """Keep at most max_records records for a group message flow."""
         ...
 
     @abc.abstractmethod

@@ -17,6 +17,8 @@ from astrbot.core.db.po import (
     CommandConflict,
     ConversationV2,
     CronJob,
+    GroupMessageFlowCursor,
+    GroupMessageFlowRecord,
     Persona,
     PersonaFolder,
     PlatformMessageHistory,
@@ -626,6 +628,161 @@ class SQLiteDatabase(BaseDatabase):
             )
             result = await session.execute(query)
             return result.scalar_one_or_none()
+
+    async def insert_group_message_flow_record(
+        self,
+        platform_id: str,
+        flow_session_id: str,
+        content: list,
+        rendered_text: str,
+        group_id: str | None = None,
+        sender_id: str | None = None,
+        sender_name: str | None = None,
+        role: str = "user",
+    ) -> GroupMessageFlowRecord:
+        """Insert a persisted group message flow record."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                record = GroupMessageFlowRecord(
+                    platform_id=platform_id,
+                    flow_session_id=flow_session_id,
+                    group_id=group_id,
+                    sender_id=sender_id,
+                    sender_name=sender_name,
+                    role=role,
+                    content=content,
+                    rendered_text=rendered_text,
+                )
+                session.add(record)
+                await session.flush()
+                await session.refresh(record)
+                return record
+
+    async def get_group_message_flow_records_after(
+        self,
+        flow_session_id: str,
+        after_id: int,
+        before_id: int | None = None,
+        limit: int = 0,
+    ) -> list[GroupMessageFlowRecord]:
+        """Get recent group message flow records after a cursor, ordered oldest first."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            conditions = [
+                col(GroupMessageFlowRecord.flow_session_id) == flow_session_id,
+                col(GroupMessageFlowRecord.id) > after_id,
+            ]
+            if before_id is not None:
+                conditions.append(col(GroupMessageFlowRecord.id) < before_id)
+            if limit and limit > 0:
+                query = (
+                    select(GroupMessageFlowRecord)
+                    .where(*conditions)
+                    .order_by(desc(GroupMessageFlowRecord.id))
+                    .limit(limit)
+                )
+                result = await session.execute(query)
+                return list(reversed(result.scalars().all()))
+            query = (
+                select(GroupMessageFlowRecord)
+                .where(*conditions)
+                .order_by(col(GroupMessageFlowRecord.id))
+            )
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
+    async def get_latest_group_message_flow_record_id(
+        self,
+        flow_session_id: str,
+    ) -> int:
+        """Get the latest record ID for a group message flow."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(func.max(GroupMessageFlowRecord.id)).where(
+                col(GroupMessageFlowRecord.flow_session_id) == flow_session_id
+            )
+            result = await session.execute(query)
+            return int(result.scalar_one_or_none() or 0)
+
+    async def get_group_message_flow_cursor(
+        self,
+        flow_session_id: str,
+        conversation_id: str,
+    ) -> GroupMessageFlowCursor | None:
+        """Get a conversation cursor for a group message flow."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(GroupMessageFlowCursor).where(
+                col(GroupMessageFlowCursor.flow_session_id) == flow_session_id,
+                col(GroupMessageFlowCursor.conversation_id) == conversation_id,
+            )
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def upsert_group_message_flow_cursor(
+        self,
+        platform_id: str,
+        flow_session_id: str,
+        conversation_id: str,
+        last_record_id: int,
+    ) -> GroupMessageFlowCursor:
+        """Create or update a conversation cursor for a group message flow."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    select(GroupMessageFlowCursor).where(
+                        col(GroupMessageFlowCursor.flow_session_id) == flow_session_id,
+                        col(GroupMessageFlowCursor.conversation_id) == conversation_id,
+                    )
+                )
+                cursor = result.scalar_one_or_none()
+                if cursor:
+                    cursor.platform_id = platform_id
+                    cursor.last_record_id = last_record_id
+                    session.add(cursor)
+                else:
+                    cursor = GroupMessageFlowCursor(
+                        platform_id=platform_id,
+                        flow_session_id=flow_session_id,
+                        conversation_id=conversation_id,
+                        last_record_id=last_record_id,
+                    )
+                    session.add(cursor)
+                await session.flush()
+                await session.refresh(cursor)
+                return cursor
+
+    async def prune_group_message_flow_records(
+        self,
+        flow_session_id: str,
+        max_records: int,
+    ) -> None:
+        """Keep at most max_records records for a group message flow."""
+        if max_records <= 0:
+            return
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                cutoff_result = await session.execute(
+                    select(GroupMessageFlowRecord.id)
+                    .where(
+                        col(GroupMessageFlowRecord.flow_session_id) == flow_session_id
+                    )
+                    .order_by(desc(GroupMessageFlowRecord.id))
+                    .offset(max_records)
+                    .limit(1)
+                )
+                cutoff_id = cutoff_result.scalar_one_or_none()
+                if cutoff_id is None:
+                    return
+                await session.execute(
+                    delete(GroupMessageFlowRecord).where(
+                        col(GroupMessageFlowRecord.flow_session_id) == flow_session_id,
+                        col(GroupMessageFlowRecord.id) <= cutoff_id,
+                    )
+                )
 
     async def create_webchat_thread(
         self,
