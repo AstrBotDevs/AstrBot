@@ -36,6 +36,23 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             base_url=provider_config.get("api_base"),
             timeout=provider_config.get("timeout", NOT_GIVEN),
         )
+        # Optional language hint + prompt to guide Whisper transcription.
+        # Default empty = let Whisper auto-detect (preserves existing behavior).
+        # Users can configure these for higher accuracy on non-English speech.
+        # `.strip() or ""` handles accidental whitespace in YAML config and
+        # accepts a `None` value gracefully (treated as "not configured").
+        # Cast to str before strip() so non-string config values (e.g. an int or
+        # bool a YAML editor accidentally typed) don't AttributeError on init.
+        self.language = str(provider_config.get("language") or "").strip()
+        self.prompt = str(provider_config.get("prompt") or "").strip()
+        # Whisper API defaults to 0 (deterministic). Operators can override
+        # via `temperature` in the provider config; values are clamped by the
+        # API itself (0–1.0 for most models).
+        temp_raw = provider_config.get("temperature", 0)
+        try:
+            self.temperature = float(temp_raw)
+        except (TypeError, ValueError):
+            self.temperature = 0.0
 
         self.set_model(provider_config["model"])
 
@@ -61,6 +78,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         """Only supports mp3, mp4, mpeg, m4a, wav, webm"""
         is_tencent = False
         output_path = None
+        downloaded_path = None  # set when audio_url is fetched from http
 
         if audio_url.startswith("http"):
             if "multimedia.nt.qq.com.cn" in audio_url:
@@ -73,6 +91,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             )
             await download_file(audio_url, path)
             audio_url = path
+            downloaded_path = path
 
         if not os.path.exists(audio_url):
             raise FileNotFoundError(f"文件不存在: {audio_url}")
@@ -116,17 +135,36 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
                 audio_url = output_path
 
-        result = await self.client.audio.transcriptions.create(
-            model=self.model_name,
-            file=("audio.wav", open(audio_url, "rb")),
-        )
+        # Open the audio file and pass the handle through to the OpenAI SDK.
+        # The existing test harness expects a real file-like object (asserts on
+        # `.name` and calls `.close()`), so we keep the SDK contract identical
+        # to the original implementation and add an explicit `finally`-close
+        # so the handle is released before `os.remove(audio_url)`. The
+        # previous code leaked the handle, which caused EBUSY on Windows and
+        # accumulated FDs under POSIX concurrency.
+        audio_file = open(audio_url, "rb")
+        try:
+            result = await self.client.audio.transcriptions.create(
+                model=self.model_name,
+                file=("audio.wav", audio_file),
+                language=self.language or NOT_GIVEN,
+                prompt=self.prompt or NOT_GIVEN,
+                temperature=self.temperature,
+            )
+        finally:
+            audio_file.close()
 
-        # remove temp file
-        if output_path and os.path.exists(output_path):
-            try:
-                os.remove(audio_url)
-            except Exception as e:
-                logger.error(f"Failed to remove temp file {audio_url}: {e}")
+        # Remove any temp files we created: the downloaded source (if any) and
+        # the format-converted output (if any). Previously only `output_path`
+        # was cleaned, leaking the downloaded temp file when no format
+        # conversion was required (e.g. an mp3 / wav URL with no opus/silk/
+        # amr suffix). See gemini-code-assist review on this PR.
+        for tmp in (output_path, downloaded_path):
+            if tmp and os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception as e:
+                    logger.error(f"Failed to remove temp file {tmp}: {e}")
         return result.text
 
     async def terminate(self):
