@@ -247,19 +247,19 @@
       "provider_settings": {
         "max_context_length": {
           "description": "Max Turns Before Compression",
-          "hint": "Limits history turns before any compression strategy is applied; -1 means no turn-based limit"
+          "hint": "Persistent conversation history is truncated or LLM-compressed by the strategy below only after it exceeds this many turns. Request-time contexts are also constrained by this value before sending. -1 means no turn-based limit."
         },
         "dequeue_context_length": {
           "description": "Turns to Discard When Limit Exceeded",
-          "hint": "Number of old conversation turns to discard at once when the turn limit is exceeded; also used as fallback when compression is unavailable"
+          "hint": "When history exceeds 'Max Turns Before Compression' and LLM compression is unavailable, discard this many oldest turns at once. Request-time truncation also reuses this value."
         },
         "context_limit_reached_strategy": {
-          "description": "Handling When Context Approaches Model Limit",
+          "description": "Handling for History Limits or Context Window Pressure",
           "labels": [
             "Truncate by Turns",
             "Compress by LLM"
           ],
-          "hint": "This strategy only triggers after turn-based limiting, when context tokens approach the model's window limit. When 'Truncate by Turns' is selected, the oldest N conversation turns will be discarded based on the 'Turns to Discard When Limit Exceeded' setting above. When 'Compress by LLM' is selected, the specified model will be used for context compression."
+          "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
         },
         "llm_compress_instruction": {
           "description": "Context Compression Instruction",
@@ -271,7 +271,7 @@
         },
         "llm_compress_provider_id": {
           "description": "Model Provider ID for Context Compression",
-          "hint": "When left empty, will fall back to the 'Truncate by Turns' strategy."
+          "hint": "When left empty, the current chat model will be used for compression. If the model is unavailable or compression fails, AstrBot falls back to the 'Truncate by Turns' strategy."
         },
         "fallback_max_context_tokens": {
           "description": "Fallback context window size",
@@ -985,9 +985,6 @@
         "group_icl_enable": {
           "description": "Enable Group Chat Context Awareness"
         },
-        "group_message_max_cnt": {
-          "description": "Maximum Message Count"
-        },
         "image_caption": {
           "description": "Auto-understand Images",
           "hint": "Requires setting a group chat image caption model."
@@ -995,6 +992,54 @@
         "image_caption_provider_id": {
           "description": "Group Chat Image Caption Model",
           "hint": "Used for image understanding in group chat context awareness, configured separately from the default image caption model."
+        },
+        "history_tool_result_truncate": {
+          "description": "Truncate Historical Tool Output",
+          "hint": "Only affects group chat LTM history, not the current tool call round's full reasoning."
+        },
+        "history_tool_result_max_chars": {
+          "description": "Historical Tool Output Truncation Limit",
+          "hint": "Maximum characters per tool output written to group chat history, default 8192."
+        },
+        "ltm_compaction_strategy": {
+          "description": "LTM Context Compaction Strategy",
+          "hint": "truncate: keep only recent rounds; llm_summary: use LLM to produce a long-term memory summary."
+        },
+        "ltm_max_rounds": {
+          "description": "LTM Max Retained Rounds",
+          "hint": "When truncate strategy is active, drop rounds beyond this limit. Default 80."
+        },
+        "ltm_truncate_drop_rounds": {
+          "description": "Truncate Drop Rounds",
+          "hint": "When truncate strategy triggers, drop this many rounds from the front. Default 50."
+        },
+        "ltm_summary_trigger_rounds": {
+          "description": "Summary Trigger Rounds",
+          "hint": "Trigger LLM summary compaction when rounds exceed this. Default 80."
+        },
+        "ltm_summary_keep_recent_rounds": {
+          "description": "Recent Rounds to Keep (Summary)",
+          "hint": "Under llm_summary strategy, keep this many recent rounds precise. Default 30."
+        },
+        "ltm_summary_provider_id": {
+          "description": "LTM Summary Model",
+          "hint": "Model used for llm_summary compaction. Leave empty to use the current chat model."
+        },
+        "ltm_summary_prompt": {
+          "description": "LTM Summary Prompt",
+          "hint": "Custom summary prompt for llm_summary strategy. Keep unchanged to use the built-in default."
+        },
+        "ltm_raw_records_max_bytes": {
+          "description": "Raw Message Buffer Memory Limit",
+          "hint": "Maximum bytes for the unprocessed message buffer per group. Prevents memory overflow in groups where the bot hasn't been @-mentioned for a long time. Default 500000 (500KB)."
+        },
+        "ltm_max_msgs_per_user_segment": {
+          "description": "User segment max messages",
+          "hint": "Maximum number of group messages between two @-mentions to retain when merging into one user segment. Default 50. Works simultaneously with the character cap — first limit hit stops accumulation. At least one message is always kept."
+        },
+        "ltm_max_chars_per_user_segment": {
+          "description": "User segment max characters",
+          "hint": "Maximum characters of group messages between two @-mentions to retain when merging into one user segment. Default 3000. Works simultaneously with the message cap — first limit hit stops accumulation. At least one message is always kept."
         },
         "active_reply": {
           "enable": {
