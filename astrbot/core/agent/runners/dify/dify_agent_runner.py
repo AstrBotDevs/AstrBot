@@ -1,5 +1,6 @@
 import base64
 import os
+import re
 import sys
 import typing as T
 
@@ -192,12 +193,14 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
 
                         # 如果是流式响应，发送增量数据
                         if self.streaming and chunk["answer"]:
-                            yield AgentResponse(
-                                type="streaming_delta",
-                                data=AgentResponseData(
-                                    chain=MessageChain().message(chunk["answer"])
-                                ),
-                            )
+                            delta = self._strip_think_tags(chunk["answer"])
+                            if delta:
+                                yield AgentResponse(
+                                    type="streaming_delta",
+                                    data=AgentResponseData(
+                                        chain=MessageChain().message(delta)
+                                    ),
+                                )
                     elif chunk["event"] == "message_end":
                         logger.debug("Dify message end")
                         break
@@ -279,11 +282,23 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             data=AgentResponseData(chain=chain),
         )
 
+    @staticmethod
+    def _strip_think_tags(text: str) -> str:
+        """Remove <think>...</think> blocks and orphan </think> tags from text.
+
+        Some models (e.g. DeepSeek-R1) embed chain-of-thought inside <think> tags
+        even when thinking mode is disabled on the Dify side. This mirrors the
+        same cleanup done in openai_source._parse_openai_completion.
+        """
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+        text = re.sub(r"</think>\s*$", "", text)
+        return text.strip()
+
     async def parse_dify_result(self, chunk: dict | str) -> MessageChain:
         """解析 Dify 的响应结果"""
         if isinstance(chunk, str):
-            # Chat
-            return MessageChain(chain=[Comp.Plain(chunk)])
+            # Chat — strip any <think> tags the underlying model may have emitted
+            return MessageChain(chain=[Comp.Plain(self._strip_think_tags(chunk))])
 
         async def parse_file(item: dict):
             match item["type"]:
@@ -303,8 +318,8 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         output = chunk["data"]["outputs"][self.workflow_output_key]
         chains = []
         if isinstance(output, str):
-            # 纯文本输出
-            chains.append(Comp.Plain(output))
+            # 纯文本输出，过滤 <think> 标签
+            chains.append(Comp.Plain(self._strip_think_tags(output)))
         elif isinstance(output, list):
             # 主要适配 Dify 的 HTTP 请求结点的多模态输出
             for item in output:
@@ -313,10 +328,10 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     not isinstance(item, dict)
                     or item.get("dify_model_identity", "") != "__dify__file__"
                 ):
-                    chains.append(Comp.Plain(str(output)))
+                    chains.append(Comp.Plain(self._strip_think_tags(str(output))))
                     break
         else:
-            chains.append(Comp.Plain(str(output)))
+            chains.append(Comp.Plain(self._strip_think_tags(str(output))))
 
         # scan file
         files = chunk["data"].get("files", [])
