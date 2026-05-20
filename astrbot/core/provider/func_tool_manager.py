@@ -146,6 +146,24 @@ PY_TO_JSON_TYPE = {
 FuncTool = FunctionTool
 
 
+def _modelscope_mcp_transport_from_url_info(url_info: Mapping[str, Any]) -> str:
+    for key in ("transport", "transport_type", "type", "protocol"):
+        raw_value = url_info.get(key)
+        if isinstance(raw_value, Mapping):
+            raw_value = raw_value.get("type") or raw_value.get("name")
+        if isinstance(raw_value, str):
+            value = raw_value.strip().lower().replace("-", "_").replace(" ", "_")
+            if value in {"streamable_http", "streamablehttp", "http"}:
+                return "streamable_http"
+            if value in {"sse", "server_sent_events"}:
+                return "sse"
+
+    path = urllib.parse.urlparse(str(url_info.get("url", ""))).path.rstrip("/").lower()
+    if path.endswith("/sse"):
+        return "sse"
+    return "streamable_http"
+
+
 def _prepare_config(config: dict) -> dict:
     """准备配置，处理嵌套格式"""
     if config.get("mcpServers"):
@@ -949,7 +967,9 @@ class FunctionToolManager:
                             # 添加到配置中(同名会覆盖)
                             local_mcp_config["mcpServers"][server_name] = {
                                 "url": server_url,
-                                "transport": "sse",
+                                "transport": _modelscope_mcp_transport_from_url_info(
+                                    url_info
+                                ),
                                 "active": True,
                                 "provider": "modelscope",
                             }
