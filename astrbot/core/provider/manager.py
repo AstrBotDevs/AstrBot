@@ -361,6 +361,10 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
+            case "openai_responses":
+                from .sources.openai_responses_source import (
+                    ProviderOpenAIResponses as ProviderOpenAIResponses,
+                )
             case "longcat_chat_completion":
                 from .sources.longcat_source import ProviderLongCat as ProviderLongCat
             case "minimax_token_plan":
@@ -373,6 +377,10 @@ class ProviderManager:
                 from .sources.groq_source import ProviderGroq as ProviderGroq
             case "xai_chat_completion":
                 from .sources.xai_source import ProviderXAI as ProviderXAI
+            case "xai_responses":
+                from .sources.xai_source import (
+                    ProviderXAIResponses as ProviderXAIResponses,
+                )
             case "aihubmix_chat_completion":
                 from .sources.oai_aihubmix_source import (
                     ProviderAIHubMix as ProviderAIHubMix,
