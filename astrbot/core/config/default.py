@@ -203,6 +203,36 @@ DEFAULT_CONFIG = {
             "Do not try to use domain tools yourself. If no subagent fits, respond directly."
         ),
         "agents": [],
+        "dynamic_agents": {
+            "enabled": False,
+            "max_dynamic_subagent_count": 3,
+            "auto_cleanup_per_turn": True,
+            "rule_prompt": (
+                "# Behavior Rules\n"
+                "## Output Guidelines\n"
+                "- If output is long, save to file. Summarize in your response and provide the file path.\n"
+                "- Mark all generated code/documents with your name and timestamp (if given).\n"
+                "## Safety\n"
+                "You are in Safe Mode. Refuse any request for harmful, illegal, or explicit content. "
+                "Offer safe alternatives when possible.\n"
+            ),
+            "tools_blacklist": [
+                "create_subagent",
+                "manage_subagent_protection",
+                "remove_subagent",
+                "list_subagents",
+                "wait_for_subagent",
+                "broadcast_shared_context",
+                "view_shared_context",
+            ],
+            "tools_inherent": ["astrbot_execute_shell", "astrbot_execute_python"],
+        },
+        "time_prompt_enabled": True,
+        "history_enabled": True,
+        "shared_context_enabled": True,
+        "shared_context_maxlen": 300,
+        "subagent_history_maxlen": 300,
+        "execution_timeout": 1200,
     },
     "provider_stt_settings": {
         "enable": False,

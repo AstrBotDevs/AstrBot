@@ -46,6 +46,8 @@ from astrbot.core.skills.skill_manager import (
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
+from astrbot.core.subagent_manager import SubAgentManager
+from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.tools.computer_tools import (
     AnnotateExecutionTool,
     BrowserBatchExecTool,
@@ -537,6 +539,9 @@ async def _ensure_persona_and_skills(
         for tool in so.handoffs:
             req.func_tool.add_tool(tool)
 
+        # add subagent manager tools
+        await _apply_subagent_manager_tools(plugin_context.get_config(), req, event, so)
+
         # check duplicates
         if remove_dup:
             handoff_names = {tool.name for tool in so.handoffs}
@@ -550,8 +555,14 @@ async def _ensure_persona_and_skills(
             .get("subagent_orchestrator", {})
             .get("router_system_prompt", "")
         ).strip()
+
         if router_prompt:
-            req.system_prompt += f"\n{router_prompt}\n"
+            dynamic_cfg = orch_cfg.get(
+                "dynamic_agents", {}
+            )  # 未启用dynamic时才注入router_prompt，否则由subagent_manager注入
+            if not dynamic_cfg.get("enabled", False):
+                req.system_prompt += f"\n{router_prompt}\n"
+
     try:
         event.trace.record(
             "sel_persona",
@@ -981,6 +992,95 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
         )
 
 
+async def _apply_subagent_manager_tools(
+    cfg: dict,
+    req: ProviderRequest,
+    event: AstrMessageEvent,
+    so: SubAgentOrchestrator,
+) -> None:
+    """Apply SubAgent tools and system prompt
+
+    When enabled:
+    1. Inject subagent capability prompt into system prompt
+    2. Register SubAgent management tools
+    3. Register session's transfer_to_xxx tools
+    """
+    orch_cfg = cfg.get("subagent_orchestrator", {})
+
+    if not orch_cfg.get("main_enable", False):
+        return
+
+    if req.func_tool is None:
+        req.func_tool = ToolSet()
+
+    try:
+        from astrbot.core.subagent_tools import (
+            BROADCAST_SHARED_CONTEXT_TOOL,
+            CREATE_SUBAGENT_TOOL,
+            LIST_SUBAGENTS_TOOL,
+            MANAGE_SUBAGENT_PROTECTION_TOOL,
+            REMOVE_SUBAGENT_TOOL,
+            VIEW_SHARED_CONTEXT_TOOL,
+            WAIT_FOR_SUBAGENT_TOOL,
+        )
+
+        # Configure SubAgentManager with settings from subagent_orchestrator
+        dynamic_cfg = orch_cfg.get("dynamic_agents", {})
+        enable_dynamic = dynamic_cfg.get("enabled", False)
+        history_enabled = orch_cfg.get("history_enabled", True)
+        shared_context_enabled = orch_cfg.get("shared_context_enabled", False)
+        SubAgentManager.configure(
+            max_subagent_count=dynamic_cfg.get("max_dynamic_subagent_count", 3),
+            auto_cleanup_per_turn=dynamic_cfg.get("auto_cleanup_per_turn", True),
+            shared_context_enabled=shared_context_enabled,
+            shared_context_maxlen=orch_cfg.get("shared_context_maxlen", 300),
+            subagent_history_maxlen=orch_cfg.get("subagent_history_maxlen", 300),
+            tools_blacklist=dynamic_cfg.get("tools_blacklist", None),
+            tools_inherent=dynamic_cfg.get("tools_inherent", None),
+            execution_timeout=orch_cfg.get("execution_timeout", 1200),
+            history_enabled=history_enabled,
+            rule_prompt=dynamic_cfg.get("rule_prompt", ""),
+            time_prompt_enabled=orch_cfg.get("time_prompt_enabled", True),
+            timezone=cfg.get("timezone", None),
+        )
+
+        # Enable subagent history and shared context if configured
+        SubAgentManager.set_history_enabled(event.unified_msg_origin, history_enabled)
+        SubAgentManager.set_shared_context_enabled(
+            event.unified_msg_origin, shared_context_enabled
+        )
+
+        session_id = event.unified_msg_origin
+        # Register static subagents from config into SubAgentManager for unified management
+        so.register_static_subagents_to_manager(session_id)
+
+        # Register dynamic subagent management tools (only when dynamic creation is enabled)
+        # Always register `wait_for_subagent` for better background task running
+        req.func_tool.add_tool(WAIT_FOR_SUBAGENT_TOOL)
+        if enable_dynamic:
+            req.func_tool.add_tool(CREATE_SUBAGENT_TOOL)
+            req.func_tool.add_tool(REMOVE_SUBAGENT_TOOL)
+            req.func_tool.add_tool(LIST_SUBAGENTS_TOOL)
+            # if SubAgentManager.is_history_enabled():   #
+            #     req.func_tool.add_tool(RESET_SUBAGENT_TOOL)
+            if SubAgentManager.is_auto_cleanup_per_turn():
+                req.func_tool.add_tool(MANAGE_SUBAGENT_PROTECTION_TOOL)
+            if SubAgentManager.is_shared_context_enabled():
+                req.func_tool.add_tool(VIEW_SHARED_CONTEXT_TOOL)
+                req.func_tool.add_tool(BROADCAST_SHARED_CONTEXT_TOOL)
+
+            # Inject subagent capability system prompt for dynamic creation
+            task_router_prompt = SubAgentManager.build_task_router_prompt(session_id)
+            req.system_prompt = f"{req.system_prompt or ''}\n{task_router_prompt}\n"
+
+        # Register dynamically created handoff tools
+        dynamic_handoffs = SubAgentManager.get_handoff_tools_for_session(session_id)
+        for handoff in dynamic_handoffs:
+            req.func_tool.add_tool(handoff)
+    except ImportError as e:
+        logger.warning(f"[SubAgent] Cannot import module: {e}")
+
+
 def _apply_sandbox_tools(
     config: MainAgentBuildConfig,
     req: ProviderRequest,
@@ -1385,8 +1485,7 @@ async def build_main_agent(
 
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(
-        context=plugin_context,
-        event=event,
+        context=plugin_context, event=event, extra={"main_agent_runner": agent_runner}
     )
 
     if config.add_cron_tools:
