@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import os
 import sys
 from pathlib import Path
@@ -289,6 +290,51 @@ class SequentialToolProvider(MockProvider):
 class MockHandoffProvider(MockToolCallProvider):
     def __init__(self, handoff_tool_name: str):
         super().__init__(handoff_tool_name, {"input": "delegate this task"})
+
+
+class SilentHandoffThenFinalProvider(MockProvider):
+    def __init__(self, handoff_tool_name: str, include_mode: bool = True):
+        super().__init__()
+        self.handoff_tool_name = handoff_tool_name
+        self.include_mode = include_mode
+        self.received_contexts = []
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        self.received_contexts.append(copy.deepcopy(kwargs.get("contexts")))
+        if self.call_count == 1:
+            tool_args = {"input": "delegate this task"}
+            if self.include_mode:
+                tool_args["mode"] = "silent"
+            return LLMResponse(
+                role="assistant",
+                completion_text="",
+                tools_call_name=[self.handoff_tool_name],
+                tools_call_args=[tool_args],
+                tools_call_ids=["call_silent_handoff"],
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+        return LLMResponse(
+            role="assistant",
+            completion_text="main final answer",
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class ImmediateSubagentContext:
+    def __init__(self):
+        self.tool_loop_agent_calls = []
+
+    async def get_current_chat_provider_id(self, _umo: str) -> str:
+        return "provider-id"
+
+    def get_config(self, **_kwargs):
+        return {"provider_settings": {}}
+
+    async def tool_loop_agent(self, **kwargs):
+        self.tool_loop_agent_calls.append(kwargs)
+        return LLMResponse(role="assistant", completion_text="subagent private result")
 
 
 class MockHooks(BaseAgentRunHooks):
@@ -1070,6 +1116,106 @@ async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
 
     with pytest.raises(StopAsyncIteration):
         await step_iter.__anext__()
+
+
+@pytest.mark.asyncio
+async def test_silent_handoff_returns_result_to_main_agent_without_visible_tool_events(
+    mock_hooks,
+):
+    subagent_context = ImmediateSubagentContext()
+    event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
+    handoff_tool = HandoffTool(
+        Agent(name="subagent", instructions="subagent-instructions", tools=[]),
+        tool_description="Delegate tasks to the subagent.",
+    )
+    provider = SilentHandoffThenFinalProvider(handoff_tool.name)
+    request = ProviderRequest(
+        prompt="delegate privately",
+        func_tool=ToolSet(tools=[handoff_tool]),
+        contexts=[],
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(
+            context=SimpleNamespace(event=event, context=subagent_context)
+        ),
+        tool_executor=FunctionToolExecutor(),
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = []
+    async for response in runner.step_until_done(5):
+        responses.append(response)
+
+    assert subagent_context.tool_loop_agent_calls
+    assert provider.call_count == 2
+    assert runner.done() is True
+    assert runner.get_final_llm_resp().completion_text == "main final answer"
+    assert [response.type for response in responses] == ["llm_result"]
+
+    tool_messages = [
+        message
+        for message in runner.run_context.messages
+        if getattr(message, "role", None) == "tool"
+    ]
+    tool_call_messages = [
+        message
+        for message in runner.run_context.messages
+        if getattr(message, "tool_calls", None)
+    ]
+    assert len(tool_messages) == 1
+    assert tool_messages[0]._no_save is True
+    assert len(tool_call_messages) == 1
+    assert tool_call_messages[0]._no_save is True
+    assert tool_messages[0].content == "subagent private result"
+    assert provider.received_contexts[1][-1].content == "subagent private result"
+
+
+@pytest.mark.asyncio
+async def test_default_silent_handoff_mode_hides_tool_events_when_mode_omitted(
+    mock_hooks,
+):
+    subagent_context = ImmediateSubagentContext()
+    event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
+    handoff_tool = HandoffTool(
+        Agent(name="subagent", instructions="subagent-instructions", tools=[]),
+        tool_description="Delegate tasks to the subagent.",
+    )
+    handoff_tool.default_handoff_mode = "silent"
+    provider = SilentHandoffThenFinalProvider(handoff_tool.name, include_mode=False)
+    request = ProviderRequest(
+        prompt="delegate privately by default",
+        func_tool=ToolSet(tools=[handoff_tool]),
+        contexts=[],
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(
+            context=SimpleNamespace(event=event, context=subagent_context)
+        ),
+        tool_executor=FunctionToolExecutor(),
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = []
+    async for response in runner.step_until_done(5):
+        responses.append(response)
+
+    assert provider.call_count == 2
+    assert runner.get_final_llm_resp().completion_text == "main final answer"
+    assert [response.type for response in responses] == ["llm_result"]
+    assert any(
+        getattr(message, "role", None) == "tool" and message._no_save
+        for message in runner.run_context.messages
+    )
 
 
 @pytest.mark.asyncio

@@ -345,8 +345,27 @@ def bind_checkpoint_messages(history: list[dict]) -> list[Message]:
 def dump_messages_with_checkpoints(messages: list[Message]) -> list[dict]:
     """Dump runtime messages and reinsert bound checkpoint segments."""
     dumped: list[dict] = []
+    hidden_tool_call_ids = {
+        message.tool_call_id
+        for message in messages
+        if message.role == "tool" and message._no_save and message.tool_call_id
+    }
     for message in messages:
+        if message._no_save:
+            continue
         message_data = message.model_dump()
+        if message_data.get("role") == "assistant" and message_data.get("tool_calls"):
+            visible_tool_calls = [
+                tool_call
+                for tool_call in message_data["tool_calls"]
+                if tool_call.get("id") not in hidden_tool_call_ids
+            ]
+            if visible_tool_calls:
+                message_data["tool_calls"] = visible_tool_calls
+            else:
+                message_data.pop("tool_calls", None)
+                if message_data.get("content") is None:
+                    continue
         if isinstance(message.content, list):
             message_data["content"] = [
                 part.model_dump()
