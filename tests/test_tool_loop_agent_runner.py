@@ -99,6 +99,22 @@ class MockToolExecutor:
         return generator()
 
 
+class MultiYieldToolExecutor:
+    @classmethod
+    def execute(cls, tool, run_context, **tool_args):
+        async def generator():
+            from mcp.types import CallToolResult, TextContent
+
+            yield CallToolResult(
+                content=[TextContent(type="text", text="first partial result")]
+            )
+            yield CallToolResult(
+                content=[TextContent(type="text", text="second partial result")]
+            )
+
+        return generator()
+
+
 class LargeTextToolExecutor:
     """模拟返回超长文本的工具执行器"""
 
@@ -633,6 +649,41 @@ async def test_tool_result_includes_all_calltoolresult_content(
             "mime_type": "image/png",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_async_generator_tool_results_share_one_tool_call_id(
+    runner, mock_provider, provider_request, mock_hooks
+):
+    """Multiple streamed tool results should be merged into one provider result."""
+
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 1
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MultiYieldToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_123"
+
+    content = str(tool_messages[0].content)
+    assert "first partial result" in content
+    assert "second partial result" in content
+    assert content.index("first partial result") < content.index(
+        "second partial result"
+    )
 
 
 @pytest.mark.asyncio
