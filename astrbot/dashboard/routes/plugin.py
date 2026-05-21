@@ -1378,9 +1378,9 @@ class PluginRoute(Route):
                 "i18n_key": page["i18n_key"],
                 "description": "Plugin Page entry",
                 "plugin_name": plugin.name,
-                "plugin_marketplace_name": plugin.name.replace(
+                "plugin_marketplace_name": (plugin.name or "").replace(
                     "_", "-"
-                ),  # 用于市场匹配的名称（减号格式）
+                ),
             }
             for page in pages
         ]
