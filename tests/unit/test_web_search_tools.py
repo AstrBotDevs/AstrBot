@@ -371,6 +371,34 @@ class _FakeFirecrawlSession:
         return self.response
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_cls,provider_setting,kwargs",
+    [
+        (tools.TavilyWebSearchTool, "websearch_tavily_key", {}),
+        (tools.BochaWebSearchTool, "websearch_bocha_key", {"query": None}),
+        (tools.BraveWebSearchTool, "websearch_brave_key", {"query": "   "}),
+        (tools.FirecrawlWebSearchTool, "websearch_firecrawl_key", {"query": ""}),
+        (tools.BaiduWebSearchTool, "websearch_baidu_app_builder_key", {}),
+    ],
+)
+async def test_search_tool_returns_friendly_error_when_query_missing(
+    tool_cls, provider_setting, kwargs
+):
+    """Issue #7499: invalid query inputs must not crash search tools."""
+    tool = tool_cls()
+    settings = {provider_setting: ["test-key"]}
+    if provider_setting == "websearch_baidu_app_builder_key":
+        settings = {provider_setting: "test-key"}
+    context = _context_with_provider_settings(settings)
+
+    result = await tool.call(context, **kwargs)
+
+    assert isinstance(result, str)
+    assert "Error:" in result
+    assert "query" in result.lower()
+
+
 def _context_with_provider_settings(provider_settings):
     config = {"provider_settings": provider_settings}
     agent_context = SimpleNamespace(
