@@ -887,6 +887,7 @@ async def test_plugin_detail_includes_scanned_page_component(
             "i18n_key": f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}",
             "description": "Plugin Page entry",
             "plugin_name": PLUGIN_PAGE_DEMO_NAME,
+            "plugin_marketplace_name": PLUGIN_PAGE_DEMO_NAME.replace("_", "-"),
         }
     ]
 
