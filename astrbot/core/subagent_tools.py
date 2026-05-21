@@ -477,8 +477,11 @@ parameter
 
         task_id = kwargs.get("task_id")  # 可选，不填则获取最新的
         timeout = kwargs.get("timeout", 60)
+        if timeout > 3600 or timeout <= 0:
+            return "Error: timeout is invalid. Must be between 1 and 3600"
         poll_interval = kwargs.get("poll_interval", 5)
-
+        if poll_interval > 60 or poll_interval <= 0:
+            return "Error: poll_interval is invalid. Must be between 1 and 60"
         session_id = context.context.event.unified_msg_origin
         session = SubAgentManager.get_session(session_id)
 
@@ -543,7 +546,7 @@ parameter
             await asyncio.sleep(poll_interval)
 
         target = f"Task {task_id}"
-        return f" Timeout! \nSubAgent '{subagent_name}' has not finished '{target}' in {timeout}s. The task may be still running. You can continue waiting by `wait_for_subagent` again."
+        return f"Timeout! SubAgent '{subagent_name}' has not finished '{target}' in {timeout}s. The task may be still running. You can continue waiting by `wait_for_subagent` again."
 
 
 # Tool instances

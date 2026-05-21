@@ -775,10 +775,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
         while True:
             try:
-                resp = await asyncio.wait_for(
-                    anext(wrapper),
-                    timeout=tool_call_timeout or run_context.tool_call_timeout,
-                )
+                if (
+                    tool.name == "wait_for_subagent"
+                ):  # wait工具有自己的超时，避免受到tool_call_timeout影响
+                    resp = await asyncio.wait_for(
+                        anext(wrapper),
+                        timeout=3600,
+                    )
+                else:
+                    resp = await asyncio.wait_for(
+                        anext(wrapper),
+                        timeout=tool_call_timeout or run_context.tool_call_timeout,
+                    )
                 if resp is not None:
                     if isinstance(resp, mcp.types.CallToolResult):
                         yield resp
