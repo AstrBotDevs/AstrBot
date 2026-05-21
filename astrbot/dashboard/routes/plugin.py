@@ -1269,7 +1269,9 @@ class PluginRoute(Route):
             if plugin.logo_path:
                 logo_url = await self.get_plugin_logo_token(plugin.logo_path)
             _t = {
-                "name": plugin.name.replace("_", "-"),  # 统一转换为减号格式，与市场数据保持一致
+                "name": plugin.name.replace(
+                    "_", "-"
+                ),  # 统一转换为减号格式，与市场数据保持一致
                 "repo": "" if plugin.repo is None else plugin.repo,
                 "author": plugin.author,
                 "desc": plugin.desc,
@@ -1319,7 +1321,9 @@ class PluginRoute(Route):
                 Response()
                 .ok(
                     {
-                        "name": plugin.name.replace("_", "-"),  # 统一转换为减号格式，与市场数据保持一致
+                        "name": plugin.name.replace(
+                            "_", "-"
+                        ),  # 统一转换为减号格式，与市场数据保持一致
                         "repo": "" if plugin.repo is None else plugin.repo,
                         "author": plugin.author,
                         "desc": plugin.desc,
@@ -1371,7 +1375,9 @@ class PluginRoute(Route):
                 "page_name": page["name"],
                 "i18n_key": page["i18n_key"],
                 "description": "Plugin Page entry",
-                "plugin_name": plugin.name.replace("_", "-"),  # 统一转换为减号格式，与市场数据保持一致
+                "plugin_name": plugin.name.replace(
+                    "_", "-"
+                ),  # 统一转换为减号格式，与市场数据保持一致
             }
             for page in pages
         ]
