@@ -116,7 +116,7 @@ class ProviderEdgeTTS(TTSProvider):
                     await mp3_path_obj.unlink()
             except Exception:
                 pass
-            raise RuntimeError(f"FFmpeg 转换失败: {e!s}")
+            raise RuntimeError(f"FFmpeg 转换失败: {e!s}") from e
 
         except Exception as e:
             logger.error(f"音频生成失败: {e!s}")
@@ -126,4 +126,4 @@ class ProviderEdgeTTS(TTSProvider):
                     await mp3_path_obj.unlink()
             except Exception:
                 pass
-            raise RuntimeError(f"音频生成失败: {e!s}")
+            raise RuntimeError(f"音频生成失败: {e!s}") from e

@@ -3,7 +3,7 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
-from ..olayer import ShellComponent
+from astrbot.core.computer.olayer import ShellComponent
 
 _MAX_SEARCH_LINE_COLUMNS = 1000
 
@@ -74,7 +74,7 @@ def _build_grep_command(
 
 
 def _quote_command(command: list[str]) -> str:
-    return " ".join(shlex.quote(part) for part in command)
+    return shlex.join(command)
 
 
 def build_search_command(

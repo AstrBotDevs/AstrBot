@@ -1,7 +1,6 @@
 from astrbot import logger
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
-
-from ..register import register_provider_adapter
 
 MINIMAX_TOKEN_PLAN_MODELS = [
     "MiniMax-M2.7",

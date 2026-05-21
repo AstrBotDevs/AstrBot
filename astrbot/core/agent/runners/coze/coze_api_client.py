@@ -81,7 +81,7 @@ class CozeAPIClient:
                 try:
                     result = await response.json()
                 except json.JSONDecodeError:
-                    raise Exception(f"文件上传响应解析失败: {response_text}")
+                    raise Exception(f"文件上传响应解析失败: {response_text}") from None
 
                 if result.get("code") != 0:
                     raise Exception(f"文件上传失败: {result.get('msg', '未知错误')}")
@@ -90,12 +90,12 @@ class CozeAPIClient:
                 logger.debug(f"[Coze] 图片上传成功,file_id: {file_id}")
                 return file_id
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error("文件上传超时")
-            raise Exception("文件上传超时")
+            raise Exception("文件上传超时") from None
         except Exception as e:
             logger.error(f"文件上传失败: {e!s}")
-            raise Exception(f"文件上传失败: {e!s}")
+            raise Exception(f"文件上传失败: {e!s}") from e
 
     async def download_image(self, image_url: str) -> bytes:
         """下载图片并返回字节数据
@@ -118,7 +118,7 @@ class CozeAPIClient:
 
         except Exception as e:
             logger.error(f"下载图片失败 {image_url}: {e!s}")
-            raise Exception(f"下载图片失败: {e!s}")
+            raise Exception(f"下载图片失败: {e!s}") from e
 
     async def chat_messages(
         self,
@@ -203,10 +203,10 @@ class CozeAPIClient:
                                     except json.JSONDecodeError:
                                         event_data = {"content": data_str}
 
-        except asyncio.TimeoutError:
-            raise Exception(f"Coze API 流式请求超时 ({timeout}秒)")
+        except TimeoutError:
+            raise Exception(f"Coze API 流式请求超时 ({timeout}秒)") from None
         except Exception as e:
-            raise Exception(f"Coze API 流式请求失败: {e!s}")
+            raise Exception(f"Coze API 流式请求失败: {e!s}") from e
 
     async def clear_context(self, conversation_id: str):
         """清空会话上下文
@@ -234,12 +234,12 @@ class CozeAPIClient:
                 try:
                     return json.loads(response_text)
                 except json.JSONDecodeError:
-                    raise Exception("Coze API 返回非JSON格式")
+                    raise Exception("Coze API 返回非JSON格式") from None
 
-        except asyncio.TimeoutError:
-            raise Exception("Coze API 请求超时")
+        except TimeoutError:
+            raise Exception("Coze API 请求超时") from None
         except aiohttp.ClientError as e:
-            raise Exception(f"Coze API 请求失败: {e!s}")
+            raise Exception(f"Coze API 请求失败: {e!s}") from e
 
     async def get_message_list(
         self,
@@ -275,7 +275,7 @@ class CozeAPIClient:
 
         except Exception as e:
             logger.error(f"获取Coze消息列表失败: {e!s}")
-            raise Exception(f"获取Coze消息列表失败: {e!s}")
+            raise Exception(f"获取Coze消息列表失败: {e!s}") from e
 
     async def close(self) -> None:
         """关闭会话"""
@@ -299,7 +299,7 @@ if __name__ == "__main__":
             async with await anyio.open_file("README.md", "rb") as f:
                 file_data = await f.read()
             file_id = await client.upload_file(file_data)
-            async for event in client.chat_messages(
+            async for _event in client.chat_messages(
                 bot_id=bot_id,
                 user_id="test_user",
                 additional_messages=[

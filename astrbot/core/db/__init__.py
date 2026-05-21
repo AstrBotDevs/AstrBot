@@ -55,6 +55,7 @@ class BaseDatabase(abc.ABC):
             expire_on_commit=False,
         )
 
+    @abc.abstractmethod
     async def initialize(self) -> None:
         """初始化数据库连接"""
 

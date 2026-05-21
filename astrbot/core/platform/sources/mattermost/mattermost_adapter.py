@@ -18,8 +18,8 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
 
-from ...register import register_platform_adapter
 from .client import MattermostClient
 from .mattermost_event import MattermostMessageEvent
 

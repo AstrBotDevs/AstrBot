@@ -57,6 +57,7 @@ class AbstractProvider(abc.ABC):
         )
         return meta
 
+    @abc.abstractmethod
     async def test(self) -> None:
         """Test the provider is a
 
@@ -366,7 +367,7 @@ class EmbeddingProvider(AbstractProvider):
                             failed_batches.append((batch_idx, batch_texts))
                             raise Exception(
                                 f"批次 {batch_idx} 处理失败,已重试 {max_retries} 次: {e!s}",
-                            )
+                            ) from e
                         await asyncio.sleep(2**attempt)
 
         tasks = []

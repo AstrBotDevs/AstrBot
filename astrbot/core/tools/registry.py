@@ -219,7 +219,8 @@ def builtin_tool(tool_cls: TFunctionTool) -> TFunctionTool: ...
 
 @overload
 def builtin_tool(
-    *, config: dict[str, Any] | None = None,
+    *,
+    config: dict[str, Any] | None = None,
 ) -> Callable[[TFunctionTool], TFunctionTool]: ...
 
 

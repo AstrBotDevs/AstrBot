@@ -254,4 +254,4 @@ def manage_plugin(
             shutil.move(backup_path, target_path)
         raise click.ClickException(
             f"Error {'updating' if is_update else 'installing'} plugin {plugin_name}: {e}",
-        )
+        ) from e

@@ -53,7 +53,9 @@ class GenieTTSProvider(TTSProvider):
                 language=language,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to load character {self.character_name}: {e}")
+            raise RuntimeError(
+                f"Failed to load character {self.character_name}: {e}"
+            ) from e
 
     def support_stream(self) -> bool:
         return True
@@ -84,7 +86,7 @@ class GenieTTSProvider(TTSProvider):
             raise RuntimeError("Genie TTS did not save to file.")
 
         except Exception as e:
-            raise RuntimeError(f"Genie TTS generation failed: {e}")
+            raise RuntimeError(f"Genie TTS generation failed: {e}") from e
 
     async def get_audio_stream(
         self,

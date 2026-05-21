@@ -164,4 +164,4 @@ class ProviderVolcengineTTS(TTSProvider):
         except Exception as e:
             error_details = traceback.format_exc()
             logger.debug(f"火山引擎 TTS 异常详情: {error_details}")
-            raise Exception(f"火山引擎 TTS 异常: {e!s}")
+            raise Exception(f"火山引擎 TTS 异常: {e!s}") from e

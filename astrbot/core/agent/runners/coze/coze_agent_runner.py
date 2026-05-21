@@ -1,12 +1,12 @@
 import base64
 import json
-import sys
-from typing import Any
+from typing import Any, override
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.message import is_checkpoint_message
 from astrbot.core.agent.response import AgentResponse, AgentResponseData
 from astrbot.core.agent.run_context import ContextWrapper, TContext
 from astrbot.core.agent.runners.base import AgentState, BaseAgentRunner
@@ -18,17 +18,7 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.provider.provider import Provider
 
-from ...hooks import BaseAgentRunHooks
-from ...message import is_checkpoint_message
-from ...response import AgentResponseData
-from ...run_context import ContextWrapper, TContext
-from ..base import AgentResponse, AgentState, BaseAgentRunner
 from .coze_api_client import CozeAPIClient
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 class CozeAgentRunner(BaseAgentRunner[TContext]):
@@ -375,7 +365,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
         except Exception as e:
             logger.error(f"处理图片失败 {image_url}: {e!s}")
-            raise Exception(f"处理图片失败: {e!s}")
+            raise Exception(f"处理图片失败: {e!s}") from e
 
     @override
     def done(self) -> bool:

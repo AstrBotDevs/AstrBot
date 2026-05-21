@@ -26,7 +26,7 @@ class StarHandlerRegistry(Generic[T]):
         self._handlers.sort(key=lambda h: -h.extras_configs["priority"])
 
     def _print_handlers(self) -> None:
-        for handler in self._handlers:
+        for _handler in self._handlers:
             pass
 
     @overload

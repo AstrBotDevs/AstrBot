@@ -111,7 +111,7 @@ class KookBaseReceiveDataClass(BaseModel):
 
     def to_dict(
         self,
-        mode: Literal["json", "python"] | str = "json",
+        mode: str = "json",
         by_alias=True,
         exclude_none=False,
         exclude_unset=True,
@@ -151,7 +151,7 @@ class KookBaseSendDataClass(KookBaseReceiveDataClass):
 
     def to_dict(
         self,
-        mode: Literal["json", "python"] | str = "json",
+        mode: str = "json",
         by_alias=True,
         exclude_none=True,
         exclude_unset=False,

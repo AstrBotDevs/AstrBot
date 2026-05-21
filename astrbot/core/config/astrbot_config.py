@@ -228,8 +228,8 @@ class AstrBotConfig(dict):
         try:
             del self[key]
             self.save_config()
-        except KeyError:
-            raise AttributeError(f"没有找到 Key: '{key}'")
+        except KeyError as err:
+            raise AttributeError(f"没有找到 Key: '{key}'") from err
 
     def __setattr__(self, key, value) -> None:
         self[key] = value

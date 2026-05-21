@@ -797,8 +797,10 @@ class AstrBotImporter:
                             logger.warning(f"媒体文件路径越界，已跳过: {target_path}")
                             continue
                         target_path.parent.mkdir(parents=True, exist_ok=True)
-                        with zf.open(name) as src, open(target_path, "wb") as dst:
-                            dst.write(src.read())
+                        with zf.open(name) as src:
+                            content = src.read()
+                        async with await anyio.open_file(target_path, "wb") as dst:
+                            await dst.write(content)
                     except Exception as e:
                         result.add_warning(f"导入媒体文件 {name} 失败: {e}")
 
@@ -864,8 +866,10 @@ class AstrBotImporter:
                         continue
 
                     target_path.parent.mkdir(parents=True, exist_ok=True)
-                    with zf.open(name) as src, open(target_path, "wb") as dst:
-                        dst.write(src.read())
+                    with zf.open(name) as src:
+                        content = src.read()
+                    async with await anyio.open_file(target_path, "wb") as dst:
+                        await dst.write(content)
                     count += 1
                 except Exception as e:
                     logger.warning(f"导入附件 {name} 失败: {e}")

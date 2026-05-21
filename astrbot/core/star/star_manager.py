@@ -17,6 +17,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import aiofiles
 import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
@@ -317,7 +318,7 @@ class PluginManager:
         如果 target_plugin 为 None，则检查所有插件的依赖
         """
         plugin_dir = self.plugin_store_path
-        if not os.path.exists(plugin_dir):
+        if not await asyncio.to_thread(os.path.exists, plugin_dir):
             return False
         to_update = []
         if target_plugin:
@@ -336,7 +337,7 @@ class PluginManager:
         plugin_label: str,
     ) -> None:
         requirements_path = os.path.join(plugin_dir_path, "requirements.txt")
-        if not os.path.exists(requirements_path):
+        if not await asyncio.to_thread(os.path.exists, requirements_path):
             return
 
         try:
@@ -961,15 +962,15 @@ class PluginManager:
                     plugin_dir_path,
                     self.conf_schema_fname,
                 )
-                if os.path.exists(plugin_schema_path):
+                if await asyncio.to_thread(os.path.exists, plugin_schema_path):
                     # 加载插件配置
-                    with open(plugin_schema_path, encoding="utf-8") as f:
+                    async with aiofiles.open(plugin_schema_path, encoding="utf-8") as f:
                         plugin_config = AstrBotConfig(
                             config_path=os.path.join(
                                 self.plugin_config_path,
                                 f"{root_dir_name}_config.json",
                             ),
-                            schema=json.loads(f.read()),
+                            schema=json.loads(await f.read()),
                         )
                 logo_path = os.path.join(plugin_dir_path, self.logo_fname)
 
@@ -1149,7 +1150,7 @@ class PluginManager:
                     metadata.activated = False
 
                 # Plugin logo path
-                if os.path.exists(logo_path):
+                if await asyncio.to_thread(os.path.exists, logo_path):
                     metadata.logo_path = logo_path
 
                 assert metadata.module_path, f"插件 {metadata.name} 模块路径为空"
@@ -1268,7 +1269,7 @@ class PluginManager:
             except Exception:
                 logger.warning(traceback.format_exc())
 
-        if os.path.exists(plugin_path):
+        if await asyncio.to_thread(os.path.exists, plugin_path):
             try:
                 remove_dir(plugin_path)
                 logger.warning(f"已清理安装失败的插件目录: {plugin_path}")
@@ -1281,9 +1282,9 @@ class PluginManager:
             self.plugin_config_path,
             f"{dir_name}_config.json",
         )
-        if os.path.exists(plugin_config_path):
+        if await asyncio.to_thread(os.path.exists, plugin_config_path):
             try:
-                os.remove(plugin_config_path)
+                await asyncio.to_thread(os.remove, plugin_config_path)
                 logger.warning(f"已清理安装失败插件配置: {plugin_config_path}")
             except Exception as e:
                 logger.warning(
@@ -1395,7 +1396,7 @@ class PluginManager:
                 _, repo_name, _ = self.updator.parse_github_url(repo_url)
                 repo_name = self.updator.format_name(repo_name)
                 plugin_path = os.path.join(self.plugin_store_path, repo_name)
-                if os.path.exists(plugin_path):
+                if await asyncio.to_thread(os.path.exists, plugin_path):
                     raise Exception(
                         f"安装失败：目录 {os.path.basename(plugin_path)} 已存在。",
                     )
@@ -1415,7 +1416,8 @@ class PluginManager:
                     self.plugin_store_path,
                     metadata_dir_name,
                 )
-                if target_plugin_path != plugin_path and os.path.exists(
+                if target_plugin_path != plugin_path and await asyncio.to_thread(
+                    os.path.exists,
                     target_plugin_path,
                 ):
                     raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
@@ -1449,13 +1451,13 @@ class PluginManager:
                 # Extract README.md content if exists
                 readme_content = None
                 readme_path = os.path.join(plugin_path, "README.md")
-                if not os.path.exists(readme_path):
+                if not await asyncio.to_thread(os.path.exists, readme_path):
                     readme_path = os.path.join(plugin_path, "readme.md")
 
-                if os.path.exists(readme_path):
+                if await asyncio.to_thread(os.path.exists, readme_path):
                     try:
-                        with open(readme_path, encoding="utf-8") as f:
-                            readme_content = f.read()
+                        async with aiofiles.open(readme_path, encoding="utf-8") as f:
+                            readme_content = await f.read()
                     except Exception as e:
                         logger.warning(
                             f"读取插件 {dir_name} 的 README.md 文件失败: {e!s}",
@@ -1529,7 +1531,7 @@ class PluginManager:
             except Exception as e:
                 raise Exception(
                     f"移除插件成功，但是删除插件文件夹失败: {e!s}。您可以手动删除该文件夹，位于 addons/plugins/ 下。",
-                )
+                ) from e
 
             self._cleanup_plugin_optional_artifacts(
                 root_dir_name=root_dir_name,
@@ -1560,7 +1562,7 @@ class PluginManager:
             self._cleanup_plugin_state(dir_name)
 
             plugin_path = os.path.join(self.plugin_store_path, dir_name)
-            if os.path.exists(plugin_path):
+            if await asyncio.to_thread(os.path.exists, plugin_path):
                 try:
                     remove_dir(plugin_path)
                 except Exception as e:
@@ -1569,7 +1571,7 @@ class PluginManager:
                             "failed_plugin_dir_remove_error",
                             error=f"{e!s}",
                         ),
-                    )
+                    ) from e
             else:
                 logger.debug(
                     "插件目录不存在，视为已部分卸载状态，继续清理失败插件记录和可选产物: %s",
@@ -1813,7 +1815,10 @@ class PluginManager:
                 self.plugin_store_path,
                 metadata_dir_name,
             )
-            if target_plugin_path != desti_dir and os.path.exists(target_plugin_path):
+            if target_plugin_path != desti_dir and await asyncio.to_thread(
+                os.path.exists,
+                target_plugin_path,
+            ):
                 skip_failed_tracking = True
                 raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
             if target_plugin_path != desti_dir:
@@ -1850,13 +1855,13 @@ class PluginManager:
             # Extract README.md content if exists
             readme_content = None
             readme_path = os.path.join(desti_dir, "README.md")
-            if not os.path.exists(readme_path):
+            if not await asyncio.to_thread(os.path.exists, readme_path):
                 readme_path = os.path.join(desti_dir, "readme.md")
 
-            if os.path.exists(readme_path):
+            if await asyncio.to_thread(os.path.exists, readme_path):
                 try:
-                    with open(readme_path, encoding="utf-8") as f:
-                        readme_content = f.read()
+                    async with aiofiles.open(readme_path, encoding="utf-8") as f:
+                        readme_content = await f.read()
                 except Exception as e:
                     logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {e!s}")
 
@@ -1889,7 +1894,10 @@ class PluginManager:
             )
             raise
         finally:
-            if (skip_failed_tracking or temp_desti_dir != desti_dir) and os.path.isdir(
+            if (
+                skip_failed_tracking or temp_desti_dir != desti_dir
+            ) and await asyncio.to_thread(
+                os.path.isdir,
                 temp_desti_dir,
             ):
                 try:

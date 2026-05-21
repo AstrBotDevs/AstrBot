@@ -330,7 +330,7 @@ class DocumentStorage:
             import json
 
             documents: list[Document] = []
-            for doc_id, text, metadata in zip(doc_ids, texts, metadatas):
+            for doc_id, text, metadata in zip(doc_ids, texts, metadatas, strict=False):
                 document = Document(
                     doc_id=doc_id,
                     text=text,
@@ -637,7 +637,7 @@ class DocumentStorage:
                 "rowid": int(doc.id),
                 "search_text": to_fts5_search_text(content, self.stopwords),
             }
-            for doc, content in zip(documents, contents)
+            for doc, content in zip(documents, contents, strict=False)
             if doc.id is not None
         ]
         if not fts_params:

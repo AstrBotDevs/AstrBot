@@ -229,9 +229,9 @@ def init(
             click.echo("首次使用前请先设置管理员密码：")
             click.echo("  astrbot conf admin")
             click.echo()
-    except Timeout:
+    except Timeout as err:
         raise click.ClickException(
             "Cannot acquire lock file. Please check if another instance is running",
-        )
+        ) from err
     except Exception as e:
-        raise click.ClickException(f"Initialization failed: {e!s}")
+        raise click.ClickException(f"Initialization failed: {e!s}") from e

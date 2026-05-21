@@ -315,11 +315,10 @@ class WeixinOCAdapter(Platform):
             )
         finally:
             state = self._typing_states.get(user_id)
-            if state is None:
-                return
-            async with state.lock:
-                if state.cancel_task is current_task:
-                    state.cancel_task = None
+            if state is not None:
+                async with state.lock:
+                    if state.cancel_task is current_task:
+                        state.cancel_task = None
 
     async def start_typing(self, user_id: str, owner_id: str) -> None:
         state = self._get_typing_state(user_id)
@@ -922,11 +921,6 @@ class WeixinOCAdapter(Platform):
                 self.meta().id,
                 qr_console_url,
             )
-            logger.warning(
-                "weixin_oc(%s): failed to render terminal QR code: %s",
-                self.meta().id,
-                e,
-            )
         login_session = OpenClawLoginSession(
             session_key=str(uuid.uuid4()),
             qrcode=qrcode,
@@ -1231,7 +1225,7 @@ class WeixinOCAdapter(Platform):
                         continue
                     try:
                         await self._poll_qr_status(current_login)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         logger.debug(
                             "weixin_oc(%s): qr status long-poll timeout",
                             self.meta().id,
@@ -1258,7 +1252,7 @@ class WeixinOCAdapter(Platform):
                     continue
                 try:
                     await self._poll_inbound_updates()
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.debug(
                         "weixin_oc(%s): inbound long-poll timeout",
                         self.meta().id,

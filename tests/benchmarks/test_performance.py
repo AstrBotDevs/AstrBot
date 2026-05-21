@@ -7,7 +7,8 @@ performance regressions and improvements over time.
 import asyncio
 import gc
 import tracemalloc
-from typing import Callable, Any
+from typing import Any
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import pytest

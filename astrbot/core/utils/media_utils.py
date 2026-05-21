@@ -149,11 +149,11 @@ async def convert_video_format(
         logger.debug(f"[Media Utils] 视频转换成功: {video_path} -> {output_path}")
         return output_path
 
-    except FileNotFoundError:
+    except FileNotFoundError as err:
         logger.error(
             "[Media Utils] ffmpeg未安装或不在PATH中,无法转换视频格式｡请安装ffmpeg: https://ffmpeg.org/",
         )
-        raise Exception("ffmpeg not found")
+        raise Exception("ffmpeg not found") from err
     except Exception as e:
         logger.error(f"[Media Utils] 转换视频格式时出错: {e}")
         raise
@@ -224,8 +224,8 @@ async def convert_audio_format(
             raise Exception(f"ffmpeg conversion failed: {error_msg}")
         logger.debug(f"[Media Utils] 音频转换成功: {audio_path} -> {output_path}")
         return output_path
-    except FileNotFoundError:
-        raise Exception("ffmpeg not found")
+    except FileNotFoundError as err:
+        raise Exception("ffmpeg not found") from err
 
 
 async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) -> str:
@@ -347,8 +347,8 @@ async def extract_video_cover(
             error_msg = stderr.decode() if stderr else "未知错误"
             raise Exception(f"ffmpeg extract cover failed: {error_msg}")
         return output_path
-    except FileNotFoundError:
-        raise Exception("ffmpeg not found")
+    except FileNotFoundError as err:
+        raise Exception("ffmpeg not found") from err
 
 
 def _compress_image_sync(
@@ -422,14 +422,14 @@ async def compress_image(
             return url_or_path
     else:
         local_path = Path(url_or_path)
-        if not local_path.exists():
+        if not await asyncio.to_thread(local_path.exists):
             return url_or_path
-        if local_path.stat().st_size < min_file_size_bytes and not _exceeds_max_size(
+        if (
+            await asyncio.to_thread(local_path.stat)
+        ).st_size < min_file_size_bytes and not _exceeds_max_size(
             local_path,
         ):
             return url_or_path
-        with local_path.open("rb") as f:
-            data = f.read()
 
         def _read_local_path():
             lp = Path(url_or_path)

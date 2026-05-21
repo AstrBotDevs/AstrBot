@@ -54,7 +54,7 @@ class PersistentShellSession:
                 stdin.write(b"exit\n")
                 await stdin.drain()
                 await asyncio.wait_for(proc.wait(), timeout=5)
-            except (TimeoutError, asyncio.TimeoutError):
+            except TimeoutError:
                 proc.kill()
                 await proc.wait()
 
@@ -218,7 +218,7 @@ class PersistentShellSession:
                     stdout.read(4096),
                     timeout=remaining,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 break
             if not chunk:
                 break

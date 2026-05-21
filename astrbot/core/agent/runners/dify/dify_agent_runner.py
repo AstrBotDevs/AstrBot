@@ -1,7 +1,6 @@
 import base64
 import os
-import sys
-from typing import Any
+from typing import Any, override
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger, sp
@@ -19,11 +18,6 @@ from astrbot.core.provider.entities import (
 from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 class DifyAgentRunner(BaseAgentRunner[TContext]):

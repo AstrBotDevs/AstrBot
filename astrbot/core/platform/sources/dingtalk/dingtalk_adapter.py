@@ -22,6 +22,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core import sp
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import (
@@ -31,14 +32,13 @@ from astrbot.core.utils.media_utils import (
     get_media_duration,
 )
 
-from ...register import register_platform_adapter
 from .dingtalk_event import DingtalkMessageEvent
 
 
 class MyEventHandler(dingtalk_stream.EventHandler):
     async def process(self, event: dingtalk_stream.EventMessage):
-        print(
-            "2",
+        logger.debug(
+            "dingtalk_event: %s %s %s %s",
             event.headers.event_type,
             event.headers.event_id,
             event.headers.event_born_time,
@@ -340,7 +340,7 @@ class DingtalkPlatformAdapter(Platform):
             "robotCode": robot_code,
         }
         temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
         f_path = temp_dir / f"dingtalk_{uuid.uuid4()}.{ext}"
         async with (
             aiohttp.ClientSession() as session,
@@ -512,7 +512,7 @@ class DingtalkPlatformAdapter(Platform):
         form = aiohttp.FormData()
         form.add_field(
             "media",
-            media_file_path.read_bytes(),
+            await asyncio.to_thread(media_file_path.read_bytes),
             filename=media_file_path.name,
             content_type="application/octet-stream",
         )

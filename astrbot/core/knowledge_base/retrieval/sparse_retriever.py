@@ -143,7 +143,7 @@ class SparseRetriever:
                     "kb_id": kb_id,
                     "text": doc["text"],
                 }
-                for doc, chunk_md in zip(result, chunk_mds)
+                for doc, chunk_md in zip(result, chunk_mds, strict=False)
             ]
             chunks.extend(mapped_chunks)
             top_k_sparse += kb_config.get("top_k_sparse", 50)

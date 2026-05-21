@@ -361,7 +361,7 @@ def run(
                                     nl=False,
                                 )
                                 click.echo(f" {message}")
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             continue
                         except asyncio.CancelledError:
                             break

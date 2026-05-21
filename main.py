@@ -71,13 +71,13 @@ async def check_dashboard_files(webui_dir: str | None = None):
     """下载管理面板文件"""
     # 指定webui目录
     if webui_dir:
-        if os.path.exists(webui_dir):
+        if await asyncio.to_thread(os.path.exists, webui_dir):
             logger.info("Using WebUI directory: %s", webui_dir)
             return webui_dir
         logger.warning("WebUI directory not found: %s. Using default.", webui_dir)
 
     data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
-    if os.path.exists(data_dist_path):
+    if await asyncio.to_thread(os.path.exists, data_dist_path):
         v = await get_dashboard_version()
         if should_use_bundled_dashboard_dist(data_dist_path, VERSION):
             bundled_dist = get_bundled_dashboard_dist_path()

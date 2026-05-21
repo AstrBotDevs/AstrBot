@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import inspect
 import shlex
@@ -8,11 +9,20 @@ from pathlib import Path
 from typing import Any
 
 from astrbot.api import logger
-
-from ..olayer import FileSystemComponent, GUIComponent, PythonComponent, ShellComponent
-from .base import ComputerBooter
-from .cua_defaults import CUA_CONFIG_KEYS, CUA_DEFAULT_CONFIG
-from .shipyard_search_file_util import search_files_via_shell
+from astrbot.core.computer.booters.base import ComputerBooter
+from astrbot.core.computer.booters.cua_defaults import (
+    CUA_CONFIG_KEYS,
+    CUA_DEFAULT_CONFIG,
+)
+from astrbot.core.computer.booters.shipyard_search_file_util import (
+    search_files_via_shell,
+)
+from astrbot.core.computer.olayer import (
+    FileSystemComponent,
+    GUIComponent,
+    PythonComponent,
+    ShellComponent,
+)
 
 _POSIX_OS_TYPES = {"linux", "darwin", "macos"}
 
@@ -646,8 +656,9 @@ class CuaGUIComponent(GUIComponent):
         raw = await self._sandbox.screenshot()
         data = _screenshot_to_bytes(raw)
         if path:
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
-            Path(path).write_bytes(data)
+            _p = Path(path)
+            await asyncio.to_thread(_p.parent.mkdir, parents=True, exist_ok=True)
+            await asyncio.to_thread(_p.write_bytes, data)
         return {
             "success": True,
             "path": path,
@@ -846,7 +857,7 @@ class CuaBooter(ComputerBooter):
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         local_path = Path(path)
-        if not local_path.is_file():
+        if not await asyncio.to_thread(local_path.is_file):
             return {"success": False, "error": f"File not found: {path}"}
         sandbox = None if self._runtime is None else self._runtime.sandbox
         if sandbox is not None and hasattr(sandbox, "upload_file"):
@@ -860,14 +871,16 @@ class CuaBooter(ComputerBooter):
             return _normalize_native_upload_result(result, file_name)
         write_bytes = _resolve_files_method(files_components, "write_bytes")
         if write_bytes is not None:
-            result = await _maybe_await(write_bytes(file_name, local_path.read_bytes()))
+            data = await asyncio.to_thread(local_path.read_bytes)
+            result = await _maybe_await(write_bytes(file_name, data))
             return _normalize_native_upload_result(result, file_name)
         if not _is_posix_os_type(self.os_type):
             return _non_posix_filesystem_result(file_name, self.os_type)
+        data = await asyncio.to_thread(local_path.read_bytes)
         result = await _write_base64_via_shell(
             self.shell,
             file_name,
-            local_path.read_bytes(),
+            data,
         )
         return {
             "success": not bool(result.get("stderr")),
@@ -885,8 +898,12 @@ class CuaBooter(ComputerBooter):
         result = await self.shell.exec(f"base64 {shlex.quote(remote_path)}")
         if result.get("stderr"):
             raise RuntimeError(result["stderr"])
-        Path(local_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(local_path).write_bytes(base64.b64decode(result.get("stdout", "")))
+        _p = Path(local_path)
+        await asyncio.to_thread(_p.parent.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(
+            _p.write_bytes,
+            base64.b64decode(result.get("stdout", "")),
+        )
 
     async def available(self) -> bool:
         return self._runtime is not None

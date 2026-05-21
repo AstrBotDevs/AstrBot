@@ -75,7 +75,7 @@ def test_login_challenge_pbkdf2():
     # The proof is HMAC-SHA256(derived_key, nonce) — the derived key IS the digest
     proof = hmac.new(
         dk,
-        "any-nonce".encode(),
+        b"any-nonce",
         hashlib.sha256,
     ).hexdigest()
 

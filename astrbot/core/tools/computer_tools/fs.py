@@ -33,6 +33,7 @@ Local path resolution rule:
 - In sandbox runtime, relative paths are passed through unchanged.
 """
 
+import asyncio
 import os
 import uuid
 from dataclasses import dataclass, field
@@ -46,19 +47,18 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.file_read_utils import read_file_tool_result
 from astrbot.core.message.components import File, Image
+from astrbot.core.tools.computer_tools import util as computer_util
+from astrbot.core.tools.computer_tools.util import (
+    check_admin_permission,
+    is_local_runtime,
+    normalize_umo_for_workspace,
+)
+from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_path,
     get_astrbot_skills_path,
     get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
-)
-
-from ..registry import builtin_tool
-from . import util as computer_util
-from .util import (
-    check_admin_permission,
-    is_local_runtime,
-    normalize_umo_for_workspace,
 )
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
@@ -707,10 +707,10 @@ class FileUploadTool(FunctionTool):
         )
         try:
             # Check if file exists
-            if not os.path.exists(local_path):
+            if not await asyncio.to_thread(os.path.exists, local_path):
                 return f"Error: File does not exist: {local_path}"
 
-            if not os.path.isfile(local_path):
+            if not await asyncio.to_thread(os.path.isfile, local_path):
                 return f"Error: Path is not a file: {local_path}"
 
             # Use basename if sandbox_filename is not provided

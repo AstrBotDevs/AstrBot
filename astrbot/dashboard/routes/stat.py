@@ -10,6 +10,7 @@ from functools import cmp_to_key
 from pathlib import Path
 
 import aiohttp
+import anyio
 import psutil
 from quart import request
 from sqlmodel import col, select
@@ -491,13 +492,17 @@ class StatRoute(Route):
             changelog_path = os.path.join(changelogs_dir, filename)
 
             # 规范化路径，防止符号链接攻击
-            changelog_path = os.path.realpath(changelog_path)
-            changelogs_dir = os.path.realpath(changelogs_dir)
+            changelog_path = await asyncio.to_thread(os.path.realpath, changelog_path)
+            changelogs_dir = await asyncio.to_thread(os.path.realpath, changelogs_dir)
 
             # 验证最终路径在预期的 changelogs 目录内（防止路径遍历）
             # 确保规范化后的路径以 changelogs_dir 开头，且是目录内的文件
-            changelog_path_normalized = os.path.normpath(changelog_path)
-            changelogs_dir_normalized = os.path.normpath(changelogs_dir)
+            changelog_path_normalized = await asyncio.to_thread(
+                os.path.normpath, changelog_path
+            )
+            changelogs_dir_normalized = await asyncio.to_thread(
+                os.path.normpath, changelogs_dir
+            )
 
             # 检查路径是否在预期目录内（必须是目录的子文件，不能是目录本身）
             expected_prefix = changelogs_dir_normalized + os.sep
@@ -507,21 +512,21 @@ class StatRoute(Route):
                 )
                 return Response().error("Invalid version format").__dict__
 
-            if not os.path.exists(changelog_path):
+            if not await asyncio.to_thread(os.path.exists, changelog_path):
                 return (
                     Response()
                     .error(f"Changelog for version {version} not found")
                     .__dict__
                 )
-            if not os.path.isfile(changelog_path):
+            if not await asyncio.to_thread(os.path.isfile, changelog_path):
                 return (
                     Response()
                     .error(f"Changelog for version {version} not found")
                     .__dict__
                 )
 
-            with open(changelog_path, encoding="utf-8") as f:
-                content = f.read()
+            async with await anyio.open_file(changelog_path, encoding="utf-8") as f:
+                content = await f.read()
 
             return Response().ok({"content": content, "version": version}).__dict__
         except Exception as e:
@@ -534,7 +539,7 @@ class StatRoute(Route):
             project_path = get_astrbot_path()
             changelogs_dir = os.path.join(project_path, "changelogs")
 
-            if not os.path.exists(changelogs_dir):
+            if not await asyncio.to_thread(os.path.exists, changelogs_dir):
                 return Response().ok({"versions": []}).__dict__
 
             versions = []

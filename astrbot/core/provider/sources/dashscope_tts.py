@@ -10,6 +10,11 @@ import aiohttp
 import dashscope
 from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
 
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
 MultiModalConversation: Any = None
 try:
     from dashscope.aigc.multimodal_conversation import (
@@ -19,11 +24,6 @@ except (
     ImportError
 ):  # pragma: no cover - older dashscope versions without Qwen TTS support
     pass
-
-from astrbot.core.provider.entities import ProviderType
-from astrbot.core.provider.provider import TTSProvider
-from astrbot.core.provider.register import register_provider_adapter
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
 @register_provider_adapter(
@@ -132,7 +132,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
                 ) as response,
             ):
                 return await response.read()
-        except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
+        except (aiohttp.ClientError, TimeoutError, OSError) as e:
             logging.exception(f"Failed to download audio from URL {url}: {e}")
             return None
 

@@ -264,7 +264,7 @@ class StorageCleaner:
     def _cleanup_empty_dirs(root_dir: Path) -> None:
         if not root_dir.exists():
             return
-        for dirpath, dirnames, filenames in os.walk(root_dir, topdown=False):
+        for dirpath, _dirnames, _filenames in os.walk(root_dir, topdown=False):
             path = Path(dirpath)
             if path == root_dir:
                 continue

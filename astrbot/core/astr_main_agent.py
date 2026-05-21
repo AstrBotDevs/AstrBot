@@ -802,10 +802,10 @@ async def _process_quote_message(
             if (
                 compress_path
                 and compress_path != path
-                and os.path.exists(compress_path)
+                and await asyncio.to_thread(os.path.exists, compress_path)
             ):
                 try:
-                    os.remove(compress_path)
+                    await asyncio.to_thread(os.remove, compress_path)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Fail to remove temporary compressed image: %s", exc)
 

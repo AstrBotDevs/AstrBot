@@ -738,7 +738,7 @@ class ProviderManager:
             )
             raise Exception(
                 f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败:{e}",
-            )
+            ) from e
 
     async def reload(self, provider_config: dict) -> None:
         async with self.reload_lock:

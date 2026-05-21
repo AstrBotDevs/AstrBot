@@ -470,7 +470,7 @@ class AstrBotExporter:
                 media_files: list[str] = []
                 media_dir = kb_helper.kb_medias_dir
                 if media_dir.exists():
-                    for root, _, files in os.walk(media_dir):
+                    for _root, _, files in os.walk(media_dir):
                         for file in files:
                             media_files.append(file)
                 if media_files:

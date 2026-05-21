@@ -1,6 +1,5 @@
 import asyncio
 import copy
-import sys
 import time
 import traceback
 import typing as T
@@ -8,8 +7,9 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
-from pathlib import Path
+from typing import override
 
+import anyio
 from mcp.types import (
     BlobResourceContents,
     CallToolResult,
@@ -26,8 +26,24 @@ from tenacity import (
 )
 
 from astrbot import logger
-from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
+from astrbot.core.agent.context.config import ContextConfig
+from astrbot.core.agent.context.manager import ContextManager
+from astrbot.core.agent.context.token_counter import EstimateTokenCounter
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    ImageURLPart,
+    Message,
+    TextPart,
+    ThinkPart,
+    ToolCallMessageSegment,
+    bind_checkpoint_messages,
+)
+from astrbot.core.agent.response import AgentResponseData, AgentStats
+from astrbot.core.agent.run_context import ContextWrapper, TContext
+from astrbot.core.agent.runners.base import AgentResponse, AgentState, BaseAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.components import Json
@@ -47,26 +63,6 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
-
-from ..context.config import ContextConfig
-from ..context.manager import ContextManager
-from ..context.token_counter import EstimateTokenCounter
-from ..hooks import BaseAgentRunHooks
-from ..message import (
-    AssistantMessageSegment,
-    Message,
-    ToolCallMessageSegment,
-    bind_checkpoint_messages,
-)
-from ..response import AgentResponseData, AgentStats
-from ..run_context import ContextWrapper, TContext
-from ..tool_executor import BaseFunctionToolExecutor
-from .base import AgentResponse, AgentState, BaseAgentRunner
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 @dataclass(slots=True)
@@ -373,7 +369,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if self.tool_result_overflow_dir is None:
             raise ValueError("tool_result_overflow_dir is not configured")
 
-        overflow_dir = Path(self.tool_result_overflow_dir).resolve(strict=False)
+        overflow_dir = await anyio.Path(
+            self.tool_result_overflow_dir,
+        ).resolve(strict=False)
         safe_tool_call_id = (
             "".join(
                 ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
@@ -983,6 +981,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_name,
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
+            strict=False,
         ):
             tool_call_streak = self._track_tool_call_streak(func_tool_name)
             yield _HandleFunctionToolsResult.from_message_chain(

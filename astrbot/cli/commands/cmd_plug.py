@@ -184,7 +184,7 @@ def remove(name: str) -> None:
     except Exception as e:
         raise click.ClickException(
             t("plugin_uninstall_failed_ex", name=name, error=str(e)),
-        )
+        ) from e
 
 
 @plug.command()

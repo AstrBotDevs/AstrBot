@@ -15,6 +15,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.exceptions import ProviderNotFoundError
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
@@ -31,18 +32,20 @@ from astrbot.core.provider.provider import (
     STTProvider,
     TTSProvider,
 )
+from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.platform_adapter_type import (
     ADAPTER_NAME_2_TYPE,
     PlatformAdapterType,
 )
+from astrbot.core.star.filter.regex import RegexFilter
+from astrbot.core.star.star import StarMetadata, star_map, star_registry
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    star_handlers_registry,
+)
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
-
-from ..exceptions import ProviderNotFoundError
-from .filter.command import CommandFilter
-from .filter.regex import RegexFilter
-from .star import StarMetadata, star_map, star_registry
-from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 
 logger = logging.getLogger("astrbot")
 
@@ -479,7 +482,7 @@ class Context:
             try:
                 session = MessageSesion.from_str(session)
             except BaseException as e:
-                raise ValueError("不合法的 session 字符串: " + str(e))
+                raise ValueError("不合法的 session 字符串: " + str(e)) from e
 
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == session.platform_name:

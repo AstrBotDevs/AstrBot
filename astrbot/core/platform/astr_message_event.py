@@ -279,7 +279,7 @@ class AstrMessageEvent(abc.ABC):
 
     async def send_streaming(
         self,
-        generator: AsyncGenerator[MessageChain, None],
+        generator: AsyncGenerator[MessageChain],
         use_fallback: bool = False,
     ) -> None:
         """发送流式消息到消息平台，使用异步生成器。
@@ -291,21 +291,25 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
+    @abc.abstractmethod
     async def send_typing(self) -> None:
         """发送输入中状态。
 
         默认实现为空，由具体平台按需重写。
         """
 
+    @abc.abstractmethod
     async def stop_typing(self) -> None:
         """停止输入中状态。
 
         默认实现为空，由具体平台按需重写。
         """
 
+    @abc.abstractmethod
     async def _pre_send(self) -> None:
         """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
 
+    @abc.abstractmethod
     async def _post_send(self) -> None:
         """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
 
@@ -501,6 +505,7 @@ class AstrMessageEvent(abc.ABC):
         """
         await self.send(MessageChain([Plain(emoji)]))
 
+    @abc.abstractmethod
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
 

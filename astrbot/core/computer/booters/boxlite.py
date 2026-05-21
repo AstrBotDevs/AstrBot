@@ -103,7 +103,7 @@ class MockShipyardSandboxClient:
                 "error": f"Connection error: {e!s}",
                 "message": "File upload failed",
             }
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 "[Computer] file_upload_failed booter=boxlite error=timeout remote_path=%s",
                 remote_path,

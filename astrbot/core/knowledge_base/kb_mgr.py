@@ -136,7 +136,7 @@ class KnowledgeBaseManager:
                 return kb_helper
         except Exception as e:
             if "kb_name" in str(e):
-                raise ValueError(f"知识库名称 '{kb_name}' 已存在")
+                raise ValueError(f"知识库名称 '{kb_name}' 已存在") from e
             raise
 
     async def get_kb(self, kb_id: str) -> KBHelper | None:

@@ -23,7 +23,7 @@ from astrbot.core.computer.olayer import (
 from .shell_background import build_detached_shell_command
 
 try:
-    from shipyard_neo import BayClient
+    from shipyard_neo import BayClient  # noqa: F401
     from shipyard_neo.sandbox import Sandbox
 except ImportError:
     logger.warning(
@@ -51,7 +51,7 @@ class NeoPythonComponent(PythonComponent):
         self,
         code: str,
         kernel_id: str | None = None,
-        timeout: int = 30,
+        timeout: int = 30,  # noqa: ASYNC109
         silent: bool = False,
     ) -> dict[str, Any]:
         _ = kernel_id
@@ -88,7 +88,7 @@ class NeoShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 300,
+        timeout: int | None = 300,  # noqa: ASYNC109
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:

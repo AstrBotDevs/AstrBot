@@ -197,7 +197,9 @@ async def download_file(
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    print(f"Downloading: {url} | Size: {total_size / 1024:.2f} KB")
+                    logger.info(
+                        f"Downloading: {url} | Size: {total_size / 1024:.2f} KB"
+                    )
                 await _emit_download_progress(
                     progress_callback,
                     {
@@ -208,7 +210,7 @@ async def download_file(
                         "speed": 0,
                     },
                 )
-                with open(path, "wb") as f:
+                async with await anyio.open_file(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
                         if not chunk:
@@ -233,9 +235,8 @@ async def download_file(
                             },
                         )
                         if show_progress:
-                            print(
-                                f"\rProgress: {percent:.2%} Speed: {speed:.2f} KB/s",
-                                end="",
+                            logger.info(
+                                f"Progress: {percent:.2%} Speed: {speed:.2f} KB/s",
                             )
                 await _emit_download_progress(
                     progress_callback,
@@ -274,7 +275,7 @@ async def download_file(
             downloaded_size = 0
             start_time = time.time()
             if show_progress:
-                print(f"Size: {total_size / 1024:.2f} KB | URL: {url}")
+                logger.info(f"Size: {total_size / 1024:.2f} KB | URL: {url}")
             await _emit_download_progress(
                 progress_callback,
                 {
@@ -285,7 +286,7 @@ async def download_file(
                     "speed": 0,
                 },
             )
-            with open(path, "wb") as f:
+            async with await anyio.open_file(path, "wb") as f:
                 while True:
                     chunk = await resp.content.read(8192)
                     if not chunk:
@@ -308,9 +309,8 @@ async def download_file(
                         },
                     )
                     if show_progress:
-                        print(
-                            f"\rProgress: {percent:.2%} Speed: {speed:.2f} KB/s",
-                            end="",
+                        logger.info(
+                            f"Progress: {percent:.2%} Speed: {speed:.2f} KB/s",
                         )
             await _emit_download_progress(
                 progress_callback,
@@ -428,7 +428,7 @@ def should_use_bundled_dashboard_dist(
 async def get_dashboard_version():
     # First check user data directory (manually updated / downloaded dashboard).
     dist_dir = os.path.join(get_astrbot_data_path(), "dist")
-    if os.path.exists(dist_dir):
+    if await asyncio.to_thread(os.path.exists, dist_dir):
         from astrbot.core.config.default import VERSION
 
         if should_use_bundled_dashboard_dist(dist_dir, VERSION):

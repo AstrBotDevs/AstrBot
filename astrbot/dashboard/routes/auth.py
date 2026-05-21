@@ -84,7 +84,7 @@ class AuthRoute(Route):
         nonce = secrets.token_hex(32)
         self._login_challenges[challenge_id] = {
             "nonce": nonce,
-            "expires_at": datetime.datetime.now(datetime.timezone.utc)
+            "expires_at": datetime.datetime.now(datetime.UTC)
             + datetime.timedelta(minutes=1),
         }
 
@@ -321,8 +321,7 @@ class AuthRoute(Route):
     def generate_jwt(self, username):
         payload = {
             "username": username,
-            "exp": datetime.datetime.now(datetime.timezone.utc)
-            + datetime.timedelta(days=7),
+            "exp": datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=7),
         }
         jwt_token = self.config["dashboard"].get("jwt_secret", None)
         if not jwt_token:
@@ -401,7 +400,7 @@ class AuthRoute(Route):
         )
 
     def _prune_login_challenges(self) -> None:
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         expired_ids = [
             challenge_id
             for challenge_id, challenge in self._login_challenges.items()

@@ -2,10 +2,9 @@ import codecs
 import json
 import types
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, Self
 
 from aiohttp import ClientResponse, ClientSession, ClientTimeout
-from typing_extensions import Self
 
 from astrbot.core import logger
 

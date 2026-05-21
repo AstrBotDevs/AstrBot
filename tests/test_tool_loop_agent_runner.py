@@ -3,7 +3,8 @@ import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, AsyncGenerator, cast
+from typing import Any, cast
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock
 
 import pytest

@@ -1,6 +1,7 @@
 """Mock providers for testing LLM interactions."""
 
-from typing import Any, AsyncGenerator
+from typing import Any
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 
 from astrbot.core.provider.entities import (

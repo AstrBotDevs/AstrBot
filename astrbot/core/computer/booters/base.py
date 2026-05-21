@@ -48,8 +48,10 @@ class ComputerBooter(abc.ABC):
     def gui(self) -> GUIComponent | None:
         return None
 
+    @abc.abstractmethod
     async def boot(self, session_id: str) -> None: ...
 
+    @abc.abstractmethod
     async def shutdown(self, **kwargs) -> None:
         """Shut down the computer sandbox.
 

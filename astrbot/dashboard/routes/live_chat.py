@@ -85,8 +85,9 @@ class LiveChatSession:
                     wav_file.writeframes(frame)
 
             self.temp_audio_path = audio_path
+            size = await asyncio.to_thread(os.path.getsize, audio_path)
             logger.info(
-                f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {os.path.getsize(audio_path)} bytes",
+                f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {size} bytes",
             )
             return audio_path, time.time() - start_time
 
@@ -520,7 +521,7 @@ class LiveChatRoute(Route):
 
                 try:
                     result = await asyncio.wait_for(back_queue.get(), timeout=1)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
                 if not result:
@@ -826,7 +827,7 @@ class LiveChatRoute(Route):
 
                     try:
                         result = await asyncio.wait_for(back_queue.get(), timeout=0.5)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         continue
 
                     if not result:

@@ -1882,7 +1882,7 @@ class PluginRoute(Route):
             *(_update_one(name) for name in plugin_names),
             return_exceptions=True,
         )
-        for name, result in zip(plugin_names, raw_results):
+        for name, result in zip(plugin_names, raw_results, strict=False):
             if isinstance(result, asyncio.CancelledError):
                 raise result
             if isinstance(result, BaseException):

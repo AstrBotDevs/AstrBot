@@ -1,7 +1,7 @@
 # Inspired by MoonshotAI/kosong, credits to MoonshotAI/kosong authors for the original implementation.
 # License: Apache License 2.0
 
-from typing import Any, ClassVar, Literal, TypeVar, cast
+from typing import Any, ClassVar, Literal, Self, TypeVar, cast
 
 from pydantic import (
     BaseModel,
@@ -12,7 +12,6 @@ from pydantic import (
     model_validator,
 )
 from pydantic_core import core_schema
-from typing_extensions import Self
 
 ContentPartT = TypeVar("ContentPartT", bound="ContentPart")
 

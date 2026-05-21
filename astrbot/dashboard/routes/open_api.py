@@ -23,7 +23,13 @@ from .chat import (
     ChatRoute,
     collect_plain_text_from_message_parts,
 )
-from .route import Response, Route, RouteContext
+from .route import (
+    Response,
+    Route,
+    RouteContext,
+    get_runtime_guard_message,
+    is_runtime_request_ready,
+)
 
 
 class OpenApiRoute(Route):
@@ -391,7 +397,7 @@ class OpenApiRoute(Route):
                     return
                 try:
                     result = await asyncio.wait_for(back_queue.get(), timeout=1)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
                 if not await self._ensure_runtime_ready():

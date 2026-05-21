@@ -2,10 +2,9 @@ import asyncio
 import functools
 import queue
 import re
-import sys
 import threading
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, override
 
 from dashscope import Application
 from dashscope.app.application_response import ApplicationResponse
@@ -23,11 +22,6 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.provider.provider import Provider
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 class DashscopeAgentRunner(BaseAgentRunner[TContext]):
