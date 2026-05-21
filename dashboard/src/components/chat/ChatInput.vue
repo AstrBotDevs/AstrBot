@@ -108,14 +108,23 @@
         </div>
       </transition>
 
+      <CommandSuggestion
+        :visible="showCommandSuggestion"
+        :commands="filteredCommands"
+        :selected-index="selectedCommandIndex"
+        :is-dark="isDark"
+        @select="handleCommandSelect"
+        @update-selected-index="selectedCommandIndex = $event"
+      />
       <textarea
         ref="inputField"
         v-model="localPrompt"
         @keydown="handleKeyDown"
+        @input="handleInput"
         @compositionstart="handleCompositionStart"
         @compositionend="handleCompositionEnd"
         @compositioncancel="handleCompositionEnd"
-        @blur="clearCompositionState()"
+        @blur="handleBlur"
         :disabled="disabled"
         placeholder="Ask AstrBot..."
         class="chat-textarea"
@@ -312,10 +321,14 @@ import { useDisplay } from "vuetify";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { isComposingEnter } from "@/utils/imeInput.mjs";
+import axios from "axios";
+import type { CommandItem } from "@/components/extension/componentPanel/types";
 import ConfigSelector from "./ConfigSelector.vue";
 import ProviderModelMenu from "./ProviderModelMenu.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import CommandSuggestion from "./CommandSuggestion.vue";
 import type { Session } from "@/composables/useSessions";
+import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
 interface StagedFileInfo {
   attachment_id: string;
@@ -387,6 +400,74 @@ const isDragging = ref(false);
 const isComposing = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
 let dragLeaveTimeout: number | null = null;
+
+// 命令提示相关状态
+const allCommands = ref<CommandItem[]>([]);
+const showCommandSuggestion = ref(false);
+const selectedCommandIndex = ref(0);
+const commandSuggestionLoading = ref(false);
+
+/** 从所有指令中展平获取启用的普通指令和子指令 */
+const enabledCommands = computed(() => {
+  const result: SuggestionCommand[] = [];
+  const seen = new Set<string>();
+
+  function addCommand(cmd: CommandItem) {
+    if (!cmd.enabled) return;
+    if (cmd.type === "group") {
+      // 指令组本身不加入，但其子指令加入
+      cmd.sub_commands?.forEach(addCommand);
+      return;
+    }
+    // 统一添加 / 前缀（子命令的 effective_command 如 "music play" 需要变成 "/music play"）
+    const displayCmd = cmd.effective_command.startsWith("/")
+      ? cmd.effective_command
+      : `/${cmd.effective_command}`;
+    if (!seen.has(displayCmd)) {
+      seen.add(displayCmd);
+      result.push({
+        handler_full_name: cmd.handler_full_name,
+        effective_command: displayCmd,
+        description: cmd.description,
+        plugin_display_name: cmd.plugin_display_name,
+        enabled: cmd.enabled,
+      });
+    }
+    // 同时加入别名（别名也需要加上 / 前缀）
+    cmd.aliases?.forEach((alias) => {
+      const aliasBase = cmd.parent_signature
+        ? `${cmd.parent_signature} ${alias}`
+        : alias;
+      const aliasKey = aliasBase.startsWith("/")
+        ? aliasBase
+        : `/${aliasBase}`;
+      if (!seen.has(aliasKey)) {
+        seen.add(aliasKey);
+        result.push({
+          handler_full_name: cmd.handler_full_name,
+          effective_command: aliasKey,
+          description: cmd.description,
+          plugin_display_name: cmd.plugin_display_name,
+          enabled: cmd.enabled,
+        });
+      }
+    });
+  }
+
+  allCommands.value.forEach(addCommand);
+  return result;
+});
+
+/** 根据当前输入过滤候选指令 */
+const filteredCommands = computed(() => {
+  const text = props.prompt;
+  if (!text || !text.startsWith("/")) return [];
+
+  const prefix = text.toLowerCase();
+  return enabledCommands.value
+    .filter((cmd) => cmd.effective_command.toLowerCase().startsWith(prefix))
+    .slice(0, 8); // 最多显示8条
+});
 
 const localPrompt = computed({
   get: () => props.prompt,
@@ -504,6 +585,36 @@ watch(localPrompt, () => {
 });
 
 function handleKeyDown(e: KeyboardEvent) {
+  // 命令提示激活时，拦截方向键和 Enter/Esc
+  if (showCommandSuggestion.value && filteredCommands.value.length > 0) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      selectedCommandIndex.value =
+        (selectedCommandIndex.value + 1) % filteredCommands.value.length;
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      selectedCommandIndex.value =
+        (selectedCommandIndex.value - 1 + filteredCommands.value.length) %
+        filteredCommands.value.length;
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const cmd = filteredCommands.value[selectedCommandIndex.value];
+      if (cmd) {
+        handleCommandSelect(cmd);
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      showCommandSuggestion.value = false;
+      return;
+    }
+  }
+
   const isEnter = e.key === "Enter";
   if (!isEnter) {
     // Ctrl+B 录音
@@ -541,6 +652,57 @@ function handleKeyDown(e: KeyboardEvent) {
       emit("send");
     }
     return;
+  }
+}
+
+/** 处理输入变化，控制命令提示显示 */
+function handleInput() {
+  const text = props.prompt;
+  if (text && text.startsWith("/") && !isComposing.value) {
+    const prefix = text.toLowerCase();
+    const hasMatch = enabledCommands.value.some((cmd) =>
+      cmd.effective_command.toLowerCase().startsWith(prefix),
+    );
+    showCommandSuggestion.value = hasMatch;
+    selectedCommandIndex.value = 0;
+  } else {
+    showCommandSuggestion.value = false;
+  }
+}
+
+/** 处理 blur 事件，延迟关闭命令提示以允许点击 */
+function handleBlur() {
+  clearCompositionState();
+  // 延迟关闭，避免点击候选项时面板已消失
+  setTimeout(() => {
+    showCommandSuggestion.value = false;
+  }, 200);
+}
+
+/** 选择命令，填入输入框 */
+function handleCommandSelect(cmd: SuggestionCommand) {
+  localPrompt.value = cmd.effective_command + " ";
+  showCommandSuggestion.value = false;
+  nextTick(() => {
+    inputField.value?.focus();
+    autoResize();
+  });
+}
+
+/** 获取指令列表 */
+async function fetchCommands() {
+  if (commandSuggestionLoading.value) return;
+  commandSuggestionLoading.value = true;
+  try {
+    const res = await axios.get("/api/commands");
+    if (res.data.status === "ok") {
+      allCommands.value = res.data.data.items || [];
+    }
+  } catch (err) {
+    // 静默失败，不影响聊天功能
+    console.warn("Failed to fetch commands for suggestion:", err);
+  } finally {
+    commandSuggestionLoading.value = false;
   }
 }
 
@@ -656,6 +818,8 @@ onMounted(() => {
     inputField.value.addEventListener("paste", handlePaste);
   }
   document.addEventListener("keyup", handleKeyUp);
+  // 预加载指令列表
+  fetchCommands();
 });
 
 onBeforeUnmount(() => {
