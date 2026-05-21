@@ -18,6 +18,7 @@ google-genai>=1.56.0
 httpx[socks]>=0.28.1
 lark-oapi>=1.4.15
 mcp>=1.8.0
+msgpack>=1.1.1
 openai>=1.78.0
 ormsgpack>=1.9.1
 pillow>=11.2.1
