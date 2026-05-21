@@ -484,7 +484,7 @@ export const useExtensionPage = () => {
       const failRes = await axios.get("/api/plugin/source/get-failed-plugins");
       failedPluginsDict.value = failRes.data.data || {};
 
-      checkUpdate();
+      // checkUpdate() is called after pluginMarketData is loaded in onMounted
     } catch (err) {
       toast(err, "error");
     } finally {
@@ -642,14 +642,20 @@ export const useExtensionPage = () => {
       if (plugin.repo) {
         onlinePluginsMap.set(plugin.repo.toLowerCase(), plugin);
       }
-      onlinePluginsNameMap.set(plugin.name, plugin);
+      const normalizedName = normalizeStr(plugin.name);
+      onlinePluginsNameMap.set(normalizedName, plugin);
     });
 
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+    
     data.forEach((extension) => {
       const repoKey = extension.repo?.toLowerCase();
       const onlinePlugin = repoKey ? onlinePluginsMap.get(repoKey) : null;
-      const onlinePluginByName = onlinePluginsNameMap.get(extension.name);
+      
+      // 使用 marketplace_name 进行市场匹配（已统一为减号格式）
+      const normalizedExtensionName = normalizeStr(extension.marketplace_name || extension.name);
+      const onlinePluginByName = onlinePluginsNameMap.get(normalizedExtensionName);
+      
       const matchedPlugin = onlinePlugin || onlinePluginByName;
 
       if (matchedPlugin) {
@@ -1234,15 +1240,15 @@ export const useExtensionPage = () => {
   const checkAlreadyInstalled = () => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
     const installedRepos = new Set(data.map((ext) => ext.repo?.toLowerCase()));
-    const installedNames = new Set(
-      data.map((ext) => normalizeStr(ext.name).replace(/_/g, "-")),
-    ); //统一格式，以防下面的匹配不生效
+    // 使用 marketplace_name 进行市场匹配（已统一为减号格式）
+    const installedNames = new Set(data.map((ext) => normalizeStr(ext.marketplace_name || ext.name)));
     const installedByRepo = new Map(
       data
         .filter((ext) => ext.repo)
         .map((ext) => [ext.repo.toLowerCase(), ext]),
     );
-    const installedByName = new Map(data.map((ext) => [ext.name, ext]));
+    // 使用 marketplace_name 创建映射，用于市场匹配
+    const installedByName = new Map(data.map((ext) => [ext.marketplace_name || ext.name, ext]));
 
     for (let i = 0; i < pluginMarketData.value.length; i++) {
       const plugin = pluginMarketData.value[i];
@@ -1266,7 +1272,7 @@ export const useExtensionPage = () => {
 
       plugin.installed =
         installedRepos.has(plugin.repo?.toLowerCase()) ||
-        installedNames.has(normalizeStr(plugin.name).replace(/_/g, "-")); //统一格式，防止匹配失败
+        installedNames.has(normalizeStr(plugin.name));
     }
 
     let installed = [];
@@ -1477,6 +1483,7 @@ export const useExtensionPage = () => {
     selectedMarketInstallPlugin.value = null;
     await getExtensions();
     checkAlreadyInstalled();
+    checkUpdate();
 
     viewReadme({
       name: resData.data.name,

@@ -1270,6 +1270,9 @@ class PluginRoute(Route):
                 logo_url = await self.get_plugin_logo_token(plugin.logo_path)
             _t = {
                 "name": plugin.name,
+                "marketplace_name": plugin.name.replace(
+                    "_", "-"
+                ),  # 用于市场匹配的名称（减号格式）
                 "repo": "" if plugin.repo is None else plugin.repo,
                 "author": plugin.author,
                 "desc": plugin.desc,
@@ -1320,6 +1323,9 @@ class PluginRoute(Route):
                 .ok(
                     {
                         "name": plugin.name,
+                        "marketplace_name": plugin.name.replace(
+                            "_", "-"
+                        ),  # 用于市场匹配的名称（减号格式）
                         "repo": "" if plugin.repo is None else plugin.repo,
                         "author": plugin.author,
                         "desc": plugin.desc,
@@ -1372,6 +1378,9 @@ class PluginRoute(Route):
                 "i18n_key": page["i18n_key"],
                 "description": "Plugin Page entry",
                 "plugin_name": plugin.name,
+                "plugin_marketplace_name": plugin.name.replace(
+                    "_", "-"
+                ),  # 用于市场匹配的名称（减号格式）
             }
             for page in pages
         ]
