@@ -131,36 +131,16 @@
             <!-- 文件上传 -->
             <v-window-item value="file">
               <!-- 文件选择 -->
-              <div
-                class="upload-dropzone"
-                :class="{ dragover: isDragging }"
-                @drop.prevent="handleDrop"
-                @dragover.prevent="isDragging = true"
-                @dragleave="isDragging = false"
-                @click="fileInput?.click()"
-              >
-                <v-icon size="64" color="primary"> mdi-cloud-upload </v-icon>
-                <p class="mt-4 text-h6">
-                  {{ t("upload.dropzone") }}
-                </p>
-                <p class="text-caption text-medium-emphasis mt-2">
-                  {{ t("upload.supportedFormats") }}.txt, .md, .pdf, .docx,
-                  .xls, .xlsx
-                </p>
-                <p class="text-caption text-medium-emphasis">
-                  {{ t("upload.maxSize") }}
-                </p>
-                <p class="text-caption text-medium-emphasis">
-                  最多可上传 10 个文件
-                </p>
-                <input
-                  ref="fileInput"
-                  type="file"
-                  multiple
-                  hidden
-                  accept=".txt,.md,.pdf,.docx,.xls,.xlsx"
-                  @change="handleFileSelect"
-                />
+              <div class="upload-dropzone" :class="{ 'dragover': isDragging }" @drop.prevent="handleDrop"
+                @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="fileInput?.click()">
+                <v-icon size="64" color="primary">mdi-cloud-upload</v-icon>
+                <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
+                <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}</p>
+                <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
+                <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
+                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
+                  @change="handleFileSelect" />
+              </div>
               </div>
 
               <div v-if="selectedFiles.length > 0" class="mt-4">
@@ -931,23 +911,26 @@ const deleteDocument = async () => {
 
 // 工具函数
 const getFileIcon = (fileType: string) => {
-  const type = fileType?.toLowerCase() || "";
-  if (type.includes("pdf")) return "mdi-file-pdf-box";
-  if (type.includes("md") || type.includes("markdown"))
-    return "mdi-language-markdown";
-  if (type.includes("txt")) return "mdi-file-document-outline";
-  if (type.includes("url")) return "mdi-link-variant";
-  return "mdi-file";
-};
+  const type = fileType?.toLowerCase() || ''
+  if (type.includes('pdf')) return 'mdi-file-pdf-box'
+  if (type.includes('epub')) return 'mdi-book-open-page-variant'
+  if (type.includes('rst') || type.includes('adoc')) return 'mdi-file-document-outline'
+  if (type.includes('md') || type.includes('markdown')) return 'mdi-language-markdown'
+  if (type.includes('txt')) return 'mdi-file-document-outline'
+  if (type.includes('url')) return 'mdi-link-variant'
+  return 'mdi-file'
+}
 
 const getFileColor = (fileType: string) => {
-  const type = fileType?.toLowerCase() || "";
-  if (type.includes("pdf")) return "error";
-  if (type.includes("md")) return "info";
-  if (type.includes("txt")) return "success";
-  if (type.includes("url")) return "primary";
-  return "grey";
-};
+  const type = fileType?.toLowerCase() || ''
+  if (type.includes('pdf')) return 'error'
+  if (type.includes('epub')) return 'warning'
+  if (type.includes('rst') || type.includes('adoc')) return 'success'
+  if (type.includes('md')) return 'info'
+  if (type.includes('txt')) return 'success'
+  if (type.includes('url')) return 'primary'
+  return 'grey'
+}
 
 const formatFileSize = (bytes: number) => {
   if (!bytes) return "-";

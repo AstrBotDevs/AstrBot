@@ -4,3 +4,4 @@ dist/
 bun.lock
 pnpm-lock.yaml
 worker.js
+src/assets/mdi-subset/
