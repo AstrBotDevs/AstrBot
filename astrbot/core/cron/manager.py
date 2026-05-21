@@ -336,8 +336,6 @@ class CronJobManager:
             cron_event.role = "admin" if sender_id in admin_ids else "member"
         if cron_payload.get("origin", "tool") == "api":
             cron_event.role = "admin"
-        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
-
         tool_call_timeout = cfg.get("provider_settings", {}).get(
             "tool_call_timeout",
             120,
@@ -346,7 +344,6 @@ class CronJobManager:
             tool_call_timeout=tool_call_timeout,
             llm_safety_mode=False,
             streaming_response=False,
-            tool_providers=[ComputerToolProvider()],
         )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)

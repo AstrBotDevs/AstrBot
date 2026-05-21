@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import importlib
 import inspect
 import shlex
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -85,12 +87,14 @@ def _maybe_model_dump(value: Any) -> dict[str, Any]:
         return value
     if is_dataclass(value) and not isinstance(value, type):
         return asdict(value)
-    if hasattr(value, "model_dump"):
-        dumped = value.model_dump()
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
         if isinstance(dumped, dict):
             return dumped
-    if hasattr(value, "dict"):
-        dumped = value.dict()
+    dict_method = getattr(value, "dict", None)
+    if callable(dict_method):
+        dumped = dict_method()
         if isinstance(dumped, dict):
             return dumped
     attr_payload = {
@@ -139,13 +143,15 @@ def _normalize_process_result(raw: Any) -> ProcessResult:
 
     stdout = first_text("stdout", "output")
     stderr = first_text("stderr", "error")
-    exit_code = payload.get("exit_code")
-    if exit_code is None:
-        exit_code = payload.get("returncode")
-    if exit_code is None:
-        exit_code = payload.get("return_code")
-    if exit_code is None:
+    raw_exit_code = payload.get("exit_code")
+    if raw_exit_code is None:
+        raw_exit_code = payload.get("returncode")
+    if raw_exit_code is None:
+        raw_exit_code = payload.get("return_code")
+    if raw_exit_code is None:
         exit_code = 0 if not stderr else 1
+    else:
+        exit_code = int(raw_exit_code)
     success = bool(payload.get("success", not stderr and exit_code in (0, None)))
     return ProcessResult(
         stdout=stdout,
@@ -284,9 +290,10 @@ class CuaShellComponent(ShellComponent):
         self._sandbox = sandbox
         self._os_type = os_type.lower()
         shell = sandbox.shell
-        self._exec_raw = getattr(shell, "exec", None) or getattr(shell, "run", None)
-        if self._exec_raw is None:
+        exec_raw = getattr(shell, "exec", None) or getattr(shell, "run", None)
+        if exec_raw is None:
             raise RuntimeError("CUA sandbox shell must provide `.exec` or `.run`.")
+        self._exec_raw: Callable[..., Any] = exec_raw
 
     async def exec(
         self,
@@ -296,7 +303,9 @@ class CuaShellComponent(ShellComponent):
         timeout: int | None = 30,
         shell: bool = True,
         background: bool = False,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
+        _ = session_id
         if not shell:
             return {
                 "stdout": "",
@@ -404,11 +413,19 @@ def _write_result(path: str, result: dict[str, Any]) -> dict[str, Any]:
     return {"success": True, "path": path, **result}
 
 
+CUA_DEFAULT_IMAGE = str(CUA_DEFAULT_CONFIG["image"])
+CUA_DEFAULT_OS_TYPE = str(CUA_DEFAULT_CONFIG["os_type"])
+CUA_DEFAULT_TTL = int(CUA_DEFAULT_CONFIG["ttl"])
+CUA_DEFAULT_TELEMETRY_ENABLED = bool(CUA_DEFAULT_CONFIG["telemetry_enabled"])
+CUA_DEFAULT_LOCAL = bool(CUA_DEFAULT_CONFIG["local"])
+CUA_DEFAULT_API_KEY = str(CUA_DEFAULT_CONFIG["api_key"])
+
+
 class CuaFileSystemComponent(FileSystemComponent):
     def __init__(
         self,
         sandbox: Any,
-        os_type: str = CUA_DEFAULT_CONFIG["os_type"],
+        os_type: str = CUA_DEFAULT_OS_TYPE,
     ) -> None:
         self._shell = CuaShellComponent(sandbox, os_type=os_type)
         self._fs_components = _resolve_files_components(sandbox)
@@ -546,6 +563,26 @@ class _PosixShellFileSystem(FileSystemComponent):
             return None
         return _non_posix_filesystem_result(path, self._os_type)
 
+    async def create_file(
+        self,
+        path: str,
+        content: str = "",
+        mode: int = 0o644,
+    ) -> dict[str, Any]:
+        write_result = await self.write_file(path, content)
+        if not write_result.get("success"):
+            return {**write_result, "mode": mode, "mode_applied": False}
+        chmod_result = await self._shell.exec(f"chmod {mode:o} {shlex.quote(path)}")
+        if chmod_result.get("stderr"):
+            return {
+                "success": True,
+                "path": path,
+                "mode": mode,
+                "mode_applied": False,
+                "mode_error": chmod_result["stderr"],
+            }
+        return {"success": True, "path": path, "mode": mode, "mode_applied": True}
+
     async def read_file(
         self,
         path: str,
@@ -622,6 +659,36 @@ class _PosixShellFileSystem(FileSystemComponent):
             after_context=after_context,
             before_context=before_context,
         )
+
+    async def edit_file(
+        self,
+        path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+        encoding: str = "utf-8",
+    ) -> dict[str, Any]:
+        read_result = await self.read_file(path, encoding=encoding)
+        if not read_result.get("success"):
+            return read_result
+        content = str(read_result.get("content", ""))
+        occurrences = content.count(old_string)
+        if occurrences == 0:
+            return {
+                "success": False,
+                "path": path,
+                "error": "old string not found in file",
+                "replacements": 0,
+            }
+        updated = content.replace(old_string, new_string, -1 if replace_all else 1)
+        write_result = await self.write_file(path, updated, encoding=encoding)
+        if not write_result.get("success"):
+            return write_result
+        return {
+            "success": True,
+            "path": path,
+            "replacements": occurrences if replace_all else 1,
+        }
 
 
 async def _list_dir_via_shell(
@@ -734,12 +801,12 @@ class _CuaRuntime:
 class CuaBooter(ComputerBooter):
     def __init__(
         self,
-        image: str = CUA_DEFAULT_CONFIG["image"],
-        os_type: str = CUA_DEFAULT_CONFIG["os_type"],
-        ttl: int = CUA_DEFAULT_CONFIG["ttl"],
-        telemetry_enabled: bool = CUA_DEFAULT_CONFIG["telemetry_enabled"],
-        local: bool = CUA_DEFAULT_CONFIG["local"],
-        api_key: str = CUA_DEFAULT_CONFIG["api_key"],
+        image: str = CUA_DEFAULT_IMAGE,
+        os_type: str = CUA_DEFAULT_OS_TYPE,
+        ttl: int = CUA_DEFAULT_TTL,
+        telemetry_enabled: bool = CUA_DEFAULT_TELEMETRY_ENABLED,
+        local: bool = CUA_DEFAULT_LOCAL,
+        api_key: str = CUA_DEFAULT_API_KEY,
     ) -> None:
         self.image = image
         self.os_type = os_type
@@ -752,12 +819,15 @@ class CuaBooter(ComputerBooter):
     async def boot(self, session_id: str) -> None:
         _ = session_id
         try:
-            from cua import Image, Sandbox
+            cua_module = importlib.import_module("cua")
         except ImportError as exc:
             raise RuntimeError(
                 "CUA sandbox support requires the optional `cua` package. "
                 "Install it with `pip install cua` in the AstrBot environment.",
             ) from exc
+
+        Image = vars(cua_module)["Image"]
+        Sandbox = vars(cua_module)["Sandbox"]
 
         image_obj = self._build_image(Image)
         ephemeral_kwargs = self._build_ephemeral_kwargs(Sandbox.ephemeral)
@@ -808,7 +878,7 @@ class CuaBooter(ComputerBooter):
             kwargs["api_key"] = self.api_key
         return kwargs
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, **kwargs) -> None:
         if self._runtime is not None:
             await self._runtime.sandbox_cm.__aexit__(None, None, None)
             self._runtime = None

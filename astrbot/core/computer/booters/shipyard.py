@@ -44,7 +44,9 @@ class ShipyardShellWrapper:
         timeout: int | None = 300,
         shell: bool = True,
         background: bool = False,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
+        _ = session_id
         if not shell:
             return {
                 "stdout": "",
@@ -246,7 +248,7 @@ class ShipyardBooter(ComputerBooter):
         self._shell = ShipyardShellWrapper(self._ship.shell)  # type: ignore[arg-type]
         self._fs = ShipyardFileSystemWrapper(self._ship.fs, self._shell)  # type: ignore[arg-type]
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, **kwargs) -> None:
         logger.info("[Computer] booter_shutdown booter=shipyard status=done")
 
     @property
@@ -259,7 +261,7 @@ class ShipyardBooter(ComputerBooter):
 
     @property
     def shell(self) -> ShellComponent:
-        return self._shell  # type: ignore[return-value]
+        return self._shell
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         """Upload file to sandbox"""

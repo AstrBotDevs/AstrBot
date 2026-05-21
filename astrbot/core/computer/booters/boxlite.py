@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import random
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import aiohttp
 import anyio
@@ -15,7 +15,7 @@ from shipyard.shell import ShellComponent as ShipyardShellComponent
 from astrbot.api import logger
 
 if TYPE_CHECKING:
-    from astrbot.core.agent.tool import FunctionTool, ToolSchema
+    from astrbot.core.agent.tool import ToolSchema
 
 from astrbot.core.computer.olayer import (
     FileSystemComponent,
@@ -24,6 +24,7 @@ from astrbot.core.computer.olayer import (
 )
 
 from .base import ComputerBooter
+from .shipyard import ShipyardFileSystemWrapper, ShipyardShellWrapper
 
 
 class MockShipyardSandboxClient:
@@ -176,7 +177,8 @@ class BoxliteBooter(ComputerBooter):
             session_id,
         )
         random_port = random.randint(20000, 30000)
-        self.box = boxlite.SimpleBox(  # type: ignore
+        SimpleBox = vars(boxlite)["SimpleBox"]
+        self.box = SimpleBox(
             image="soulter/shipyard-ship",
             memory_mib=512,
             cpus=1,
@@ -196,25 +198,27 @@ class BoxliteBooter(ComputerBooter):
         self.mocked = MockShipyardSandboxClient(
             sb_url=f"http://127.0.0.1:{random_port}",
         )
-        self._fs = ShipyardFileSystemComponent(
-            client=self.mocked,
+        raw_fs = ShipyardFileSystemComponent(
+            client=cast(Any, self.mocked),
             ship_id=self.box.id,
             session_id=session_id,
         )
         self._python = ShipyardPythonComponent(
-            client=self.mocked,
+            client=cast(Any, self.mocked),
             ship_id=self.box.id,
             session_id=session_id,
         )
-        self._shell = ShipyardShellComponent(
-            client=self.mocked,
+        raw_shell = ShipyardShellComponent(
+            client=cast(Any, self.mocked),
             ship_id=self.box.id,
             session_id=session_id,
         )
+        self._shell = ShipyardShellWrapper(cast(Any, raw_shell))
+        self._fs = ShipyardFileSystemWrapper(cast(Any, raw_fs), self._shell)
 
         await self.mocked.wait_healthy(self.box.id, session_id)
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, **kwargs) -> None:
         logger.info(
             "[Computer] booter_shutdown booter=boxlite ship_id=%s status=starting",
             self.box.id,
@@ -224,6 +228,9 @@ class BoxliteBooter(ComputerBooter):
             "[Computer] booter_shutdown booter=boxlite ship_id=%s status=done",
             self.box.id,
         )
+
+    async def available(self) -> bool:
+        return hasattr(self, "box")
 
     @property
     def fs(self) -> FileSystemComponent:
@@ -243,7 +250,7 @@ class BoxliteBooter(ComputerBooter):
 
     @classmethod
     @functools.cache
-    def _default_tools(cls) -> tuple[FunctionTool, ...]:
+    def _default_tools(cls) -> tuple[ToolSchema, ...]:
         from astrbot.core.computer.tools import (
             ExecuteShellTool,
             FileDownloadTool,
@@ -251,7 +258,7 @@ class BoxliteBooter(ComputerBooter):
             PythonTool,
         )
 
-        return (  # type: ignore
+        return (
             ExecuteShellTool(),
             PythonTool(),
             FileUploadTool(),

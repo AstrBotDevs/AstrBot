@@ -122,7 +122,10 @@ class BwrapShellComponent(ShellComponent):
         timeout: int | None = 30,
         shell: bool = True,
         background: bool = False,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
+        _ = session_id
+
         def _run() -> dict[str, Any]:
             run_env = os.environ.copy()
             if env:
@@ -235,7 +238,14 @@ class HostBackedFileSystemComponent(FileSystemComponent):
         await asyncio.to_thread(os.chmod, p, mode)
         return {"success": True, "path": p}
 
-    async def read_file(self, path: str, encoding: str = "utf-8") -> dict[str, Any]:
+    async def read_file(
+        self,
+        path: str,
+        encoding: str = "utf-8",
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        _ = offset, limit
         p = self._safe_path(path)
         try:
             content = await asyncio.to_thread(_read_file_sync, p, encoding)
@@ -400,7 +410,7 @@ class BwrapBooter(ComputerBooter):
 {}""".format(test_py["stderr"]),
             )
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, **kwargs) -> None:
         config = self.config
         if config is None:
             return

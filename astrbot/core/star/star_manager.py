@@ -177,6 +177,20 @@ async def _install_requirements_with_precheck(
         )
 
 
+async def _get_global_list_preference(key: str) -> list[Any]:
+    value = await sp.global_get(key, [])
+    if not isinstance(value, list):
+        raise TypeError(f"全局偏好设置 {key} 应为 list, 实际为 {type(value).__name__}")
+    return value
+
+
+async def _get_global_dict_preference(key: str) -> dict[Any, Any]:
+    value = await sp.global_get(key, {})
+    if not isinstance(value, dict):
+        raise TypeError(f"全局偏好设置 {key} 应为 dict, 实际为 {type(value).__name__}")
+    return value
+
+
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
         self.updator = PluginUpdator()
@@ -470,6 +484,7 @@ class PluginManager:
         Notes: 旧版本 AstrBot 插件可能使用的是 info() 函数来获取元数据。
         """
         metadata = None
+        raw_metadata: object | None = None
 
         if not os.path.exists(plugin_path):
             raise Exception("插件不存在。")
@@ -479,52 +494,52 @@ class PluginManager:
                 os.path.join(plugin_path, "metadata.yaml"),
                 encoding="utf-8",
             ) as f:
-                metadata = yaml.safe_load(f)
+                raw_metadata = yaml.safe_load(f)
         elif plugin_obj and hasattr(plugin_obj, "info"):
             # 使用 info() 函数
-            metadata = plugin_obj.info()
+            raw_metadata = plugin_obj.info()
 
-        if isinstance(metadata, dict):
-            if "desc" not in metadata and "description" in metadata:
-                metadata["desc"] = metadata["description"]
+        if isinstance(raw_metadata, dict):
+            if "desc" not in raw_metadata and "description" in raw_metadata:
+                raw_metadata["desc"] = raw_metadata["description"]
 
             if (
-                "name" not in metadata
-                or "desc" not in metadata
-                or "version" not in metadata
-                or "author" not in metadata
+                "name" not in raw_metadata
+                or "desc" not in raw_metadata
+                or "version" not in raw_metadata
+                or "author" not in raw_metadata
             ):
                 raise Exception(
                     "插件元数据信息不完整。name, desc, version, author 是必须的字段。",
                 )
             metadata = StarMetadata(
-                name=metadata["name"],
-                author=metadata["author"],
-                desc=metadata["desc"],
+                name=raw_metadata["name"],
+                author=raw_metadata["author"],
+                desc=raw_metadata["desc"],
                 short_desc=(
-                    metadata["short_desc"]
-                    if isinstance(metadata.get("short_desc"), str)
+                    raw_metadata["short_desc"]
+                    if isinstance(raw_metadata.get("short_desc"), str)
                     else None
                 ),
-                version=metadata["version"],
-                repo=metadata["repo"] if "repo" in metadata else None,
-                display_name=metadata.get("display_name", None),
+                version=raw_metadata["version"],
+                repo=raw_metadata["repo"] if "repo" in raw_metadata else None,
+                display_name=raw_metadata.get("display_name", None),
                 support_platforms=(
                     [
                         platform_id
-                        for platform_id in metadata["support_platforms"]
+                        for platform_id in raw_metadata["support_platforms"]
                         if isinstance(platform_id, str)
                     ]
-                    if isinstance(metadata.get("support_platforms"), list)
+                    if isinstance(raw_metadata.get("support_platforms"), list)
                     else []
                 ),
                 astrbot_version=(
-                    metadata["astrbot_version"]
-                    if isinstance(metadata.get("astrbot_version"), str)
+                    raw_metadata["astrbot_version"]
+                    if isinstance(raw_metadata.get("astrbot_version"), str)
                     else None
                 ),
-                pages=metadata["pages"]
-                if isinstance(metadata.get("pages"), list)
+                pages=raw_metadata["pages"]
+                if isinstance(raw_metadata.get("pages"), list)
                 else [],
                 i18n=PluginManager._load_plugin_i18n(plugin_path),
             )
@@ -888,9 +903,11 @@ class PluginManager:
                 - error_message (str|None): 错误信息，成功时为 None
 
         """
-        inactivated_plugins = await sp.global_get("inactivated_plugins", [])
-        inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
-        alter_cmd = await sp.global_get("alter_cmd", {})
+        inactivated_plugins = await _get_global_list_preference("inactivated_plugins")
+        inactivated_llm_tools = await _get_global_list_preference(
+            "inactivated_llm_tools",
+        )
+        alter_cmd = await _get_global_dict_preference("alter_cmd")
 
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
@@ -1145,6 +1162,8 @@ class PluginManager:
                     star_map[path] = metadata
                     star_registry.append(metadata)
 
+                assert metadata.module_path, f"插件 {metadata.name} 模块路径为空"
+
                 # 禁用/启用插件
                 if metadata.module_path in inactivated_plugins:
                     metadata.activated = False
@@ -1152,8 +1171,6 @@ class PluginManager:
                 # Plugin logo path
                 if await asyncio.to_thread(os.path.exists, logo_path):
                     metadata.logo_path = logo_path
-
-                assert metadata.module_path, f"插件 {metadata.name} 模块路径为空"
 
                 full_names = []
                 for handler in star_handlers_registry.get_handlers_by_module_name(
@@ -1163,7 +1180,8 @@ class PluginManager:
 
                     # 检查并且植入自定义的权限过滤器（alter_cmd）
                     if (
-                        metadata.name in alter_cmd
+                        metadata.name is not None
+                        and metadata.name in alter_cmd
                         and handler.handler_name in alter_cmd[metadata.name]
                     ):
                         cmd_type = alter_cmd[metadata.name][handler.handler_name].get(
@@ -1696,12 +1714,14 @@ class PluginManager:
             await self._terminate_plugin(plugin)
 
             # 加入到 shared_preferences 中
-            inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
+            inactivated_plugins = await _get_global_list_preference(
+                "inactivated_plugins",
+            )
             if plugin.module_path not in inactivated_plugins:
                 inactivated_plugins.append(plugin.module_path)
 
-            inactivated_llm_tools: list = list(
-                set(await sp.global_get("inactivated_llm_tools", [])),
+            inactivated_llm_tools = list(
+                set(await _get_global_list_preference("inactivated_llm_tools")),
             )  # 后向兼容
 
             # 禁用插件启用的 llm_tool
@@ -1769,12 +1789,19 @@ class PluginManager:
             except Exception:
                 logger.error(traceback.format_exc())
 
+    async def cleanup_loaded_plugins(self) -> None:
+        """Terminate all currently loaded plugin instances."""
+        for plugin in self.context.get_all_stars():
+            await self._terminate_plugin(plugin)
+
     async def turn_on_plugin(self, plugin_name: str) -> None:
         plugin = self.context.get_registered_star(plugin_name)
         if plugin is None:
             raise Exception(f"插件 {plugin_name} 不存在。")
-        inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
-        inactivated_llm_tools: list = await sp.global_get("inactivated_llm_tools", [])
+        inactivated_plugins = await _get_global_list_preference("inactivated_plugins")
+        inactivated_llm_tools = await _get_global_list_preference(
+            "inactivated_llm_tools",
+        )
         if plugin.module_path in inactivated_plugins:
             inactivated_plugins.remove(plugin.module_path)
         await sp.global_put("inactivated_plugins", inactivated_plugins)

@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import os
 import time
 import traceback
 import typing as T
@@ -372,6 +373,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         overflow_dir = await anyio.Path(
             self.tool_result_overflow_dir,
         ).resolve(strict=False)
+        overflow_dir_path = os.fspath(overflow_dir)
         safe_tool_call_id = (
             "".join(
                 ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
@@ -380,12 +382,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             or "tool_call"
         )
         file_name = f"{safe_tool_call_id}_{uuid.uuid4().hex[:8]}.txt"
-        overflow_path = overflow_dir / file_name
+        overflow_path = os.path.join(overflow_dir_path, file_name)
 
         def _run() -> str:
-            overflow_dir.mkdir(parents=True, exist_ok=True)
-            overflow_path.write_text(content, encoding="utf-8")
-            return str(overflow_path)
+            os.makedirs(overflow_dir_path, exist_ok=True)
+            with open(overflow_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            return overflow_path
 
         return await asyncio.to_thread(_run)
 
@@ -965,6 +968,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> T.AsyncGenerator[_HandleFunctionToolsResult, None]:
         """处理函数工具调用。"""
         tool_call_result_blocks: list[ToolCallMessageSegment] = []
+        last_func_tool_name = "unknown"
+        last_func_tool_id = "unknown"
         logger.info(f"Agent 使用工具: {llm_response.tools_call_name}")
 
         def _append_tool_call_result(tool_call_id: str, content: str) -> None:
@@ -983,6 +988,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_ids,
             strict=False,
         ):
+            last_func_tool_name = func_tool_name
+            last_func_tool_id = func_tool_id
             tool_call_streak = self._track_tool_call_streak(func_tool_name)
             yield _HandleFunctionToolsResult.from_message_chain(
                 MessageChain(
@@ -1212,7 +1219,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     chain=[
                         Json(
                             data={
-                                "id": func_tool_id,
+                                "id": last_func_tool_id,
                                 "ts": time.time(),
                                 "result": last_tcr_content,
                             },
@@ -1220,7 +1227,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     ],
                 ),
             )
-            logger.info(f"Tool `{func_tool_name}` Result: {last_tcr_content}")
+            logger.info(f"Tool `{last_func_tool_name}` Result: {last_tcr_content}")
 
         # 处理函数调用响应
         if tool_call_result_blocks:
@@ -1237,7 +1244,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         contexts: list[dict[str, T.Any]] = []
         for msg in self.run_context.messages:
             if hasattr(msg, "model_dump"):
-                contexts.append(msg.model_dump())  # type: ignore[call-arg]
+                contexts.append(msg.model_dump())
             elif isinstance(msg, dict):
                 contexts.append(copy.deepcopy(msg))
         instruction = self.SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE.format(

@@ -333,7 +333,7 @@ class LocalBooter(ComputerBooter):
     async def boot(self, session_id: str) -> None:
         logger.info(f"Local computer booter initialized for session: {session_id}")
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, **kwargs) -> None:
         await LocalShellComponent.shutdown_all()
         logger.info("Local computer booter shutdown complete.")
 

@@ -255,6 +255,13 @@ async def migration_persona_data(
             logger.error(f"解析 Persona 配置失败:{e}")
 
 
+def _get_dict_preference(key: str) -> dict[str, object]:
+    value = sp_v3.get(key, default={})
+    if not isinstance(value, dict):
+        raise TypeError(f"旧偏好设置 {key} 应为 dict, 实际为 {type(value).__name__}")
+    return value
+
+
 async def migration_preferences(
     db_helper: BaseDatabase,
     platform_id_map: dict[str, dict[str, str]],
@@ -272,7 +279,7 @@ async def migration_preferences(
         if value is not None:
             await sp.put_async("global", "global", key, value)
             logger.info(f"迁移全局偏好设置 {key} 成功,值: {value}")
-    session_conversation = sp_v3.get("session_conversation", default={})
+    session_conversation = _get_dict_preference("session_conversation")
     for umo, conversation_id in session_conversation.items():
         if not umo or not conversation_id:
             continue
@@ -284,7 +291,7 @@ async def migration_preferences(
             logger.info(f"迁移会话 {umo} 的对话数据到新表成功,平台 ID: {platform_id}")
         except Exception as e:
             logger.error(f"迁移会话 {umo} 的对话数据失败: {e}", exc_info=True)
-    session_service_config = sp_v3.get("session_service_config", default={})
+    session_service_config = _get_dict_preference("session_service_config")
     for umo, config in session_service_config.items():
         if not umo or not config:
             continue
@@ -296,7 +303,7 @@ async def migration_preferences(
             logger.info(f"迁移会话 {umo} 的服务配置到新表成功,平台 ID: {platform_id}")
         except Exception as e:
             logger.error(f"迁移会话 {umo} 的服务配置失败: {e}", exc_info=True)
-    session_variables = sp_v3.get("session_variables", default={})
+    session_variables = _get_dict_preference("session_variables")
     for umo, variables in session_variables.items():
         if not umo or not variables:
             continue
@@ -307,7 +314,7 @@ async def migration_preferences(
             await sp.put_async("umo", str(session), "session_variables", variables)
         except Exception as e:
             logger.error(f"迁移会话 {umo} 的变量失败: {e}", exc_info=True)
-    session_provider_perf = sp_v3.get("session_provider_perf", default={})
+    session_provider_perf = _get_dict_preference("session_provider_perf")
     for umo, perf in session_provider_perf.items():
         if not umo or not perf:
             continue
@@ -315,8 +322,12 @@ async def migration_preferences(
             session = MessageSesion.from_str(session_str=umo)
             platform_id = get_platform_id(platform_id_map, session.platform_name)
             session.platform_id = platform_id
-            perf_dict = perf
-            for provider_type, provider_id in perf_dict.items():
+            if not isinstance(perf, dict):
+                raise TypeError(
+                    f"旧偏好设置 session_provider_perf.{umo} 应为 dict, "
+                    f"实际为 {type(perf).__name__}",
+                )
+            for provider_type, provider_id in perf.items():
                 await sp.put_async(
                     "umo",
                     str(session),

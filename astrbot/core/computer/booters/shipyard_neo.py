@@ -21,6 +21,7 @@ from astrbot.core.computer.olayer import (
 )
 
 from .shell_background import build_detached_shell_command
+from .shipyard_search_file_util import search_files_via_shell
 
 try:
     from shipyard_neo import BayClient  # noqa: F401
@@ -91,7 +92,9 @@ class NeoShellComponent(ShellComponent):
         timeout: int | None = 300,  # noqa: ASYNC109
         shell: bool = True,
         background: bool = False,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
+        _ = session_id
         if not shell:
             return {
                 "stdout": "",
@@ -163,10 +166,22 @@ class NeoFileSystemComponent(FileSystemComponent):
         await self._sandbox.filesystem.write_file(path, content)
         return {"success": True, "path": path}
 
-    async def read_file(self, path: str, encoding: str = "utf-8") -> dict[str, Any]:
+    async def read_file(
+        self,
+        path: str,
+        encoding: str = "utf-8",
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
         _ = encoding
         content = await self._sandbox.filesystem.read_file(path)
-        return {"success": True, "path": path, "content": content}
+        text = str(content)
+        if offset is not None or limit is not None:
+            lines = text.splitlines(keepends=True)
+            start = 0 if offset is None else offset
+            selected = lines[start:] if limit is None else lines[start : start + limit]
+            text = "".join(selected)
+        return {"success": True, "path": path, "content": text}
 
     async def write_file(
         self,
@@ -197,6 +212,57 @@ class NeoFileSystemComponent(FileSystemComponent):
                 continue
             data.append(item)
         return {"success": True, "path": path, "entries": data}
+
+    async def search_files(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        after_context: int | None = None,
+        before_context: int | None = None,
+    ) -> dict[str, Any]:
+        if self._shell is None:
+            raise RuntimeError(
+                "NeoFileSystemComponent requires a shell for search_files."
+            )
+        return await search_files_via_shell(
+            self._shell,
+            pattern=pattern,
+            path=path,
+            glob=glob,
+            after_context=after_context,
+            before_context=before_context,
+        )
+
+    async def edit_file(
+        self,
+        path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+        encoding: str = "utf-8",
+    ) -> dict[str, Any]:
+        read_result = await self.read_file(path, encoding=encoding)
+        if not read_result.get("success"):
+            return read_result
+        content = str(read_result.get("content", ""))
+        occurrences = content.count(old_string)
+        if occurrences == 0:
+            return {
+                "success": False,
+                "path": path,
+                "error": "old string not found in file",
+                "replacements": 0,
+            }
+        updated = content.replace(old_string, new_string, -1 if replace_all else 1)
+        write_result = await self.write_file(path, updated, encoding=encoding)
+        if not write_result.get("success"):
+            return write_result
+        return {
+            "success": True,
+            "path": path,
+            "replacements": occurrences if replace_all else 1,
+        }
 
 
 class NeoBrowserComponent(BrowserComponent):
@@ -500,7 +566,8 @@ class ShipyardNeoBooter(ComputerBooter):
             )
         return chosen
 
-    async def shutdown(self, *, delete_sandbox: bool = False) -> None:
+    async def shutdown(self, **kwargs) -> None:
+        delete_sandbox = bool(kwargs.get("delete_sandbox", False))
         if self._client is not None:
             sandbox_id = getattr(self._sandbox, "id", "unknown")
 
@@ -622,7 +689,7 @@ class ShipyardNeoBooter(ComputerBooter):
 
     @classmethod
     @functools.cache
-    def _base_tools(cls):
+    def _base_tools(cls) -> tuple[ToolSchema, ...]:
         """4 base + 11 Neo lifecycle = 15 tools (all Neo profiles)."""
         from astrbot.core.computer.tools import (
             AnnotateExecutionTool,
@@ -662,7 +729,7 @@ class ShipyardNeoBooter(ComputerBooter):
 
     @classmethod
     @functools.cache
-    def _browser_tools(cls):
+    def _browser_tools(cls) -> tuple[ToolSchema, ...]:
         from astrbot.core.computer.tools import (
             BrowserBatchExecTool,
             BrowserExecTool,
@@ -681,7 +748,7 @@ class ShipyardNeoBooter(ComputerBooter):
         caps = self.capabilities
         if caps is None:
             return self.__class__.get_default_tools()
-        tools = list(self._base_tools())
+        tools: list[ToolSchema] = list(self._base_tools())
         if "browser" in caps:
             tools.extend(self._browser_tools())
         return tools
