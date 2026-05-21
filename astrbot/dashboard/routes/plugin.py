@@ -1270,9 +1270,9 @@ class PluginRoute(Route):
                 logo_url = await self.get_plugin_logo_token(plugin.logo_path)
             _t = {
                 "name": plugin.name,
-                "marketplace_name": plugin.name.replace(
+                "marketplace_name": (plugin.name or "").replace(
                     "_", "-"
-                ),  # 用于市场匹配的名称（减号格式）
+                ),
                 "repo": "" if plugin.repo is None else plugin.repo,
                 "author": plugin.author,
                 "desc": plugin.desc,
