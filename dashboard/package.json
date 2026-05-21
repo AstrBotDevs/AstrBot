@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@guolao/vue-monaco-editor": "^1.5.4",
+    "@ricky0123/vad-web": "^0.0.30",
     "@tiptap/starter-kit": "2.1.7",
     "@tiptap/vue-3": "2.1.7",
     "apexcharts": "3.42.0",
@@ -31,6 +32,7 @@
     "markstream-vue": "^0.0.6",
     "mermaid": "^11.12.2",
     "monaco-editor": "^0.52.2",
+    "onnxruntime-web": "^1.26.0",
     "pinia": "2.1.6",
     "pinyin-pro": "^3.26.0",
     "qrcode": "^1.5.4",
