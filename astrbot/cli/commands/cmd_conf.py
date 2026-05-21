@@ -137,6 +137,22 @@ def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
     return obj
 
 
+def _set_dashboard_password(config: dict[str, Any], raw_password: str) -> None:
+    """Set dashboard password hashes and clear password migration flags."""
+    _set_nested_item(
+        config,
+        "dashboard.pbkdf2_password",
+        hash_dashboard_password(raw_password),
+    )
+    _set_nested_item(
+        config,
+        "dashboard.password",
+        hash_legacy_dashboard_password(raw_password),
+    )
+    _set_nested_item(config, "dashboard.password_storage_upgraded", True)
+    _set_nested_item(config, "dashboard.password_change_required", False)
+
+
 @click.group(name="conf")
 def conf() -> None:
     """Configuration management commands
@@ -171,16 +187,7 @@ def set_config(key: str, value: str) -> None:
         old_value = _get_nested_item(config, key)
         validated_value = CONFIG_VALIDATORS[key](value)
         if key == "dashboard.password":
-            _set_nested_item(
-                config,
-                "dashboard.pbkdf2_password",
-                hash_dashboard_password(validated_value),
-            )
-            _set_nested_item(
-                config,
-                "dashboard.password",
-                hash_legacy_dashboard_password(validated_value),
-            )
+            _set_dashboard_password(config, validated_value)
         else:
             _set_nested_item(config, key, validated_value)
         _save_config(config)
