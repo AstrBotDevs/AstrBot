@@ -1317,36 +1317,46 @@ async def test_cleanup_plugin_optional_artifacts_skips_kv_when_plugin_id_none(
 
 
 @pytest.mark.asyncio
-async def test_uninstall_plugin_reads_plugin_id_from_star_cls(
+async def test_uninstall_plugin_reads_plugin_id_from_metadata(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
     cleanup_calls = []
-
-    class MockStarCls:
-        plugin_id = "mock_author/mock_name"
 
     mock_star = MockStar()
     mock_star.root_dir_name = TEST_PLUGIN_DIR
     mock_star.name = TEST_PLUGIN_NAME
     mock_star.module_path = "data.plugins.helloworld.main"
     mock_star.reserved = False
-    mock_star.star_cls = MockStarCls()
+    mock_star.star_cls = None
+    mock_star.plugin_id = "mock_author/mock_name"
 
     cast(Any, plugin_manager_pm.context).stars.append(mock_star)
 
-    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", lambda p: asyncio.sleep(0))
-    monkeypatch.setattr(plugin_manager_pm, "_unbind_plugin", lambda n, m: asyncio.sleep(0))
+    monkeypatch.setattr(
+        plugin_manager_pm, "_terminate_plugin", lambda p: asyncio.sleep(0)
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm, "_unbind_plugin", lambda n, m: asyncio.sleep(0)
+    )
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.remove_dir",
         lambda p: None,
     )
 
-    async def mock_cleanup(*, root_dir_name, plugin_label, plugin_id, delete_config, delete_data):
+    async def mock_cleanup(
+        *, root_dir_name, plugin_label, plugin_id, delete_config, delete_data
+    ):
         cleanup_calls.append(
-            {"root_dir_name": root_dir_name, "plugin_label": plugin_label, "plugin_id": plugin_id}
+            {
+                "root_dir_name": root_dir_name,
+                "plugin_label": plugin_label,
+                "plugin_id": plugin_id,
+            }
         )
 
-    monkeypatch.setattr(plugin_manager_pm, "_cleanup_plugin_optional_artifacts", mock_cleanup)
+    monkeypatch.setattr(
+        plugin_manager_pm, "_cleanup_plugin_optional_artifacts", mock_cleanup
+    )
 
     await plugin_manager_pm.uninstall_plugin(
         TEST_PLUGIN_NAME, delete_config=False, delete_data=True
@@ -1357,42 +1367,96 @@ async def test_uninstall_plugin_reads_plugin_id_from_star_cls(
 
 
 @pytest.mark.asyncio
-async def test_uninstall_plugin_handles_missing_star_cls_gracefully(
+async def test_uninstall_plugin_handles_disabled_plugin_with_plugin_id(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
     cleanup_calls = []
 
     mock_star = MockStar()
     mock_star.root_dir_name = TEST_PLUGIN_DIR
+    mock_star.name = TEST_PLUGIN_NAME
     mock_star.module_path = "data.plugins.helloworld.main"
     mock_star.star_cls = None
+    mock_star.plugin_id = "mock_author/mock_name"
 
     cast(Any, plugin_manager_pm.context).stars.append(mock_star)
 
-    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", lambda p: asyncio.sleep(0))
-    monkeypatch.setattr(plugin_manager_pm, "_unbind_plugin", lambda n, m: asyncio.sleep(0))
+    monkeypatch.setattr(
+        plugin_manager_pm, "_terminate_plugin", lambda p: asyncio.sleep(0)
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm, "_unbind_plugin", lambda n, m: asyncio.sleep(0)
+    )
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.remove_dir",
         lambda p: None,
     )
 
-    async def mock_cleanup(*, root_dir_name, plugin_label, plugin_id, delete_config, delete_data):
+    async def mock_cleanup(
+        *, root_dir_name, plugin_label, plugin_id, delete_config, delete_data
+    ):
         cleanup_calls.append(
-            {"root_dir_name": root_dir_name, "plugin_label": plugin_label, "plugin_id": plugin_id}
+            {
+                "root_dir_name": root_dir_name,
+                "plugin_label": plugin_label,
+                "plugin_id": plugin_id,
+            }
         )
 
-    monkeypatch.setattr(plugin_manager_pm, "_cleanup_plugin_optional_artifacts", mock_cleanup)
+    monkeypatch.setattr(
+        plugin_manager_pm, "_cleanup_plugin_optional_artifacts", mock_cleanup
+    )
 
     await plugin_manager_pm.uninstall_plugin(
         TEST_PLUGIN_NAME, delete_config=False, delete_data=True
     )
 
     assert len(cleanup_calls) == 1
-    assert cleanup_calls[0]["plugin_id"] is None
+    assert cleanup_calls[0]["plugin_id"] == "mock_author/mock_name"
 
 
 @pytest.mark.asyncio
-async def test_uninstall_failed_plugin_passes_none_plugin_id(
+async def test_uninstall_failed_plugin_passes_plugin_id_from_record(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    cleanup_calls = []
+
+    plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {
+        "name": TEST_PLUGIN_NAME,
+        "display_name": "Hello World",
+        "plugin_id": "astrbot_team/helloworld",
+    }
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.remove_dir",
+        lambda p: None,
+    )
+
+    async def mock_cleanup(
+        *, root_dir_name, plugin_label, plugin_id, delete_config, delete_data
+    ):
+        cleanup_calls.append(
+            {
+                "root_dir_name": root_dir_name,
+                "plugin_label": plugin_label,
+                "plugin_id": plugin_id,
+            }
+        )
+
+    monkeypatch.setattr(
+        plugin_manager_pm, "_cleanup_plugin_optional_artifacts", mock_cleanup
+    )
+
+    await plugin_manager_pm.uninstall_failed_plugin(
+        TEST_PLUGIN_DIR, delete_config=False, delete_data=True
+    )
+
+    assert len(cleanup_calls) == 1
+    assert cleanup_calls[0]["plugin_id"] == "astrbot_team/helloworld"
+
+
+@pytest.mark.asyncio
+async def test_uninstall_failed_plugin_without_plugin_id_in_record(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
     cleanup_calls = []
@@ -1407,12 +1471,20 @@ async def test_uninstall_failed_plugin_passes_none_plugin_id(
         lambda p: None,
     )
 
-    async def mock_cleanup(*, root_dir_name, plugin_label, plugin_id, delete_config, delete_data):
+    async def mock_cleanup(
+        *, root_dir_name, plugin_label, plugin_id, delete_config, delete_data
+    ):
         cleanup_calls.append(
-            {"root_dir_name": root_dir_name, "plugin_label": plugin_label, "plugin_id": plugin_id}
+            {
+                "root_dir_name": root_dir_name,
+                "plugin_label": plugin_label,
+                "plugin_id": plugin_id,
+            }
         )
 
-    monkeypatch.setattr(plugin_manager_pm, "_cleanup_plugin_optional_artifacts", mock_cleanup)
+    monkeypatch.setattr(
+        plugin_manager_pm, "_cleanup_plugin_optional_artifacts", mock_cleanup
+    )
 
     await plugin_manager_pm.uninstall_failed_plugin(
         TEST_PLUGIN_DIR, delete_config=False, delete_data=True

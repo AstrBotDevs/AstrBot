@@ -34,6 +34,9 @@ class StarMetadata:
     repo: str | None = None
     """插件仓库地址"""
 
+    plugin_id: str | None = None
+    """插件的唯一标识，格式为 author/name"""
+
     star_cls_type: type[Star] | None = None
     """插件的类对象的类型"""
     module_path: str | None = None

@@ -739,6 +739,8 @@ class PluginManager:
         try:
             metadata = self._load_plugin_metadata(plugin_path=plugin_dir_path)
             if metadata:
+                p_name = (metadata.name or "unknown").lower().replace("/", "_")
+                p_author = (metadata.author or "unknown").lower().replace("/", "_")
                 record.update(
                     {
                         "name": metadata.name,
@@ -750,6 +752,7 @@ class PluginManager:
                         "display_name": metadata.display_name,
                         "support_platforms": metadata.support_platforms,
                         "astrbot_version": metadata.astrbot_version,
+                        "plugin_id": f"{p_author}/{p_name}",
                     }
                 )
         except Exception as metadata_error:
@@ -1016,6 +1019,7 @@ class PluginManager:
                     p_name = (metadata.name or "unknown").lower().replace("/", "_")
                     p_author = (metadata.author or "unknown").lower().replace("/", "_")
                     plugin_id = f"{p_author}/{p_name}"
+                    metadata.plugin_id = plugin_id
 
                     # 在实例化前注入类属性，保证插件 __init__ 可读取这些值
                     if metadata.star_cls_type:
@@ -1539,7 +1543,7 @@ class PluginManager:
                     f"移除插件成功，但是删除插件文件夹失败: {e!s}。您可以手动删除该文件夹，位于 addons/plugins/ 下。",
                 )
 
-            plugin_id = getattr(plugin.star_cls, "plugin_id", None)
+            plugin_id = plugin.plugin_id
 
             await self._cleanup_plugin_optional_artifacts(
                 root_dir_name=root_dir_name,
@@ -1588,17 +1592,19 @@ class PluginManager:
                 )
 
             plugin_label = dir_name
+            plugin_id = None
             if isinstance(failed_info, dict):
                 plugin_label = (
                     failed_info.get("display_name")
                     or failed_info.get("name")
                     or dir_name
                 )
+                plugin_id = failed_info.get("plugin_id")
 
             await self._cleanup_plugin_optional_artifacts(
                 root_dir_name=dir_name,
                 plugin_label=plugin_label,
-                plugin_id=None,
+                plugin_id=plugin_id,
                 delete_config=delete_config,
                 delete_data=delete_data,
             )
