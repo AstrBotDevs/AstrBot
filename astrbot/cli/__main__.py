@@ -9,7 +9,7 @@ import click
 from click.shell_completion import get_completion_class
 
 from . import __version__
-from .commands import bk, conf, init, password, plug, run, uninstall
+from .commands import bk, config, init, password, plugin, run, service, uninstall
 from .i18n import t
 
 
@@ -55,15 +55,24 @@ def version_callback(ctx: click.Context, param: click.Parameter, value: bool) ->
     return value
 
 
-@click.group()
-@click.option(
-    "--version",
-    "-v",
-    is_flag=True,
-    is_eager=True,
-    expose_value=False,
-    callback=lambda ctx, param, value: value and (print_version_detail(), ctx.exit()),
-)
+class AstrBotCLIGroup(click.Group):
+    COMMAND_ALIASES = {
+        "conf": "config",
+        "plug": "plugin",
+    }
+
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+        command = super().get_command(ctx, cmd_name)
+        if command is not None:
+            return command
+        alias_target = self.COMMAND_ALIASES.get(cmd_name)
+        if alias_target is None:
+            return None
+        return super().get_command(ctx, alias_target)
+
+
+@click.group(cls=AstrBotCLIGroup)
+@click.version_option(__version__, prog_name="AstrBot")
 def cli() -> None:
     """Astrbot
     Agentic IM Chatbot infrastructure that integrates lots of IM platforms, LLMs, plugins and AI feature, and can be your openclaw alternative. ✨
@@ -123,11 +132,12 @@ def help(command_name: str | None, all: bool) -> None:
 cli.add_command(init)
 cli.add_command(run)
 cli.add_command(help)
-cli.add_command(plug)
-cli.add_command(conf)
+cli.add_command(plugin)
+cli.add_command(config)
 cli.add_command(uninstall)
 cli.add_command(bk)
 cli.add_command(password)
+cli.add_command(service)
 
 
 @click.command()
