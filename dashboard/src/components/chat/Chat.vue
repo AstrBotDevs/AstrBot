@@ -841,6 +841,7 @@ async function startNewChat() {
   replyTarget.value = null;
   newChat();
   closeMobileSidebar();
+  await focusChatInput();
 }
 
 function openCreateProjectDialog() {
@@ -975,6 +976,7 @@ async function selectSession(sessionId: string, pushRoute = true) {
   }
   scrollToBottom();
   closeMobileSidebar();
+  await focusChatInput();
 }
 
 async function sendCurrentMessage() {
@@ -1032,6 +1034,7 @@ async function sendCurrentMessage() {
     console.error("Failed to send message:", error);
   } finally {
     sending.value = false;
+    await focusChatInput();
   }
 }
 
@@ -1323,6 +1326,13 @@ function scrollToBottom() {
     if (!container) return;
     container.scrollTop = container.scrollHeight;
     shouldStickToBottom.value = true;
+  });
+}
+
+async function focusChatInput() {
+  await nextTick();
+  window.requestAnimationFrame(() => {
+    inputRef.value?.focusInput();
   });
 }
 
