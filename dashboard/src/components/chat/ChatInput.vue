@@ -407,6 +407,10 @@ const showCommandSuggestion = ref(false);
 const selectedCommandIndex = ref(0);
 const commandSuggestionLoading = ref(false);
 
+function normalizeCommandSearchText(value: string) {
+  return value.trim().replace(/^\/+/, "").toLowerCase();
+}
+
 /** 从所有指令中展平获取启用的普通指令和子指令 */
 const enabledCommands = computed(() => {
   const result: SuggestionCommand[] = [];
@@ -431,6 +435,7 @@ const enabledCommands = computed(() => {
         description: cmd.description,
         plugin_display_name: cmd.plugin_display_name,
         enabled: cmd.enabled,
+        reserved: cmd.reserved,
       });
     }
     // 同时加入别名（别名也需要加上 / 前缀）
@@ -449,6 +454,7 @@ const enabledCommands = computed(() => {
           description: cmd.description,
           plugin_display_name: cmd.plugin_display_name,
           enabled: cmd.enabled,
+          reserved: cmd.reserved,
         });
       }
     });
@@ -458,15 +464,40 @@ const enabledCommands = computed(() => {
   return result;
 });
 
+function sortSystemPluginCommandsFirst(commands: SuggestionCommand[]) {
+  return [...commands].sort((a, b) => Number(b.reserved) - Number(a.reserved));
+}
+
 /** 根据当前输入过滤候选指令 */
 const filteredCommands = computed(() => {
   const text = props.prompt;
   if (!text || !text.startsWith("/")) return [];
 
-  const prefix = text.toLowerCase();
-  return enabledCommands.value
-    .filter((cmd) => cmd.effective_command.toLowerCase().startsWith(prefix))
-    .slice(0, 8); // 最多显示8条
+  const query = normalizeCommandSearchText(text);
+  if (!query) return sortSystemPluginCommandsFirst(enabledCommands.value);
+
+  const startsWithMatches: SuggestionCommand[] = [];
+  const containsMatches: SuggestionCommand[] = [];
+
+  for (const cmd of enabledCommands.value) {
+    const commandText = normalizeCommandSearchText(cmd.effective_command);
+    const pluginText = normalizeCommandSearchText(cmd.plugin_display_name || "");
+    const descriptionText = normalizeCommandSearchText(cmd.description || "");
+    const matchesCommand = commandText.includes(query);
+    const matchesMetadata =
+      pluginText.includes(query) || descriptionText.includes(query);
+
+    if (commandText.startsWith(query)) {
+      startsWithMatches.push(cmd);
+    } else if (matchesCommand || matchesMetadata) {
+      containsMatches.push(cmd);
+    }
+  }
+
+  return [
+    ...sortSystemPluginCommandsFirst(startsWithMatches),
+    ...sortSystemPluginCommandsFirst(containsMatches),
+  ];
 });
 
 const localPrompt = computed({
@@ -659,11 +690,7 @@ function handleKeyDown(e: KeyboardEvent) {
 function handleInput() {
   const text = props.prompt;
   if (text && text.startsWith("/") && !isComposing.value) {
-    const prefix = text.toLowerCase();
-    const hasMatch = enabledCommands.value.some((cmd) =>
-      cmd.effective_command.toLowerCase().startsWith(prefix),
-    );
-    showCommandSuggestion.value = hasMatch;
+    showCommandSuggestion.value = filteredCommands.value.length > 0;
     selectedCommandIndex.value = 0;
   } else {
     showCommandSuggestion.value = false;
