@@ -1497,6 +1497,9 @@ function toggleTheme() {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
+  padding-right: 68px;
+  position: relative;
+  box-sizing: border-box;
   cursor: pointer;
   text-align: left;
 }
@@ -1521,15 +1524,24 @@ function toggleTheme() {
 }
 
 .session-actions {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  visibility: hidden;
 }
 
 .session-item:hover .session-actions,
 .session-item:focus-within .session-actions {
-  display: flex;
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
 }
 
 .session-action-btn {
