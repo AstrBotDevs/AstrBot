@@ -1,3 +1,4 @@
+import base64
 import copy
 import getpass
 import json
@@ -7,6 +8,7 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -14,6 +16,7 @@ from pathlib import Path
 from textwrap import dedent
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from xml.etree import ElementTree
 
 import click
 
@@ -24,10 +27,7 @@ DEFAULT_DASHBOARD_PORT = 6185
 DEFAULT_STATUS_TIMEOUT_SECONDS = 2.0
 DEFAULT_LOG_LINES = 200
 MACOS_LABEL_PREFIX = "app.astrbot"
-WINDOWS_SERVICE_UNSUPPORTED_MESSAGE = (
-    "AstrBot service management is not supported on Windows yet. "
-    "Use 'astrbot run' to start AstrBot in the foreground."
-)
+WINDOWS_TASK_XML_NS = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 
 
 @dataclass(frozen=True)
@@ -64,12 +64,6 @@ class AppLogConfig:
 @click.group(name="service")
 def service() -> None:
     """Install and manage AstrBot as a background service."""
-    _ensure_service_platform_supported()
-
-
-def _ensure_service_platform_supported() -> None:
-    if platform.system() == "Windows":
-        raise click.ClickException(WINDOWS_SERVICE_UNSUPPORTED_MESSAGE)
 
 
 def _validate_service_name(name: str) -> str:
@@ -250,6 +244,8 @@ def _service_log_paths(service_name: str) -> tuple[Path, Path]:
     system = platform.system()
     if system == "Darwin":
         log_dir = _macos_log_dir()
+    elif system == "Windows":
+        return _windows_service_log_paths(service_name)
     else:
         log_dir = get_astrbot_root() / "data" / "logs"
     return log_dir / f"{service_name}.out.log", log_dir / f"{service_name}.err.log"
@@ -311,6 +307,188 @@ def _install_launch_agent(
         _start_launch_agent(service_name)
 
     return plist_path
+
+
+def _task_element(
+    parent: ElementTree.Element,
+    name: str,
+    text: str | None = None,
+    attrib: dict[str, str] | None = None,
+) -> ElementTree.Element:
+    child = ElementTree.SubElement(
+        parent, f"{{{WINDOWS_TASK_XML_NS}}}{name}", attrib or {}
+    )
+    if text is not None:
+        child.text = text
+    return child
+
+
+def _windows_log_dir() -> Path:
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        return Path(local_app_data) / "AstrBot" / "Logs"
+    return Path.home() / "AppData" / "Local" / "AstrBot" / "Logs"
+
+
+def _windows_service_log_paths(service_name: str) -> tuple[Path, Path]:
+    log_dir = _windows_log_dir()
+    return log_dir / f"{service_name}.out.log", log_dir / f"{service_name}.err.log"
+
+
+def _windows_powershell_executable() -> str:
+    return "powershell.exe"
+
+
+def _quote_windows_cmd_arg(value: Path | str) -> str:
+    escaped = str(value).replace('"', '""')
+    return f'"{escaped}"'
+
+
+def _quote_powershell_literal(value: Path | str) -> str:
+    escaped = str(value).replace("'", "''")
+    return f"'{escaped}'"
+
+
+def _build_windows_cmd_line(service_name: str, executable: Path) -> str:
+    out_log, err_log = _windows_service_log_paths(service_name)
+    return (
+        f"{_quote_windows_cmd_arg(executable)} run "
+        f">> {_quote_windows_cmd_arg(out_log)} "
+        f"2>> {_quote_windows_cmd_arg(err_log)}"
+    )
+
+
+def _build_windows_powershell_arguments(
+    service_name: str,
+    executable: Path,
+    workdir: Path,
+) -> str:
+    script = (
+        "$ErrorActionPreference = 'Stop'\n"
+        "$env:PYTHONUNBUFFERED = '1'\n"
+        "$cmdExe = if ($env:COMSPEC) { $env:COMSPEC } else { 'cmd.exe' }\n"
+        f"$astrbotCommand = {_quote_powershell_literal(_build_windows_cmd_line(service_name, executable))}\n"
+        "$process = Start-Process "
+        "-FilePath $cmdExe "
+        "-ArgumentList @('/d', '/c', $astrbotCommand) "
+        f"-WorkingDirectory {_quote_powershell_literal(workdir)} "
+        "-WindowStyle Hidden "
+        "-PassThru "
+        "-Wait\n"
+        "exit $process.ExitCode\n"
+    )
+    encoded_script = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    return (
+        "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass "
+        f"-WindowStyle Hidden -EncodedCommand {encoded_script}"
+    )
+
+
+def _build_windows_task_xml(
+    service_name: str,
+    executable: Path,
+    workdir: Path,
+) -> bytes:
+    ElementTree.register_namespace("", WINDOWS_TASK_XML_NS)
+    task = ElementTree.Element(
+        f"{{{WINDOWS_TASK_XML_NS}}}Task",
+        {"version": "1.4"},
+    )
+
+    registration_info = _task_element(task, "RegistrationInfo")
+    _task_element(registration_info, "Description", "AstrBot Service")
+
+    triggers = _task_element(task, "Triggers")
+    logon_trigger = _task_element(triggers, "LogonTrigger")
+    _task_element(logon_trigger, "Enabled", "true")
+
+    principals = _task_element(task, "Principals")
+    principal = _task_element(principals, "Principal", attrib={"id": "Author"})
+    _task_element(principal, "LogonType", "InteractiveToken")
+    _task_element(principal, "RunLevel", "LeastPrivilege")
+
+    settings = _task_element(task, "Settings")
+    _task_element(settings, "MultipleInstancesPolicy", "IgnoreNew")
+    _task_element(settings, "DisallowStartIfOnBatteries", "false")
+    _task_element(settings, "StopIfGoingOnBatteries", "false")
+    _task_element(settings, "AllowHardTerminate", "true")
+    _task_element(settings, "StartWhenAvailable", "true")
+    _task_element(settings, "RunOnlyIfNetworkAvailable", "false")
+    _task_element(settings, "AllowStartOnDemand", "true")
+    _task_element(settings, "Enabled", "true")
+    _task_element(settings, "Hidden", "true")
+    _task_element(settings, "RunOnlyIfIdle", "false")
+    _task_element(settings, "WakeToRun", "false")
+    _task_element(settings, "ExecutionTimeLimit", "PT0S")
+    _task_element(settings, "Priority", "7")
+    restart = _task_element(settings, "RestartOnFailure")
+    _task_element(restart, "Interval", "PT1M")
+    _task_element(restart, "Count", "3")
+
+    actions = _task_element(task, "Actions", attrib={"Context": "Author"})
+    exec_action = _task_element(actions, "Exec")
+    _task_element(exec_action, "Command", _windows_powershell_executable())
+    _task_element(
+        exec_action,
+        "Arguments",
+        _build_windows_powershell_arguments(service_name, executable, workdir),
+    )
+    _task_element(exec_action, "WorkingDirectory", str(workdir))
+
+    ElementTree.indent(task, space="  ")
+    return ElementTree.tostring(task, encoding="utf-16", xml_declaration=True)
+
+
+def _windows_task_exists(service_name: str) -> bool:
+    result = subprocess.run(
+        ["schtasks", "/Query", "/TN", service_name],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return result.returncode == 0
+
+
+def _install_windows_task(
+    service_name: str,
+    executable: Path,
+    workdir: Path,
+    *,
+    force: bool,
+    now: bool,
+) -> None:
+    if platform.system() != "Windows":
+        raise click.ClickException(
+            "Windows scheduled task installation is only available on Windows"
+        )
+    if shutil.which("schtasks") is None:
+        raise click.ClickException("schtasks was not found")
+    if _windows_task_exists(service_name) and not force:
+        raise click.ClickException(
+            f"Scheduled task {service_name} already exists. Use --force to overwrite"
+        )
+
+    _windows_log_dir().mkdir(parents=True, exist_ok=True)
+    task_xml = _build_windows_task_xml(service_name, executable, workdir)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".xml", delete=False) as f:
+            temp_path = Path(f.name)
+            f.write(task_xml)
+
+        command = ["schtasks", "/Create", "/TN", service_name, "/XML", str(temp_path)]
+        if force:
+            command.append("/F")
+        _run_checked(command, "Failed to create the Windows scheduled task")
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+
+    if now:
+        _run_checked(
+            ["schtasks", "/Run", "/TN", service_name],
+            "Failed to start the Windows scheduled task",
+        )
 
 
 def _first_output_line(result: subprocess.CompletedProcess[str]) -> str | None:
@@ -417,12 +595,58 @@ def _get_launchd_state(service_name: str) -> ServiceState:
     )
 
 
+def _parse_schtasks_field(output: str, field_name: str) -> str | None:
+    prefix = f"{field_name}:"
+    for line in output.splitlines():
+        if line.startswith(prefix):
+            return line.removeprefix(prefix).strip()
+    return None
+
+
+def _get_windows_task_state(service_name: str) -> ServiceState:
+    if shutil.which("schtasks") is None:
+        return ServiceState(
+            manager="Task Scheduler",
+            installed=False,
+            state="unknown",
+            detail="schtasks was not found",
+        )
+
+    result = _run_capture(
+        ["schtasks", "/Query", "/TN", service_name, "/FO", "LIST", "/V"]
+    )
+    if result is None:
+        return ServiceState(
+            manager="Task Scheduler",
+            installed=False,
+            state="unknown",
+            detail="schtasks was not found",
+        )
+    if result.returncode != 0:
+        return ServiceState(
+            manager="Task Scheduler",
+            installed=False,
+            state="not-installed",
+            detail=_first_output_line(result),
+        )
+
+    status = _parse_schtasks_field(result.stdout or "", "Status") or "unknown"
+    return ServiceState(
+        manager="Task Scheduler",
+        installed=True,
+        state=status.lower(),
+        detail=_parse_schtasks_field(result.stdout or "", "Task To Run"),
+    )
+
+
 def _get_service_state(service_name: str) -> ServiceState:
     system = platform.system()
     if system == "Linux":
         return _get_systemd_state(service_name)
     if system == "Darwin":
         return _get_launchd_state(service_name)
+    if system == "Windows":
+        return _get_windows_task_state(service_name)
     return ServiceState(
         manager="unknown",
         installed=False,
@@ -612,6 +836,25 @@ def _stop_launch_agent(service_name: str, *, allow_missing: bool = False) -> Non
         _wait_for_launch_agent_state(service_name, loaded=False)
 
 
+def _control_windows_task(service_name: str, action: str) -> None:
+    if shutil.which("schtasks") is None:
+        raise click.ClickException("schtasks was not found")
+    if not _windows_task_exists(service_name):
+        raise click.ClickException(
+            f"Scheduled task {service_name} does not exist. Run 'service install' first"
+        )
+
+    match action:
+        case "start":
+            command = ["schtasks", "/Run", "/TN", service_name]
+        case "stop":
+            command = ["schtasks", "/End", "/TN", service_name]
+        case _:
+            raise click.ClickException(f"Unsupported Windows task action: {action}")
+
+    _run_checked(command, f"Failed to {action} the Windows scheduled task")
+
+
 def _control_service(service_name: str, action: str) -> None:
     system = platform.system()
     if system == "Linux":
@@ -629,6 +872,17 @@ def _control_service(service_name: str, action: str) -> None:
                 _start_launch_agent(service_name)
             case _:
                 raise click.ClickException(f"Unsupported launchd action: {action}")
+        return
+
+    if system == "Windows":
+        match action:
+            case "start" | "stop":
+                _control_windows_task(service_name, action)
+            case "restart":
+                _control_windows_task(service_name, "stop")
+                _control_windows_task(service_name, "start")
+            case _:
+                raise click.ClickException(f"Unsupported Windows task action: {action}")
         return
 
     raise click.ClickException(f"Unsupported platform: {system}")
@@ -671,12 +925,27 @@ def _uninstall_launch_agent(service_name: str) -> Path:
     return plist_path
 
 
+def _uninstall_windows_task(service_name: str) -> str:
+    if shutil.which("schtasks") is None:
+        raise click.ClickException("schtasks was not found")
+    if not _windows_task_exists(service_name):
+        raise click.ClickException(f"Scheduled task {service_name} does not exist")
+
+    _run_checked(
+        ["schtasks", "/Delete", "/TN", service_name, "/F"],
+        "Failed to delete the Windows scheduled task",
+    )
+    return service_name
+
+
 def _uninstall_service(service_name: str) -> Path | str:
     system = platform.system()
     if system == "Linux":
         return _uninstall_systemd_service(service_name)
     if system == "Darwin":
         return _uninstall_launch_agent(service_name)
+    if system == "Windows":
+        return _uninstall_windows_task(service_name)
     raise click.ClickException(f"Unsupported platform: {system}")
 
 
@@ -862,7 +1131,7 @@ def _show_service_logs(
         _show_journal_logs(service_name, lines, follow)
         return
 
-    if system == "Darwin":
+    if system in {"Darwin", "Windows"}:
         out_log, err_log = _service_log_paths(service_name)
         paths = [out_log]
         if include_stderr:
@@ -933,6 +1202,18 @@ def install(
         )
         click.echo(f"Installed LaunchAgent: {plist_path}")
         click.echo(f"LaunchAgent label: {_macos_label(service_name)}")
+        return
+
+    if system == "Windows":
+        _install_windows_task(
+            service_name,
+            astrbot_executable,
+            astrbot_root,
+            force=force,
+            now=now,
+        )
+        click.echo(f"Installed Windows scheduled task: {service_name}")
+        click.echo(f"Manage it with: schtasks /Query /TN {service_name}")
         return
 
     raise click.ClickException(f"Unsupported platform: {system}")
@@ -1039,7 +1320,7 @@ def uninstall(name: str, force: bool) -> None:
 @click.option(
     "--include-stderr",
     is_flag=True,
-    help="Also show stderr logs on macOS.",
+    help="Also show stderr logs on macOS and Windows.",
 )
 def logs(
     ctx: click.Context,

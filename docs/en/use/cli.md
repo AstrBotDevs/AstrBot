@@ -90,9 +90,7 @@ Each platform uses its native service manager:
 | --- | --- |
 | Linux | `systemd --user` |
 | macOS | LaunchAgent |
-
-> [!NOTE]
-> `astrbot service` is not supported on Windows yet. Use `astrbot run` to start AstrBot in the foreground.
+| Windows | Task Scheduler |
 
 ### Install
 
@@ -192,9 +190,9 @@ Common options:
 | `--name <NAME>` | Service name. |
 | `-n, --lines <N>` | Show the latest N lines. Default: 200. |
 | `-f, --follow` | Follow log output. |
-| `--include-stderr` | Also show stderr logs on macOS. |
+| `--include-stderr` | Also show stderr logs on macOS and Windows. |
 
-On macOS, `astrbot service logs` shows stdout logs by default, which are the `.out.log` files. Add `--include-stderr` when you also need error output.
+On macOS and Windows, `astrbot service logs` shows stdout logs by default, which are the `.out.log` files. Add `--include-stderr` when you also need error output.
 
 ### Application Log File
 

@@ -90,9 +90,7 @@ astrbot run --reset-password
 | --- | --- |
 | Linux | `systemd --user` |
 | macOS | LaunchAgent |
-
-> [!NOTE]
-> Windows 暂不支持 `astrbot service`。请先使用 `astrbot run` 前台启动。
+| Windows | 任务计划程序 |
 
 ### 安装服务
 
@@ -192,9 +190,9 @@ astrbot service logs -f
 | `--name <NAME>` | 指定服务名。 |
 | `-n, --lines <N>` | 显示最近 N 行，默认 200。 |
 | `-f, --follow` | 持续跟随日志输出。 |
-| `--include-stderr` | 在 macOS 上同时显示 stderr 日志。 |
+| `--include-stderr` | 在 macOS 和 Windows 上同时显示 stderr 日志。 |
 
-macOS 下，`astrbot service logs` 默认只显示标准输出日志，也就是 `.out.log`。如果需要同时查看错误输出，再加 `--include-stderr`。
+macOS 和 Windows 下，`astrbot service logs` 默认只显示标准输出日志，也就是 `.out.log`。如果需要同时查看错误输出，再加 `--include-stderr`。
 
 ### 启用应用日志文件
 
