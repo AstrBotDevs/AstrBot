@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import logging
 import os
-import re
 import socket
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +23,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
+from astrbot.core.utils.env_template import expand_env_placeholders
 from astrbot.core.utils.io import (
     get_bundled_dashboard_dist_path,
     get_local_ip_addresses,
@@ -48,9 +48,6 @@ class _AddrWithPort(Protocol):
 
 
 APP: Quart
-_ENV_PLACEHOLDER_RE = re.compile(
-    r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>[^}]*))?\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))",
-)
 
 
 def _normalize_plugin_api_route(route: str) -> str:
@@ -96,29 +93,6 @@ def _parse_env_bool(value: str | None, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _expand_env_placeholders(value: str, field_name: str) -> str:
-    missing_vars: list[str] = []
-
-    def _replace(match: re.Match[str]) -> str:
-        var_name = match.group("braced") or match.group("plain")
-        default = match.group("default")
-        env_value = os.environ.get(var_name)
-        if env_value is not None:
-            return env_value
-        if default is not None:
-            return default
-        missing_vars.append(var_name)
-        return match.group(0)
-
-    expanded = _ENV_PLACEHOLDER_RE.sub(_replace, value)
-    if missing_vars:
-        missing = ", ".join(sorted(set(missing_vars)))
-        raise ValueError(
-            f"Unresolved environment variable(s) in dashboard {field_name}: {missing}",
-        )
-    return expanded
-
-
 def _resolve_dashboard_value(
     value: str | int | None,
     *,
@@ -126,7 +100,11 @@ def _resolve_dashboard_value(
 ) -> str | int | None:
     if not isinstance(value, str):
         return value
-    return _expand_env_placeholders(value, field_name).strip()
+    return expand_env_placeholders(
+        value,
+        field_name=f"dashboard {field_name}",
+        strict=True,
+    ).strip()
 
 
 class AstrBotJSONProvider(DefaultJSONProvider):
@@ -462,9 +440,21 @@ class AstrBotDashboard:
             or ssl_config.get("ca_certs", "")
         )
 
-        cert_file = _expand_env_placeholders(str(cert_file), "ssl.cert_file")
-        key_file = _expand_env_placeholders(str(key_file), "ssl.key_file")
-        ca_certs = _expand_env_placeholders(str(ca_certs), "ssl.ca_certs")
+        cert_file = expand_env_placeholders(
+            str(cert_file),
+            field_name="dashboard ssl.cert_file",
+            strict=True,
+        )
+        key_file = expand_env_placeholders(
+            str(key_file),
+            field_name="dashboard ssl.key_file",
+            strict=True,
+        )
+        ca_certs = expand_env_placeholders(
+            str(ca_certs),
+            field_name="dashboard ssl.ca_certs",
+            strict=True,
+        )
 
         if not cert_file or not key_file:
             logger.warning(

@@ -34,7 +34,7 @@ class DashboardManager:
                         click.echo(t("dashboard_installing"))
                         try:
                             await download_dashboard(
-                                path="data/dashboard.zip",
+                                path=str(astrbot_root / "data" / "dashboard.zip"),
                                 extract_path=str(astrbot_root / "data"),
                                 version=f"v{VERSION}",
                                 latest=False,
@@ -56,7 +56,7 @@ class DashboardManager:
                         version = dashboard_version.split("v")[1]
                         click.echo(t("dashboard_version", version=version))
                         await download_dashboard(
-                            path="data/dashboard.zip",
+                            path=str(astrbot_root / "data" / "dashboard.zip"),
                             extract_path=str(astrbot_root / "data"),
                             version=f"v{VERSION}",
                             latest=False,

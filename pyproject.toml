@@ -66,6 +66,7 @@ dependencies = [
   "packaging>=24.2",
   "python-ripgrep==0.0.8",
   "python-dotenv>=1.2.2",
+  "anyio>=4.0.0",
 ]
 
 [dependency-groups]

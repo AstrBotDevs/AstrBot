@@ -14,6 +14,7 @@ Skills 目录路径:固定为数据目录下的 skills 目录
 """
 
 import os
+import tempfile
 from importlib import resources
 from pathlib import Path
 
@@ -110,20 +111,12 @@ class AstrbotPaths:
 
     async def async_dashboard_version(self) -> str | None:
         try:
-            # anyio.open_file returns a coroutine that yields an async file object.
-            # Await it to get the file object, then use it and close it explicitly.
-            f = await anyio.open_file(self.dist / "assets" / "version", mode="r")
-            try:
+            async with await anyio.open_file(
+                self.dist / "assets" / "version",
+                mode="r",
+            ) as f:
                 data = await f.read()
-                if data is None:
-                    return None
-                return data.strip()
-            finally:
-                # Ensure we close the async file handle; ignore close errors defensively.
-                try:
-                    await f.aclose()
-                except Exception:
-                    pass
+                return data.strip() if data is not None else None
         except (FileNotFoundError, OSError):
             return None
         except Exception:
@@ -251,7 +244,7 @@ def get_astrbot_backups_path() -> str:
 
 def get_astrbot_system_tmp_path() -> str:
     """获取Astrbot系统临时目录路径 (/tmp/.astrbot)"""
-    return "/tmp/.astrbot"
+    return os.path.realpath(os.path.join(tempfile.gettempdir(), ".astrbot"))
 
 
 def get_astrbot_workspaces_path() -> str:

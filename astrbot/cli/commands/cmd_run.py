@@ -44,7 +44,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 import sys
 import traceback
 from pathlib import Path
@@ -54,47 +53,12 @@ from dotenv import load_dotenv
 from filelock import FileLock, Timeout
 
 from astrbot.cli.utils import DashboardManager
+from astrbot.core.utils.env_template import expand_env_placeholders
 from astrbot.runtime_bootstrap import initialize_runtime_bootstrap
 
 # Python version check: require 3.12 or 3.13
 if not (sys.version_info.major == 3 and sys.version_info.minor in (12, 13)):
     sys.exit(1)
-
-# Regular expression to find bash-like parameter expansions:
-# ${VAR:-default} or ${VAR}
-_PARAM_EXPAND_RE = re.compile(r"\$\{([^}:]+?)(:-([^}]*))?\}")
-
-
-def _expand_parameter(
-    match: re.Match,
-    env: dict[str, str],
-    local: dict[str, str],
-) -> str:
-    """Helper to expand a single ${VAR:-default} or ${VAR} occurrence.
-
-    Precedence:
-      1. local dict (parsed from the same file, earlier entries)
-      2. environment variables
-      3. default provided in the expansion (if any)
-      4. empty string
-    """
-    var = match.group(1)
-    default = match.group(3) if match.group(3) is not None else ""
-    # Prefer 'local' parsed values first
-    if var in local and local[var] != "":
-        return local[var]
-    val = env.get(var, "")
-    if val != "":
-        return val
-    return default
-
-
-def _expand_env_parameter_value(value: str) -> str:
-    local: dict[str, str] = {}
-    return _PARAM_EXPAND_RE.sub(
-        lambda match: _expand_parameter(match, os.environ, local),
-        value,
-    )
 
 
 async def run_astrbot(astrbot_root: Path) -> None:
@@ -185,7 +149,7 @@ def run(
         # --- Step 1: Resolve service-config path (if provided). We'll treat it as a .env file later. ---
         svc_path: Path | None = None
         if service_config:
-            expanded_service_config = _expand_env_parameter_value(service_config)
+            expanded_service_config = expand_env_placeholders(service_config)
             candidate = Path(os.path.expanduser(expanded_service_config))
             if not candidate.exists():
                 candidate = Path.cwd() / candidate
