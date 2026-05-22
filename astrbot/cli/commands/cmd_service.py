@@ -20,7 +20,7 @@ from xml.etree import ElementTree
 
 import click
 
-from ..utils import check_astrbot_root, get_astrbot_root
+from astrbot.core.utils.astrbot_path import astrbot_paths
 
 DEFAULT_SERVICE_NAME = "astrbot"
 DEFAULT_DASHBOARD_PORT = 6185
@@ -77,9 +77,17 @@ def _validate_service_name(name: str) -> str:
     return name
 
 
+def _get_astrbot_root() -> Path:
+    return astrbot_paths.root
+
+
+def _is_astrbot_root(path: Path) -> bool:
+    return path.exists() and path.is_dir() and (path / ".astrbot").exists()
+
+
 def _resolve_workdir(workdir: Path | None) -> Path:
-    astrbot_root = (workdir or get_astrbot_root()).expanduser().resolve()
-    if not check_astrbot_root(astrbot_root):
+    astrbot_root = (workdir or _get_astrbot_root()).expanduser().resolve()
+    if not _is_astrbot_root(astrbot_root):
         raise click.ClickException(
             f"{astrbot_root} is not a valid AstrBot root directory. "
             "Use 'astrbot init' before installing the service"
@@ -116,10 +124,10 @@ def _resolve_astrbot_executable(executable: str | None) -> Path:
 def _run_checked(command: list[str], failure_message: str) -> None:
     try:
         subprocess.run(command, check=True)
-    except FileNotFoundError:
-        raise click.ClickException(f"Command not found: {command[0]}")
+    except FileNotFoundError as e:
+        raise click.ClickException(f"Command not found: {command[0]}") from e
     except subprocess.CalledProcessError as e:
-        raise click.ClickException(f"{failure_message}: {e}")
+        raise click.ClickException(f"{failure_message}: {e}") from e
 
 
 def _run_capture(command: list[str]) -> subprocess.CompletedProcess[str] | None:
@@ -247,7 +255,7 @@ def _service_log_paths(service_name: str) -> tuple[Path, Path]:
     elif system == "Windows":
         return _windows_service_log_paths(service_name)
     else:
-        log_dir = get_astrbot_root() / "data" / "logs"
+        log_dir = _get_astrbot_root() / "data" / "logs"
     return log_dir / f"{service_name}.out.log", log_dir / f"{service_name}.err.log"
 
 
@@ -990,7 +998,7 @@ def _load_or_init_config(astrbot_root: Path) -> dict:
     try:
         return json.loads(config_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as e:
-        raise click.ClickException(f"Failed to parse config file: {e}")
+        raise click.ClickException(f"Failed to parse config file: {e}") from e
 
 
 def _save_config(astrbot_root: Path, config: dict) -> None:
@@ -1095,8 +1103,8 @@ def _follow_log_files(paths: list[Path]) -> None:
 def _run_passthrough(command: list[str], failure_message: str) -> None:
     try:
         result = subprocess.run(command, check=False)
-    except FileNotFoundError:
-        raise click.ClickException(f"Command not found: {command[0]}")
+    except FileNotFoundError as e:
+        raise click.ClickException(f"Command not found: {command[0]}") from e
     except KeyboardInterrupt:
         return
 
