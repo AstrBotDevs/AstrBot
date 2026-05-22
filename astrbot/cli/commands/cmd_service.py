@@ -1,3 +1,4 @@
+import base64
 import copy
 import getpass
 import json
@@ -334,8 +335,8 @@ def _windows_service_log_paths(service_name: str) -> tuple[Path, Path]:
     return log_dir / f"{service_name}.out.log", log_dir / f"{service_name}.err.log"
 
 
-def _windows_cmd_executable() -> str:
-    return os.environ.get("COMSPEC") or "cmd.exe"
+def _windows_powershell_executable() -> str:
+    return "powershell.exe"
 
 
 def _quote_windows_cmd_arg(value: Path | str) -> str:
@@ -343,14 +344,43 @@ def _quote_windows_cmd_arg(value: Path | str) -> str:
     return f'"{escaped}"'
 
 
-def _build_windows_cmd_arguments(service_name: str, executable: Path) -> str:
+def _quote_powershell_literal(value: Path | str) -> str:
+    escaped = str(value).replace("'", "''")
+    return f"'{escaped}'"
+
+
+def _build_windows_cmd_line(service_name: str, executable: Path) -> str:
     out_log, err_log = _windows_service_log_paths(service_name)
     return (
-        "/d /c "
-        f'"{_quote_windows_cmd_arg(executable)} run '
+        f"{_quote_windows_cmd_arg(executable)} run "
         f">> {_quote_windows_cmd_arg(out_log)} "
         f"2>> {_quote_windows_cmd_arg(err_log)}"
-        '"'
+    )
+
+
+def _build_windows_powershell_arguments(
+    service_name: str,
+    executable: Path,
+    workdir: Path,
+) -> str:
+    script = (
+        "$ErrorActionPreference = 'Stop'\n"
+        "$env:PYTHONUNBUFFERED = '1'\n"
+        "$cmdExe = if ($env:COMSPEC) { $env:COMSPEC } else { 'cmd.exe' }\n"
+        f"$astrbotCommand = {_quote_powershell_literal(_build_windows_cmd_line(service_name, executable))}\n"
+        "$process = Start-Process "
+        "-FilePath $cmdExe "
+        "-ArgumentList @('/d', '/c', $astrbotCommand) "
+        f"-WorkingDirectory {_quote_powershell_literal(workdir)} "
+        "-WindowStyle Hidden "
+        "-PassThru "
+        "-Wait\n"
+        "exit $process.ExitCode\n"
+    )
+    encoded_script = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    return (
+        "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass "
+        f"-WindowStyle Hidden -EncodedCommand {encoded_script}"
     )
 
 
@@ -386,7 +416,7 @@ def _build_windows_task_xml(
     _task_element(settings, "RunOnlyIfNetworkAvailable", "false")
     _task_element(settings, "AllowStartOnDemand", "true")
     _task_element(settings, "Enabled", "true")
-    _task_element(settings, "Hidden", "false")
+    _task_element(settings, "Hidden", "true")
     _task_element(settings, "RunOnlyIfIdle", "false")
     _task_element(settings, "WakeToRun", "false")
     _task_element(settings, "ExecutionTimeLimit", "PT0S")
@@ -397,11 +427,11 @@ def _build_windows_task_xml(
 
     actions = _task_element(task, "Actions", attrib={"Context": "Author"})
     exec_action = _task_element(actions, "Exec")
-    _task_element(exec_action, "Command", _windows_cmd_executable())
+    _task_element(exec_action, "Command", _windows_powershell_executable())
     _task_element(
         exec_action,
         "Arguments",
-        _build_windows_cmd_arguments(service_name, executable),
+        _build_windows_powershell_arguments(service_name, executable, workdir),
     )
     _task_element(exec_action, "WorkingDirectory", str(workdir))
 
