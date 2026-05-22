@@ -1153,9 +1153,9 @@ class ProviderOpenAIOfficial(Provider):
             or ("tool" in str(e).lower() and "support" in str(e).lower())
             or ("function" in str(e).lower() and "support" in str(e).lower())
         ):
-            # openai, ollama, gemini openai, siliconcloud 的错误提示与 code 不统一,只能通过字符串匹配
-            logger.info(
-                f"{self.get_model()} 不支持函数工具调用,已自动去除,不影响使用｡",
+            # openai, ollama, gemini openai, siliconcloud 的错误提示与 code 不统一，只能通过字符串匹配
+            logger.warning(
+                f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。如需永久关闭，可前往 WebUI 中关闭工具调用。",
             )
             payloads.pop("tools", None)
             return (
@@ -1168,9 +1168,6 @@ class ProviderOpenAIOfficial(Provider):
                 image_fallback_used,
             )
         # logger.error(f"发生了错误｡Provider 配置如下: {self.provider_config}")
-
-        if "tool" in str(e).lower() and "support" in str(e).lower():
-            logger.error("疑似该模型不支持函数调用工具调用｡请输入 /tool off_all")
 
         if is_connection_error(e):
             proxy = self.provider_config.get("proxy", "")

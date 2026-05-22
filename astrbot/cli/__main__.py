@@ -9,7 +9,7 @@ import click
 from click.shell_completion import get_completion_class
 
 from . import __version__
-from .commands import bk, conf, init, plug, run, uninstall
+from .commands import bk, conf, init, password, plug, run, uninstall
 from .i18n import t
 
 
@@ -127,6 +127,7 @@ cli.add_command(plug)
 cli.add_command(conf)
 cli.add_command(uninstall)
 cli.add_command(bk)
+cli.add_command(password)
 
 
 @click.command()
@@ -171,7 +172,6 @@ def version_cmd() -> None:
 
 
 cli.add_command(version_cmd)
-
 
 if __name__ == "__main__":
     cli()
