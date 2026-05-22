@@ -166,6 +166,10 @@
           "description": "Require AstrBot Admin Permission",
           "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
         },
+        "enable_default_workspace_path": {
+          "description": "Enable Default Workspace Path",
+          "hint": "When enabled, the session-specific default workspace path will be injected into the system prompt."
+        },
         "sandbox": {
           "booter": {
             "description": "Sandbox Environment Driver"

@@ -165,6 +165,11 @@ class MainAgentBuildConfig:
     safety_mode_strategy: str = "system_prompt"
     computer_use_runtime: str = "local"
     """The runtime for agent computer use: none, local, or sandbox."""
+    enable_default_workspace_path: bool = True
+    """Whether to inject the default workspace path into the tool prompt.
+    When enabled, the main agent will tell the LLM the current workspace path
+    for file-related operations. When disabled, no workspace path hint is injected.
+    """
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
@@ -1423,7 +1428,10 @@ async def build_main_agent(
             else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
         )
 
-        if config.computer_use_runtime == "local":
+        if (
+            config.computer_use_runtime == "local"
+            and config.enable_default_workspace_path
+        ):
             tool_prompt += (
                 f"\nCurrent workspace you can use: "
                 f"`{_get_workspace_path_for_umo(event.unified_msg_origin)}`\n"
