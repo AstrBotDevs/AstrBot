@@ -366,6 +366,8 @@ def _build_windows_powershell_arguments(
     script = (
         "$ErrorActionPreference = 'Stop'\n"
         "$env:PYTHONUNBUFFERED = '1'\n"
+        "$env:PYTHONUTF8 = '1'\n"
+        "$env:PYTHONIOENCODING = 'utf-8'\n"
         "$cmdExe = if ($env:COMSPEC) { $env:COMSPEC } else { 'cmd.exe' }\n"
         f"$astrbotCommand = {_quote_powershell_literal(_build_windows_cmd_line(service_name, executable))}\n"
         "$process = Start-Process "

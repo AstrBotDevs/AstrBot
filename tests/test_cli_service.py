@@ -146,6 +146,9 @@ def test_windows_task_xml_uses_astrbot_executable_and_working_directory():
     assert "<Command>powershell.exe</Command>" in task_xml
     assert "<Hidden>true</Hidden>" in task_xml
     assert "-WindowStyle Hidden" in task_xml
+    assert "$env:PYTHONUNBUFFERED = '1'" in powershell_script
+    assert "$env:PYTHONUTF8 = '1'" in powershell_script
+    assert "$env:PYTHONIOENCODING = 'utf-8'" in powershell_script
     assert "Start-Process" in powershell_script
     assert "-WindowStyle Hidden" in powershell_script
     assert "C:\\Users\\astrbot\\.local\\bin\\astrbot.exe" in powershell_script
