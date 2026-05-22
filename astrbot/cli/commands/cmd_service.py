@@ -363,21 +363,18 @@ def _build_windows_powershell_arguments(
     executable: Path,
     workdir: Path,
 ) -> str:
+    out_log, err_log = _windows_service_log_paths(service_name)
     script = (
         "$ErrorActionPreference = 'Stop'\n"
         "$env:PYTHONUNBUFFERED = '1'\n"
         "$env:PYTHONUTF8 = '1'\n"
         "$env:PYTHONIOENCODING = 'utf-8'\n"
-        "$cmdExe = if ($env:COMSPEC) { $env:COMSPEC } else { 'cmd.exe' }\n"
-        f"$astrbotCommand = {_quote_powershell_literal(_build_windows_cmd_line(service_name, executable))}\n"
-        "$process = Start-Process "
-        "-FilePath $cmdExe "
-        "-ArgumentList @('/d', '/c', $astrbotCommand) "
-        f"-WorkingDirectory {_quote_powershell_literal(workdir)} "
-        "-WindowStyle Hidden "
-        "-PassThru "
-        "-Wait\n"
-        "exit $process.ExitCode\n"
+        f"Set-Location -LiteralPath {_quote_powershell_literal(workdir)}\n"
+        f"$stdoutLog = {_quote_powershell_literal(out_log)}\n"
+        f"$stderrLog = {_quote_powershell_literal(err_log)}\n"
+        "New-Item -ItemType Directory -Force -Path (Split-Path -Parent $stdoutLog) | Out-Null\n"
+        f"& {_quote_powershell_literal(executable)} run 1>> $stdoutLog 2>> $stderrLog\n"
+        "exit $LASTEXITCODE\n"
     )
     encoded_script = base64.b64encode(script.encode("utf-16le")).decode("ascii")
     return (

@@ -149,8 +149,11 @@ def test_windows_task_xml_uses_astrbot_executable_and_working_directory():
     assert "$env:PYTHONUNBUFFERED = '1'" in powershell_script
     assert "$env:PYTHONUTF8 = '1'" in powershell_script
     assert "$env:PYTHONIOENCODING = 'utf-8'" in powershell_script
-    assert "Start-Process" in powershell_script
-    assert "-WindowStyle Hidden" in powershell_script
+    assert "Set-Location -LiteralPath 'C:\\Users\\astrbot\\AstrBot'" in powershell_script
+    assert "New-Item -ItemType Directory -Force" in powershell_script
+    assert "& 'C:\\Users\\astrbot\\.local\\bin\\astrbot.exe' run" in powershell_script
+    assert "1>> $stdoutLog 2>> $stderrLog" in powershell_script
+    assert "Start-Process" not in powershell_script
     assert "C:\\Users\\astrbot\\.local\\bin\\astrbot.exe" in powershell_script
     assert "run" in powershell_script
     assert "astrbot.out.log" in powershell_script
