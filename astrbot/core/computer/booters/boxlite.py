@@ -199,22 +199,22 @@ class BoxliteBooter(ComputerBooter):
             sb_url=f"http://127.0.0.1:{random_port}",
         )
         raw_fs = ShipyardFileSystemComponent(
-            client=cast(Any, self.mocked),
+            client=cast("Any", self.mocked),
             ship_id=self.box.id,
             session_id=session_id,
         )
         self._python = ShipyardPythonComponent(
-            client=cast(Any, self.mocked),
+            client=cast("Any", self.mocked),
             ship_id=self.box.id,
             session_id=session_id,
         )
         raw_shell = ShipyardShellComponent(
-            client=cast(Any, self.mocked),
+            client=cast("Any", self.mocked),
             ship_id=self.box.id,
             session_id=session_id,
         )
-        self._shell = ShipyardShellWrapper(cast(Any, raw_shell))
-        self._fs = ShipyardFileSystemWrapper(cast(Any, raw_fs), self._shell)
+        self._shell = ShipyardShellWrapper(cast("Any", raw_shell))
+        self._fs = ShipyardFileSystemWrapper(cast("Any", raw_fs), self._shell)
 
         await self.mocked.wait_healthy(self.box.id, session_id)
 

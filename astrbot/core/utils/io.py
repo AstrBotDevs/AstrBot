@@ -198,7 +198,7 @@ async def download_file(
                 start_time = time.time()
                 if show_progress:
                     logger.info(
-                        f"Downloading: {url} | Size: {total_size / 1024:.2f} KB"
+                        f"Downloading: {url} | Size: {total_size / 1024:.2f} KB",
                     )
                 await _emit_download_progress(
                     progress_callback,

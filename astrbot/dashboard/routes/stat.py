@@ -498,10 +498,12 @@ class StatRoute(Route):
             # 验证最终路径在预期的 changelogs 目录内（防止路径遍历）
             # 确保规范化后的路径以 changelogs_dir 开头，且是目录内的文件
             changelog_path_normalized = await asyncio.to_thread(
-                os.path.normpath, changelog_path
+                os.path.normpath,
+                changelog_path,
             )
             changelogs_dir_normalized = await asyncio.to_thread(
-                os.path.normpath, changelogs_dir
+                os.path.normpath,
+                changelogs_dir,
             )
 
             # 检查路径是否在预期目录内（必须是目录的子文件，不能是目录本身）

@@ -54,7 +54,7 @@ class GenieTTSProvider(TTSProvider):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to load character {self.character_name}: {e}"
+                f"Failed to load character {self.character_name}: {e}",
             ) from e
 
     def support_stream(self) -> bool:

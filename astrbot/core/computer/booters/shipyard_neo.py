@@ -223,7 +223,7 @@ class NeoFileSystemComponent(FileSystemComponent):
     ) -> dict[str, Any]:
         if self._shell is None:
             raise RuntimeError(
-                "NeoFileSystemComponent requires a shell for search_files."
+                "NeoFileSystemComponent requires a shell for search_files.",
             )
         return await search_files_via_shell(
             self._shell,

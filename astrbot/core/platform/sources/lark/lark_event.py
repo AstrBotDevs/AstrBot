@@ -668,7 +668,8 @@ class LarkMessageEvent(AstrMessageEvent):
             return
 
         if not original_audio_path or not await asyncio.to_thread(
-            os.path.exists, original_audio_path
+            os.path.exists,
+            original_audio_path,
         ):
             logger.error(f"[Lark] 音频文件不存在: {original_audio_path}")
             return
@@ -700,7 +701,8 @@ class LarkMessageEvent(AstrMessageEvent):
 
         # 清理转换后的临时音频文件
         if converted_audio_path and await asyncio.to_thread(
-            os.path.exists, converted_audio_path
+            os.path.exists,
+            converted_audio_path,
         ):
             try:
                 await asyncio.to_thread(os.remove, converted_audio_path)
@@ -746,7 +748,8 @@ class LarkMessageEvent(AstrMessageEvent):
             return
 
         if not original_video_path or not await asyncio.to_thread(
-            os.path.exists, original_video_path
+            os.path.exists,
+            original_video_path,
         ):
             logger.error(f"[Lark] 视频文件不存在: {original_video_path}")
             return
@@ -778,7 +781,8 @@ class LarkMessageEvent(AstrMessageEvent):
 
         # 清理转换后的临时视频文件
         if converted_video_path and await asyncio.to_thread(
-            os.path.exists, converted_video_path
+            os.path.exists,
+            converted_video_path,
         ):
             try:
                 await asyncio.to_thread(os.remove, converted_video_path)
