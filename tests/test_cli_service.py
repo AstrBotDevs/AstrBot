@@ -1,4 +1,3 @@
-import base64
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -13,7 +12,6 @@ from astrbot.cli.commands.cmd_service import (
     WebUIStatus,
     _build_launchd_plist,
     _build_systemd_unit,
-    _build_windows_task_xml,
     _check_webui,
     _get_app_log_config,
     _health_label,
@@ -21,12 +19,6 @@ from astrbot.cli.commands.cmd_service import (
     _load_or_init_config,
     service,
 )
-
-
-def _decode_windows_encoded_command(task_xml: str) -> str:
-    marker = "-EncodedCommand "
-    encoded_command = task_xml.split(marker, 1)[1].split("<", 1)[0]
-    return base64.b64decode(encoded_command).decode("utf-16le")
 
 
 class _HealthyHandler(BaseHTTPRequestHandler):
@@ -135,26 +127,13 @@ def test_launch_agent_start_waits_until_loaded_before_kickstart(monkeypatch, tmp
     assert events.index("bootstrap") < events.index("kickstart")
 
 
-def test_windows_task_xml_uses_astrbot_executable_and_working_directory():
-    task_xml = _build_windows_task_xml(
-        "astrbot",
-        Path("C:\\Users\\astrbot\\.local\\bin\\astrbot.exe"),
-        Path("C:\\Users\\astrbot\\AstrBot"),
-    ).decode("utf-16")
-    powershell_script = _decode_windows_encoded_command(task_xml)
+def test_service_command_rejects_windows(monkeypatch):
+    monkeypatch.setattr(cmd_service.platform, "system", lambda: "Windows")
 
-    assert "<Command>powershell.exe</Command>" in task_xml
-    assert "<Hidden>true</Hidden>" in task_xml
-    assert "-WindowStyle Hidden" in task_xml
-    assert "Start-Process" in powershell_script
-    assert "-WindowStyle Hidden" in powershell_script
-    assert "C:\\Users\\astrbot\\.local\\bin\\astrbot.exe" in powershell_script
-    assert "run" in powershell_script
-    assert "astrbot.out.log" in powershell_script
-    assert "astrbot.err.log" in powershell_script
-    assert (
-        "<WorkingDirectory>C:\\Users\\astrbot\\AstrBot</WorkingDirectory>" in task_xml
-    )
+    result = CliRunner().invoke(service, ["start"])
+
+    assert result.exit_code == 1
+    assert "not supported on Windows yet" in result.output
 
 
 def test_load_dashboard_port_reads_cmd_config(tmp_path):

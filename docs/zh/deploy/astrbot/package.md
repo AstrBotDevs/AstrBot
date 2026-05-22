@@ -35,7 +35,9 @@ astrbot service install --now
 
 - Linux：`systemd --user`
 - macOS：`LaunchAgent`
-- Windows：任务计划程序
+
+> [!NOTE]
+> Windows 暂不支持 `astrbot service`。请先使用 `astrbot run` 前台启动。
 
 如果需要指定 AstrBot 工作目录或可执行文件路径，可以使用：
 
@@ -67,7 +69,7 @@ astrbot service logs
 astrbot service logs -f
 ```
 
-macOS 和 Windows 下默认只显示标准输出日志；如需同时查看 stderr：
+macOS 下默认只显示标准输出日志；如需同时查看 stderr：
 
 ```bash
 astrbot service logs --include-stderr
