@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import re
 import socket
 from datetime import datetime
 from pathlib import Path
@@ -47,6 +48,9 @@ class _AddrWithPort(Protocol):
 
 
 APP: Quart
+_ENV_PLACEHOLDER_RE = re.compile(
+    r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>[^}]*))?\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))",
+)
 
 
 def _normalize_plugin_api_route(route: str) -> str:
@@ -92,6 +96,39 @@ def _parse_env_bool(value: str | None, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _expand_env_placeholders(value: str, field_name: str) -> str:
+    missing_vars: list[str] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        var_name = match.group("braced") or match.group("plain")
+        default = match.group("default")
+        env_value = os.environ.get(var_name)
+        if env_value is not None:
+            return env_value
+        if default is not None:
+            return default
+        missing_vars.append(var_name)
+        return match.group(0)
+
+    expanded = _ENV_PLACEHOLDER_RE.sub(_replace, value)
+    if missing_vars:
+        missing = ", ".join(sorted(set(missing_vars)))
+        raise ValueError(
+            f"Unresolved environment variable(s) in dashboard {field_name}: {missing}",
+        )
+    return expanded
+
+
+def _resolve_dashboard_value(
+    value: str | int | None,
+    *,
+    field_name: str,
+) -> str | int | None:
+    if not isinstance(value, str):
+        return value
+    return _expand_env_placeholders(value, field_name).strip()
+
+
 class AstrBotJSONProvider(DefaultJSONProvider):
     def default(self, obj):
         if isinstance(obj, datetime):
@@ -132,7 +169,11 @@ class AstrBotDashboard:
                 # Fall back to expected user path (will fail gracefully later)
                 self.data_path = os.path.abspath(user_dist)
 
-        self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
+        self.app = Quart(
+            "AstrBotDashboard",
+            static_folder=self.data_path,
+            static_url_path="/",
+        )
         APP = self.app  # noqa
         self.app.config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
@@ -405,18 +446,25 @@ class AstrBotDashboard:
         cert_file = (
             os.environ.get("DASHBOARD_SSL_CERT")
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_CERT")
+            or os.environ.get("ASTRBOT_SSL_CERT")
             or ssl_config.get("cert_file", "")
         )
         key_file = (
             os.environ.get("DASHBOARD_SSL_KEY")
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_KEY")
+            or os.environ.get("ASTRBOT_SSL_KEY")
             or ssl_config.get("key_file", "")
         )
         ca_certs = (
             os.environ.get("DASHBOARD_SSL_CA_CERTS")
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_CA_CERTS")
+            or os.environ.get("ASTRBOT_SSL_CA_CERTS")
             or ssl_config.get("ca_certs", "")
         )
+
+        cert_file = _expand_env_placeholders(str(cert_file), "ssl.cert_file")
+        key_file = _expand_env_placeholders(str(key_file), "ssl.key_file")
+        ca_certs = _expand_env_placeholders(str(ca_certs), "ssl.ca_certs")
 
         if not cert_file or not key_file:
             logger.warning(
@@ -456,17 +504,27 @@ class AstrBotDashboard:
     def run(self):
         ip_addr = []
         dashboard_config = self.core_lifecycle.astrbot_config.get("dashboard", {})
-        port = (
+        port_value = (
             os.environ.get("DASHBOARD_PORT")
             or os.environ.get("ASTRBOT_DASHBOARD_PORT")
+            or os.environ.get("ASTRBOT_PORT")
             or dashboard_config.get("port", 6185)
         )
-        host = (
+        port = _resolve_dashboard_value(port_value, field_name="port")
+        host_value = (
             os.environ.get("DASHBOARD_HOST")
             or os.environ.get("ASTRBOT_DASHBOARD_HOST")
+            or os.environ.get("ASTRBOT_HOST")
             or dashboard_config.get("host", "0.0.0.0")
         )
-        enable = dashboard_config.get("enable", True)
+        host = _resolve_dashboard_value(host_value, field_name="host")
+        if not isinstance(host, str) or not host:
+            raise ValueError("Dashboard host must be a non-empty string")
+        enable = _parse_env_bool(
+            os.environ.get("ASTRBOT_DASHBOARD_ENABLE")
+            or os.environ.get("DASHBOARD_ENABLE"),
+            bool(dashboard_config.get("enable", True)),
+        )
         ssl_config = dashboard_config.get("ssl", {})
         if not isinstance(ssl_config, dict):
             ssl_config = {}
@@ -486,6 +544,11 @@ class AstrBotDashboard:
             logger.info("WebUI disabled.")
             return None
 
+        if isinstance(port, str):
+            port = int(port)
+        if not isinstance(port, int) or port < 1 or port > 65535:
+            raise ValueError("Dashboard port must be an integer between 1 and 65535")
+
         logger.info("Starting WebUI at %s://%s:%s", scheme, host, port)
         if host == "0.0.0.0":
             logger.info(
@@ -497,9 +560,6 @@ class AstrBotDashboard:
                 ip_addr = get_local_ip_addresses()
             except Exception as _:
                 pass
-        if isinstance(port, str):
-            port = int(port)
-
         if self.check_port_in_use(port):
             process_info = self.get_process_using_port(port)
             logger.error(
