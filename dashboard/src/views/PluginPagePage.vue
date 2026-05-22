@@ -1,14 +1,20 @@
 <script setup>
 import axios from "axios";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useModuleI18n } from "@/i18n/composables";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const BRIDGE_CHANNEL = "astrbot-plugin-page";
 
 const route = useRoute();
 const router = useRouter();
 const { tm } = useModuleI18n("features/extension");
+const {
+  locale,
+  pluginName: pluginDisplayName,
+  pluginPageTitle,
+} = usePluginI18n();
 
 const loading = ref(true);
 const errorMessage = ref("");
@@ -22,7 +28,22 @@ let iframeMessageOrigin = null;
 
 const pluginName = computed(() => String(route.params.pluginName || ""));
 const pageName = computed(() => String(route.params.pageName || ""));
+const localizedPageTitle = computed(() =>
+  pluginPageTitle(
+    plugin.value,
+    page.value || pageName.value,
+    page.value?.title || pageName.value || tm("buttons.openPages"),
+  ),
+);
 const getIframeWindow = () => iframeRef.value?.contentWindow || null;
+
+const toPostMessageData = (value, fallback = null) => {
+  try {
+    return JSON.parse(JSON.stringify(toRaw(value)));
+  } catch {
+    return fallback;
+  }
+};
 
 const goBack = () => {
   if (window.history.length > 1) {
@@ -84,12 +105,19 @@ const normalizePluginEndpoint = (endpoint) => {
   if (!trimmed) {
     throw new Error("Plugin bridge endpoint cannot be empty.");
   }
-  if (trimmed.includes("\\") || trimmed.includes("://") || trimmed.includes("?") || trimmed.includes("#")) {
+  if (
+    trimmed.includes("\\") ||
+    trimmed.includes("://") ||
+    trimmed.includes("?") ||
+    trimmed.includes("#")
+  ) {
     throw new Error("Plugin bridge endpoint is invalid.");
   }
 
   const segments = trimmed.split("/");
-  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+  if (
+    segments.some((segment) => !segment || segment === "." || segment === "..")
+  ) {
     throw new Error("Plugin bridge endpoint is invalid.");
   }
   return segments.map((segment) => encodeURIComponent(segment)).join("/");
@@ -114,7 +142,9 @@ const isBridgeUploadFile = (value) => {
   if (tag === "[object File]" || tag === "[object Blob]") {
     return true;
   }
-  return typeof value.arrayBuffer === "function" && typeof value.size === "number";
+  return (
+    typeof value.arrayBuffer === "function" && typeof value.size === "number"
+  );
 };
 
 const coerceBridgeUploadFile = async (value, fileName) => {
@@ -134,7 +164,9 @@ const coerceBridgeUploadFile = async (value, fileName) => {
     return new File([buffer], fileName, {
       type: fileType,
       lastModified:
-        typeof value.lastModified === "number" ? value.lastModified : Date.now(),
+        typeof value.lastModified === "number"
+          ? value.lastModified
+          : Date.now(),
     });
   }
   return new Blob([buffer], { type: fileType });
@@ -165,9 +197,11 @@ const sendIframeContext = () => {
     kind: "context",
     context: {
       pluginName: plugin.value.name,
-      displayName: plugin.value.display_name || plugin.value.name,
+      displayName: pluginDisplayName(plugin.value),
       pageName: page.value.name,
-      pageTitle: page.value.title,
+      pageTitle: localizedPageTitle.value,
+      locale: locale.value,
+      i18n: toPostMessageData(plugin.value.i18n, {}),
     },
   });
 };
@@ -221,7 +255,9 @@ const handleBridgeRequest = async (message) => {
         },
       );
       if (response.data?.status === "error") {
-        throw new Error(response.data.message || "Plugin upload request failed.");
+        throw new Error(
+          response.data.message || "Plugin upload request failed.",
+        );
       }
       sendBridgeResponse(requestId, true, response.data?.data ?? response.data);
       return;
@@ -237,7 +273,9 @@ const handleBridgeRequest = async (message) => {
       anchor.href = blobUrl;
       anchor.download =
         (typeof message.filename === "string" && message.filename) ||
-        parseContentDispositionFilename(response.headers["content-disposition"]);
+        parseContentDispositionFilename(
+          response.headers["content-disposition"],
+        );
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -254,11 +292,16 @@ const handleBridgeRequest = async (message) => {
         throw new Error("Missing SSE subscription id.");
       }
       closeSSEConnection(subscriptionId);
-      const url = new URL(buildPluginApiPath(message.endpoint), window.location.origin);
+      const url = new URL(
+        buildPluginApiPath(message.endpoint),
+        window.location.origin,
+      );
       Object.entries(message.params || {}).forEach(([key, value]) => {
         url.searchParams.set(key, String(value));
       });
-      const eventSource = new EventSource(url.toString(), { withCredentials: true });
+      const eventSource = new EventSource(url.toString(), {
+        withCredentials: true,
+      });
       sseConnections.set(subscriptionId, eventSource);
       eventSource.onopen = () => {
         postToIframe({ kind: "sse_state", subscriptionId, state: "open" });
@@ -285,13 +328,19 @@ const handleBridgeRequest = async (message) => {
 
     if (action === "sse:unsubscribe") {
       closeSSEConnection(String(message.subscriptionId || ""));
-      sendBridgeResponse(requestId, true, { subscriptionId: message.subscriptionId });
+      sendBridgeResponse(requestId, true, {
+        subscriptionId: message.subscriptionId,
+      });
       return;
     }
 
     throw new Error(`Unsupported plugin bridge action: ${action}`);
   } catch (error) {
-    sendBridgeResponse(requestId, false, error?.message || "Plugin bridge request failed.");
+    sendBridgeResponse(
+      requestId,
+      false,
+      error?.message || "Plugin bridge request failed.",
+    );
   }
 };
 
@@ -386,7 +435,9 @@ const loadPluginPage = async () => {
     iframeSrc.value = pageEntry.content_path;
   } catch (error) {
     errorMessage.value =
-      error?.response?.data?.message || error?.message || tm("messages.pluginPageLoadFailed");
+      error?.response?.data?.message ||
+      error?.message ||
+      tm("messages.pluginPageLoadFailed");
   } finally {
     loading.value = false;
   }
@@ -402,6 +453,9 @@ onBeforeUnmount(() => {
 });
 
 watch([pluginName, pageName], loadPluginPage, { immediate: true });
+watch(locale, () => {
+  sendIframeContext();
+});
 </script>
 
 <template>
@@ -418,7 +472,7 @@ watch([pluginName, pageName], loadPluginPage, { immediate: true });
 
       <div>
         <div class="text-h2 mb-1">
-          {{ page?.title || pageName || tm("buttons.openPages") }}
+          {{ localizedPageTitle }}
         </div>
       </div>
     </div>

@@ -1,10 +1,9 @@
 import os
-import shutil
 import zipfile
 
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
-from astrbot.core.utils.io import on_error, remove_dir
+from astrbot.core.utils.io import ensure_dir, remove_dir
 
 from ..star.star import StarMetadata
 from ..updator import RepoZipUpdator
@@ -31,11 +30,15 @@ class PluginUpdator(RepoZipUpdator):
 
         return plugin_path
 
-    async def update(self, plugin: StarMetadata, proxy="") -> str:
+    async def update(
+        self, plugin: StarMetadata, proxy="", download_url: str = ""
+    ) -> str:
         repo_url = plugin.repo
 
-        if not repo_url:
-            raise Exception(f"Plugin {plugin.name} does not specify a repository URL.")
+        if not repo_url and not download_url:
+            raise Exception(
+                f"Plugin {plugin.name} does not specify a repository URL or download URL."
+            )
 
         if not plugin.root_dir_name:
             raise Exception(
@@ -47,7 +50,13 @@ class PluginUpdator(RepoZipUpdator):
         logger.info(
             f"Updating plugin at path: {plugin_path}, repository URL: {repo_url}",
         )
-        await self.download_from_repo_url(plugin_path, repo_url, proxy=proxy)
+        if download_url:
+            logger.info(
+                f"Downloading plugin update archive for {plugin.name}: {download_url}"
+            )
+            await self._download_file(download_url, plugin_path + ".zip")
+        else:
+            await self.download_from_repo_url(plugin_path, repo_url, proxy=proxy)
 
         try:
             remove_dir(plugin_path)
@@ -61,29 +70,10 @@ class PluginUpdator(RepoZipUpdator):
         return plugin_path
 
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
-        os.makedirs(target_dir, exist_ok=True)
-        update_dir = ""
+        ensure_dir(target_dir)
         logger.info(f"Extracting archive: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:
-            update_dir = z.namelist()[0]
+            update_dir = self._resolve_archive_root_dir(z.namelist())
             z.extractall(target_dir)
 
-        files = os.listdir(os.path.join(target_dir, update_dir))
-        for f in files:
-            if os.path.isdir(os.path.join(target_dir, update_dir, f)):
-                if os.path.exists(os.path.join(target_dir, f)):
-                    shutil.rmtree(os.path.join(target_dir, f), onerror=on_error)
-            elif os.path.exists(os.path.join(target_dir, f)):
-                os.remove(os.path.join(target_dir, f))
-            shutil.move(os.path.join(target_dir, update_dir, f), target_dir)
-
-        try:
-            logger.info(
-                f"Removing temporary files: {zip_path} and {os.path.join(target_dir, update_dir)}",
-            )
-            shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
-            os.remove(zip_path)
-        except BaseException:
-            logger.warning(
-                f"Failed to remove update files; you can manually delete {zip_path} and {os.path.join(target_dir, update_dir)}",
-            )
+        self._finalize_extracted_archive(zip_path, target_dir, update_dir)

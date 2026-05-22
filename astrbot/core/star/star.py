@@ -72,6 +72,9 @@ class StarMetadata:
     i18n: dict[str, dict] = field(default_factory=dict)
     """插件自带的国际化文案，按 locale 分组。"""
 
+    pages: list[dict] = field(default_factory=list)
+    """插件注册的 Pages 元数据。"""
+
     def __str__(self) -> str:
         return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"
 

@@ -66,7 +66,7 @@ If everything works, you will see AstrBot logs.
 Without errors, you should see a log like `🌈 Management panel started, accessible at` with several URLs. Open one URL to access AstrBot WebUI.
 
 > [!TIP]
-> Default username and password: `astrbot` / `astrbot`.
+> First-time logins use the random password generated on startup and printed to logs. Use that password (and the username shown in the logs, usually `astrbot`) to log in, then change it immediately.
 >
 > If WebUI returns 404:
 > Download `dist.zip` from [release](https://github.com/AstrBotDevs/AstrBot/releases), extract it into `AstrBot/data`, then restart the computer if needed.

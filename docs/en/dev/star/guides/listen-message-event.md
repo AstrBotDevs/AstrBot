@@ -1,4 +1,3 @@
-
 # Handling Message Events
 
 Event listeners can receive message content delivered by the platform and implement features such as commands, command groups, and event listening.
@@ -97,7 +96,7 @@ AstrBot will automatically parse command parameters for you.
 
 ```python
 @filter.command("add")
-def add(self, event: AstrMessageEvent, a: int, b: int):
+async def add(self, event: AstrMessageEvent, a: int, b: int):
     # /add 1 2 -> Result is: 3
     yield event.plain_result(f"Wow! The answer is {a + b}!")
 ```
@@ -108,7 +107,7 @@ Command groups help you organize commands.
 
 ```python
 @filter.command_group("math")
-def math(self):
+def math():
     pass
 
 @math.command("add")
@@ -160,7 +159,7 @@ async def sub(self, event: AstrMessageEvent, a: int, b: int):
     yield event.plain_result(f"Result is: {a - b}")
 
 @calc.command("help")
-def calc_help(self, event: AstrMessageEvent):
+async def calc_help(self, event: AstrMessageEvent):
     # /math calc help
     yield event.plain_result("This is a calculator plugin with add and sub commands.")
 ```
@@ -173,7 +172,7 @@ You can add different aliases for commands or command groups:
 
 ```python
 @filter.command("help", alias={'帮助', 'helpme'})
-def help(self, event: AstrMessageEvent):
+async def help(self, event: AstrMessageEvent):
     yield event.plain_result("This is a calculator plugin with add and sub commands.")
 ```
 
@@ -209,7 +208,7 @@ async def on_aiocqhttp(self, event: AstrMessageEvent):
     yield event.plain_result("Received a message")
 ```
 
-In the current version, `PlatformAdapterType` includes `AIOCQHTTP`, `QQOFFICIAL`, `GEWECHAT`, and `ALL`.
+In the current version, `PlatformAdapterType` supports the following values: `AIOCQHTTP`, `QQOFFICIAL`, `QQOFFICIAL_WEBHOOK`, `TELEGRAM`, `WECOM`, `WECOM_AI_BOT`, `LARK`, `DINGTALK`, `DISCORD`, `SLACK`, `KOOK`, `VOCECHAT`, `WEIXIN_OFFICIAL_ACCOUNT`, `SATORI`, `MISSKEY`, `LINE`, `MATRIX`, `WEIXIN_OC`, `MATTERMOST`, `WEBCHAT`, `ALL`.
 
 #### Admin Commands
 
@@ -250,6 +249,22 @@ async def on_astrbot_loaded(self):
     print("AstrBot initialization complete")
 
 ```
+
+#### On Waiting for LLM Request
+
+This hook is triggered when AstrBot is preparing to call the LLM but has not yet acquired the session lock.
+
+It is suitable for sending feedback such as "Waiting for request..." to the user, or for obtaining the LLM request outside the lock without waiting for it to be released.
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+
+@filter.on_waiting_llm_request()
+async def on_waiting_llm(self, event: AstrMessageEvent):
+    await event.send(event.plain_result("🤔 Waiting for request..."))
+```
+
+> You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
 
 #### On LLM Request
 
@@ -293,6 +308,14 @@ async def my_custom_hook_1(self, event: AstrMessageEvent, req: ProviderRequest):
 >             )
 >         )
 >     )
+> ```
+>
+> If the appended content should only affect the current LLM request and should not be persisted into conversation history, call `.mark_as_temp()` to mark it as temporary:
+>
+> ```python
+> req.extra_user_content_parts.append(
+>     TextPart(text="<runtime_hint>This hint only applies to the current request.</runtime_hint>").mark_as_temp()
+> )
 > ```
 >
 > For long-term memory, knowledge bases, or external system queries that may be large or unnecessary for every round, do not put everything directly into the prompt. Prefer registering them as `llm_tool` functions so the model can call them when needed, or retrieve only a small relevant summary in your plugin and append that summary through `extra_user_content_parts`.
@@ -412,13 +435,14 @@ You can implement some message decoration here, such as converting to voice, con
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+import astrbot.api.message_components as Comp
 
 @filter.on_decorating_result()
 async def on_decorating_result(self, event: AstrMessageEvent):
     result = event.get_result()
     chain = result.chain
     print(chain) # Print the message chain
-    chain.append(Plain("!")) # Add an exclamation mark at the end of the message chain
+    chain.append(Comp.Plain("!")) # Add an exclamation mark at the end of the message chain
 ```
 
 > You cannot use yield to send messages here. This hook is only for decorating event.get_result().chain. If you need to send, please use the `event.send()` method directly.

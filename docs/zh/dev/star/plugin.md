@@ -346,11 +346,11 @@ AstrBot 会自动帮你解析指令的参数。
 
 ```python
 @filter.command("echo")
-def echo(self, event: AstrMessageEvent, message: str):
+async def echo(self, event: AstrMessageEvent, message: str):
     yield event.plain_result(f"你发了: {message}")
 
 @filter.command("add")
-def add(self, event: AstrMessageEvent, a: int, b: int):
+async def add(self, event: AstrMessageEvent, a: int, b: int):
     # /add 1 2 -> 结果是: 3
     yield event.plain_result(f"结果是: {a + b}")
 ```
@@ -377,7 +377,7 @@ async def sub(self, event: AstrMessageEvent, a: int, b: int):
 
 指令组函数内不需要实现任何函数，请直接 `pass` 或者添加函数内注释。指令组的子指令使用 `指令组名.command` 来注册。
 
-当用户没有输入子指令时，会报错并，并渲染出该指令组的树形结构。
+当用户没有输入子指令时，会报错并渲染出该指令组的树形结构。
 
 ![image](https://files.astrbot.app/docs/source/images/plugin/image-1.png)
 
@@ -462,7 +462,7 @@ async def on_aiocqhttp(self, event: AstrMessageEvent):
     yield event.plain_result("收到了一条信息")
 ```
 
-当前版本下，`PlatformAdapterType` 有 `AIOCQHTTP`, `QQOFFICIAL`, `GEWECHAT`, `ALL`。
+当前版本下，`PlatformAdapterType` 有 `AIOCQHTTP`, `QQOFFICIAL`, `ALL`等。
 
 ##### 管理员指令
 
@@ -546,6 +546,14 @@ async def my_custom_hook_1(self, event: AstrMessageEvent, req: ProviderRequest):
 >             )
 >         )
 >     )
+> ```
+>
+> 如果追加的内容只希望参与本轮 LLM 请求，不希望被持久化到会话历史中，可以调用 `.mark_as_temp()` 标记为临时内容：
+>
+> ```python
+> req.extra_user_content_parts.append(
+>     TextPart(text="<runtime_hint>这段提示只在本轮请求中生效。</runtime_hint>").mark_as_temp()
+> )
 > ```
 >
 > 对于长期记忆、知识库、外部系统查询等内容量较大或不一定每轮都需要的信息，不建议全部塞进提示词。可以优先注册为 `llm_tool`，让模型在需要时调用；也可以先在插件中检索出本轮真正相关的少量摘要，再放入 `extra_user_content_parts`。
@@ -1155,7 +1163,7 @@ async def test(self, event: AstrMessageEvent):
     # func_tools_mgr = self.context.get_llm_tool_manager()
     prov = self.context.get_using_provider(umo=event.unified_msg_origin)
     if prov:
-        llm_resp = await provider.text_chat(
+        llm_resp = await prov.text_chat(
             prompt="Hi!",
             context=[
                 {"role": "user", "content": "balabala"},
@@ -1377,7 +1385,7 @@ class HelloWorldTool(FunctionTool):
 要将上述工具注册到 AstrBot，可以在插件主文件的 `__init__.py` 中添加以下代码：
 
 ```py
-from .tools.search import SearchTool
+from .tools.search import HelloWorldTool
 
 class MyPlugin(Star):
     def __init__(self, context: Context):
@@ -1635,7 +1643,7 @@ persona_mgr = self.context.persona_manager
 - **Arguments**  
   - `persona_id: str` – 待删除的人格 ID
 - **Raises**  
-  `Valueable` – 若 `persona_id` 不存在
+  `ValueError` – 若 `persona_id` 不存在
 
 ##### `get_default_persona_v3`
 

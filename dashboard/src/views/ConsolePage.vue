@@ -63,7 +63,7 @@ export default {
   },
   data() {
     return {
-      autoScrollEnabled: true,
+      autoScrollEnabled: localStorage.getItem('console_auto_scroll') !== 'false',
       pipDialog: false,
       pipInstallPayload: {
         package: '',
@@ -73,8 +73,14 @@ export default {
       status: ''
     }
   },
+  mounted() {
+    if (this.$refs.consoleDisplayer) {
+      this.$refs.consoleDisplayer.autoScroll = this.autoScrollEnabled;
+    }
+  },
   watch: {
     autoScrollEnabled(val) {
+      localStorage.setItem('console_auto_scroll', val);
       if (this.$refs.consoleDisplayer) {
         this.$refs.consoleDisplayer.autoScroll = val;
       }

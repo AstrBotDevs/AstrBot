@@ -184,6 +184,10 @@ class TestSelectProvider:
         result = module._select_provider(mock_event, mock_context)
 
         assert result is None
+        mock_event.set_extra.assert_called_with(
+            module.LLM_ERROR_MESSAGE_EXTRA_KEY,
+            "LLM 请求失败：未找到指定的提供商 `non-existent`。请检查提供商配置或重新选择可用模型。",
+        )
 
     def test_select_provider_invalid_type(self, mock_event, mock_context):
         """Test selecting provider when result is not a Provider instance."""
@@ -196,6 +200,10 @@ class TestSelectProvider:
         result = module._select_provider(mock_event, mock_context)
 
         assert result is None
+        mock_event.set_extra.assert_called_with(
+            module.LLM_ERROR_MESSAGE_EXTRA_KEY,
+            "LLM 请求失败：选择的提供商类型无效（str），已跳过本次请求。",
+        )
 
     def test_select_provider_fallback(self, mock_event, mock_context, mock_provider):
         """Test provider selection fallback to using provider."""
@@ -219,6 +227,10 @@ class TestSelectProvider:
         result = module._select_provider(mock_event, mock_context)
 
         assert result is None
+        mock_event.set_extra.assert_called_with(
+            module.LLM_ERROR_MESSAGE_EXTRA_KEY,
+            "LLM 请求失败：Test error",
+        )
 
 
 class TestGetSessionConv:
@@ -340,6 +352,23 @@ class TestApplyKb:
 
         await module._apply_kb(mock_event, req, mock_context, config)
 
+        assert req.system_prompt == "System"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("prompt", ["", "   \n\t"])
+    async def test_apply_kb_blank_prompt(self, prompt, mock_event, mock_context):
+        """Test applying knowledge base when prompt is blank."""
+        module = ama
+        req = ProviderRequest(prompt=prompt, system_prompt="System")
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60, kb_agentic_mode=False
+        )
+        retrieve = AsyncMock(return_value="KB result")
+
+        with patch("astrbot.core.astr_main_agent.retrieve_knowledge_base", retrieve):
+            await module._apply_kb(mock_event, req, mock_context, config)
+
+        retrieve.assert_not_awaited()
         assert req.system_prompt == "System"
 
     @pytest.mark.asyncio

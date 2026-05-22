@@ -104,6 +104,8 @@
     "notFound": "未找到该插件",
     "docsTitle": "文档",
     "docsEmpty": "暂无文档",
+    "changelogTitle": "更新日志",
+    "changelogEmpty": "暂无更新日志",
     "handlerGroups": {
       "page": "页面",
       "skill": "技能",
@@ -212,6 +214,12 @@
       "sectionTitle": "安装",
       "downloadSource": "将从以下位置安装插件包体：",
       "githubSecurityWarning": "AstrBot 不能保证从 GitHub 上下载的插件的安全性。请确认你信任该插件来源后再安装。"
+    },
+    "update": {
+      "title": "更新插件",
+      "sectionTitle": "更新",
+      "downloadSource": "将从以下位置安装更新包体：",
+      "confirm": "确认更新"
     },
     "danger_warning": {
       "title": "警告",

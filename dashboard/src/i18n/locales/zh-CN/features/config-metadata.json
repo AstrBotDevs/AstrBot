@@ -182,7 +182,7 @@
           },
           "shipyard_neo_profile": {
             "description": "Shipyard Neo Profile",
-            "hint": "Shipyard Neo 沙箱 profile，例如 python-default。"
+            "hint": "Shipyard Neo 沙箱 profile，例如 python-default。留空时自动选择能力更完整的 profile。"
           },
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox 存活时间(秒)",
@@ -196,9 +196,9 @@
             "description": "CUA 操作系统类型",
             "hint": "CUA 沙箱操作系统类型，默认 linux。"
           },
-          "cua_ttl": {
-            "description": "CUA Sandbox 存活时间(秒)",
-            "hint": "CUA 沙箱生存时间（秒）。当前作为会话配置保存，具体生效取决于 CUA SDK。"
+          "cua_idle_timeout": {
+            "description": "CUA 空闲超时(秒)",
+            "hint": "CUA 沙箱空闲超时时间（秒）。大于 0 时，AstrBot 会在会话空闲达到该时长后主动关闭 CUA 沙箱；0 表示禁用。"
           },
           "cua_telemetry_enabled": {
             "description": "CUA 遥测",
@@ -466,10 +466,6 @@
       "kf_name": {
         "description": "微信客服账号名",
         "hint": "如果填写此项，即代表你将使用企业微信客服，而不是企业微信应用。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取。"
-      },
-      "lark_bot_name": {
-        "description": "飞书机器人的名字",
-        "hint": "请务必填写正确，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。"
       },
       "lark_connection_mode": {
         "description": "订阅方式",
@@ -1084,6 +1080,10 @@
       "callback_api_base": {
         "description": "对外可达的回调接口地址",
         "hint": "外部服务可能会通过 AstrBot 生成的回调链接(如文件下载链接)访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址(host),因此需要通过此配置项显式指定外部服务如何访问 AstrBot 的地址。如 [http://localhost:6185](http://localhost:6185),[https://example.com](https://example.com) 等。"
+      },
+      "disable_metrics": {
+        "description": "禁用匿名使用统计",
+        "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。"
       },
       "dashboard": {
         "ssl": {

@@ -180,7 +180,7 @@
                     },
                     "shipyard_neo_profile": {
                         "description": "Профиль Shipyard Neo",
-                        "hint": "Профиль песочницы, например, python-default."
+                        "hint": "Профиль песочницы, например, python-default. Оставьте пустым для автоматического выбора самого функционального профиля."
                     },
                     "shipyard_neo_ttl": {
                         "description": "TTL песочницы Shipyard Neo",
@@ -194,9 +194,9 @@
                         "description": "Тип ОС CUA",
                         "hint": "Тип операционной системы песочницы CUA. По умолчанию linux."
                     },
-                    "cua_ttl": {
-                        "description": "TTL песочницы CUA",
-                        "hint": "Время жизни песочницы CUA в секундах. Фактическое поведение зависит от установленного CUA SDK."
+                    "cua_idle_timeout": {
+                        "description": "Таймаут простоя CUA",
+                        "hint": "Таймаут простоя сессии песочницы CUA в секундах. Если значение больше 0, AstrBot автоматически завершит неактивную песочницу CUA после указанного времени бездействия; 0 отключает автоочистку."
                     },
                     "cua_telemetry_enabled": {
                         "description": "Телеметрия CUA",
@@ -464,10 +464,6 @@
             "kf_name": {
                 "description": "Имя аккаунта службы поддержки WeChat",
                 "hint": "Необязательно. См. https://kf.weixin.qq.com/kf/frame#/accounts"
-            },
-            "lark_bot_name": {
-                "description": "Имя бота Lark",
-                "hint": "Должно быть точным для работы через @ упоминания."
             },
             "lark_connection_mode": {
                 "description": "Режим подписки",
@@ -1083,6 +1079,10 @@
             "callback_api_base": {
                 "description": "Внешний адрес для Callback API",
                 "hint": "Используется для сервисов, требующих обратных выливов (например, в песочнице)."
+            },
+            "disable_metrics": {
+                "description": "Отключить анонимную статистику",
+                "hint": "После отключения AstrBot не будет отправлять анонимные данные об использовании."
             },
             "dashboard": {
                 "ssl": {
