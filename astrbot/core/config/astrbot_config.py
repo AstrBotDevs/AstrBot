@@ -152,6 +152,7 @@ class AstrBotConfig(dict):
                         default,
                         fallback,
                         v,
+                        path=k,
                     )
                 else:
                     fallback = copy.deepcopy(DEFAULT_VALUE_MAP[v["type"]])
@@ -159,6 +160,7 @@ class AstrBotConfig(dict):
                         default,
                         fallback,
                         v,
+                        path=k,
                     )
 
         _parse_schema(schema, conf)
@@ -188,12 +190,12 @@ class AstrBotConfig(dict):
                     sanitized = int(value.strip())
                     changed = True
                 except ValueError:
-                    return copy.deepcopy(default), True
+                    return default, True
             elif isinstance(value, float) and value.is_integer():
                 sanitized = int(value)
                 changed = True
             else:
-                return copy.deepcopy(default), True
+                return default, True
         elif type_ == "float":
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 sanitized = float(value)
@@ -203,28 +205,28 @@ class AstrBotConfig(dict):
                     sanitized = float(value.strip())
                     changed = True
                 except ValueError:
-                    return copy.deepcopy(default), True
+                    return default, True
             else:
-                return copy.deepcopy(default), True
+                return default, True
         elif type_ in ("string", "text"):
             if not isinstance(value, str):
-                return copy.deepcopy(default), True
+                return default, True
             sanitized = value
         elif type_ == "bool":
             if type(value) is not bool:
-                return copy.deepcopy(default), True
+                return default, True
             sanitized = value
         else:
             sanitized = value
 
         if not self._value_matches_options(sanitized, meta):
-            return copy.deepcopy(default), True
+            return default, True
 
         return sanitized, changed
 
     def _sanitize_list_by_schema(self, value, default, meta: dict):
         if not isinstance(value, list):
-            return copy.deepcopy(default), True
+            return default, True
 
         options = meta.get("options")
         if not isinstance(options, list):
@@ -236,11 +238,17 @@ class AstrBotConfig(dict):
 
         if filtered:
             return filtered, True
-        return copy.deepcopy(default), True
+        return default, True
 
-    def _sanitize_template_list_by_schema(self, value, default, meta: dict):
+    def _sanitize_template_list_by_schema(
+        self,
+        value,
+        default,
+        meta: dict,
+        path="",
+    ):
         if not isinstance(value, list):
-            return copy.deepcopy(default), True
+            return default, True
 
         templates = meta.get("templates")
         if not isinstance(templates, dict):
@@ -252,12 +260,27 @@ class AstrBotConfig(dict):
         for idx, item in enumerate(value):
             if not isinstance(item, dict):
                 changed = True
+                logger.warning(
+                    "Dropping non-dict entry from template_list at index %d.",
+                    idx,
+                )
                 continue
 
             template_key = item.get("__template_key") or item.get("template")
             template_meta = templates.get(template_key)
-            if not template_key or not isinstance(template_meta, dict):
+            if not template_key:
                 changed = True
+                logger.warning(
+                    "Dropping template_list entry at index %d: missing template key.",
+                    idx,
+                )
+                continue
+            if not isinstance(template_meta, dict):
+                changed = True
+                logger.warning(
+                    "Dropping template_list entry at index %d: unknown template key.",
+                    idx,
+                )
                 continue
 
             template_items = template_meta.get("items", {})
@@ -273,7 +296,7 @@ class AstrBotConfig(dict):
             entry_changed = self.check_config_integrity(
                 entry_default,
                 entry_data,
-                path=f"[{idx}]",
+                path=f"{path}[{idx}]" if path else f"[{idx}]",
                 schema=template_items,
             )
 
@@ -290,10 +313,10 @@ class AstrBotConfig(dict):
         if sanitized_entries != value:
             changed = True
         if not sanitized_entries and value:
-            return copy.deepcopy(default), True
+            return default, True
         return sanitized_entries, changed
 
-    def _sanitize_value_by_schema(self, value, default, meta: dict | None):
+    def _sanitize_value_by_schema(self, value, default, meta: dict | None, path=""):
         if not isinstance(meta, dict) or "type" not in meta:
             return value, False
 
@@ -313,17 +336,19 @@ class AstrBotConfig(dict):
             changed = self.check_config_integrity(
                 default,
                 nested_value,
+                path=path,
                 schema=items,
             )
             return nested_value, changed
 
         if type_ == "dict":
+            # dict is an opaque user mapping; object is recursively schema-defined.
             if not isinstance(value, dict):
                 return default, True
             return value, False
 
         if type_ == "template_list":
-            return self._sanitize_template_list_by_schema(value, default, meta)
+            return self._sanitize_template_list_by_schema(value, default, meta, path)
 
         if type_ == "list":
             return self._sanitize_list_by_schema(value, default, meta)
@@ -352,15 +377,16 @@ class AstrBotConfig(dict):
 
         # 先按照参考配置的顺序添加配置项
         for key, value in refer_conf.items():
+            path_ = path + "." + key if path else key
             item_schema = schema.get(key) if isinstance(schema, dict) else None
             if key not in conf:
                 # 配置项不存在，插入默认值
-                path_ = path + "." + key if path else key
                 logger.info("Config key missing; added default.")
                 new_conf[key] = copy.deepcopy(value)
                 has_new = True
             elif conf[key] is None:
                 # 配置项为 None，使用默认值
+                logger.info("Config key is None; added default.")
                 new_conf[key] = copy.deepcopy(value)
                 has_new = True
             elif isinstance(item_schema, dict):
@@ -368,6 +394,7 @@ class AstrBotConfig(dict):
                     conf[key],
                     value,
                     item_schema,
+                    path=path_,
                 )
                 if value_changed:
                     logger.info("Config key incompatible with schema; sanitized.")
