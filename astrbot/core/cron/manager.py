@@ -304,7 +304,7 @@ class CronJobManager:
             _get_session_conv,
             build_main_agent,
         )
-        from astrbot.core.tools.prompts import (
+        from astrbot.core.astr_main_agent_resources import (
             CONVERSATION_HISTORY_INJECT_PREFIX,
             CRON_TASK_WOKE_USER_PROMPT,
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,

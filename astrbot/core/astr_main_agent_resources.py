@@ -1,10 +1,5 @@
 import base64
 
-from astrbot.core.tools.prompts import (  # noqa: F401 — re-export for backward compatibility
-    BACKGROUND_TASK_WOKE_USER_PROMPT,
-    CONVERSATION_HISTORY_INJECT_PREFIX,
-)
-
 LLM_SAFETY_MODE_SYSTEM_PROMPT = """You are running in Safe Mode.
 
 Follow these rules:
@@ -102,6 +97,26 @@ BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT = (
     "# BACKGROUND TASK CONTEXT\n"
     "The following object describes the background task that completed:\n"
     "{background_task_result}"
+)
+
+CONVERSATION_HISTORY_INJECT_PREFIX = (
+    "\n\nBelow is your and the user's previous conversation history:\n"
+)
+
+BACKGROUND_TASK_WOKE_USER_PROMPT = (
+    "Proceed according to your system instructions. "
+    "Output using same language as previous conversation. "
+    "If you need to deliver the result to the user immediately, "
+    "you MUST use `send_message_to_user` tool to send the message directly to the user, "
+    "otherwise the user will not see the result. "
+    "After completing your task, summarize and output your actions and results. "
+)
+
+CRON_TASK_WOKE_USER_PROMPT = (
+    "You are now responding to a scheduled task. "
+    "Proceed according to your system instructions. "
+    "Output using same language as previous conversation. "
+    "After completing your task, summarize and output your actions and results."
 )
 
 # we prevent astrbot from connecting to known malicious hosts
