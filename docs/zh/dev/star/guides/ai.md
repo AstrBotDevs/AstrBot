@@ -157,8 +157,9 @@ Multi-Agent（多智能体）系统将复杂应用分解为多个专业化智能
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
+from astrbot.api import logger
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
 
 @dataclass
@@ -348,6 +349,8 @@ from astrbot.core.agent.message import (
     TextPart,
 )
 
+conv_mgr = self.context.conversation_manager
+provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
 curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
 user_msg = UserMessageSegment(content=[TextPart(text="hi")])
 llm_resp = await self.context.llm_generate(

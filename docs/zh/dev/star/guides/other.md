@@ -9,8 +9,12 @@ from astrbot.api.event import filter, AstrMessageEvent
 
 @filter.command("test")
 async def test_(self, event: AstrMessageEvent):
-    from astrbot.api.platform import AiocqhttpAdapter # 其他平台同理
-    platform = self.context.get_platform(filter.PlatformAdapterType.AIOCQHTTP)
+    from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import AiocqhttpAdapter # 其他平台同理
+    # >= v4.0.0 使用：
+    platform_id = event.get_platform_id()
+    platform = self.context.get_platform_inst(platform_id)
+    # < v4.0.0 使用（已废弃）：
+    # platform = self.context.get_platform(filter.PlatformAdapterType.AIOCQHTTP)
     assert isinstance(platform, AiocqhttpAdapter)
     # platform.get_client().api.call_action()
 ```

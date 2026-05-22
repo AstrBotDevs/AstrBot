@@ -157,13 +157,21 @@ In the example below, we define a Main Agent responsible for delegating tasks to
 Define Tools:
 
 ```py
+from astrbot.api import logger
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
+from astrbot.core.astr_agent_context import AstrAgentContext
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+
+
 @dataclass
 class AssignAgentTool(FunctionTool[AstrAgentContext]):
     """Main agent uses this tool to decide which sub-agent to delegate a task to."""
 
     name: str = "assign_agent"
     description: str = "Assign an agent to a task based on the given query"
-    parameters: dict = field(
+    parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -178,7 +186,7 @@ class AssignAgentTool(FunctionTool[AstrAgentContext]):
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> str | CallToolResult:
+    ) -> ToolExecResult:
         # Here you would implement the actual agent assignment logic.
         # For demonstration purposes, we'll return a dummy response.
         return "Based on the query, you should assign agent 1."
@@ -190,7 +198,7 @@ class WeatherTool(FunctionTool[AstrAgentContext]):
 
     name: str = "weather"
     description: str = "Get weather information for a location"
-    parameters: dict = field(
+    parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -205,7 +213,7 @@ class WeatherTool(FunctionTool[AstrAgentContext]):
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> str | CallToolResult:
+    ) -> ToolExecResult:
         city = kwargs["city"]
         # Here you would implement the actual weather fetching logic.
         # For demonstration purposes, we'll return a dummy response.
@@ -218,7 +226,7 @@ class SubAgent1(FunctionTool[AstrAgentContext]):
 
     name: str = "subagent1_name"
     description: str = "subagent1_description"
-    parameters: dict = field(
+    parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -233,7 +241,7 @@ class SubAgent1(FunctionTool[AstrAgentContext]):
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> str | CallToolResult:
+    ) -> ToolExecResult:
         ctx = context.context.context
         event = context.context.event
         logger.info(f"the llm context messages: {context.messages}")
@@ -255,7 +263,7 @@ class SubAgent2(FunctionTool[AstrAgentContext]):
 
     name: str = "subagent2_name"
     description: str = "subagent2_description"
-    parameters: dict = field(
+    parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -270,7 +278,7 @@ class SubAgent2(FunctionTool[AstrAgentContext]):
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> str | CallToolResult:
+    ) -> ToolExecResult:
         return "I am useless :(, you shouldn't call me :("
 ```
 
@@ -334,6 +342,32 @@ class Conversation:
 ```
 
 :::
+
+### Quickly Adding LLM Records to a Conversation `add_message_pair`
+
+```py
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    UserMessageSegment,
+    TextPart,
+)
+
+conv_mgr = self.context.conversation_manager
+provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
+curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
+user_msg = UserMessageSegment(content=[TextPart(text="hi")])
+llm_resp = await self.context.llm_generate(
+    chat_provider_id=provider_id,  # Chat model ID
+    contexts=[user_msg],  # When prompt is not specified, contexts is used as input; if both prompt and contexts are provided, prompt is appended to the end of the LLM input
+)
+await conv_mgr.add_message_pair(
+    cid=curr_cid,
+    user_message=user_msg,
+    assistant_message=AssistantMessageSegment(
+        content=[TextPart(text=llm_resp.completion_text)]
+    ),
+)
+```
 
 ### Main Methods
 
