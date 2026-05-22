@@ -70,12 +70,14 @@ astrbot run
 | --- | --- |
 | `-p, --port <PORT>` | 指定 WebUI 端口。 |
 | `-r, --reload` | 启用插件自动重载，适合插件开发调试。 |
+| `--reset-password` | 启动时重置 WebUI 初始密码，并在启动日志中打印新的初始密码。 |
 
 示例：
 
 ```bash
 astrbot run --port 6185
 astrbot run --reload
+astrbot run --reset-password
 ```
 
 ## 后台服务

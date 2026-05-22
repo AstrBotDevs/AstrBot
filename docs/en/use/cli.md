@@ -70,12 +70,14 @@ Common options:
 | --- | --- |
 | `-p, --port <PORT>` | Set the WebUI port. |
 | `-r, --reload` | Enable plugin auto-reload for plugin development. |
+| `--reset-password` | Reset the WebUI initial password on startup and print the new initial password in startup logs. |
 
 Examples:
 
 ```bash
 astrbot run --port 6185
 astrbot run --reload
+astrbot run --reset-password
 ```
 
 ## Background Service
