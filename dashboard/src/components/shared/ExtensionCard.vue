@@ -145,9 +145,22 @@ const viewChangelog = () => {
   emit("view-changelog", props.extension);
 };
 
-const viewExtensionPage = () => {
-  emit("view-extension-page", props.extension);
-};
+const safeSocialLink = computed(() => {
+  const socialLink = props.extension?.social_link;
+  if (typeof socialLink !== "string" || !socialLink.trim().length) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(socialLink);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.href
+      : "";
+  } catch {
+    return "";
+  }
+});
+
 </script>
 
 <template>
@@ -316,11 +329,90 @@ const viewExtensionPage = () => {
             </v-chip>
           </div>
 
-          <div
-            class="extension-desc"
-            :class="{ 'text-caption': $vuetify.display.xs }"
-          >
-            {{ localizedDesc }}
+            <div class="extension-meta-group">
+              <div class="extension-chip-group d-flex flex-wrap">
+                <v-chip color="primary" label size="small">
+                  <v-icon icon="mdi-source-branch" start></v-icon>
+                  {{ extension.version }}
+                </v-chip>
+                <v-chip
+                  v-if="extension?.has_update"
+                  color="warning"
+                  label
+                  size="small"
+                  style="cursor: pointer"
+                  @click="updateExtension"
+                >
+                  <v-icon icon="mdi-arrow-up-bold" start></v-icon>
+                  {{ extension.online_version }}
+                </v-chip>
+                <v-chip
+                  v-if="extension.handlers?.length"
+                  color="primary"
+                  label
+                  size="small"
+                  @click="viewHandlers"
+                  style="cursor: pointer"
+                >
+                  <v-icon icon="mdi-cogs" start></v-icon>
+                  {{ extension.handlers?.length
+                  }}{{ tm("card.status.handlersCount") }}
+                </v-chip>
+                <v-chip
+                  v-for="tag in extension.tags"
+                  :key="tag"
+                  :color="tag === 'danger' ? 'error' : 'primary'"
+                  label
+                  size="small"
+                >
+                  {{ tag === "danger" ? tm("tags.danger") : tag }}
+                </v-chip>
+                <PluginPlatformChip :platforms="supportPlatforms" />
+                <v-chip
+                  v-if="astrbotVersionRequirement"
+                  color="secondary"
+                  variant="outlined"
+                  label
+                  size="small"
+                >
+                  AstrBot: {{ astrbotVersionRequirement }}
+                </v-chip>
+              </div>
+
+              <div
+                v-if="!marketMode && extension.author"
+                class="extension-author-row"
+              >
+                <v-icon
+                  icon="mdi-account"
+                  size="x-small"
+                  class="extension-author-row__icon"
+                ></v-icon>
+                <a
+                  v-if="safeSocialLink"
+                  :href="safeSocialLink"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="extension-author-row__link text-subtitle-2 font-weight-medium"
+                  @click.stop
+                >
+                  {{ extension.author }}
+                </a>
+                <span
+                  v-else
+                  class="extension-author-row__text text-subtitle-2 font-weight-medium"
+                >
+                  {{ extension.author }}
+                </span>
+              </div>
+
+              <div
+                class="extension-desc"
+                :class="{ 'text-caption': $vuetify.display.xs }"
+              >
+                {{ extension.desc }}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -419,7 +511,15 @@ const viewExtensionPage = () => {
             <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
           </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click.stop="updateExtension">
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-text-box-search-outline"
+            @click="viewChangelog"
+          >
+            <v-list-item-title>{{ tm("pluginChangelog.menuTitle") }}</v-list-item-title>
+          </v-list-item>
+
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click="updateExtension">
             <v-list-item-title>{{
               extension.has_update
                 ? tm("card.actions.updateTo") + " " + extension.online_version
@@ -483,6 +583,41 @@ const viewExtensionPage = () => {
 
 .extension-chip-group {
   gap: 6px;
+}
+
+.extension-author-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  color: rgb(var(--v-theme-primary));
+  min-width: 0;
+}
+
+.extension-author-row__icon {
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  flex-shrink: 0;
+}
+
+.extension-author-row__link,
+.extension-author-row__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extension-author-row__link,
+.extension-author-row__text {
+  color: rgb(var(--v-theme-primary));
+}
+
+.extension-author-row__link {
+  text-decoration: none;
+}
+
+.extension-author-row__link:hover {
+  text-decoration: underline;
 }
 
 .extension-desc {
