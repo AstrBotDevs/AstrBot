@@ -218,7 +218,13 @@ class AstrMessageEvent(abc.ABC):
             return nickname
         return str(nickname)
 
-    def set_extra(self, key, value) -> None:
+    def get_sender_avatar(self) -> str | None:
+        """获取消息发送者的头像 URL。(可能会返回 None)"""
+        if hasattr(self.message_obj.sender, 'avatar'):
+            return self.message_obj.sender.avatar
+        return None
+
+    def set_extra(self, key, value):
         """设置额外的信息。"""
         self._extras[key] = value
 

@@ -141,6 +141,17 @@
                             </div>
                         </template>
 
+                        <template v-slot:item.user_name="{ item }">
+                            <span>{{ item.user_name || '-' }}</span>
+                        </template>
+
+                        <template v-slot:item.avatar="{ item }">
+                            <v-avatar v-if="item.avatar" size="32">
+                                <v-img :src="item.avatar" :alt="item.user_name || 'avatar'"></v-img>
+                            </v-avatar>
+                            <span v-else>-</span>
+                        </template>
+
                         <template v-slot:item.created_at="{ item }">
                             {{ formatTimestamp(item.created_at) }}
                         </template>
@@ -487,8 +498,19 @@ export default {
         // 动态表头
         tableHeaders() {
             return [
-                { title: this.tm('table.headers.title'), key: 'title', sortable: true, minWidth: '80px', width: '200px' },
-                { title: this.tm('table.headers.umo'), key: 'umo_source', sortable: false, minWidth: '280px', width: '360px' },
+                { title: this.tm('table.headers.title'), key: 'title', sortable: true },
+                { title: this.tm('table.headers.cid'), key: 'cid', sortable: true, width: '100px' },
+                {
+                    title: this.tm('table.headers.umo'),
+                    align: 'center',
+                    children: [
+                        { title: this.tm('table.headers.platform'), key: 'platform', sortable: true, width: '120px' },
+                        { title: this.tm('table.headers.type'), key: 'messageType', sortable: true, width: '100px' },
+                        { title: this.tm('table.headers.sessionId'), key: 'sessionId', sortable: true, width: '100px' },
+                    ],
+                },
+                { title: this.tm('table.headers.userName'), key: 'user_name', sortable: true, width: '120px' },
+                { title: this.tm('table.headers.avatar'), key: 'avatar', sortable: false, width: '80px' },
                 { title: this.tm('table.headers.createdAt'), key: 'created_at', sortable: true, width: '180px' },
                 { title: this.tm('table.headers.updatedAt'), key: 'updated_at', sortable: true, width: '180px' },
                 { title: this.tm('table.headers.actions'), key: 'actions', sortable: false, align: 'center' }
