@@ -658,8 +658,29 @@ export default {
       }
     },
 
-    scheduleAutoScroll() {
-      if (!this.autoScroll) {
+    toggleAutoScroll() {
+      this.autoScroll = !this.autoScroll;
+    },
+
+    toggleFullscreen() {
+      const container = document.getElementById('console-wrapper');
+      if (!document.fullscreenElement) {
+        container.requestFullscreen().catch(err => {
+          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    },
+
+    handleFullscreenChange() {
+      this.isFullscreen = !!document.fullscreenElement;
+    },
+
+    appendLogContent(element, log) {
+      const levelMatch = log.match(/\[(DBUG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/);
+      if (!levelMatch) {
+        element.innerText = `${log}`;
         return;
       }
 
@@ -744,6 +765,10 @@ export default {
 
 .console-terminal {
   background-color: #1e1e1e;
+  border-radius: 8px;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
   padding: 16px;
   border-radius: 8px;
   overflow-y: auto;
@@ -781,6 +806,22 @@ export default {
 
 :deep(.console-log-message) {
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+  .console-term {
+    padding: 12px;
+  }
+
+  :deep(.console-log-line--structured) {
+    min-width: max-content;
+  }
+
+  :deep(.console-log-message) {
+    overflow-wrap: normal;
+    word-break: normal;
+    white-space: pre;
+  }
 }
 
 :deep(.fade-in) {
