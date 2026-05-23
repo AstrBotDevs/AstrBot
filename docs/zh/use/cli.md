@@ -70,12 +70,14 @@ astrbot run
 | --- | --- |
 | `-p, --port <PORT>` | 指定 WebUI 端口。 |
 | `-r, --reload` | 启用插件自动重载，适合插件开发调试。 |
+| `--reset-password` | 启动时重置 WebUI 初始密码，并在启动日志中打印新的初始密码。 |
 
 示例：
 
 ```bash
 astrbot run --port 6185
 astrbot run --reload
+astrbot run --reset-password
 ```
 
 ## 后台服务
@@ -88,7 +90,9 @@ astrbot run --reload
 | --- | --- |
 | Linux | `systemd --user` |
 | macOS | LaunchAgent |
-| Windows | 任务计划程序 |
+
+> [!NOTE]
+> Windows 暂不支持 `astrbot service`。请使用 `astrbot run` 前台启动，或使用其他进程管理工具。
 
 ### 安装服务
 
@@ -188,9 +192,9 @@ astrbot service logs -f
 | `--name <NAME>` | 指定服务名。 |
 | `-n, --lines <N>` | 显示最近 N 行，默认 200。 |
 | `-f, --follow` | 持续跟随日志输出。 |
-| `--include-stderr` | 在 macOS 和 Windows 上同时显示 stderr 日志。 |
+| `--include-stderr` | 在 macOS 上同时显示 stderr 日志。 |
 
-macOS 和 Windows 下，`astrbot service logs` 默认只显示标准输出日志，也就是 `.out.log`。如果需要同时查看错误输出，再加 `--include-stderr`。
+macOS 下，`astrbot service logs` 默认只显示标准输出日志，也就是 `.out.log`。如果需要同时查看错误输出，再加 `--include-stderr`。
 
 ### 启用应用日志文件
 

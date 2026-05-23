@@ -16,6 +16,7 @@ from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
+DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_DASHBOARD_RESET_PASSWORD"
 logger = logging.getLogger("astrbot")
 
 CORE_COMPUTER_RUNTIME_IDS = {"local", "sandbox", "none"}
@@ -140,19 +141,21 @@ class AstrBotConfig(dict):
             )
         # 检查配置完整性,并插入
         has_new = self.check_config_integrity(default_config, conf)
-        has_new |= self._migrate_legacy_sandbox_runtime(conf)
+        dashboard_reset_requested = self._is_dashboard_password_reset_requested()
         if (
             "dashboard" in conf
             and isinstance(conf["dashboard"], dict)
-            and not conf["dashboard"].get("pbkdf2_password")
-            and not conf["dashboard"].get("password")
-        ) or (
-            "dashboard" in conf
-            and isinstance(conf["dashboard"], dict)
-            and legacy_dashboard_password_change_required
-            and conf["dashboard"].get("pbkdf2_password")
+            and (
+                dashboard_reset_requested
+                or (
+                    not conf["dashboard"].get("pbkdf2_password")
+                    and not conf["dashboard"].get("password")
+                )
+            )
         ):
             self._reset_generated_dashboard_password(conf)
+            if dashboard_reset_requested:
+                os.environ[DASHBOARD_RESET_PASSWORD_ENV] = "0"
             has_new = True
         self.update(conf)
         if has_new:
@@ -186,6 +189,15 @@ class AstrBotConfig(dict):
             return generate_dashboard_password()
         validate_dashboard_password(env_password)
         return env_password
+
+    @staticmethod
+    def _is_dashboard_password_reset_requested() -> bool:
+        return os.environ.get(DASHBOARD_RESET_PASSWORD_ENV, "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
 
     def _config_schema_to_default_config(self, schema: dict) -> dict:
         """将 Schema 转换成 Config"""

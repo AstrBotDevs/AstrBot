@@ -88,6 +88,8 @@ def _expand_parameter(
         return val
     return default
 
+DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_DASHBOARD_RESET_PASSWORD"
+
 
 async def run_astrbot(astrbot_root: Path) -> None:
     """Run AstrBot"""
@@ -112,62 +114,13 @@ async def run_astrbot(astrbot_root: Path) -> None:
 @click.option("--reload", "-r", is_flag=True, help="Auto-reload plugins")
 @click.option("--host", "-H", help="AstrBot Dashboard Host", required=False, type=str)
 @click.option("--port", "-p", help="AstrBot Dashboard port", required=False, type=str)
-@click.option("--root", help="AstrBot root directory", required=False, type=str)
 @click.option(
-    "--service-config",
-    "-c",
-    help="Service configuration file path (supports ${VAR:-default} style expansion)",
-    required=False,
-    type=str,
-)
-@click.option(
-    "--backend-only",
-    "-b",
+    "--reset-password",
     is_flag=True,
-    default=False,
-    help="Disable WebUI, run backend only",
+    help="Force reset the dashboard initial password on startup.",
 )
-@click.option(
-    "--log-level",
-    "-l",
-    help="Log level",
-    required=False,
-    type=str,
-    default="INFO",
-)
-@click.option(
-    "--ssl-cert",
-    help="SSL certificate file path for backend (preferred env name: ASTRBOT_SSL_CERT)",
-    required=False,
-    type=str,
-)
-@click.option(
-    "--ssl-key",
-    help="SSL private key file path for backend (preferred env name: ASTRBOT_SSL_KEY)",
-    required=False,
-    type=str,
-)
-@click.option(
-    "--ssl-ca",
-    help="SSL CA certificates file path for backend (preferred env name: ASTRBOT_SSL_CA_CERTS)",
-    required=False,
-    type=str,
-)
-@click.option("--debug", is_flag=True, help="Enable debug mode")
 @click.command()
-def run(
-    reload: bool,
-    host: str,
-    port: str,
-    root: str,
-    service_config: str,
-    backend_only: bool,
-    log_level: str,
-    ssl_cert: str,
-    ssl_key: str,
-    ssl_ca: str,
-    debug: bool,
-) -> None:
+def run(reload: bool, port: str, reset_password: bool) -> None:
     """Run AstrBot"""
     initialize_runtime_bootstrap()
     try:
@@ -251,62 +204,8 @@ def run(
             click.echo("Plugin auto-reload enabled")
             os.environ["ASTRBOT_RELOAD"] = "1"
 
-        if debug:
-            keys_to_print = [
-                "ASTRBOT_ROOT",
-                "ASTRBOT_LOG_LEVEL",
-                "ASTRBOT_CLI",
-                "ASTRBOT_DESKTOP_CLIENT",
-                "ASTRBOT_SYSTEMD",
-                "ASTRBOT_RELOAD",
-                "ASTRBOT_DISABLE_METRICS",
-                "TESTING",
-                "DEMO_MODE",
-                "PYTHON",
-                "ASTRBOT_DASHBOARD_ENABLE",
-                "DASHBOARD_ENABLE",
-                "ASTRBOT_HOST",
-                "DASHBOARD_HOST",
-                "ASTRBOT_PORT",
-                "DASHBOARD_PORT",
-                # Dashboard SSL (legacy)
-                "ASTRBOT_SSL_ENABLE",
-                "DASHBOARD_SSL_ENABLE",
-                "ASTRBOT_SSL_CERT",
-                "DASHBOARD_SSL_CERT",
-                "ASTRBOT_SSL_KEY",
-                "DASHBOARD_SSL_KEY",
-                "ASTRBOT_SSL_CA_CERTS",
-                "DASHBOARD_SSL_CA_CERTS",
-                # Backend-standard SSL (preferred)
-                "ASTRBOT_SSL_ENABLE",
-                "ASTRBOT_SSL_CERT",
-                "ASTRBOT_SSL_KEY",
-                "ASTRBOT_SSL_CA_CERTS",
-                "http_proxy",
-                "https_proxy",
-                "no_proxy",
-                "DASHSCOPE_API_KEY",
-                "COZE_API_KEY",
-                "COZE_BOT_ID",
-                "BAY_DATA_DIR",
-                "TEST_MODE",
-            ]
-            click.secho("\n[Debug Mode] Environment Variables:", fg="yellow", bold=True)
-            for key in keys_to_print:
-                if key in os.environ:
-                    val = os.environ[key]
-                    if "KEY" in key or "PASSWORD" in key or "SECRET" in key:
-                        if len(val) > 8:
-                            val = val[:4] + "****" + val[-4:]
-                        else:
-                            val = "****"
-                    click.echo(f"  {click.style(key, fg='cyan')}: {val}")
-            if svc_path:
-                click.echo(
-                    f"  {click.style('SERVICE_CONFIG', fg='cyan')}: {svc_path!s}",
-                )
-            click.echo("")
+        if reset_password:
+            os.environ[DASHBOARD_RESET_PASSWORD_ENV] = "1"
 
         lock_file = astrbot_root / "astrbot.lock"
         lock = FileLock(lock_file, timeout=5)

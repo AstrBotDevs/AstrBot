@@ -70,12 +70,14 @@ Common options:
 | --- | --- |
 | `-p, --port <PORT>` | Set the WebUI port. |
 | `-r, --reload` | Enable plugin auto-reload for plugin development. |
+| `--reset-password` | Reset the WebUI initial password on startup and print the new initial password in startup logs. |
 
 Examples:
 
 ```bash
 astrbot run --port 6185
 astrbot run --reload
+astrbot run --reset-password
 ```
 
 ## Background Service
@@ -88,7 +90,9 @@ Each platform uses its native service manager:
 | --- | --- |
 | Linux | `systemd --user` |
 | macOS | LaunchAgent |
-| Windows | Task Scheduler |
+
+> [!NOTE]
+> `astrbot service` is not supported on Windows. Use `astrbot run` in the foreground or another process manager.
 
 ### Install
 
@@ -188,9 +192,9 @@ Common options:
 | `--name <NAME>` | Service name. |
 | `-n, --lines <N>` | Show the latest N lines. Default: 200. |
 | `-f, --follow` | Follow log output. |
-| `--include-stderr` | Also show stderr logs on macOS and Windows. |
+| `--include-stderr` | Also show stderr logs on macOS. |
 
-On macOS and Windows, `astrbot service logs` shows stdout logs by default, which are the `.out.log` files. Add `--include-stderr` when you also need error output.
+On macOS, `astrbot service logs` shows stdout logs by default, which are the `.out.log` files. Add `--include-stderr` when you also need error output.
 
 ### Application Log File
 
