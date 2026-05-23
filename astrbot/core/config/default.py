@@ -166,6 +166,7 @@ DEFAULT_CONFIG = {
         },
         "computer_use_runtime": "none",
         "computer_use_require_admin": True,
+        "enable_default_workspace_path": True,
         "sandbox": {
             "booter": "shipyard_neo",
             "shipyard_endpoint": "",
@@ -3336,6 +3337,14 @@ CONFIG_METADATA_3 = {
                         "description": "需要 AstrBot 管理员权限",
                         "type": "bool",
                         "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
+                    },
+                    "provider_settings.enable_default_workspace_path": {
+                        "description": "启用默认工作路径",
+                        "type": "bool",
+                        "hint": "开启后，将在工具调用提示词中注入当前会话的工作目录路径，引导模型在默认工作目录中执行文件操作。关闭后不再注入该提示词。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "local",
+                        },
                     },
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
