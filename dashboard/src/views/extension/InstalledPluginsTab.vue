@@ -1,4 +1,5 @@
 <script setup>
+import ModManagerLayout from "@/components/extension/mod-manager/ModManagerLayout.vue";
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import { normalizeTextInput } from "@/utils/inputValue";
 import {
@@ -31,6 +32,7 @@ const {
   getLocationHash,
   extractTabFromHash,
   syncTabFromHash,
+  extension_data,
   snack_message,
   snack_show,
   snack_success,
@@ -89,6 +91,7 @@ const {
   totalPages,
   paginatedPlugins,
   updatableExtensions,
+  loading_,
   toast,
   resetLoadingDialog,
   onLoadingDialogResult,
@@ -143,6 +146,52 @@ const {
   searchDebounceTimer,
 } = props.state;
 
+const VIEW_MODE_KEY = "pluginManager.installedViewMode";
+const SHOW_RESERVED_KEY = "showReservedPlugins";
+
+const readInstalledViewMode = () => {
+  try {
+    return localStorage.getItem(VIEW_MODE_KEY) === "mod" ? "mod" : "legacy";
+  } catch {
+    return "legacy";
+  }
+};
+
+const readShowReserved = () => {
+  try {
+    return localStorage.getItem(SHOW_RESERVED_KEY) === "true";
+  } catch {
+    return false;
+  }
+};
+
+const installedViewMode = ref(readInstalledViewMode());
+const showReserved = ref(readShowReserved());
+
+watch(installedViewMode, (mode) => {
+  try {
+    localStorage.setItem(VIEW_MODE_KEY, mode === "mod" ? "mod" : "legacy");
+  } catch {
+    // Ignore restricted storage environments.
+  }
+});
+
+watch(showReserved, (value) => {
+  try {
+    localStorage.setItem(SHOW_RESERVED_KEY, String(Boolean(value)));
+  } catch {
+    // Ignore restricted storage environments.
+  }
+});
+
+const setInstalledViewMode = (mode) => {
+  installedViewMode.value = mode === "mod" ? "mod" : "legacy";
+};
+
+const setShowReserved = (value) => {
+  showReserved.value = Boolean(value);
+};
+
 const openPluginDetail = (extension) => {
   if (!extension?.name) return;
   router.push({
@@ -179,6 +228,13 @@ const sortedInstalledPlugins = computed(() => {
   });
 });
 
+const modManagerPlugins = computed(() => {
+  if (showReserved.value) {
+    return filteredPlugins.value;
+  }
+  return filteredPlugins.value.filter((plugin) => !plugin?.reserved);
+});
+
 watch(
   pinnedExtensionNames,
   (names) => {
@@ -202,6 +258,9 @@ const togglePinnedExtension = (extension) => {
   }
   pinnedExtensionNames.value = next;
 };
+
+const pinnedNames = pinnedExtensionNames;
+const togglePin = togglePinnedExtension;
 </script>
 
 <template>
@@ -225,10 +284,61 @@ const togglePinnedExtension = (extension) => {
             style="min-width: 220px; max-width: 340px"
           >
           </v-text-field>
+
+          <v-btn-toggle
+            :model-value="installedViewMode"
+            @update:model-value="setInstalledViewMode"
+            mandatory
+            density="compact"
+            color="primary"
+          >
+            <v-btn value="legacy">
+              <v-icon size="18">mdi-view-grid</v-icon>
+              <v-tooltip activator="parent" location="bottom">{{
+                tm("views.card")
+              }}</v-tooltip>
+            </v-btn>
+            <v-btn value="mod">
+              <v-icon size="18">mdi-view-dashboard-outline</v-icon>
+              <v-tooltip activator="parent" location="bottom">{{
+                tm("views.modManager")
+              }}</v-tooltip>
+            </v-btn>
+          </v-btn-toggle>
         </div>
       </div>
     </div>
 
+    <div v-if="installedViewMode === 'mod'" style="height: calc(100vh - 200px)">
+      <ModManagerLayout
+        :plugins="modManagerPlugins"
+        :loading="loading_"
+        :show-reserved="showReserved"
+        :pinned-names="pinnedNames"
+        installed-view-mode="mod"
+        :updatable-count="updatableExtensions.length"
+        :search="pluginSearch"
+        :updating-all="updatingAll"
+        :failed-message="extension_data.message"
+        @update:search="pluginSearch = $event"
+        @update:show-reserved="setShowReserved"
+        @update:installed-view-mode="setInstalledViewMode"
+        @install="openInstallDialog"
+        @update-all="showUpdateAllConfirm"
+        @action-enable="pluginOn($event)"
+        @action-disable="pluginOff($event)"
+        @action-reload="reloadPlugin($event)"
+        @action-update="updateExtension($event)"
+        @action-uninstall="uninstallExtension($event)"
+        @action-configure="openExtensionConfig($event.name)"
+        @action-open-readme="viewReadme($event)"
+        @action-open-repo="(url) => window.open(url, '_blank')"
+        @toggle-pin="togglePin"
+        @config-saved="getExtensions"
+      />
+    </div>
+
+    <template v-else>
     <v-card
       v-if="failedPluginItems.length > 0"
       class="mb-4 rounded-lg"
@@ -393,6 +503,7 @@ const togglePinnedExtension = (extension) => {
         />
       </template>
     </v-tooltip>
+    </template>
   </v-tab-item>
 </template>
 
