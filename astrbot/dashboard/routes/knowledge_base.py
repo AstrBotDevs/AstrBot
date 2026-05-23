@@ -12,7 +12,7 @@ import aiofiles
 import jwt
 from quart import request, send_file
 
-from astrbot.core import logger
+from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.knowledge_base.package_io import (
     KnowledgeBasePackageExporter,
@@ -89,6 +89,36 @@ class KnowledgeBaseRoute(Route):
 
     def _get_kb_manager(self):
         return self.core_lifecycle.kb_manager
+
+    @staticmethod
+    async def _remove_kb_from_session_configs(kb_id: str) -> int:
+        prefs = await sp.session_get(None, "kb_config")
+        if not isinstance(prefs, list):
+            return 0
+
+        updated = 0
+
+        for pref in prefs:
+            scope_id = getattr(pref, "scope_id", None)
+            if not isinstance(scope_id, str):
+                continue
+
+            value = await sp.session_get(scope_id, "kb_config")
+            if not isinstance(value, dict):
+                continue
+
+            kb_ids = value.get("kb_ids")
+            if not isinstance(kb_ids, list) or kb_id not in kb_ids:
+                continue
+
+            new_value = {
+                **value,
+                "kb_ids": [item for item in kb_ids if item != kb_id],
+            }
+            await sp.session_put(scope_id, "kb_config", new_value)
+            updated += 1
+
+        return updated
 
     def _init_task(self, task_id: str, status: str = "pending") -> None:
         self.upload_tasks[task_id] = {
@@ -669,7 +699,13 @@ class KnowledgeBaseRoute(Route):
             if not success:
                 return Response().error("知识库不存在").to_json()
 
-            return Response().ok(message="删除知识库成功").to_json()
+            updated_sessions = await self._remove_kb_from_session_configs(kb_id)
+            if updated_sessions:
+                logger.info(
+                    f"已从 {updated_sessions} 个会话配置中移除已删除知识库 {kb_id}",
+                )
+
+            return Response().ok(message="删除知识库成功").__dict__
 
         except ValueError as e:
             return Response().error(str(e)).to_json()
