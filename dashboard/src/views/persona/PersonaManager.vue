@@ -150,7 +150,179 @@
             </v-card>
           </div>
         </div>
-      </div>
+
+        <!-- 创建/编辑 Persona 对话框 -->
+        <PersonaForm v-model="showPersonaDialog" :editing-persona="editingPersona ?? undefined"
+            :current-folder-id="currentFolderId ?? undefined" :current-folder-name="currentFolderName ?? undefined"
+            @saved="handlePersonaSaved" @deleted="handlePersonaDeleted" @error="showError" />
+
+        <!-- 查看 Persona 详情对话框 -->
+        <v-dialog v-model="showViewDialog" max-width="700px">
+            <v-card v-if="viewingPersona">
+                <v-card-title class="d-flex justify-space-between align-center">
+                    <span class="text-h5">{{ viewingPersona.persona_id }}</span>
+                    <div class="d-flex align-center ga-1">
+                        <v-btn
+                            color="primary"
+                            variant="tonal"
+                            size="small"
+                            prepend-icon="mdi-pencil"
+                            @click="openEditFromViewDialog"
+                        >
+                            {{ tm('buttons.edit') }}
+                        </v-btn>
+                        <v-btn icon="mdi-close" variant="text" @click="showViewDialog = false" />
+                    </div>
+                </v-card-title>
+
+                <v-card-text>
+                    <div class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.systemPrompt') }}</h4>
+                        <pre class="system-prompt-content">{{ viewingPersona.system_prompt }}</pre>
+                    </div>
+
+                    <div v-if="viewingPersona.custom_error_message" class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.customErrorMessage') }}</h4>
+                        <pre class="system-prompt-content">{{ viewingPersona.custom_error_message }}</pre>
+                    </div>
+
+                    <div v-if="viewingPersona.begin_dialogs && viewingPersona.begin_dialogs.length > 0" class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.presetDialogs') }}</h4>
+                        <div v-for="(dialog, index) in viewingPersona.begin_dialogs" :key="index" class="mb-2">
+                            <v-chip :color="index % 2 === 0 ? 'primary' : 'secondary'" variant="tonal" size="small"
+                                class="mb-1">
+                                {{ index % 2 === 0 ? tm('form.userMessage') : tm('form.assistantMessage') }}
+                            </v-chip>
+                            <div class="dialog-content ml-2">{{ dialog }}</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.tools') }}</h4>
+                        <div v-if="viewingPersona.tools === null" class="text-body-2 text-medium-emphasis">
+                            <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-all">
+                                {{ tm('form.allToolsAvailable') }}
+                            </v-chip>
+                        </div>
+                        <div v-else-if="viewingPersona.tools && viewingPersona.tools.length > 0"
+                            class="d-flex flex-wrap ga-1">
+                            <v-chip v-for="toolName in viewingPersona.tools" :key="toolName" size="small"
+                                color="primary" variant="tonal">
+                                {{ toolName }}
+                            </v-chip>
+                        </div>
+                        <div v-else class="text-body-2 text-medium-emphasis">
+                            {{ tm('form.noToolsSelected') }}
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.skills') }}</h4>
+                        <div v-if="viewingPersona.skills === null" class="text-body-2 text-medium-emphasis">
+                            <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-all">
+                                {{ tm('form.allSkillsAvailable') }}
+                            </v-chip>
+                        </div>
+                        <div v-else-if="viewingPersona.skills && viewingPersona.skills.length > 0"
+                            class="d-flex flex-wrap ga-1">
+                            <v-chip v-for="skillName in viewingPersona.skills" :key="skillName" size="small"
+                                color="primary" variant="tonal">
+                                {{ skillName }}
+                            </v-chip>
+                        </div>
+                        <div v-else class="text-body-2 text-medium-emphasis">
+                            {{ tm('form.noSkillsSelected') }}
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.subagents') }}</h4>
+                        <div v-if="viewingPersona.subagents === null" class="text-body-2 text-medium-emphasis">
+                            <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-all">
+                                {{ tm('form.allSubagentsAvailable') }}
+                            </v-chip>
+                        </div>
+                        <div v-else-if="viewingPersona.subagents && viewingPersona.subagents.length > 0"
+                            class="d-flex flex-wrap ga-1">
+                            <v-chip v-for="subagentName in viewingPersona.subagents" :key="subagentName" size="small"
+                                color="primary" variant="tonal">
+                                {{ subagentName }}
+                            </v-chip>
+                        </div>
+                        <div v-else class="text-body-2 text-medium-emphasis">
+                            {{ tm('form.noSubagentsSelected') }}
+                        </div>
+                    </div>
+
+                    <div class="text-caption text-medium-emphasis">
+                        <div>{{ tm('labels.createdAt') }}: {{ formatDate(viewingPersona.created_at) }}</div>
+                        <div v-if="viewingPersona.updated_at">{{ tm('labels.updatedAt') }}:
+                            {{ formatDate(viewingPersona.updated_at) }}</div>
+                    </div>
+                </v-card-text>
+            </v-card>
+        </v-dialog>
+
+        <!-- 创建文件夹对话框 -->
+        <CreateFolderDialog v-model="showCreateFolderDialog" :parent-folder-id="currentFolderId"
+            @created="showSuccess" @error="showError" />
+
+        <!-- 重命名文件夹对话框 -->
+        <v-dialog v-model="showRenameFolderDialog" max-width="400px">
+            <v-card>
+                <v-card-title>{{ tm('folder.renameDialog.title') }}</v-card-title>
+                <v-card-text>
+                    <v-text-field v-model="renameFolderData.name" :label="tm('folder.form.name')"
+                        :rules="[v => !!v || tm('folder.validation.nameRequired')]" variant="outlined"
+                        density="comfortable" autofocus @keyup.enter="submitRenameFolder" />
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" @click="showRenameFolderDialog = false">
+                        {{ tm('buttons.cancel') }}
+                    </v-btn>
+                    <v-btn color="primary" variant="flat" @click="submitRenameFolder" :loading="renameLoading"
+                        :disabled="!renameFolderData.name">
+                        {{ tm('buttons.save') }}
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
+        <!-- 移动对话框 -->
+        <MoveToFolderDialog v-model="showMoveDialog" :item-type="moveDialogType" :item="moveDialogItem"
+            @moved="showSuccess" @error="showError" />
+
+        <!-- 删除文件夹确认对话框 -->
+        <v-dialog v-model="showDeleteFolderDialog" max-width="450px">
+            <v-card>
+                <v-card-title class="text-error">
+                    <v-icon class="mr-2" color="error">mdi-alert</v-icon>
+                    {{ tm('folder.deleteDialog.title') }}
+                </v-card-title>
+                <v-card-text>
+                    <p>{{ tm('folder.deleteDialog.message', { name: deleteFolderData?.name ?? '' }) }}</p>
+                    <p class="text-warning mt-2">
+                        <v-icon size="small" class="mr-1">mdi-information</v-icon>
+                        {{ tm('folder.deleteDialog.warning') }}
+                    </p>
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" @click="showDeleteFolderDialog = false">
+                        {{ tm('buttons.cancel') }}
+                    </v-btn>
+                    <v-btn color="error" variant="flat" @click="submitDeleteFolder" :loading="deleteLoading">
+                        {{ tm('buttons.delete') }}
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
+        <!-- 消息提示 -->
+        <v-snackbar :timeout="3000" elevation="24" :color="messageType" v-model="showMessage" location="top">
+            {{ message }}
+        </v-snackbar>
     </div>
 
     <!-- 创建/编辑 Persona 对话框 -->
@@ -462,16 +634,17 @@ import {
 import type { Folder, FolderTreeNode } from "@/components/folder/types";
 
 interface Persona {
-  persona_id: string;
-  system_prompt: string;
-  custom_error_message?: string | null;
-  begin_dialogs?: string[] | null;
-  tools?: string[] | null;
-  skills?: string[] | null;
-  created_at?: string;
-  updated_at?: string;
-  folder_id?: string | null;
-  [key: string]: any;
+    persona_id: string;
+    system_prompt: string;
+    custom_error_message?: string | null;
+    begin_dialogs?: string[] | null;
+    tools?: string[] | null;
+    skills?: string[] | null;
+    subagents?: string[] | null;
+    created_at?: string;
+    updated_at?: string;
+    folder_id?: string | null;
+    [key: string]: any;
 }
 
 interface RenameFolderData {

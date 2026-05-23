@@ -13,6 +13,7 @@ DEFAULT_PERSONALITY = Personality(
     mood_imitation_dialogs=[],
     tools=None,
     skills=None,
+    subagents=None,
     custom_error_message=None,
     personality_config=None,
     chat_config=None,
@@ -140,6 +141,7 @@ class PersonaManager:
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None | object = NOT_GIVEN,
         skills: list[str] | None | object = NOT_GIVEN,
+        subagents: list[str] | None | object = NOT_GIVEN,
         custom_error_message: str | None | object = NOT_GIVEN,
         personality_config: dict | None | object = NOT_GIVEN,
         chat_config: dict | None | object = NOT_GIVEN,
@@ -156,6 +158,8 @@ class PersonaManager:
             update_kwargs["tools"] = tools
         if skills is not NOT_GIVEN:
             update_kwargs["skills"] = skills
+        if subagents is not NOT_GIVEN:
+            update_kwargs["subagents"] = subagents
         if custom_error_message is not NOT_GIVEN:
             update_kwargs["custom_error_message"] = custom_error_message
         if personality_config is not NOT_GIVEN:
@@ -331,6 +335,7 @@ class PersonaManager:
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
         skills: list[str] | None = None,
+        subagents: list[str] | None = None,
         custom_error_message: str | None = None,
         folder_id: str | None = None,
         sort_order: int = 0,
@@ -346,9 +351,10 @@ class PersonaManager:
             persona_id: Persona 唯一标识
             system_prompt: 系统提示词
             begin_dialogs: 预设对话列表
-            tools: 工具列表,None 表示使用所有工具,空列表表示不使用任何工具
-            skills: Skills 列表,None 表示使用所有 Skills,空列表表示不使用任何 Skills
-            folder_id: 所属文件夹 ID,None 表示根目录
+            tools: 工具列表，None 表示使用所有工具，空列表表示不使用任何工具
+            skills: Skills 列表，None 表示使用所有 Skills，空列表表示不使用任何 Skills
+            subagents: Subagents 列表，None 表示使用所有 Subagents，空列表表示不使用任何 Subagents
+            folder_id: 所属文件夹 ID，None 表示根目录
             sort_order: 排序顺序
             personality_config: 高级人格配置 - 人格特质、表达风格、识别规则、心情标签等
             chat_config: 高级人格配置 - 聊天频率、动态频率、消息长度等
@@ -364,6 +370,7 @@ class PersonaManager:
             begin_dialogs,
             tools=tools,
             skills=skills,
+            subagents=subagents,
             custom_error_message=custom_error_message,
             folder_id=folder_id,
             sort_order=sort_order,
@@ -428,6 +435,7 @@ class PersonaManager:
                 "mood_imitation_dialogs": [],
                 "tools": persona.tools,
                 "skills": persona.skills,
+                "subagents": persona.subagents,
                 "custom_error_message": persona.custom_error_message,
                 "personality_config": persona.personality_config,
                 "chat_config": persona.chat_config,
@@ -483,6 +491,7 @@ class PersonaManager:
             begin_dialogs=selected_default_persona["begin_dialogs"],
             tools=selected_default_persona["tools"] or None,
             skills=selected_default_persona["skills"] or None,
+            subagents=selected_default_persona["subagents"] or None,
             custom_error_message=selected_default_persona["custom_error_message"],
         )
         return (v3_persona_config, personas_v3, selected_default_persona)

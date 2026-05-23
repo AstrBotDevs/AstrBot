@@ -64,9 +64,10 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(text("PRAGMA temp_store=MEMORY"))
             await conn.execute(text("PRAGMA mmap_size=134217728"))
             await conn.execute(text("PRAGMA optimize"))
-            # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
+            # 确保 personas 表有 folder_id、sort_order、skills、subagents 列（前向兼容）
             await self._ensure_persona_folder_columns(conn)
             await self._ensure_persona_skills_column(conn)
+            await self._ensure_persona_subagents_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
             await self._ensure_persona_advanced_columns(conn)
             await conn.commit()
@@ -123,6 +124,18 @@ class SQLiteDatabase(BaseDatabase):
         await self._ensure_column(
             conn, "conversations", "avatar", "avatar VARCHAR(512) DEFAULT NULL"
         )
+
+    async def _ensure_persona_subagents_column(self, conn) -> None:
+        """确保 personas 表有 subagents 列。
+
+        这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
+        的 metadata.create_all 自动创建这些列。
+        """
+        result = await conn.execute(text("PRAGMA table_info(personas)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "subagents" not in columns:
+            await conn.execute(text("ALTER TABLE personas ADD COLUMN subagents JSON"))
 
     async def _ensure_persona_custom_error_message_column(self, conn) -> None:
         """确保 personas 表有 custom_error_message 列。"""
@@ -1017,6 +1030,7 @@ class SQLiteDatabase(BaseDatabase):
         begin_dialogs=None,
         tools=None,
         skills=None,
+        subagents=None,
         custom_error_message=None,
         folder_id=None,
         sort_order=0,
@@ -1036,6 +1050,7 @@ class SQLiteDatabase(BaseDatabase):
                     begin_dialogs=begin_dialogs or [],
                     tools=tools,
                     skills=skills,
+                    subagents=subagents,
                     custom_error_message=custom_error_message,
                     folder_id=folder_id,
                     sort_order=sort_order,
@@ -1073,6 +1088,7 @@ class SQLiteDatabase(BaseDatabase):
         begin_dialogs=None,
         tools=NOT_GIVEN,
         skills=NOT_GIVEN,
+        subagents=NOT_GIVEN,
         custom_error_message=NOT_GIVEN,
         personality_config=NOT_GIVEN,
         chat_config=NOT_GIVEN,
@@ -1094,6 +1110,8 @@ class SQLiteDatabase(BaseDatabase):
                     values["tools"] = tools
                 if skills is not NOT_GIVEN:
                     values["skills"] = skills
+                if subagents is not NOT_GIVEN:
+                    values["subagents"] = subagents
                 if custom_error_message is not NOT_GIVEN:
                     values["custom_error_message"] = custom_error_message
                 if personality_config is not NOT_GIVEN:

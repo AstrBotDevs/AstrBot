@@ -69,57 +69,36 @@
         {{ truncateText(persona.system_prompt, 100) }}
       </div>
 
-      <div class="mt-3 d-flex flex-wrap ga-1">
-        <v-chip
-          v-if="persona.begin_dialogs && persona.begin_dialogs.length > 0"
-          size="small"
-          color="secondary"
-          variant="tonal"
-          prepend-icon="mdi-chat"
-        >
-          {{
-            tm("labels.presetDialogs", {
-              count: persona.begin_dialogs.length / 2,
-            })
-          }}
-        </v-chip>
-        <v-chip
-          v-if="persona.tools === null"
-          size="small"
-          color="success"
-          variant="tonal"
-          prepend-icon="mdi-tools"
-        >
-          {{ tm("form.allToolsAvailable") }}
-        </v-chip>
-        <v-chip
-          v-else-if="persona.tools && persona.tools.length > 0"
-          size="small"
-          color="primary"
-          variant="tonal"
-          prepend-icon="mdi-tools"
-        >
-          {{ persona.tools.length }} {{ tm("persona.toolsCount") }}
-        </v-chip>
-        <v-chip
-          v-if="persona.skills === null"
-          size="small"
-          color="success"
-          variant="tonal"
-          prepend-icon="mdi-lightning-bolt"
-        >
-          {{ tm("form.allSkillsAvailable") }}
-        </v-chip>
-        <v-chip
-          v-else-if="persona.skills && persona.skills.length > 0"
-          size="small"
-          color="primary"
-          variant="tonal"
-          prepend-icon="mdi-lightning-bolt"
-        >
-          {{ persona.skills.length }} {{ tm("persona.skillsCount") }}
-        </v-chip>
-      </div>
+            <div class="mt-3 d-flex flex-wrap ga-1">
+                <v-chip v-if="persona.begin_dialogs && persona.begin_dialogs.length > 0" size="small" color="secondary"
+                    variant="tonal" prepend-icon="mdi-chat">
+                    {{ tm('labels.presetDialogs', { count: persona.begin_dialogs.length / 2 }) }}
+                </v-chip>
+                <v-chip v-if="persona.tools === null" size="small" color="success" variant="tonal"
+                    prepend-icon="mdi-tools">
+                    {{ tm('form.allToolsAvailable') }}
+                </v-chip>
+                <v-chip v-else-if="persona.tools && persona.tools.length > 0" size="small" color="primary" variant="tonal"
+                    prepend-icon="mdi-tools">
+                    {{ persona.tools.length }} {{ tm('persona.toolsCount') }}
+                </v-chip>
+                <v-chip v-if="persona.skills === null" size="small" color="success" variant="tonal"
+                    prepend-icon="mdi-lightning-bolt">
+                    {{ tm('form.allSkillsAvailable') }}
+                </v-chip>
+                <v-chip v-else-if="persona.skills && persona.skills.length > 0" size="small" color="primary"
+                    variant="tonal" prepend-icon="mdi-lightning-bolt">
+                    {{ persona.skills.length }} {{ tm('persona.skillsCount') }}
+                </v-chip>
+                <v-chip v-if="persona.subagents === null" size="small" color="success" variant="tonal"
+                    prepend-icon="mdi-vector-link">
+                    {{ tm('form.allSubagentsAvailable') }}
+                </v-chip>
+                <v-chip v-else-if="persona.subagents && persona.subagents.length > 0" size="small" color="primary"
+                    variant="tonal" prepend-icon="mdi-vector-link">
+                    {{ persona.subagents.length }} {{ tm('persona.subagentsCount') }}
+                </v-chip>
+            </div>
 
       <div class="mt-3 text-caption text-medium-emphasis">
         {{ tm("labels.createdAt") }}: {{ formatDate(persona.created_at) }}
@@ -139,16 +118,17 @@ import { defineComponent, type PropType } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 interface Persona {
-  persona_id: string;
-  system_prompt: string;
-  custom_error_message?: string | null;
-  begin_dialogs?: string[] | null;
-  tools?: string[] | null;
-  skills?: string[] | null;
-  created_at?: string;
-  updated_at?: string;
-  folder_id?: string | null;
-  [key: string]: any;
+    persona_id: string;
+    system_prompt: string;
+    custom_error_message?: string | null;
+    begin_dialogs?: string[] | null;
+    tools?: string[] | null;
+    skills?: string[] | null;
+    subagents?: string[] | null;
+    created_at?: string;
+    updated_at?: string;
+    folder_id?: string | null;
+    [key: string]: any;
 }
 
 export default defineComponent({
