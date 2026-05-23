@@ -215,14 +215,19 @@ def _resolve_builtin_tool_name(tool_cls: type[FunctionTool]) -> str:
 
 
 @overload
-def builtin_tool(tool_cls: TFunctionTool) -> TFunctionTool: ...
+def builtin_tool(
+    tool_cls: None = None,
+    *,
+    config: dict[str, Any] | None = None,
+) -> Callable[[TFunctionTool], TFunctionTool]: ...
 
 
 @overload
 def builtin_tool(
+    tool_cls: TFunctionTool,
     *,
     config: dict[str, Any] | None = None,
-) -> Callable[[TFunctionTool], TFunctionTool]: ...
+) -> TFunctionTool: ...
 
 
 def builtin_tool(

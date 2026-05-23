@@ -373,7 +373,8 @@ class ProviderAnthropic(Provider):
                         ],
                     },
                 )
-                can_append_to_previous_tool_results = (
+
+                if (
                     last_message is not None
                     and last_message.get("role") == "user"
                     and isinstance(last_content, list)
@@ -382,10 +383,8 @@ class ProviderAnthropic(Provider):
                         isinstance(block, dict) and block.get("type") == "tool_result"
                         for block in last_content
                     )
-                )
-
-                if can_append_to_previous_tool_results:
-                    last_content.append(tool_result_block)  # type: ignore[union-attr]
+                ):
+                    last_content.append(tool_result_block)
                 else:
                     new_messages.append(
                         {

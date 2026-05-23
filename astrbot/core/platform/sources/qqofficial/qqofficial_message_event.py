@@ -894,21 +894,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         markdown: message.MarkdownPayload | None = None,
         keyboard: message.Keyboard | None = None,
         stream: dict | None = None,
-    ) -> message.Message:
-        bot = getattr(send_helper, "bot", send_helper)
-        payload = {
-            "msg_type": msg_type,
-            "content": content,
-            "embed": embed,
-            "ark": ark,
-            "message_reference": message_reference,
-            "media": media,
-            "msg_id": msg_id,
-            "msg_seq": msg_seq,
-            "event_id": event_id,
-            "markdown": markdown,
-            "keyboard": keyboard,
-        }
+    ) -> message.Message | None:
+        payload = locals()
+        payload.pop("self", None)
+        # QQ API does not accept stream.id=None; remove it when not yet assigned
         if "stream" in payload and payload["stream"] is not None:
             stream_data = dict(payload["stream"])
             if stream_data.get("id") is None:

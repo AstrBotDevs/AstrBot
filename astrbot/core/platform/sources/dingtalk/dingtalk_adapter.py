@@ -828,15 +828,46 @@ class DingtalkPlatformAdapter(Platform):
         # so we run start() from an executor thread.  Use the thread-safe
         # asyncio.run_coroutine_threadsafe() instead of loop.create_task().
         def start_client(loop: asyncio.AbstractEventLoop) -> None:
-            try:
-                self._shutdown_event = threading.Event()
-                future = asyncio.run_coroutine_threadsafe(self.client_.start(), loop)
-                self._shutdown_event.wait()
-                if future.done():
-                    future.result()
-            except Exception as e:
-                if "Graceful shutdown" in str(e):
-                    logger.info("钉钉适配器已被关闭")
+            retry_count = 0
+
+            def handle_retry(error_msg: str) -> bool:
+                """处理重试逻辑，返回 True 表示需要继续重试，False 表示放弃。"""
+                nonlocal retry_count
+                logger.error(error_msg)
+                retry_count += 1
+                if retry_count < MAX_RETRIES:
+                    logger.info(f"钉钉适配器尝试重连 ({retry_count}/{MAX_RETRIES})...")
+                    time.sleep(RETRY_INTERVAL)
+                    return True
+                logger.error("钉钉适配器重连失败，已达最大重试次数")
+                return False
+
+            while retry_count < MAX_RETRIES:
+                task = None
+                try:
+                    self._shutdown_event = threading.Event()
+                    task = loop.create_task(self.client_.start())
+                    # 当 task 完成时唤醒线程（无论是正常退出还是异常退出）
+                    task.add_done_callback(
+                        lambda _: (
+                            self._shutdown_event.set() if self._shutdown_event else None
+                        )
+                    )
+                    self._shutdown_event.wait()
+                    if task.done():
+                        try:
+                            exc = task.exception()
+                        except asyncio.CancelledError:
+                            logger.info("钉钉适配器 task 已取消")
+                            return
+                        if exc:
+                            if "Graceful shutdown" in str(exc):
+                                logger.info("钉钉适配器已被关闭")
+                                return
+                            if handle_retry(f"钉钉 SDK task 异常退出: {exc}"):
+                                continue
+                            return
+                    # task 仍在运行，shutdown_event 被设置（正常关闭）
                     return
                 except Exception as e:
                     if "Graceful shutdown" in str(e):

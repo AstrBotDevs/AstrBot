@@ -451,15 +451,11 @@ def _sanitize_mcp_arguments(
 
         properties = normalized.get("properties")
         if isinstance(properties, dict):
-            original_properties = (
-                node.get("properties")
-                if isinstance(node.get("properties"), dict)
-                else {}
-            )
-            if cleaned_item is _EMPTY_MCP_ARGUMENT:
-                continue
-            cleaned_dict[key] = cleaned_item
-        return cleaned_dict if cleaned_dict or required else _EMPTY_MCP_ARGUMENT
+            original_properties = node.get("properties")
+            if not isinstance(original_properties, dict):
+                original_properties = {}
+            required = normalized.get("required")
+            required_list = required[:] if isinstance(required, list) else []
 
     return value
 
