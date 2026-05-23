@@ -283,3 +283,7 @@ class RetrievalManager:
         reranked_list.sort(key=lambda x: x.score, reverse=True)
 
         return reranked_list[:top_k]
+
+    def invalidate_sparse_cache(self, kb_id: str) -> None:
+        """清除指定 KB 的 BM25 缓存"""
+        self.sparse_retriever.invalidate_cache(kb_id)

@@ -68,6 +68,10 @@ class KnowledgeBaseManager:
         self.kb_db = KBSQLiteDatabase(DB_PATH.as_posix())
         await self.kb_db.initialize()
         await self.kb_db.migrate_to_v1()
+        # v2 schema: add `enabled` column. Idempotent (the method swallows
+        # "duplicate column" on re-runs) and ordered after v1 so indices
+        # exist before the column add.
+        await self.kb_db.migrate_to_v2()
         logger.info(f"KnowledgeBase database initialized: {DB_PATH}")
 
     async def load_kbs(self) -> None:
