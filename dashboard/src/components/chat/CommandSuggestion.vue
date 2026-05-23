@@ -8,7 +8,7 @@
     <div class="command-suggestion-list">
       <div
         v-for="(cmd, index) in filteredCommands"
-        :key="cmd.handler_full_name"
+        :key="`${cmd.handler_full_name}:${cmd.effective_command}`"
         class="command-suggestion-item"
         :class="{ active: index === selectedIndex }"
         @click="handleSelect(index)"
@@ -43,6 +43,7 @@ export interface SuggestionCommand {
   description: string;
   plugin_display_name: string | null;
   enabled: boolean;
+  reserved: boolean;
 }
 
 interface Props {
