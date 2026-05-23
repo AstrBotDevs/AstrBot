@@ -13,11 +13,12 @@ AstrBot currently supports the following sandbox drivers:
 
 - `Shipyard Neo` (recommended)
 - `Shipyard` (legacy option, still supported)
+- `CUA` (local or cloud computer-use sandbox for desktop automation scenarios)
 
 In the current AstrBot console, go to **AI Settings** -> **Agent Computer Use** and select:
 
 - `Computer Use Runtime` = `sandbox`
-- `Sandbox Driver` = `Shipyard Neo` or `Shipyard`
+- `Sandbox Driver` = `Shipyard Neo`, `Shipyard`, or `CUA`
 
 `Shipyard Neo` is now the default driver. It consists of Bay, Ship, and Gull:
 
@@ -29,6 +30,23 @@ For `Shipyard Neo`, the workspace root is fixed at `/workspace`. When using file
 
 > [!TIP]
 > Browser capability is not available in every `Shipyard Neo` profile. AstrBot only mounts browser-related tools when the selected profile supports the `browser` capability. A typical example is `browser-python`.
+
+## CUA Runtime
+
+`CUA` is an optional computer-use sandbox runtime. In AstrBot, it can provide shell, Python, filesystem, screenshot, mouse, keyboard, and sandbox file upload/download tools.
+
+If you use the local Linux CUA runtime, you need a local Docker image. AstrBot does not require extra image registry configuration; usually you only need one of the following options:
+
+- Pull the image manually:
+
+```bash
+docker pull trycua/cua-xfce:latest
+```
+
+- Create or start a CUA sandbox from AstrBot and let AstrBot pull the required image through CUA/Docker.
+
+> [!NOTE]
+> The Linux CUA image is large, so the first pull may take several minutes. If AstrBot reports that `trycua/cua-xfce:latest` is missing locally, run the `docker pull` command above first, or retry creating the sandbox from AstrBot on a stable network.
 
 ## Performance Requirements
 

@@ -387,13 +387,7 @@ class AstrBotDashboard:
         self.platform_route = PlatformRoute(self.context, core_lifecycle)
         self.backup_route = BackupRoute(self.context, db, core_lifecycle)
         self.live_chat_route = LiveChatRoute(self.context, db, core_lifecycle)
-        self.chat_widget = ChatWidget(
-            self.context,
-            db,
-            core_lifecycle,
-            self.chat_route,
-            self.open_api_route,
-        )
+        self.sandbox_route = SandboxRoute(self.context)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",

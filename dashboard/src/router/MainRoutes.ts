@@ -91,9 +91,14 @@ const MainRoutes = {
       component: () => import('@/views/SubAgentPage.vue')
     },
     {
-      name: "Persona",
-      path: "/persona",
-      component: () => import("@/views/PersonaPage.vue"),
+      name: 'Sandboxes',
+      path: '/sandboxes',
+      component: () => import('@/views/SandboxManagementPage.vue')
+    },
+    {
+      name: 'CronJobs',
+      path: '/cron',
+      component: () => import('@/views/CronJobPage.vue')
     },
     {
       name: "SubAgent",

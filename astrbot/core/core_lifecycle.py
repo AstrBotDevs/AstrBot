@@ -20,6 +20,10 @@ from enum import Enum
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.computer.computer_client import (
+    cleanup_managed_cua_sandboxes,
+    reconcile_cua_sandboxes_on_startup,
+)
 from astrbot.core.config.default import VERSION
 from astrbot.core.context_compaction_scheduler import (
     PeriodicContextCompactionScheduler,
@@ -431,6 +435,8 @@ class AstrBotCoreLifecycle:
 
         await html_renderer.initialize()
 
+        await reconcile_cua_sandboxes_on_startup()
+
         # 初始化 UMOP 配置路由器
         self.umop_config_router = UmopConfigRouter(sp=sp)
         await self.umop_config_router.initialize()
@@ -706,8 +712,14 @@ class AstrBotCoreLifecycle:
                     "Error iterating plugin_manager.context.get_all_stars()",
                 )
 
-        # Terminate other managers if present
-        if getattr(self, "provider_manager", None):
+        await cleanup_managed_cua_sandboxes()
+        await self.provider_manager.terminate()
+        await self.platform_manager.terminate()
+        await self.kb_manager.terminate()
+        self.dashboard_shutdown_event.set()
+
+        # 再次遍历curr_tasks等待每个任务真正结束
+        for task in self.curr_tasks:
             try:
                 await self.provider_manager.terminate()
             except Exception:
@@ -745,6 +757,7 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
+        await cleanup_managed_cua_sandboxes()
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()

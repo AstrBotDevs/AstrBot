@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import shutil
+import tempfile
 import time
 import uuid
 from dataclasses import dataclass
@@ -11,6 +12,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
+from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+from astrbot.core.computer.cua_sandbox_provider import CuaSandboxProvider
+from astrbot.core.computer.sandbox_manager import SANDBOX_LEASE_SECONDS, SandboxManager
 from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
 from astrbot.core.star.context import Context
 from astrbot.core.utils.astrbot_path import (
@@ -28,6 +32,428 @@ if TYPE_CHECKING:
 session_booter: dict[str, ComputerBooter] = {}
 local_booter: ComputerBooter | None = None
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
+cua_registry = CuaSandboxRegistry()
+CUA_LEASE_SECONDS = SANDBOX_LEASE_SECONDS
+_cua_boot_locks: dict[str, asyncio.Lock] = {}
+
+
+@dataclass(slots=True)
+class _CUAIdleState:
+    expires_at: float
+    task: asyncio.Task
+
+
+cua_idle_state: dict[str, _CUAIdleState] = {}
+
+
+sandbox_manager: SandboxManager
+
+
+def _sync_sandbox_manager_refs() -> None:
+    sandbox_manager.registry = cua_registry
+    sandbox_manager.session_booter = session_booter
+    sandbox_manager.idle_state = cua_idle_state
+    sandbox_manager.boot_locks = _cua_boot_locks
+
+
+def _save_cua_registry() -> None:
+    _sync_sandbox_manager_refs()
+    sandbox_manager.save_registry()
+
+
+def _get_cua_idle_timeout(context: Context, session_id: str) -> float:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.providers["cua"].get_idle_timeout(context, session_id)
+
+
+def _clear_cua_idle_state(sandbox_id: str) -> None:
+    _sync_sandbox_manager_refs()
+    sandbox_manager.clear_idle_state(sandbox_id)
+
+
+def _cua_boot_lock(sandbox_id: str) -> asyncio.Lock:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager._sandbox_boot_lock(sandbox_id)
+
+
+def _drop_cua_boot_lock(sandbox_id: str) -> None:
+    _sync_sandbox_manager_refs()
+    sandbox_manager.drop_boot_lock(sandbox_id)
+
+
+def _schedule_cua_idle_cleanup(sandbox_id: str, timeout: float) -> None:
+    _sync_sandbox_manager_refs()
+    sandbox_manager.schedule_idle_cleanup(sandbox_id, timeout)
+
+
+def _cua_sandbox_has_active_lease(sandbox_id: str) -> bool:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.sandbox_has_active_lease(sandbox_id)
+
+
+def _cua_sandbox_controlled_by_other_session(sandbox_id: str, session_id: str) -> bool:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.sandbox_controlled_by_other_session(sandbox_id, session_id)
+
+
+def _acquire_cua_sandbox_lease(sandbox_id: str, session_id: str) -> bool:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.acquire_lease(sandbox_id, session_id)
+
+
+async def _booter_available(booter: ComputerBooter) -> bool:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.booter_available(booter)
+
+
+def renew_cua_sandbox_lease(sandbox_id: str, session_id: str, *, ttl: float) -> bool:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.acquire_lease(sandbox_id, session_id, ttl=ttl)
+
+
+async def _boot_managed_cua_sandbox(
+    context: Context,
+    session_id: str,
+    sandbox_id: str,
+    cua_kwargs: dict,
+) -> ComputerBooter:
+    from .booters.cua import CuaBooter
+
+    uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
+    client = CuaBooter(**cua_kwargs)
+    started_at = time.monotonic()
+    logger.info(
+        "[Computer] CUA managed sandbox boot start: sandbox_id=%s session_id=%s boot_session_id=%s image=%s os_type=%s local=%s ttl=%s",
+        sandbox_id,
+        session_id,
+        uuid_str,
+        cua_kwargs.get("image"),
+        cua_kwargs.get("os_type"),
+        cua_kwargs.get("local"),
+        cua_kwargs.get("ttl"),
+    )
+    try:
+        await client.boot(uuid_str)
+        logger.info(
+            "[Computer] CUA managed sandbox boot connected: sandbox_id=%s session_id=%s elapsed_ms=%d",
+            sandbox_id,
+            session_id,
+            int((time.monotonic() - started_at) * 1000),
+        )
+        await _sync_skills_to_sandbox(client)
+    except Exception:
+        logger.warning(
+            "[Computer] CUA managed sandbox boot failed: sandbox_id=%s session_id=%s elapsed_ms=%d",
+            sandbox_id,
+            session_id,
+            int((time.monotonic() - started_at) * 1000),
+            exc_info=True,
+        )
+        try:
+            await client.shutdown()
+        except Exception as shutdown_error:
+            logger.warning(
+                "Failed to shutdown sandbox after boot error for session %s: %s",
+                session_id,
+                shutdown_error,
+            )
+        raise
+    logger.info(
+        "[Computer] CUA managed sandbox boot done: sandbox_id=%s session_id=%s elapsed_ms=%d",
+        sandbox_id,
+        session_id,
+        int((time.monotonic() - started_at) * 1000),
+    )
+    return client
+
+
+async def _boot_managed_cua_sandbox_hook(
+    context: Context,
+    session_id: str,
+    sandbox_id: str,
+    cua_kwargs: dict,
+) -> ComputerBooter:
+    return await _boot_managed_cua_sandbox(context, session_id, sandbox_id, cua_kwargs)
+
+
+sandbox_manager = SandboxManager(
+    registry=cua_registry,
+    providers={"cua": CuaSandboxProvider(boot_hook=_boot_managed_cua_sandbox_hook)},
+)
+_sync_sandbox_manager_refs()
+
+
+async def _get_or_create_cua_booter(
+    context: Context, session_id: str, sandbox_cfg: dict
+) -> ComputerBooter:
+    _sync_sandbox_manager_refs()
+    _ = sandbox_cfg
+    config = sandbox_manager.providers["cua"].build_create_config(context, session_id)
+    logger.info(
+        f"[Computer] CUA config: image={config['image']}, "
+        f"os_type={config['os_type']}, ttl={config['ttl']}"
+    )
+    return await sandbox_manager.get_or_create_booter(context, session_id, "cua")
+
+
+async def create_cua_sandbox(
+    context: Context,
+    session_id: str,
+    sandbox_name: str | None = None,
+) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.create_sandbox(
+        context, session_id, "cua", sandbox_name
+    )
+
+
+async def create_sandbox(
+    context: Context,
+    session_id: str,
+    provider: str = "cua",
+    sandbox_name: str | None = None,
+) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.create_sandbox(
+        context, session_id, provider, sandbox_name
+    )
+
+
+async def create_cua_sandbox_uncontrolled(
+    context: Context,
+    session_id: str,
+    sandbox_name: str | None = None,
+) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.create_sandbox_uncontrolled(
+        context, session_id, "cua", sandbox_name
+    )
+
+
+async def create_sandbox_uncontrolled(
+    context: Context,
+    session_id: str,
+    provider: str = "cua",
+    sandbox_name: str | None = None,
+) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.create_sandbox_uncontrolled(
+        context, session_id, provider, sandbox_name
+    )
+
+
+def list_cua_sandboxes() -> list[dict]:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.list_sandboxes()
+
+
+def list_sandboxes() -> list[dict]:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.list_sandboxes()
+
+
+def set_default_cua_sandbox(sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.set_default_sandbox(sandbox_id)
+
+
+def set_default_sandbox(sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.set_default_sandbox(sandbox_id)
+
+
+def update_cua_sandbox_config(
+    sandbox_id: str,
+    *,
+    sandbox_name: str | None = None,
+    idle_timeout: int | float | None,
+    expires_at: int | float | None,
+    retention_policy: str,
+) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.update_sandbox_config(
+        sandbox_id,
+        sandbox_name=sandbox_name,
+        idle_timeout=idle_timeout,
+        expires_at=expires_at,
+        retention_policy=retention_policy,
+    )
+
+
+def update_sandbox_config(
+    sandbox_id: str,
+    *,
+    sandbox_name: str | None = None,
+    idle_timeout: int | float | None,
+    expires_at: int | float | None,
+    retention_policy: str,
+) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.update_sandbox_config(
+        sandbox_id,
+        sandbox_name=sandbox_name,
+        idle_timeout=idle_timeout,
+        expires_at=expires_at,
+        retention_policy=retention_policy,
+    )
+
+
+async def reconcile_cua_sandboxes_on_startup() -> None:
+    _sync_sandbox_manager_refs()
+    await sandbox_manager.reconcile_on_startup()
+
+
+async def cleanup_managed_cua_sandboxes() -> None:
+    _sync_sandbox_manager_refs()
+    await sandbox_manager.cleanup_managed_sandboxes()
+
+
+def get_current_cua_sandbox(session_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.get_current_sandbox(session_id)
+
+
+def get_current_sandbox(session_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.get_current_sandbox(session_id)
+
+
+def switch_current_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.switch_current_sandbox(session_id, sandbox_id)
+
+
+async def switch_current_cua_sandbox_checked(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.switch_current_sandbox_checked(session_id, sandbox_id)
+
+
+def switch_current_sandbox(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.switch_current_sandbox(session_id, sandbox_id)
+
+
+async def switch_current_sandbox_checked(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.switch_current_sandbox_checked(session_id, sandbox_id)
+
+
+def release_current_cua_sandbox(
+    session_id: str,
+    sandbox_id: str | None = None,
+) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.release_current_sandbox(session_id, sandbox_id)
+
+
+def release_current_sandbox(
+    session_id: str,
+    sandbox_id: str | None = None,
+) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.release_current_sandbox(session_id, sandbox_id)
+
+
+def takeover_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.takeover_sandbox(session_id, sandbox_id)
+
+
+def takeover_sandbox(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.takeover_sandbox(session_id, sandbox_id)
+
+
+async def destroy_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.destroy_sandbox(session_id, sandbox_id)
+
+
+async def destroy_sandbox(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.destroy_sandbox(session_id, sandbox_id)
+
+
+async def get_cua_sandbox_observer_booter_by_id(sandbox_id: str) -> ComputerBooter:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.get_observer_booter_by_id(sandbox_id)
+
+
+async def get_sandbox_observer_booter_by_id(sandbox_id: str) -> ComputerBooter:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.get_observer_booter_by_id(sandbox_id)
+
+
+async def copy_file_between_cua_sandboxes(
+    *,
+    session_id: str,
+    source_sandbox_id: str,
+    source_path: str,
+    target_sandbox_id: str,
+    target_path: str,
+    temp_dir: str | Path | None = None,
+) -> dict:
+    source_record = cua_registry.get_sandbox(source_sandbox_id)
+    if source_record is None or not source_record.get("managed"):
+        raise RuntimeError(f"Source sandbox {source_sandbox_id} not found")
+    target_record = cua_registry.get_sandbox(target_sandbox_id)
+    if target_record is None or not target_record.get("managed"):
+        raise RuntimeError(f"Target sandbox {target_sandbox_id} not found")
+    if not _acquire_cua_sandbox_lease(target_sandbox_id, session_id):
+        raise RuntimeError(f"Target sandbox {target_sandbox_id} is busy")
+
+    source_booter = session_booter.get(source_sandbox_id)
+    target_booter = session_booter.get(target_sandbox_id)
+    if source_booter is None or not await _booter_available(source_booter):
+        raise RuntimeError(f"Source sandbox {source_sandbox_id} is not running")
+    if target_booter is None or not await _booter_available(target_booter):
+        raise RuntimeError(f"Target sandbox {target_sandbox_id} is not running")
+
+    relay_root = (
+        Path(temp_dir) if temp_dir is not None else Path(get_astrbot_temp_path())
+    )
+    relay_root.mkdir(parents=True, exist_ok=True)
+    fd, relay_path = tempfile.mkstemp(
+        prefix="cua-relay-", suffix=".tmp", dir=relay_root
+    )
+    os.close(fd)
+    relay_file = Path(relay_path)
+    try:
+        await source_booter.download_file(source_path, str(relay_file))
+        upload_result = await target_booter.upload_file(str(relay_file), target_path)
+        if not upload_result.get("success", False):
+            raise RuntimeError(str(upload_result.get("message") or "upload failed"))
+        cua_registry.touch_sandbox(source_sandbox_id)
+        cua_registry.touch_sandbox(target_sandbox_id)
+        _save_cua_registry()
+        return {
+            "source_sandbox_id": source_sandbox_id,
+            "source_path": source_path,
+            "target_sandbox_id": target_sandbox_id,
+            "target_path": target_path,
+            "upload": upload_result,
+        }
+    finally:
+        relay_file.unlink(missing_ok=True)
+
+
+async def get_cua_observer_booter(context: Context, session_id: str) -> ComputerBooter:
+    config = context.get_config(umo=session_id)
+    sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
+    current_sandbox_id = cua_registry.get_current_sandbox_id(session_id)
+    if current_sandbox_id is None:
+        return await _get_or_create_cua_booter(context, session_id, sandbox_cfg)
+    booter = session_booter.get(current_sandbox_id)
+    if booter is None or not await _booter_available(booter):
+        booter = await _get_or_create_cua_booter(context, session_id, sandbox_cfg)
+        current_sandbox_id = getattr(booter, "sandbox_id", current_sandbox_id)
+    cua_registry.touch_sandbox(current_sandbox_id)
+    _save_cua_registry()
+    _schedule_cua_idle_cleanup(
+        current_sandbox_id,
+        _get_cua_idle_timeout(context, session_id),
+    )
+    return booter
 
 
 def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
@@ -526,7 +952,10 @@ async def get_booter(
     current_skills_revision = _compute_local_skills_revision(skills_root)
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
-    booter_type = sandbox_cfg.get("booter", BOOTER_SHIPYARD_NEO)
+    booter_type = sandbox_cfg.get("booter", "shipyard_neo")
+
+    if booter_type == "cua":
+        return await _get_or_create_cua_booter(context, session_id, sandbox_cfg)
 
     if session_id in session_booter:
         booter = session_booter[session_id]
@@ -649,8 +1078,6 @@ async def get_booter(
             raise e
 
         session_booter[session_id] = client
-    if booter_type == "cua":
-        _schedule_cua_idle_cleanup(session_id, cua_idle_timeout)
     return session_booter[session_id]
 
 

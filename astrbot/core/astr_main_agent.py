@@ -66,6 +66,18 @@ from astrbot.core.tools.computer_tools import (
     BrowserExecTool,
     CreateSkillCandidateTool,
     CreateSkillPayloadTool,
+    CuaCopyFileBetweenSandboxesTool,
+    CuaCreateSandboxTool,
+    CuaDestroySandboxTool,
+    CuaGetCurrentSandboxTool,
+    CuaKeyboardTypeTool,
+    CuaListSandboxesTool,
+    CuaMouseClickTool,
+    CuaReleaseSandboxTool,
+    CuaScreenshotSandboxTool,
+    CuaScreenshotTool,
+    CuaSwitchSandboxTool,
+    CuaTakeoverSandboxTool,
     EvaluateSkillCandidateTool,
     ExecuteShellTool,
     FileDownloadTool,
@@ -1364,6 +1376,33 @@ def _apply_sandbox_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillReleasesTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
+
+    if booter == "cua":
+        req.system_prompt += (
+            "\n[CUA Desktop Control]\n"
+            "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
+            'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
+            "After each visible step, call `astrbot_cua_screenshot` with "
+            "`send_to_user=true` and `return_image_to_llm=true` so the user can "
+            "monitor progress. When typing, inspect the screenshot first and confirm "
+            "the target field is focused and empty or safe to append to. Use "
+            "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
+            "for text input; use text=`\\n` for Enter.\n"
+        )
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaListSandboxesTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaGetCurrentSandboxTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaCreateSandboxTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaSwitchSandboxTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaReleaseSandboxTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaTakeoverSandboxTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaDestroySandboxTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotSandboxTool))
+        req.func_tool.add_tool(
+            tool_mgr.get_builtin_tool(CuaCopyFileBetweenSandboxesTool)
+        )
 
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
     for part in prompt_parts:

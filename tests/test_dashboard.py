@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import sys
+import time
 import uuid
 import zipfile
 from datetime import datetime
@@ -18,6 +19,7 @@ from quart import Quart, jsonify
 from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
+from astrbot.core.computer.cua_registry import CuaSandboxRegistry
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.provider.provider import EmbeddingProvider
@@ -1309,6 +1311,372 @@ async def test_batch_delete_sessions_masks_internal_error(
     assert data["data"]["failed_count"] == 1
     assert data["data"]["failed_items"][0]["session_id"] == session_id
     assert data["data"]["failed_items"][0]["reason"] == "internal_error"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_api_lists_provider_neutral_sandboxes(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.computer import computer_client
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-cua",
+        sandbox_name="CUA worker",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-a",
+        owner_session_id="session-a",
+        connect_info={"name": "CUA worker", "local": True},
+        is_default=True,
+    )
+    registry.upsert_sandbox(
+        sandbox_id="sb-neo",
+        sandbox_name="Neo worker",
+        booter_type="shipyard_neo",
+        provider="shipyard_neo",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-b",
+        owner_session_id="session-b",
+        connect_info={"profile": "python-default"},
+    )
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+
+    response = await app.test_client().get(
+        "/api/sandboxes",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    sandboxes = data["data"]["sandboxes"]
+    assert [sandbox["sandbox_id"] for sandbox in sandboxes] == ["sb-cua", "sb-neo"]
+    assert sandboxes[0]["provider"] == "cua"
+    assert sandboxes[0]["capabilities"] == [
+        "create",
+        "destroy",
+        "screenshot",
+        "shell",
+    ]
+    assert sandboxes[1]["booter_type"] == "shipyard_neo"
+    assert sandboxes[1]["capabilities"] == []
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_api_switch_release_takeover_destroy(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.computer import computer_client
+
+    class FakeBooter:
+        def __init__(self):
+            self.shutdowns = 0
+
+        async def available(self):
+            return True
+
+        async def shutdown(self):
+            self.shutdowns += 1
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-cua",
+        sandbox_name="CUA worker",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-a",
+        owner_session_id="session-a",
+        controller_user_id="other",
+        controller_session_id="other",
+        lease_expires_at=time.time() + 60,
+        connect_info={"name": "CUA worker", "local": True},
+    )
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+    computer_client.session_booter["sb-cua"] = FakeBooter()
+    client = app.test_client()
+
+    switch_response = await client.post(
+        "/api/sandboxes/switch-current",
+        headers=authenticated_header,
+        json={"session_id": "dashboard-session", "sandbox_id": "sb-cua"},
+    )
+    switch_data = await switch_response.get_json()
+    assert switch_data["status"] == "error"
+    assert "busy" in switch_data["message"]
+
+    takeover_response = await client.post(
+        "/api/sandboxes/takeover",
+        headers=authenticated_header,
+        json={"session_id": "dashboard-session", "sandbox_id": "sb-cua"},
+    )
+    takeover_data = await takeover_response.get_json()
+    assert takeover_data["status"] == "ok"
+    assert (
+        registry.get_sandbox("sb-cua")["controller_session_id"] == "dashboard-session"
+    )
+
+    release_response = await client.post(
+        "/api/sandboxes/release",
+        headers=authenticated_header,
+        json={"session_id": "dashboard-session", "sandbox_id": "sb-cua"},
+    )
+    release_data = await release_response.get_json()
+    assert release_data["status"] == "ok"
+    assert registry.get_sandbox("sb-cua")["controller_session_id"] is None
+
+    destroy_response = await client.post(
+        "/api/sandboxes/destroy",
+        headers=authenticated_header,
+        json={"session_id": "dashboard-session", "sandbox_id": "sb-cua"},
+    )
+    destroy_data = await destroy_response.get_json()
+    assert destroy_data["status"] == "ok"
+    assert registry.get_sandbox("sb-cua") is None
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_api_create_uses_runtime_provider_payload(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.computer import computer_client
+
+    class FakeBooter:
+        def __init__(self, sandbox_id: str):
+            self.sandbox_id = sandbox_id
+
+        async def available(self):
+            return True
+
+        async def shutdown(self):
+            return None
+
+    async def fake_boot_managed(ctx, session_id, sandbox_id, cua_kwargs):
+        return FakeBooter(sandbox_id)
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    monkeypatch.setattr(computer_client, "_boot_managed_cua_sandbox", fake_boot_managed)
+    computer_client.session_booter.clear()
+
+    response = await app.test_client().post(
+        "/api/sandboxes/create",
+        headers=authenticated_header,
+        json={
+            "session_id": "dashboard-session",
+            "provider": "cua",
+            "sandbox_name": "dashboard-cua",
+        },
+    )
+    data = await response.get_json()
+
+    assert data["status"] == "ok"
+    sandbox = data["data"]["sandbox"]
+    assert sandbox["sandbox_name"] == "dashboard-cua"
+    assert sandbox["provider"] == "cua"
+    assert sandbox["controller_session_id"] is None
+    assert sandbox["lease_expires_at"] is None
+    assert registry.get_current_sandbox_id("dashboard-session") is None
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_api_sets_default_and_updates_config(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.computer import computer_client
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-a",
+        sandbox_name="Sandbox A",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox A"},
+        is_default=True,
+    )
+    registry.upsert_sandbox(
+        sandbox_id="sb-b",
+        sandbox_name="Sandbox B",
+        booter_type="shipyard_neo",
+        provider="shipyard_neo",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-b",
+        owner_session_id="session-b",
+        connect_info={"name": "Sandbox B"},
+    )
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    client = app.test_client()
+
+    default_response = await client.post(
+        "/api/sandboxes/default/set",
+        headers=authenticated_header,
+        json={"sandbox_id": "sb-b"},
+    )
+    default_data = await default_response.get_json()
+    assert default_data["status"] == "ok"
+    assert registry.default_sandbox_id == "sb-b"
+    assert registry.get_sandbox("sb-a")["is_default"] is True
+    assert registry.get_sandbox("sb-b")["is_default"] is True
+
+    config_response = await client.post(
+        "/api/sandboxes/config/update",
+        headers=authenticated_header,
+        json={
+            "sandbox_id": "sb-b",
+            "retention_policy": "persistent",
+            "idle_timeout": None,
+            "expires_at": None,
+            "sandbox_name": "Renamed Sandbox",
+        },
+    )
+    config_data = await config_response.get_json()
+    assert config_data["status"] == "ok"
+    sandbox = registry.get_sandbox("sb-b")
+    assert sandbox["sandbox_name"] == "Renamed Sandbox"
+    assert sandbox["connect_info"]["name"] == "Sandbox B"
+    assert sandbox["retention_policy"] == "persistent"
+    assert sandbox["idle_timeout"] is None
+    assert sandbox["expires_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_api_screenshot_returns_inline_image(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.computer import computer_client
+
+    class FakeGui:
+        async def screenshot(self, path: str):
+            Path(path).write_bytes(b"fake-png")
+            return {"success": True, "path": path, "mime_type": "image/png"}
+
+    class FakeBooter:
+        gui = FakeGui()
+
+        async def available(self):
+            return True
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-cua",
+        sandbox_name="Sandbox",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox"},
+    )
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+    computer_client.session_booter["sb-cua"] = FakeBooter()
+
+    response = await app.test_client().post(
+        "/api/sandboxes/screenshot",
+        headers=authenticated_header,
+        json={"sandbox_id": "sb-cua"},
+    )
+    data = await response.get_json()
+
+    assert data["status"] == "ok"
+    screenshot = data["data"]["screenshot"]
+    assert screenshot["mime_type"] == "image/png"
+    assert screenshot["data_url"] == "data:image/png;base64,ZmFrZS1wbmc="
+    assert "path" not in screenshot
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_api_shell_executes_without_taking_over(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.computer import computer_client
+
+    class FakeShell:
+        async def exec(
+            self,
+            command: str,
+            cwd: str | None = None,
+            env: dict[str, str] | None = None,
+            timeout: int | None = 300,
+            shell: bool = True,
+            background: bool = False,
+        ):
+            return {
+                "stdout": f"ran:{command}",
+                "stderr": "",
+                "exit_code": 0,
+                "cwd": cwd,
+                "timeout": timeout,
+                "background": background,
+            }
+
+    class FakeBooter:
+        shell = FakeShell()
+
+        async def available(self):
+            return True
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-cua",
+        sandbox_name="Sandbox",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-a",
+        owner_session_id="session-a",
+        controller_user_id="chat-user",
+        controller_session_id="chat-session",
+        lease_expires_at=time.time() + 60,
+        connect_info={"name": "Sandbox"},
+    )
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+    computer_client.session_booter["sb-cua"] = FakeBooter()
+
+    response = await app.test_client().post(
+        "/api/sandboxes/shell",
+        headers=authenticated_header,
+        json={"sandbox_id": "sb-cua", "command": "pwd", "timeout": 12},
+    )
+    data = await response.get_json()
+
+    assert data["status"] == "ok"
+    assert "script -q -e -c pwd /dev/null" in data["data"]["result"]["stdout"]
+    assert data["data"]["result"]["exit_code"] == 0
+    assert data["data"]["result"]["timeout"] == 12
+    assert registry.get_sandbox("sb-cua")["controller_session_id"] == "chat-session"
 
 
 @pytest.mark.asyncio

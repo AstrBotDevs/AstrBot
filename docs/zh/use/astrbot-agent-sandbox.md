@@ -71,6 +71,21 @@ CUA 本身还依赖具体运行方式：
 
 具体宿主机要求、镜像支持情况和本地运行时安装方式，请参考 [CUA 官方文档](https://cua.ai/docs)。
 
+### 准备 CUA 本地镜像
+
+使用本地 Linux CUA 运行时时，需要先准备 Docker 镜像。AstrBot 不需要您额外配置镜像仓库；通常只需要二选一：
+
+- 手动拉取镜像：
+
+```bash
+docker pull trycua/cua-xfce:latest
+```
+
+- 直接在 AstrBot 中创建或启动 CUA 沙盒，让 AstrBot 通过 CUA/Docker 拉取所需镜像。
+
+> [!NOTE]
+> CUA Linux 镜像体积较大，首次拉取可能需要数分钟。如果 AstrBot 提示本地缺少 `trycua/cua-xfce:latest`，请先执行上面的 `docker pull` 命令，或在网络较稳定的环境下重新通过 AstrBot 创建沙盒。
+
 ### 在 AstrBot 中配置 CUA
 
 进入 WebUI：
