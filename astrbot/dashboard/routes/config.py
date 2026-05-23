@@ -700,13 +700,30 @@ class ConfigRoute(Route):
         converted: dict[str, Any] = ConfigMetadataI18n.convert_to_i18n_keys(
             {"provider_group": {"metadata": {"provider": _provider_meta}}},
         )
-        config_schema = {
-            "provider": converted["provider_group"]["metadata"]["provider"],
+        provider_i18n_translations = {}
+        provider_schema = provider_metadata["provider_group"]["metadata"]["provider"]
+        config_schema = {"provider": provider_schema}
+
+        provider_default_tmpl = config_schema["provider"]["config_template"]
+        provider_schema_wrapper = {
+            "provider_group": {"metadata": {"provider": provider_schema}}
         }
+        for provider in provider_registry:
+            if provider.default_config_tmpl:
+                provider_default_tmpl[provider.type] = copy.deepcopy(
+                    provider.default_config_tmpl
+                )
+            if provider.config_metadata:
+                self._inject_provider_metadata_with_i18n(
+                    provider,
+                    provider_schema_wrapper,
+                    provider_i18n_translations,
+                )
         data = {
             "config_schema": config_schema,
             "providers": astrbot_config["provider"],
             "provider_sources": astrbot_config["provider_sources"],
+            "provider_i18n_translations": provider_i18n_translations,
         }
         return Response().ok(data=data).to_json()
 
@@ -1525,6 +1542,33 @@ class ConfigRoute(Route):
                 f"Unexpected error registering logo for platform {platform.name}: {e}",
             )
 
+    def _rewrite_metadata_i18n_keys(
+        self, metadata: dict, i18n_prefix: str, field_path: str = ""
+    ):
+        """Rewrite metadata text fields to dynamic i18n keys recursively."""
+        for field_key, field_value in metadata.items():
+            if not isinstance(field_value, dict):
+                continue
+
+            current_path = f"{field_path}.{field_key}" if field_path else field_key
+            for key in ("description", "hint", "labels", "name"):
+                if key in field_value:
+                    field_value[key] = f"{i18n_prefix}.{current_path}.{key}"
+
+            if "items" in field_value and isinstance(field_value["items"], dict):
+                self._rewrite_metadata_i18n_keys(
+                    field_value["items"], i18n_prefix, current_path
+                )
+
+            if "template_schema" in field_value and isinstance(
+                field_value["template_schema"], dict
+            ):
+                self._rewrite_metadata_i18n_keys(
+                    field_value["template_schema"],
+                    i18n_prefix,
+                    f"{current_path}.template_schema",
+                )
+
     def _inject_platform_metadata_with_i18n(
         self,
         platform,
@@ -1541,12 +1585,32 @@ class ConfigRoute(Route):
                     "platform_group",
                     {},
                 ).setdefault("platform", {})[platform.name] = lang_data
-            for field_key, field_value in platform_items_to_inject.items():
-                for key in ("description", "hint", "labels"):
-                    if key in field_value:
-                        field_value[key] = f"{i18n_prefix}.{field_key}.{key}"
+
+            self._rewrite_metadata_i18n_keys(platform_items_to_inject, i18n_prefix)
+
         metadata["platform_group"]["metadata"]["platform"]["items"].update(
             platform_items_to_inject,
+        )
+
+    def _inject_provider_metadata_with_i18n(
+        self, provider, metadata, provider_i18n_translations: dict
+    ):
+        """Inject provider config metadata and rewrite dynamic i18n keys."""
+        metadata["provider_group"]["metadata"]["provider"].setdefault("items", {})
+        provider_items_to_inject = copy.deepcopy(provider.config_metadata)
+
+        if provider.i18n_resources:
+            i18n_prefix = f"provider_group.provider.{provider.type}"
+
+            for lang, lang_data in provider.i18n_resources.items():
+                provider_i18n_translations.setdefault(lang, {}).setdefault(
+                    "provider_group", {}
+                ).setdefault("provider", {})[provider.type] = lang_data
+
+            self._rewrite_metadata_i18n_keys(provider_items_to_inject, i18n_prefix)
+
+        metadata["provider_group"]["metadata"]["provider"]["items"].update(
+            provider_items_to_inject
         )
 
     async def _get_astrbot_config(self):
@@ -1586,16 +1650,27 @@ class ConfigRoute(Route):
                     )
         if logo_registration_tasks:
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
-        _provider_tmpl: Any = metadata["provider_group"]
-        _provider_tmpl2: Any = _provider_tmpl["metadata"]["provider"]
-        provider_default_tmpl: Any = _provider_tmpl2["config_template"]
+
+        # 服务提供商的默认配置模板注入
+        provider_default_tmpl = metadata["provider_group"]["metadata"]["provider"][
+            "config_template"
+        ]
+        provider_i18n_translations = {}
         for provider in provider_registry:
             if provider.default_config_tmpl:
-                provider_default_tmpl[provider.type] = provider.default_config_tmpl
+                provider_default_tmpl[provider.type] = copy.deepcopy(
+                    provider.default_config_tmpl
+                )
+            if provider.config_metadata:
+                self._inject_provider_metadata_with_i18n(
+                    provider, metadata, provider_i18n_translations
+                )
+
         return {
             "metadata": metadata,
             "config": config,
             "platform_i18n_translations": platform_i18n_translations,
+            "provider_i18n_translations": provider_i18n_translations,
         }
 
     async def _get_plugin_config(self, plugin_name: str):
