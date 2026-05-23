@@ -942,7 +942,36 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
 
         if not llm_resp.tools_call_name:
-            await self._complete_with_assistant_response(llm_resp)
+            # 如果没有工具调用，转换到完成状态
+            self.final_llm_resp = llm_resp
+            self._transition_state(AgentState.DONE)
+            self.stats.end_time = time.time()
+
+            # call the on_agent_done hook BEFORE recording the message,
+            # so that plugins can clean metadata tags from completion_text first.
+            try:
+                await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
+            except Exception as e:
+                logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+
+            # record the final assistant message (now cleaned by hooks)
+            parts = []
+            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+                parts.append(
+                    ThinkPart(
+                        think=llm_resp.reasoning_content,
+                        encrypted=llm_resp.reasoning_signature,
+                    )
+                )
+            if llm_resp.completion_text:
+                parts.append(TextPart(text=llm_resp.completion_text))
+            if len(parts) == 0:
+                logger.warning(
+                    "LLM returned empty assistant message with no tool calls."
+                )
+            self.run_context.messages.append(Message(role="assistant", content=parts))
+
+            self._resolve_unconsumed_follow_ups()
 
         # 返回 LLM 结果
         if llm_resp.result_chain:
@@ -1569,6 +1598,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
 
+        try:
+            await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
+        except Exception as e:
+            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+
         parts = []
         if llm_resp.reasoning_content or llm_resp.reasoning_signature:
             parts.append(
@@ -1581,11 +1615,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             parts.append(TextPart(text=llm_resp.completion_text))
         if parts:
             self.run_context.messages.append(Message(role="assistant", content=parts))
-
-        try:
-            await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
-        except Exception as e:
-            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
 
         self._resolve_unconsumed_follow_ups()
         return AgentResponse(
