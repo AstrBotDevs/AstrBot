@@ -164,7 +164,7 @@ class SQLiteDatabase:
 
     def get_base_stats(self, offset_sec: int = 86400) -> Stats:
         """获取 offset_sec 秒前到现在的基础统计数据"""
-        where_clause = f" WHERE timestamp >= {int(time.time()) - offset_sec}"
+        min_timestamp = int(time.time()) - offset_sec
 
         try:
             c = self.conn.cursor()
@@ -174,8 +174,9 @@ class SQLiteDatabase:
         c.execute(
             """
             SELECT * FROM platform
-            """
-            + where_clause,
+            WHERE timestamp >= :min_timestamp
+            """,
+            {"min_timestamp": min_timestamp},
         )
 
         platform = []
@@ -203,7 +204,7 @@ class SQLiteDatabase:
 
     def get_grouped_base_stats(self, offset_sec: int = 86400) -> Stats:
         """获取 offset_sec 秒前到现在的基础统计数据(合并)"""
-        where_clause = f" WHERE timestamp >= {int(time.time()) - offset_sec}"
+        min_timestamp = int(time.time()) - offset_sec
 
         try:
             c = self.conn.cursor()
@@ -213,9 +214,10 @@ class SQLiteDatabase:
         c.execute(
             """
             SELECT name, SUM(count), timestamp FROM platform
-            """
-            + where_clause
-            + " GROUP BY name",
+            WHERE timestamp >= :min_timestamp
+            GROUP BY name
+            """,
+            {"min_timestamp": min_timestamp},
         )
 
         platform = []
@@ -403,14 +405,15 @@ class SQLiteDatabase:
         try:
             # 构建查询条件
             where_clauses = []
-            params = []
+            params: dict[str, Any] = {}
 
             # 平台筛选
             if platforms and len(platforms) > 0:
                 platform_conditions = []
-                for platform in platforms:
-                    platform_conditions.append("user_id LIKE ?")
-                    params.append(f"{platform}:%")
+                for index, platform in enumerate(platforms):
+                    param_name = f"platform_{index}"
+                    platform_conditions.append(f"user_id LIKE :{param_name}")
+                    params[param_name] = f"{platform}:%"
 
                 if platform_conditions:
                     where_clauses.append(f"({' OR '.join(platform_conditions)})")
@@ -418,9 +421,10 @@ class SQLiteDatabase:
             # 消息类型筛选
             if message_types and len(message_types) > 0:
                 message_type_conditions = []
-                for msg_type in message_types:
-                    message_type_conditions.append("user_id LIKE ?")
-                    params.append(f"%:{msg_type}:%")
+                for index, msg_type in enumerate(message_types):
+                    param_name = f"message_type_{index}"
+                    message_type_conditions.append(f"user_id LIKE :{param_name}")
+                    params[param_name] = f"%:{msg_type}:%"
 
                 if message_type_conditions:
                     where_clauses.append(f"({' OR '.join(message_type_conditions)})")
@@ -429,28 +433,32 @@ class SQLiteDatabase:
             if search_query:
                 search_query = search_query.encode("unicode_escape").decode("utf-8")
                 where_clauses.append(
-                    "(title LIKE ? OR user_id LIKE ? OR cid LIKE ? OR history LIKE ?)",
+                    "("
+                    "title LIKE :search_query OR user_id LIKE :search_query OR "
+                    "cid LIKE :search_query OR history LIKE :search_query"
+                    ")",
                 )
-                search_param = f"%{search_query}%"
-                params.extend([search_param, search_param, search_param, search_param])
+                params["search_query"] = f"%{search_query}%"
 
             # 排除特定用户ID
             if exclude_ids and len(exclude_ids) > 0:
-                for exclude_id in exclude_ids:
-                    where_clauses.append("user_id NOT LIKE ?")
-                    params.append(f"{exclude_id}%")
+                for index, exclude_id in enumerate(exclude_ids):
+                    param_name = f"exclude_id_{index}"
+                    where_clauses.append(f"user_id NOT LIKE :{param_name}")
+                    params[param_name] = f"{exclude_id}%"
 
             # 排除特定平台
             if exclude_platforms and len(exclude_platforms) > 0:
-                for exclude_platform in exclude_platforms:
-                    where_clauses.append("user_id NOT LIKE ?")
-                    params.append(f"{exclude_platform}:%")
+                for index, exclude_platform in enumerate(exclude_platforms):
+                    param_name = f"exclude_platform_{index}"
+                    where_clauses.append(f"user_id NOT LIKE :{param_name}")
+                    params[param_name] = f"{exclude_platform}:%"
 
             # 构建完整的 WHERE 子句
             where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
             # 构建计数查询
-            count_sql = f"SELECT COUNT(*) FROM webchat_conversation{where_sql}"
+            count_sql = "SELECT COUNT(*) FROM webchat_conversation" + where_sql
 
             # 获取总记录数
             c.execute(count_sql, params)
@@ -460,14 +468,14 @@ class SQLiteDatabase:
             offset = (page - 1) * page_size
 
             # 构建分页数据查询
-            data_sql = f"""
-                SELECT user_id, cid, created_at, updated_at, title, persona_id
-                FROM webchat_conversation
-                {where_sql}
-                ORDER BY updated_at DESC
-                LIMIT ? OFFSET ?
-            """
-            query_params = params + [page_size, offset]
+            data_sql = (
+                "SELECT user_id, cid, created_at, updated_at, title, persona_id\n"
+                "FROM webchat_conversation"
+                f"{where_sql}\n"
+                "ORDER BY updated_at DESC\n"
+                "LIMIT :page_size OFFSET :offset"
+            )
+            query_params = {**params, "page_size": page_size, "offset": offset}
 
             # 获取分页数据
             c.execute(data_sql, query_params)

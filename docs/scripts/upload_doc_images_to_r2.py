@@ -220,7 +220,9 @@ def run_rclone_upload(
         else:
             print(f"Uploading to: {target}")
 
-        subprocess.run(cmd, check=True)
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+        # Uses an argv list with shell=False after checking that rclone exists in PATH.
+        subprocess.run(cmd, check=True, shell=False)
     finally:
         tmp_path.unlink(missing_ok=True)
 

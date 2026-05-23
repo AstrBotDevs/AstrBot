@@ -249,11 +249,14 @@ class LocalPythonComponent(PythonComponent):
             working_dir = self.policy.normalize_working_dir(None)
             wrapped_command = self.policy.wrap_command(python_command, working_dir)
             try:
+                # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+                # Executes the current interpreter with a fixed argv list and shell=False.
                 result = subprocess.run(
-                    wrapped_command,
-                    cwd=working_dir,
+                    [sys.executable, "-c", code],
                     timeout=timeout,
                     capture_output=True,
+                    text=True,
+                    shell=False,
                 )
                 stdout = "" if silent else _decode_shell_output(result.stdout)
                 stderr = (

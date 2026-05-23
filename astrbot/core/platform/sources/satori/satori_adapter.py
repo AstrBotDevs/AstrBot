@@ -27,6 +27,8 @@ from astrbot.api.platform import (
 )
 from astrbot.core.platform.astr_message_event import MessageSession
 
+from ..websocket_security import require_secure_transport_url
+
 
 @register_platform_adapter(
     "satori", "Satori 协议适配器", support_streaming_message=False
@@ -137,9 +139,11 @@ class SatoriPlatformAdapter(Platform):
         logger.info(f"Satori 适配器正在连接到 WebSocket: {self.endpoint}")
         logger.info(f"Satori 适配器 HTTP API 地址: {self.api_base_url}")
 
-        if not self.endpoint.startswith(("ws://", "wss://")):
-            logger.error(f"无效的WebSocket URL: {self.endpoint}")
-            raise ValueError(f"WebSocket URL必须以ws://或wss://开头: {self.endpoint}")
+        require_secure_transport_url(
+            self.endpoint,
+            label="Satori WebSocket URL",
+            allowed_schemes={"ws", "wss"},
+        )
 
         try:
             websocket = await connect(
