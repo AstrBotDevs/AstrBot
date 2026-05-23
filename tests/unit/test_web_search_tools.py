@@ -655,3 +655,80 @@ async def test_firecrawl_scrape_raises_error_for_http_errors(monkeypatch):
     assert session.trust_env is True
     assert session.entered is True
     assert session.exited is True
+
+
+class _FakeFirecrawlResponse:
+    def __init__(self, status=200, json_data=None, text_data=""):
+        self.status = status
+        self.json_data = json_data or {}
+        self.text_data = text_data
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    async def json(self):
+        return self.json_data
+
+    async def text(self):
+        return self.text_data
+
+
+class _FakeFirecrawlSession:
+    def __init__(self, response):
+        self.response = response
+        self.trust_env = None
+        self.entered = False
+        self.exited = False
+        self.posted = None
+
+    async def __aenter__(self):
+        self.entered = True
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.exited = True
+        return None
+
+    def post(self, url, json, headers):
+        self.posted = {"url": url, "json": json, "headers": headers}
+        return self.response
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_cls,provider_setting,kwargs",
+    [
+        (tools.TavilyWebSearchTool, "websearch_tavily_key", {}),
+        (tools.BochaWebSearchTool, "websearch_bocha_key", {"query": None}),
+        (tools.BraveWebSearchTool, "websearch_brave_key", {"query": "   "}),
+        (tools.FirecrawlWebSearchTool, "websearch_firecrawl_key", {"query": ""}),
+        (tools.BaiduWebSearchTool, "websearch_baidu_app_builder_key", {}),
+    ],
+)
+async def test_search_tool_returns_friendly_error_when_query_missing(
+    tool_cls, provider_setting, kwargs
+):
+    """Issue #7499: invalid query inputs must not crash search tools."""
+    tool = tool_cls()
+    settings = {provider_setting: ["test-key"]}
+    if provider_setting == "websearch_baidu_app_builder_key":
+        settings = {provider_setting: "test-key"}
+    context = _context_with_provider_settings(settings)
+
+    result = await tool.call(context, **kwargs)
+
+    assert isinstance(result, str)
+    assert "Error:" in result
+    assert "query" in result.lower()
+
+
+def _context_with_provider_settings(provider_settings):
+    config = {"provider_settings": provider_settings}
+    agent_context = SimpleNamespace(
+        context=SimpleNamespace(get_config=lambda umo: config),
+        event=SimpleNamespace(unified_msg_origin="test:private:session"),
+    )
+    return SimpleNamespace(context=agent_context)

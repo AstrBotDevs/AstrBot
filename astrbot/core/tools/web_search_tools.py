@@ -138,26 +138,10 @@ def _get_runtime(context) -> tuple[dict, dict, str]:
     return cfg, provider_settings, event.unified_msg_origin
 
 
-def _normalize_timeout(timeout: int | float | str | None) -> aiohttp.ClientTimeout:
-    try:
-        timeout_value = int(timeout) if timeout is not None else MIN_WEB_SEARCH_TIMEOUT
-    except (TypeError, ValueError):
-        timeout_value = MIN_WEB_SEARCH_TIMEOUT
-    return aiohttp.ClientTimeout(total=max(timeout_value, MIN_WEB_SEARCH_TIMEOUT))
-
-
-def _normalize_count(
-    value: int | float | str | None,
-    *,
-    default: int,
-    minimum: int,
-    maximum: int,
-) -> int:
-    try:
-        count = int(value) if value is not None else default
-    except (TypeError, ValueError):
-        count = default
-    return max(minimum, min(count, maximum))
+def _validate_search_query(kwargs: dict) -> str | None:
+    # Keep provider behavior aligned when the model omits or blanks the required query.
+    query = str(kwargs.get("query") or "").strip()
+    return query or None
 
 
 def _cache_favicon(url: str, favicon: str | None) -> None:
@@ -627,7 +611,10 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Required. Search query."},
+                "query": {
+                    "type": "string",
+                    "description": "Required string: search query to execute.",
+                },
                 "max_results": {
                     "type": "integer",
                     "description": "Optional. The maximum number of results to return. Default is 7. Range is 5-20.",
@@ -670,6 +657,10 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_tavily_key", []):
             return "Error: Tavily API key is not configured in AstrBot."
 
+        query = _validate_search_query(kwargs)
+        if not query:
+            return "Error: 'query' parameter is required but was not provided."
+
         search_depth = kwargs.get("search_depth", "basic")
         if search_depth not in ["basic", "advanced"]:
             search_depth = "basic"
@@ -679,7 +670,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
             topic = "general"
 
         payload = {
-            "query": kwargs["query"],
+            "query": query,
             "max_results": kwargs.get("max_results", 7),
             "include_favicon": True,
             "search_depth": search_depth,
@@ -986,8 +977,12 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_bocha_key", []):
             return "Error: BoCha API key is not configured in AstrBot."
 
+        query = _validate_search_query(kwargs)
+        if not query:
+            return "Error: 'query' parameter is required but was not provided."
+
         payload = {
-            "query": kwargs["query"],
+            "query": query,
             "count": kwargs.get("count", 10),
             "summary": bool(kwargs.get("summary", False)),
         }
@@ -1048,12 +1043,16 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_brave_key", []):
             return "Error: Brave API key is not configured in AstrBot."
 
+        query = _validate_search_query(kwargs)
+        if not query:
+            return "Error: 'query' parameter is required but was not provided."
+
         count = int(kwargs.get("count", 10))
         count = max(count, 1)
         count = min(count, 20)
 
         payload = {
-            "q": kwargs["query"],
+            "q": query,
             "count": count,
             "country": kwargs.get("country", "US"),
             "search_lang": kwargs.get("search_lang", "zh-hans"),
@@ -1111,8 +1110,12 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_firecrawl_key", []):
             return "Error: Firecrawl API key is not configured in AstrBot."
 
+        query = _validate_search_query(kwargs)
+        if not query:
+            return "Error: 'query' parameter is required but was not provided."
+
         payload = {
-            "query": kwargs["query"],
+            "query": query,
             "limit": kwargs.get("limit", 5),
             "sources": ["web"],
         }
@@ -1229,12 +1232,16 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_baidu_app_builder_key", ""):
             return "Error: Baidu AI Search API key is not configured in AstrBot."
 
+        query = _validate_search_query(kwargs)
+        if not query:
+            return "Error: 'query' parameter is required but was not provided."
+
         top_k = int(kwargs.get("top_k", 10))
         top_k = max(top_k, 1)
         top_k = min(top_k, 50)
 
         payload = {
-            "messages": [{"role": "user", "content": str(kwargs["query"])[:72]}],
+            "messages": [{"role": "user", "content": query[:72]}],
             "search_source": "baidu_search_v2",
             "resource_type_filter": [{"type": "web", "top_k": top_k}],
         }
