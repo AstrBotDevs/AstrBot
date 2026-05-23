@@ -678,32 +678,26 @@ async def _sync_skills_to_sandbox(
         remote_zip_name = f"{zip_base.name}.zip"
         remote_zip = Path(SANDBOX_SKILLS_ROOT) / remote_zip_name
 
-        try:
-            if sync_skill_dirs:
-                bundle_root.mkdir(parents=True)
-                for skill_name, skill_dir in sync_skill_dirs:
-                    shutil.copytree(skill_dir, bundle_root / skill_name)
-                shutil.make_archive(str(zip_base), "zip", str(bundle_root))
-                logger.info("Uploading skills bundle to sandbox...")
-                await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
-                upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
-                if not upload_result.get("success", False):
-                    raise RuntimeError("Failed to upload skills bundle to sandbox.")
-            else:
-                logger.info(
-                    "No local skills found. Keeping sandbox built-ins and refreshing metadata."
-                )
-                await booter.shell.exec(
-                    f"rm -f {SANDBOX_SKILLS_ROOT}/{remote_zip_name}"
-                )
-
-            # Keep backward-compatible behavior while splitting lifecycle into two
-            # observable phases: apply (filesystem mutation) + scan (metadata read).
-            await _apply_skills_to_sandbox(booter, zip_name=remote_zip_name)
-            payload = await _scan_sandbox_skills(booter)
-            _update_sandbox_skills_cache(payload, provider_id=provider_id)
-            managed = (
-                payload.get("managed_skills", []) if isinstance(payload, dict) else []
+    try:
+        if sync_skill_dirs:
+            if zip_path.exists():
+                zip_path.unlink()
+            if bundle_root.exists():
+                shutil.rmtree(bundle_root)
+            bundle_root.mkdir(parents=True)
+            for skill_name, skill_dir in sync_skill_dirs:
+                shutil.copytree(skill_dir, bundle_root / skill_name)
+            shutil.make_archive(str(zip_base), "zip", str(bundle_root))
+            # Force forward slashes for sandbox compatibility.
+            remote_zip = (Path(SANDBOX_SKILLS_ROOT) / "skills.zip").as_posix()
+            logger.info("Uploading skills bundle to sandbox...")
+            await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
+            upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
+            if not upload_result.get("success", False):
+                raise RuntimeError("Failed to upload skills bundle to sandbox.")
+        else:
+            logger.info(
+                "No local skills found. Keeping sandbox built-ins and refreshing metadata."
             )
             logger.info(
                 "[Computer] Sandbox skill sync complete: managed=%d",
