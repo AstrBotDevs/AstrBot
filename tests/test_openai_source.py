@@ -11,8 +11,6 @@ import astrbot.core.provider.sources.openai_source as openai_source_module
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
-
-
 class _ErrorWithBody(Exception):
     def __init__(self, message: str, body: dict):
         super().__init__(message)

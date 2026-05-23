@@ -481,8 +481,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     const oldVersionProviderTypeMapping: Record<string, string> = {
       openai_chat_completion: 'chat_completion',
-      openai_responses: 'chat_completion',
-      xai_responses: 'chat_completion',
+      qiniu_chat_completion: 'chat_completion',
       anthropic_chat_completion: 'chat_completion',
       googlegenai_chat_completion: 'chat_completion',
       zhipu_chat_completion: 'chat_completion',
