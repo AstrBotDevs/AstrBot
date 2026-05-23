@@ -34,7 +34,23 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
-from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
+from astrbot.core.star.star import star_map
+from astrbot.core.tools.computer_tools import (
+    CuaKeyboardTypeTool,
+    CuaMouseClickTool,
+    CuaScreenshotTool,
+    ExecuteShellTool,
+    FileDownloadTool,
+    FileEditTool,
+    FileReadTool,
+    FileUploadTool,
+    FileWriteTool,
+    GrepTool,
+    LocalPythonTool,
+    PythonTool,
+)
+from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
@@ -153,6 +169,26 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             fallback_provider_id,
         )
         return fallback_provider_id
+
+    @classmethod
+    def _tool_enabled_for_session(
+        cls,
+        tool: FunctionTool,
+        session_config: dict | None,
+    ) -> bool:
+        mp = tool.handler_module_path
+        if not mp:
+            return True
+
+        plugin = star_map.get(mp)
+        if not plugin:
+            return True
+
+        return SessionPluginManager.is_plugin_enabled_for_session_config(
+            plugin.name,
+            session_config,
+            reserved=plugin.reserved,
+        )
 
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
@@ -379,7 +415,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         return {t.name: t for t in tools}
 
     @classmethod
-    def _build_handoff_toolset(
+    async def _build_handoff_toolset(
         cls,
         run_context: ContextWrapper[AstrAgentContext],
         tools: list[str | FunctionTool] | None,
@@ -387,6 +423,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         ctx = run_context.context.context
         event = run_context.context.event
         cfg = ctx.get_config(umo=event.unified_msg_origin)
+        session_config = await SessionPluginManager.get_session_plugin_config(
+            event.unified_msg_origin
+        )
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
         tool_mgr = ctx.get_llm_tool_manager()
@@ -400,7 +439,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             for registered_tool in llm_tools.func_list:
                 if isinstance(registered_tool, HandoffTool):
                     continue
-                if registered_tool.active:
+                if registered_tool.active and cls._tool_enabled_for_session(
+                    registered_tool,
+                    session_config,
+                ):
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)
@@ -411,14 +453,19 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         for tool_name_or_obj in tools:
             if isinstance(tool_name_or_obj, str):
                 registered_tool = llm_tools.get_func(tool_name_or_obj)
-                if registered_tool and registered_tool.active:
+                if (
+                    registered_tool
+                    and registered_tool.active
+                    and cls._tool_enabled_for_session(registered_tool, session_config)
+                ):
                     toolset.add_tool(registered_tool)
                     continue
                 runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
                 if runtime_tool:
                     toolset.add_tool(runtime_tool)
             elif isinstance(tool_name_or_obj, FunctionTool):
-                toolset.add_tool(tool_name_or_obj)
+                if cls._tool_enabled_for_session(tool_name_or_obj, session_config):
+                    toolset.add_tool(tool_name_or_obj)
         return None if toolset.empty() else toolset
 
     @classmethod
@@ -455,7 +502,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 tool_args.get("image_urls"),
             )
         tool_args["image_urls"] = image_urls
-        toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
+
+        # Build handoff toolset from registered tools plus runtime computer tools.
+        toolset = await cls._build_handoff_toolset(run_context, tool.agent.tools)
 
         umo = event.unified_msg_origin
 
