@@ -574,17 +574,31 @@ class ProviderOpenAIOfficial(Provider):
         self.set_model(model)
 
         self.reasoning_key = "reasoning_content"
-        # 检测是否使用豆包格式（可通过配置或 api_base 自动判断）
-        self.use_doubao_format = bool(provider_config.get("use_doubao_format", False))
-        api_base = provider_config.get("api_base", "")
-        if not self.use_doubao_format and isinstance(api_base, str):
-            # 自动检测豆包 API
-            self.use_doubao_format = (
-                "volces.com" in api_base or "bytedance" in api_base.lower()
-            )
+        self.max_retries = self._get_max_retries()
 
-        if self.use_doubao_format:
-            logger.info(f"检测到豆包 API，将使用豆包图片格式（input_image + 直接 URL）")
+    _MAX_RETRIES_DEFAULT = 10
+    _MAX_RETRIES_UPPER_BOUND = 50
+
+    def _get_max_retries(self) -> int:
+        """获取并验证最大重试次数，确保为 1 到 _MAX_RETRIES_UPPER_BOUND 之间的整数。"""
+        raw = self.provider_config.get("max_retries", self._MAX_RETRIES_DEFAULT)
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            logger.warning(
+                "max_retries 配置无效 (%s)，使用默认值 %d。",
+                raw,
+                self._MAX_RETRIES_DEFAULT,
+            )
+            return self._MAX_RETRIES_DEFAULT
+        clamped = max(1, min(value, self._MAX_RETRIES_UPPER_BOUND))
+        if clamped != value:
+            logger.warning(
+                "max_retries 配置值 %d 超出范围，已调整为 %d。",
+                value,
+                clamped,
+            )
+        return clamped
 
     def _ollama_disable_thinking_enabled(self) -> bool:
         value = self.provider_config.get("ollama_disable_thinking", False)
@@ -1501,7 +1515,7 @@ class ProviderOpenAIOfficial(Provider):
         logger.debug(f"Prepared payloads for OpenAI API: {payloads}")
 
         llm_response = None
-        max_retries = 10
+        max_retries = self.max_retries
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
         image_fallback_used = False
@@ -1576,7 +1590,7 @@ class ProviderOpenAIOfficial(Provider):
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
-        max_retries = 10
+        max_retries = self.max_retries
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
         image_fallback_used = False
