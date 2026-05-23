@@ -121,6 +121,36 @@
     },
     "labels": {
       "proxy": "代理地址"
+    },
+    "oauth": {
+      "title": "ChatGPT/Codex OAuth",
+      "description": "将当前独立 Provider Source 绑定到 ChatGPT/Codex 账号态 OAuth。绑定成功后，AstrBot 会通过账号态后端接口发起模型请求，而不是把它当普通 OpenAI API Key 使用。",
+      "modeManual": "当前使用 API Key",
+      "modeOAuth": "当前使用账号态 OAuth",
+      "manualHint": "可点击下方按钮走本地回跳授权，也可直接粘贴 JSON 格式的账号态凭据。",
+      "connectedHint": "当前 source 已绑定账号态 OAuth，请求会走 ChatGPT/Codex backend-api。",
+      "start": "开始授权",
+      "openAuthorize": "打开授权页",
+      "copyAuthorize": "复制授权链接",
+      "authorizeUrl": "授权链接",
+      "callbackInput": "回调结果或 JSON 凭据",
+      "callbackHint": "可粘贴浏览器回跳后的完整 URL、code#state，或包含 access_token / refresh_token / account_id 的 JSON。",
+      "complete": "完成绑定",
+      "refresh": "刷新令牌",
+      "disconnect": "断开绑定",
+      "startSuccess": "已生成账号态 OAuth 授权链接",
+      "startError": "生成账号态 OAuth 授权链接失败",
+      "copySuccess": "授权链接已复制",
+      "copyError": "复制授权链接失败",
+      "authInputRequired": "请先粘贴回调结果或 JSON 凭据",
+      "completeSuccess": "账号态 OAuth 绑定成功",
+      "completeError": "账号态 OAuth 绑定失败",
+      "refreshSuccess": "账号态 OAuth 刷新成功",
+      "refreshError": "账号态 OAuth 刷新失败",
+      "disconnectSuccess": "账号态 OAuth 已断开",
+      "disconnectError": "断开账号态 OAuth 失败",
+      "boundAs": "账号 {email}",
+      "expiresAtShort": "过期时间 {time}"
     }
   },
   "models": {
