@@ -538,7 +538,7 @@ class ProviderAnthropic(Provider):
                     if event.index in tool_use_buffer:
                         tool_info = tool_use_buffer[event.index]
                         try:
-                            if "input_json" in tool_info:
+                            if isinstance(tool_info.get("input_json"), str) and tool_info["input_json"]:
                                 tool_info["input"] = json.loads(tool_info["input_json"])
 
                             final_tool_calls.append(
