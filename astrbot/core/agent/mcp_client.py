@@ -22,6 +22,7 @@ from tenacity import (
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.utils.log_pipe import LogPipe
 
+from .mcp_oauth import create_mcp_http_auth, has_mcp_oauth_config
 from .run_context import TContext
 from .tool import FunctionTool
 
@@ -529,9 +530,12 @@ class MCPClient:
                 self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
-            success, error_msg = await _quick_test_mcp_connection(cfg)
-            if not success:
-                raise Exception(error_msg)
+            auth = await create_mcp_http_auth(cfg)
+
+            if not has_mcp_oauth_config(cfg):
+                success, error_msg = await _quick_test_mcp_connection(cfg)
+                if not success:
+                    raise Exception(error_msg)
 
             if "transport" in cfg:
                 transport_type = cfg["transport"]
@@ -551,9 +555,12 @@ class MCPClient:
 
             if transport_type != "streamable_http":
                 # SSE transport method
-                _http_client_kwargs["timeout"] = cfg.get("timeout", 5)
-                _http_client_kwargs["sse_read_timeout"] = cfg.get(
-                    "sse_read_timeout", 60 * 5
+                self._streams_context = sse_client(
+                    url=cfg["url"],
+                    headers=cfg.get("headers", {}),
+                    timeout=cfg.get("timeout", 5),
+                    sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
+                    auth=auth,
                 )
                 self._streams_context = sse_client(**_http_client_kwargs)
                 streams = await self.exit_stack.enter_async_context(
@@ -578,8 +585,13 @@ class MCPClient:
                 _http_client_kwargs["sse_read_timeout"] = timedelta(
                     seconds=cfg.get("sse_read_timeout", 60 * 5),
                 )
-                _http_client_kwargs["terminate_on_close"] = cfg.get(
-                    "terminate_on_close", True
+                self._streams_context = streamablehttp_client(
+                    url=cfg["url"],
+                    headers=cfg.get("headers", {}),
+                    timeout=timeout,
+                    sse_read_timeout=sse_read_timeout,
+                    terminate_on_close=cfg.get("terminate_on_close", True),
+                    auth=auth,
                 )
                 self._streams_context = streamablehttp_client(**_http_client_kwargs)
                 read_s, write_s, _ = await self.exit_stack.enter_async_context(

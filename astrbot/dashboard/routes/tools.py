@@ -4,7 +4,8 @@ from typing import Any
 from quart import request
 
 from astrbot.core import logger
-from astrbot.core.agent.mcp_client import MCPTool
+from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
+from astrbot.core.agent.mcp_oauth import MCPOAuthAuthorizationRequiredError
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 
@@ -50,19 +51,19 @@ class ToolsRoute(Route):
             "/tools/mcp/update": ("POST", self.update_mcp_server),
             "/tools/mcp/delete": ("POST", self.delete_mcp_server),
             "/tools/mcp/test": ("POST", self.test_mcp_connection),
-            "/tools/mcp/providers/mcprouter/list-servers": (
-                "POST",
-                self.list_mcprouter_servers,
-            ),
+            "/tools/mcp/oauth/start": ("POST", self.start_mcp_oauth_authorization),
+            "/tools/mcp/oauth/status": ("GET", self.get_mcp_oauth_status),
             "/tools/list": ("GET", self.get_tool_list),
             "/tools/toggle-tool": ("POST", self.toggle_tool),
             "/tools/mcp/sync-provider": ("POST", self.sync_provider),
         }
         self.register_routes()
-        provider_mgr = self.core_lifecycle.provider_manager
-        if provider_mgr is None:
-            raise RuntimeError("Provider manager not initialized")
-        self.tool_mgr = provider_mgr.llm_tools
+        self.tool_mgr = self.core_lifecycle.provider_manager.llm_tools
+        self.app.add_url_rule(
+            "/mcp/oauth/callback",
+            view_func=self.handle_mcp_oauth_callback,
+            methods=["GET"],
+        )
 
     def _rollback_mcp_server(self, name: str) -> bool:
         try:
@@ -98,6 +99,12 @@ class ToolsRoute(Route):
                 for key, value in server_config.items():
                     if key != "active":
                         server_info[key] = value
+
+                server_info.update(
+                    await self.tool_mgr.get_mcp_oauth_state(server_config)
+                )
+
+                # 如果 MCP 客户端已初始化，从客户端获取工具名称
                 for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
                     if name_key == name:
                         mcp_client = runtime.client
@@ -121,7 +128,15 @@ class ToolsRoute(Route):
             has_valid_config = False
             server_config = {"active": server_data.get("active", True)}
             for key, value in server_data.items():
-                if key not in ["name", "active", "tools", "errlogs"]:
+                if key not in [
+                    "name",
+                    "active",
+                    "tools",
+                    "errlogs",
+                    "oauth2_enabled",
+                    "oauth2_authorized",
+                    "oauth2_grant_type",
+                ]:  # 排除特殊字段
                     if key == "mcpServers":
                         try:
                             server_config = _extract_mcp_server_config(
@@ -143,6 +158,8 @@ class ToolsRoute(Route):
                 return Response().error(f"Server {name} already exists").to_json()
             try:
                 await self.tool_mgr.test_mcp_server_connection(server_config)
+            except MCPOAuthAuthorizationRequiredError as e:
+                return Response().error(f"{e!s}").__dict__
             except Exception as e:
                 logger.error(traceback.format_exc())
                 return Response().error(f"MCP connection test failed: {e!s}").to_json()
@@ -154,6 +171,12 @@ class ToolsRoute(Route):
                         server_config,
                         timeout=30,
                     )
+                except MCPOAuthAuthorizationRequiredError as e:
+                    rollback_ok = self._rollback_mcp_server(name)
+                    err_msg = f"{e!s}"
+                    if not rollback_ok:
+                        err_msg += " Configuration rollback failed. Please check the config manually."
+                    return Response().error(err_msg).__dict__
                 except TimeoutError:
                     rollback_ok = self._rollback_mcp_server(name)
                     err_msg = f"Timed out while enabling MCP server {name}."
@@ -199,7 +222,16 @@ class ToolsRoute(Route):
             server_config = {"active": active}
             only_update_active = True
             for key, value in server_data.items():
-                if key not in ["name", "active", "tools", "errlogs", "oldName"]:
+                if key not in [
+                    "name",
+                    "active",
+                    "tools",
+                    "errlogs",
+                    "oldName",
+                    "oauth2_enabled",
+                    "oauth2_authorized",
+                    "oauth2_grant_type",
+                ]:  # 排除特殊字段
                     if key == "mcpServers":
                         try:
                             server_config = _extract_mcp_server_config(
@@ -212,7 +244,7 @@ class ToolsRoute(Route):
                     only_update_active = False
             if only_update_active and isinstance(old_config, dict):
                 for key, value in old_config.items():
-                    if key != "active":
+                    if key != "active":  # 除了 active 之外的所有字段都保留
                         server_config[key] = value
             if is_rename:
                 config["mcpServers"].pop(old_name)
@@ -220,6 +252,7 @@ class ToolsRoute(Route):
             else:
                 config["mcpServers"][name] = server_config
             if self.tool_mgr.save_mcp_config(config):
+                # 处理 MCP 客户端状态变化
                 if active:
                     if (
                         old_name in self.tool_mgr.mcp_server_runtime_view
@@ -254,6 +287,8 @@ class ToolsRoute(Route):
                             config["mcpServers"][name],
                             timeout=30,
                         )
+                    except MCPOAuthAuthorizationRequiredError as e:
+                        return Response().error(f"{e!s}").__dict__
                     except TimeoutError:
                         return (
                             Response()
@@ -369,9 +404,114 @@ class ToolsRoute(Route):
                 .ok(data=tools_name, message="🎉 MCP server is available!")
                 .to_json()
             )
+        except MCPOAuthAuthorizationRequiredError as e:
+            return Response().error(f"{e!s}").__dict__
+
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"Failed to test MCP connection: {e!s}").to_json()
+
+    async def start_mcp_oauth_authorization(self):
+        try:
+            name = request.args.get("name")
+            payload = await request.json
+            if not isinstance(payload, dict):
+                return Response().error("Invalid JSON body: expected object").__dict__
+
+            config = payload.get("mcp_server_config")
+            if not isinstance(config, dict) or not config:
+                return Response().error("Invalid MCP server configuration").__dict__
+
+            if "mcpServers" in config:
+                try:
+                    config = _extract_mcp_server_config(config["mcpServers"])
+                except ValueError as e:
+                    return Response().error(f"{e!s}").__dict__
+
+            # 优先使用配置中的对外可达的回调接口地址
+            callback_api_base = self.config.get("callback_api_base")
+            callback_base_url = (
+                callback_api_base
+                or payload.get("callback_base_url")
+                or request.url_root.rstrip("/")
+            )
+
+            flow_status = await self.tool_mgr.start_mcp_oauth_authorization(
+                config,
+                callback_base_url=callback_base_url,
+                server_name=name,
+                force=bool(payload.get("force", False)),
+            )
+            return (
+                Response()
+                .ok(
+                    data=flow_status,
+                    message="OAuth 2.0 authorization flow is ready.",
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return (
+                Response()
+                .error(f"Failed to start MCP OAuth authorization: {e!s}")
+                .__dict__
+            )
+
+    async def get_mcp_oauth_status(self):
+        try:
+            flow_id = request.args.get("flow_id", "").strip()
+            if not flow_id:
+                return Response().error("Missing required parameter: flow_id").__dict__
+
+            flow_status = self.tool_mgr.get_mcp_oauth_flow_status(flow_id)
+            return Response().ok(data=flow_status).__dict__
+        except KeyError:
+            return Response().error("OAuth flow not found or expired").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"Failed to get MCP OAuth status: {e!s}").__dict__
+
+    async def handle_mcp_oauth_callback(self):
+        error = request.args.get("error")
+        error_description = request.args.get("error_description")
+        if error_description:
+            error = f"{error or 'oauth_error'}: {error_description}"
+
+        state = request.args.get("state")
+        try:
+            await self.tool_mgr.submit_mcp_oauth_callback(
+                None,
+                code=request.args.get("code"),
+                state=state,
+                error=error,
+            )
+        except KeyError:
+            return (
+                "<html><body><h3>OAuth flow not found or expired.</h3></body></html>",
+                404,
+                {"Content-Type": "text/html; charset=utf-8"},
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return (
+                f"<html><body><h3>OAuth callback failed: {e!s}</h3></body></html>",
+                500,
+                {"Content-Type": "text/html; charset=utf-8"},
+            )
+
+        html = """
+<html>
+  <body style="font-family: sans-serif; padding: 24px;">
+    <h3>OAuth authorization completed.</h3>
+    <p>You can return to AstrBot and wait for the status to update.</p>
+    <script>
+      window.close();
+    </script>
+  </body>
+</html>
+"""
+        return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
     async def get_tool_list(self):
         """Get all registered tools."""
