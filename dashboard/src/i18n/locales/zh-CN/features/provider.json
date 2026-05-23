@@ -21,6 +21,8 @@
     },
     "description": {
       "openai": "也支持所有兼容 OpenAI API 的模型提供商。",
+      "deepseek": "DeepSeek 官方 OpenAI 兼容模板，默认端点为 https://api.deepseek.com，适合常规聊天与工具调用接入。",
+      "deepseek_anthropic": "DeepSeek 官方 Anthropic 兼容模板，默认端点为 https://api.deepseek.com/anthropic，推荐用于接入 DeepSeek V4 系列。",
       "kimi_code": "Kimi 的 CodingPlan / Kimi Code 专用接入，使用特殊的 Anthropic API 兼容适配。",
       "vllm_rerank": "也支持 Jina AI, Cohere, PPIO 等提供商。",
       "default": ""
@@ -118,6 +120,35 @@
       "key": "API 密钥",
       "apiBase": "自定义 API 端点 URL",
       "proxy": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。"
+    },
+    "deepseekOpenAIActiveNote": "当前模板使用 DeepSeek 官方 OpenAI 兼容入口：https://api.deepseek.com。请填写 DeepSeek API Key；通常不需要额外追加 /v1，也无需自定义请求头。若要走 Anthropic 兼容协议，请改用 DeepSeek Anthropic 模板。",
+    "deepseekOpenAI": {
+      "labels": {
+        "apiBase": "DeepSeek API Base URL"
+      },
+      "hints": {
+        "id": "提供商源唯一 ID。建议保持 deepseek；如果你需要并行接入多个 DeepSeek 网关，再改成更明确的名字。",
+        "key": "请填写 DeepSeek API Key。支持添加多个 key，用于轮换或不同环境。",
+        "apiBase": "DeepSeek 官方 OpenAI 兼容入口。默认填写 https://api.deepseek.com，AstrBot 会基于该地址访问兼容 API，通常不需要手动追加 /v1。",
+        "customHeaders": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中。直连 DeepSeek 官方接口通常无需填写；仅在反向代理、API 网关或鉴权链路要求额外请求头时再添加，值必须为字符串。"
+      }
+    },
+    "deepseekAnthropicNote": "如需使用 Anthropic 兼容协议，请改用 DeepSeek Anthropic 模板，端点为 https://api.deepseek.com/anthropic。",
+    "deepseekAnthropicActiveNote": "当前模板使用 DeepSeek 的 Anthropic 兼容入口：https://api.deepseek.com/anthropic。请填写 DeepSeek API Key；DeepSeek 思考默认开启，output_config.effort 支持 high / max，low / medium 会兼容映射到 high，budget_tokens 会被忽略。",
+    "deepseekAnthropic": {
+      "labels": {
+        "apiBase": "Anthropic API Base URL",
+        "thinkingConfig": "DeepSeek 思考配置"
+      },
+      "hints": {
+        "id": "提供商源唯一 ID。建议保持 deepseek-anthropic，便于与标准 DeepSeek OpenAI 入口区分。",
+        "key": "请填写 DeepSeek API Key，而不是 Anthropic Console 的密钥。",
+        "apiBase": "DeepSeek 的 Anthropic 兼容入口。默认填写 https://api.deepseek.com/anthropic，通常不需要额外追加 /v1。",
+        "customHeaders": "此处添加的键值对将被合并到 Anthropic SDK 的 default_headers 中。直连 DeepSeek 官方接口通常无需填写；仅在反向代理或网关要求额外请求头时再添加，值必须为字符串。",
+        "thinkingType": "设为 'adaptive' 可显式发送思考开关并启用思考深度控制；留空时 DeepSeek 仍默认开启思考。",
+        "thinkingBudget": "DeepSeek Anthropic 会忽略 thinking.budget_tokens。这个字段仅用于兼容 Anthropic 生态中的客户端输入，不会精确控制预算。",
+        "thinkingEffort": "当思考类型为 'adaptive' 时，会映射到 output_config.effort。DeepSeek V4 支持 high / max；low / medium 会兼容映射到 high。"
+      }
     },
     "labels": {
       "proxy": "代理地址"

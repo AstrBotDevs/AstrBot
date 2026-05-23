@@ -52,7 +52,19 @@
             />
           </div>
 
-          <div class="provider-workbench__divider"></div>
+            <v-col cols="12" md="8" lg="9" class="provider-workbench__settings">
+              <v-card class="provider-config-card provider-settings-panel h-100" elevation="0">
+                <div v-if="selectedProviderSource" class="provider-config-header">
+                  <div class="provider-config-headline">
+                    <div class="provider-config-kicker">{{ tm('providers.settings') }}</div>
+                    <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
+                    <div class="provider-config-subtitle">
+                      {{ selectedProviderSource.api_base || 'N/A' }}
+                    </div>
+                    <div v-if="deepseekSourceNote" class="provider-config-note">
+                      {{ deepseekSourceNote }}
+                    </div>
+                  </div>
 
           <div class="provider-workbench__main">
             <div v-if="selectedProviderSource" class="provider-config-shell">
@@ -324,12 +336,8 @@
         :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')"
       >
         <v-card-text class="py-4">
-          <AstrBotConfig
-            :iterable="newSelectedProviderConfig"
-            :metadata="configSchema"
-            metadataKey="provider"
-            :is-editing="updatingMode"
-          />
+          <AstrBotConfig :iterable="newSelectedProviderConfig" :metadata="newProviderSourceSchema"
+            metadataKey="provider" :is-editing="updatingMode" />
         </v-card-text>
 
         <v-divider></v-divider>
@@ -416,8 +424,7 @@ import ItemCard from '@/components/shared/ItemCard.vue'
 import AddNewProvider from '@/components/provider/AddNewProvider.vue'
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
-import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog'
-import { useProviderSources } from '@/composables/useProviderSources'
+import { buildProviderSourceSchema, isDeepSeekOpenAISource, useProviderSources } from '@/composables/useProviderSources'
 import { getProviderIcon } from '@/utils/providerUtils'
 
 const props = defineProps({
@@ -663,6 +670,29 @@ async function disconnectOpenAIOAuth() {
     openaiOauthLoading.value.disconnect = false
   }
 }
+
+const deepseekSourceNote = computed(() => {
+  const source = selectedProviderSource.value
+  if (!source || source.provider !== 'deepseek') {
+    return ''
+  }
+
+  if (isDeepSeekOpenAISource(source)) {
+    return tm('providerSources.deepseekOpenAIActiveNote')
+  }
+
+  return source.type === 'anthropic_chat_completion'
+    ? tm('providerSources.deepseekAnthropicActiveNote')
+    : ''
+})
+
+const newProviderSourceSchema = computed(() => {
+  return buildProviderSourceSchema(
+    configSchema.value,
+    tm,
+    newSelectedProviderConfig.value
+  )
+})
 
 function openProviderEdit(provider) {
   providerEditData.value = JSON.parse(JSON.stringify(provider))
@@ -1033,6 +1063,13 @@ function goToConfigPage() {
   font-size: 13px;
   line-height: 1.6;
   overflow-wrap: anywhere;
+}
+
+.provider-config-note {
+  margin-top: 6px;
+  color: var(--provider-subtle);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .provider-config-actions {
