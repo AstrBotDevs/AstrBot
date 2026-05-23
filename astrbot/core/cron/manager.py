@@ -15,6 +15,7 @@ from astrbot import logger
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 
 if TYPE_CHECKING:
@@ -345,9 +346,148 @@ class CronJobManager:
         logger.debug(
             f"Cron job {extras.get('cron_job', {}).get('id')} dispatched to pipeline (hooks triggered)."
         )
-        # 原始的_woke_main_agent 手动调用 persist_agent_history()
-        # PipelineScheduler 的 internal.py 自动调用 _save_to_history()
-        # 功能完整保留，且更简洁
+        config = MainAgentBuildConfig(
+            tool_call_timeout=tool_call_timeout,
+            llm_safety_mode=False,
+            streaming_response=False,
+        )
+        req = ProviderRequest()
+        conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
+        req.conversation = conv
+        # finetine the messages
+        context = json.loads(conv.history)
+        if context:
+            req.contexts = context
+            context_dump = req._print_friendly_context()
+            req.contexts = []
+            req.system_prompt += (
+                "\n\nBellow is you and user previous conversation history:\n"
+                f"---\n"
+                f"{context_dump}\n"
+                f"---\n"
+            )
+        cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
+        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
+            cron_job=cron_job_str
+        )
+        req.prompt = (
+            "You are now responding to a scheduled task. "
+            "Proceed according to your system instructions. "
+            "Output using same language as previous conversation. "
+            "After completing your task, summarize and output your actions and results."
+        )
+        if not req.func_tool:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(
+            self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
+        )
+
+        result = await build_main_agent(
+            event=cron_event, plugin_context=self.ctx, config=config, req=req
+        )
+        if not result:
+            logger.error("Failed to build main agent for cron job.")
+            return
+
+        runner = result.agent_runner
+        async for _ in runner.step_until_done(30):
+            # agent will send message to user via using tools
+            pass
+        llm_resp = runner.get_final_llm_resp()
+        cron_meta = extras.get("cron_job", {}) if extras else {}
+        summary_note = (
+            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
+            f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
+        )
+        if llm_resp and llm_resp.role == "assistant":
+            summary_note += (
+                f"I finished this job, here is the result: {llm_resp.completion_text}"
+            )
+
+        await persist_agent_history(
+            self.ctx.conversation_manager,
+            event=cron_event,
+            req=req,
+            summary_note=summary_note,
+        )
+        await self._send_active_agent_fallback_if_needed(
+            session=session,
+            req=req,
+            llm_resp=llm_resp,
+            cron_meta=cron_meta,
+        )
+        if not llm_resp:
+            logger.warning("Cron job agent got no response")
+            return
+
+    async def _send_active_agent_fallback_if_needed(
+        self,
+        *,
+        session: MessageSession,
+        req: ProviderRequest,
+        llm_resp,
+        cron_meta: dict,
+    ) -> bool:
+        if self._agent_sent_message_to_user(req):
+            logger.info(
+                "cron active agent fallback skipped agent_sent=True session=%s job_id=%s",
+                session,
+                cron_meta.get("id"),
+            )
+            return False
+
+        text = str(getattr(llm_resp, "completion_text", "") or "").strip()
+        if not llm_resp or getattr(llm_resp, "role", "") != "assistant" or not text:
+            logger.warning(
+                "cron active agent fallback skipped no assistant text session=%s job_id=%s",
+                session,
+                cron_meta.get("id"),
+            )
+            return False
+
+        logger.info(
+            "cron active agent fallback send start session=%s job_id=%s",
+            session,
+            cron_meta.get("id"),
+        )
+        try:
+            ok = await self.ctx.send_message(session, MessageChain().message(text))
+            logger.info(
+                "cron active agent fallback send done ok=%s session=%s job_id=%s",
+                ok,
+                session,
+                cron_meta.get("id"),
+            )
+            return bool(ok)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "cron active agent fallback send exception session=%s job_id=%s err=%r",
+                session,
+                cron_meta.get("id"),
+                e,
+                exc_info=True,
+            )
+            raise
+
+    @staticmethod
+    def _agent_sent_message_to_user(req: ProviderRequest) -> bool:
+        results = getattr(req, "tool_calls_result", None)
+        if not results:
+            return False
+        if not isinstance(results, list):
+            results = [results]
+
+        for result in results:
+            call_results = getattr(result, "tool_calls_result", None) or []
+            for call_result in call_results:
+                content = getattr(call_result, "content", "")
+                if isinstance(content, list):
+                    content = " ".join(
+                        str(getattr(part, "text", part)) for part in content
+                    )
+                if "Message sent to session" in str(content):
+                    return True
+        return False
 
 
 __all__ = ["CronJobManager"]
