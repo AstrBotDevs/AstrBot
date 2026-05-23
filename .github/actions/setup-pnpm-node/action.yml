@@ -1,0 +1,36 @@
+name: Setup pnpm and Node.js
+description: Install pnpm and configure Node.js with pnpm cache.
+
+inputs:
+  pnpm-version:
+    description: pnpm version to install.
+    required: true
+  node-version:
+    description: Node.js version to install.
+    required: true
+  cache-dependency-path:
+    description: Optional pnpm lockfile path for setup-node cache.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v6.0.3
+      with:
+        version: ${{ inputs.pnpm-version }}
+
+    - name: Setup Node.js with pnpm cache
+      if: ${{ inputs.cache-dependency-path != '' }}
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}
+
+    - name: Setup Node.js
+      if: ${{ inputs.cache-dependency-path == '' }}
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
