@@ -100,6 +100,9 @@ class BaseMessageComponent(BaseModel):
         # 默认情况下,回退到旧的同步 toDict()
         return self.toDict()
 
+    def empty(self) -> bool:
+        return True
+
 
 class Plain(BaseMessageComponent):
     type: ComponentType = ComponentType.Plain
@@ -114,6 +117,9 @@ class Plain(BaseMessageComponent):
     async def to_dict(self) -> dict:
         return {"type": "text", "data": {"text": self.text}}
 
+    def empty(self) -> bool:
+        return not bool(self.text and self.text.strip())
+
 
 class Face(BaseMessageComponent):
     type: ComponentType = ComponentType.Face
@@ -121,6 +127,9 @@ class Face(BaseMessageComponent):
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
+
+    def empty(self) -> bool:
+        return self.id is None
 
 
 class Record(BaseMessageComponent):
@@ -138,6 +147,9 @@ class Record(BaseMessageComponent):
                 pass
                 # Protocol.warn(f"go-cqhttp doesn't support send {self.type} by {k}")
         super().__init__(file=file, **_)
+
+    def empty(self) -> bool:
+        return not bool(self.file)
 
     @staticmethod
     def fromFileSystem(path, **_):
@@ -261,6 +273,9 @@ class Video(BaseMessageComponent):
     def __init__(self, file: str, **_) -> None:
         super().__init__(file=file, **_)
 
+    def empty(self) -> bool:
+        return not bool(self.file)
+
     @staticmethod
     def fromFileSystem(path, **_):
         return Video(file=f"file:///{os.path.abspath(path)}", path=path, **_)
@@ -345,6 +360,9 @@ class At(BaseMessageComponent):
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
+    def empty(self) -> bool:
+        return not (bool(self.qq) or bool(self.name))
+
     def toDict(self):
         return {
             "type": "at",
@@ -365,6 +383,9 @@ class RPS(BaseMessageComponent):  # TODO
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
+    def empty(self) -> bool:
+        return False
+
 
 class Dice(BaseMessageComponent):  # TODO
     type: ComponentType = ComponentType.Dice
@@ -372,12 +393,18 @@ class Dice(BaseMessageComponent):  # TODO
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
+    def empty(self) -> bool:
+        return False
+
 
 class Shake(BaseMessageComponent):  # TODO
     type: ComponentType = ComponentType.Shake
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
+
+    def empty(self) -> bool:
+        return False
 
 
 class Share(BaseMessageComponent):
@@ -390,6 +417,9 @@ class Share(BaseMessageComponent):
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
+    def empty(self) -> bool:
+        return not (bool(self.url) or bool(self.title))
+
 
 class Contact(BaseMessageComponent):  # TODO
     type: ComponentType = ComponentType.Contact
@@ -398,6 +428,9 @@ class Contact(BaseMessageComponent):  # TODO
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
+
+    def empty(self) -> bool:
+        return not bool(self._type and self.id)
 
 
 class Location(BaseMessageComponent):  # TODO
@@ -409,6 +442,9 @@ class Location(BaseMessageComponent):  # TODO
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
+
+    def empty(self) -> bool:
+        return not bool(self.lat is not None and self.lon is not None)
 
 
 class Music(BaseMessageComponent):
@@ -427,6 +463,12 @@ class Music(BaseMessageComponent):
         #         logger.warn(f"Protocol: {k}={_[k]} doesn't match values")
         super().__init__(**_)
 
+    def empty(self) -> bool:
+        return not (
+            (self.id and self._type and self._type != "custom")
+            or (self._type == "custom" and self.url and self.audio and self.title)
+        )
+
 
 class Image(BaseMessageComponent):
     type: ComponentType = ComponentType.Image
@@ -438,6 +480,9 @@ class Image(BaseMessageComponent):
 
     def __init__(self, file: str | None, **_) -> None:
         super().__init__(file=file, **_)
+
+    def empty(self) -> bool:
+        return not bool(self.file)
 
     @staticmethod
     def fromURL(url: str, **_):
@@ -564,12 +609,8 @@ class Reply(BaseMessageComponent):
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
-    async def to_dict(self) -> dict:
-        chain = self.chain if self.chain is not None else []
-        return {
-            "type": self.type.lower(),
-            "data": {"id": self.id, "chain": [await comp.to_dict() for comp in chain]},
-        }
+    def empty(self) -> bool:
+        return not (bool(self.id) and self.sender_id is not None)
 
 
 class Poke(BaseMessageComponent):
@@ -597,6 +638,9 @@ class Poke(BaseMessageComponent):
                 return text
         return None
 
+    def empty(self) -> bool:
+        return self.target_id() is None
+
     def toDict(self):
         target_id = self.target_id()
         data = {"type": str(self._type or "126")}
@@ -611,6 +655,9 @@ class Forward(BaseMessageComponent):
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
+
+    def empty(self) -> bool:
+        return not bool(self.id)
 
 
 class Node(BaseMessageComponent):
@@ -629,6 +676,9 @@ class Node(BaseMessageComponent):
             # back
             content = [content]
         super().__init__(content=content, **_)
+
+    def empty(self) -> bool:
+        return not bool(self.content)
 
     async def to_dict(self):
         data_content = []
@@ -673,6 +723,9 @@ class Nodes(BaseMessageComponent):
 
     def __init__(self, nodes: list[Node], **_) -> None:
         super().__init__(nodes=nodes, **_)
+
+    def empty(self) -> bool:
+        return not bool(self.nodes)
 
     def toDict(self):
         """Deprecated. Use to_dict instead"""
@@ -721,10 +774,16 @@ class Json(BaseMessageComponent):
             "data": self.data,
         }
 
+    def empty(self) -> bool:
+        return not bool(self.data)
+
 
 class Unknown(BaseMessageComponent):
     type: ComponentType = ComponentType.Unknown
     text: str
+
+    def empty(self) -> bool:
+        return not bool(self.text and self.text.strip())
 
 
 class File(BaseMessageComponent):
@@ -738,6 +797,9 @@ class File(BaseMessageComponent):
     def __init__(self, name: str, file: str = "", url: str = "") -> None:
         """文件消息段｡"""
         super().__init__(name=name, file_=file, url=url)
+
+    def empty(self) -> bool:
+        return not bool(self.file_ or self.url)
 
     @property
     def file(self) -> str:

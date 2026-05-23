@@ -10,7 +10,6 @@ import discord
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
-    BaseMessageComponent,
     File,
     Image,
     Plain,
@@ -20,13 +19,6 @@ from astrbot.api.platform import AstrBotMessage, At, PlatformMetadata
 
 from .client import DiscordBotClient
 from .components import DiscordEmbed, DiscordView
-
-
-class DiscordViewComponent(BaseMessageComponent):
-    type: str = "discord_view"
-
-    def __init__(self, view: discord.ui.View) -> None:
-        self.view = view
 
 
 class DiscordPlatformEvent(AstrMessageEvent):
@@ -229,11 +221,11 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 embeds.append(i.to_discord_embed())
             elif isinstance(i, DiscordView):
                 view = i.to_discord_view()
-            elif isinstance(i, DiscordViewComponent):
-                if isinstance(i.view, discord.ui.View):
-                    view = i.view
             else:
-                logger.debug(f"[Discord] 忽略了不支持的消息组件: {i.type}")
+                logger.debug(
+                    f"[Discord] 忽略了不支持的消息组件: {getattr(i, 'type', None)}"
+                )
+
         content = "".join(content_parts)
         if len(content) > 2000:
             logger.warning("[Discord] 消息内容超过2000字符,将被截断｡")

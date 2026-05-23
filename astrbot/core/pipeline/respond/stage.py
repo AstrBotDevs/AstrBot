@@ -16,41 +16,6 @@ from astrbot.core.utils.path_util import path_Mapping
 
 @register_stage
 class RespondStage(Stage):
-    # 组件类型到其非空判断函数的映射
-    _component_validators = {
-        Comp.Plain: lambda comp: bool(
-            comp.text and comp.text.strip(),
-        ),  # 纯文本消息需要strip
-        Comp.Face: lambda comp: comp.id is not None,  # QQ表情
-        Comp.Record: lambda comp: bool(comp.file),  # 语音
-        Comp.Video: lambda comp: bool(comp.file),  # 视频
-        Comp.At: lambda comp: bool(comp.qq) or bool(comp.name),  # @
-        Comp.Image: lambda comp: bool(comp.file),  # 图片
-        Comp.Reply: lambda comp: bool(comp.id) and comp.sender_id is not None,  # 回复
-        Comp.Poke: lambda comp: comp.target_id() is not None,  # 戳一戳
-        Comp.Node: lambda comp: bool(comp.content),  # 转发节点
-        Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
-        Comp.File: lambda comp: bool(comp.file_ or comp.url),
-        Comp.Json: lambda comp: bool(comp.data),  # Json 卡片
-        Comp.Share: lambda comp: bool(comp.url) or bool(comp.title),
-        Comp.Music: lambda comp: (
-            (comp.id and comp._type and comp._type != "custom")
-            or (comp._type == "custom" and comp.url and comp.audio and comp.title)
-        ),  # 音乐分享
-        Comp.Forward: lambda comp: bool(comp.id),  # 合并转发
-        Comp.Location: lambda comp: bool(
-            comp.lat is not None and comp.lon is not None,
-        ),  # 位置
-        Comp.Contact: lambda comp: bool(comp._type and comp.id),  # 推荐好友 or 群
-        Comp.Shake: lambda _: True,  # 窗口抖动（戳一戳）
-        Comp.Dice: lambda _: True,  # 掷骰子魔法表情
-        Comp.RPS: lambda _: True,  # 猜拳魔法表情
-        Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
-        # QQ 官方平台按钮（Keyboard）
-        QQCButton: lambda comp: bool(comp.id),
-        QQCKeyboard: lambda comp: bool(comp.rows),
-    }
-
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.config = ctx.astrbot_config
@@ -160,7 +125,7 @@ class RespondStage(Stage):
             return True
 
         for comp in chain:
-            if self._has_meaningful_content(comp):
+            if not comp.empty():
                 return False
 
         # 如果所有组件都为空
