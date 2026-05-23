@@ -30,6 +30,7 @@ class MessageChain:
     use_markdown_: bool | None = (
         None  # 是否使用 Markdown 发送消息。None 跟随平台默认，True 强制 Markdown，False 强制纯文本。
     )
+    use_remote_image_url_: bool = False
     type: str | None = None
     """消息链承载的消息的类型｡可选,用于让消息平台区分不同业务场景的消息链｡"""
 
@@ -43,6 +44,7 @@ class MessageChain:
         new = MessageChain(chain=chain if chain is not None else [])
         new.use_t2i_ = self.use_t2i_
         new.use_markdown_ = self.use_markdown_
+        new.use_remote_image_url_ = self.use_remote_image_url_
         new.type = self.type
         return new
 
@@ -144,6 +146,11 @@ class MessageChain:
 
         """
         self.use_markdown_ = use
+        return self
+
+    def use_remote_image_url(self, use: bool = True):
+        """让支持的平台直接发送远程图片 URL。"""
+        self.use_remote_image_url_ = use
         return self
 
     def get_plain_text(self, with_other_comps_mark: bool = False) -> str:

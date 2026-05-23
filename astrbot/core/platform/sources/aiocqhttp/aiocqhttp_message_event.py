@@ -1,7 +1,5 @@
 import asyncio
-import base64
-import copy
-import hashlib
+import pathlib
 import re
 import uuid
 from collections.abc import AsyncGenerator
@@ -43,166 +41,29 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         self.bot = bot
 
     @staticmethod
-    def _is_local_file_path(file_str: str) -> bool:
-        """判断是否为本地文件路径(非 base64/URL)"""
-        if not file_str:
-            return False
-        # base64 编码
-        if file_str.startswith("base64://"):
-            return False
-        # 远程 URL
-        if file_str.startswith(("http://", "https://")):
-            return False
-        # 包含协议头但不是以上几种,如 file://,仍视为本地
-        if "://" in file_str:
-            # file:// 开头认为是本地
-            return file_str.startswith("file://")
-        # 无协议头,视为本地路径
-        return True
-
-    @classmethod
-    async def _send_with_stream_retry(
-        cls,
-        bot: CQHttp,
-        message_chain: MessageChain,
-        event: Event | None,
-        is_group: bool,
-        session_id: str | None,
-    ) -> bool:
-        """尝试普通发送,若失败且消息中包含本地文件,则尝试通过流式上传重发｡
-        返回 True 表示发送成功(含重试成功),False 表示失败且无需继续｡
-        抛出异常表示需要上层处理(如取消任务等)｡
-        """
-        # 构造新消息链,避免修改原始对象
-        new_chain = MessageChain([])
-        modified = False
-        for seg in message_chain.chain:
-            new_seg = copy.copy(seg)  # 浅拷贝,确保独立
-            if isinstance(new_seg, (Image, Record, File, Video)):
-                file_val = getattr(new_seg, "file", None)
-                if file_val and cls._is_local_file_path(file_val):
-                    try:
-                        logger.debug(f"文件上传失败,尝试 NapCat 流式传输: {file_val}")
-                        new_path = await cls._upload_file_via_stream(bot, file_val)
-                        new_seg.file = new_path
-                        modified = True
-                    except Exception as upload_err:
-                        raise RuntimeError(
-                            f"NapCat 文件流式上传失败: {upload_err}",
-                        ) from upload_err
-            new_chain.chain.append(new_seg)
-        if not modified:
-            return False
-        ret = await cls._parse_onebot_json(new_chain)
-        if ret:
-            await cls._dispatch_send(bot, event, is_group, session_id, ret)
-            return True
-        return False
-
-    @classmethod
-    async def _upload_file_via_stream(cls, bot: CQHttp, file_path: str) -> str:
-        """使用 OneBot 流式上传接口上传文件,返回服务端文件路径"""
-        # 处理 file:// URI 协议头
-        if file_path.startswith("file://"):
-            parsed = urlparse(file_path)
-            path = parsed.path
-            if parsed.netloc and not path:
-                path = parsed.netloc
-            if path.startswith("/") and ":" in path:
-                path = path.lstrip("/")
-            file_path = path
-
-        path = Path(file_path)
-        if not await asyncio.to_thread(path.exists):
-            raise FileNotFoundError(f"文件不存在: {file_path}")
-
-        # 第一次遍历:计算文件总大小和 SHA256 哈希
-        def _read_all_and_hash():
-            hasher = hashlib.sha256()
-            total_size = 0
-            with open(path, "rb") as f:
-                while True:
-                    chunk = f.read(CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    hasher.update(chunk)
-                    total_size += len(chunk)
-            return hasher.hexdigest(), total_size
-
-        sha256_hash, total_size = await asyncio.to_thread(_read_all_and_hash)
-        total_chunks = (total_size + CHUNK_SIZE - 1) // CHUNK_SIZE
-
-        # 第二次遍历:逐块上传
-        stream_id = str(uuid.uuid4())
-
-        async def _read_chunk(file_pos: int) -> bytes:
-            def _read_chunk_sync(file_pos: int) -> bytes:
-                with open(path, "rb") as f:
-                    f.seek(file_pos)
-                    return f.read(CHUNK_SIZE)
-
-            return await asyncio.to_thread(_read_chunk_sync, file_pos)
-
-        for i in range(total_chunks):
-            chunk = await _read_chunk(i * CHUNK_SIZE)
-            if not chunk:
-                break
-            chunk_b64 = base64.b64encode(chunk).decode("utf-8")
-            params = {
-                "stream_id": stream_id,
-                "chunk_data": chunk_b64,
-                "chunk_index": i,
-                "total_chunks": total_chunks,
-                "file_size": total_size,
-                "expected_sha256": sha256_hash,
-                "filename": path.name,
-                "file_retention": FILE_RETENTION_MS,  # 单位为毫秒
-            }
-            resp = await bot.call_action("upload_file_stream", **params)
-            if not cls._is_upload_success_response(
-                resp,
-                expected_statuses=("chunk_received", "file_complete"),
-            ):
-                raise OSError(f"上传分片 {i} 失败: {resp}")
-
-        # 发送完成信号
-        complete_params = {"stream_id": stream_id, "is_complete": True}
-        resp = await bot.call_action("upload_file_stream", **complete_params)
-        if not cls._is_upload_success_response(
-            resp,
-            expected_statuses=("file_complete",),
-        ):
-            raise OSError(f"文件合并失败: {resp}")
-
-        # 提取最终文件路径
-        file_path_result = None
-        data = resp.get("data")
-        if data and isinstance(data, dict):
-            file_path_result = data.get("file_path")
-        if not file_path_result:
-            file_path_result = resp.get("file_path")
-        if not file_path_result:
-            raise ValueError(f"无法从响应中获取文件路径: {resp}")
-        return file_path_result
-
-    @classmethod
-    def _is_upload_success_response(cls, resp: dict, expected_statuses: tuple) -> bool:
-        """判断流式上传的响应是否为成功"""
-        # 标准 OneBot 响应
-        if resp.get("status") == "ok":
-            return True
-        # NapCat 流式响应
-        resp_type = resp.get("type", "").lower()
-        resp_status = resp.get("status", "")
-        if resp_type in ("stream", "response") and resp_status in expected_statuses:
-            return True
-        return False
+    def _remote_image_url(segment: Image, use_remote_image_url: bool) -> str | None:
+        if not use_remote_image_url:
+            return None
+        raw = segment.url or segment.file
+        if raw and raw.startswith(("http://", "https://")):
+            return raw
+        return None
 
     @staticmethod
-    async def _from_segment_to_dict(segment: BaseMessageComponent) -> dict:
-        """修复部分字段"""
+    async def _from_segment_to_dict(
+        segment: BaseMessageComponent,
+        use_remote_image_url: bool = False,
+    ) -> dict:
+        if isinstance(segment, Image):
+            remote_image_url = AiocqhttpMessageEvent._remote_image_url(
+                segment, use_remote_image_url
+            )
+            if remote_image_url is not None:
+                return {
+                    "type": "image",
+                    "data": {"file": remote_image_url},
+                }
         if isinstance(segment, Image | Record):
-            # For Image and Record segments, we convert them to base64
             bs64 = await segment.convert_to_base64()
             return {
                 "type": segment.type.lower(),
@@ -211,20 +72,14 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 },
             }
         if isinstance(segment, File):
-            # For File segments, we need to handle the file differently
             d = await segment.to_dict()
             file_val = d.get("data", {}).get("file", "")
             if file_val:
-                import pathlib
-
                 try:
-                    # 使用 pathlib 处理路径,能更好地处理 Windows/Linux 差异
                     path_obj = pathlib.Path(file_val)
-                    # 如果是绝对路径且不包含协议头 (://),则转换为标准的 file: URI
                     if path_obj.is_absolute() and "://" not in file_val:
                         d["data"]["file"] = path_obj.as_uri()
                 except Exception:
-                    # 如果不是合法路径(例如已经是特定的特殊字符串),则跳过转换
                     pass
             return d
         if isinstance(segment, Video):
@@ -237,19 +92,26 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
     async def _parse_onebot_json(message_chain: MessageChain):
         """解析成 OneBot json 格式"""
         ret = []
+        use_remote_image_url = message_chain.use_remote_image_url_
         for segment in message_chain.chain:
             if isinstance(segment, At):
-                # At 组件后插入一个空格,避免与后续文本粘连
-                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+                # At 组件后插入一个空格，避免与后续文本粘连
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(
+                    segment, use_remote_image_url=use_remote_image_url
+                )
                 ret.append(d)
                 ret.append({"type": "text", "data": {"text": " "}})
             elif isinstance(segment, Plain):
                 if not segment.text.strip():
                     continue
-                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(
+                    segment, use_remote_image_url=use_remote_image_url
+                )
                 ret.append(d)
             else:
-                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(
+                    segment, use_remote_image_url=use_remote_image_url
+                )
                 ret.append(d)
         return ret
 
@@ -375,7 +237,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         name=file_name,
                     )
             else:
-                messages = await cls._parse_onebot_json(MessageChain([seg]))
+                messages = await cls._parse_onebot_json(message_chain.derive([seg]))
                 if not messages:
                     continue
                 await cls._dispatch_send(bot, event, is_group, session_id, messages)
@@ -426,7 +288,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         if any(p in buffer for p in "｡?!~…"):
                             buffer = await self.process_buffer(buffer, pattern)
                     else:
-                        await self.send(MessageChain(chain=[comp]))
+                        await self.send(chain.derive([comp]))
                         await asyncio.sleep(1.5)  # 限速
 
         if buffer.strip():
