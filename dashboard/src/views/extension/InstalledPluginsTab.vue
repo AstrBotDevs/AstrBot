@@ -8,6 +8,13 @@ import {
 } from "./extensionPreferenceStorage.mjs";
 import { computed, ref, watch } from "vue";
 
+const handlePluginLogoError = (event) => {
+  const target = event?.target;
+  if (!target || target.dataset.fallbackApplied === "1") return;
+  target.dataset.fallbackApplied = "1";
+  target.src = defaultPluginIcon;
+};
+
 const props = defineProps({
   state: {
     type: Object,
@@ -370,10 +377,410 @@ const togglePin = togglePinnedExtension;
                 <div class="text-caption text-medium-emphasis">
                   {{ plugin.dir_name }}
                 </div>
-              </td>
-              <td style="max-width: 520px">
-                <div
-                  class="text-caption text-medium-emphasis"
+                <v-table density="compact">
+                  <thead>
+                    <tr>
+                      <th>{{ tm("failedPlugins.columns.plugin") }}</th>
+                      <th>{{ tm("failedPlugins.columns.error") }}</th>
+                      <th class="text-right">{{ tm("buttons.actions") }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="plugin in failedPluginItems" :key="plugin.dir_name">
+                      <td>
+                        <div class="font-weight-medium">
+                          {{ plugin.display_name }}
+                        </div>
+                        <div class="text-caption text-medium-emphasis">
+                          {{ plugin.dir_name }}
+                        </div>
+                      </td>
+                      <td style="max-width: 520px">
+                        <div
+                          class="text-caption text-medium-emphasis"
+                          style="
+                            display: -webkit-box;
+                            -webkit-line-clamp: 2;
+                            line-clamp: 2;
+                            -webkit-box-orient: vertical;
+                            overflow: hidden;
+                          "
+                        >
+                          {{ plugin.error || tm("status.unknown") }}
+                        </div>
+                      </td>
+                      <td class="text-right">
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="primary"
+                          class="mr-2"
+                          prepend-icon="mdi-refresh"
+                          @click="reloadFailedPlugin(plugin.dir_name)"
+                        >
+                          {{ tm("buttons.reload") }}
+                        </v-btn>
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="error"
+                          prepend-icon="mdi-delete"
+                          :disabled="plugin.reserved"
+                          @click="requestUninstallFailedPlugin(plugin.dir_name)"
+                        >
+                          {{ tm("buttons.uninstall") }}
+                        </v-btn>
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </v-card-text>
+            </v-card>
+
+            <v-fade-transition hide-on-leave>
+              <!-- 表格视图 -->
+              <div v-if="isListView">
+                <v-card class="rounded-lg overflow-hidden elevation-0">
+                  <v-data-table
+                    class="plugin-list-table"
+                    :headers="pluginHeaders"
+                    :items="filteredPlugins"
+                    :loading="loading_"
+                    item-key="name"
+                    hover
+                  >
+                    <template v-slot:loader>
+                      <v-row class="py-8 d-flex align-center justify-center">
+                        <v-progress-circular
+                          indeterminate
+                          color="primary"
+                        ></v-progress-circular>
+                        <span class="ml-2">{{ tm("status.loading") }}</span>
+                      </v-row>
+                    </template>
+
+                    <template v-slot:item.name="{ item }">
+                      <div class="d-flex align-center py-2">
+                        <div
+                          v-if="item.logo"
+                          class="mr-3"
+                          style="flex-shrink: 0"
+                        >
+                          <img
+                            :src="item.logo"
+                            :alt="item.name"
+                            @error="handlePluginLogoError"
+                            style="
+                              height: 40px;
+                              width: 40px;
+                              border-radius: 8px;
+                              object-fit: cover;
+                            "
+                          />
+                        </div>
+                        <div v-else class="mr-3" style="flex-shrink: 0">
+                          <img
+                            :src="defaultPluginIcon"
+                            :alt="item.name"
+                            style="
+                              height: 40px;
+                              width: 40px;
+                              border-radius: 8px;
+                              object-fit: cover;
+                            "
+                          />
+                        </div>
+                        <div>
+                          <div class="text-h5" style="font-family: inherit;">
+                            {{
+                              item.display_name && item.display_name.length
+                                ? item.display_name
+                                : item.name
+                            }}
+                          </div>
+                          <div
+                            v-if="item.display_name && item.display_name.length"
+                            class="text-caption text-medium-emphasis mt-1"
+                          >
+                            {{ item.name }}
+                          </div>
+                          <div
+                            v-if="item.reserved"
+                            class="d-flex align-center mt-1"
+                          >
+                            <v-chip
+                              color="primary"
+                              size="x-small"
+                              class="font-weight-medium"
+                              >{{ tm("status.system") }}</v-chip
+                            >
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+
+                    <template v-slot:item.desc="{ item }">
+                      <div class="py-2">
+                        <div
+                          class="text-body-2 text-medium-emphasis"
+                          style="
+                            display: -webkit-box;
+                            -webkit-line-clamp: 3;
+                            line-clamp: 3;
+                            -webkit-box-orient: vertical;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                          "
+                        >
+                          {{ item.desc }}
+                        </div>
+                        <div
+                          v-if="item.support_platforms?.length"
+                          class="d-flex align-center flex-wrap mt-2"
+                        >
+                          <span class="text-caption text-medium-emphasis mr-2">
+                            {{ tm("card.status.supportPlatform") }}:
+                          </span>
+                          <v-chip
+                            v-for="platformId in item.support_platforms"
+                            :key="platformId"
+                            size="x-small"
+                            color="info"
+                            variant="outlined"
+                            class="mr-1 mb-1"
+                          >
+                            {{ platformId }}
+                          </v-chip>
+                        </div>
+                        <div
+                          v-if="item.astrbot_version"
+                          class="d-flex align-center flex-wrap mt-1"
+                        >
+                          <span class="text-caption text-medium-emphasis mr-2">
+                            {{ tm("card.status.astrbotVersion") }}:
+                          </span>
+                          <v-chip
+                            size="x-small"
+                            color="secondary"
+                            variant="outlined"
+                            class="mr-1 mb-1"
+                          >
+                            {{ item.astrbot_version }}
+                          </v-chip>
+                        </div>
+                      </div>
+                    </template>
+
+                    <template v-slot:item.version="{ item }">
+                      <div class="d-flex align-center">
+                        <span class="text-body-2">{{ item.version }}</span>
+                        <v-tooltip v-if="item.has_update" location="top">
+                          <template v-slot:activator="{ props: tooltipProps }">
+                            <v-icon
+                              v-bind="tooltipProps"
+                              color="warning"
+                              size="small"
+                              class="ml-1"
+                              style="cursor: pointer"
+                              @click.stop="updateExtension(item.name)"
+                              >mdi-alert</v-icon
+                            >
+                          </template>
+                          <span
+                            >{{ tm("messages.hasUpdate") }}
+                            {{ item.online_version }}</span
+                          >
+                        </v-tooltip>
+                        <v-tooltip v-if="item.has_update" location="top">
+                          <template v-slot:activator="{ props: tooltipProps }">
+                            <span
+                              v-bind="tooltipProps"
+                              class="ml-1 text-caption text-warning"
+                              style="cursor: pointer"
+                              @click.stop="updateExtension(item.name)"
+                            >
+                              {{ item.online_version }}
+                            </span>
+                          </template>
+                          <span>{{ tm("buttons.update") }}</span>
+                        </v-tooltip>
+                      </div>
+                    </template>
+
+                    <template v-slot:item.author="{ item }">
+                      <div class="text-body-2">{{ item.author }}</div>
+                    </template>
+
+                    <template v-slot:item.actions="{ item }">
+                      <div class="table-action-row d-flex align-center flex-nowrap justify-start ga-2 py-1">
+                        <v-btn
+                          v-if="!item.activated"
+                          size="small"
+                          variant="tonal"
+                          color="success"
+                          class="table-action-btn"
+                          prepend-icon="mdi-play"
+                          @click="pluginOn(item)"
+                        >
+                          {{ tm("buttons.enable") }}
+                        </v-btn>
+                        <v-btn
+                          v-else
+                          size="small"
+                          variant="tonal"
+                          color="error"
+                          class="table-action-btn"
+                          prepend-icon="mdi-pause"
+                          @click="pluginOff(item)"
+                        >
+                          {{ tm("buttons.disable") }}
+                        </v-btn>
+
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="primary"
+                          class="table-action-btn"
+                          prepend-icon="mdi-refresh"
+                          @click="reloadPlugin(item.name)"
+                        >
+                          {{ tm("buttons.reload") }}
+                        </v-btn>
+
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="primary"
+                          class="table-action-btn"
+                          prepend-icon="mdi-cog"
+                          @click="openExtensionConfig(item.name)"
+                        >
+                          {{ tm("buttons.configure") }}
+                        </v-btn>
+
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="info"
+                          class="table-action-btn"
+                          prepend-icon="mdi-book-open-page-variant"
+                          :disabled="!item.repo"
+                          @click="item.repo && viewReadme(item)"
+                        >
+                          {{ tm("buttons.viewDocs") }}
+                        </v-btn>
+
+                        <StyledMenu location="bottom end" offset="8">
+                          <template #activator="{ props: menuProps }">
+                            <v-btn
+                              v-bind="menuProps"
+                              icon="mdi-dots-horizontal"
+                              size="small"
+                              variant="tonal"
+                              color="secondary"
+                              class="table-action-btn"
+                            ></v-btn>
+                          </template>
+
+                          <v-list-item
+                            class="styled-menu-item"
+                            prepend-icon="mdi-information"
+                            @click="showPluginInfo(item)"
+                        >
+                          <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
+                        </v-list-item>
+
+                          <v-list-item
+                            class="styled-menu-item"
+                            prepend-icon="mdi-update"
+                            @click="updateExtension(item.name)"
+                          >
+                            <v-list-item-title>{{ tm("buttons.update") }}</v-list-item-title>
+                          </v-list-item>
+
+                          <v-list-item
+                            class="styled-menu-item"
+                            prepend-icon="mdi-delete"
+                            :disabled="item.reserved"
+                            @click="uninstallExtension(item.name)"
+                          >
+                            <v-list-item-title>{{ tm("buttons.uninstall") }}</v-list-item-title>
+                          </v-list-item>
+                        </StyledMenu>
+                      </div>
+                    </template>
+
+                    <template v-slot:no-data>
+                      <div class="text-center pa-8">
+                        <v-icon size="64" color="info" class="mb-4"
+                          >mdi-puzzle-outline</v-icon
+                        >
+                        <div class="text-h5 mb-2">
+                          {{ tm("empty.noPlugins") }}
+                        </div>
+                        <div class="text-body-1 mb-4">
+                          {{ tm("empty.noPluginsDesc") }}
+                        </div>
+                      </div>
+                    </template>
+                  </v-data-table>
+                </v-card>
+              </div>
+
+              <!-- 卡片视图 -->
+              <div v-else>
+                <v-row v-if="filteredPlugins.length === 0" class="text-center">
+                  <v-col cols="12" class="pa-2">
+                    <v-icon size="64" color="info" class="mb-4"
+                      >mdi-puzzle-outline</v-icon
+                    >
+                    <div class="text-h5 mb-2">{{ tm("empty.noPlugins") }}</div>
+                    <div class="text-body-1 mb-4">
+                      {{ tm("empty.noPluginsDesc") }}
+                    </div>
+                  </v-col>
+                </v-row>
+
+                <v-row>
+                  <v-col
+                    cols="12"
+                    md="6"
+                    lg="4"
+                    v-for="extension in filteredPlugins"
+                    :key="extension.name"
+                    class="pb-2"
+                  >
+                    <ExtensionCard
+                      :extension="extension"
+                      class="rounded-lg"
+                      style="background-color: rgb(var(--v-theme-mcpCardBg))"
+                      @configure="openExtensionConfig(extension.name)"
+                      @uninstall="
+                        (ext, options) => uninstallExtension(ext.name, options)
+                      "
+                      @update="updateExtension(extension.name)"
+                      @reload="reloadPlugin(extension.name)"
+                      @toggle-activation="
+                        extension.activated
+                          ? pluginOff(extension)
+                          : pluginOn(extension)
+                      "
+                      @view-handlers="showPluginInfo(extension)"
+                      @view-readme="viewReadme(extension)"
+                      @view-changelog="viewChangelog(extension)"
+                    >
+                    </ExtensionCard>
+                  </v-col>
+                </v-row>
+              </div>
+            </v-fade-transition>
+
+            <v-tooltip :text="tm('market.installPlugin')" location="left">
+              <template v-slot:activator="{ props }">
+                <button
+                  v-bind="props"
+                  type="button"
+                  class="v-btn v-btn--elevated v-btn--icon v-theme--PurpleThemeDark bg-darkprimary v-btn--density-default v-btn--size-x-large v-btn--variant-elevated fab-button"
                   style="
                     display: -webkit-box;
                     -webkit-line-clamp: 2;
