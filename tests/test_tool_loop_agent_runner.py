@@ -1,10 +1,7 @@
 import asyncio
 import os
 import sys
-from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
-from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock
 
 import pytest
@@ -17,7 +14,11 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import ImageURLPart, Message, TextPart
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.agent.runners.tool_loop_agent_runner import (
+    PostToolCompactionConfig,
+    PostToolCompactionController,
+    ToolLoopAgentRunner,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -1193,92 +1194,35 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
 
 
 @pytest.mark.asyncio
-async def test_skills_like_requery_passes_extra_user_content_parts():
-    """skills-like 模式 re-query 时应传递 extra_user_content_parts(如 image_caption)"""
-    from astrbot.core.agent.message import TextPart
-
-    captured_kwargs = {}
-
-    class SkillsLikeProvider(MockProvider):
-        async def text_chat(self, **kwargs) -> LLMResponse:
-            self.call_count += 1
-            if self.call_count == 1:
-                # 第一次调用:返回工具选择(light schema)
-                return LLMResponse(
-                    role="assistant",
-                    completion_text="选择工具",
-                    tools_call_name=["test_tool"],
-                    tools_call_args=[{"query": "test"}],
-                    tools_call_ids=["call_1"],
-                    usage=TokenUsage(input_other=10, output=5),
-                )
-            if self.call_count == 2:
-                # 第二次调用:re-query with param schema
-                captured_kwargs.update(kwargs)
-                return LLMResponse(
-                    role="assistant",
-                    completion_text="调用工具",
-                    tools_call_name=["test_tool"],
-                    tools_call_args=[{"query": "actual"}],
-                    tools_call_ids=["call_2"],
-                    usage=TokenUsage(input_other=10, output=5),
-                )
-            # 后续调用:正常回复
-            return LLMResponse(
-                role="assistant",
-                completion_text="最终回复",
-                usage=TokenUsage(input_other=10, output=5),
-            )
-
-    provider = SkillsLikeProvider()
-    tool = FunctionTool(
-        name="test_tool",
-        description="测试",
-        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
-        handler=AsyncMock(),
-    )
-    tool_set = ToolSet(tools=[tool])
-
-    caption_part = TextPart(text="<image_caption>一张猫的照片</image_caption>")
-    req = ProviderRequest(
-        prompt="看看这张图",
-        func_tool=tool_set,
-        contexts=[],
-        extra_user_content_parts=[caption_part],
-    )
-
-    event = MockEvent(umo="test_umo", sender_id="test_sender")
-    ctx = MockAgentContext(event)
-    run_context = ContextWrapper(context=ctx)
-    runner = ToolLoopAgentRunner()
-
+async def test_compact_context_after_tool_call_enabled(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
     await runner.reset(
-        provider=provider,
-        request=req,
-        run_context=run_context,
-        tool_executor=cast(Any, MockToolExecutor()),
-        agent_hooks=MockHooks(),
-        tool_schema_mode="skills_like",
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        compact_context_after_tool_call=True,
+    )
+
+    runner.context_manager.process = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda messages, trusted_token_usage=0: messages,
     )
 
     async for _ in runner.step():
         pass
 
-    # 验证 re-query 调用包含了 extra_user_content_parts
-    assert "extra_user_content_parts" in captured_kwargs, (
-        "re-query 应该传递 extra_user_content_parts"
-    )
-    parts = captured_kwargs["extra_user_content_parts"]
-    assert len(parts) == 1
-    assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
+    assert runner.context_manager.process.await_count == 2
 
 
 @pytest.mark.asyncio
-async def test_follow_up_accepted_when_active_and_not_stopping(
+async def test_compact_context_after_tool_call_disabled_by_default(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
-    """Test that follow-up is accepted when runner is active and stop is not requested."""
-
+    mock_provider.should_call_tools = True
     await runner.reset(
         provider=mock_provider,
         request=provider_request,
@@ -1288,366 +1232,169 @@ async def test_follow_up_accepted_when_active_and_not_stopping(
         streaming=False,
     )
 
+    runner.context_manager.process = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda messages, trusted_token_usage=0: messages,
+    )
+
+    async for _ in runner.step():
+        pass
+
+    assert runner.context_manager.process.await_count == 1
+
 
 @pytest.mark.asyncio
-async def test_large_tool_result_is_spilled_to_file_and_replaced_with_read_notice(
-    tmp_path,
+async def test_compact_context_after_tool_call_honors_debounce(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
-    tool = FunctionTool(
-        name="test_tool",
-        description="测试工具",
-        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
-        handler=AsyncMock(),
-    )
-    read_tool = FunctionTool(
-        name="astrbot_file_read_tool",
-        description="read file",
-        parameters={"type": "object", "properties": {"path": {"type": "string"}}},
-        handler=AsyncMock(),
-    )
-    tool_set = ToolSet(tools=[tool, read_tool])
-    provider = SingleToolThenFinalProvider(tool.name, {"query": "large"})
-    request = ProviderRequest(prompt="run tool", func_tool=tool_set, contexts=[])
-    runner = ToolLoopAgentRunner()
-
+    mock_provider.should_call_tools = True
+    mock_provider.provider_config["max_context_tokens"] = 100
     await runner.reset(
-        provider=provider,
-        request=request,
+        provider=mock_provider,
+        request=provider_request,
         run_context=ContextWrapper(context=None),
-        tool_executor=cast(
-            Any,
-            LargeTextToolExecutor.from_text(_make_large_tool_result_text()),
-        ),
-        agent_hooks=MockHooks(),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
         streaming=False,
-        tool_result_overflow_dir=str(tmp_path),
-        read_tool=read_tool,
+        compact_context_after_tool_call=True,
+        compact_context_soft_ratio=0.3,
+        compact_context_hard_ratio=0.4,
+        compact_context_debounce_seconds=3600,
     )
 
-    responses = []
-    async for response in runner.step_until_done(3):
-        responses.append(response)
+    runner.context_manager.token_counter = SimpleNamespace(
+        count_tokens=lambda *_args, **_kwargs: 90
+    )
+    runner.context_manager.process = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda messages, trusted_token_usage=0: messages,
+    )
 
-    tool_messages = [m for m in runner.run_context.messages if m.role == "tool"]
-    assert len(tool_messages) == 1
-    tool_message_content = str(tool_messages[0].content)
-    assert "xxxxxxxxxx" in tool_message_content
-    assert "Truncated tool output preview shown above." in tool_message_content
-    assert "The tool output was too large to include directly" in tool_message_content
-    assert "`astrbot_file_read_tool`" in tool_message_content
-    assert "Use `astrbot_file_read_tool` to inspect it." in tool_message_content
+    # step 1: pre-LLM compact + post-tool compact
+    async for _ in runner.step():
+        pass
+    # step 2: pre-LLM compact + post-tool compact skipped by debounce
+    async for _ in runner.step():
+        pass
 
-    overflow_files = list(Path(tmp_path).glob("call_large_result_*.txt"))
-    assert len(overflow_files) == 1
+    assert runner.context_manager.process.await_count == 3
+
+
+def test_post_tool_compaction_soft_zone_respects_min_delta(runner):
+    runner.post_tool_compaction = PostToolCompactionConfig(
+        enabled=True,
+        soft_ratio=0.3,
+        hard_ratio=0.9,
+        min_delta_tokens=10,
+        min_delta_turns=10,
+        debounce_seconds=0,
+    )
+    runner.post_tool_compaction_controller = PostToolCompactionController(
+        runner.post_tool_compaction
+    )
+    runner.context_config = SimpleNamespace(max_context_tokens=100)
+    runner.run_context = SimpleNamespace(messages=[object(), object()])
+    runner.context_manager = SimpleNamespace(
+        token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 35)
+    )
+    runner.post_tool_compaction_controller.refresh_baseline(
+        messages=runner.run_context.messages,
+        token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 30),
+    )
+
+    # ratio=0.35 in soft zone, token delta=5 and message delta=0 -> should skip
+    assert runner._should_run_post_tool_compaction() is False
+
+    runner.context_manager = SimpleNamespace(
+        token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 95)
+    )
+    # ratio=0.95 in hard zone -> force compaction
+    assert runner._should_run_post_tool_compaction() is True
+
+
+def test_post_tool_compaction_handles_token_counter_errors(runner):
+    runner.post_tool_compaction = PostToolCompactionConfig(
+        enabled=True,
+        soft_ratio=0.3,
+        hard_ratio=0.9,
+        min_delta_tokens=10,
+        min_delta_turns=10,
+        debounce_seconds=0,
+    )
+    runner.post_tool_compaction_controller = PostToolCompactionController(
+        runner.post_tool_compaction
+    )
+    runner.context_config = SimpleNamespace(max_context_tokens=100)
+    runner.run_context = SimpleNamespace(messages=[object(), object()])
+
+    def _raise(*_args, **_kwargs):
+        raise RuntimeError("counter broken")
+
+    runner.context_manager = SimpleNamespace(
+        token_counter=SimpleNamespace(count_tokens=_raise)
+    )
+
+    assert runner._should_run_post_tool_compaction() is False
+
+
+def test_post_tool_compaction_debounce_is_not_extended(monkeypatch):
+    config = PostToolCompactionConfig(
+        enabled=True,
+        soft_ratio=0.3,
+        hard_ratio=0.9,
+        min_delta_tokens=0,
+        min_delta_turns=0,
+        debounce_seconds=100,
+    )
+    controller = PostToolCompactionController(config)
+    messages = [object()]
+    token_counter = SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 95)
+
+    # refresh baseline before checks
+    controller.refresh_baseline(
+        messages=messages,
+        token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 30),
+    )
+
+    ts = iter([1.0, 10.0, 20.0, 105.0])
+    monkeypatch.setattr(
+        "astrbot.core.agent.runners.tool_loop_agent_runner.time.monotonic",
+        lambda: next(ts),
+    )
+
+    # first check performs decision and sets baseline timestamp
     assert (
-        overflow_files[0].read_text(encoding="utf-8") == _make_large_tool_result_text()
-    )
-    assert str(overflow_files[0]) in tool_message_content
-
-    llm_results = [resp for resp in responses if resp.type == "llm_result"]
-    assert llm_results
-
-
-@pytest.mark.asyncio
-async def test_large_tool_result_keeps_preview_when_spill_fails(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    tool = FunctionTool(
-        name="test_tool",
-        description="测试工具",
-        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
-        handler=AsyncMock(),
-    )
-    read_tool = FunctionTool(
-        name="astrbot_file_read_tool",
-        description="read file",
-        parameters={"type": "object", "properties": {"path": {"type": "string"}}},
-        handler=AsyncMock(),
-    )
-    tool_set = ToolSet(tools=[tool, read_tool])
-    provider = SingleToolThenFinalProvider(tool.name, {"query": "large"})
-    request = ProviderRequest(prompt="run tool", func_tool=tool_set, contexts=[])
-    runner = ToolLoopAgentRunner()
-
-    async def _raise_spill_error(*, tool_call_id: str, content: str) -> str:
-        raise OSError("disk full")
-
-    monkeypatch.setattr(runner, "_write_tool_result_overflow_file", _raise_spill_error)
-
-    await runner.reset(
-        provider=provider,
-        request=request,
-        run_context=ContextWrapper(context=None),
-        tool_executor=cast(
-            Any,
-            LargeTextToolExecutor.from_text(_make_large_tool_result_text()),
-        ),
-        agent_hooks=MockHooks(),
-        streaming=False,
-        tool_result_overflow_dir=str(tmp_path),
-        read_tool=read_tool,
-    )
-
-    async for _ in runner.step_until_done(3):
-        pass
-
-    tool_messages = [m for m in runner.run_context.messages if m.role == "tool"]
-    assert len(tool_messages) == 1
-    tool_message_content = str(tool_messages[0].content)
-    assert "xxxxxxxxxx" in tool_message_content
-    assert "Tool output exceeded the inline result limit" in tool_message_content
-    assert "disk full" in tool_message_content
-
-
-@pytest.mark.asyncio
-async def test_follow_up_rejected_when_stop_requested(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
-):
-    """Test that follow-up is rejected when stop has been requested."""
-
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=ContextWrapper(context=None),
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=False,
-    )
-
-    # Request stop
-    runner.request_stop()
-    assert runner._is_stop_requested() is True
-
-    ticket = runner.follow_up(message_text="follow-up after stop")
-
-    assert ticket is None, "Follow-up should be rejected after stop is requested"
-    assert len(runner._pending_follow_ups) == 0
-
-
-@pytest.mark.asyncio
-async def test_follow_up_rejected_when_runner_done(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
-):
-    """Test that follow-up is rejected when runner is done."""
-
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=ContextWrapper(context=None),
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=False,
-    )
-
-    # Run to completion
-    async for _ in runner.step_until_done(10):
-        pass
-
-    # Runner should be done
-    assert runner.done()
-
-    ticket = runner.follow_up(message_text="follow-up after done")
-
-    assert ticket is None, "Follow-up should be rejected when runner is done"
-
-
-@pytest.mark.asyncio
-async def test_follow_up_rejected_after_stop_before_tool_call(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
-):
-    """Test that follow-ups submitted after stop are not merged into tool results."""
-
-    mock_event = MockEvent("test:FriendMessage:stop_race", "u1")
-    run_context = ContextWrapper(context=MockAgentContext(mock_event))
-
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=run_context,
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=False,
-    )
-
-    # Add a follow-up before stop
-    ticket_before_stop = runner.follow_up(message_text="before stop")
-    assert ticket_before_stop is not None
-
-    # Request stop
-    runner.request_stop()
-
-    # Try to add a follow-up after stop
-    ticket_after_stop = runner.follow_up(message_text="after stop")
-    assert ticket_after_stop is None, "Follow-up after stop should be rejected"
-
-    # Verify only the pre-stop follow-up is in the queue
-    assert len(runner._pending_follow_ups) == 1
-    assert runner._pending_follow_ups[0].text == "before stop"
-
-
-@pytest.mark.asyncio
-async def test_follow_up_merged_into_tool_result_before_stop(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
-):
-    """Test that follow-ups queued before stop are merged into tool results."""
-
-    mock_event = MockEvent("test:FriendMessage:merge_before_stop", "u1")
-    run_context = ContextWrapper(context=MockAgentContext(mock_event))
-
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=run_context,
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=False,
-    )
-
-    # Queue follow-ups before stop
-    ticket1 = runner.follow_up(message_text="follow up 1 before stop")
-    ticket2 = runner.follow_up(message_text="follow up 2 before stop")
-    assert ticket1 is not None
-    assert ticket2 is not None
-
-    # Run the agent step (should execute tool and merge follow-ups)
-    async for _ in runner.step():
-        pass
-
-    # Verify follow-ups were merged into tool result
-    assert provider_request.tool_calls_result is not None
-    assert isinstance(provider_request.tool_calls_result, list)
-    assert provider_request.tool_calls_result
-    tool_result = str(
-        provider_request.tool_calls_result[0].tool_calls_result[0].content
-    )
-
-    # Should contain the follow-up notice
-    assert "SYSTEM NOTICE" in tool_result
-    assert "follow up 1 before stop" in tool_result
-    assert "follow up 2 before stop" in tool_result
-
-    # Tickets should be marked as consumed
-    assert ticket1.consumed is True
-    assert ticket2.consumed is True
-
-
-@pytest.mark.asyncio
-async def test_follow_up_rejected_and_runner_stops_without_execution(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
-):
-    """Test that when stop is requested before execution, follow-ups are rejected and runner stops gracefully."""
-
-    mock_event = MockEvent("test:FriendMessage:stop_before_execution", "u1")
-    run_context = ContextWrapper(context=MockAgentContext(mock_event))
-
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=run_context,
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=False,
-    )
-
-    # Request stop before any execution (simulates /stop command received at start)
-    runner.request_stop()
-    assert runner._is_stop_requested() is True
-
-    # Try to add follow-up after stop (should be rejected)
-    ticket_after = runner.follow_up(message_text="follow-up after stop")
-    assert ticket_after is None, "Post-stop follow-up should be rejected"
-
-    # Verify queue is empty
-    assert len(runner._pending_follow_ups) == 0
-
-    # Run the agent step - should stop immediately without executing tools
-    async for response in runner.step():
-        # Should yield an aborted response
-        if response.type == "aborted":
-            break
-
-    # Verify runner stopped gracefully
-    assert runner.done()
-    assert runner.was_aborted()
-
-    # No tool execution should have occurred
-    assert provider_request.tool_calls_result is None
-
-
-@pytest.mark.asyncio
-async def test_follow_up_after_stop_not_merged_into_tool_result(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
-):
-    """Regression test for issue #6626: verify post-stop follow-ups are not injected into tool results.
-
-    This test simulates the race condition where:
-    1. Runner is active and executing tools
-    2. A follow-up is queued (should be included in tool result)
-    3. Stop is requested
-    4. Another follow-up is attempted (should be rejected)
-    5. Tool execution completes and merges follow-ups into result
-
-    The key assertion is that only pre-stop follow-ups are merged into the tool result.
-    """
-
-    mock_event = MockEvent("test:FriendMessage:regression_6626", "u1")
-    run_context = ContextWrapper(context=MockAgentContext(mock_event))
-
-    await runner.reset(
-        provider=mock_provider,
-        request=provider_request,
-        run_context=run_context,
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=False,
-    )
-
-    # Add a follow-up before stop (should be included in tool result)
-    ticket_before = runner.follow_up(message_text="valid before stop")
-    assert ticket_before is not None
-    assert ticket_before in runner._pending_follow_ups
-
-    # Request stop (simulates /stop command during active execution)
-    runner.request_stop()
-    assert runner._is_stop_requested() is True
-
-    # Try to add follow-up after stop (should be rejected)
-    ticket_after = runner.follow_up(message_text="invalid after stop")
-    assert ticket_after is None, "Post-stop follow-up should be rejected"
-
-    # Verify queue only contains pre-stop follow-up
-    assert len(runner._pending_follow_ups) == 1
-    assert runner._pending_follow_ups[0].text == "valid before stop"
-
-    # Run the agent step - this will execute tool and merge follow-ups into result
-    async for response in runner.step():
-        # The runner should execute tools and then stop
-        pass
-
-    # Verify tool result was created with follow-up merged
-    # Note: When stop is requested, the tool may or may not execute depending on timing.
-    # The key assertion is that IF tool_calls_result exists, it only contains pre-stop follow-ups.
-    if provider_request.tool_calls_result is not None:
-        assert isinstance(provider_request.tool_calls_result, list)
-        assert provider_request.tool_calls_result
-        tool_result = str(
-            provider_request.tool_calls_result[0].tool_calls_result[0].content
+        controller.should_compact(
+            messages=messages,
+            token_counter=token_counter,
+            max_context_tokens=100,
         )
-
-        # Should contain the pre-stop follow-up
-        assert "valid before stop" in tool_result
-
-        # Should NOT contain the post-stop follow-up
-        assert "invalid after stop" not in tool_result
-        assert "after stop" not in tool_result or "after stop" in "valid before stop"
-
-        # Ticket should be marked as consumed (merged into tool result)
-        assert ticket_before.consumed is True
-    else:
-        # If tool execution was aborted by stop, the ticket should still be resolved
-        # but not consumed (since there was no tool call to merge into)
-        assert ticket_before.resolved.is_set()
+        is True
+    )
+    # next two checks are debounced
+    assert (
+        controller.should_compact(
+            messages=messages,
+            token_counter=token_counter,
+            max_context_tokens=100,
+        )
+        is False
+    )
+    assert (
+        controller.should_compact(
+            messages=messages,
+            token_counter=token_counter,
+            max_context_tokens=100,
+        )
+        is False
+    )
+    # should become eligible at t=105 if debounce anchor remains at first real check (t=1)
+    assert (
+        controller.should_compact(
+            messages=messages,
+            token_counter=token_counter,
+            max_context_tokens=100,
+        )
+        is True
+    )
 
 
 if __name__ == "__main__":

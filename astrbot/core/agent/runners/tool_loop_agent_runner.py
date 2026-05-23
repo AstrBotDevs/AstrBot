@@ -64,12 +64,7 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
-from astrbot.core.tools.claude_strategy import ClaudeToolSearchStrategy
-from astrbot.core.tools.discovery_state import DiscoveryState
-from astrbot.core.tools.generic_strategy import GenericToolSearchStrategy
-from astrbot.core.tools.strategy import ToolSearchStrategy
-from astrbot.core.tools.tool_catalog import ToolCatalog
-from astrbot.core.tools.tool_search_index import ToolSearchIndex
+from astrbot.core.utils.config_normalization import to_non_negative_int, to_ratio
 
 
 def _is_claude_provider(provider: Provider) -> bool:
@@ -123,11 +118,83 @@ class FollowUpTicket:
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
 
 
-class _ToolExecutionInterrupted(Exception):
-    """Raised when a running tool call is interrupted by a stop request."""
+@dataclass(slots=True, frozen=True)
+class PostToolCompactionConfig:
+    enabled: bool = False
+    soft_ratio: float = 0.3
+    hard_ratio: float = 0.7
+    min_delta_tokens: int = 0
+    min_delta_turns: int = 0
+    debounce_seconds: int = 0
 
 
-ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
+class PostToolCompactionController:
+    def __init__(self, config: PostToolCompactionConfig) -> None:
+        self.config = config
+        self._baseline_tokens = 0
+        self._baseline_messages = 0
+        self._last_check_at = 0.0
+
+    def refresh_baseline(
+        self,
+        *,
+        messages: list[Message],
+        token_counter: TokenCounter,
+        trusted_token_usage: int = 0,
+    ) -> None:
+        try:
+            self._baseline_tokens = token_counter.count_tokens(
+                messages,
+                trusted_token_usage,
+            )
+        except Exception:
+            self._baseline_tokens = 0
+        self._baseline_messages = len(messages)
+
+    def should_compact(
+        self,
+        *,
+        messages: list[Message],
+        token_counter: TokenCounter,
+        max_context_tokens: int,
+    ) -> bool:
+        if not self.config.enabled:
+            return False
+
+        now = time.monotonic()
+        if (
+            self.config.debounce_seconds > 0
+            and self._last_check_at > 0
+            and (now - self._last_check_at) < self.config.debounce_seconds
+        ):
+            return False
+        self._last_check_at = now
+
+        if max_context_tokens <= 0:
+            # No explicit token budget configured: preserve legacy behavior.
+            return True
+
+        try:
+            current_tokens = token_counter.count_tokens(messages)
+        except Exception:
+            return False
+
+        current_messages = len(messages)
+        current_ratio = current_tokens / max(1, max_context_tokens)
+
+        if current_ratio >= self.config.hard_ratio:
+            return True
+        if current_ratio < self.config.soft_ratio:
+            return False
+
+        delta_tokens = max(0, current_tokens - self._baseline_tokens)
+        delta_messages = max(0, current_messages - self._baseline_messages)
+        if (
+            delta_tokens < self.config.min_delta_tokens
+            and delta_messages < self.config.min_delta_turns
+        ):
+            return False
+        return True
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
@@ -248,6 +315,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_compress_use_compact_api: bool = True,
         # truncate by turns compressor
         truncate_turns: int = 1,
+        # context token counting mode
+        token_counter_mode: str = "estimate",
+        # run context compression immediately after tool execution
+        compact_context_after_tool_call: bool = False,
+        # post-tool-call compaction policy
+        compact_context_soft_ratio: float = 0.3,
+        compact_context_hard_ratio: float = 0.7,
+        compact_context_min_delta_tokens: int = 0,
+        compact_context_min_delta_turns: int = 0,
+        compact_context_debounce_seconds: int = 0,
         # customize
         custom_token_counter: T.Any = None,
         custom_compressor: T.Any = None,
@@ -266,6 +343,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.llm_compress_provider = llm_compress_provider
         self.llm_compress_use_compact_api = llm_compress_use_compact_api
         self.truncate_turns = truncate_turns
+        self.token_counter_mode = token_counter_mode
+        post_tool_soft_ratio = to_ratio(compact_context_soft_ratio, 0.3)
+        self.post_tool_compaction = PostToolCompactionConfig(
+            enabled=bool(compact_context_after_tool_call),
+            soft_ratio=post_tool_soft_ratio,
+            hard_ratio=max(
+                post_tool_soft_ratio, to_ratio(compact_context_hard_ratio, 0.7)
+            ),
+            min_delta_tokens=to_non_negative_int(compact_context_min_delta_tokens),
+            min_delta_turns=to_non_negative_int(compact_context_min_delta_turns),
+            debounce_seconds=to_non_negative_int(compact_context_debounce_seconds),
+        )
+        self.post_tool_compaction_controller = PostToolCompactionController(
+            self.post_tool_compaction
+        )
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
         self.tool_result_overflow_dir = tool_result_overflow_dir
@@ -273,7 +365,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._tool_result_token_counter = EstimateTokenCounter()
         # we will do compress when:
         # 1. before requesting LLM
-        # TODO: 2. after LLM output a tool call
+        # 2. optionally after tool execution, controlled by config
         self.context_config = ContextConfig(
             # <=0 will never do compress
             max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
@@ -283,7 +375,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
             llm_compress_provider=self.llm_compress_provider,
-            llm_compress_use_compact_api=self.llm_compress_use_compact_api,
+            token_counter_mode=self.token_counter_mode,
+            token_counter_model=provider.get_model(),
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )
@@ -402,6 +495,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 Message(role="system", content=request.system_prompt),
             )
         self.run_context.messages = messages
+        self._refresh_tool_compaction_baseline(
+            trusted_token_usage=request.conversation.token_usage
+            if request.conversation
+            else 0
+        )
 
         # Append tool_search system prompt after mode resolution (SYS-01, SYS-02)
         if (
@@ -425,142 +523,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats = AgentStats()
         self.stats.start_time = time.time()
 
-    def _read_tool_hint(self) -> str:
-        if self.read_tool is not None:
-            return f"`{self.read_tool.name}`"
-        return "the available file-read tool"
-
-    async def _assemble_request_context_for_provider(
-        self,
-        request: ProviderRequest,
-    ) -> dict[str, T.Any]:
-        modalities = self.provider.provider_config.get("modalities", None)
-        if not isinstance(modalities, list):
-            return await request.assemble_context()
-
-        supports_image = "image" in modalities
-        supports_audio = "audio" in modalities
-        if supports_image and supports_audio:
-            return await request.assemble_context()
-
-        adjusted_request = replace(
-            request,
-            image_urls=request.image_urls if supports_image else [],
-            audio_urls=request.audio_urls if supports_audio else [],
+    def _refresh_tool_compaction_baseline(
+        self, *, trusted_token_usage: int = 0
+    ) -> None:
+        self.post_tool_compaction_controller.refresh_baseline(
+            messages=self.run_context.messages,
+            token_counter=self.context_manager.token_counter,
+            trusted_token_usage=trusted_token_usage,
         )
-        context = await adjusted_request.assemble_context()
-        content = context.get("content")
-        if isinstance(content, str):
-            content_blocks: list[dict[str, T.Any]] = [{"type": "text", "text": content}]
-        elif isinstance(content, list):
-            content_blocks = content
-        else:
-            content_blocks = []
 
-        if not supports_image:
-            for _ in request.image_urls:
-                content_blocks.append({"type": "text", "text": "[Image]"})
-        if not supports_audio:
-            for _ in request.audio_urls:
-                content_blocks.append({"type": "text", "text": "[Audio]"})
-
-        return {"role": "user", "content": content_blocks}
-
-    async def _write_tool_result_overflow_file(
-        self,
-        *,
-        tool_call_id: str,
-        content: str,
-    ) -> str:
-        if self.tool_result_overflow_dir is None:
-            raise ValueError("tool_result_overflow_dir is not configured")
-
-        overflow_dir = await anyio.Path(
-            self.tool_result_overflow_dir,
-        ).resolve(strict=False)
-        overflow_dir_path = os.fspath(overflow_dir)
-        safe_tool_call_id = (
-            "".join(
-                ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
-                for ch in tool_call_id
-            ).strip("._")
-            or "tool_call"
+    def _should_run_post_tool_compaction(self) -> bool:
+        if not hasattr(self, "post_tool_compaction_controller"):
+            return False
+        return self.post_tool_compaction_controller.should_compact(
+            messages=self.run_context.messages,
+            token_counter=self.context_manager.token_counter,
+            max_context_tokens=int(self.context_config.max_context_tokens or 0),
         )
-        file_name = f"{safe_tool_call_id}_{uuid.uuid4().hex[:8]}.txt"
-        overflow_path = os.path.join(overflow_dir_path, file_name)
-
-        def _run() -> str:
-            os.makedirs(overflow_dir_path, exist_ok=True)
-            with open(overflow_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            return overflow_path
-
-        return await asyncio.to_thread(_run)
-
-    async def _materialize_large_tool_result(
-        self,
-        *,
-        tool_call_id: str,
-        content: str,
-    ) -> str:
-        if self.tool_result_overflow_dir is None or self.read_tool is None:
-            return content
-
-        estimated_tokens = self._tool_result_token_counter.count_tokens(
-            [Message(role="tool", content=content, tool_call_id=tool_call_id)],
-        )
-        if estimated_tokens <= self.TOOL_RESULT_MAX_ESTIMATED_TOKENS:
-            return content
-
-        preview = self._truncate_tool_result_preview(content, tool_call_id=tool_call_id)
-        try:
-            overflow_path = await self._write_tool_result_overflow_file(
-                tool_call_id=tool_call_id,
-                content=content,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Failed to spill oversized tool result for %s: %s",
-                tool_call_id,
-                exc,
-                exc_info=True,
-            )
-            error_notice = (
-                "Tool output exceeded the inline result limit "
-                f"({estimated_tokens} estimated tokens > "
-                f"{self.TOOL_RESULT_MAX_ESTIMATED_TOKENS}) and could not be written "
-                f"to `{self.tool_result_overflow_dir}`: {exc}"
-            )
-            if not preview:
-                return error_notice
-            return f"{preview}\n\n{error_notice}"
-
-        notice = self.TOOL_RESULT_OVERFLOW_NOTICE_TEMPLATE.format(
-            overflow_path=overflow_path,
-            read_tool_hint=self._read_tool_hint(),
-        )
-        if not preview:
-            return notice
-        return f"{preview}\n\n{notice}"
-
-    def _truncate_tool_result_preview(
-        self,
-        content: str,
-        *,
-        tool_call_id: str,
-    ) -> str:
-        preview = content
-        while preview:
-            estimated_tokens = self._tool_result_token_counter.count_tokens(
-                [Message(role="tool", content=preview, tool_call_id=tool_call_id)],
-            )
-            if estimated_tokens <= self.TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS:
-                return preview
-            next_len = len(preview) // 2
-            if next_len <= 0:
-                break
-            preview = preview[:next_len]
-        return preview
 
     async def _iter_llm_responses(
         self,
@@ -869,6 +848,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.run_context.messages,
             trusted_token_usage=token_usage,
         )
+        self._refresh_tool_compaction_baseline(trusted_token_usage=token_usage)
         self._simple_print_message_role("[AftCompact]")
 
         # Per-turn tool set reassembly for tool_search mode
@@ -1096,6 +1076,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
 
             self.req.append_tool_calls_result(tool_calls_result)
+
+            if self._should_run_post_tool_compaction():
+                self.run_context.messages = await self.context_manager.process(
+                    self.run_context.messages,
+                    force_compaction=True,
+                )
+                self._refresh_tool_compaction_baseline()
 
     async def step_until_done(
         self,

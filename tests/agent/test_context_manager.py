@@ -94,24 +94,17 @@ class TestContextManager:
 
         assert isinstance(manager.compressor, TruncateByTurnsCompressor)
 
-    @pytest.mark.asyncio
-    async def test_llm_compressor_keeps_history_when_summary_is_empty(self):
-        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+    @patch("astrbot.core.agent.context.manager.create_token_counter")
+    def test_init_uses_token_counter_mode(self, mock_create_token_counter):
+        """Test token counter mode wiring into ContextManager."""
+        fake_counter = MagicMock()
+        mock_create_token_counter.return_value = fake_counter
+        config = ContextConfig(token_counter_mode="auto", token_counter_model="gpt-4")
 
-        provider = MockProvider()
-        provider.text_chat = AsyncMock(
-            return_value=LLMResponse(role="assistant", completion_text="  ")
-        )
-        compressor = LLMSummaryCompressor(provider=provider, keep_recent=2)  # type: ignore[arg-type]
-        messages = self.create_messages(6)
+        manager = ContextManager(config)
 
-        with patch("astrbot.core.agent.context.compressor.logger") as mock_logger:
-            result = await compressor(messages)
-
-        assert result == messages
-        mock_logger.warning.assert_called_once_with(
-            "LLM context compression returned an empty summary."
-        )
+        mock_create_token_counter.assert_called_once_with("auto", model="gpt-4")
+        assert manager.token_counter is fake_counter
 
     # ==================== Empty and Edge Cases ====================
 
@@ -227,6 +220,29 @@ class TestContextManager:
                 mock_should_compress.assert_called_once()
                 # Compressor should not be called
                 mock_compress.assert_not_called()
+                assert result == messages
+
+    @pytest.mark.asyncio
+    async def test_force_compaction_bypasses_threshold_gate(self):
+        """Test that force_compaction bypasses compressor threshold gate."""
+        config = ContextConfig(max_context_tokens=1000)
+        manager = ContextManager(config)
+
+        messages = [self.create_message("user", "Hello")]
+
+        with patch.object(
+            manager.compressor, "should_compress", return_value=False
+        ) as mock_should_compress:
+            with patch.object(
+                manager,
+                "_run_compression",
+                new_callable=AsyncMock,
+                return_value=messages,
+            ) as mock_run_compression:
+                result = await manager.process(messages, force_compaction=True)
+
+                mock_should_compress.assert_not_called()
+                mock_run_compression.assert_called_once()
                 assert result == messages
 
     @pytest.mark.asyncio

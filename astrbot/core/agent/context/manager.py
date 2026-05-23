@@ -3,7 +3,7 @@ from astrbot.core.agent.message import Message
 
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
-from .token_counter import EstimateTokenCounter
+from .token_counter import create_token_counter
 from .truncator import ContextTruncator
 
 
@@ -26,7 +26,10 @@ class ContextManager:
         """
         self.config = config
 
-        self.token_counter = config.custom_token_counter or EstimateTokenCounter()
+        self.token_counter = config.custom_token_counter or create_token_counter(
+            config.token_counter_mode,
+            model=config.token_counter_model,
+        )
         self.truncator = ContextTruncator()
 
         if config.custom_compressor:
@@ -47,13 +50,15 @@ class ContextManager:
         self,
         messages: list[Message],
         trusted_token_usage: int = 0,
+        force_compaction: bool = False,
     ) -> list[Message]:
         """Process the messages.
 
         Args:
             messages: The original message list.
-            trusted_token_usage: Trusted token usage from conversation.
-            event: Optional event for triggering hooks.
+            trusted_token_usage: Optional trusted token usage hint.
+            force_compaction: Force one compaction pass when token-based compaction
+                is enabled, regardless of compressor threshold.
 
         Returns:
             The processed message list.
@@ -77,10 +82,8 @@ class ContextManager:
                     trusted_token_usage,
                 )
 
-                if self.compressor.should_compress(
-                    result,
-                    total_tokens,
-                    self.config.max_context_tokens,
+                if force_compaction or self.compressor.should_compress(
+                    result, total_tokens, self.config.max_context_tokens
                 ):
                     result = await self._run_compression(result, total_tokens, event)
 

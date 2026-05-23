@@ -21,6 +21,9 @@ from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.default import VERSION
+from astrbot.core.context_compaction_scheduler import (
+    PeriodicContextCompactionScheduler,
+)
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
 from astrbot.core.db import BaseDatabase
@@ -68,7 +71,9 @@ class AstrBotCoreLifecycle:
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
-        self._default_chat_provider_warning_emitted = False
+        self.context_compaction_scheduler: PeriodicContextCompactionScheduler | None = (
+            None
+        )
 
         # 设置代理
         proxy_config = self.astrbot_config.get("http_proxy", "")
@@ -475,6 +480,13 @@ class AstrBotCoreLifecycle:
         # 初始化对话管理器
         self.conversation_manager = ConversationManager(self.db)
 
+        # 初始化定时历史压缩调度器（基于 llm_compress）
+        self.context_compaction_scheduler = PeriodicContextCompactionScheduler(
+            config_manager=self.astrbot_config_mgr,
+            conversation_manager=self.conversation_manager,
+            provider_manager=self.provider_manager,
+        )
+
         # 初始化平台消息历史管理器
         self.platform_message_history_manager = PlatformMessageHistoryManager(self.db)
 
@@ -502,6 +514,9 @@ class AstrBotCoreLifecycle:
             self.astrbot_config_mgr,
             self.kb_manager,
             self.memory_manager,
+        )
+        self.star_context.context_compaction_scheduler = (
+            self.context_compaction_scheduler
         )
 
         # 初始化插件管理器
@@ -568,6 +583,12 @@ class AstrBotCoreLifecycle:
                 self.temp_dir_cleaner.run(),
                 name="temp_dir_cleaner",
             )
+        context_compaction_task = None
+        if self.context_compaction_scheduler:
+            context_compaction_task = asyncio.create_task(
+                self.context_compaction_scheduler.run(),
+                name="context_compaction_scheduler",
+            )
 
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
@@ -582,6 +603,8 @@ class AstrBotCoreLifecycle:
             tasks_.append(cron_task)
         if temp_dir_cleaner_task:
             tasks_.append(temp_dir_cleaner_task)
+        if context_compaction_task:
+            tasks_.append(context_compaction_task)
         for task in tasks_:
             self.curr_tasks.append(
                 asyncio.create_task(self._task_wrapper(task), name=task.get_name()),
@@ -634,13 +657,17 @@ class AstrBotCoreLifecycle:
     async def stop(self) -> None:
         """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器.
 
-        This method is defensive: not all attributes may exist if only a partial
-        initialization was performed (tests construct lifecycle objects and call
-        stop() in different phases). Guard attribute accesses and log failures
-        instead of raising AttributeError.
-        """
-        # Stop temp dir cleaner if present
-        if self.temp_dir_cleaner is not None:
+        if self.context_compaction_scheduler:
+            await self.context_compaction_scheduler.stop()
+
+        # 请求停止所有正在运行的异步任务
+        for task in self.curr_tasks:
+            task.cancel()
+
+        if self.cron_manager:
+            await self.cron_manager.shutdown()
+
+        for plugin in self.plugin_manager.context.get_all_stars():
             try:
                 await self.temp_dir_cleaner.stop()
             except Exception:
