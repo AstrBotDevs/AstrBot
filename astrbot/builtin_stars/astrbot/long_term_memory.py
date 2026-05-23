@@ -11,6 +11,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import LLMResponse, Provider, ProviderRequest
+from astrbot.core.agent.message import TextPart
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 from .constants import LTM_ACTIVE_REPLY_KEY
@@ -21,6 +22,9 @@ from .constants import LTM_ACTIVE_REPLY_KEY
 
 
 class LongTermMemory:
+    DEFAULT_MAX_GROUP_MESSAGES = 50
+    DEFAULT_GROUP_ICL_TOKEN_BUDGET = 4000
+
     def __init__(self, acm: AstrBotConfigManager, context: star.Context) -> None:
         self.acm = acm
         self.context = context
@@ -33,7 +37,19 @@ class LongTermMemory:
             max_cnt = int(cfg["provider_ltm_settings"]["group_message_max_cnt"])
         except BaseException as e:
             logger.error(e)
-            max_cnt = 300
+            max_cnt = self.DEFAULT_MAX_GROUP_MESSAGES
+        max_cnt = max(1, max_cnt)
+        try:
+            group_icl_token_budget = int(
+                cfg["provider_ltm_settings"].get(
+                    "group_icl_token_budget",
+                    self.DEFAULT_GROUP_ICL_TOKEN_BUDGET,
+                )
+            )
+        except BaseException as e:
+            logger.error(e)
+            group_icl_token_budget = self.DEFAULT_GROUP_ICL_TOKEN_BUDGET
+        group_icl_token_budget = max(1, group_icl_token_budget)
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
         image_caption_provider_id = cfg["provider_ltm_settings"].get(
             "image_caption_provider_id",
@@ -61,8 +77,7 @@ class LongTermMemory:
         ar_whitelist = active_reply.get("whitelist", [])
         ret = {
             "max_cnt": max_cnt,
-            "context_prompt": context_prompt,
-            "active_reply_suffix_prompt": active_reply_suffix_prompt,
+            "group_icl_token_budget": group_icl_token_budget,
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
             "image_caption_provider_id": image_caption_provider_id,
@@ -73,6 +88,74 @@ class LongTermMemory:
             "ar_whitelist": ar_whitelist,
         }
         return ret
+
+    @staticmethod
+    def _estimate_text_tokens(text: str) -> int:
+        chinese_count = len([c for c in text if "\u4e00" <= c <= "\u9fff"])
+        other_count = len(text) - chinese_count
+        return int(chinese_count * 0.6 + other_count * 0.3)
+
+    def _trim_text_to_token_budget(self, text: str, token_budget: int) -> str:
+        marker = "[truncated]\n"
+        marker_tokens = self._estimate_text_tokens(marker)
+        if self._estimate_text_tokens(text) <= token_budget:
+            return text
+        if token_budget <= marker_tokens:
+            return marker.strip()
+
+        low = 0
+        high = len(text)
+        best = ""
+        target_budget = token_budget - marker_tokens
+        while low <= high:
+            mid = (low + high) // 2
+            candidate = text[-mid:] if mid else ""
+            if self._estimate_text_tokens(candidate) <= target_budget:
+                best = candidate
+                low = mid + 1
+            else:
+                high = mid - 1
+        result = f"{marker}{best}"
+        while result and self._estimate_text_tokens(result) > token_budget:
+            result = result[:-1]
+        return result
+
+    def _build_chats_context(
+        self,
+        chats: list[str],
+        token_budget: int,
+    ) -> tuple[str, int, int]:
+        separator = "\n---\n"
+        separator_tokens = self._estimate_text_tokens(separator)
+        selected: list[str] = []
+        total_tokens = 0
+
+        for chat in reversed(chats):
+            chat_tokens = self._estimate_text_tokens(chat)
+            extra_tokens = chat_tokens + (separator_tokens if selected else 0)
+            if selected and total_tokens + extra_tokens > token_budget:
+                break
+            if not selected and chat_tokens > token_budget:
+                trimmed = self._trim_text_to_token_budget(chat, token_budget)
+                return trimmed, len(chats) - 1, self._estimate_text_tokens(trimmed)
+            selected.append(chat)
+            total_tokens += extra_tokens
+
+        selected.reverse()
+        omitted = len(chats) - len(selected)
+        chats_str = separator.join(selected)
+        if omitted > 0:
+            omitted_notice = (
+                f"[{omitted} earlier group messages omitted due to token budget]"
+            )
+            chats_str = f"{omitted_notice}{separator}{chats_str}"
+            total_tokens += (
+                self._estimate_text_tokens(omitted_notice) + separator_tokens
+            )
+        if total_tokens > token_budget:
+            chats_str = self._trim_text_to_token_budget(chats_str, token_budget)
+            total_tokens = self._estimate_text_tokens(chats_str)
+        return chats_str, omitted, total_tokens
 
     async def remove_session(self, event: AstrMessageEvent) -> int:
         cnt = 0
@@ -147,6 +230,11 @@ class LongTermMemory:
                     parts.append(f" {comp.text}")
                 elif isinstance(comp, Image):
                     if cfg["image_caption"]:
+                        logger.warning(
+                            "Group ICL image caption is enabled. Each group image may trigger an extra multimodal request. umo=%s, provider=%s",
+                            event.unified_msg_origin,
+                            cfg["image_caption_provider_id"],
+                        )
                         try:
                             url = comp.url or comp.file
                             if not url:
@@ -179,24 +267,20 @@ class LongTermMemory:
         if event.unified_msg_origin not in self.session_chats:
             return
 
-        current_msg_id = _get_event_msg_id(event)
-
-        # 构造历史字符串时按 msg_id 过滤当前轮消息
-        history_records: list[ChatRecord] = self.session_chats[event.unified_msg_origin]
-        filtered_texts = [
-            rec.text for rec in history_records if rec.msg_id != current_msg_id
-        ]
-        chats_str = "\n---\n".join(filtered_texts)
-
         cfg = self.cfg(event)
-        active_reply_req_id = event.get_extra(LTM_ACTIVE_REPLY_KEY, None)
-        is_active_reply = (
-            active_reply_req_id is not None and id(req) == active_reply_req_id
+        chats_str, omitted, estimated_tokens = self._build_chats_context(
+            self.session_chats[event.unified_msg_origin],
+            cfg["group_icl_token_budget"],
         )
-
-        if cfg["enable_active_reply"] and is_active_reply:
-            # 仅在本次请求确实由主动回复触发时，才执行 chatroom 改写
-            # 避免普通 @ 请求也被错误地清空 req.contexts
+        if omitted > 0:
+            logger.warning(
+                "Group ICL context truncated by token budget. umo=%s, omitted=%s, estimated_tokens=%s, budget=%s",
+                event.unified_msg_origin,
+                omitted,
+                estimated_tokens,
+                cfg["group_icl_token_budget"],
+            )
+        if cfg["enable_active_reply"]:
             prompt = req.prompt
             req.prompt = (
                 f"{cfg['context_prompt']}{chats_str}"
@@ -205,8 +289,17 @@ class LongTermMemory:
             )
             req.contexts = []  # 清空上下文，主动回复时所有聊天记录都在一个 prompt 中
         else:
-            req.system_prompt += cfg["context_prompt"]
-            req.system_prompt += chats_str
+            req.extra_user_content_parts.append(
+                TextPart(
+                    text=(
+                        "Use the following recent group chat context only as background "
+                        "for this request.\n"
+                        "[Group Chat Context]\n"
+                        "Recent group chat messages, newest messages are kept when truncated:\n"
+                        f"{chats_str}"
+                    )
+                ).mark_as_temp()
+            )
 
     async def after_req_llm(
         self,

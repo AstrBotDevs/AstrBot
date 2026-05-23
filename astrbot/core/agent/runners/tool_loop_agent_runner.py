@@ -202,6 +202,8 @@ class PostToolCompactionController:
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     TOOL_RESULT_MAX_ESTIMATED_TOKENS = 27_500
     TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS = 7000
+    REQUEST_WARN_ESTIMATED_INPUT_TOKENS = 16_000
+    REQUEST_WARN_IMAGE_COUNT = 1
     EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
     EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 1
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
@@ -270,83 +272,41 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return extract_persona_custom_error_message_from_event(event)
 
     @staticmethod
-    def _normalize_tool_call(tc: T.Any) -> dict[str, T.Any]:
-        """Normalize a raw tool call to a dictionary."""
-        if isinstance(tc, dict):
-            return tc
-        if isinstance(tc, str):
-            try:
-                return json.loads(tc)
-            except json.JSONDecodeError:
-                return {}
-        if hasattr(tc, "id") and hasattr(tc, "function"):
-            return {
-                "id": tc.id,
-                "function": {"name": getattr(tc.function, "name", "")},
-            }
-        return {}
-
-    def _build_failed_tool_results(
-        self, raw_tool_calls: T.Iterable[T.Any]
-    ) -> ToolCallsResult:
-        """Build ToolCallsResult with failure messages for each unparsed tool call."""
-        tool_call_result_blocks = []
-        tool_calls_info_list = []
-
-        for tc in raw_tool_calls:
-            tc_dict = self._normalize_tool_call(tc)
-            tool_call_id = tc_dict.get("id", "")
-            tool_name = tc_dict.get("function", {}).get("name", "unknown")
-
-            tool_call_result_blocks.append(
-                ToolCallMessageSegment(
-                    role="tool",
-                    tool_call_id=tool_call_id,
-                    content=self._merge_follow_up_notice(
-                        f"error: Tool '{tool_name}' is not available or tool parsing failed."
-                    ),
+    def _count_image_parts(messages: list[Message]) -> int:
+        count = 0
+        for message in messages:
+            if isinstance(message.content, list):
+                count += sum(
+                    1 for part in message.content if isinstance(part, ImageURLPart)
                 )
-            )
-            tool_calls_info_list.append(
-                {
-                    "id": tool_call_id,
-                    "type": "function",
-                    "function": {"name": tool_name, "arguments": "{}"},
-                }
-            )
+        return count
 
-        return ToolCallsResult(
-            tool_calls_info=AssistantMessageSegment(
-                tool_calls=tool_calls_info_list,
-                content=[],
-            ),
-            tool_calls_result=tool_call_result_blocks,
+    def _log_request_cost_preflight(self) -> None:
+        estimated_input_tokens = EstimateTokenCounter().count_tokens(
+            self.run_context.messages
         )
-
-    def _build_empty_tool_call_failure_result(self) -> ToolCallsResult:
-        """Build ToolCallsResult when LLM requested tool calls but returned no tool call details."""
-        tool_call_id = f"failed_call_{uuid.uuid4().hex[:8]}"
-        return ToolCallsResult(
-            tool_calls_info=AssistantMessageSegment(
-                tool_calls=[
-                    {
-                        "id": tool_call_id,
-                        "type": "function",
-                        "function": {"name": "unknown", "arguments": "{}"},
-                    }
-                ],
-                content=[],
-            ),
-            tool_calls_result=[
-                ToolCallMessageSegment(
-                    role="tool",
-                    tool_call_id=tool_call_id,
-                    content=self._merge_follow_up_notice(
-                        "error: LLM requested tool call but no tool details were provided."
-                    ),
-                )
-            ],
+        image_count = self._count_image_parts(self.run_context.messages)
+        logger.debug(
+            "LLM request preflight. provider=%s, model=%s, estimated_input_tokens=%s, image_count=%s",
+            self.provider.provider_config.get("id", ""),
+            self.provider.get_model(),
+            estimated_input_tokens,
+            image_count,
         )
+        if estimated_input_tokens >= self.REQUEST_WARN_ESTIMATED_INPUT_TOKENS:
+            logger.warning(
+                "LLM request has high estimated input tokens. provider=%s, model=%s, estimated_input_tokens=%s",
+                self.provider.provider_config.get("id", ""),
+                self.provider.get_model(),
+                estimated_input_tokens,
+            )
+        if image_count > self.REQUEST_WARN_IMAGE_COUNT:
+            logger.warning(
+                "LLM request contains multiple images. provider=%s, model=%s, image_count=%s",
+                self.provider.provider_config.get("id", ""),
+                self.provider.get_model(),
+                image_count,
+            )
 
     async def _complete_with_assistant_response(self, llm_resp: LLMResponse) -> None:
         """Finalize the current step as a plain assistant response with no tool calls."""
@@ -980,6 +940,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
         self._refresh_tool_compaction_baseline(trusted_token_usage=token_usage)
         self._simple_print_message_role("[AftCompact]")
+        self._log_request_cost_preflight()
 
         # Per-turn tool set reassembly for tool_search mode
         if (

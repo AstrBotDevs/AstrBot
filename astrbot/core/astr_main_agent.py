@@ -171,24 +171,10 @@ class MainAgentBuildConfig:
     """The number of most recent turns to keep during llm_compress strategy."""
     llm_compress_provider_id: str = ""
     """The provider ID for the LLM used in context compression."""
-    context_token_counter_mode: str = "estimate"
-    """Token counting mode for context compaction: estimate, tokenizer, auto."""
-    compact_context_after_tool_call: bool = False
-    """Whether to run context compaction check immediately after tool execution."""
-    compact_context_soft_ratio: float = 0.3
-    """Soft trigger threshold for post-tool-call context compaction."""
-    compact_context_hard_ratio: float = 0.7
-    """Hard trigger threshold for post-tool-call context compaction."""
-    compact_context_min_delta_tokens: int = 0
-    """Minimum token growth required before post-tool-call compaction runs in soft zone."""
-    compact_context_min_delta_turns: int = 0
-    """Minimum message growth required before post-tool-call compaction runs in soft zone."""
-    compact_context_debounce_seconds: int = 0
-    """Debounce window for post-tool-call compaction checks."""
-    max_context_length: int = -1
+    max_context_length: int = 30
     """The maximum number of turns to keep in context. -1 means no limit.
     This enforce max turns before compression"""
-    dequeue_context_length: int = 1
+    dequeue_context_length: int = 10
     """The number of oldest turns to remove when context length limit is reached."""
     fallback_max_context_tokens: int = 128000
     """Fallback max context tokens. When max_context_tokens is 0 and the model is not in LLM_METADATAS, use this value."""

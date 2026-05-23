@@ -139,17 +139,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         ),
         "llm_compress_keep_recent": 6,
         "llm_compress_provider_id": "",
-        "context_token_counter_mode": "estimate",
-        "compact_context_after_tool_call": False,
-        "compact_context_soft_ratio": 0.3,
-        "compact_context_hard_ratio": 0.7,
-        "compact_context_min_delta_tokens": 0,
-        "compact_context_min_delta_turns": 0,
-        "compact_context_debounce_seconds": 0,
-        "periodic_context_compaction": dict(PERIODIC_CONTEXT_COMPACTION_DEFAULTS),
-        "context_memory": dict(CONTEXT_MEMORY_DEFAULTS),
-        "max_context_length": -1,
-        "dequeue_context_length": 1,
+        "max_context_length": 30,
+        "dequeue_context_length": 10,
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
@@ -243,9 +234,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
-        "group_message_max_cnt": 300,
-        "context_prompt": "You are now in a chatroom. The chat history is as follows: \n",
-        "active_reply_suffix_prompt": "Please react to it. Only output your response and do not output any other information. You MUST use the SAME language as the chatroom is using.",
+        "group_message_max_cnt": 50,
+        "group_icl_token_budget": 4000,
         "image_caption": False,
         "image_caption_provider_id": "",
         "active_reply": {
@@ -3324,6 +3314,9 @@ CONFIG_METADATA_2: Any = {
                     "group_message_max_cnt": {
                         "type": "int",
                     },
+                    "group_icl_token_budget": {
+                        "type": "int",
+                    },
                     "image_caption": {
                         "type": "bool",
                     },
@@ -4782,9 +4775,10 @@ CONFIG_METADATA_3 = {
                         "description": "最大消息数量",
                         "type": "int",
                     },
-                    "provider_ltm_settings.context_prompt": {
-                        "description": "上下文感知提示词",
-                        "type": "text",
+                    "provider_ltm_settings.group_icl_token_budget": {
+                        "description": "群聊上下文 Token 预算",
+                        "type": "int",
+                        "hint": "每次 LLM 请求注入的群聊上下文近似 token 上限。降低该值可减少费用并降低缓存失效影响。",
                     },
                     "provider_ltm_settings.image_caption": {
                         "description": "自动理解图片",

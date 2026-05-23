@@ -320,10 +320,19 @@ class InternalAgentSubStage(Stage):
                         and not event.platform_meta.support_streaming_message
                     )
 
+                    system_prompt_before_hooks = req.system_prompt or ""
                     if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
                         if reset_coro:
                             reset_coro.close()
                         return
+                    system_prompt_after_hooks = req.system_prompt or ""
+                    if system_prompt_after_hooks != system_prompt_before_hooks:
+                        logger.warning(
+                            "LLM system prompt was modified by request hooks. umo=%s, before_chars=%s, after_chars=%s",
+                            event.unified_msg_origin,
+                            len(system_prompt_before_hooks),
+                            len(system_prompt_after_hooks),
+                        )
 
                     # apply reset
                     if reset_coro:
