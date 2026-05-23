@@ -109,6 +109,7 @@ export interface BuiltinToolConfigTag {
 /** MCP/函数工具对象 */
 export interface ToolItem {
   name: string;
+  display_name?: string;
   description: string;
   active: boolean;
   readonly?: boolean;

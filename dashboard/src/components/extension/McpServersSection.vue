@@ -27,53 +27,47 @@
             <span>{{ getServerConfigSummary(server) }}</span>
           </div>
 
-          <div class="mcp-server-tools text-caption text-medium-emphasis">
-            <template v-if="server.tools && server.tools.length > 0">
-              <v-dialog max-width="600px">
-                <template v-slot:activator="{ props: listToolsProps }">
-                  <button
-                    v-bind="listToolsProps"
-                    class="mcp-server-tools__button"
-                    type="button"
-                    @click.stop
-                  >
-                    <v-icon size="small" class="me-1">mdi-tools</v-icon>
-                    {{
-                      tm('mcpServers.status.availableTools', {
-                        count: server.tools.length,
-                      })
-                    }}
-                    ({{ server.tools.length }})
-                  </button>
-                </template>
-                <template v-slot:default="{ isActive }">
-                  <v-card style="padding: 16px;">
-                    <v-card-title class="d-flex align-center">
-                      <span>{{ tm('mcpServers.status.availableTools') }}</span>
-                    </v-card-title>
-                    <v-card-text>
-                      <ul>
-                        <li
-                          v-for="(tool, idx) in server.tools"
-                          :key="idx"
-                          style="margin: 8px 0px;"
-                        >
-                          {{ tool }}
-                        </li>
-                      </ul>
-                    </v-card-text>
-                    <v-card-actions class="d-flex justify-end">
-                      <v-btn
-                        variant="text"
-                        color="primary"
-                        @click="isActive.value = false"
-                      >
-                        Close
-                      </v-btn>
-                    </v-card-actions>
-                  </v-card>
-                </template>
-              </v-dialog>
+              <div class="d-flex" style="gap: 8px;">
+                <div>
+                  <div v-if="item.tools && item.tools.length > 0">
+                    <div class="d-flex align-center mb-1">
+                      <v-icon size="small" color="grey" class="me-2">mdi-tools</v-icon>
+                      <v-dialog max-width="600px">
+                        <template v-slot:activator="{ props: listToolsProps }">
+                          <span class="text-caption text-medium-emphasis cursor-pointer" v-bind="listToolsProps"
+                            style="text-decoration: underline;">
+                            {{ tm('mcpServers.status.availableTools', { count: item.tools.length }) }} ({{ item.tools.length }})
+                          </span>
+                        </template>
+                        <template v-slot:default="{ isActive }">
+                          <v-card style="padding: 16px;">
+                            <v-card-title class="d-flex align-center">
+                              <span>{{ tm('mcpServers.status.availableTools') }}</span>
+                            </v-card-title>
+                            <v-card-text>
+                              <ul>
+                                <li v-for="(tool, idx) in (item.original_tool_names || item.tools)" :key="idx" style="margin: 8px 0px;">{{ tool }}</li>
+                              </ul>
+                            </v-card-text>
+                            <v-card-actions class="d-flex justify-end">
+                              <v-btn variant="text" color="primary" @click="isActive.value = false">
+                                Close
+                              </v-btn>
+                            </v-card-actions>
+                          </v-card>
+                        </template>
+                      </v-dialog>
+                    </div>
+                  </div>
+                  <div v-else class="text-caption text-medium-emphasis">
+                    <v-icon size="small" color="warning" class="me-1">mdi-alert-circle</v-icon>
+                    {{ tm('mcpServers.status.noTools') }}
+                  </div>
+                </div>
+                <div v-if="mcpServerUpdateLoaders[item.name]" class="text-caption text-medium-emphasis">
+                  <v-progress-circular indeterminate color="primary" size="16"></v-progress-circular>
+                </div>
+              </div>
             </template>
             <template v-else>
               <v-icon size="small" color="warning" class="me-1">

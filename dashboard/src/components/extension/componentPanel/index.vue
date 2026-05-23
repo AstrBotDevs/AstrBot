@@ -16,6 +16,7 @@ import { computed, onActivated, onMounted, ref, watch} from 'vue';
 import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
 import { normalizeTextInput } from '@/utils/inputValue';
+import { matchesToolSearch } from '@/utils/toolDisplayName';
 
 // Composables
 import { useComponentData } from './composables/useComponentData';
@@ -83,14 +84,9 @@ const {
   openDetailsDialog
 } = useCommandActions(toast, () => fetchCommands(tm('messages.loadFailed')));
 
-const filteredTools = computed(() => {
-  const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
-  if (!query) return tools.value;
-  return tools.value.filter(tool => 
-    tool.name?.toLowerCase().includes(query) ||
-    tool.description?.toLowerCase().includes(query)
-  );
-});
+const filteredTools = computed(() =>
+  tools.value.filter(tool => matchesToolSearch(tool, toolSearch.value))
+);
 
 // 处理切换指令状态
 const handleToggleCommand = async (cmd: CommandItem) => {
