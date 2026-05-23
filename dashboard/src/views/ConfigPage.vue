@@ -762,12 +762,33 @@ export default {
           }
           return { success: true, restarted: shouldRestart };
         } else {
-          this.save_message = res.data.message || this.messages.saveError;
+          const errorMsg = res.data.message || this.messages.saveError;
+          this.save_message = this.formatSslValidationError(errorMsg);
           this.save_message_snack = true;
           this.save_message_success = "error";
           return { success: false };
         }
       });
+    },
+    formatSslValidationError(errorMsg: string) {
+      if (!errorMsg.includes("sslValidation.")) {
+        return errorMsg;
+      }
+
+      return errorMsg
+        .split(";")
+        .map((err) => {
+          const trimmedErr = err.trim();
+          if (!trimmedErr.startsWith("sslValidation.")) {
+            return trimmedErr;
+          }
+
+          const [key, file] = trimmedErr.split("|", 2);
+          const i18nKey = key.replace("sslValidation.", "");
+          const translated = this.tm(`sslValidation.${i18nKey}`);
+          return file ? translated.replace("{file}", file) : translated;
+        })
+        .join("; ");
     },
     // 重置未保存状态
     onConfigSaved() {

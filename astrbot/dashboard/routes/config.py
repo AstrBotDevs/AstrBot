@@ -33,7 +33,10 @@ from astrbot.core.provider.oauth.openai_oauth import (
 )
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import StarMetadata, star_registry
-from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_plugin_data_path,
+)
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
@@ -352,6 +355,46 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
     return (errors, data)
 
 
+def validate_ssl_config(post_config: dict) -> list[str]:
+    """Validate WebUI HTTPS certificate settings before saving config."""
+    errors: list[str] = []
+    dashboard_config = post_config.get("dashboard", {})
+    if not isinstance(dashboard_config, dict):
+        return errors
+
+    ssl_config = dashboard_config.get("ssl", {})
+    if not isinstance(ssl_config, dict):
+        return errors
+
+    ssl_enable = ssl_config.get("enable", False)
+    if not ssl_enable:
+        return errors
+
+    cert_file = ssl_config.get("cert_file", "")
+    key_file = ssl_config.get("key_file", "")
+
+    cert_file = cert_file.strip() if isinstance(cert_file, str) else ""
+    key_file = key_file.strip() if isinstance(key_file, str) else ""
+
+    if not cert_file:
+        errors.append("sslValidation.required")
+    elif not _ssl_config_file_exists(cert_file):
+        errors.append(f"sslValidation.certNotFound|{cert_file}")
+
+    if not key_file:
+        errors.append("sslValidation.required")
+    elif not _ssl_config_file_exists(key_file):
+        errors.append(f"sslValidation.keyNotFound|{key_file}")
+
+    return list(dict.fromkeys(errors))
+
+
+def _ssl_config_file_exists(path_value: str) -> bool:
+    path = Path(path_value)
+    if not path.is_absolute():
+        path = Path(get_astrbot_data_path()) / path
+    return path.is_file()
+
 def _log_computer_config_changes(old_config: dict, new_config: dict) -> None:
     """Compare and log Computer/sandbox configuration changes."""
     old_ps = old_config.get("provider_settings", {})
@@ -383,6 +426,60 @@ def _log_computer_config_changes(old_config: dict, new_config: dict) -> None:
                 old_display,
                 new_display,
             )
+
+async def _validate_neo_connectivity(
+    post_config: dict,
+) -> str | None:
+    """Check if Bay is reachable when Shipyard Neo sandbox is configured.
+
+    Returns a warning message string if Bay isn't reachable, or None if
+    everything looks fine (or Neo isn't configured).
+    """
+    ps = post_config.get("provider_settings", {})
+    runtime = ps.get("computer_use_runtime", "none")
+    sandbox = ps.get("sandbox", {})
+    booter = sandbox.get("booter", "")
+
+    # Only check when sandbox mode + shipyard_neo is selected
+    if runtime != "sandbox" or booter != "shipyard_neo":
+        return None
+
+    endpoint = sandbox.get("shipyard_neo_endpoint", "").rstrip("/")
+    if not endpoint:
+        return "⚠️ Shipyard Neo endpoint 未设置"
+
+    access_token = sandbox.get("shipyard_neo_access_token", "")
+    if not access_token:
+        # Try auto-discovery
+        from astrbot.core.computer.computer_client import _discover_bay_credentials
+
+        access_token = _discover_bay_credentials(endpoint)
+
+    if not access_token:
+        return (
+            "⚠️ 未找到 Bay API Key。请填写访问令牌，"
+            "或确保 Bay 的 credentials.json 可被自动发现。"
+        )
+
+    # Connectivity check
+    import aiohttp
+
+    health_url = f"{endpoint}/health"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                health_url,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                if resp.status != 200:
+                    return (
+                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
+                        f"请确认 Bay 正在运行: {endpoint}"
+                    )
+    except Exception:
+        return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
+
+    return None
 
 
 def save_config(
@@ -418,6 +515,11 @@ def save_config(
         raise ValueError(f"验证配置时出现异常: {e}") from e
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
+
+    ssl_errors = validate_ssl_config(post_config)
+    if ssl_errors:
+        raise ValueError("; ".join(ssl_errors))
+
     config.save_config(post_config)
 
     if is_core and old_config_snapshot is not None:

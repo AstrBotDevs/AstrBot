@@ -154,5 +154,10 @@
       "cancel": "取消"
     },
     "reloadConfig": "重新从文件读取配置会丢弃当前未保存的更改，是否继续？"
+  },
+  "sslValidation": {
+    "required": "启用 WebUI HTTPS 时，必须配置 SSL 证书文件路径和私钥文件路径",
+    "certNotFound": "SSL 证书文件不存在: {file}",
+    "keyNotFound": "SSL 私钥文件不存在: {file}"
   }
 }
