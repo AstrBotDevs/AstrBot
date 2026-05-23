@@ -503,6 +503,7 @@ class AuthRoute(Route):
         host = (
             os.environ.get("DASHBOARD_HOST")
             or os.environ.get("ASTRBOT_DASHBOARD_HOST")
+            or os.environ.get("ASTRBOT_HOST")
             or self.config["dashboard"].get("host", "")
         )
         return str(host).strip().lower() in LOCAL_DASHBOARD_HOSTS

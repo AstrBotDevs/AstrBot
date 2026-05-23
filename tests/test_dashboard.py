@@ -2367,6 +2367,44 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
 
 
 @pytest.mark.asyncio
+async def test_dashboard_run_accepts_astrbot_host_and_port_env_aliases(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+
+    async def fake_serve(app, config, shutdown_trigger):
+        return config
+
+    monkeypatch.setenv("ASTRBOT_HOST", "127.0.0.1")
+    monkeypatch.setenv("ASTRBOT_PORT", "18089")
+    monkeypatch.delenv("DASHBOARD_HOST", raising=False)
+    monkeypatch.delenv("DASHBOARD_PORT", raising=False)
+    monkeypatch.delenv("ASTRBOT_DASHBOARD_HOST", raising=False)
+    monkeypatch.delenv("ASTRBOT_DASHBOARD_PORT", raising=False)
+    monkeypatch.setattr(server, "check_port_in_use", lambda port: False)
+    monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
+
+    config = await server.run()
+
+    assert config.bind == ["127.0.0.1:18089"]
+
+
+@pytest.mark.asyncio
+async def test_dashboard_run_can_be_disabled_from_astrbot_env(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+
+    monkeypatch.setenv("ASTRBOT_DASHBOARD_ENABLE", "false")
+
+    assert server.run() is None
+
+
+@pytest.mark.asyncio
 async def test_subagent_config_accepts_default_persona(
     app: Quart,
     authenticated_header: dict,

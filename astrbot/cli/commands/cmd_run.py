@@ -54,41 +54,12 @@ from dotenv import load_dotenv
 from filelock import FileLock, Timeout
 
 from astrbot.cli.utils import DashboardManager
+from astrbot.core.utils.env_template import expand_env_placeholders
 from astrbot.runtime_bootstrap import initialize_runtime_bootstrap
 
 # Python version check: require 3.12 or 3.13
 if not (sys.version_info.major == 3 and sys.version_info.minor in (12, 13)):
     sys.exit(1)
-
-# Regular expression to find bash-like parameter expansions:
-# ${VAR:-default} or ${VAR}
-_PARAM_EXPAND_RE = re.compile(r"\$\{([^}:]+?)(:-([^}]*))?\}")
-
-
-def _expand_parameter(
-    match: re.Match,
-    env: dict[str, str],
-    local: dict[str, str],
-) -> str:
-    """Helper to expand a single ${VAR:-default} or ${VAR} occurrence.
-
-    Precedence:
-      1. local dict (parsed from the same file, earlier entries)
-      2. environment variables
-      3. default provided in the expansion (if any)
-      4. empty string
-    """
-    var = match.group(1)
-    default = match.group(3) if match.group(3) is not None else ""
-    # Prefer 'local' parsed values first
-    if var in local and local[var] != "":
-        return local[var]
-    val = env.get(var, "")
-    if val != "":
-        return val
-    return default
-
-DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_DASHBOARD_RESET_PASSWORD"
 
 
 async def run_astrbot(astrbot_root: Path) -> None:
@@ -114,13 +85,62 @@ async def run_astrbot(astrbot_root: Path) -> None:
 @click.option("--reload", "-r", is_flag=True, help="Auto-reload plugins")
 @click.option("--host", "-H", help="AstrBot Dashboard Host", required=False, type=str)
 @click.option("--port", "-p", help="AstrBot Dashboard port", required=False, type=str)
+@click.option("--root", help="AstrBot root directory", required=False, type=str)
 @click.option(
-    "--reset-password",
-    is_flag=True,
-    help="Force reset the dashboard initial password on startup.",
+    "--service-config",
+    "-c",
+    help="Service configuration file path (supports ${VAR:-default} style expansion)",
+    required=False,
+    type=str,
 )
+@click.option(
+    "--backend-only",
+    "-b",
+    is_flag=True,
+    default=False,
+    help="Disable WebUI, run backend only",
+)
+@click.option(
+    "--log-level",
+    "-l",
+    help="Log level",
+    required=False,
+    type=str,
+    default="INFO",
+)
+@click.option(
+    "--ssl-cert",
+    help="SSL certificate file path for backend (preferred env name: ASTRBOT_SSL_CERT)",
+    required=False,
+    type=str,
+)
+@click.option(
+    "--ssl-key",
+    help="SSL private key file path for backend (preferred env name: ASTRBOT_SSL_KEY)",
+    required=False,
+    type=str,
+)
+@click.option(
+    "--ssl-ca",
+    help="SSL CA certificates file path for backend (preferred env name: ASTRBOT_SSL_CA_CERTS)",
+    required=False,
+    type=str,
+)
+@click.option("--debug", is_flag=True, help="Enable debug mode")
 @click.command()
-def run(reload: bool, port: str, reset_password: bool) -> None:
+def run(
+    reload: bool,
+    host: str,
+    port: str,
+    root: str,
+    service_config: str,
+    backend_only: bool,
+    log_level: str,
+    ssl_cert: str,
+    ssl_key: str,
+    ssl_ca: str,
+    debug: bool,
+) -> None:
     """Run AstrBot"""
     initialize_runtime_bootstrap()
     try:
@@ -130,12 +150,16 @@ def run(reload: bool, port: str, reset_password: bool) -> None:
         # --- Step 1: Resolve service-config path (if provided). We'll treat it as a .env file later. ---
         svc_path: Path | None = None
         if service_config:
-            candidate = Path(service_config)
+            expanded_service_config = expand_env_placeholders(service_config)
+            candidate = Path(os.path.expanduser(expanded_service_config))
             if not candidate.exists():
-                # Try to expand user and resolve
-                candidate = Path(os.path.expanduser(service_config))
+                candidate = Path.cwd() / candidate
             if candidate.exists():
                 svc_path = candidate
+            else:
+                raise click.ClickException(
+                    f"Service configuration file not found: {service_config}",
+                )
 
         # NOTE:
         # Loading of common .env files (CWD/.env, packaged project .env, ASTRBOT_ROOT/.env)
@@ -183,17 +207,24 @@ def run(reload: bool, port: str, reset_password: bool) -> None:
         # Host/Port precedence: CLI args > parsed service config/env/.env > defaults.
         if port is not None:
             os.environ["ASTRBOT_PORT"] = port
+            os.environ["ASTRBOT_DASHBOARD_PORT"] = port
+            os.environ["DASHBOARD_PORT"] = port
 
         if host is not None:
             os.environ["ASTRBOT_HOST"] = host
+            os.environ["ASTRBOT_DASHBOARD_HOST"] = host
+            os.environ["DASHBOARD_HOST"] = host
 
         # CLI-provided SSL paths should set backend-standard env names.
         if ssl_cert is not None:
             os.environ["ASTRBOT_SSL_CERT"] = ssl_cert
+            os.environ["ASTRBOT_DASHBOARD_SSL_CERT"] = ssl_cert
         if ssl_key is not None:
             os.environ["ASTRBOT_SSL_KEY"] = ssl_key
+            os.environ["ASTRBOT_DASHBOARD_SSL_KEY"] = ssl_key
         if ssl_ca is not None:
             os.environ["ASTRBOT_SSL_CA_CERTS"] = ssl_ca
+            os.environ["ASTRBOT_DASHBOARD_SSL_CA_CERTS"] = ssl_ca
 
         # Dashboard enable is derived from CLI flag (--backend-only). CLI decision should win.
         os.environ["ASTRBOT_DASHBOARD_ENABLE"] = str(not backend_only)
@@ -204,8 +235,62 @@ def run(reload: bool, port: str, reset_password: bool) -> None:
             click.echo("Plugin auto-reload enabled")
             os.environ["ASTRBOT_RELOAD"] = "1"
 
-        if reset_password:
-            os.environ[DASHBOARD_RESET_PASSWORD_ENV] = "1"
+        if debug:
+            keys_to_print = [
+                "ASTRBOT_ROOT",
+                "ASTRBOT_LOG_LEVEL",
+                "ASTRBOT_CLI",
+                "ASTRBOT_DESKTOP_CLIENT",
+                "ASTRBOT_SYSTEMD",
+                "ASTRBOT_RELOAD",
+                "ASTRBOT_DISABLE_METRICS",
+                "TESTING",
+                "DEMO_MODE",
+                "PYTHON",
+                "ASTRBOT_DASHBOARD_ENABLE",
+                "DASHBOARD_ENABLE",
+                "ASTRBOT_HOST",
+                "DASHBOARD_HOST",
+                "ASTRBOT_PORT",
+                "DASHBOARD_PORT",
+                # Dashboard SSL (legacy)
+                "ASTRBOT_SSL_ENABLE",
+                "DASHBOARD_SSL_ENABLE",
+                "ASTRBOT_SSL_CERT",
+                "DASHBOARD_SSL_CERT",
+                "ASTRBOT_SSL_KEY",
+                "DASHBOARD_SSL_KEY",
+                "ASTRBOT_SSL_CA_CERTS",
+                "DASHBOARD_SSL_CA_CERTS",
+                # Backend-standard SSL (preferred)
+                "ASTRBOT_SSL_ENABLE",
+                "ASTRBOT_SSL_CERT",
+                "ASTRBOT_SSL_KEY",
+                "ASTRBOT_SSL_CA_CERTS",
+                "http_proxy",
+                "https_proxy",
+                "no_proxy",
+                "DASHSCOPE_API_KEY",
+                "COZE_API_KEY",
+                "COZE_BOT_ID",
+                "BAY_DATA_DIR",
+                "TEST_MODE",
+            ]
+            click.secho("\n[Debug Mode] Environment Variables:", fg="yellow", bold=True)
+            for key in keys_to_print:
+                if key in os.environ:
+                    val = os.environ[key]
+                    if "KEY" in key or "PASSWORD" in key or "SECRET" in key:
+                        if len(val) > 8:
+                            val = val[:4] + "****" + val[-4:]
+                        else:
+                            val = "****"
+                    click.echo(f"  {click.style(key, fg='cyan')}: {val}")
+            if svc_path:
+                click.echo(
+                    f"  {click.style('SERVICE_CONFIG', fg='cyan')}: {svc_path!s}",
+                )
+            click.echo("")
 
         lock_file = astrbot_root / "astrbot.lock"
         lock = FileLock(lock_file, timeout=5)
