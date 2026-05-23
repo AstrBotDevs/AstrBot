@@ -60,7 +60,7 @@ if ! has "$UV_BIN"; then
   err "uv was not found after installation."
   err "Please install uv manually: https://docs.astral.sh/uv/getting-started/installation/"
   exit 1
-fi  
+fi
 
 ok "$("$UV_BIN" --version)"
 info "Installing AstrBot with Python 3.12..."
