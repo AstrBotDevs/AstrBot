@@ -86,13 +86,13 @@ async def call_event_hook(
     #
 
     """
+    from astrbot.core.star.session_plugin_manager import SessionPluginManager
+
     handlers = star_handlers_registry.get_handlers_by_event_type(
         hook_type,
         plugins_name=event.plugins_name,
     )
-    session_config = await SessionPluginManager.get_session_plugin_config(
-        event.unified_msg_origin
-    )
+    handlers = await SessionPluginManager.filter_handlers_by_session(event, handlers)
     for handler in handlers:
         plugin = star_map.get(handler.handler_module_path)
         if plugin and not SessionPluginManager.is_plugin_enabled_for_session_config(
