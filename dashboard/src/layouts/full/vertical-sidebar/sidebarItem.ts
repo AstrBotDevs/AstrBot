@@ -88,9 +88,14 @@ const sidebarItem: menu[] = [
     to: '/knowledge-base',
   },
   {
-    title: 'core.navigation.persona',
-    icon: 'mdi-heart',
-    to: '/persona'
+    title: 'core.navigation.memory',
+    icon: 'mdi-brain',
+    to: '/memory',
+  },
+  {
+    title: 'core.navigation.chat',
+    icon: 'mdi-chat',
+    to: '/chat'
   },
   {
     title: 'core.navigation.groups.more',

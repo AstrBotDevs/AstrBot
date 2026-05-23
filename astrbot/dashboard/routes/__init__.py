@@ -10,7 +10,7 @@ from .cron import CronRoute
 from .file import FileRoute
 from .knowledge_base import KnowledgeBaseRoute
 from .log import LogRoute
-from .open_api import OpenApiRoute
+from .memory import MemoryRoute
 from .persona import PersonaRoute
 from .platform import PlatformRoute
 from .plugin import PluginRoute
@@ -35,7 +35,7 @@ __all__ = [
     "FileRoute",
     "KnowledgeBaseRoute",
     "LogRoute",
-    "OpenApiRoute",
+    "MemoryRoute",
     "PersonaRoute",
     "PlatformRoute",
     "PluginRoute",

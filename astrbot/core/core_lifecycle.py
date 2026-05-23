@@ -24,6 +24,7 @@ from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.memory.memory_manager import MemoryManager
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.platform.manager import PlatformManager
@@ -213,6 +214,8 @@ class AstrBotCoreLifecycle:
 
         # 初始化知识库管理器
         self.kb_manager = KnowledgeBaseManager(self.provider_manager)
+        # 初始化记忆管理器
+        self.memory_manager = MemoryManager()
 
         # 初始化 CronJob 管理器
         self.cron_manager = CronJobManager(self.db)
@@ -232,8 +235,7 @@ class AstrBotCoreLifecycle:
             self.persona_mgr,
             self.astrbot_config_mgr,
             self.kb_manager,
-            self.cron_manager,
-            self.subagent_orchestrator,
+            self.memory_manager,
         )
 
         # 初始化插件管理器
