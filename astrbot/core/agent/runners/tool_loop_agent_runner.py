@@ -2,16 +2,14 @@ import asyncio
 import copy
 import hashlib
 import json
-import sys
 import time
 import traceback
 import typing as T
-import uuid
+from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from typing import override
 
-import anyio
 from mcp.types import (
     BlobResourceContents,
     CallToolResult,
@@ -27,10 +25,34 @@ from tenacity import (
     wait_exponential,
 )
 
+import astrbot.core.message.components as Comp
 from astrbot import logger
+from astrbot.core.agent.context.config import ContextConfig
+from astrbot.core.agent.context.guard import RequestContextGuard
+from astrbot.core.agent.context.token_counter import EstimateTokenCounter, TokenCounter
 from astrbot.core.agent.handoff import HandoffTool
-from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    ImageURLPart,
+    Message,
+    TextPart,
+    ThinkPart,
+    ToolCallMessageSegment,
+    bind_checkpoint_messages,
+)
+from astrbot.core.agent.response import AgentResponseData, AgentStats
+from astrbot.core.agent.run_context import ContextWrapper, TContext
+from astrbot.core.agent.runners.base import (
+    AgentResponse,
+    AgentState,
+    BaseAgentRunner,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.tool_call_approval import (
+    ToolCallApprovalContext,
+    request_tool_call_approval,
+)
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -52,22 +74,14 @@ from astrbot.core.provider.modalities import (
 )
 from astrbot.core.provider.provider import Provider
 from astrbot.core.subagent_manager import SubAgentManager
+from astrbot.core.tools.claude_strategy import ClaudeToolSearchStrategy
+from astrbot.core.tools.discovery_state import DiscoveryState
+from astrbot.core.tools.generic_strategy import GenericToolSearchStrategy
+from astrbot.core.tools.strategy import ToolSearchStrategy
+from astrbot.core.tools.tool_catalog import ToolCatalog
+from astrbot.core.tools.tool_search_index import ToolSearchIndex
+from astrbot.core.utils.config_normalization import to_non_negative_int, to_ratio
 
-from ..context.compressor import ContextCompressor
-from ..context.config import ContextConfig
-from ..context.guard import RequestContextGuard
-from ..context.token_counter import EstimateTokenCounter, TokenCounter
-from ..hooks import BaseAgentRunHooks
-from ..message import (
-    AssistantMessageSegment,
-    Message,
-    ToolCallMessageSegment,
-    bind_checkpoint_messages,
-)
-from ..response import AgentResponseData, AgentStats
-from ..run_context import ContextWrapper, TContext
-from ..tool_executor import BaseFunctionToolExecutor
-from .base import AgentResponse, AgentState, BaseAgentRunner
 
 def _is_claude_provider(provider: Provider) -> bool:
     """Check whether the provider uses the Anthropic Claude API.
@@ -199,6 +213,13 @@ class PostToolCompactionController:
         return True
 
 
+class _ToolExecutionInterrupted(Exception):
+    """Raised when a running tool call is interrupted by a stop request."""
+
+
+ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
+
+
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     TOOL_RESULT_MAX_ESTIMATED_TOKENS = 27_500
     TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS = 7000
@@ -325,7 +346,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.completion_text:
             parts.append(TextPart(text=llm_resp.completion_text))
         if len(parts) == 0:
-            logger.warning("LLM returned empty assistant message with no tool calls.")
+            model_id = getattr(self.run_context, "model_id", None)
+            provider_id = getattr(self.run_context, "provider_id", None)
+            run_id = getattr(self.run_context, "run_id", None)
+            context_parts = []
+            if model_id is not None:
+                context_parts.append(f"model_id={model_id}")
+            if provider_id is not None:
+                context_parts.append(f"provider_id={provider_id}")
+            if run_id is not None:
+                context_parts.append(f"run_id={run_id}")
+            message = "LLM returned empty assistant message with no tool calls."
+            if context_parts:
+                message = f"{message} Context: {', '.join(context_parts)}."
+            logger.warning(message)
+            raise EmptyModelOutputError(message)
         self.run_context.messages.append(Message(role="assistant", content=parts))
 
         try:
@@ -603,14 +638,33 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             image_urls=request.image_urls if supports_image else [],
             audio_urls=request.audio_urls if supports_audio else [],
         )
+        context = await adjusted_request.assemble_context()
+        content = context.get("content")
+        if isinstance(content, str):
+            content_blocks: list[dict[str, T.Any]] = [{"type": "text", "text": content}]
+        elif isinstance(content, list):
+            content_blocks = content
+        else:
+            content_blocks = []
+
+        if not supports_image:
+            for _ in request.image_urls:
+                content_blocks.append({"type": "text", "text": "[Image]"})
+        if not supports_audio:
+            for _ in request.audio_urls:
+                content_blocks.append({"type": "text", "text": "[Audio]"})
+
+        return {"role": "user", "content": content_blocks}
 
     def _should_run_post_tool_compaction(self) -> bool:
         if not hasattr(self, "post_tool_compaction_controller"):
             return False
         return self.post_tool_compaction_controller.should_compact(
             messages=self.run_context.messages,
-            token_counter=self.context_manager.token_counter,
-            max_context_tokens=int(self.context_config.max_context_tokens or 0),
+            token_counter=self.request_context_guard.token_counter,
+            max_context_tokens=int(
+                self.request_context_guard_config.max_context_tokens or 0
+            ),
         )
 
     async def _iter_llm_responses(
@@ -633,25 +687,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # For primary provider we keep explicit model selection if provided.
             payload["model"] = self.req.model
         if self.streaming:
-            stream = self.provider.text_chat_stream(
-                contexts=contexts,
-                func_tool=func_tool,
-                session_id=self.req.session_id,
-                extra_user_content_parts=self.req.extra_user_content_parts,
-                abort_signal=self._abort_signal,
-                model=model,
-            )
+            stream = self.provider.text_chat_stream(**payload)
             async for resp in stream:
                 yield resp
         else:
-            yield await self.provider.text_chat(
-                contexts=contexts,
-                func_tool=func_tool,
-                session_id=self.req.session_id,
-                extra_user_content_parts=self.req.extra_user_content_parts,
-                abort_signal=self._abort_signal,
-                model=model,
-            )
+            yield await self.provider.text_chat(**payload)
 
     def _refresh_tool_search_strategy(self, provider: Provider) -> None:
         """Rebuild tool_search strategy for the current provider family.
@@ -686,6 +726,42 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         self._tool_search_strategy = strategy
         self.req.func_tool = strategy.build_tool_set()
+
+    def _is_empty_llm_response(self, resp: LLMResponse) -> bool:
+        """Check if an LLM response is effectively empty.
+
+        This heuristic checks:
+        - completion_text is empty or whitespace only
+        - reasoning_content is empty or whitespace only
+        - tools_call_args is empty (no tool calls)
+        - result_chain has no meaningful content (Plain components with non-empty text,
+          or any non-Plain components like images, voice, etc.)
+
+        Returns True if the response contains no meaningful content.
+        """
+        completion_text_stripped = (resp.completion_text or "").strip()
+        reasoning_content_stripped = (resp.reasoning_content or "").strip()
+
+        # Check result_chain for meaningful non-empty content (e.g., images, non-empty text)
+        has_result_chain_content = False
+        if resp.result_chain and resp.result_chain.chain:
+            for comp in resp.result_chain.chain:
+                # Skip empty Plain components
+                if isinstance(comp, Comp.Plain):
+                    if comp.text and comp.text.strip():
+                        has_result_chain_content = True
+                        break
+                else:
+                    # Non-Plain components (e.g., images, voice) are considered valid content
+                    has_result_chain_content = True
+                    break
+
+        return (
+            not completion_text_stripped
+            and not reasoning_content_stripped
+            and not resp.tools_call_args
+            and not has_result_chain_content
+        )
 
     async def _iter_llm_responses_with_fallback(
         self,
@@ -735,6 +811,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     has_stream_output = True
                                     yield resp
                                     continue
+
+                                if (
+                                    (resp.role == "assistant" or resp.role == "tool")
+                                    and self._is_empty_llm_response(resp)
+                                    and not is_last_candidate
+                                ):
+                                    raise EmptyModelOutputError(
+                                        "LLM returned empty response with no tool calls."
+                                    )
 
                                 if (
                                     resp.role == "err"
@@ -1212,11 +1297,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.req.append_tool_calls_result(tool_calls_result)
 
             if self._should_run_post_tool_compaction():
-                self.run_context.messages = await self.context_manager.process(
-                    self.run_context.messages,
-                    force_compaction=True,
+                token_usage = (
+                    self.req.conversation.token_usage if self.req.conversation else 0
                 )
-                self._refresh_tool_compaction_baseline()
+                self.run_context.messages = await self.request_context_guard.process(
+                    self.run_context.messages,
+                    trusted_token_usage=token_usage,
+                )
+                self._refresh_tool_compaction_baseline(trusted_token_usage=token_usage)
 
     async def step_until_done(
         self,
@@ -1257,8 +1345,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> T.AsyncGenerator[_HandleFunctionToolsResult, None]:
         """处理函数工具调用。"""
         tool_call_result_blocks: list[ToolCallMessageSegment] = []
-        last_func_tool_name = "unknown"
-        last_func_tool_id = "unknown"
         logger.info(f"Agent 使用工具: {llm_response.tools_call_name}")
 
         def _append_tool_call_result(tool_call_id: str, content: str) -> None:
