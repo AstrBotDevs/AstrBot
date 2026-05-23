@@ -287,6 +287,7 @@ export default defineConfig({
             collapsed: false,
             items: [
               { text: "Package Manager", link: "/astrbot/package" },
+              { text: "Desktop Client", link: "/astrbot/desktop" },
               { text: "One-click Launcher", link: "/astrbot/launcher" },
               { text: "Docker", link: "/astrbot/docker" },
               { text: "Kubernetes", link: "/astrbot/kubernetes" },
@@ -343,6 +344,7 @@ export default defineConfig({
               { text: "Mattermost", link: "/mattermost" },
               { text: "Misskey", link: "/misskey" },
               { text: "Discord", link: "/discord" },
+              { text: "KOOK", link: "/kook" },
               {
                 text: "Satori",
                 base: "/en/platform/satori",
@@ -357,7 +359,6 @@ export default defineConfig({
                 collapsed: false,
                 items: [
                   { text: "Matrix", link: "/matrix" },
-                  { text: "KOOK", link: "/kook" },
                   { text: "VoceChat", link: "/vocechat" },
                 ],
               },

@@ -383,6 +383,7 @@ export default {
   border-radius: 8px;
   height: 100%;
   overflow-y: auto;
+  overflow-x: auto;
   padding: 16px;
 }
 
@@ -400,7 +401,7 @@ export default {
 
 :deep(.console-log-line--structured) {
   display: grid;
-  grid-template-columns: max-content 10ch minmax(0, 1fr);
+  grid-template-columns: max-content max-content minmax(0, 1fr);
   column-gap: 8px;
   align-items: start;
   white-space: normal;
@@ -419,6 +420,16 @@ export default {
 
 :deep(.console-log-message) {
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+  :deep(.console-log-line--structured) {
+    grid-template-columns: 1fr;
+  }
+  :deep(.console-log-prefix:empty),
+  :deep(.console-log-level:empty) {
+    display: none;
+  }
 }
 
 :deep(.fade-in) {

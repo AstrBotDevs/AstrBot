@@ -114,6 +114,8 @@ from astrbot.core.utils.quoted_message_parser import (
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
+LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
+
 
 @dataclass(slots=True)
 class MainAgentBuildConfig:
@@ -183,6 +185,10 @@ class MainAgentBuildResult:
     reset_coro: Coroutine | None = None
 
 
+def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
+    event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, message)
+
+
 def _select_provider(
     event: AstrMessageEvent, plugin_context: Context
 ) -> Provider | None:
@@ -190,11 +196,20 @@ def _select_provider(
     sel_provider = event.get_extra("selected_provider")
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
-        if not provider:
+        if provider is None:
             logger.error("未找到指定的提供商: %s。", sel_provider)
+            _set_llm_error_message(
+                event,
+                f"LLM 请求失败：未找到指定的提供商 `{sel_provider}`。请检查提供商配置或重新选择可用模型。",
+            )
+            return None
         if not isinstance(provider, Provider):
             logger.error(
                 "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
+            )
+            _set_llm_error_message(
+                event,
+                f"LLM 请求失败：选择的提供商类型无效（{type(provider).__name__}），已跳过本次请求。",
             )
             return None
         return provider
@@ -202,6 +217,7 @@ def _select_provider(
         return plugin_context.get_using_provider(umo=event.unified_msg_origin)
     except ValueError as exc:
         logger.error("Error occurred while selecting provider: %s", exc)
+        _set_llm_error_message(event, f"LLM 请求失败：{exc}")
         return None
 
 
@@ -229,7 +245,7 @@ async def _apply_kb(
     config: MainAgentBuildConfig,
 ) -> None:
     if not config.kb_agentic_mode:
-        if req.prompt is None:
+        if req.prompt is None or not req.prompt.strip():
             return
         try:
             kb_result = await retrieve_knowledge_base(
@@ -1192,6 +1208,11 @@ async def build_main_agent(
     provider = provider or _select_provider(event, plugin_context)
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
+        if not event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):
+            _set_llm_error_message(
+                event,
+                "LLM 请求失败：未找到任何可用的对话模型（提供商）。请先在 WebUI 中配置并启用可用模型。",
+            )
         return None
 
     if req is None:

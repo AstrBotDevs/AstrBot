@@ -79,8 +79,13 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     )
 
     async def _resolve_path_from_sandbox(
-        self, context: ContextWrapper[AstrAgentContext], path: str
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        path: str,
+        *,
+        component_type: str = "file",
     ) -> tuple[str, bool]:
+        path = str(path)
         # if the path is relative, check if the file exists in user's local workspace
         if not os.path.isabs(path):
             unified_msg_origin = context.context.event.unified_msg_origin
@@ -115,8 +120,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return local_path, True
         except Exception as exc:
             logger.warning(f"Failed to check/download file from sandbox: {exc}")
+            raise
 
-        return path, False
+        raise FileNotFoundError(f"{component_type} path does not exist: {path}")
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
@@ -155,7 +161,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     url = msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path
+                            context, path, component_type="image"
                         )
                         components.append(Comp.Image.fromFileSystem(path=local_path))
                     elif url:
@@ -167,7 +173,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     url = msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path
+                            context, path, component_type="record"
                         )
                         components.append(Comp.Record.fromFileSystem(path=local_path))
                     elif url:
@@ -179,7 +185,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     url = msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path
+                            context, path, component_type="video"
                         )
                         components.append(Comp.Video.fromFileSystem(path=local_path))
                     elif url:
@@ -197,7 +203,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     )
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path
+                            context, path, component_type="file"
                         )
                         components.append(Comp.File(name=name, file=local_path))
                     elif url:
@@ -213,6 +219,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     return (
                         f"error: unsupported message type '{msg_type}' at index {idx}."
                     )
+            except FileNotFoundError as exc:
+                return f"error: {exc}"
             except Exception as exc:
                 return f"error: failed to build messages[{idx}] component: {exc}"
 
