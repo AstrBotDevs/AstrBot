@@ -214,7 +214,12 @@ def _validate_template_list(value, meta, path_key, errors, validate_fn) -> None:
         if not template_meta:
             errors.append(f"未知模板 {item_path}: {template_key}")
             continue
-        validate_fn(item, template_meta.get("items", {}), path=f"{item_path}.")
+
+        validate_fn(
+            item,
+            template_meta.get("items", {}),
+            path=f"{path_key}.templates.{template_key}.",
+        )
 
 
 def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
