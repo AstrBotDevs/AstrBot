@@ -82,13 +82,14 @@ def _get_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
                 continue
             name = canonicalize_distribution_name(req.name)
             if name in installed:
-                # Use the original constraint from pyproject.toml instead of ==installed_version
-                # This allows plugins to require higher versions as long as they satisfy the core constraint
-                if req.specifier:
-                    constraints.append(f"{name}{req.specifier}")
+                ver = installed[name]
+                try:
+                    next_major = int(str(ver).split(".")[0]) + 1
+                except (ValueError, TypeError):
+                    constraints.append(f"{name}=={ver}")
                 else:
-                    # No version constraint in original, use >=installed to prevent downgrade
-                    constraints.append(f"{name}>={installed[name]}")
+                    # Allow compatible upgrades but block next major version
+                    constraints.append(f"{name}>={ver},<{next_major}")
         except Exception:
             continue
 
