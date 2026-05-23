@@ -1,5 +1,6 @@
-import builtins
+from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlparse, urlunparse
 
 import pytest
 from openai.types.chat.chat_completion import ChatCompletion
@@ -312,9 +313,114 @@ async def test_parse_openai_completion_accepts_reasoning_only_response(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_openai_payload_handles_none_think_content():
-    """Test that _finally_convert_payload handles think content being None."""
+async def test_pop_record_removes_assistant_tool_calls_with_following_tools_atomically():
     provider = _make_provider()
+    try:
+        context = [
+            {"role": "system", "content": "system"},
+            {"role": "assistant", "tool_calls": [{"id": "call_1"}], "content": None},
+            {"role": "tool", "tool_call_id": "call_1", "content": "result"},
+            {"role": "user", "content": "keep me"},
+        ]
+
+        await provider.pop_record(context)
+
+        assert context == [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "keep me"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pop_record_removes_leading_orphan_tool_messages():
+    provider = _make_provider()
+    try:
+        context = [
+            {"role": "system", "content": "system"},
+            {"role": "tool", "tool_call_id": "call_1", "content": "orphan"},
+            {"role": "user", "content": "old user"},
+            {"role": "assistant", "content": "old assistant"},
+            {"role": "user", "content": "new user"},
+        ]
+
+        await provider.pop_record(context)
+
+        assert context == [
+            {"role": "system", "content": "system"},
+            {"role": "assistant", "content": "old assistant"},
+            {"role": "user", "content": "new user"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pop_record_normal_messages_no_regression():
+    provider = _make_provider()
+    try:
+        context = [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "user1"},
+            {"role": "assistant", "content": "assistant1"},
+            {"role": "user", "content": "user2"},
+            {"role": "assistant", "content": "assistant2"},
+        ]
+
+        await provider.pop_record(context)
+
+        assert context == [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "user2"},
+            {"role": "assistant", "content": "assistant2"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pop_record_assistant_with_multiple_tool_calls():
+    provider = _make_provider()
+    try:
+        context = [
+            {"role": "system", "content": "system"},
+            {
+                "role": "assistant",
+                "tool_calls": [{"id": "call_1"}, {"id": "call_2"}],
+                "content": None,
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "result1"},
+            {"role": "tool", "tool_call_id": "call_2", "content": "result2"},
+            {"role": "user", "content": "keep me"},
+        ]
+
+        await provider.pop_record(context)
+
+        assert context == [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "keep me"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pop_record_only_system_messages():
+    provider = _make_provider()
+    try:
+        context = [{"role": "system", "content": "system"}]
+
+        await provider.pop_record(context)
+
+        assert context == [{"role": "system", "content": "system"}]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_groq_payload_drops_reasoning_content_from_assistant_history():
+    provider = _make_groq_provider()
     try:
         # Test case where think content might be None
         payloads = {
@@ -851,9 +957,8 @@ async def test_prepare_chat_payload_materializes_context_file_uri_image_urls(tmp
 async def test_file_uri_to_path_preserves_windows_drive_letter():
     provider = _make_provider()
     try:
-        assert provider._file_uri_to_path("file:///C:/tmp/quoted-image.png") == (
-            "C:/tmp/quoted-image.png"
-        )
+        resolved = provider._file_uri_to_path("file:///C:/tmp/quoted-image.png")
+        assert Path(resolved) == Path("C:/tmp/quoted-image.png")
     finally:
         await provider.terminate()
 
@@ -862,9 +967,8 @@ async def test_file_uri_to_path_preserves_windows_drive_letter():
 async def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
     provider = _make_provider()
     try:
-        assert provider._file_uri_to_path("file://C:/tmp/quoted-image.png") == (
-            "C:/tmp/quoted-image.png"
-        )
+        resolved = provider._file_uri_to_path("file://C:/tmp/quoted-image.png")
+        assert Path(resolved) == Path("C:/tmp/quoted-image.png")
     finally:
         await provider.terminate()
 
@@ -873,9 +977,8 @@ async def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
 async def test_file_uri_to_path_preserves_remote_netloc_as_unc_path():
     provider = _make_provider()
     try:
-        assert provider._file_uri_to_path("file://server/share/quoted-image.png") == (
-            "//server/share/quoted-image.png"
-        )
+        resolved = provider._file_uri_to_path("file://server/share/quoted-image.png")
+        assert Path(resolved) == Path("//server/share/quoted-image.png")
     finally:
         await provider.terminate()
 
@@ -1046,7 +1149,10 @@ async def test_prepare_chat_payload_materializes_context_localhost_file_uri_imag
         image_path = tmp_path / "quoted-image.png"
         PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_path)
 
-        localhost_uri = f"file://localhost{image_path.as_posix()}"
+        parsed_local_uri = urlparse(image_path.as_uri())
+        localhost_uri = urlunparse(
+            ("file", "localhost", parsed_local_uri.path, "", "", "")
+        )
         payloads, _ = await provider._prepare_chat_payload(
             prompt=None,
             contexts=[
