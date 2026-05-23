@@ -270,13 +270,24 @@ def parse_description(text: str) -> str:
             break
     if end_idx is None:
         return ""
-    for line in lines[1:end_idx]:
-        if ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        if key.strip().lower() == "description":
-            return value.strip().strip('"').strip("'")
-    return ""
+
+    frontmatter = "\\n".join(lines[1:end_idx])
+    try:
+        import yaml
+    except ImportError:
+        return ""
+
+    try:
+        payload = yaml.safe_load(frontmatter) or dict()
+    except yaml.YAMLError:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+
+    description = payload.get("description", "")
+    if not isinstance(description, str):
+        return ""
+    return description.strip()
 
 
 def load_managed_skills() -> list[str]:
@@ -606,6 +617,12 @@ async def get_booter(
             from .booters.boxlite import BoxliteBooter
 
             client = BoxliteBooter()
+        elif booter_type == "bwrap":
+            from .booters.bwrap import BwrapBooter
+
+            rw_binds = sandbox_cfg.get("bwrap_rw_binds", [])
+            ro_binds = sandbox_cfg.get("bwrap_ro_binds", [])
+            client = BwrapBooter(rw_binds=rw_binds, ro_binds=ro_binds)
         else:
             raise ValueError(f"Unknown booter type: {booter_type}")
 

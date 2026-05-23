@@ -368,17 +368,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "shipyard_neo_access_token": "",
             "shipyard_neo_profile": "python-default",
             "shipyard_neo_ttl": 3600,
-            "cua_image": CUA_DEFAULT_CONFIG["image"],
-            "cua_os_type": CUA_DEFAULT_CONFIG["os_type"],
-            "cua_idle_timeout": CUA_DEFAULT_CONFIG["idle_timeout"],
-            "cua_telemetry_enabled": CUA_DEFAULT_CONFIG["telemetry_enabled"],
-            "cua_local": CUA_DEFAULT_CONFIG["local"],
-            "cua_api_key": CUA_DEFAULT_CONFIG["api_key"],
-        },
-        "image_compress_enabled": True,
-        "image_compress_options": {
-            "max_size": 1280,
-            "quality": 95,
+            "bwrap_rw_binds": [],
+            "bwrap_ro_binds": [],
         },
     },
     # SubAgent orchestrator mode:
@@ -3733,10 +3724,30 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
                         "type": "string",
-                        "options": [BOOTER_SHIPYARD_NEO, BOOTER_SHIPYARD],
-                        "labels": ["Shipyard Neo", "Shipyard"],
+                        "options": ["shipyard_neo", "shipyard", "bwrap"],
+                        "labels": ["Shipyard Neo", "Shipyard", "Bubblewrap"],
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
+                        },
+                    },
+                    "provider_settings.sandbox.bwrap_rw_binds": {
+                        "description": "Bubblewrap Read & Write Binds",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "Bubblewrap 沙箱额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "bwrap",
+                        },
+                    },
+                    "provider_settings.sandbox.bwrap_ro_binds": {
+                        "description": "Bubblewrap Read Only Binds",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "Bubblewrap 沙箱额外的只读挂载目录（回车添加，可添加多个。宿主机系统目录/usr, /etc, /opt默认只读挂载于沙箱内的相同位置）。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "bwrap",
                         },
                     },
                     "provider_settings.sandbox.shipyard_neo_endpoint": {

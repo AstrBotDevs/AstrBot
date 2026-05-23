@@ -10,15 +10,11 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any
 
-from astrbot.core.computer.olayer import (
-    FileSystemComponent,
-    PythonComponent,
-    ShellComponent,
-)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_temp_path,
 )
 
+from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
 
 
@@ -38,16 +34,6 @@ def _decode_shell_output(output: bytes | None) -> str:
         pass
 
     return output.decode("utf-8", errors="replace")
-
-
-def _write_file_sync(path: str, content: str, mode: str, encoding: str) -> None:
-    with open(path, mode, encoding=encoding) as f:
-        f.write(content)
-
-
-def _read_file_sync(path: str, encoding: str) -> str:
-    with open(path, encoding=encoding) as f:
-        return f.read()
 
 
 @dataclass
@@ -91,19 +77,29 @@ def build_bwrap_cmd(config: BwrapConfig, script_cmd: list[str]) -> list[str]:
             "--unshare-ipc",
             "--unshare-uts",
             "--die-with-parent",
-            "--dir",
-            "/tmp",
-            "--dir",
-            "/var/tmp",
-            "--proc",
-            "/proc",
-            "--dev",
-            "/dev",
-            "--bind",
-            config.workspace_dir,
-            config.workspace_dir,
-        ],
+        ]
     )
+    cmd += [
+        "--dir",
+        "/tmp",
+    ]
+    cmd += [
+        "--dir",
+        "/var/tmp",
+    ]
+    cmd += [
+        "--proc",
+        "/proc",
+    ]
+    cmd += [
+        "--dev",
+        "/dev",
+    ]
+    cmd += [
+        "--bind",
+        config.workspace_dir,
+        config.workspace_dir,
+    ]
 
     cmd.extend(["--"])
     cmd.extend(script_cmd)
@@ -122,16 +118,14 @@ class BwrapShellComponent(ShellComponent):
         timeout: int | None = 30,
         shell: bool = True,
         background: bool = False,
-        session_id: str | None = None,
     ) -> dict[str, Any]:
-        _ = session_id
 
         def _run() -> dict[str, Any]:
             run_env = os.environ.copy()
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
 
-            working_dir = cwd or self.config.workspace_dir
+            working_dir = cwd if cwd else self.config.workspace_dir
 
             # Use /bin/sh -c to run the evaluated command
             # The command must be run inside bwrap
@@ -150,7 +144,6 @@ class BwrapShellComponent(ShellComponent):
 
             result = subprocess.run(
                 bwrap_cmd,
-                check=False,
                 cwd=working_dir,
                 env=run_env,
                 timeout=timeout,
@@ -178,13 +171,11 @@ class BwrapPythonComponent(PythonComponent):
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             bwrap_cmd = build_bwrap_cmd(
-                self.config,
-                [os.environ.get("PYTHON", "python3"), "-c", code],
+                self.config, [os.environ.get("PYTHON", "python3"), "-c", code]
             )
             try:
                 result = subprocess.run(
                     bwrap_cmd,
-                    check=False,
                     timeout=timeout,
                     capture_output=True,
                     text=True,
@@ -227,43 +218,32 @@ class HostBackedFileSystemComponent(FileSystemComponent):
         return path
 
     async def create_file(
-        self,
-        path: str,
-        content: str = "",
-        mode: int = 0o644,
+        self, path: str, content: str = "", mode: int = 0o644
     ) -> dict[str, Any]:
         p = self._safe_path(path)
-        await asyncio.to_thread(os.makedirs, os.path.dirname(p), exist_ok=True)
-        await asyncio.to_thread(_write_file_sync, p, content, "w", "utf-8")
-        await asyncio.to_thread(os.chmod, p, mode)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.chmod(p, mode)
         return {"success": True, "path": p}
 
-    async def read_file(
-        self,
-        path: str,
-        encoding: str = "utf-8",
-        offset: int | None = None,
-        limit: int | None = None,
-    ) -> dict[str, Any]:
-        _ = offset, limit
+    async def read_file(self, path: str, encoding: str = "utf-8") -> dict[str, Any]:
         p = self._safe_path(path)
         try:
-            content = await asyncio.to_thread(_read_file_sync, p, encoding)
+            with open(p, encoding=encoding) as f:
+                content = f.read()
             return {"success": True, "content": content}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
     async def write_file(
-        self,
-        path: str,
-        content: str,
-        mode: str = "w",
-        encoding: str = "utf-8",
+        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
     ) -> dict[str, Any]:
         p = self._safe_path(path)
-        await asyncio.to_thread(os.makedirs, os.path.dirname(p), exist_ok=True)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
         try:
-            await asyncio.to_thread(_write_file_sync, p, content, mode, encoding)
+            with open(p, mode, encoding=encoding) as f:
+                f.write(content)
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -271,18 +251,16 @@ class HostBackedFileSystemComponent(FileSystemComponent):
     async def delete_file(self, path: str) -> dict[str, Any]:
         p = self._safe_path(path)
         try:
-            if await asyncio.to_thread(os.path.isdir, p):
-                await asyncio.to_thread(shutil.rmtree, p)
+            if os.path.isdir(p):
+                shutil.rmtree(p)
             else:
-                await asyncio.to_thread(os.remove, p)
+                os.remove(p)
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
     async def list_dir(
-        self,
-        path: str = ".",
-        show_hidden: bool = False,
+        self, path: str = ".", show_hidden: bool = False
     ) -> dict[str, Any]:
         p = self._safe_path(path)
         try:
@@ -293,62 +271,9 @@ class HostBackedFileSystemComponent(FileSystemComponent):
         except Exception as e:
             return {"success": False, "error": str(e), "items": []}
 
-    async def search_files(
-        self,
-        pattern: str,
-        path: str | None = None,
-        glob: str | None = None,
-        after_context: int | None = None,
-        before_context: int | None = None,
-    ) -> dict[str, Any]:
-        p = path or self.workspace_dir
-        try:
-            import subprocess
-
-            cmd = ["grep", "-r", pattern, p]
-            result = await asyncio.to_thread(
-                subprocess.run,
-                cmd,
-                capture_output=True,
-                text=True,
-            )
-            return {
-                "success": True,
-                "matches": result.stdout.splitlines() if result.stdout else [],
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e), "matches": []}
-
-    async def edit_file(
-        self,
-        path: str,
-        old_string: str,
-        new_string: str,
-        replace_all: bool = False,
-        encoding: str = "utf-8",
-    ) -> dict[str, Any]:
-        p = self._safe_path(path)
-        try:
-            content = await asyncio.to_thread(_read_file_sync, p, encoding)
-            if replace_all:
-                new_content = content.replace(old_string, new_string)
-            else:
-                parts = content.split(old_string, 1)
-                if len(parts) == 1:
-                    return {"success": False, "error": "Pattern not found"}
-                new_content = new_string.join(parts)
-            await asyncio.to_thread(_write_file_sync, p, new_content, "w", encoding)
-            return {"success": True}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
 
 class BwrapBooter(ComputerBooter):
-    def __init__(
-        self,
-        rw_binds: list[str] | None = None,
-        ro_binds: list[str] | None = None,
-    ):
+    def __init__(self, rw_binds: list[str] = None, ro_binds: list[str] = None):
         self._rw_binds = rw_binds or []
         self._ro_binds = ro_binds or []
         self._fs: HostBackedFileSystemComponent | None = None
@@ -358,20 +283,14 @@ class BwrapBooter(ComputerBooter):
 
     @property
     def fs(self) -> FileSystemComponent:
-        if self._fs is None:
-            raise RuntimeError("BwrapBooter filesystem is unavailable before boot")
         return self._fs
 
     @property
     def python(self) -> PythonComponent:
-        if self._python is None:
-            raise RuntimeError("BwrapBooter python is unavailable before boot")
         return self._python
 
     @property
     def shell(self) -> ShellComponent:
-        if self._shell is None:
-            raise RuntimeError("BwrapBooter shell is unavailable before boot")
         return self._shell
 
     @property
@@ -380,13 +299,12 @@ class BwrapBooter(ComputerBooter):
 
     async def boot(self, session_id: str) -> None:
         workspace_dir = os.path.join(
-            get_astrbot_temp_path(),
-            f"sandbox_workspace_{session_id}",
+            get_astrbot_temp_path(), f"sandbox_workspace_{session_id}"
         )
-        await asyncio.to_thread(os.makedirs, workspace_dir, exist_ok=True)
+        os.makedirs(workspace_dir, exist_ok=True)
 
         self.config = BwrapConfig(
-            workspace_dir=await asyncio.to_thread(os.path.abspath, workspace_dir),
+            workspace_dir=os.path.abspath(workspace_dir),
             rw_binds=self._rw_binds,
             ro_binds=self._ro_binds,
         )
@@ -395,34 +313,27 @@ class BwrapBooter(ComputerBooter):
         self._shell = BwrapShellComponent(self.config)
         if not await self.available():
             raise RuntimeError(
-                "BubbleWrap sandbox unavailable on current machine for no bwrap executable.",
+                "BubbleWrap sandbox unavailable on current machine for no bwrap executable."
             )
         test_shl = await self._shell.exec(command="ls > /dev/null")
         if test_shl["exit_code"] != 0:
             raise RuntimeError(
                 """BubbleWrap sandbox fails to exec test shell command "ls > /dev/null" with stderr:
-{}""".format(test_shl["stderr"]),
+{}""".format(test_shl["stderr"])
             )
         test_py = await self._python.exec(code="print('Yes')")
         if test_py["exit_code"] != 0:
             raise RuntimeError(
                 """BubbleWrap sandbox fails to exec test python code "print('Yes')" with stderr:
-{}""".format(test_py["stderr"]),
+{}""".format(test_py["stderr"])
             )
 
-    async def shutdown(self, **kwargs) -> None:
-        config = self.config
-        if config is None:
-            return
-        if await asyncio.to_thread(os.path.exists, config.workspace_dir):
-            await asyncio.to_thread(
-                shutil.rmtree,
-                config.workspace_dir,
-                ignore_errors=True,
-            )
+    async def shutdown(self) -> None:
+        if self.config and os.path.exists(self.config.workspace_dir):
+            shutil.rmtree(self.config.workspace_dir, ignore_errors=True)
 
     async def upload_file(self, path: str, file_name: str) -> dict:
-        if not self._fs or not self.config:
+        if not self._fs:
             return {"success": False, "error": "Not booted"}
         target = os.path.join(self.config.workspace_dir, file_name)
         try:
@@ -432,7 +343,7 @@ class BwrapBooter(ComputerBooter):
             return {"success": False, "error": str(e)}
 
     async def download_file(self, remote_path: str, local_path: str) -> None:
-        if not self._fs or not self.config:
+        if not self._fs:
             return
         if not remote_path.startswith("/"):
             remote_path = os.path.join(self.config.workspace_dir, remote_path)

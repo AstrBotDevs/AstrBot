@@ -45,6 +45,15 @@ from astrbot.core.computer.booters.bwrap import (
     BwrapShellComponent,
 )
 
+from astrbot.core.computer.booters.bwrap import (
+    BwrapBooter,
+    BwrapConfig,
+    build_bwrap_cmd,
+    HostBackedFileSystemComponent,
+    BwrapPythonComponent,
+    BwrapShellComponent,
+)
+
 
 class TestLocalBooterInit:
     """Tests for LocalBooter initialization."""

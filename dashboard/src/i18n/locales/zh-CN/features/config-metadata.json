@@ -181,8 +181,8 @@
             "description": "沙箱环境驱动器"
           },
           "bwrap_rw_binds": {
-            "description": "Bubblewrap 读写挂载目录",
-            "hint": "额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写，整个宿主机系统默认是只读挂载于沙箱内的相同位置）。"
+            "description": "Bubblewrap 额外读写挂载目录",
+            "hint": "Bubblewrap 沙箱额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写。"
           },
           "bwrap_ro_binds": {
             "description": "Bubblewrap 额外只读挂载目录",
@@ -243,6 +243,10 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Ship 会话复用上限",
             "hint": "决定了一个实例承载的最大会话数量。"
+          },
+          "bwrap_rw_binds": {
+            "description": "Bubblewrap 读写挂载目录",
+            "hint": "额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写，整个宿主机系统默认是只读挂载于沙箱内的相同位置）。"
           }
         }
       }
