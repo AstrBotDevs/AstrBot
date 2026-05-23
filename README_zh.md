@@ -159,8 +159,8 @@ yay -S astrbot-git
 | **Satori** | 官方维护 |
 | **KOOK** | 官方维护 |
 | **Misskey** | 官方维护 |
-| **Mattermost** | 官方维护 |
-| **WhatsApp（将支持）** | 官方维护 |
+| **微博私信** | 官方维护 |
+| **Whatsapp (将支持)** | 官方维护 |
 | [**Matrix**](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | 社区维护 |
 | [**Rocket.Chat**](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | 社区维护 |
 | [**VoceChat**](https://github.com/HikariFroya/astrbot_plugin_vocechat) | 社区维护 |
@@ -178,7 +178,7 @@ yay -S astrbot-git
 | DeepSeek | LLM |
 | Ollama (本地部署) | LLM |
 | LM Studio (本地部署) | LLM |
-| [AIHubMix](https://aihubmix.com/?aff=4bfH) | LLM (API 网关, 支持所有模型) |
+| [AIHubMix](https://aihubmix.com/?aff=4bfH) | LLM（API网关，支持全模型，含免费模型；同时支持 TTS、STT、Embedding、Reranking）|
 | [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | LLM (API 网关, 支持所有模型) |
 | [硅基流动](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot) | LLM (API 网关, 支持所有模型)  |
 | [PPIO 派欧云](https://ppio.com/user/register?invited_by=AIOONE) | LLM (API 网关, 支持所有模型) |

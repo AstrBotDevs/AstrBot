@@ -184,7 +184,7 @@ Connect AstrBot to your favorite chat platform.
 | Satori | Official |
 | KOOK | Official |
 | Misskey | Official |
-| Mattermost | Official |
+| Weibo Direct Message | Official |
 | WhatsApp (Coming Soon) | Official |
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | Community |
 | [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | Community |
@@ -202,7 +202,7 @@ Connect AstrBot to your favorite chat platform.
 | DeepSeek | LLM Services |
 | Ollama (Self-hosted) | LLM Services |
 | LM Studio (Self-hosted) | LLM Services |
-| [AIHubMix](https://aihubmix.com/?aff=4bfH) | LLM Services (API Gateway, supports all models) |
+| [AIHubMix](https://aihubmix.com/?aff=4bfH) | LLM Services (API gateway for all models, includes free models, plus TTS, STT, Embedding & Reranking) |
 | [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | LLM Services |
 | [302.AI](https://share.302.ai/rr1M3l) | LLM Services |
 | [TokenPony](https://www.tokenpony.cn/3YPyf) | LLM Services |
