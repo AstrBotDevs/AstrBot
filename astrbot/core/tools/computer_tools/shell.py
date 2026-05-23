@@ -11,13 +11,14 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
-from astrbot.core.tools.computer_tools.util import (
+
+from ..registry import builtin_tool
+from .util import (
     check_admin_permission,
+    init_workspace,
     is_local_runtime,
     workspace_root,
 )
-from astrbot.core.tools.registry import builtin_tool
-from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
@@ -106,9 +107,10 @@ class ExecuteShellTool(FunctionTool):
         try:
             # Ensure the workspace directory exists (useful for file operations)
             if is_local_runtime(context):
-                workspace_root(
-                    context.context.event.unified_msg_origin,
-                ).mkdir(parents=True, exist_ok=True)
+                current_workspace_root = init_workspace(
+                    context.context.event.unified_msg_origin
+                )
+                cwd = str(current_workspace_root)
 
             env = dict(env or {})
             effective_background = background and not _is_self_detached_command(command)
