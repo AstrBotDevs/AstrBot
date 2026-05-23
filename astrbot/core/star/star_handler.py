@@ -243,6 +243,8 @@ class EventType(enum.Enum):
 
 H = TypeVar("H", bound=Callable[..., Any])
 
+    OnStarActivatedEvent = enum.auto()  # 插件启用
+    OnStarDeactivatedEvent = enum.auto()  # 插件禁用
 
 @dataclass
 class StarHandlerMetadata(Generic[H]):
