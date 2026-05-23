@@ -142,8 +142,19 @@ function parseTimeValue(value: any): number {
 function formatTime(val: any): string {
   if (!val) return tm('table.notAvailable')
   try {
-    return new Date(val).toLocaleString()
-  } catch {
+    // If the datetime string doesn't have timezone info, assume it's UTC
+    // This handles cases where the backend returns naive datetime strings
+    let dateStr = val
+    if (typeof val === 'string' && val.includes('T')) {
+      // Check for timezone suffix: Z, +HH:MM, -HH:MM, +HHMM, -HHMM
+      const hasTimezone = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(val)
+      if (!hasTimezone) {
+        // ISO datetime without timezone suffix - treat as UTC
+        dateStr = val + 'Z'
+      }
+    }
+    return new Date(dateStr).toLocaleString()
+  } catch (e) {
     return String(val)
   }
 }
