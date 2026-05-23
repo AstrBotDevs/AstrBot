@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
+from astrbot.core.i18n import t
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.context import PipelineContext
 from astrbot.core.pipeline.stage import Stage, register_stage
@@ -17,6 +18,7 @@ class ContentSafetyCheckStage(Stage):
     """
 
     async def initialize(self, ctx: PipelineContext) -> None:
+        self.ctx = ctx
         config = ctx.astrbot_config["content_safety"]
         self.strategy_selector = StrategySelector(config)
 
@@ -33,12 +35,14 @@ class ContentSafetyCheckStage(Stage):
         check_text: str,
     ) -> AsyncGenerator[None, None]:
         """检查内容安全"""
-        ok, info = self.strategy_selector.check(check_text)
+        text = check_text if check_text else event.get_message_str()
+        locale = self.ctx.get_current_language()
+        ok, info = self.strategy_selector.check(text, locale=locale)
         if not ok:
             if event.is_at_or_wake_command:
                 event.set_result(
                     MessageEventResult().message(
-                        "你的消息或者大模型的响应中包含不适当的内容,已被屏蔽｡",
+                        t("pipeline.content_blocked", locale=locale),
                     ),
                 )
                 yield None

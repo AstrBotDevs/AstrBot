@@ -1,0 +1,12 @@
+{
+  "pipeline": {
+    "filter_error": "Plugin {plugin_name}: {error}",
+    "no_permission": "You (ID: {sender_id}) do not have permission to use this command. Use /sid to get your ID and ask an administrator to add it.",
+    "content_blocked": "Your message or the model response contains inappropriate content and has been blocked.",
+    "keyword_blocked_reason": "Content safety check failed because a sensitive keyword was matched.",
+    "baidu_aip_violation_header": "Baidu content moderation found {count} violations:\n",
+    "baidu_aip_conclusion": "\nConclusion: {conclusion}",
+    "plugin_handler_error": ":(\n\nAn exception occurred while calling plugin {plugin_name}'s handler {handler_name}: {error}",
+    "reasoning_prefix": "🤔 Thinking: {reasoning_content}\n"
+  }
+}

@@ -3,10 +3,7 @@
 import os
 from typing import Any
 
-from astrbot.builtin_stars.web_searcher.provider_constants import (
-    DEFAULT_WEB_SEARCH_PROVIDER,
-)
-from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
+from astrbot.core.i18n import Language
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 VERSION = "4.30.0-dev"
@@ -60,6 +57,7 @@ DEFAULT_MAX_HANDOFF_CALLS_PER_RUN = 8
 # 默认配置
 DEFAULT_CONFIG: dict[str, Any] = {
     "config_version": 2,
+    "language": Language.ZH_CN.value,
     "platform_settings": {
         "unique_session": False,
         "global_unified_context_mode": False,
@@ -4745,6 +4743,13 @@ CONFIG_METADATA_3_SYSTEM = {
                 "description": "系统配置",
                 "type": "object",
                 "items": {
+                    "language": {
+                        "description": "系统语言",
+                        "type": "string",
+                        "hint": "用于 AstrBot 运行时回复的语言。目前支持简体中文和英文。",
+                        "options": [Language.ZH_CN.value, Language.EN_US.value],
+                        "labels": ["简体中文", "English"],
+                    },
                     "t2i_strategy": {
                         "description": "文本转图像策略",
                         "type": "string",

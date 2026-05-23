@@ -20,3 +20,6 @@ class PipelineContext:
     astrbot_config_id: str
     call_handler = call_handler
     call_event_hook = call_event_hook
+
+    def get_current_language(self) -> str:
+        return self.plugin_manager.context.get_current_language()

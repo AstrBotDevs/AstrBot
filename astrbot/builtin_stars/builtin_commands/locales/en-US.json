@@ -1,0 +1,33 @@
+{
+  "help": {
+    "no_enabled_builtin_commands": "No enabled built-in commands."
+  },
+  "sid": {
+    "info": "UMO: 「{sid}」\nUID: 「{user_id}」\n*Use UMO to set whitelist and configure routing, use UID to set admin list.\n\nYour session information:\nBot ID: 「{platform}」\nMessage Type: 「{message_type}」\nSession ID: 「{session_id}」\n\n",
+    "group_whitelist": "\n\nThe group's ID: 「{group_id}」. Set this ID to whitelist to allow the entire group."
+  },
+  "dashboard": {
+    "updating": "⏳ Updating dashboard...",
+    "updated": "✅ Dashboard updated successfully."
+  },
+  "scene": {
+    "group_unique_on": "group chat with unique session enabled",
+    "group_unique_off": "group chat with unique session disabled",
+    "private": "private chat"
+  },
+  "conversation": {
+    "reset_admin_required": "Reset command requires admin permission in {scene_name} scenario, you (ID {sender_id}) are not admin, cannot perform this action.",
+    "reset_success": "✅ Conversation reset successfully.",
+    "no_provider": "😕 Cannot find any LLM provider. Configure one first.",
+    "no_conversation": "😕 You are not in a conversation. Use /new to create one.",
+    "stop_requested": "✅ Requested to stop {count} running tasks.",
+    "no_running_tasks": "✅ No running tasks in the current session.",
+    "new_created": "✅ New conversation created.",
+    "switched_new": "✅ Switched to new conversation: {conversation_id}."
+  },
+  "setunset": {
+    "set_success": "Session {session_id} variable {key} saved. Use /unset to remove it.",
+    "unset_not_found": "No variable with that name. Format: /unset variable_name.",
+    "unset_success": "Session {session_id} variable {key} removed."
+  }
+}

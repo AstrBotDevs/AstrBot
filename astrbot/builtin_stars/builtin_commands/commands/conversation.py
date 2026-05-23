@@ -14,6 +14,7 @@ from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIC
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.active_event_registry import active_event_registry
 
+from ..i18n import t
 from .utils.rst_scene import RstScene
 
 THIRD_PARTY_AGENT_RUNNER_KEY = {
@@ -150,36 +151,55 @@ class ConversationCommands:
         if required_perm == "admin" and message.role != "admin":
             message.set_result(
                 MessageEventResult().message(
-                    f"在{scene.name}场景下,reset命令需要管理员权限,您 (ID {message.get_sender_id()}) 不是管理员,无法执行此操作｡",
+                    t(
+                        self.context,
+                        "conversation.reset_admin_required",
+                        scene_name=t(self.context, f"scene.{scene.key}"),
+                        sender_id=message.get_sender_id(),
+                    ),
                 ),
             )
             return
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             active_event_registry.stop_all(umo, exclude=message)
-            await sp.remove_async(
-                scope="umo",
-                scope_id=umo,
-                key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
+            await _clear_third_party_agent_runner_state(
+                self.context,
+                umo,
+                agent_runner_type,
+            )
+            message.set_result(
+                MessageEventResult().message(
+                    t(self.context, "conversation.reset_success"),
+                )
             )
             message.set_result(MessageEventResult().message("重置对话成功｡"))
             return
         if not self.context.get_using_provider(umo):
             message.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商｡请先配置｡"),
+                MessageEventResult().message(
+                    t(self.context, "conversation.no_provider"),
+                ),
             )
             return
         cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
         if not cid:
             message.set_result(
                 MessageEventResult().message(
-                    "当前未处于对话状态,请 /switch 切换或者 /new 创建｡",
+                    t(self.context, "conversation.no_conversation"),
                 ),
             )
             return
         active_event_registry.stop_all(umo, exclude=message)
-        await self.context.conversation_manager.update_conversation(umo, cid, [])
-        ret = "清除聊天历史成功!"
+
+        await self.context.conversation_manager.update_conversation(
+            umo,
+            cid,
+            [],
+        )
+
+        ret = t(self.context, "conversation.reset_success")
+
         message.set_extra("_clean_ltm_session", True)
         message.set_result(MessageEventResult().message(ret))
 
@@ -198,33 +218,20 @@ class ConversationCommands:
         if stopped_count > 0:
             message.set_result(
                 MessageEventResult().message(
-                    f"已请求停止 {stopped_count} 个运行中的任务｡",
-                ),
+                    t(
+                        self.context,
+                        "conversation.stop_requested",
+                        count=stopped_count,
+                    ),
+                )
             )
             return
         message.set_result(MessageEventResult().message("当前会话没有运行中的任务｡"))
 
-    async def his(self, message: AstrMessageEvent, page: int = 1) -> None:
-        """查看对话记录"""
-        if not self.context.get_using_provider(message.unified_msg_origin):
-            message.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商｡请先配置｡"),
+        message.set_result(
+            MessageEventResult().message(
+                t(self.context, "conversation.no_running_tasks"),
             )
-            return
-        size_per_page = 6
-        conv_mgr = self.context.conversation_manager
-        umo = message.unified_msg_origin
-        session_curr_cid = await conv_mgr.get_curr_conversation_id(umo)
-        if not session_curr_cid:
-            session_curr_cid = await conv_mgr.new_conversation(
-                umo,
-                message.get_platform_id(),
-            )
-        contexts, total_pages = await conv_mgr.get_human_readable_context(
-            umo,
-            session_curr_cid,
-            page,
-            size_per_page,
         )
         parts = []
         for context in contexts:
@@ -323,10 +330,15 @@ class ConversationCommands:
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
-            await sp.remove_async(
-                scope="umo",
-                scope_id=message.unified_msg_origin,
-                key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
+            await _clear_third_party_agent_runner_state(
+                self.context,
+                message.unified_msg_origin,
+                agent_runner_type,
+            )
+            message.set_result(
+                MessageEventResult().message(
+                    t(self.context, "conversation.new_created")
+                )
             )
             message.set_result(MessageEventResult().message("已创建新对话｡"))
             return
@@ -339,7 +351,13 @@ class ConversationCommands:
         )
         message.set_extra("_clean_ltm_session", True)
         message.set_result(
-            MessageEventResult().message(f"切换到新对话: 新对话({cid[:4]})｡"),
+            MessageEventResult().message(
+                t(
+                    self.context,
+                    "conversation.switched_new",
+                    conversation_id=cid[:4],
+                ),
+            ),
         )
 
     async def stats(self, message: AstrMessageEvent) -> None:

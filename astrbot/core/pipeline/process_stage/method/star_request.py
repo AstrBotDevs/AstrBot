@@ -4,7 +4,8 @@ import traceback
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from astrbot.core import astrbot_config, logger
+from astrbot.core import logger
+from astrbot.core.i18n import t
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.context import PipelineContext, call_event_hook, call_handler
 from astrbot.core.pipeline.process_stage.stage import Stage
@@ -114,7 +115,13 @@ class StarRequestSubStage(Stage):
                         logger.warning("SDK plugin_error dispatch failed: %s", exc)
 
                 if not event.is_stopped() and event.is_at_or_wake_command:
-                    ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常:{e}"
+                    ret = t(
+                        "pipeline.plugin_handler_error",
+                        locale=self.ctx.get_current_language(),
+                        plugin_name=md.name,
+                        handler_name=handler.handler_name,
+                        error=e,
+                    )
                     event.set_result(MessageEventResult().message(ret))
                     yield None
                     event.clear_result()
