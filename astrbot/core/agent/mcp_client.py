@@ -400,7 +400,7 @@ class MCPClient:
 
         # Kept for internal use inside _run_connection; external code must not
         # touch the exit_stack directly.
-        self.exit_stack = AsyncExitStack()
+        self.exit_stack: AsyncExitStack | None = None
 
         self.name: str | None = None
         self.active: bool = True
@@ -413,9 +413,13 @@ class MCPClient:
         self._server_name: str | None = None
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False  # For logging and debugging
-        self._session_ready = asyncio.Event()  # set when session is initialised
 
-    async def _run_connection(self, mcp_server_config: dict, name: str) -> None:
+    async def _run_connection(
+        self,
+        mcp_server_config: dict,
+        name: str,
+        ready: asyncio.Future,
+    ) -> None:
         """Own the full lifetime of one MCP connection.
 
         This coroutine is always run inside a dedicated asyncio.Task
@@ -430,17 +434,30 @@ class MCPClient:
         that previously occurred when aclose() was called from a different task
         or from the asyncio async-generator GC finalizer.
         """
-        self.exit_stack = AsyncExitStack()
+        # Capture the stack in a local variable so that if self.exit_stack is
+        # overwritten by a concurrent _run_connection (during reconnect), this
+        # task's finally block still closes only the resources it opened.
+        stack = self.exit_stack = AsyncExitStack()
         try:
-            await self._do_connect(mcp_server_config, name)
-            self._session_ready.set()
+            try:
+                await self._do_connect(mcp_server_config, name)
+            except Exception as exc:
+                if not ready.done():
+                    ready.set_exception(exc)
+                raise
+            else:
+                if not ready.done():
+                    ready.set_result(None)
             # Hold the connection open until cancelled.
             await asyncio.Event().wait()
         finally:
             try:
-                await self.exit_stack.aclose()
+                await stack.aclose()
             except Exception as e:
                 logger.debug(f"Error closing exit stack for {name}: {e}")
+            # Ensure the waiter is not left pending if we exit very early.
+            if not ready.done():
+                ready.set_exception(RuntimeError("Connection task exited early"))
 
     async def connect_to_server(self, mcp_server_config: dict, name: str) -> None:
         """Connect to MCP server by spawning a dedicated owner task.
@@ -461,43 +478,25 @@ class MCPClient:
         """
         self._mcp_server_config = mcp_server_config
         self._server_name = name
-        self._session_ready = asyncio.Event()
+
+        ready: asyncio.Future = asyncio.get_running_loop().create_future()
 
         self._connection_task = asyncio.create_task(
-            self._run_connection(mcp_server_config, name),
+            self._run_connection(mcp_server_config, name, ready),
             name=f"mcp-conn:{name}",
         )
 
-        # Wait until the session is initialised (or the task fails).
-        # We race two futures: the connection task itself (signals failure) and
-        # a waiter for _session_ready (signals success).  The waiter must be
-        # cancelled after asyncio.wait returns to avoid a task leak.
-        ready_waiter = asyncio.ensure_future(self._session_ready.wait())
         try:
-            done, _ = await asyncio.wait(
-                {self._connection_task, ready_waiter},
-                return_when=asyncio.FIRST_COMPLETED,
-            )
+            await ready
         except asyncio.CancelledError:
             # Caller was cancelled while waiting — tear down the connection task.
             # cancel() is asynchronous; the task will not finish until the next
             # event-loop iteration, so we track it in _old_connection_tasks so
             # that cleanup() can await it later.
-            if not self._connection_task.done():
+            if self._connection_task and not self._connection_task.done():
                 self._cancel_connection_task(self._connection_task)
                 self._connection_task = None
             raise
-        finally:
-            # Always clean up ready_waiter regardless of how we exit.
-            if not ready_waiter.done():
-                ready_waiter.cancel()
-
-        if self._connection_task in done:
-            # Task finished before session was ready — it raised an exception.
-            exc = self._connection_task.exception()
-            if exc:
-                raise exc
-            raise Exception(f"MCP connection task for {name} exited unexpectedly")
 
     async def _do_connect(self, mcp_server_config: dict, name: str) -> None:
         """Internal: perform the actual connection inside _run_connection's task."""
@@ -620,6 +619,9 @@ class MCPClient:
 
     def _cancel_connection_task(self, task: asyncio.Task) -> None:
         """Cancel a connection owner task and track it until it finishes."""
+        # Prune already-finished tasks to avoid accumulating references over
+        # many reconnections in a long-running process.
+        self._old_connection_tasks = [t for t in self._old_connection_tasks if not t.done()]
         if task.done():
             return
         task.cancel()
@@ -729,16 +731,12 @@ class MCPClient:
 
     async def cleanup(self) -> None:
         """Clean up resources by cancelling the connection owner task."""
-        # Cancel the current connection task.  Its finally block calls aclose()
-        # from the correct task context, so anyio cancel scopes exit cleanly.
-        if self._connection_task and not self._connection_task.done():
-            self._connection_task.cancel()
-            try:
-                await self._connection_task
-            except (asyncio.CancelledError, Exception) as e:
-                logger.debug(f"Connection task for {self._server_name} finished: {e}")
+        # Cancel current and any old connection tasks via the shared helper so
+        # all cancellation + tracking behaviour goes through one code path.
+        if self._connection_task:
+            self._cancel_connection_task(self._connection_task)
+            self._connection_task = None
 
-        # Wait for any old connection tasks from previous reconnects to finish.
         if self._old_connection_tasks:
             pending = [t for t in self._old_connection_tasks if not t.done()]
             if pending:
