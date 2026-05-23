@@ -274,7 +274,11 @@ class ProviderManager:
 
         return provider
 
-    async def initialize(self) -> None:
+    async def initialize(
+        self,
+        *,
+        init_timeout: float | int | str | None = None,
+    ) -> None:
         # 逐个初始化提供商
         for provider_config in self.providers_config:
             try:
@@ -335,17 +339,21 @@ class ProviderManager:
         if not self.curr_tts_provider_inst and self.tts_provider_insts:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
 
-        async def _init_mcp_clients_bg() -> None:
-            try:
-                await self.llm_tools.init_mcp_clients()
-            except Exception:
-                logger.error("MCP init background task failed", exc_info=True)
-
-        if self._mcp_init_task is None or self._mcp_init_task.done():
-            self._mcp_init_task = asyncio.create_task(
-                _init_mcp_clients_bg(),
-                name="provider-manager:mcp-init",
+        try:
+            strict_mcp_init = os.getenv(
+                "ASTRBOT_MCP_INIT_STRICT", ""
+            ).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            await self.llm_tools.init_mcp_clients(
+                raise_on_all_failed=strict_mcp_init,
+                init_timeout=init_timeout,
             )
+        except Exception as e:
+            logger.error("MCP service initialization failed", exc_info=True)
 
     def dynamic_import_provider(self, type: str) -> None:
         """动态导入提供商适配器模块

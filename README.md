@@ -59,7 +59,9 @@ AstrBot is an open-source all-in-one Agent chatbot platform that integrates with
 
 选择最适合您需求的部署方式：
 
-### 🚀 初学者推荐（简单快捷）
+### One-Click Deployment
+
+For users who want to quickly experience AstrBot, are familiar with command-line usage, and can install a `uv` environment on their own, we recommend the `uv` one-click deployment method ⚡️:
 
 #### Docker 部署（最推荐）
 使用 Docker / Docker Compose 是部署 AstrBot 最简单的方式。
@@ -88,16 +90,48 @@ AstrBot 已由 1Panel 官方上架至 1Panel 应用商店。
 3. 搜索"AstrBot"
 4. 点击【安装】
 
-### 🔧 进阶部署方式
+For users familiar with containers and looking for a more stable, production-ready deployment method, we recommend deploying AstrBot with Docker / Docker Compose.
 
-#### uv 部署（Python 用户）
-如果您熟悉 Python 环境，可以使用 uv 部署：
+Please refer to the official documentation: [Deploy AstrBot with Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
+
+### Deploy on RainYun
+
+For users who want one-click deployment and do not want to manage servers themselves, we recommend RainYun's one-click cloud deployment service ☁️:
+
+[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
+
+### Desktop Application Deployment
+
+For users who want to use AstrBot on desktop and mainly use ChatUI, we recommend AstrBot App.
+
+Visit [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop) to download and install; this method is designed for desktop usage and is not recommended for server scenarios.
+
+### Launcher Deployment
+
+For desktop users who also want fast deployment and isolated multi-instance usage, we recommend AstrBot Launcher.
+
+Visit [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) to download and install.
+
+### Deploy on Replit
+
+Replit deployment is maintained by the community and is suitable for online demos and lightweight trials.
+
+[![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
+
+### AUR
+
+AUR deployment targets Arch Linux users who prefer installing AstrBot through the system package workflow.
+
+Run the command below to install `astrbot-git`, then start AstrBot in your local environment.
+
 ```bash
 # 安装并启动 AstrBot
 uvx astrbot
 ```
 
-### ☁️ 云平台部署
+**More deployment methods**
+
+If you need panel-based management or deeper customization, see [BT-Panel Deployment](https://astrbot.app/deploy/astrbot/btpanel.html) for BT Panel app-store setup, [1Panel Deployment](https://astrbot.app/deploy/astrbot/1panel.html) for 1Panel app-market deployment, [CasaOS Deployment](https://astrbot.app/deploy/astrbot/casaos.html) for NAS/home-server visual deployment, and [Manual Deployment](https://astrbot.app/deploy/astrbot/cli.html) for fully custom source-based installation with `uv`.
 
 #### 在 雨云 上部署
 AstrBot 已由雨云官方上架至云应用平台，可一键部署。

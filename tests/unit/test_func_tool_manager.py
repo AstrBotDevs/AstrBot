@@ -2,346 +2,97 @@ import json
 
 import pytest
 
-from astrbot.core import sp
+from astrbot.core.provider import func_tool_manager
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
-from astrbot.core.tools.computer_tools.shell import ExecuteShellTool
-from astrbot.core.tools.message_tools import SendMessageToUserTool
-from astrbot.core.tools.web_search_tools import (
-    FirecrawlExtractWebPageTool,
-    FirecrawlWebSearchTool,
-)
 
 
-def test_get_builtin_tool_by_class_returns_cached_instance():
-    manager = FunctionToolManager()
-
-    tool_by_class = manager.get_builtin_tool(SendMessageToUserTool)
-    tool_by_name = manager.get_builtin_tool("send_message_to_user")
-
-    assert tool_by_class is tool_by_name
-    assert manager.get_func("send_message_to_user") is tool_by_class
-    assert tool_by_class.name == "send_message_to_user"
-
-
-def test_builtin_tool_ignores_inactivated_llm_tools():
-    manager = FunctionToolManager()
-    sp.put(
-        "inactivated_llm_tools",
-        ["send_message_to_user"],
-        scope="global",
-        scope_id="global",
-    )
-
-    try:
-        tool = manager.get_builtin_tool(SendMessageToUserTool)
-        assert tool.active is True
-    finally:
-        sp.put("inactivated_llm_tools", [], scope="global", scope_id="global")
-
-
-def test_computer_tools_are_registered_as_builtin_tools():
-    manager = FunctionToolManager()
-
-    tool = manager.get_builtin_tool(ExecuteShellTool)
-
-    assert tool.name == "astrbot_execute_shell"
-    assert tool.parameters["properties"]["background"]["default"] is False
-    assert manager.is_builtin_tool("astrbot_execute_shell") is True
-
-
-@pytest.mark.asyncio
-async def test_execute_shell_defaults_to_foreground(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
-
-    calls = []
-
-    class FakeShell:
-        async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
-        ):
-            calls.append({"command": command, "background": background})
-            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
-
-    class FakeBooter:
-        shell = FakeShell()
-
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper:
-        context = FakeAstrContext()
-
-    async def fake_get_booter(context, session_id):
-        return FakeBooter()
-
-    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
-
-    result = await ExecuteShellTool().call(
-        FakeWrapper(), command="chromium https://example.com"
-    )
-
-    assert json.loads(result)["success"] is True
-    assert calls == [{"command": "chromium https://example.com", "background": False}]
-
-
-@pytest.mark.asyncio
-async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
-
-    calls = []
-
-    class FakeShell:
-        async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
-        ):
-            env["MUTATED_BY_FAKE_SHELL"] = command
-            calls.append(env)
-            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
-
-    class FakeBooter:
-        shell = FakeShell()
-
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper:
-        context = FakeAstrContext()
-
-    async def fake_get_booter(context, session_id):
-        return FakeBooter()
-
-    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
-    tool = ExecuteShellTool()
-
-    await tool.call(FakeWrapper(), command="first")
-    await tool.call(FakeWrapper(), command="second")
-
-    assert calls[0] is not calls[1]
-    assert calls[0]["MUTATED_BY_FAKE_SHELL"] == "first"
-    assert calls[1] == {"MUTATED_BY_FAKE_SHELL": "second"}
-
-
-@pytest.mark.asyncio
-async def test_execute_shell_copies_user_env_before_execution(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
-
-    calls = []
-
-    class FakeShell:
-        async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
-        ):
-            env["MUTATED_BY_FAKE_SHELL"] = command
-            calls.append(env)
-            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
-
-    class FakeBooter:
-        shell = FakeShell()
-
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper:
-        context = FakeAstrContext()
-
-    async def fake_get_booter(context, session_id):
-        return FakeBooter()
-
-    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
-    original_env = {"FOO": "bar"}
-
-    await ExecuteShellTool().call(FakeWrapper(), command="first", env=original_env)
-
-    assert original_env == {"FOO": "bar"}
-    assert calls == [{"FOO": "bar", "MUTATED_BY_FAKE_SHELL": "first"}]
-
-
-@pytest.mark.asyncio
-async def test_execute_shell_avoids_double_background_for_detached_commands(
-    monkeypatch,
+@pytest.fixture
+def mcp_init_harness(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
-
-    calls = []
-
-    class FakeShell:
-        async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
-        ):
-            calls.append({"command": command, "background": background})
-            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
-
-    class FakeBooter:
-        shell = FakeShell()
-
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper:
-        context = FakeAstrContext()
-
-    async def fake_get_booter(context, session_id):
-        return FakeBooter()
-
-    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
-
-    command = "nohup firefox >/tmp/astrbot-firefox.log 2>&1 &"
-    result = await ExecuteShellTool().call(
-        FakeWrapper(), command=command, background=True
-    )
-
-    assert json.loads(result)["success"] is True
-    assert calls == [{"command": command, "background": False}]
-
-
-@pytest.mark.asyncio
-async def test_execute_shell_recognizes_commented_background_command(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
-
-    calls = []
-
-    class FakeShell:
-        async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
-        ):
-            calls.append({"command": command, "background": background})
-            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
-
-    class FakeBooter:
-        shell = FakeShell()
-
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper:
-        context = FakeAstrContext()
-
-    async def fake_get_booter(context, session_id):
-        return FakeBooter()
-
-    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
-
-    command = "firefox & # already detached"
-    result = await ExecuteShellTool().call(
-        FakeWrapper(), command=command, background=True
-    )
-
-    assert json.loads(result)["success"] is True
-    assert calls == [{"command": command, "background": False}]
-
-
-@pytest.mark.parametrize(
-    ("command", "expected"),
-    [
-        ("echo '#'", False),
-        ("echo '&'", False),
-        ("echo foo#bar &", True),
-        ("echo 'unterminated", False),
-        ("firefox & # already detached", True),
-        ("nohup firefox >/tmp/astrbot-firefox.log 2>&1 &", True),
-        ("firefox", False),
-    ],
-)
-def test_is_self_detached_command_handles_quotes_and_comments(command, expected):
-    from astrbot.core.tools.computer_tools.shell import _is_self_detached_command
-
-    assert _is_self_detached_command(command) is expected
-
-
-@pytest.mark.asyncio
-async def test_execute_shell_reports_blank_exception_type(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
-
-    class BlankError(Exception):
-        def __str__(self):
-            return ""
-
-    class FakeShell:
-        async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
-        ):
-            raise BlankError()
-
-    class FakeBooter:
-        shell = FakeShell()
-
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper:
-        context = FakeAstrContext()
-
-    async def fake_get_booter(context, session_id):
-        return FakeBooter()
-
-    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
-
-    result = await ExecuteShellTool().call(FakeWrapper(), command="firefox")
-
-    assert result == "Error executing command: BlankError"
-
-
-def test_firecrawl_tools_are_registered_as_builtin_tools():
     manager = FunctionToolManager()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
 
-    search_tool = manager.get_builtin_tool(FirecrawlWebSearchTool)
-    extract_tool = manager.get_builtin_tool(FirecrawlExtractWebPageTool)
+    (data_dir / "mcp_server.json").write_text(
+        json.dumps({"mcpServers": {"demo": {"active": True}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        func_tool_manager,
+        "get_astrbot_data_path",
+        lambda: data_dir,
+    )
 
-    assert search_tool.name == "web_search_firecrawl"
-    assert extract_tool.name == "firecrawl_extract_web_page"
-    assert manager.is_builtin_tool("web_search_firecrawl") is True
-    assert manager.is_builtin_tool("firecrawl_extract_web_page") is True
+    called = {}
+
+    async def fake_start_mcp_server(*, name, cfg, shutdown_event, timeout_seconds):
+        called[name] = {
+            "cfg": cfg,
+            "shutdown_event_type": type(shutdown_event).__name__,
+            "timeout_seconds": timeout_seconds,
+        }
+
+    monkeypatch.setattr(manager, "_start_mcp_server", fake_start_mcp_server)
+    return manager, called
+
+
+def assert_demo_init_result(summary, called, *, timeout_seconds: float) -> None:
+    assert summary.total == 1
+    assert summary.success == 1
+    assert summary.failed == []
+    assert called["demo"]["cfg"] == {"active": True}
+    assert called["demo"]["shutdown_event_type"] == "Event"
+    assert called["demo"]["timeout_seconds"] == timeout_seconds
+
+
+@pytest.mark.asyncio
+async def test_init_mcp_clients_passes_timeout_seconds_keyword(mcp_init_harness):
+    manager, called = mcp_init_harness
+
+    summary = await manager.init_mcp_clients()
+
+    assert_demo_init_result(
+        summary,
+        called,
+        timeout_seconds=manager._init_timeout_default,
+    )
+
+
+@pytest.mark.asyncio
+async def test_init_mcp_clients_passes_overridden_init_timeout(
+    mcp_init_harness,
+):
+    manager, called = mcp_init_harness
+
+    summary = await manager.init_mcp_clients(init_timeout=3.5)
+
+    assert_demo_init_result(summary, called, timeout_seconds=3.5)
+
+
+@pytest.mark.asyncio
+async def test_init_mcp_clients_reads_env_timeout_when_not_overridden(
+    mcp_init_harness,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    manager, called = mcp_init_harness
+    manager._init_timeout_default = 20.0  # ensure env override is observable
+    monkeypatch.setenv("ASTRBOT_MCP_INIT_TIMEOUT", "3.5")
+
+    summary = await manager.init_mcp_clients()
+
+    assert_demo_init_result(summary, called, timeout_seconds=3.5)
+
+
+@pytest.mark.asyncio
+async def test_init_mcp_clients_prefers_explicit_timeout_over_env(
+    mcp_init_harness,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    manager, called = mcp_init_harness
+    monkeypatch.setenv("ASTRBOT_MCP_INIT_TIMEOUT", "7.0")
+
+    summary = await manager.init_mcp_clients(init_timeout=3.5)
+
+    assert_demo_init_result(summary, called, timeout_seconds=3.5)

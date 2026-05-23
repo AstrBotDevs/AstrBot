@@ -25,16 +25,6 @@ from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
 from astrbot.core.utils.metrics import Metric
 
 
-def _is_gif(path: str) -> bool:
-    if path.lower().endswith(".gif"):
-        return True
-    try:
-        with open(path, "rb") as f:
-            return f.read(6) in (b"GIF87a", b"GIF89a")
-    except OSError:
-        return False
-
-
 class TelegramPlatformEvent(AstrMessageEvent):
     # Telegram 的最大消息长度限制
     MAX_MESSAGE_LENGTH = 4096
@@ -398,9 +388,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
             message_thread_id: 可选，目标消息线程 ID
             parse_mode: 可选，消息文本的解析模式
         """
-        if not text or not text.strip():
-            return
-
         kwargs: dict[str, Any] = {}
         if message_thread_id:
             kwargs["message_thread_id"] = int(message_thread_id)
@@ -434,20 +421,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 on_text(i.text)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
-                if _is_gif(image_path):
-                    action = ChatAction.UPLOAD_VIDEO
-                    send_coro = self.client.send_animation
-                    media_kwarg = {"animation": image_path}
-                else:
-                    action = ChatAction.UPLOAD_PHOTO
-                    send_coro = self.client.send_photo
-                    media_kwarg = {"photo": image_path}
                 await self._send_media_with_action(
                     self.client,
-                    action,
-                    send_coro,
+                    ChatAction.UPLOAD_PHOTO,
+                    self.client.send_photo,
                     user_name=user_name,
-                    **media_kwarg,
+                    photo=image_path,
                     **cast(Any, payload),
                 )
             elif isinstance(i, File):
@@ -488,7 +467,19 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     async def _send_final_segment(self, delta: str, payload: dict[str, Any]) -> None:
         """将累积文本作为 MarkdownV2 真实消息发送，失败时回退到纯文本。"""
-        await self._send_text_chunks(self.client, delta, payload)
+        try:
+            markdown_text = telegramify_markdown.markdownify(
+                delta,
+                normalize_whitespace=False,
+            )
+            await self.client.send_message(
+                text=markdown_text,
+                parse_mode="MarkdownV2",
+                **cast(Any, payload),
+            )
+        except Exception as e:
+            logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
+            await self.client.send_message(text=delta, **cast(Any, payload))
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         message_thread_id = None
@@ -560,6 +551,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         try:
                             md = telegramify_markdown.markdownify(
                                 draft_text,
+                                normalize_whitespace=False,
                             )
                             await self._send_message_draft(
                                 user_name,
@@ -654,6 +646,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
             nonlocal delta
             delta += t
 
+        def _append_text(t: str) -> None:
+            nonlocal delta
+            delta += t
+
         async for chain in generator:
             if not isinstance(chain, MessageChain):
                 continue
@@ -679,11 +675,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
             # 编辑或发送消息
             if message_id and len(delta) <= self.MAX_MESSAGE_LENGTH:
-                current_time = asyncio.get_running_loop().time()
+                current_time = asyncio.get_event_loop().time()
                 time_since_last_edit = current_time - last_edit_time
 
                 if time_since_last_edit >= throttle_interval:
-                    current_time = asyncio.get_running_loop().time()
+                    current_time = asyncio.get_event_loop().time()
                     if current_time - last_chat_action_time >= chat_action_interval:
                         await self._ensure_typing(user_name, message_thread_id)
                         last_chat_action_time = current_time
@@ -696,9 +692,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         current_content = delta
                     except Exception as e:
                         logger.warning(f"编辑消息失败(streaming): {e!s}")
-                    last_edit_time = asyncio.get_running_loop().time()
+                    last_edit_time = asyncio.get_event_loop().time()
             else:
-                current_time = asyncio.get_running_loop().time()
+                current_time = asyncio.get_event_loop().time()
                 if current_time - last_chat_action_time >= chat_action_interval:
                     await self._ensure_typing(user_name, message_thread_id)
                     last_chat_action_time = current_time
@@ -710,7 +706,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 except Exception as e:
                     logger.warning(f"发送消息失败(streaming): {e!s}")
                 message_id = msg.message_id
-                last_edit_time = asyncio.get_running_loop().time()
+                last_edit_time = asyncio.get_event_loop().time()
 
         try:
             if delta and current_content != delta:

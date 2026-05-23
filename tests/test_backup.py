@@ -172,6 +172,15 @@ class TestAstrBotExporter:
         assert "test.json" in exporter._checksums
         assert exporter._checksums["test.json"].startswith("sha256:")
 
+    def test_read_text_if_exists(self, tmp_path):
+        """测试 _read_text_if_exists 行为。"""
+        exporter = AstrBotExporter(main_db=MagicMock())
+        file_path = tmp_path / "config.json"
+        file_path.write_text('{"k":"v"}', encoding="utf-8")
+
+        assert exporter._read_text_if_exists(str(file_path)) == '{"k":"v"}'
+        assert exporter._read_text_if_exists(str(tmp_path / "missing.json")) is None
+
     def test_generate_manifest(self, mock_main_db, mock_kb_manager):
         """测试生成清单"""
         exporter = AstrBotExporter(
@@ -239,6 +248,95 @@ class TestAstrBotExporter:
             assert "manifest.json" in namelist
             assert "databases/main_db.json" in namelist
             assert "config/cmd_config.json" in namelist
+
+    @pytest.mark.asyncio
+    async def test_export_attachments_exports_existing_and_skips_missing(
+        self, mock_main_db, tmp_path
+    ):
+        """测试附件导出：存在文件写入 ZIP，不存在文件跳过。"""
+        exporter = AstrBotExporter(main_db=mock_main_db, kb_manager=None)
+
+        existing_file = tmp_path / "exists.txt"
+        existing_file.write_text("hello", encoding="utf-8")
+        missing_file = tmp_path / "missing.txt"
+        zip_path = tmp_path / "attachments.zip"
+
+        attachments = [
+            {"attachment_id": "att_ok", "path": str(existing_file)},
+            {"attachment_id": "att_missing", "path": str(missing_file)},
+        ]
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            await exporter._export_attachments(zf, attachments)
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            namelist = zf.namelist()
+
+        assert "files/attachments/att_ok.txt" in namelist
+        assert "files/attachments/att_missing.txt" not in namelist
+
+    @pytest.mark.asyncio
+    async def test_export_attachments_skips_empty_attachment_id(
+        self, mock_main_db, tmp_path
+    ):
+        """测试附件导出：attachment_id 为空时跳过，避免覆盖冲突。"""
+        exporter = AstrBotExporter(main_db=mock_main_db, kb_manager=None)
+
+        file_a = tmp_path / "a.txt"
+        file_b = tmp_path / "b.txt"
+        file_a.write_text("a", encoding="utf-8")
+        file_b.write_text("b", encoding="utf-8")
+        zip_path = tmp_path / "attachments_empty_id.zip"
+
+        attachments = [
+            {"attachment_id": "", "path": str(file_a)},
+            {"path": str(file_b)},
+            {"attachment_id": "att_ok", "path": str(file_a)},
+        ]
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            await exporter._export_attachments(zf, attachments)
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            namelist = zf.namelist()
+
+        assert "files/attachments/att_ok.txt" in namelist
+        assert "files/attachments/.txt" not in namelist
+
+    @pytest.mark.asyncio
+    async def test_export_attachments_keeps_best_effort_on_unexpected_write_error(
+        self, mock_main_db, tmp_path
+    ):
+        """测试附件导出：单个非 OSError 写入异常不会中断后续附件导出。"""
+        exporter = AstrBotExporter(main_db=mock_main_db, kb_manager=None)
+
+        file_a = tmp_path / "a.txt"
+        file_b = tmp_path / "b.txt"
+        file_a.write_text("a", encoding="utf-8")
+        file_b.write_text("b", encoding="utf-8")
+        zip_path = tmp_path / "attachments_best_effort.zip"
+
+        attachments = [
+            {"attachment_id": "att_boom", "path": str(file_a)},
+            {"attachment_id": "att_ok", "path": str(file_b)},
+        ]
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            original_write = zf.write
+
+            def flaky_write(filename, arcname=None, *args, **kwargs):
+                if arcname == "files/attachments/att_boom.txt":
+                    raise RuntimeError("boom")
+                return original_write(filename, arcname, *args, **kwargs)
+
+            with patch.object(zf, "write", side_effect=flaky_write):
+                await exporter._export_attachments(zf, attachments)
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            namelist = zf.namelist()
+
+        assert "files/attachments/att_boom.txt" not in namelist
+        assert "files/attachments/att_ok.txt" in namelist
 
 
 class TestAstrBotImporter:

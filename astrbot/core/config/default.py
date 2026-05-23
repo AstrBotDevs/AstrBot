@@ -5,7 +5,7 @@ import os
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.25.1"
+VERSION = "4.19.1"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -443,7 +443,6 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "client_id": "",
                         "client_secret": "",
-                        "card_template_id": "",
                     },
                     "Telegram": {
                         "id": "telegram",
@@ -750,11 +749,6 @@ CONFIG_METADATA_2 = {
                         "description": "上传到网盘的目标文件夹 ID",
                         "type": "string",
                         "hint": "可选：填写 Misskey 网盘中目标文件夹的 ID，上传的文件将放置到该文件夹内。留空则使用账号网盘根目录。",
-                    },
-                    "card_template_id": {
-                        "description": "卡片模板 ID",
-                        "type": "string",
-                        "hint": "可选。钉钉互动卡片模板 ID。启用后将使用互动卡片进行流式回复。",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",
