@@ -170,7 +170,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     timeout = cfg.get("timeout", 10)
 
     try:
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(trust_env=True) as session:
             if cfg.get("transport") == "streamable_http":
                 test_payload = {
                     "jsonrpc": "2.0",
@@ -1047,13 +1047,16 @@ class FunctionToolManager:
             "failed_servers": sorted(failures.keys()),
         }
 
-    async def list_mcp_servers_from_provider(
-        self,
-        provider_name: str,
-        payload: dict[str, Any],
-    ) -> list[dict[str, Any]]:
-        provider = get_mcp_sync_provider(provider_name)
-        return await provider.list_servers(payload)
+        try:
+            async with aiohttp.ClientSession(trust_env=True) as session:
+                async with session.get(url, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        mcp_server_list = data.get("data", {}).get(
+                            "mcp_server_list",
+                            [],
+                        )
+                        local_mcp_config = self.load_mcp_config()
 
     async def sync_modelscope_mcp_servers(self, access_token: str) -> None:
         await self.sync_mcp_servers_from_provider(
