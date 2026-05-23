@@ -1298,7 +1298,8 @@ class PluginRoute(Route):
                 logo_url = await self.get_plugin_logo_token(plugin.logo_path)
             _t = {
                 "name": plugin.name,
-                "repo": "" if plugin.repo is None else str(plugin.repo),
+                "marketplace_name": (plugin.name or "").replace("_", "-"),
+                "repo": "" if plugin.repo is None else plugin.repo,
                 "author": plugin.author,
                 "desc": plugin.desc,
                 "version": plugin.version,
@@ -1363,7 +1364,8 @@ class PluginRoute(Route):
                 .ok(
                     {
                         "name": plugin.name,
-                        "repo": "" if plugin.repo is None else str(plugin.repo),
+                        "marketplace_name": (plugin.name or "").replace("_", "-"),
+                        "repo": "" if plugin.repo is None else plugin.repo,
                         "author": plugin.author,
                         "desc": plugin.desc,
                         "version": plugin.version,
@@ -1415,6 +1417,7 @@ class PluginRoute(Route):
                 "i18n_key": page["i18n_key"],
                 "description": "Plugin Page entry",
                 "plugin_name": plugin.name,
+                "plugin_marketplace_name": (plugin.name or "").replace("_", "-"),
             }
             for page in pages
         ]
