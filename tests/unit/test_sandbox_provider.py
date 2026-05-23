@@ -1,129 +1,24 @@
-import asyncio
+from typing import Any, get_type_hints
 
-import pytest
-
-
-class FakeContext:
-    def __init__(self, config: dict):
-        self._config = config
-
-    def get_config(self, umo: str | None = None):
-        return self._config
+from astrbot.core.computer.sandbox_provider import SandboxProvider
 
 
-def test_cua_sandbox_provider_builds_config_from_runtime_settings():
-    from astrbot.core.computer.cua_sandbox_provider import CuaSandboxProvider
+def test_sandbox_provider_protocol_exposes_generic_runtime_contract():
+    protocol_hints = get_type_hints(SandboxProvider)
+    assert protocol_hints["provider_id"] is str
+    assert protocol_hints["capabilities"] == set[str]
+    assert protocol_hints["tool_names"] == set[str]
+    assert protocol_hints["system_prompt"] is str
+    assert protocol_hints["plugin_config"] == dict[str, Any] | None
+    assert protocol_hints["provider_api_version"] is str
+    assert protocol_hints["auto_sync_skills"] is bool
+    assert protocol_hints["supports_persistent_reconnect"] is bool
 
-    provider = CuaSandboxProvider()
-    config = provider.build_create_config(
-        FakeContext(
-            {
-                "provider_settings": {
-                    "sandbox": {
-                        "cua_image": "linux",
-                        "cua_os_type": "linux",
-                        "cua_ttl": 123,
-                        "cua_local": False,
-                        "cua_api_key": "sk-test",
-                    }
-                }
-            }
-        ),
-        "session-a",
-    )
-
-    assert provider.provider_id == "cua"
-    assert config["image"] == "linux"
-    assert config["ttl"] == 123
-    assert config["local"] is False
-    assert config["api_key"] == "sk-test"
+    hints = get_type_hints(SandboxProvider.create_booter)
+    assert "context" in hints
+    assert hints["session_id"] is str
+    assert hints["sandbox_id"] is str
 
 
-def test_cua_sandbox_provider_declares_dashboard_capabilities():
-    from astrbot.core.computer.cua_sandbox_provider import CuaSandboxProvider
-
-    provider = CuaSandboxProvider()
-
-    assert provider.capabilities == {"create", "destroy", "shell", "screenshot"}
-
-
-def test_cua_sandbox_provider_updates_connect_info_name():
-    from astrbot.core.computer.cua_sandbox_provider import CuaSandboxProvider
-
-    provider = CuaSandboxProvider()
-
-    connect_info = provider.update_connect_info(
-        {"connect_info": {"name": "old", "local": True, "image": "linux"}},
-        sandbox_name="new",
-    )
-
-    assert connect_info == {"name": "new", "local": True, "image": "linux"}
-
-
-@pytest.mark.asyncio
-async def test_cua_sandbox_provider_creates_booter_and_syncs_skills(monkeypatch):
-    from astrbot.core.computer import cua_sandbox_provider
-    from astrbot.core.computer.booters import cua as cua_booter
-    from astrbot.core.computer.cua_sandbox_provider import CuaSandboxProvider
-
-    synced = []
-
-    class FakeCuaBooter:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-        async def boot(self, session_id: str):
-            self.boot_session_id = session_id
-
-        async def available(self):
-            return True
-
-    monkeypatch.setattr(cua_booter, "CuaBooter", FakeCuaBooter)
-    monkeypatch.setattr(
-        cua_sandbox_provider,
-        "_sync_skills_to_sandbox",
-        lambda booter: synced.append(booter) or asyncio.sleep(0),
-    )
-
-    booter = await CuaSandboxProvider().create_booter(
-        FakeContext({}),
-        "session-a",
-        "sb-1",
-        {"image": "linux", "os_type": "linux", "local": False, "ttl": 3600},
-    )
-
-    assert isinstance(booter, FakeCuaBooter)
-    assert booter.sandbox_id == "sb-1"
-    assert synced == [booter]
-
-
-@pytest.mark.asyncio
-async def test_cua_sandbox_provider_shuts_down_when_skill_sync_fails(monkeypatch):
-    from astrbot.core.computer import cua_sandbox_provider
-    from astrbot.core.computer.booters import cua as cua_booter
-    from astrbot.core.computer.cua_sandbox_provider import CuaSandboxProvider
-
-    shutdowns = []
-
-    class FakeCuaBooter:
-        async def boot(self, session_id: str):
-            return None
-
-        async def shutdown(self):
-            shutdowns.append(True)
-
-    async def fail_sync(booter):
-        raise RuntimeError("sync failed")
-
-    monkeypatch.setattr(cua_booter, "CuaBooter", lambda **kwargs: FakeCuaBooter())
-    monkeypatch.setattr(cua_sandbox_provider, "_sync_skills_to_sandbox", fail_sync)
-
-    with pytest.raises(RuntimeError, match="sync failed"):
-        await CuaSandboxProvider().create_booter(
-            FakeContext({}),
-            "session-a",
-            "sb-1",
-            {"image": "linux", "os_type": "linux", "local": False, "ttl": 3600},
-        )
-
-    assert shutdowns == [True]
+def test_sandbox_provider_protocol_has_no_default_existence_probe():
+    assert "check_persistent_sandbox_exists" not in SandboxProvider.__dict__

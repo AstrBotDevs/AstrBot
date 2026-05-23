@@ -23,7 +23,7 @@ from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_WOKE_USER_PROMPT,
     CONVERSATION_HISTORY_INJECT_PREFIX,
 )
-from astrbot.core.config.default import DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
+from astrbot.core.computer.sandbox_tool_binding import tool_available_in_runtime
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -37,18 +37,27 @@ from astrbot.core.provider.register import llm_tools
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.tools.computer_tools import (
-    CuaKeyboardTypeTool,
-    CuaMouseClickTool,
-    CuaScreenshotTool,
+    CopyFileBetweenSandboxesTool,
+    CreateSandboxTool,
+    DestroySandboxTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
     FileReadTool,
     FileUploadTool,
     FileWriteTool,
+    GetCurrentSandboxTool,
     GrepTool,
+    KeepAliveSandboxTool,
+    ListSandboxesTool,
+    ListSandboxProvidersTool,
     LocalPythonTool,
     PythonTool,
+    ReleaseSandboxTool,
+    ScreenshotSandboxTool,
+    SetSandboxRetentionPolicyTool,
+    SwitchSandboxTool,
+    TakeoverSandboxTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -59,136 +68,27 @@ from astrbot.core.utils.trace import _current_span as _trace_current_span
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
-    _HANDOFF_CALL_COUNT_EXTRA_KEY = "_subagent_handoff_call_count"
-    _DEFAULT_MAX_HANDOFF_CALLS_PER_RUN = DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
-    _MAX_HANDOFF_CALL_COUNT_SANITY_LIMIT = 10_000
+    _runtime_computer_tools_cache: dict[
+        tuple[int, str, str], dict[str, FunctionTool]
+    ] = {}
 
     @classmethod
-    def _build_handoff_error_result(
-        cls,
-        *,
-        tool_name: str,
-        error_type: str,
-        fix_hint: str,
-        action_hint: str,
-    ) -> mcp.types.CallToolResult:
-        guidance = (
-            "[handoff CALL FAILED - IMMEDIATE RETRY REQUIRED]\n"
-            f"error_type: {error_type}\n"
-            f"fix: {fix_hint}\n"
-            f"action: {action_hint}\n"
-            "example:\n"
-            "{\n"
-            '  "input": "Summarize the user request, constraints, and expected output.",\n'
-            '  "background_task": false\n'
-            "}"
-        )
-        return mcp.types.CallToolResult(
-            content=[
-                mcp.types.TextContent(
-                    type="text",
-                    text=f"error: {tool_name} rejected invalid handoff request.\n{guidance}",
-                )
-            ]
-        )
+    def clear_runtime_computer_tools_cache(cls, provider_id: str | None = None) -> None:
+        if provider_id is None:
+            cls._runtime_computer_tools_cache.clear()
+            return
 
-    @classmethod
-    def _parse_background_task_arg(
-        cls,
-        tool_name: str,
-        value: T.Any,
-    ) -> tuple[bool, mcp.types.CallToolResult | None]:
-        if value is None:
-            return False, None
-        if isinstance(value, bool):
-            return value, None
-        if isinstance(value, str):
-            normalized = value.strip().lower()
-            if normalized in {"true", "1", "yes", "on"}:
-                return True, None
-            if normalized in {"false", "0", "no", "off", ""}:
-                return False, None
+        normalized_provider_id = str(provider_id).strip().lower()
+        if not normalized_provider_id:
+            return
 
-        return False, cls._build_handoff_error_result(
-            tool_name=tool_name,
-            error_type="invalid_background_task",
-            fix_hint=(
-                "`background_task` must be a boolean (`true` or `false`) or a string "
-                'equivalent such as `"1"`/`"0"`, `"yes"`/`"no"`, or '
-                '`"on"`/`"off"`.'
-            ),
-            action_hint=(
-                "Retry the same handoff with `background_task` set to a boolean or one "
-                'of the supported string equivalents (`"true"`, `"false"`, '
-                '`"1"`, `"0"`, `"yes"`, `"no"`, `"on"`, `"off"`).'
-            ),
-        )
-
-    @classmethod
-    def _normalize_handoff_input(
-        cls,
-        tool_name: str,
-        input_value: T.Any,
-    ) -> tuple[str | None, mcp.types.CallToolResult | None]:
-        if not isinstance(input_value, str) or not input_value.strip():
-            return None, cls._build_handoff_error_result(
-                tool_name=tool_name,
-                error_type="missing_or_empty_input",
-                fix_hint=(
-                    "Provide a non-empty `input` string that clearly describes the delegated task."
-                ),
-                action_hint=("Retry now with a concise task statement in `input`."),
-            )
-        return input_value.strip(), None
-
-    @classmethod
-    async def _resolve_handoff_provider_id(
-        cls,
-        tool: HandoffTool,
-        *,
-        ctx: T.Any,
-        umo: str,
-    ) -> str:
-        configured_provider_id = str(getattr(tool, "provider_id", "") or "").strip()
-        if not configured_provider_id:
-            return await ctx.get_current_chat_provider_id(umo)
-
-        provider_mgr = getattr(ctx, "provider_manager", None)
-        if provider_mgr is None or not hasattr(provider_mgr, "get_provider_by_id"):
-            return configured_provider_id
-
-        provider_inst = await provider_mgr.get_provider_by_id(configured_provider_id)
-        if provider_inst is not None:
-            return configured_provider_id
-
-        fallback_provider_id = await ctx.get_current_chat_provider_id(umo)
-        logger.warning(
-            "Subagent %s configured provider `%s` not found, fallback to `%s`.",
-            tool.name,
-            configured_provider_id,
-            fallback_provider_id,
-        )
-        return fallback_provider_id
-
-    @classmethod
-    def _tool_enabled_for_session(
-        cls,
-        tool: FunctionTool,
-        session_config: dict | None,
-    ) -> bool:
-        mp = tool.handler_module_path
-        if not mp:
-            return True
-
-        plugin = star_map.get(mp)
-        if not plugin:
-            return True
-
-        return SessionPluginManager.is_plugin_enabled_for_session_config(
-            plugin.name,
-            session_config,
-            reserved=plugin.reserved,
-        )
+        keys_to_remove = [
+            key
+            for key in cls._runtime_computer_tools_cache
+            if key[2] == normalized_provider_id
+        ]
+        for key in keys_to_remove:
+            cls._runtime_computer_tools_cache.pop(key, None)
 
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
@@ -374,76 +274,80 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         runtime: str,
         tool_mgr: Any = None,
         booter: str | None = None,
-        session_id: str = "",
-        sandbox_cfg: dict | None = None,
-    ) -> dict[str, ToolSchema]:
-        """Get computer runtime tools via ComputerToolProvider.
-
-        Delegates tool discovery to ComputerToolProvider for decoupled
-        sandbox / local tool injection.  The *tool_mgr* parameter is kept
-        for backward compatibility but is no longer used.
-
-        Args:
-            runtime: ``'sandbox'``, ``'local'``, or ``'none'``.
-            tool_mgr: Kept for backward compatibility (unused).
-            booter: Short-form booter type (e.g. ``'shipyard_neo'``).
-            session_id: Session identifier.
-            sandbox_cfg: Full sandbox configuration dict (preferred over
-                *booter* when both are provided).
-
-        Returns:
-            Dict mapping tool name to FunctionTool instance.
-
-        """
-        from astrbot.core.computer.computer_tool_provider import (
-            ComputerToolProvider,
-        )
-        from astrbot.core.tool_provider import ToolProviderContext
-
-        cfg: dict = {}
-        if sandbox_cfg is not None:
-            cfg = sandbox_cfg
-        elif booter:
-            cfg["booter"] = booter
-
-        ctx = ToolProviderContext(
-            computer_use_runtime=runtime,
-            sandbox_cfg=cfg,
-            session_id=session_id,
-        )
-        tools = ComputerToolProvider().get_tools(ctx)
-        return {t.name: t for t in tools}
-
-    @classmethod
-    def _apply_web_search_tools(
-        cls,
-        toolset: ToolSet,
-        tool_mgr: T.Any,
-        cfg: dict,
-    ) -> None:
-        """根据配置添加 Web 搜索工具，复用主代理的逻辑。"""
-        prov_settings = cfg.get("provider_settings", {})
-        if not prov_settings.get("web_search", False):
-            return
-
-        provider = prov_settings.get("websearch_provider", "tavily")
-        try:
-            if provider == "tavily":
-                toolset.add_tool(tool_mgr.get_builtin_tool("web_search_tavily"))
-                toolset.add_tool(tool_mgr.get_builtin_tool("tavily_extract_web_page"))
-            elif provider == "bocha":
-                toolset.add_tool(tool_mgr.get_builtin_tool("web_search_bocha"))
-            elif provider == "brave":
-                toolset.add_tool(tool_mgr.get_builtin_tool("web_search_brave"))
-            elif provider == "firecrawl":
-                toolset.add_tool(tool_mgr.get_builtin_tool("web_search_firecrawl"))
-                toolset.add_tool(
-                    tool_mgr.get_builtin_tool("firecrawl_extract_web_page")
-                )
-            elif provider == "baidu_ai_search":
-                toolset.add_tool(tool_mgr.get_builtin_tool("web_search_baidu"))
-        except KeyError:
-            pass
+    ) -> dict[str, FunctionTool]:
+        booter = "" if booter is None else str(booter).lower()
+        cache_key = (id(tool_mgr), runtime, booter)
+        if cache_key in cls._runtime_computer_tools_cache:
+            return cls._runtime_computer_tools_cache[cache_key]
+        if runtime == "sandbox":
+            shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
+            list_sandboxes_tool = tool_mgr.get_builtin_tool(ListSandboxesTool)
+            list_sandbox_providers_tool = tool_mgr.get_builtin_tool(
+                ListSandboxProvidersTool
+            )
+            get_current_sandbox_tool = tool_mgr.get_builtin_tool(GetCurrentSandboxTool)
+            create_sandbox_tool = tool_mgr.get_builtin_tool(CreateSandboxTool)
+            switch_sandbox_tool = tool_mgr.get_builtin_tool(SwitchSandboxTool)
+            keep_alive_sandbox_tool = tool_mgr.get_builtin_tool(KeepAliveSandboxTool)
+            release_sandbox_tool = tool_mgr.get_builtin_tool(ReleaseSandboxTool)
+            set_sandbox_retention_policy_tool = tool_mgr.get_builtin_tool(
+                SetSandboxRetentionPolicyTool
+            )
+            takeover_sandbox_tool = tool_mgr.get_builtin_tool(TakeoverSandboxTool)
+            destroy_sandbox_tool = tool_mgr.get_builtin_tool(DestroySandboxTool)
+            screenshot_sandbox_tool = tool_mgr.get_builtin_tool(ScreenshotSandboxTool)
+            copy_between_sandboxes_tool = tool_mgr.get_builtin_tool(
+                CopyFileBetweenSandboxesTool
+            )
+            python_tool = tool_mgr.get_builtin_tool(PythonTool)
+            upload_tool = tool_mgr.get_builtin_tool(FileUploadTool)
+            download_tool = tool_mgr.get_builtin_tool(FileDownloadTool)
+            read_tool = tool_mgr.get_builtin_tool(FileReadTool)
+            write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
+            edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
+            grep_tool = tool_mgr.get_builtin_tool(GrepTool)
+            tools = {
+                shell_tool.name: shell_tool,
+                list_sandboxes_tool.name: list_sandboxes_tool,
+                list_sandbox_providers_tool.name: list_sandbox_providers_tool,
+                get_current_sandbox_tool.name: get_current_sandbox_tool,
+                create_sandbox_tool.name: create_sandbox_tool,
+                switch_sandbox_tool.name: switch_sandbox_tool,
+                keep_alive_sandbox_tool.name: keep_alive_sandbox_tool,
+                release_sandbox_tool.name: release_sandbox_tool,
+                set_sandbox_retention_policy_tool.name: set_sandbox_retention_policy_tool,
+                takeover_sandbox_tool.name: takeover_sandbox_tool,
+                destroy_sandbox_tool.name: destroy_sandbox_tool,
+                screenshot_sandbox_tool.name: screenshot_sandbox_tool,
+                copy_between_sandboxes_tool.name: copy_between_sandboxes_tool,
+                python_tool.name: python_tool,
+                upload_tool.name: upload_tool,
+                download_tool.name: download_tool,
+                read_tool.name: read_tool,
+                write_tool.name: write_tool,
+                edit_tool.name: edit_tool,
+                grep_tool.name: grep_tool,
+            }
+            cls._runtime_computer_tools_cache[cache_key] = tools
+            return tools
+        if runtime == "local":
+            shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
+            python_tool = tool_mgr.get_builtin_tool(LocalPythonTool)
+            read_tool = tool_mgr.get_builtin_tool(FileReadTool)
+            write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
+            edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
+            grep_tool = tool_mgr.get_builtin_tool(GrepTool)
+            tools = {
+                shell_tool.name: shell_tool,
+                python_tool.name: python_tool,
+                read_tool.name: read_tool,
+                write_tool.name: write_tool,
+                edit_tool.name: edit_tool,
+                grep_tool.name: grep_tool,
+            }
+            cls._runtime_computer_tools_cache[cache_key] = tools
+            return tools
+        return {}
 
     @classmethod
     def _build_handoff_toolset(
@@ -462,8 +366,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool_mgr = ctx.get_llm_tool_manager()
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
-            session_id=event.unified_msg_origin,
-            sandbox_cfg=sandbox_cfg,
+            tool_mgr,
         )
         if tools is None:
             toolset = ToolSet()
@@ -471,9 +374,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             for registered_tool in tool_mgr.func_list:
                 if isinstance(registered_tool, HandoffTool):
                     continue
-                if registered_tool.active and cls._tool_enabled_for_session(
-                    registered_tool,
-                    session_config,
+                if registered_tool.active and tool_available_in_runtime(
+                    registered_tool, runtime
                 ):
                     toolset.add_tool(registered_tool)
             # 添加计算机工具（根据 computer_use_runtime 配置）
@@ -774,12 +676,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             message_type=session.message_type,
         )
         cron_event.role = event.role
-
+        session_config = ctx.get_config(umo=event.unified_msg_origin)
+        provider_settings = session_config.get("provider_settings", {})
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
-            streaming_response=ctx.get_config()
-            .get("provider_settings", {})
-            .get("stream", False),
+            streaming_response=provider_settings.get("stream", False),
+            computer_use_runtime=str(
+                provider_settings.get("computer_use_runtime", "local")
+            ),
+            sandbox_cfg=provider_settings.get("sandbox", {}),
+            provider_settings=provider_settings,
         )
         req = ProviderRequest()
         req.system_prompt = ""

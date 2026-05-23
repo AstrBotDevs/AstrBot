@@ -399,6 +399,18 @@ class FunctionToolManager:
         self.builtin_func_list[tool_cls] = builtin_tool
         return builtin_tool
 
+    def clear_builtin_tool_cache_by_module_prefix(
+        self, module_prefix: str
+    ) -> list[str]:
+        removed: list[str] = []
+        for tool_cls in tuple(self.builtin_func_list):
+            if not getattr(tool_cls, "__module__", "").startswith(module_prefix):
+                continue
+            tool = self.builtin_func_list.pop(tool_cls, None)
+            tool_name = get_builtin_tool_name(tool_cls) or getattr(tool, "name", None)
+            removed.append(tool_name or tool_cls.__name__)
+        return removed
+
     def iter_builtin_tools(self) -> list[FuncTool]:
         ensure_builtin_tools_loaded()
         return [

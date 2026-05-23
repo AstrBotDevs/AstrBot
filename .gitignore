@@ -65,5 +65,4 @@ GenieData/
 
 .astrbot_sdk_testing/
 dashboard/bun.lock
-.claude
-.env
+docs/plans/

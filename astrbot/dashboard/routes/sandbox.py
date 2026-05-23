@@ -1,299 +1,308 @@
-from __future__ import annotations
+import traceback
 
-import base64
-import shlex
-import time
-import uuid
-from pathlib import Path
-from typing import Any
-
-from quart import request
+from quart import jsonify, request
 
 from astrbot.core import logger
-from astrbot.core.computer.computer_client import (
-    create_sandbox,
-    create_sandbox_uncontrolled,
-    destroy_sandbox,
-    get_current_sandbox,
-    get_sandbox_observer_booter_by_id,
-    list_sandboxes,
-    release_current_sandbox,
-    set_default_sandbox,
-    switch_current_sandbox_checked,
-    takeover_sandbox,
-    update_sandbox_config,
-)
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.computer import computer_client
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 
 from .route import Response, Route, RouteContext
 
 
-class _DashboardSandboxContext:
-    def __init__(self, config: Any):
-        self._config = config
-
-    def get_config(self, umo: str | None = None):
-        return self._config
+def _is_sandbox_name_conflict(error: Exception) -> bool:
+    return isinstance(error, RuntimeError) and str(error).startswith("Sandbox name ")
 
 
-def _session_id(data: dict[str, Any]) -> str:
-    value = data.get("session_id") or data.get("umo") or "dashboard"
-    return str(value)
+def _is_sandbox_limit_error(error: Exception) -> bool:
+    return isinstance(error, RuntimeError) and str(error).startswith(
+        "Sandbox limit reached"
+    )
 
 
-def _terminal_command(command: str) -> str:
-    quoted = shlex.quote(command)
+def _is_sandbox_user_error(error: Exception) -> bool:
+    if not isinstance(error, (RuntimeError, ValueError)):
+        return False
+    message = str(error)
     return (
-        f"TERM=xterm-256color COLUMNS=160 LINES=40 script -q -e -c {quoted} /dev/null"
+        _is_sandbox_name_conflict(error)
+        or _is_sandbox_limit_error(error)
+        or "does not support persistent sandboxes" in message
+        or "retention_policy must be" in message
+        or "sandbox_name must be" in message
     )
 
 
 class SandboxRoute(Route):
-    """Provider-neutral sandbox management APIs.
-
-    Phase 1 actions are backed by the managed CUA implementation, while response
-    payloads keep provider/booter_type fields so the dashboard can represent CUA,
-    Shipyard Neo, Shipyard, and future providers in one surface.
-    """
-
-    def __init__(self, context: RouteContext) -> None:
+    def __init__(
+        self,
+        context: RouteContext,
+        core_lifecycle: AstrBotCoreLifecycle,
+    ) -> None:
         super().__init__(context)
-        self.routes = {
-            "/sandboxes": ("GET", self.list_sandboxes),
-            "/sandboxes/current": ("GET", self.get_current),
-            "/sandboxes/create": ("POST", self.create_sandbox),
-            "/sandboxes/switch-current": ("POST", self.switch_current),
-            "/sandboxes/release": ("POST", self.release_sandbox),
-            "/sandboxes/takeover": ("POST", self.takeover_sandbox),
-            "/sandboxes/destroy": ("POST", self.destroy_sandbox),
-            "/sandboxes/screenshot": ("POST", self.screenshot_sandbox),
-            "/sandboxes/shell": ("POST", self.shell_sandbox),
-            "/sandboxes/default/ensure": ("POST", self.ensure_default),
-            "/sandboxes/default/set": ("POST", self.set_default),
-            "/sandboxes/config/update": ("POST", self.update_sandbox_config),
-        }
+        self.core_lifecycle = core_lifecycle
+        self.routes = [
+            ("/sandbox/providers", ("GET", self.list_providers)),
+            ("/sandbox", ("GET", self.list_sandboxes)),
+            ("/sandbox/current", ("GET", self.get_current_sandbox)),
+            ("/sandbox/current", ("DELETE", self.release_current_sandbox)),
+            ("/sandbox", ("POST", self.create_sandbox)),
+            ("/sandbox/<sandbox_id>/switch", ("POST", self.switch_sandbox)),
+            ("/sandbox/<sandbox_id>/takeover", ("POST", self.takeover_sandbox)),
+            ("/sandbox/<sandbox_id>/default", ("POST", self.set_default_sandbox)),
+            ("/sandbox/<sandbox_id>/shell", ("POST", self.run_shell)),
+            ("/sandbox/<sandbox_id>/screenshot", ("POST", self.capture_screenshot)),
+            ("/sandbox/<sandbox_id>", ("PATCH", self.update_sandbox)),
+            ("/sandbox/<sandbox_id>", ("DELETE", self.destroy_sandbox)),
+        ]
         self.register_routes()
 
-    async def list_sandboxes(self):
-        return Response().ok({"sandboxes": list_sandboxes()}).__dict__
+    def _session_id(self) -> str:
+        return request.args.get("session_id") or "dashboard"
 
-    async def get_current(self):
-        session_id = (
-            request.args.get("session_id") or request.args.get("umo") or "dashboard"
-        )
-        return Response().ok(get_current_sandbox(str(session_id))).__dict__
+    async def list_providers(self):
+        try:
+            config = self.core_lifecycle.star_context.get_config(umo=self._session_id())
+            sandbox_config = config.get("provider_settings", {}).get("sandbox", {})
+            default_provider_id = ""
+            if isinstance(sandbox_config, dict):
+                configured_provider_id = str(sandbox_config.get("booter") or "").strip()
+                if computer_client.get_sandbox_provider_info(configured_provider_id):
+                    default_provider_id = configured_provider_id
+            return jsonify(
+                Response()
+                .ok(
+                    data={
+                        "providers": computer_client.list_sandbox_providers(),
+                        "default_provider_id": default_provider_id,
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to list sandbox providers: {e!s}").__dict__
+            )
+
+    async def list_sandboxes(self):
+        try:
+            return jsonify(
+                Response()
+                .ok(
+                    data={"sandboxes": computer_client.sandbox_manager.list_sandboxes()}
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to list sandboxes: {e!s}").__dict__
+            )
+
+    async def get_current_sandbox(self):
+        try:
+            return jsonify(
+                Response()
+                .ok(
+                    data=computer_client.sandbox_manager.get_current_sandbox(
+                        self._session_id()
+                    )
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to get current sandbox: {e!s}").__dict__
+            )
 
     async def create_sandbox(self):
-        data = await request.json
-        if not isinstance(data, dict):
-            data = {}
-        provider = str(data.get("provider") or "cua")
-        if provider != "cua":
-            return (
-                Response().error(f"Provider {provider} is not supported yet.").__dict__
-            )
         try:
-            sandbox = await create_sandbox_uncontrolled(
-                _DashboardSandboxContext(self.config),
-                _session_id(data),
-                provider,
+            data = await request.get_json(silent=True) or {}
+            provider_id = str(data.get("provider_id") or "").strip()
+            if not provider_id:
+                return jsonify(Response().error("provider_id is required").__dict__)
+            sandbox = await computer_client.sandbox_manager.create_sandbox_uncontrolled_deferred(
+                self.core_lifecycle.star_context,
+                self._session_id(),
+                provider_id,
                 sandbox_name=data.get("sandbox_name"),
             )
-            return Response().ok({"sandbox": sandbox}).__dict__
-        except Exception as e:
-            return Response().error(str(e)).__dict__
-
-    async def switch_current(self):
-        data = await request.json
-        if not isinstance(data, dict):
-            data = {}
-        sandbox_id = data.get("sandbox_id")
-        if not sandbox_id:
-            return Response().error("sandbox_id is required.").__dict__
-        try:
-            sandbox = await switch_current_sandbox_checked(
-                _session_id(data), str(sandbox_id)
+            return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
+        except RuntimeError as e:
+            if _is_sandbox_name_conflict(e) or _is_sandbox_limit_error(e):
+                logger.warning(str(e))
+                return jsonify(Response().error(str(e)).__dict__)
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to create sandbox: {e!s}").__dict__
             )
-            return Response().ok({"sandbox": sandbox}).__dict__
         except Exception as e:
-            return Response().error(str(e)).__dict__
-
-    async def release_sandbox(self):
-        data = await request.json
-        if not isinstance(data, dict):
-            data = {}
-        sandbox_id = data.get("sandbox_id")
-        try:
-            sandbox = release_current_sandbox(
-                _session_id(data),
-                str(sandbox_id) if sandbox_id else None,
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to create sandbox: {e!s}").__dict__
             )
-            return Response().ok({"sandbox": sandbox}).__dict__
-        except Exception as e:
-            return Response().error(str(e)).__dict__
 
-    async def takeover_sandbox(self):
-        data = await request.json
-        if not isinstance(data, dict):
-            data = {}
-        sandbox_id = data.get("sandbox_id")
-        if not sandbox_id:
-            return Response().error("sandbox_id is required.").__dict__
+    async def switch_sandbox(self, sandbox_id: str):
         try:
-            sandbox = takeover_sandbox(_session_id(data), str(sandbox_id))
-            return Response().ok({"sandbox": sandbox}).__dict__
-        except Exception as e:
-            return Response().error(str(e)).__dict__
-
-    async def destroy_sandbox(self):
-        data = await request.json
-        if not isinstance(data, dict):
-            data = {}
-        sandbox_id = data.get("sandbox_id")
-        if not sandbox_id:
-            return Response().error("sandbox_id is required.").__dict__
-        try:
-            sandbox = await destroy_sandbox(_session_id(data), str(sandbox_id))
-            return Response().ok({"sandbox": sandbox}).__dict__
-        except Exception as e:
-            return Response().error(str(e)).__dict__
-
-    async def screenshot_sandbox(self):
-        data = await request.json
-        if not isinstance(data, dict):
-            data = {}
-        sandbox_id = data.get("sandbox_id")
-        if not sandbox_id:
-            return Response().error("sandbox_id is required.").__dict__
-        try:
-            booter = await get_sandbox_observer_booter_by_id(str(sandbox_id))
-            gui = getattr(booter, "gui", None)
-            if gui is None:
-                return (
-                    Response()
-                    .error("Target sandbox does not support screenshot.")
-                    .__dict__
+            sandbox = (
+                await computer_client.sandbox_manager.switch_current_sandbox_checked(
+                    self._session_id(),
+                    sandbox_id,
+                    context=self.core_lifecycle.star_context,
                 )
-            screenshot_dir = Path(get_astrbot_temp_path()) / "sandbox_screenshots"
-            screenshot_dir.mkdir(parents=True, exist_ok=True)
-            path = screenshot_dir / f"{uuid.uuid4().hex}.png"
-            result = await gui.screenshot(str(path))
-            try:
-                mime_type = result.get("mime_type") or "image/png"
-                image_base64 = result.get("base64")
-                if not image_base64:
-                    image_base64 = base64.b64encode(path.read_bytes()).decode("ascii")
-                return (
-                    Response()
-                    .ok(
-                        {
-                            "screenshot": {
-                                "mime_type": mime_type,
-                                "base64": image_base64,
-                                "data_url": f"{mime_type};base64,{image_base64}"
-                                if mime_type.startswith("data:")
-                                else f"data:{mime_type};base64,{image_base64}",
-                            }
-                        }
-                    )
-                    .__dict__
-                )
-            finally:
-                path.unlink(missing_ok=True)
+            )
+            return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
         except Exception as e:
-            return Response().error(str(e)).__dict__
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to switch sandbox: {e!s}").__dict__
+            )
 
-    async def shell_sandbox(self):
-        data = await request.json
-        if not isinstance(data, dict):
-            data = {}
-        sandbox_id = data.get("sandbox_id")
-        command = str(data.get("command") or "").strip()
-        if not sandbox_id:
-            return Response().error("sandbox_id is required.").__dict__
-        if not command:
-            return Response().error("command is required.").__dict__
-        started_at = time.monotonic()
+    async def release_current_sandbox(self):
         try:
-            logger.info(
-                "[Dashboard] Sandbox shell exec start: sandbox_id=%s timeout=%s background=%s command=%r",
+            sandbox_id = request.args.get("sandbox_id")
+            if sandbox_id:
+                sandbox = computer_client.sandbox_manager.force_release_sandbox(
+                    sandbox_id
+                )
+            else:
+                sandbox = computer_client.sandbox_manager.release_current_sandbox(
+                    self._session_id()
+                )
+            return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to release sandbox: {e!s}").__dict__
+            )
+
+    async def takeover_sandbox(self, sandbox_id: str):
+        try:
+            sandbox = await computer_client.sandbox_manager.takeover_sandbox(
+                self._session_id(), sandbox_id, context=self.core_lifecycle.star_context
+            )
+            return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to takeover sandbox: {e!s}").__dict__
+            )
+
+    async def set_default_sandbox(self, sandbox_id: str):
+        try:
+            sandbox = computer_client.sandbox_manager.set_default_sandbox(sandbox_id)
+            return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to set default sandbox: {e!s}").__dict__
+            )
+
+    async def run_shell(self, sandbox_id: str):
+        try:
+            data = await request.get_json(silent=True) or {}
+            command = str(data.get("command") or "").strip()
+            if not command:
+                return jsonify(Response().error("command is required").__dict__)
+            # Dashboard shell access is an administrative operation; it does
+            # not need a lease so admins can operate any sandbox at any time.
+            booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
                 sandbox_id,
-                data.get("timeout") or 300,
-                bool(data.get("background", False)),
-                command[:500],
+                self._session_id(),
+                require_lease=False,
+                context=self.core_lifecycle.star_context,
             )
-            booter = await get_sandbox_observer_booter_by_id(str(sandbox_id))
             shell = getattr(booter, "shell", None)
             if shell is None:
-                return (
-                    Response().error("Target sandbox does not support shell.").__dict__
+                return jsonify(
+                    Response().error("Sandbox does not support shell.").__dict__
                 )
-            cwd = data.get("cwd")
             result = await shell.exec(
-                _terminal_command(command),
-                cwd=str(cwd) if cwd else None,
-                timeout=int(data.get("timeout") or 300),
-                background=bool(data.get("background", False)),
+                command,
+                cwd=data.get("cwd"),
+                env=data.get("env"),
+                timeout=data.get("timeout", 300),
+                shell=data.get("shell", True),
             )
-            logger.info(
-                "[Dashboard] Sandbox shell exec done: sandbox_id=%s exit_code=%s elapsed_ms=%d stdout_len=%d stderr_len=%d",
+            return jsonify(Response().ok(data={"result": result}).__dict__)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to run sandbox shell: {e!s}").__dict__
+            )
+
+    async def capture_screenshot(self, sandbox_id: str):
+        try:
+            data = await request.get_json(silent=True) or {}
+            # Dashboard screenshot is a read-only observer operation; it does
+            # not need a lease and must not reset the sandbox idle timer.
+            booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
                 sandbox_id,
-                result.get("exit_code", result.get("returncode")),
-                int((time.monotonic() - started_at) * 1000),
-                len(str(result.get("stdout", "") or "")),
-                len(str(result.get("stderr", "") or "")),
+                self._session_id(),
+                require_lease=False,
+                context=self.core_lifecycle.star_context,
             )
-            return Response().ok({"result": result}).__dict__
+            gui = getattr(booter, "gui", None)
+            if gui is None:
+                return jsonify(
+                    Response().error("Sandbox does not support screenshots.").__dict__
+                )
+            screenshot = await gui.screenshot(path=data.get("path"))
+            return jsonify(Response().ok(data={"screenshot": screenshot}).__dict__)
         except Exception as e:
-            logger.warning(
-                "[Dashboard] Sandbox shell exec failed: sandbox_id=%s elapsed_ms=%d error=%s",
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response()
+                .error(f"Failed to capture sandbox screenshot: {e!s}")
+                .__dict__
+            )
+
+    async def update_sandbox(self, sandbox_id: str):
+        try:
+            data = await request.get_json(silent=True) or {}
+            current_sandbox = computer_client.sandbox_manager.registry.get_sandbox(
+                sandbox_id
+            )
+            retention_policy = data.get(
+                "retention_policy",
+                current_sandbox.get("retention_policy", "temporary")
+                if current_sandbox
+                else "temporary",
+            )
+            idle_timeout = data.get(
+                "idle_timeout",
+                current_sandbox.get("idle_timeout") if current_sandbox else None,
+            )
+            expires_at = data.get(
+                "expires_at",
+                current_sandbox.get("expires_at") if current_sandbox else None,
+            )
+            sandbox = computer_client.sandbox_manager.update_sandbox_config(
                 sandbox_id,
-                int((time.monotonic() - started_at) * 1000),
-                str(e) or type(e).__name__,
-                exc_info=True,
-            )
-            return Response().error(str(e)).__dict__
-
-    async def ensure_default(self):
-        try:
-            sandbox = await create_sandbox(
-                _DashboardSandboxContext(self.config),
-                "dashboard",
-                "cua",
-                sandbox_name="default-cua",
-            )
-            return Response().ok({"sandbox": sandbox}).__dict__
-        except Exception as e:
-            return Response().error(str(e)).__dict__
-
-    async def set_default(self):
-        data = await request.json
-        if not isinstance(data, dict):
-            data = {}
-        sandbox_id = data.get("sandbox_id")
-        if not sandbox_id:
-            return Response().error("sandbox_id is required.").__dict__
-        try:
-            sandbox = set_default_sandbox(str(sandbox_id))
-            return Response().ok({"sandbox": sandbox}).__dict__
-        except Exception as e:
-            return Response().error(str(e)).__dict__
-
-    async def update_sandbox_config(self):
-        data = await request.json
-        if not isinstance(data, dict):
-            data = {}
-        sandbox_id = data.get("sandbox_id")
-        if not sandbox_id:
-            return Response().error("sandbox_id is required.").__dict__
-        try:
-            sandbox = update_sandbox_config(
-                str(sandbox_id),
                 sandbox_name=data.get("sandbox_name"),
-                idle_timeout=data.get("idle_timeout"),
-                expires_at=data.get("expires_at"),
-                retention_policy=str(data.get("retention_policy") or "temporary"),
+                idle_timeout=idle_timeout,
+                expires_at=expires_at,
+                retention_policy=retention_policy,
             )
-            return Response().ok({"sandbox": sandbox}).__dict__
+            return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
         except Exception as e:
-            return Response().error(str(e)).__dict__
+            if _is_sandbox_user_error(e):
+                logger.info("Failed to update sandbox: %s", e)
+            else:
+                logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to update sandbox: {e!s}").__dict__
+            )
+
+    async def destroy_sandbox(self, sandbox_id: str):
+        try:
+            sandbox = await computer_client.sandbox_manager.destroy_sandbox_deferred(
+                self._session_id(), sandbox_id
+            )
+            return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to destroy sandbox: {e!s}").__dict__
+            )

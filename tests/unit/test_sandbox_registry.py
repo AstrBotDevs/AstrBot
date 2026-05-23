@@ -1,231 +1,376 @@
+import asyncio
+import json
+import threading
 from pathlib import Path
+
+import pytest
 
 from astrbot.core.computer.sandbox_registry import SandboxRegistry
 
 
-def _upsert(registry: SandboxRegistry, sandbox_id: str, **kwargs):
+def _registry(tmp_path):
+    return SandboxRegistry(tmp_path / "sandbox_registry.json")
+
+
+def _upsert(registry, sandbox_id="generic-1", provider="generic"):
     return registry.upsert_sandbox(
         sandbox_id=sandbox_id,
-        sandbox_name=kwargs.pop("sandbox_name", sandbox_id),
-        booter_type=kwargs.pop("booter_type", "cua"),
-        provider=kwargs.pop("provider", "cua"),
-        managed=kwargs.pop("managed", True),
-        created_by_astrbot=kwargs.pop("created_by_astrbot", True),
-        owner_user_id=kwargs.pop("owner_user_id", "user-a"),
-        owner_session_id=kwargs.pop("owner_session_id", "session-a"),
-        connect_info=kwargs.pop("connect_info", {}),
-        **kwargs,
+        sandbox_name=f"Sandbox {sandbox_id}",
+        provider=provider,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-1",
+        owner_session_id="session-1",
+        connect_info={"name": sandbox_id},
+        capabilities={"shell", "python", "filesystem"},
+        tool_names={"generic_tool"},
     )
 
 
-def test_sandbox_registry_persists_and_reloads_state(tmp_path: Path):
-    storage_path = tmp_path / "sandbox_registry.json"
-    registry = SandboxRegistry(storage_path=storage_path)
-    _upsert(registry, "sb-1", is_default=True)
-    registry.set_current_sandbox_id("session-a", "sb-1")
-    registry.save()
+def test_registry_upserts_lists_and_deletes_sandboxes(tmp_path):
+    registry = _registry(tmp_path)
 
-    restored = SandboxRegistry(storage_path=storage_path)
-    restored.load()
+    record = _upsert(registry)
 
-    assert restored.default_sandbox_id == "sb-1"
-    assert restored.get_current_sandbox_id("session-a") == "sb-1"
-    assert restored.get_sandbox("sb-1")["sandbox_name"] == "sb-1"
+    assert record["sandbox_id"] == "generic-1"
+    assert record["capabilities"] == ["filesystem", "python", "shell"]
+    assert record["tool_names"] == ["generic_tool"]
+    assert registry.get_sandbox("generic-1")["sandbox_name"] == "Sandbox generic-1"
+    assert [item["sandbox_id"] for item in registry.list_sandboxes()] == ["generic-1"]
 
+    registry.delete_sandbox("generic-1")
 
-def test_sandbox_registry_delete_default_promotes_another_managed_sandbox(tmp_path):
-    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
-    _upsert(registry, "sb-default", is_default=True)
-    _upsert(registry, "sb-next")
-
-    registry.delete_sandbox("sb-default")
-
-    assert registry.default_sandbox_id == "sb-next"
-    assert registry.get_sandbox("sb-next")["is_default"] is True
+    assert registry.get_sandbox("generic-1") is None
+    assert registry.list_sandboxes() == []
 
 
-def test_sandbox_registry_tracks_default_per_provider(tmp_path):
-    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
-    _upsert(registry, "cua-default", provider="cua", is_default=True)
-    _upsert(registry, "neo-default", provider="shipyard_neo", is_default=True)
+def test_registry_tracks_provider_defaults_and_current_session(tmp_path):
+    registry = _registry(tmp_path)
+    _upsert(registry, "generic-1", provider="generic")
+    _upsert(registry, "other-1", provider="other")
 
-    assert registry.get_default_sandbox_id("cua") == "cua-default"
-    assert registry.get_default_sandbox_id("shipyard_neo") == "neo-default"
-    assert registry.default_sandbox_id == "neo-default"
+    registry.set_default_sandbox_id("generic-1")
+    registry.set_current_sandbox_id("session-a", "generic-1")
 
-    registry.delete_sandbox("neo-default")
+    assert registry.get_default_sandbox_id("generic") == "generic-1"
+    assert registry.get_default_sandbox_id("other") is None
+    assert registry.get_current_sandbox_id("session-a") == "generic-1"
 
-    assert registry.get_default_sandbox_id("shipyard_neo") is None
-    assert registry.get_default_sandbox_id("cua") == "cua-default"
+    registry.delete_sandbox("generic-1")
 
-
-def test_sandbox_registry_setting_default_keeps_other_provider_default_marker(
-    tmp_path,
-):
-    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
-    _upsert(registry, "cua-default", provider="cua", is_default=True)
-    _upsert(registry, "neo-default", provider="shipyard_neo")
-
-    registry.set_default_sandbox_id("neo-default")
-
-    assert registry.get_default_sandbox_id("cua") == "cua-default"
-    assert registry.get_default_sandbox_id("shipyard_neo") == "neo-default"
-    assert registry.get_sandbox("cua-default")["is_default"] is True
-    assert registry.get_sandbox("neo-default")["is_default"] is True
+    assert registry.get_current_sandbox_id("session-a") is None
 
 
-def test_sandbox_registry_delete_provider_default_promotes_same_provider(
-    tmp_path,
-):
-    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
-    _upsert(registry, "cua-default", provider="cua", is_default=True)
-    _upsert(registry, "neo-default", provider="shipyard_neo", is_default=True)
-    _upsert(registry, "neo-next", provider="shipyard_neo")
-
-    registry.delete_sandbox("neo-default")
-
-    assert registry.get_default_sandbox_id("cua") == "cua-default"
-    assert registry.get_sandbox("cua-default")["is_default"] is True
-    assert registry.get_default_sandbox_id("shipyard_neo") == "neo-next"
-    assert registry.get_sandbox("neo-next")["is_default"] is True
-
-
-def test_sandbox_registry_acquires_releases_and_takes_over_lease(tmp_path):
-    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
-    _upsert(registry, "sb-1")
+def test_registry_acquires_releases_and_takes_over_leases(tmp_path):
+    registry = _registry(tmp_path)
+    _upsert(registry)
 
     assert registry.acquire_lease(
-        sandbox_id="sb-1", session_id="session-a", user_id="user-a", ttl=30, now=100
+        sandbox_id="generic-1", session_id="session-a", user_id="user-a", ttl=60, now=10
     )
-    assert (
-        registry.acquire_lease(
-            sandbox_id="sb-1", session_id="session-b", user_id="user-b", ttl=30, now=110
-        )
-        is False
+    assert not registry.acquire_lease(
+        sandbox_id="generic-1", session_id="session-b", user_id="user-b", ttl=60, now=20
     )
 
-    registry.release_lease("sb-1")
-    assert registry.get_sandbox("sb-1")["controller_session_id"] is None
-
-    registry.takeover_lease(
-        sandbox_id="sb-1", session_id="session-b", user_id="user-b", ttl=10, now=120
+    released = registry.release_lease("generic-1")
+    assert released["controller_session_id"] is None
+    assert registry.acquire_lease(
+        sandbox_id="generic-1", session_id="session-b", user_id="user-b", ttl=60, now=20
     )
-    assert registry.get_sandbox("sb-1")["lease_expires_at"] == 130
 
-
-def test_sandbox_registry_reconcile_startup_clears_managed_leases(tmp_path):
-    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
-    _upsert(
-        registry,
-        "managed",
-        controller_user_id="user-a",
-        controller_session_id="session-a",
-        lease_expires_at=999,
+    taken = registry.takeover_lease(
+        sandbox_id="generic-1", session_id="session-c", user_id="user-c", ttl=60, now=30
     )
-    _upsert(
-        registry,
-        "external",
-        managed=False,
-        created_by_astrbot=False,
-        controller_user_id="user-b",
-        controller_session_id="session-b",
-        lease_expires_at=999,
+    assert taken["controller_session_id"] == "session-c"
+
+
+def test_registry_normalizes_sandbox_status_enum_values(tmp_path):
+    from astrbot.core.computer.sandbox_models import SandboxStatus
+
+    registry = _registry(tmp_path)
+    _upsert(registry)
+
+    updated = registry.update_sandbox_status("generic-1", SandboxStatus.UNKNOWN)
+
+    assert updated["status"] == "unknown"
+    assert type(updated["status"]) is str
+    assert registry.get_sandbox("generic-1")["status"] == "unknown"
+    assert type(registry.get_sandbox("generic-1")["status"]) is str
+
+
+def test_registry_saves_loads_and_reconciles_runtime_state(tmp_path):
+    registry = _registry(tmp_path)
+    _upsert(registry)
+    registry.acquire_lease(
+        sandbox_id="generic-1", session_id="session-a", user_id="user-a", ttl=60, now=10
+    )
+    registry.set_current_sandbox_id("session-a", "generic-1")
+    registry.save()
+
+    loaded = _registry(tmp_path)
+    loaded.load()
+    assert loaded.get_sandbox("generic-1")["controller_session_id"] == "session-a"
+
+    loaded.reconcile_startup()
+
+    record = loaded.get_sandbox("generic-1")
+    assert record is not None
+    assert record["status"] == "error"
+    assert loaded.get_current_sandbox_id("session-a") is None
+
+    payload = json.loads((tmp_path / "sandbox_registry.json").read_text())
+    assert payload["schema_version"] == 1
+    assert "sandboxes" in payload
+
+
+def test_registry_loads_legacy_payload_without_schema_version(tmp_path):
+    legacy_payload = {
+        "default_sandbox_id": None,
+        "default_sandbox_ids": {},
+        "sandboxes": {
+            "generic-1": {
+                "sandbox_id": "generic-1",
+                "sandbox_name": "Legacy",
+                "provider": "generic",
+                "managed": True,
+                "created_by_astrbot": True,
+                "owner_user_id": "user-1",
+                "owner_session_id": "session-1",
+                "connect_info": {"name": "Legacy"},
+            }
+        },
+        "session_current": {},
+    }
+    path = tmp_path / "sandbox_registry.json"
+    path.write_text(json.dumps(legacy_payload), encoding="utf-8")
+
+    registry = _registry(tmp_path)
+    registry.load()
+
+    assert registry._payload["schema_version"] == 1
+    assert registry.get_sandbox("generic-1")["sandbox_name"] == "Legacy"
+
+
+def test_registry_loads_non_object_payload_as_empty_registry(tmp_path):
+    path = tmp_path / "sandbox_registry.json"
+    path.write_text("[]", encoding="utf-8")
+
+    registry = _registry(tmp_path)
+    registry.load()
+
+    assert registry._payload["schema_version"] == 1
+    assert registry.list_sandboxes() == []
+
+
+def test_registry_reconcile_startup_marks_non_persistent_creating_records_error(
+    tmp_path,
+):
+    registry = _registry(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Sandbox generic-1",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-1",
+        owner_session_id="session-1",
+        connect_info={"name": "generic-1"},
+        status="creating",
     )
 
     registry.reconcile_startup()
 
-    assert registry.get_sandbox("managed")["controller_session_id"] is None
-    assert registry.get_sandbox("managed")["status"] == "unknown"
-    assert registry.get_sandbox("external")["controller_session_id"] == "session-b"
+    record = registry.get_sandbox("generic-1")
+    assert record is not None
+    assert record["status"] == "error"
 
 
-def test_sandbox_registry_load_only_clears_managed_leases(tmp_path):
-    storage_path = tmp_path / "sandbox_registry.json"
-    registry = SandboxRegistry(storage_path=storage_path)
-    _upsert(
-        registry,
-        "managed",
-        controller_user_id="user-a",
-        controller_session_id="session-a",
-        lease_expires_at=999,
+def test_registry_reconcile_startup_retains_temporary_records_as_error(tmp_path):
+    registry = _registry(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Sandbox generic-1",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-1",
+        owner_session_id="session-1",
+        connect_info={"name": "generic-1"},
+        status="running",
+        retention_policy="temporary",
     )
-    _upsert(
-        registry,
-        "external",
-        managed=False,
-        created_by_astrbot=False,
-        controller_user_id="user-b",
-        controller_session_id="session-b",
-        lease_expires_at=999,
+
+    registry.reconcile_startup()
+
+    record = registry.get_sandbox("generic-1")
+    assert record is not None
+    assert record["status"] == "error"
+    assert record["controller_session_id"] is None
+    assert record["lease_expires_at"] is None
+
+
+def test_registry_reconcile_startup_marks_non_persistent_restoring_records_error(
+    tmp_path,
+):
+    registry = _registry(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Sandbox generic-1",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-1",
+        owner_session_id="session-1",
+        connect_info={"name": "generic-1"},
+        status="restoring",
     )
-    registry.save()
 
-    restored = SandboxRegistry(storage_path=storage_path)
-    restored.load()
+    registry.reconcile_startup()
 
-    assert restored.get_sandbox("managed")["controller_session_id"] is None
-    assert restored.get_sandbox("external")["controller_session_id"] == "session-b"
+    record = registry.get_sandbox("generic-1")
+    assert record is not None
+    assert record["status"] == "error"
 
 
-def test_sandbox_registry_load_recovers_from_corrupted_json(tmp_path):
-    storage_path = tmp_path / "sandbox_registry.json"
-    storage_path.write_text("{not-json", encoding="utf-8")
+def test_registry_reconcile_startup_marks_persistent_running_unknown(tmp_path):
+    registry = _registry(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Sandbox generic-1",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-1",
+        owner_session_id="session-1",
+        connect_info={"name": "generic-1"},
+        status="running",
+        retention_policy="persistent",
+    )
 
-    registry = SandboxRegistry(storage_path=storage_path)
-    registry.load()
+    registry.reconcile_startup()
+
+    assert registry.get_sandbox("generic-1")["status"] == "unknown"
+
+
+def test_registry_reconcile_startup_clears_stale_default_references(tmp_path):
+    registry = _registry(tmp_path)
+    registry._payload["default_sandbox_id"] = "missing-1"
+    registry._payload["default_sandbox_ids"] = {"generic": "missing-1"}
+    registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Sandbox generic-1",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-1",
+        owner_session_id="session-1",
+        connect_info={"name": "generic-1"},
+        retention_policy="persistent",
+        status="running",
+    )
+
+    registry.reconcile_startup()
 
     assert registry.default_sandbox_id is None
-    assert registry.list_sandboxes() == []
+    assert registry.get_default_sandbox_id("generic") is None
+    assert registry._payload["default_sandbox_ids"] == {}
 
 
-def test_sandbox_registry_updates_config_and_status(tmp_path):
-    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
-    _upsert(registry, "sb-1")
-
-    registry.update_sandbox_config(
-        "sb-1", idle_timeout=30, expires_at=200, retention_policy="persistent"
+def test_registry_reconcile_startup_clears_stale_is_default_flags(tmp_path):
+    registry = _registry(tmp_path)
+    record = registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Sandbox generic-1",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-1",
+        owner_session_id="session-1",
+        connect_info={"name": "generic-1"},
+        retention_policy="persistent",
+        status="running",
     )
-    registry.update_sandbox_status("sb-1", "stopped")
+    registry._payload["default_sandbox_id"] = "missing-1"
+    registry._payload["default_sandbox_ids"] = {}
+    registry._payload["sandboxes"][record["sandbox_id"]]["is_default"] = True
 
-    record = registry.get_sandbox("sb-1")
-    assert record["idle_timeout"] == 30
-    assert record["expires_at"] == 200
-    assert record["retention_policy"] == "persistent"
-    assert record["status"] == "stopped"
+    registry.reconcile_startup()
 
-
-def test_sandbox_registry_upsert_preserves_runtime_fields_when_omitted(tmp_path):
-    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
-    _upsert(
-        registry,
-        "sb-1",
-        controller_user_id="user-a",
-        controller_session_id="session-a",
-        lease_expires_at=200,
-        last_used_at=100,
-        idle_timeout=30,
-        status="unknown",
-    )
-
-    _upsert(registry, "sb-1", sandbox_name="renamed", connect_info={"name": "renamed"})
-
-    record = registry.get_sandbox("sb-1")
-    assert record["sandbox_name"] == "renamed"
-    assert record["connect_info"] == {"name": "renamed"}
-    assert record["controller_user_id"] == "user-a"
-    assert record["controller_session_id"] == "session-a"
-    assert record["lease_expires_at"] == 200
-    assert record["last_used_at"] == 100
-    assert record["idle_timeout"] == 30
-    assert record["status"] == "unknown"
+    assert registry.get_sandbox("generic-1")["is_default"] is False
 
 
-def test_sandbox_registry_upsert_preserves_default_marker_when_omitted(tmp_path):
-    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
-    _upsert(registry, "sb-1", is_default=True)
+@pytest.mark.asyncio
+async def test_registry_save_async_runs_save_in_worker_thread(tmp_path):
+    registry = _registry(tmp_path)
+    main_thread_id = threading.get_ident()
+    save_thread_id = None
 
-    _upsert(registry, "sb-1", sandbox_name="renamed")
+    def fake_write_payload(payload):
+        nonlocal save_thread_id
+        assert payload == registry._payload
+        save_thread_id = threading.get_ident()
 
-    record = registry.get_sandbox("sb-1")
-    assert registry.default_sandbox_id == "sb-1"
-    assert record["is_default"] is True
+    registry._write_payload = fake_write_payload
+
+    await registry.save_async()
+
+    assert save_thread_id is not None
+    assert save_thread_id != main_thread_id
+
+
+@pytest.mark.asyncio
+async def test_registry_save_async_serializes_writes(tmp_path):
+    registry = _registry(tmp_path)
+    active_writes = 0
+    max_active_writes = 0
+    release_first_write = None
+    first_write_started = asyncio.Event()
+
+    def fake_write_payload(payload):
+        nonlocal active_writes, max_active_writes, release_first_write
+        active_writes += 1
+        max_active_writes = max(max_active_writes, active_writes)
+        if release_first_write is None:
+            release_first_write = threading.Event()
+            first_write_started.set()
+            assert release_first_write.wait(timeout=1)
+        active_writes -= 1
+
+    registry._write_payload = fake_write_payload
+
+    first = asyncio.create_task(registry.save_async())
+    await first_write_started.wait()
+    second = asyncio.create_task(registry.save_async())
+    await asyncio.sleep(0.05)
+
+    assert max_active_writes == 1
+    release_first_write.set()
+    await first
+    await second
+
+
+def test_registry_write_payload_replaces_temp_file_atomically(tmp_path, monkeypatch):
+    registry = _registry(tmp_path)
+    payload = {
+        "default_sandbox_id": None,
+        "default_sandbox_ids": {},
+        "sandboxes": {"generic-1": {"sandbox_id": "generic-1"}},
+        "session_current": {},
+    }
+    replace_calls = []
+    original_replace = Path.replace
+
+    def track_replace(self, target):
+        replace_calls.append((Path(self), Path(target)))
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", track_replace)
+
+    registry._write_payload(payload)
+
+    assert replace_calls
+    source_path, target_path = replace_calls[0]
+    assert source_path != target_path
+    assert target_path == registry.storage_path
+    assert source_path.parent == target_path.parent
+    assert json.loads(registry.storage_path.read_text(encoding="utf-8")) == payload

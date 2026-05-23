@@ -1192,6 +1192,44 @@ async def test_same_tool_streak_resets_after_switching_tools(
 
 
 @pytest.mark.asyncio
+async def test_repeated_shell_tool_results_do_not_include_guidance(
+    runner, mock_tool_executor, mock_hooks
+):
+    runner_cls = type(runner)
+    total_calls = runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD
+    provider = SequentialToolProvider(["astrbot_execute_shell"] * total_calls)
+    tool = FunctionTool(
+        name="astrbot_execute_shell",
+        description="Execute shell commands",
+        parameters={"type": "object", "properties": {"command": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="Run several shell commands",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(total_calls + 1):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    assert len(tool_messages) == total_calls
+    assert all("SYSTEM NOTICE" not in str(message.content) for message in tool_messages)
+
+
+@pytest.mark.asyncio
 async def test_fallback_provider_used_when_primary_raises(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):

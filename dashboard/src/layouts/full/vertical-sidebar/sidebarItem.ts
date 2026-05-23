@@ -122,6 +122,11 @@ const sidebarItem: menu[] = [
         to: '/sandboxes'
       },
       {
+        title: 'core.navigation.sandboxes',
+        icon: 'mdi-cube-outline',
+        to: '/sandboxes'
+      },
+      {
         title: 'core.navigation.dashboard',
         icon: 'mdi-view-dashboard',
         to: '/dashboard/default'

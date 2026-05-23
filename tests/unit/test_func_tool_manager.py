@@ -1,9 +1,10 @@
 import asyncio
 import json
-import time
+from dataclasses import dataclass, field
 
 import pytest
 
+from astrbot.api import FunctionTool
 from astrbot.core import sp
 from astrbot.core.computer.cua_registry import CuaSandboxRegistry
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
@@ -50,6 +51,26 @@ def test_computer_tools_are_registered_as_builtin_tools():
     assert tool.name == "astrbot_execute_shell"
     assert tool.parameters["properties"]["background"]["default"] is False
     assert manager.is_builtin_tool("astrbot_execute_shell") is True
+
+
+def test_clear_builtin_tool_cache_by_module_prefix_removes_matching_instances():
+    manager = FunctionToolManager()
+
+    @dataclass
+    class ExampleTool(FunctionTool):
+        name: str = "astrbot_test_cached_tool"
+        description: str = "Cached tool for eviction testing."
+        parameters: dict = field(
+            default_factory=lambda: {"type": "object", "properties": {}}
+        )
+
+    tool = ExampleTool()
+    manager.builtin_func_list[ExampleTool] = tool
+
+    removed = manager.clear_builtin_tool_cache_by_module_prefix(__name__)
+
+    assert removed == ["astrbot_test_cached_tool"]
+    assert manager.builtin_func_list == {}
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from copy import deepcopy
@@ -7,19 +8,33 @@ from pathlib import Path
 from typing import Any
 
 from astrbot.api import logger
-from astrbot.core.computer.sandbox_models import SandboxRecord
+from astrbot.core.computer.sandbox_models import SandboxRecord, SandboxStatus
+from astrbot.core.computer.sandbox_timeouts import (
+    lease_expires_at_from_timeout,
+    lease_is_active,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 _UNSET = object()
+_SCHEMA_VERSION = 1
 
 
 def _default_registry_payload() -> dict[str, Any]:
     return {
+        "schema_version": _SCHEMA_VERSION,
         "default_sandbox_id": None,
         "default_sandbox_ids": {},
         "sandboxes": {},
         "session_current": {},
     }
+
+
+def _coerce_schema_version(value: Any) -> int:
+    try:
+        version = int(value)
+    except (TypeError, ValueError):
+        return _SCHEMA_VERSION
+    return version if version > 0 else _SCHEMA_VERSION
 
 
 class SandboxRegistry:
@@ -28,6 +43,7 @@ class SandboxRegistry:
             storage_path = Path(get_astrbot_data_path()) / "sandbox_registry.json"
         self.storage_path = Path(storage_path)
         self._payload = _default_registry_payload()
+        self._save_lock = asyncio.Lock()
 
     @property
     def default_sandbox_id(self) -> str | None:
@@ -43,7 +59,9 @@ class SandboxRegistry:
                 return self._payload["default_sandbox_id"]
         return None
 
-    def get_sandbox(self, sandbox_id: str) -> dict[str, Any] | None:
+    def get_sandbox(self, sandbox_id: str | None) -> dict[str, Any] | None:
+        if sandbox_id is None:
+            return None
         record = self._payload["sandboxes"].get(sandbox_id)
         return deepcopy(record) if record is not None else None
 
@@ -86,7 +104,6 @@ class SandboxRegistry:
         *,
         sandbox_id: str,
         sandbox_name: str,
-        booter_type: str,
         provider: str,
         managed: bool,
         created_by_astrbot: bool,
@@ -104,6 +121,7 @@ class SandboxRegistry:
         lease_expires_at: float | None | object = _UNSET,
         labels: dict[str, Any] | None | object = _UNSET,
         capabilities: list[str] | set[str] | None | object = _UNSET,
+        tool_names: list[str] | set[str] | None | object = _UNSET,
         notes: str | None | object = _UNSET,
     ) -> dict[str, Any]:
         record = self._payload["sandboxes"].get(sandbox_id, {})
@@ -111,12 +129,13 @@ class SandboxRegistry:
             {
                 "sandbox_id": sandbox_id,
                 "sandbox_name": sandbox_name,
-                "booter_type": booter_type,
                 "provider": provider,
                 "managed": managed,
                 "created_by_astrbot": created_by_astrbot,
                 "owner_user_id": owner_user_id,
                 "owner_session_id": owner_session_id,
+                "created_by_user_id": owner_user_id,
+                "created_by_session_id": owner_session_id,
                 "connect_info": deepcopy(connect_info),
             }
         )
@@ -132,7 +151,9 @@ class SandboxRegistry:
             "is_default": False,
             "labels": {},
             "capabilities": [],
+            "tool_names": [],
             "notes": None,
+            "created_hook_fired": False,
         }
         updates = {
             "controller_user_id": controller_user_id,
@@ -148,7 +169,9 @@ class SandboxRegistry:
             "capabilities": sorted(capabilities)
             if capabilities is not _UNSET
             else _UNSET,
+            "tool_names": sorted(tool_names) if tool_names is not _UNSET else _UNSET,
             "notes": notes,
+            "created_hook_fired": _UNSET,
         }
         for field_name, default_value in defaults.items():
             value = updates[field_name]
@@ -239,7 +262,18 @@ class SandboxRegistry:
         record = self._payload["sandboxes"].get(sandbox_id)
         if record is None:
             return None
-        record["status"] = status
+        record["status"] = getattr(status, "value", status)
+        return deepcopy(record)
+
+    def has_created_hook_fired(self, sandbox_id: str) -> bool:
+        record = self._payload["sandboxes"].get(sandbox_id)
+        return bool(record and record.get("created_hook_fired"))
+
+    def mark_created_hook_fired(self, sandbox_id: str) -> dict[str, Any] | None:
+        record = self._payload["sandboxes"].get(sandbox_id)
+        if record is None:
+            return None
+        record["created_hook_fired"] = True
         return deepcopy(record)
 
     def acquire_lease(
@@ -257,16 +291,15 @@ class SandboxRegistry:
         current_time = time.time() if now is None else now
         controller_session_id = record.get("controller_session_id")
         lease_expires_at = record.get("lease_expires_at")
-        if (
-            controller_session_id
-            and controller_session_id != session_id
-            and lease_expires_at
-            and lease_expires_at > current_time
-        ):
+        if lease_is_active(
+            controller_session_id, lease_expires_at, now=current_time
+        ) and (controller_session_id != session_id):
             return False
         record["controller_session_id"] = session_id
         record["controller_user_id"] = user_id
-        record["lease_expires_at"] = current_time + float(ttl)
+        record["lease_expires_at"] = lease_expires_at_from_timeout(
+            ttl, now=current_time
+        )
         return True
 
     def release_lease(self, sandbox_id: str) -> dict[str, Any] | None:
@@ -293,73 +326,104 @@ class SandboxRegistry:
         current_time = time.time() if now is None else now
         record["controller_session_id"] = session_id
         record["controller_user_id"] = user_id
-        record["lease_expires_at"] = current_time + float(ttl)
+        record["lease_expires_at"] = lease_expires_at_from_timeout(
+            ttl, now=current_time
+        )
         return deepcopy(record)
 
     def reconcile_startup(self) -> None:
-        for record in self._payload["sandboxes"].values():
-            if not record.get("managed"):
-                continue
-            record["controller_user_id"] = None
+        self._payload["session_current"] = {}
+        for sandbox_id, record in list(self._payload["sandboxes"].items()):
             record["controller_session_id"] = None
+            record["controller_user_id"] = None
             record["lease_expires_at"] = None
-            if record.get("status") != "stopped":
-                record["status"] = "unknown"
+            if record.get("retention_policy") == "persistent":
+                if record.get("status") == SandboxStatus.RUNNING:
+                    record["status"] = SandboxStatus.UNKNOWN.value
+                elif record.get("status") in {
+                    SandboxStatus.CREATING,
+                    SandboxStatus.RESTORING,
+                }:
+                    record["status"] = SandboxStatus.ERROR.value
+            elif record.get("status") in {
+                SandboxStatus.RUNNING,
+                SandboxStatus.CREATING,
+                SandboxStatus.RESTORING,
+                SandboxStatus.UNKNOWN,
+            }:
+                record["status"] = SandboxStatus.ERROR.value
+        self._prune_default_references()
 
-    def save(self) -> None:
-        self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.storage_path.open("w", encoding="utf-8") as f:
-            json.dump(self._payload, f, ensure_ascii=False, indent=2)
+    def _prune_default_references(self) -> None:
+        sandboxes = self._payload["sandboxes"]
+        default_sandbox_id = self._payload.get("default_sandbox_id")
+        if default_sandbox_id not in sandboxes:
+            self._payload["default_sandbox_id"] = None
+        default_sandbox_ids = self._payload.get("default_sandbox_ids") or {}
+        valid_default_sandbox_ids = {
+            provider: sandbox_id
+            for provider, sandbox_id in default_sandbox_ids.items()
+            if sandbox_id in sandboxes
+            and sandboxes[sandbox_id].get("provider") == provider
+        }
+        self._payload["default_sandbox_ids"] = valid_default_sandbox_ids
+        for record in sandboxes.values():
+            record["is_default"] = False
+        if self._payload["default_sandbox_id"]:
+            sandboxes[self._payload["default_sandbox_id"]]["is_default"] = True
+        for sandbox_id in valid_default_sandbox_ids.values():
+            if sandbox_id in sandboxes:
+                sandboxes[sandbox_id]["is_default"] = True
 
     def load(self) -> None:
         if not self.storage_path.exists():
             self._payload = _default_registry_payload()
             return
         try:
-            with self.storage_path.open("r", encoding="utf-8") as f:
-                payload = json.load(f)
-        except (json.JSONDecodeError, OSError) as exc:
-            logger.warning(
-                "[Computer] Failed to load sandbox registry %s: %s",
-                self.storage_path,
-                exc,
-            )
+            payload = json.loads(self.storage_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("Failed to load sandbox registry: %s", exc)
+            self._payload = _default_registry_payload()
+            return
+        if not isinstance(payload, dict):
+            logger.warning("Failed to load sandbox registry: payload is not an object")
             self._payload = _default_registry_payload()
             return
         self._payload = _default_registry_payload()
-        self._payload.update(payload)
-        sandboxes = self._payload.get("sandboxes", {})
-        valid_sandboxes = {}
-        for record in sandboxes.values():
-            try:
-                normalized = SandboxRecord.from_dict(record).to_dict()
-            except (KeyError, TypeError, ValueError) as exc:
-                logger.warning(
-                    "[Computer] Skip invalid sandbox registry record: %s",
-                    exc,
-                )
-                continue
-            record = normalized
-            if not record.get("managed"):
-                valid_sandboxes[record["sandbox_id"]] = record
-                continue
-            record["controller_user_id"] = None
-            record["controller_session_id"] = None
-            record["lease_expires_at"] = None
-            valid_sandboxes[record["sandbox_id"]] = record
-        self._payload["sandboxes"] = valid_sandboxes
-        defaults = self._payload.get("default_sandbox_ids", {})
-        self._payload["default_sandbox_ids"] = {
-            provider: sandbox_id
-            for provider, sandbox_id in defaults.items()
-            if sandbox_id in valid_sandboxes
-            and valid_sandboxes[sandbox_id].get("provider") == provider
-        }
-        if not self._payload["default_sandbox_ids"]:
-            for sandbox_id, record in valid_sandboxes.items():
-                if record.get("is_default"):
-                    self._payload["default_sandbox_ids"][record["provider"]] = (
-                        sandbox_id
-                    )
-        if self._payload["default_sandbox_id"] not in valid_sandboxes:
-            self._payload["default_sandbox_id"] = None
+        self._payload["schema_version"] = _coerce_schema_version(
+            payload.get("schema_version")
+        )
+        self._payload.update({key: payload.get(key) for key in self._payload})
+        self._payload["schema_version"] = _coerce_schema_version(
+            self._payload.get("schema_version")
+        )
+        self._payload["default_sandbox_ids"] = dict(
+            self._payload.get("default_sandbox_ids") or {}
+        )
+        self._payload["sandboxes"] = dict(self._payload.get("sandboxes") or {})
+        self._payload["session_current"] = dict(
+            self._payload.get("session_current") or {}
+        )
+
+    def _write_payload(self, payload: dict[str, Any]) -> None:
+        self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = self.storage_path.with_name(
+            f"{self.storage_path.name}.{time.time_ns()}.tmp"
+        )
+        try:
+            temp_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            temp_path.replace(self.storage_path)
+        finally:
+            if temp_path.exists():
+                temp_path.unlink()
+
+    def save(self) -> None:
+        self._write_payload(deepcopy(self._payload))
+
+    async def save_async(self) -> None:
+        async with self._save_lock:
+            payload = deepcopy(self._payload)
+            await asyncio.to_thread(self._write_payload, payload)

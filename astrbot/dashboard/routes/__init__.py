@@ -48,7 +48,7 @@ __all__ = [
     "PluginRoute",
     "SandboxRoute",
     "SessionManagementRoute",
-    "SkillsRoute",
+    "SandboxRoute",
     "StatRoute",
     "StaticFileRoute",
     "SubAgentRoute",

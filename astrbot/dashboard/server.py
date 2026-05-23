@@ -73,6 +73,7 @@ from .routes.backup import BackupRoute
 from .routes.live_chat import LiveChatRoute
 from .routes.platform import PlatformRoute
 from .routes.route import Response, RouteContext
+from .routes.sandbox import SandboxRoute
 from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
@@ -380,6 +381,7 @@ class AstrBotDashboard:
             db,
             self.core_lifecycle,
         )
+        self.sandbox_route = SandboxRoute(self.context, core_lifecycle)
         self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
         self.cron_route = CronRoute(self.context, core_lifecycle)
         self.t2i_route = T2iRoute(self.context, core_lifecycle)

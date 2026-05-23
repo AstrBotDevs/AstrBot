@@ -53,9 +53,10 @@ class ComputerBooter(abc.ABC):
 
     @abc.abstractmethod
     async def shutdown(self, **kwargs) -> None:
-        """Shut down the computer sandbox.
+        """Close the current runtime connection without deleting sandbox resources.
 
-        Subclasses may accept type-specific keyword arguments.
+        Subclasses may accept extra keyword arguments for type-specific cleanup.
+        The default implementation ignores them.
         """
 
     async def upload_file(self, path: str, file_name: str) -> dict:

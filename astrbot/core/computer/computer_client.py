@@ -2,19 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import shutil
-import tempfile
-import time
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
-from astrbot.core.computer.cua_registry import CuaSandboxRegistry
-from astrbot.core.computer.cua_sandbox_provider import CuaSandboxProvider
-from astrbot.core.computer.sandbox_manager import SANDBOX_LEASE_SECONDS, SandboxManager
+from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.provider.register import llm_tools
 from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
 from astrbot.core.star.context import Context
 from astrbot.core.utils.astrbot_path import (
@@ -25,435 +20,297 @@ from astrbot.core.utils.astrbot_path import (
 from .booters.base import ComputerBooter
 from .booters.constants import BOOTER_BOXLITE, BOOTER_SHIPYARD, BOOTER_SHIPYARD_NEO
 from .booters.local import LocalBooter
+from .sandbox_manager import SandboxManager
+from .sandbox_models import SandboxStatus
+from .sandbox_provider import SandboxProvider
+from .sandbox_registry import SandboxRegistry
+from .sandbox_tool_binding import mark_tool_as_sandbox_provider_tool
 
-if TYPE_CHECKING:
-    from astrbot.core.agent.tool import ToolSchema
-
-session_booter: dict[str, ComputerBooter] = {}
-local_booter: ComputerBooter | None = None
+local_booter: LocalBooter | None = None
+sandbox_registry = SandboxRegistry()
+sandbox_manager = SandboxManager(registry=sandbox_registry, providers={})
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
-cua_registry = CuaSandboxRegistry()
-CUA_LEASE_SECONDS = SANDBOX_LEASE_SECONDS
-_cua_boot_locks: dict[str, asyncio.Lock] = {}
+_SANDBOX_SKILLS_SYNC_LOCK = asyncio.Lock()
+
+# Tracks tools registered per provider so core can remove them on unregister.
+_provider_tools: dict[str, list[FunctionTool]] = {}
 
 
-@dataclass(slots=True)
-class _CUAIdleState:
-    expires_at: float
-    task: asyncio.Task
+def _sandbox_provider_info(provider_id: str, provider: SandboxProvider) -> dict:
+    return {
+        "provider_id": provider_id,
+        "capabilities": sorted(getattr(provider, "capabilities", set())),
+        "tool_names": sorted(getattr(provider, "tool_names", set())),
+        "system_prompt": str(getattr(provider, "system_prompt", "") or ""),
+    }
 
 
-cua_idle_state: dict[str, _CUAIdleState] = {}
-
-
-sandbox_manager: SandboxManager
-
-
-def _sync_sandbox_manager_refs() -> None:
-    sandbox_manager.registry = cua_registry
-    sandbox_manager.session_booter = session_booter
-    sandbox_manager.idle_state = cua_idle_state
-    sandbox_manager.boot_locks = _cua_boot_locks
-
-
-def _save_cua_registry() -> None:
-    _sync_sandbox_manager_refs()
-    sandbox_manager.save_registry()
-
-
-def _get_cua_idle_timeout(context: Context, session_id: str) -> float:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.providers["cua"].get_idle_timeout(context, session_id)
-
-
-def _clear_cua_idle_state(sandbox_id: str) -> None:
-    _sync_sandbox_manager_refs()
-    sandbox_manager.clear_idle_state(sandbox_id)
-
-
-def _cua_boot_lock(sandbox_id: str) -> asyncio.Lock:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager._sandbox_boot_lock(sandbox_id)
-
-
-def _drop_cua_boot_lock(sandbox_id: str) -> None:
-    _sync_sandbox_manager_refs()
-    sandbox_manager.drop_boot_lock(sandbox_id)
-
-
-def _schedule_cua_idle_cleanup(sandbox_id: str, timeout: float) -> None:
-    _sync_sandbox_manager_refs()
-    sandbox_manager.schedule_idle_cleanup(sandbox_id, timeout)
-
-
-def _cua_sandbox_has_active_lease(sandbox_id: str) -> bool:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.sandbox_has_active_lease(sandbox_id)
-
-
-def _cua_sandbox_controlled_by_other_session(sandbox_id: str, session_id: str) -> bool:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.sandbox_controlled_by_other_session(sandbox_id, session_id)
-
-
-def _acquire_cua_sandbox_lease(sandbox_id: str, session_id: str) -> bool:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.acquire_lease(sandbox_id, session_id)
-
-
-async def _booter_available(booter: ComputerBooter) -> bool:
-    _sync_sandbox_manager_refs()
-    return await sandbox_manager.booter_available(booter)
-
-
-def renew_cua_sandbox_lease(sandbox_id: str, session_id: str, *, ttl: float) -> bool:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.acquire_lease(sandbox_id, session_id, ttl=ttl)
-
-
-async def _boot_managed_cua_sandbox(
-    context: Context,
-    session_id: str,
-    sandbox_id: str,
-    cua_kwargs: dict,
-) -> ComputerBooter:
-    from .booters.cua import CuaBooter
-
-    uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
-    client = CuaBooter(**cua_kwargs)
-    started_at = time.monotonic()
-    logger.info(
-        "[Computer] CUA managed sandbox boot start: sandbox_id=%s session_id=%s boot_session_id=%s image=%s os_type=%s local=%s ttl=%s",
-        sandbox_id,
-        session_id,
-        uuid_str,
-        cua_kwargs.get("image"),
-        cua_kwargs.get("os_type"),
-        cua_kwargs.get("local"),
-        cua_kwargs.get("ttl"),
+def _has_managed_sandboxes_for_provider(provider_id: str) -> bool:
+    return any(
+        record.get("managed") and record.get("provider") == provider_id
+        for record in sandbox_manager.registry.list_sandboxes()
     )
-    try:
-        await client.boot(uuid_str)
+
+
+def register_sandbox_provider(
+    provider: SandboxProvider,
+    *,
+    replace: bool = False,
+    tools: list[FunctionTool] | None = None,
+) -> None:
+    """Register a plugin-provided sandbox runtime.
+
+    Args:
+        provider: The sandbox provider instance.
+        replace: If ``True``, replace an existing provider with the same ID.
+        tools: Optional list of provider-specific tools to register with the
+            global LLM tool manager. Core will automatically unregister these
+            tools when the provider is unregistered.
+    """
+    if not provider.provider_id:
+        raise ValueError("Sandbox provider_id must be a non-empty string.")
+    if provider.provider_id in sandbox_manager.providers and not replace:
+        raise RuntimeError(
+            f"Sandbox provider {provider.provider_id} is already registered"
+        )
+
+    # Clean up previous tools when replacing.
+    if replace and provider.provider_id in sandbox_manager.providers:
+        _unregister_provider_tools(provider.provider_id)
+
+    sandbox_manager.providers[provider.provider_id] = provider
+
+    if tools:
+        registered: list[FunctionTool] = []
+        for tool in tools:
+            mark_tool_as_sandbox_provider_tool(tool, provider.provider_id)
+            llm_tools.func_list.append(tool)
+            registered.append(tool)
+        _provider_tools[provider.provider_id] = registered
         logger.info(
-            "[Computer] CUA managed sandbox boot connected: sandbox_id=%s session_id=%s elapsed_ms=%d",
-            sandbox_id,
-            session_id,
-            int((time.monotonic() - started_at) * 1000),
+            "Sandbox provider %s registered with %d tool(s)",
+            provider.provider_id,
+            len(registered),
         )
-        await _sync_skills_to_sandbox(client)
-    except Exception:
-        logger.warning(
-            "[Computer] CUA managed sandbox boot failed: sandbox_id=%s session_id=%s elapsed_ms=%d",
-            sandbox_id,
-            session_id,
-            int((time.monotonic() - started_at) * 1000),
-            exc_info=True,
+    else:
+        logger.info("Sandbox provider %s registered", provider.provider_id)
+
+
+def unregister_sandbox_provider(provider_id: str, *, force: bool = False) -> None:
+    if not force and _has_managed_sandboxes_for_provider(provider_id):
+        raise RuntimeError(
+            f"Sandbox provider {provider_id} has active managed sandboxes; "
+            "destroy them or pass force=True before unregistering."
         )
-        try:
-            await client.shutdown()
-        except Exception as shutdown_error:
-            logger.warning(
-                "Failed to shutdown sandbox after boot error for session %s: %s",
-                session_id,
-                shutdown_error,
-            )
-        raise
-    logger.info(
-        "[Computer] CUA managed sandbox boot done: sandbox_id=%s session_id=%s elapsed_ms=%d",
-        sandbox_id,
-        session_id,
-        int((time.monotonic() - started_at) * 1000),
-    )
-    return client
+
+    if force:
+        # Synchronously clear registry and memory state for this provider's
+        # sandboxes.  Async destroy_booter is best-effort via background task.
+        _cleanup_provider_sandboxes_sync(provider_id)
+
+    _unregister_provider_tools(provider_id)
+    sandbox_manager.providers.pop(provider_id, None)
 
 
-async def _boot_managed_cua_sandbox_hook(
-    context: Context,
-    session_id: str,
-    sandbox_id: str,
-    cua_kwargs: dict,
-) -> ComputerBooter:
-    return await _boot_managed_cua_sandbox(context, session_id, sandbox_id, cua_kwargs)
+def _unregister_provider_tools(provider_id: str) -> None:
+    registered = _provider_tools.pop(provider_id, [])
+    if registered:
+        registered_ids = {id(tool) for tool in registered}
+        llm_tools.func_list = [
+            tool for tool in llm_tools.func_list if id(tool) not in registered_ids
+        ]
+    from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+
+    FunctionToolExecutor.clear_runtime_computer_tools_cache(provider_id)
+    if registered:
+        logger.info(
+            "Unregistered %d tool(s) for sandbox provider %s",
+            len(registered),
+            provider_id,
+        )
 
 
-sandbox_manager = SandboxManager(
-    registry=cua_registry,
-    providers={"cua": CuaSandboxProvider(boot_hook=_boot_managed_cua_sandbox_hook)},
-)
-_sync_sandbox_manager_refs()
+def _cleanup_provider_sandboxes_sync(provider_id: str) -> None:
+    """Synchronous cleanup of a provider's managed sandboxes on unregister.
 
+    Temporary registry records and in-memory state are removed immediately.  If
+    a temporary booter is alive and an event loop is running, an async
+    destroy_booter task is spawned as a best-effort cleanup.  Persistent records
+    are preserved and their live booters are only shut down to close the current
+    runtime connection.
+    """
+    import asyncio
 
-async def _get_or_create_cua_booter(
-    context: Context, session_id: str, sandbox_cfg: dict
-) -> ComputerBooter:
-    _sync_sandbox_manager_refs()
-    _ = sandbox_cfg
-    config = sandbox_manager.providers["cua"].build_create_config(context, session_id)
-    logger.info(
-        f"[Computer] CUA config: image={config['image']}, "
-        f"os_type={config['os_type']}, ttl={config['ttl']}"
-    )
-    return await sandbox_manager.get_or_create_booter(context, session_id, "cua")
-
-
-async def create_cua_sandbox(
-    context: Context,
-    session_id: str,
-    sandbox_name: str | None = None,
-) -> dict:
-    _sync_sandbox_manager_refs()
-    return await sandbox_manager.create_sandbox(
-        context, session_id, "cua", sandbox_name
-    )
-
-
-async def create_sandbox(
-    context: Context,
-    session_id: str,
-    provider: str = "cua",
-    sandbox_name: str | None = None,
-) -> dict:
-    _sync_sandbox_manager_refs()
-    return await sandbox_manager.create_sandbox(
-        context, session_id, provider, sandbox_name
-    )
-
-
-async def create_cua_sandbox_uncontrolled(
-    context: Context,
-    session_id: str,
-    sandbox_name: str | None = None,
-) -> dict:
-    _sync_sandbox_manager_refs()
-    return await sandbox_manager.create_sandbox_uncontrolled(
-        context, session_id, "cua", sandbox_name
-    )
-
-
-async def create_sandbox_uncontrolled(
-    context: Context,
-    session_id: str,
-    provider: str = "cua",
-    sandbox_name: str | None = None,
-) -> dict:
-    _sync_sandbox_manager_refs()
-    return await sandbox_manager.create_sandbox_uncontrolled(
-        context, session_id, provider, sandbox_name
-    )
-
-
-def list_cua_sandboxes() -> list[dict]:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.list_sandboxes()
-
-
-def list_sandboxes() -> list[dict]:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.list_sandboxes()
-
-
-def set_default_cua_sandbox(sandbox_id: str) -> dict:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.set_default_sandbox(sandbox_id)
-
-
-def set_default_sandbox(sandbox_id: str) -> dict:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.set_default_sandbox(sandbox_id)
-
-
-def update_cua_sandbox_config(
-    sandbox_id: str,
-    *,
-    sandbox_name: str | None = None,
-    idle_timeout: int | float | None,
-    expires_at: int | float | None,
-    retention_policy: str,
-) -> dict:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.update_sandbox_config(
-        sandbox_id,
-        sandbox_name=sandbox_name,
-        idle_timeout=idle_timeout,
-        expires_at=expires_at,
-        retention_policy=retention_policy,
-    )
-
-
-def update_sandbox_config(
-    sandbox_id: str,
-    *,
-    sandbox_name: str | None = None,
-    idle_timeout: int | float | None,
-    expires_at: int | float | None,
-    retention_policy: str,
-) -> dict:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.update_sandbox_config(
-        sandbox_id,
-        sandbox_name=sandbox_name,
-        idle_timeout=idle_timeout,
-        expires_at=expires_at,
-        retention_policy=retention_policy,
-    )
-
-
-async def reconcile_cua_sandboxes_on_startup() -> None:
-    _sync_sandbox_manager_refs()
-    await sandbox_manager.reconcile_on_startup()
-
-
-async def cleanup_managed_cua_sandboxes() -> None:
-    _sync_sandbox_manager_refs()
-    await sandbox_manager.cleanup_managed_sandboxes()
-
-
-def get_current_cua_sandbox(session_id: str) -> dict:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.get_current_sandbox(session_id)
-
-
-def get_current_sandbox(session_id: str) -> dict:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.get_current_sandbox(session_id)
-
-
-def switch_current_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.switch_current_sandbox(session_id, sandbox_id)
-
-
-async def switch_current_cua_sandbox_checked(session_id: str, sandbox_id: str) -> dict:
-    _sync_sandbox_manager_refs()
-    return await sandbox_manager.switch_current_sandbox_checked(session_id, sandbox_id)
-
-
-def switch_current_sandbox(session_id: str, sandbox_id: str) -> dict:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.switch_current_sandbox(session_id, sandbox_id)
-
-
-async def switch_current_sandbox_checked(session_id: str, sandbox_id: str) -> dict:
-    _sync_sandbox_manager_refs()
-    return await sandbox_manager.switch_current_sandbox_checked(session_id, sandbox_id)
-
-
-def release_current_cua_sandbox(
-    session_id: str,
-    sandbox_id: str | None = None,
-) -> dict:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.release_current_sandbox(session_id, sandbox_id)
-
-
-def release_current_sandbox(
-    session_id: str,
-    sandbox_id: str | None = None,
-) -> dict:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.release_current_sandbox(session_id, sandbox_id)
-
-
-def takeover_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.takeover_sandbox(session_id, sandbox_id)
-
-
-def takeover_sandbox(session_id: str, sandbox_id: str) -> dict:
-    _sync_sandbox_manager_refs()
-    return sandbox_manager.takeover_sandbox(session_id, sandbox_id)
-
-
-async def destroy_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
-    _sync_sandbox_manager_refs()
-    return await sandbox_manager.destroy_sandbox(session_id, sandbox_id)
-
-
-async def destroy_sandbox(session_id: str, sandbox_id: str) -> dict:
-    _sync_sandbox_manager_refs()
-    return await sandbox_manager.destroy_sandbox(session_id, sandbox_id)
-
-
-async def get_cua_sandbox_observer_booter_by_id(sandbox_id: str) -> ComputerBooter:
-    _sync_sandbox_manager_refs()
-    return await sandbox_manager.get_observer_booter_by_id(sandbox_id)
-
-
-async def get_sandbox_observer_booter_by_id(sandbox_id: str) -> ComputerBooter:
-    _sync_sandbox_manager_refs()
-    return await sandbox_manager.get_observer_booter_by_id(sandbox_id)
-
-
-async def copy_file_between_cua_sandboxes(
-    *,
-    session_id: str,
-    source_sandbox_id: str,
-    source_path: str,
-    target_sandbox_id: str,
-    target_path: str,
-    temp_dir: str | Path | None = None,
-) -> dict:
-    source_record = cua_registry.get_sandbox(source_sandbox_id)
-    if source_record is None or not source_record.get("managed"):
-        raise RuntimeError(f"Source sandbox {source_sandbox_id} not found")
-    target_record = cua_registry.get_sandbox(target_sandbox_id)
-    if target_record is None or not target_record.get("managed"):
-        raise RuntimeError(f"Target sandbox {target_sandbox_id} not found")
-    if not _acquire_cua_sandbox_lease(target_sandbox_id, session_id):
-        raise RuntimeError(f"Target sandbox {target_sandbox_id} is busy")
-
-    source_booter = session_booter.get(source_sandbox_id)
-    target_booter = session_booter.get(target_sandbox_id)
-    if source_booter is None or not await _booter_available(source_booter):
-        raise RuntimeError(f"Source sandbox {source_sandbox_id} is not running")
-    if target_booter is None or not await _booter_available(target_booter):
-        raise RuntimeError(f"Target sandbox {target_sandbox_id} is not running")
-
-    relay_root = (
-        Path(temp_dir) if temp_dir is not None else Path(get_astrbot_temp_path())
-    )
-    relay_root.mkdir(parents=True, exist_ok=True)
-    fd, relay_path = tempfile.mkstemp(
-        prefix="cua-relay-", suffix=".tmp", dir=relay_root
-    )
-    os.close(fd)
-    relay_file = Path(relay_path)
+    for record in list(sandbox_manager.registry.list_sandboxes()):
+        if not record.get("managed") or record.get("provider") != provider_id:
+            continue
+        sandbox_id = record["sandbox_id"]
+        if record.get("retention_policy") == "persistent":
+            booter = sandbox_manager.session_booter.pop(sandbox_id, None)
+            sandbox_manager.clear_idle_state(sandbox_id)
+            sandbox_manager.drop_boot_lock(sandbox_id)
+            if booter is not None:
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(_safe_shutdown_booter(booter, record))
+                except RuntimeError:
+                    pass  # no running event loop
+            continue
+        booter = sandbox_manager.session_booter.pop(sandbox_id, None)
+        sandbox_manager.clear_idle_state(sandbox_id)
+        sandbox_manager.registry.delete_sandbox(sandbox_id)
+        sandbox_manager.drop_boot_lock(sandbox_id)
+        if booter is not None:
+            try:
+                loop = asyncio.get_running_loop()
+                provider = sandbox_manager.providers.get(provider_id)
+                if provider is not None:
+                    loop.create_task(_safe_destroy_booter(provider, booter, record))
+            except RuntimeError:
+                pass  # no running event loop
     try:
-        await source_booter.download_file(source_path, str(relay_file))
-        upload_result = await target_booter.upload_file(str(relay_file), target_path)
-        if not upload_result.get("success", False):
-            raise RuntimeError(str(upload_result.get("message") or "upload failed"))
-        cua_registry.touch_sandbox(source_sandbox_id)
-        cua_registry.touch_sandbox(target_sandbox_id)
-        _save_cua_registry()
-        return {
-            "source_sandbox_id": source_sandbox_id,
-            "source_path": source_path,
-            "target_sandbox_id": target_sandbox_id,
-            "target_path": target_path,
-            "upload": upload_result,
-        }
-    finally:
-        relay_file.unlink(missing_ok=True)
+        sandbox_manager.registry.save()
+    except Exception as exc:
+        logger.warning(
+            "[Computer] Failed to save registry after force-unregister: %s",
+            exc,
+        )
+    from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 
-
-async def get_cua_observer_booter(context: Context, session_id: str) -> ComputerBooter:
-    config = context.get_config(umo=session_id)
-    sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
-    current_sandbox_id = cua_registry.get_current_sandbox_id(session_id)
-    if current_sandbox_id is None:
-        return await _get_or_create_cua_booter(context, session_id, sandbox_cfg)
-    booter = session_booter.get(current_sandbox_id)
-    if booter is None or not await _booter_available(booter):
-        booter = await _get_or_create_cua_booter(context, session_id, sandbox_cfg)
-        current_sandbox_id = getattr(booter, "sandbox_id", current_sandbox_id)
-    cua_registry.touch_sandbox(current_sandbox_id)
-    _save_cua_registry()
-    _schedule_cua_idle_cleanup(
-        current_sandbox_id,
-        _get_cua_idle_timeout(context, session_id),
+    FunctionToolExecutor.clear_runtime_computer_tools_cache(provider_id)
+    logger.info(
+        "Force-unregistered sandbox provider %s: sandboxes cleaned up",
+        provider_id,
     )
-    return booter
+
+
+async def cleanup_sandbox_provider(provider_id: str) -> None:
+    """Destroy all sandboxes owned by a provider before unregistering it."""
+    provider = sandbox_manager.providers.get(provider_id)
+    removed = 0
+    preserved = 0
+    handled_sandbox_ids: set[str] = set()
+
+    def _pop_live_booter(sandbox_id: str):
+        booter = sandbox_manager.session_booter.pop(sandbox_id, None)
+        sandbox_manager.clear_idle_state(sandbox_id)
+        sandbox_manager.drop_boot_lock(sandbox_id)
+        return booter
+
+    for record in list(sandbox_manager.registry.list_sandboxes()):
+        if not record.get("managed") or record.get("provider") != provider_id:
+            continue
+        sandbox_id = record["sandbox_id"]
+        handled_sandbox_ids.add(sandbox_id)
+        booter = _pop_live_booter(sandbox_id)
+        if record.get("retention_policy") == "persistent":
+            if booter is not None:
+                await _safe_shutdown_booter(booter, record)
+            preserved += 1
+            continue
+        if booter is not None and provider is not None:
+            await _safe_destroy_booter(provider, booter, record)
+        sandbox_manager.registry.delete_sandbox(sandbox_id)
+        removed += 1
+
+    for sandbox_id, booter in list(sandbox_manager.session_booter.items()):
+        booter_provider = getattr(booter, "provider_id", None)
+        if str(booter_provider or "") != provider_id:
+            continue
+        if sandbox_id in handled_sandbox_ids:
+            continue
+        record = sandbox_manager.registry.get_sandbox(sandbox_id) or {
+            "sandbox_id": sandbox_id,
+            "provider": provider_id,
+            "managed": True,
+            "retention_policy": "temporary",
+        }
+        sandbox_manager.session_booter.pop(sandbox_id, None)
+        sandbox_manager.clear_idle_state(sandbox_id)
+        sandbox_manager.drop_boot_lock(sandbox_id)
+        if provider is not None:
+            await _safe_destroy_booter(provider, booter, record)
+        if sandbox_manager.registry.get_sandbox(sandbox_id) is not None:
+            sandbox_manager.registry.delete_sandbox(sandbox_id)
+        removed += 1
+    try:
+        await sandbox_manager.save_registry_async()
+    except Exception as exc:
+        logger.warning(
+            "[Computer] Failed to save registry after provider cleanup: %s",
+            exc,
+        )
+    logger.info(
+        "Provider sandbox cleanup completed: provider=%s removed_temporary=%d preserved_persistent=%d",
+        provider_id,
+        removed,
+        preserved,
+    )
+
+
+def detach_sandbox_provider(provider_id: str) -> None:
+    """Remove a provider and its registered tools without touching sandboxes."""
+    _unregister_provider_tools(provider_id)
+    sandbox_manager.providers.pop(provider_id, None)
+
+
+async def _safe_destroy_booter(
+    provider: SandboxProvider, booter: ComputerBooter, record: dict
+) -> None:
+    try:
+        await provider.destroy_booter(booter, record)
+    except Exception as exc:
+        logger.warning(
+            "Background destroy_booter failed for sandbox %s: %s",
+            record.get("sandbox_id"),
+            exc,
+        )
+
+
+async def _safe_shutdown_booter(booter: ComputerBooter, record: dict) -> None:
+    try:
+        await booter.shutdown()
+    except Exception as exc:
+        logger.warning(
+            "Background shutdown failed for sandbox %s: %s",
+            record.get("sandbox_id"),
+            exc,
+        )
+
+
+def get_sandbox_provider_info(provider_id: str) -> dict | None:
+    provider = sandbox_manager.providers.get(provider_id)
+    if provider is None:
+        return None
+    return _sandbox_provider_info(provider_id, provider)
+
+
+def get_current_sandbox_provider_id(session_id: str) -> str | None:
+    current_sandbox_id = sandbox_manager.registry.get_current_sandbox_id(session_id)
+    if not current_sandbox_id:
+        return None
+    current_record = sandbox_manager.registry.get_sandbox(current_sandbox_id)
+    if current_record is None:
+        return None
+    if current_record.get("status") in {
+        SandboxStatus.STOPPING,
+        SandboxStatus.STOPPED,
+        SandboxStatus.ERROR,
+    }:
+        return None
+    provider_id = str(current_record.get("provider") or "").strip()
+    return provider_id or None
+
+
+def list_sandbox_providers() -> list[dict]:
+    return [
+        _sandbox_provider_info(provider_id, provider)
+        for provider_id, provider in sorted(sandbox_manager.providers.items())
+    ]
+
+
+async def cleanup_managed_sandboxes() -> None:
+    await sandbox_manager.cleanup_managed_sandboxes()
 
 
 def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
@@ -507,72 +364,6 @@ def _set_booter_skills_revision(booter: ComputerBooter, revision: str) -> None:
     setattr(booter, "_astrbot_skills_revision", revision)
 
 
-def _discover_bay_credentials(endpoint: str) -> str:
-    """Try to auto-discover Bay API key from credentials.json.
-
-    Search order:
-    1. BAY_DATA_DIR env var
-    2. Mono-repo relative path: ../pkgs/bay/ (dev layout)
-    3. Current working directory
-
-    Returns:
-        API key string, or empty string if not found.
-
-    """
-    candidates: list[Path] = []
-
-    # 1. BAY_DATA_DIR env var
-    bay_data_dir = os.environ.get("BAY_DATA_DIR")
-    if bay_data_dir:
-        candidates.append(Path(bay_data_dir) / "credentials.json")
-
-    # 2. Mono-repo layout: AstrBot/../pkgs/bay/credentials.json
-    astrbot_root = Path(__file__).resolve().parents[3]  # astrbot/core/computer/ ￫ root
-    candidates.append(astrbot_root.parent / "pkgs" / "bay" / "credentials.json")
-
-    # 3. Current working directory
-    candidates.append(Path.cwd() / "credentials.json")
-
-    for cred_path in candidates:
-        if not cred_path.is_file():
-            continue
-        try:
-            data = json.loads(cred_path.read_text())
-            api_key = data.get("api_key", "")
-            if api_key:
-                # Optionally verify endpoint matches
-                cred_endpoint = data.get("endpoint", "")
-                if (
-                    cred_endpoint
-                    and endpoint
-                    and cred_endpoint.rstrip("/") != endpoint.rstrip("/")
-                ):
-                    logger.warning(
-                        "[Computer] bay_credentials_mismatch file_endpoint=%s configured_endpoint=%s action=use_key",
-                        cred_endpoint,
-                        endpoint,
-                    )
-                masked_key = f"{api_key[:4]}..." if len(api_key) >= 6 else "redacted"
-                logger.info(
-                    "[Computer] bay_credentials_lookup status=found path=%s key_prefix=%s",
-                    cred_path,
-                    masked_key,
-                )
-                return api_key
-        except (json.JSONDecodeError, OSError) as exc:
-            logger.debug(
-                "[Computer] bay_credentials_read_failed path=%s error=%s",
-                cred_path,
-                exc,
-            )
-
-    logger.debug("[Computer] bay_credentials_lookup status=not_found")
-    return ""
-
-
-_discover_bay_credentials = discover_bay_credentials
-
-
 def _build_python_exec_command(script: str) -> str:
     return (
         "if command -v python3 >/dev/null 2>&1; then PYBIN=python3; "
@@ -584,7 +375,7 @@ def _build_python_exec_command(script: str) -> str:
     )
 
 
-def _build_apply_sync_command() -> str:
+def _build_apply_sync_command(zip_name: str = "skills.zip") -> str:
     """Build shell command for sync stage only.
 
     This stage mutates sandbox files (managed skill replacement) but does not scan
@@ -598,7 +389,7 @@ import zipfile
 from pathlib import Path
 
 root = Path({SANDBOX_SKILLS_ROOT!r})
-zip_path = root / "skills.zip"
+zip_path = root / {zip_name!r}
 tmp_extract = Path(f"{{root}}_tmp_extract")
 managed_file = root / {_MANAGED_SKILLS_FILE!r}
 
@@ -810,16 +601,22 @@ def _decode_sync_payload(stdout: str) -> dict | None:
     return None
 
 
-def _update_sandbox_skills_cache(payload: dict | None) -> None:
+def _update_sandbox_skills_cache(
+    payload: dict | None,
+    provider_id: str | None = None,
+) -> None:
     if not isinstance(payload, dict):
         return
     skills = payload.get("skills", [])
     if not isinstance(skills, list):
         return
-    SkillManager().set_sandbox_skills_cache(skills)
+    SkillManager().set_sandbox_skills_cache(skills, provider_id=provider_id)
 
 
-async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
+async def _apply_skills_to_sandbox(
+    booter: ComputerBooter,
+    zip_name: str = "skills.zip",
+) -> None:
     """Apply local skill bundle to sandbox filesystem only.
 
     This function is intentionally limited to file mutation. Metadata scanning is
@@ -827,7 +624,7 @@ async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
     """
     logger.info("[Computer] sandbox_sync phase=apply status=start")
     apply_result = _normalize_shell_exec_result(
-        await booter.shell.exec(_build_apply_sync_command()),
+        await booter.shell.exec(_build_apply_sync_command(zip_name))
     )
     if not _shell_exec_succeeded(apply_result):
         detail = _format_exec_error_detail(apply_result)
@@ -861,79 +658,70 @@ async def _scan_sandbox_skills(booter: ComputerBooter) -> dict | None:
     return payload
 
 
-async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
+async def _sync_skills_to_sandbox(
+    booter: ComputerBooter,
+    provider_id: str | None = None,
+) -> None:
     """Sync local skills to sandbox and refresh cache.
 
     Backward-compatible orchestrator: keep historical behavior while internally
     splitting into `apply` and `scan` phases.
     """
-    import anyio
+    async with _SANDBOX_SKILLS_SYNC_LOCK:
+        sync_skill_dirs = _collect_sync_skill_dirs()
 
-    sync_skill_dirs = _collect_sync_skill_dirs()
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        zip_base = temp_dir / f"skills_bundle_{uuid.uuid4().hex}"
+        zip_path = zip_base.with_suffix(".zip")
+        bundle_root = temp_dir / f"{zip_base.name}_contents"
+        remote_zip_name = f"{zip_base.name}.zip"
+        remote_zip = Path(SANDBOX_SKILLS_ROOT) / remote_zip_name
 
-    skills_root = anyio.Path(get_astrbot_skills_path())
-    if not await skills_root.is_dir():
-        return
+        try:
+            if sync_skill_dirs:
+                bundle_root.mkdir(parents=True)
+                for skill_name, skill_dir in sync_skill_dirs:
+                    shutil.copytree(skill_dir, bundle_root / skill_name)
+                shutil.make_archive(str(zip_base), "zip", str(bundle_root))
+                logger.info("Uploading skills bundle to sandbox...")
+                await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
+                upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
+                if not upload_result.get("success", False):
+                    raise RuntimeError("Failed to upload skills bundle to sandbox.")
+            else:
+                logger.info(
+                    "No local skills found. Keeping sandbox built-ins and refreshing metadata."
+                )
+                await booter.shell.exec(
+                    f"rm -f {SANDBOX_SKILLS_ROOT}/{remote_zip_name}"
+                )
 
-    temp_dir = anyio.Path(get_astrbot_temp_path())
-    await temp_dir.mkdir(parents=True, exist_ok=True)
-    zip_base = temp_dir / "skills_bundle"
-    zip_path = zip_base.with_suffix(".zip")
-    bundle_root = temp_dir / f"skills_bundle_{uuid.uuid4().hex}"
-
-    try:
-        if sync_skill_dirs:
-            if await zip_path.exists():
-                await zip_path.unlink()
-            if await bundle_root.exists():
-                shutil.rmtree(bundle_root)
-            await bundle_root.mkdir(parents=True, exist_ok=True)
-            for skill_name, skill_dir in sync_skill_dirs:
-                shutil.copytree(skill_dir, bundle_root / skill_name)
-            shutil.make_archive(str(zip_base), "zip", str(bundle_root))
-            remote_zip = anyio.Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
-            logger.info("[Computer] sandbox_sync phase=upload status=start")
-            await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
-            upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
-            if not upload_result.get("success", False):
-                logger.error("[Computer] sandbox_sync phase=upload status=failed")
-                raise RuntimeError("Failed to upload skills bundle to sandbox.")
-            logger.info("[Computer] sandbox_sync phase=upload status=done")
-        else:
-            logger.info(
-                "[Computer] sandbox_sync phase=upload status=skipped reason=no_skills",
+            # Keep backward-compatible behavior while splitting lifecycle into two
+            # observable phases: apply (filesystem mutation) + scan (metadata read).
+            await _apply_skills_to_sandbox(booter, zip_name=remote_zip_name)
+            payload = await _scan_sandbox_skills(booter)
+            _update_sandbox_skills_cache(payload, provider_id=provider_id)
+            managed = (
+                payload.get("managed_skills", []) if isinstance(payload, dict) else []
             )
-            await booter.shell.exec(f"rm -f {SANDBOX_SKILLS_ROOT}/skills.zip")
-
-        # Keep backward-compatible behavior while splitting lifecycle into two
-        # observable phases: apply (filesystem mutation) + scan (metadata read).
-        await _apply_skills_to_sandbox(booter)
-        payload = await _scan_sandbox_skills(booter)
-        _update_sandbox_skills_cache(payload)
-        _set_booter_skills_revision(booter, local_skills_revision)
-        managed = payload.get("managed_skills", []) if isinstance(payload, dict) else []
-        logger.info(
-            "[Computer] sandbox_sync phase=overall status=done managed=%d",
-            len(managed),
-            local_skills_revision[:12],
-        )
-    finally:
-        if await bundle_root.exists():
-            try:
-                shutil.rmtree(bundle_root)
-            except Exception:
-                logger.warning(
-                    "[Computer] sandbox_sync phase=cleanup status=failed path=%s",
-                    bundle_root,
-                )
-        if await zip_path.exists():
-            try:
-                await zip_path.unlink()
-            except Exception:
-                logger.warning(
-                    "[Computer] sandbox_sync phase=cleanup status=failed path=%s",
-                    zip_path,
-                )
+            logger.info(
+                "[Computer] Sandbox skill sync complete: managed=%d",
+                len(managed),
+            )
+        finally:
+            if bundle_root.exists():
+                try:
+                    shutil.rmtree(bundle_root)
+                except Exception:
+                    logger.warning(
+                        f"Failed to remove temp skills bundle: {bundle_root}"
+                    )
+            if zip_path.exists():
+                try:
+                    zip_path.unlink()
+                except Exception:
+                    logger.warning(f"Failed to remove temp skills zip: {zip_path}")
 
 
 async def get_booter(
@@ -948,155 +736,56 @@ async def get_booter(
     if runtime == "none":
         raise RuntimeError("Sandbox runtime is disabled by configuration.")
 
-    skills_root = Path(get_astrbot_skills_path())
-    current_skills_revision = _compute_local_skills_revision(skills_root)
+    current_sandbox_id = sandbox_manager.registry.get_current_sandbox_id(session_id)
+    if current_sandbox_id:
+        current_record = sandbox_manager.registry.get_sandbox(current_sandbox_id)
+        if current_record and current_record.get("managed"):
+            return await sandbox_manager.get_observer_booter_by_id(
+                current_sandbox_id,
+                session_id,
+                require_lease=True,
+                context=context,
+            )
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
-    booter_type = sandbox_cfg.get("booter", "shipyard_neo")
-
-    if booter_type == "cua":
-        return await _get_or_create_cua_booter(context, session_id, sandbox_cfg)
-
-    if session_id in session_booter:
-        booter = session_booter[session_id]
-        if not await booter.available():
-            # Clean up old booter before rebuilding so sandbox resources
-            # on Bay (containers, volumes, networks) are not leaked.
-            # Only ShipyardNeoBooter supports delete_sandbox; other booters
-            # (local, boxlite, cua, etc.) are not backed by a remote sandbox
-            # manager and don't need it.
-            try:
-                if booter_type == "shipyard_neo":
-                    await booter.shutdown(delete_sandbox=True)
-                else:
-                    await booter.shutdown()
-            except Exception as shutdown_err:
-                logger.warning(
-                    "[Computer] Error shutting down stale booter for session %s: %s",
-                    session_id,
-                    shutdown_err,
-                )
-            session_booter.pop(session_id, None)
-        elif _get_booter_skills_revision(booter) != current_skills_revision:
-            logger.info(
-                "[Computer] Local skills changed for session=%s, refreshing sandbox before reuse",
-                session_id,
-            )
-            try:
-                await _sync_skills_to_sandbox(booter)
-            except Exception as e:
-                logger.warning(
-                    "Failed to refresh sandbox skills before reusing session %s: %s",
-                    session_id,
-                    e,
-                )
-    if session_id not in session_booter:
-        uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
-        logger.info(
-            "[Computer] booter_init booter=%s session=%s",
-            booter_type,
-            session_id,
+    provider_id = str(sandbox_cfg.get("booter", "")).strip()
+    if not provider_id:
+        raise ValueError(
+            "Sandbox provider is not configured. Install and enable a sandbox provider plugin, then select it in provider_settings.sandbox.booter."
         )
-        if booter_type == "shipyard":
-            from .booters.shipyard import ShipyardBooter
 
-            ep = sandbox_cfg.get("shipyard_endpoint", "")
-            token = sandbox_cfg.get("shipyard_access_token", "")
-            ttl = sandbox_cfg.get("shipyard_ttl", 3600)
-            max_sessions = sandbox_cfg.get("shipyard_max_sessions", 10)
-
-            client = ShipyardBooter(
-                endpoint_url=ep,
-                access_token=token,
-                ttl=ttl,
-                session_num=max_sessions,
-            )
-        elif booter_type == "shipyard_neo":
-            from .booters.shipyard_neo import ShipyardNeoBooter
-
-            ep = sandbox_cfg.get("shipyard_neo_endpoint", "")
-            token = sandbox_cfg.get("shipyard_neo_access_token", "")
-            ttl = sandbox_cfg.get("shipyard_neo_ttl", 3600)
-            profile = sandbox_cfg.get("shipyard_neo_profile", "python-default")
-
-            # Auto-discover token from Bay's credentials.json if not configured
-            if not token:
-                token = _discover_bay_credentials(ep)
-
-            logger.info(
-                f"[Computer] Shipyard Neo config: endpoint={ep}, profile={profile}, ttl={ttl}",
-            )
-            client = ShipyardNeoBooter(
-                endpoint_url=ep,
-                access_token=token,
-                profile=profile,
-                ttl=ttl,
-            )
-        elif booter_type == "cua":
-            from .booters.cua import CuaBooter, build_cua_booter_kwargs
-
-            cua_kwargs = build_cua_booter_kwargs(sandbox_cfg)
-            logger.info(
-                f"[Computer] CUA config: image={cua_kwargs['image']}, "
-                f"os_type={cua_kwargs['os_type']}, ttl={cua_kwargs['ttl']}",
-            )
-            client = CuaBooter(**cua_kwargs)
-        elif booter_type == "boxlite":
-            from .booters.boxlite import BoxliteBooter
-
-            client = BoxliteBooter()
-        elif booter_type == "bwrap":
-            from .booters.bwrap import BwrapBooter
-
-            rw_binds = sandbox_cfg.get("bwrap_rw_binds", [])
-            ro_binds = sandbox_cfg.get("bwrap_ro_binds", [])
-            client = BwrapBooter(rw_binds=rw_binds, ro_binds=ro_binds)
-        else:
-            raise ValueError(f"Unknown booter type: {booter_type}")
-
-        try:
-            await client.boot(uuid_str)
-            logger.info(
-                "[Computer] booter_ready booter=%s session=%s",
-                booter_type,
-                session_id,
-            )
-            await _sync_skills_to_sandbox(client)
-        except Exception as e:
-            logger.error(f"Error booting sandbox for session {session_id}: {e}")
-            try:
-                if booter_type == "shipyard_neo":
-                    await client.shutdown(delete_sandbox=True)
-                else:
-                    await client.shutdown()
-            except Exception as shutdown_error:
-                logger.warning(
-                    "Failed to shutdown sandbox after boot error for session %s: %s",
-                    session_id,
-                    shutdown_error,
-                )
-            raise e
-
-        session_booter[session_id] = client
-    return session_booter[session_id]
+    logger.info(
+        f"[Computer] Initializing sandbox provider: provider={provider_id}, session={session_id}"
+    )
+    if provider_id in sandbox_manager.providers:
+        return await sandbox_manager.get_or_create_booter(
+            context,
+            session_id,
+            provider_id,
+        )
+    raise ValueError(
+        f"Unknown sandbox provider: {provider_id}. Install and enable a sandbox provider plugin, then select it in provider_settings.sandbox.booter."
+    )
 
 
 async def sync_skills_to_active_sandboxes() -> None:
     """Best-effort skills synchronization for all active sandbox sessions."""
+    active_booters = list(sandbox_manager.session_booter.items())
     logger.info(
-        "[Computer] sandbox_sync scope=active sessions=%d",
-        len(session_booter),
+        "[Computer] Syncing skills to %d active sandbox(es)", len(active_booters)
     )
-    for session_id, booter in list(session_booter.items()):
+    for sandbox_id, booter in active_booters:
+        record = sandbox_manager.registry.get_sandbox(sandbox_id) or {}
+        provider_id = str(record.get("provider") or "").strip() or None
         try:
-            if not await booter.available():
+            if not await sandbox_manager.booter_available(booter):
                 continue
-            await _sync_skills_to_sandbox(booter)
-        except Exception:
-            logger.exception(
-                "[Computer] sandbox_sync_failed session=%s booter=%s",
-                session_id,
-                booter.__class__.__name__,
+            await _sync_skills_to_sandbox(booter, provider_id=provider_id)
+        except Exception as e:
+            logger.warning(
+                "Failed to sync skills to sandbox for sandbox %s: %s",
+                sandbox_id,
+                e,
             )
 
 

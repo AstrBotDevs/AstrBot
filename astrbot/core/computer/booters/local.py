@@ -28,9 +28,8 @@ from astrbot.core.utils.astrbot_path import (
 )
 
 from .base import ComputerBooter
-from .bwrap import _decode_shell_output
 
-SandboxBackend = Literal["none", "bwrap", "seatbelt"]
+_MAX_SEARCH_LINE_COLUMNS = 1000
 
 _BLOCKED_COMMAND_PATTERNS = [
     " rm -rf ",
@@ -159,6 +158,23 @@ def _decode_process_output(
     def wrap_command(self, command: list[str], working_dir: Path) -> list[str]:
         if not self.sandboxed:
             return command
+
+def _truncate_long_lines(text: str) -> str:
+    output_lines: list[str] = []
+    for line in text.splitlines(keepends=True):
+        line_ending = ""
+        line_body = line
+        if line.endswith("\r\n"):
+            line_body = line[:-2]
+            line_ending = "\r\n"
+        elif line.endswith("\n") or line.endswith("\r"):
+            line_body = line[:-1]
+            line_ending = line[-1]
+        if len(line_body) > _MAX_SEARCH_LINE_COLUMNS:
+            line_body = line_body[:_MAX_SEARCH_LINE_COLUMNS]
+        output_lines.append(f"{line_body}{line_ending}")
+    return "".join(output_lines)
+
 
 @dataclass
 class LocalShellComponent(ShellComponent):

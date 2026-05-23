@@ -57,18 +57,32 @@
             <template #item.provider="{ item }">
               <div class="d-flex flex-column ga-1 py-2">
                 <v-chip size="small" color="primary" variant="tonal" class="provider-chip">{{ item.provider || tm('labels.unknown') }}</v-chip>
-                <span class="text-caption text-medium-emphasis">{{ item.booter_type || tm('labels.unknown') }}</span>
               </div>
             </template>
 
-            <template #item.lease="{ item }">
-              <div class="py-2">
-                <v-chip size="small" :color="item.controller_session_id ? 'warning' : 'success'" variant="tonal">
-                  {{ item.controller_session_id ? tm('labels.busy') : tm('labels.available') }}
+            <template #item.capabilities="{ item }">
+              <div class="capability-tags py-2">
+                <v-chip
+                  v-for="capability in item.capabilities || []"
+                  :key="`${item.sandbox_id}-${capability}`"
+                  size="x-small"
+                  color="secondary"
+                  variant="tonal"
+                >
+                  {{ capability }}
                 </v-chip>
-                <div class="text-caption text-medium-emphasis mt-1">
-                  {{ item.controller_session_id || tm('labels.noController') }}
-                </div>
+                <span v-if="!item.capabilities?.length" class="text-caption text-medium-emphasis">-</span>
+              </div>
+            </template>
+
+            <template #item.status="{ item }">
+              <div class="py-2">
+                <v-chip size="small" :color="statusColor(item)" variant="tonal">
+                  {{ statusLabel(item) }}
+                  <v-tooltip v-if="item.controller_session_id" activator="parent" location="top">
+                    {{ item.controller_session_id }}
+                  </v-tooltip>
+                </v-chip>
               </div>
             </template>
 
@@ -79,15 +93,15 @@
             <template #item.actions="{ item }">
               <div class="sandbox-actions-cell">
                 <v-btn size="small" variant="tonal" @click="openDetails(item)">{{ tm('actions.inspect') }}</v-btn>
-                <v-btn size="small" color="amber" variant="tonal" :disabled="item.is_default" @click="setDefaultSandbox(item)">{{ tm('actions.setDefault') }}</v-btn>
-                <v-btn size="small" variant="tonal" @click="openConfig(item)">{{ tm('actions.configure') }}</v-btn>
-                <v-btn size="small" color="primary" variant="tonal" :disabled="!hasCapability(item, 'shell')" @click="openConsole(item)">
+                <v-btn size="small" color="amber" variant="tonal" :disabled="!canUseAction(item, 'setDefault')" @click="setDefaultSandbox(item)">{{ tm('actions.setDefault') }}</v-btn>
+                <v-btn size="small" variant="tonal" :disabled="!canUseAction(item, 'configure')" @click="openConfig(item)">{{ tm('actions.configure') }}</v-btn>
+                <v-btn size="small" color="primary" variant="tonal" :disabled="!canUseAction(item, 'console')" @click="openConsole(item)">
                   {{ tm('actions.console') }}
                   <v-tooltip activator="parent" location="top">{{ tm('tooltips.console') }}</v-tooltip>
                 </v-btn>
-                <v-btn size="small" variant="tonal" :disabled="!canReleaseFromDashboard(item)" @click="releaseSandbox(item)">{{ tm('actions.release') }}</v-btn>
-                <v-btn size="small" variant="tonal" :disabled="!hasCapability(item, 'screenshot')" @click="screenshotSandbox(item)">{{ tm('actions.screenshot') }}</v-btn>
-                <v-btn size="small" color="error" variant="tonal" :disabled="!hasCapability(item, 'destroy')" @click="openDestroyConfirm(item)">{{ tm('actions.destroy') }}</v-btn>
+                <v-btn size="small" variant="tonal" :disabled="!canUseAction(item, 'release')" @click="releaseSandbox(item)">{{ tm('actions.release') }}</v-btn>
+                <v-btn size="small" variant="tonal" :disabled="!canUseAction(item, 'screenshot')" @click="screenshotSandbox(item)">{{ tm('actions.screenshot') }}</v-btn>
+                <v-btn size="small" color="error" variant="tonal" :disabled="!canUseAction(item, 'destroy')" @click="openDestroyConfirm(item)">{{ tm('actions.destroy') }}</v-btn>
               </div>
             </template>
 
@@ -104,24 +118,33 @@
     </v-container>
 
     <v-navigation-drawer v-model="detailsOpen" location="right" temporary width="420">
-      <div class="pa-4" v-if="selectedSandbox">
-        <div class="text-h6">{{ selectedSandbox.sandbox_name || selectedSandbox.sandbox_id }}</div>
-        <div class="text-caption text-medium-emphasis mb-4">{{ selectedSandbox.sandbox_id }}</div>
+      <div class="pa-4" v-if="selectedSandboxRecord">
+        <div class="text-h6">{{ selectedSandboxRecord.sandbox_name || selectedSandboxRecord.sandbox_id }}</div>
+        <div class="text-caption text-medium-emphasis mb-4">{{ selectedSandboxRecord.sandbox_id }}</div>
         <v-divider class="mb-4" />
         <v-list density="compact">
-          <v-list-item :title="tm('fields.provider')" :subtitle="selectedSandbox.provider" />
-          <v-list-item :title="tm('fields.booterType')" :subtitle="selectedSandbox.booter_type" />
-          <v-list-item :title="tm('fields.status')" :subtitle="selectedSandbox.status || '-'" />
-          <v-list-item :title="tm('fields.owner')" :subtitle="selectedSandbox.owner_session_id || '-'" />
-          <v-list-item :title="tm('fields.controller')" :subtitle="selectedSandbox.controller_session_id || '-'" />
-          <v-list-item :title="tm('fields.retentionPolicy')" :subtitle="retentionLabel(selectedSandbox.retention_policy)" />
-          <v-list-item :title="tm('fields.leaseExpires')" :subtitle="formatTime(selectedSandbox.lease_expires_at)" />
-          <v-list-item :title="tm('fields.idleTimeout')" :subtitle="String(selectedSandbox.idle_timeout ?? '-')" />
-          <v-list-item :title="tm('fields.expiresAt')" :subtitle="formatTime(selectedSandbox.expires_at)" />
+          <v-list-item :title="tm('fields.provider')" :subtitle="selectedSandboxRecord.provider" />
+          <v-list-item
+            v-if="selectedSandboxRecord.capabilities?.length"
+            :title="tm('fields.capabilities')"
+            :subtitle="selectedSandboxRecord.capabilities.join(', ')"
+          />
+          <v-list-item
+            v-if="selectedSandboxRecord.tool_names?.length"
+            :title="tm('fields.toolNames')"
+            :subtitle="selectedSandboxRecord.tool_names.join(', ')"
+          />
+          <v-list-item :title="tm('fields.status')" :subtitle="statusLabel(selectedSandboxRecord)" />
+          <v-list-item :title="tm('fields.owner')" :subtitle="selectedSandboxRecord.owner_session_id || '-'" />
+          <v-list-item :title="tm('fields.controller')" :subtitle="selectedSandboxRecord.controller_session_id || '-'" />
+          <v-list-item :title="tm('fields.retentionPolicy')" :subtitle="retentionLabel(selectedSandboxRecord.retention_policy)" />
+          <v-list-item :title="tm('fields.occupiedUntil')" :subtitle="formatTime(selectedSandboxRecord.lease_expires_at)" />
+          <v-list-item :title="tm('fields.idleCleanupAt')" :subtitle="formatTime(selectedSandboxRecord.idle_cleanup_at)" />
+          <v-list-item :title="tm('fields.expiresAt')" :subtitle="formatTime(selectedSandboxRecord.expires_at)" />
         </v-list>
         <v-divider class="my-4" />
         <div class="text-subtitle-2 mb-2">{{ tm('fields.connectInfo') }}</div>
-        <pre class="connect-info">{{ JSON.stringify(selectedSandbox.connect_info || {}, null, 2) }}</pre>
+        <pre class="connect-info">{{ JSON.stringify(selectedSandboxRecord.connect_info || {}, null, 2) }}</pre>
       </div>
     </v-navigation-drawer>
 
@@ -177,19 +200,16 @@
     </v-dialog>
 
     <v-dialog v-model="createDialog" max-width="520">
-      <v-card>
+        <v-card>
         <v-card-title>{{ tm('create.title') }}</v-card-title>
         <v-card-text>
-          <v-select v-model="createProvider" :items="providerOptions" :label="tm('fields.provider')" variant="outlined" />
+          <v-select v-model="createProvider" :items="providerOptions" :label="tm('fields.provider')" variant="outlined" :disabled="!hasProviderOptions" />
           <v-text-field v-model="createName" :label="tm('create.name')" variant="outlined" />
-          <v-alert v-if="createProvider !== 'cua'" type="info" variant="tonal" density="compact">
-            {{ tm('create.providerHint') }}
-          </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="createDialog = false">{{ tm('actions.cancel') }}</v-btn>
-          <v-btn color="primary" :loading="creating" :disabled="createProvider !== 'cua'" @click="createSandbox">
+          <v-btn color="primary" :loading="creatingRequestPending" :disabled="!hasProviderOptions || creatingRequestPending" @click="createSandbox">
             {{ tm('actions.create') }}
           </v-btn>
         </v-card-actions>
@@ -269,7 +289,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="destroyDialog = false">{{ tm('actions.cancel') }}</v-btn>
-          <v-btn color="error" :loading="destroying" @click="confirmDestroySandbox">{{ tm('actions.destroy') }}</v-btn>
+          <v-btn color="error" @click="confirmDestroySandbox">{{ tm('actions.destroy') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -284,14 +304,13 @@
 </template>
 
 <script setup lang="ts">
-import axios from 'axios'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import axios, { type AxiosRequestConfig } from 'axios'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useModuleI18n } from '@/i18n/composables'
 
 type SandboxRecord = {
   sandbox_id: string
   sandbox_name?: string
-  booter_type?: string
   provider?: string
   managed?: boolean
   created_by_astrbot?: boolean
@@ -301,12 +320,37 @@ type SandboxRecord = {
   lease_expires_at?: number | null
   last_used_at?: number | null
   idle_timeout?: number | null
+  idle_cleanup_at?: number | null
   expires_at?: number | null
   retention_policy?: string | null
   status?: string
   connect_info?: Record<string, unknown>
   capabilities?: string[]
+  tool_names?: string[]
 }
+
+type LoadSandboxesResult = {
+  ok: boolean
+  records: SandboxRecord[]
+  error?: string
+}
+
+type ProviderOption = {
+  title: string
+  value: string
+}
+
+type SandboxProviderInfo = {
+  provider_id: string
+}
+
+type SandboxAction =
+  | 'setDefault'
+  | 'configure'
+  | 'console'
+  | 'release'
+  | 'screenshot'
+  | 'destroy'
 
 type ConsoleHistoryEntry = {
   id: number
@@ -321,11 +365,11 @@ type ConsoleHistoryEntry = {
 const { tm } = useModuleI18n('features/sandbox')
 
 const loading = ref(false)
-const creating = ref(false)
+const creatingRequestPending = ref(false)
 const savingConfig = ref(false)
 const sandboxes = ref<SandboxRecord[]>([])
 const detailsOpen = ref(false)
-const selectedSandbox = ref<SandboxRecord | null>(null)
+const selectedSandboxId = ref<string | null>(null)
 const createDialog = ref(false)
 const configDialog = ref(false)
 const configSandbox = ref<SandboxRecord | null>(null)
@@ -334,11 +378,16 @@ const configIdleTimeout = ref<number | null>(null)
 const configExpiresAt = ref('')
 const configSandboxName = ref('')
 const createName = ref('')
-const createProvider = ref('cua')
+const createProvider = ref('')
+const createPollingTimers = ref<Record<string, ReturnType<typeof setTimeout>>>({})
+const createGeneration = ref(0)
+const pendingCreateSandboxes = ref<Record<string, { placeholder: SandboxRecord; attempts: number; refreshFailures: number }>>({})
+const destroyPollingTimers = ref<Record<string, ReturnType<typeof setTimeout>>>({})
+const destroyGeneration = ref(0)
+const pendingDestroySandboxes = ref<Record<string, { attempts: number; refreshFailures: number }>>({})
 const screenshotDialog = ref(false)
 const screenshotDataUrl = ref('')
 const destroyDialog = ref(false)
-const destroying = ref(false)
 const destroySandboxTarget = ref<SandboxRecord | null>(null)
 const consoleOpen = ref(false)
 const consoleSandbox = ref<SandboxRecord | null>(null)
@@ -353,47 +402,176 @@ const consoleBodyRef = ref<HTMLElement | null>(null)
 let consoleEntryId = 0
 const snackbar = ref({ show: false, message: '', color: 'success' })
 
-const providerOptions = [
-  { title: 'CUA', value: 'cua' },
-  { title: 'Shipyard Neo', value: 'shipyard_neo' },
-  { title: 'Shipyard', value: 'shipyard' }
-]
+const providerOptions = ref<ProviderOption[]>([])
+const hasProviderOptions = computed(() => providerOptions.value.length > 0)
+let sandboxesRefreshTimer: ReturnType<typeof window.setInterval> | null = null
 
 const headers = computed(() => [
   { title: tm('headers.sandbox'), key: 'identity', sortable: false, width: '22%' },
-  { title: tm('headers.provider'), key: 'provider', sortable: false, width: '14%' },
-  { title: tm('headers.lease'), key: 'lease', sortable: false, width: '12%' },
-  { title: tm('headers.lastUsed'), key: 'last_used', sortable: false, width: '18%' },
+  { title: tm('headers.provider'), key: 'provider', sortable: false, width: '12%' },
+  { title: tm('headers.capabilities'), key: 'capabilities', sortable: false, width: '18%' },
+  { title: tm('headers.status'), key: 'status', sortable: false, width: '12%' },
+  { title: tm('headers.lastUsed'), key: 'last_used', sortable: false, width: '14%' },
   { title: tm('headers.actions'), key: 'actions', sortable: false, align: 'end' as const, width: 520 }
 ])
 
-const providerCount = computed(() => new Set(sandboxes.value.map((item) => item.provider || item.booter_type || 'unknown')).size)
+const providerCount = computed(() => new Set(sandboxes.value.map((item) => item.provider || 'unknown')).size)
 const busyCount = computed(() => sandboxes.value.filter((item) => !!item.controller_session_id).length)
 const defaultCount = computed(() => sandboxes.value.filter((item) => item.is_default).length)
 const canSaveConfig = computed(() => configSandboxName.value.trim().length > 0)
+const selectedSandboxRecord = computed(() => {
+  if (!selectedSandboxId.value) return null
+  return sandboxes.value.find((item) => item.sandbox_id === selectedSandboxId.value) || null
+})
+
+const CREATE_POLL_INTERVAL_MS = 2000
+const CREATE_POLL_MAX_ATTEMPTS = 60
+const CREATE_POLL_MAX_REFRESH_FAILURES = 3
+const DESTROY_POLL_INTERVAL_MS = 2000
+const DESTROY_POLL_MAX_ATTEMPTS = 60
+const DESTROY_POLL_MAX_REFRESH_FAILURES = 3
+const DANGEROUS_CONSOLE_COMMAND_PATTERNS = [
+  /(^|[;&|]\s*)rm\s+(?:-[\w-]*r[\w-]*f[\w-]*|-[\w-]*f[\w-]*r[\w-]*)\s+(?:--\s+)?(?:\/(?:\S*)?|~(?:\S*)?|\$HOME(?:\S*)?)(?:\s|$)/i,
+  /(^|[;&|]\s*)mkfs(?:\.[\w-]+)?\s+/,
+  /(^|[;&|]\s*)dd\s+[^\n]*(?:of=\/dev\/|of=\/)/,
+  /(^|[;&|]\s*):\(\)\s*\{\s*:\|:\s*&\s*\}\s*;/,
+]
 
 function toast(message: string, color: 'success' | 'error' | 'warning' = 'success') {
   snackbar.value = { show: true, message, color }
+}
+
+function localizedSandboxError(message?: string) {
+  const text = String(message || '').trim()
+  const limitMatch = text.match(/Sandbox limit reached\. Maximum managed sandboxes: (\d+)\./)
+  if (limitMatch) {
+    return tm('messages.maxSandboxesReached', { max: limitMatch[1] })
+  }
+  return text || tm('messages.operationFailed')
 }
 
 function requiredSandboxNameRule(value: string) {
   return !!value?.trim() || tm('config.nameRequired')
 }
 
-function isCua(item: SandboxRecord) {
-  return item.provider === 'cua' || item.booter_type === 'cua'
-}
-
 function hasCapability(item: SandboxRecord, capability: string) {
   return item.capabilities?.includes(capability) ?? false
 }
 
-function hasController(item: SandboxRecord) {
-  return !!item.controller_session_id
+function hasController(item?: { controller_session_id?: string | null } | null) {
+  return !!item?.controller_session_id
 }
 
-function canReleaseFromDashboard(item: SandboxRecord) {
-  return isCua(item) && item.controller_session_id === 'dashboard'
+function displayStatusKey(item?: SandboxRecord | string | null) {
+  if (typeof item === 'string') return item
+  const status = item?.status || 'unknown'
+  if (status === 'running') {
+    return hasController(item) ? 'busy' : 'available'
+  }
+  return status
+}
+
+function statusLabel(item?: SandboxRecord | string | null) {
+  const key = displayStatusKey(item)
+  const labels: Record<string, string> = {
+    creating: tm('labels.creating'),
+    restoring: tm('labels.restoring'),
+    running: tm('labels.running'),
+    busy: tm('labels.busy'),
+    available: tm('labels.available'),
+    error: tm('labels.error'),
+    stopping: tm('labels.stopping'),
+    stopped: tm('labels.stopped'),
+    unknown: tm('labels.unknown'),
+  }
+  return labels[key] || tm('labels.unknownStatus', { status: key })
+}
+
+function statusColor(item?: SandboxRecord | string | null) {
+  const key = displayStatusKey(item)
+  const colors: Record<string, string> = {
+    creating: 'amber',
+    restoring: 'info',
+    running: 'success',
+    busy: 'warning',
+    available: 'success',
+    error: 'error',
+    stopping: 'warning',
+    stopped: 'grey',
+    unknown: 'grey',
+  }
+  return colors[key] || 'grey'
+}
+
+function isCreatePendingStatus(status?: string | null) {
+  return status === 'creating' || status === 'restoring'
+}
+
+function canUseAction(item: SandboxRecord, action: SandboxAction) {
+  const status = item.status || 'unknown'
+
+  switch (action) {
+    case 'setDefault':
+      return !item.is_default && status !== 'stopping'
+    case 'configure':
+      return status !== 'creating' && status !== 'restoring' && status !== 'stopping'
+    case 'console':
+      return status === 'running' && hasCapability(item, 'shell')
+    case 'release':
+      return status !== 'stopping' && !!item.controller_session_id
+    case 'screenshot':
+      return status === 'running' && hasCapability(item, 'screenshot')
+    case 'destroy':
+      return status !== 'stopping' && !item.controller_session_id
+  }
+}
+
+function upsertSandboxRecord(record: SandboxRecord) {
+  const index = sandboxes.value.findIndex((item) => item.sandbox_id === record.sandbox_id)
+  if (index === -1) {
+    sandboxes.value = [...sandboxes.value, record]
+    return
+  }
+
+  const next = [...sandboxes.value]
+  next[index] = record
+  sandboxes.value = next
+}
+
+function removeSandboxRecord(sandboxId: string) {
+  sandboxes.value = sandboxes.value.filter((item) => item.sandbox_id !== sandboxId)
+}
+
+function setPendingCreateSandbox(
+  sandboxId: string,
+  pending: { placeholder: SandboxRecord; attempts: number; refreshFailures: number }
+) {
+  pendingCreateSandboxes.value = {
+    ...pendingCreateSandboxes.value,
+    [sandboxId]: pending
+  }
+}
+
+function removePendingCreateSandbox(sandboxId: string) {
+  const next = { ...pendingCreateSandboxes.value }
+  delete next[sandboxId]
+  pendingCreateSandboxes.value = next
+}
+
+function setPendingDestroySandbox(
+  sandboxId: string,
+  pending: { attempts: number; refreshFailures: number }
+) {
+  pendingDestroySandboxes.value = {
+    ...pendingDestroySandboxes.value,
+    [sandboxId]: pending
+  }
+}
+
+function removePendingDestroySandbox(sandboxId: string) {
+  const next = { ...pendingDestroySandboxes.value }
+  delete next[sandboxId]
+  pendingDestroySandboxes.value = next
 }
 
 function formatTime(value?: number | null) {
@@ -418,7 +596,7 @@ function fromDateTimeLocal(value: string) {
 }
 
 function openDetails(item: SandboxRecord) {
-  selectedSandbox.value = item
+  selectedSandboxId.value = item.sandbox_id
   detailsOpen.value = true
 }
 
@@ -431,25 +609,91 @@ function openConfig(item: SandboxRecord) {
   configDialog.value = true
 }
 
-async function loadSandboxes() {
-  loading.value = true
+async function loadSandboxes(options: { silent?: boolean } = {}): Promise<LoadSandboxesResult> {
+  const { silent = false } = options
+  if (!silent) loading.value = true
   try {
-    const res = await axios.get('/api/sandboxes')
+    // Add cache-bust parameter to prevent the browser from serving a stale list.
+    const res = await axios.get('/api/sandbox', { params: { _t: Date.now() } })
     if (res.data.status === 'ok') {
-      sandboxes.value = res.data.data?.sandboxes || []
+      const records = res.data.data?.sandboxes || []
+      sandboxes.value = records
+      return { ok: true, records }
     } else {
-      toast(res.data.message || tm('messages.loadFailed'), 'error')
+      const error = res.data.message || tm('messages.loadFailed')
+      if (!silent) toast(error, 'error')
+      return { ok: false, records: sandboxes.value, error }
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.loadFailed'), 'error')
+    const error = e?.response?.data?.message || tm('messages.loadFailed')
+    if (!silent) toast(error, 'error')
+    return { ok: false, records: sandboxes.value, error }
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
-async function postAction(path: string, payload: Record<string, unknown>, successMessage?: string) {
+async function loadProviders() {
   try {
-    const res = await axios.post(path, payload)
+    const res = await axios.get('/api/sandbox/providers', { params: { _t: Date.now() } })
+    if (res.data.status !== 'ok') {
+      providerOptions.value = []
+      createProvider.value = ''
+      return
+    }
+
+    const providers = (res.data.data?.providers || []) as SandboxProviderInfo[]
+    const defaultProviderId = String(res.data.data?.default_provider_id || '').trim()
+    providerOptions.value = providers.map((provider) => ({
+      title: provider.provider_id,
+      value: provider.provider_id,
+    }))
+
+    if (!providerOptions.value.some((option) => option.value === createProvider.value)) {
+      const defaultOption = providerOptions.value.find((option) => option.value === defaultProviderId)
+      createProvider.value = defaultOption?.value || providerOptions.value[0]?.value || ''
+    }
+  } catch {
+    providerOptions.value = []
+    createProvider.value = ''
+  }
+}
+
+function startSandboxesAutoRefresh() {
+  if (sandboxesRefreshTimer !== null) return
+  sandboxesRefreshTimer = window.setInterval(() => {
+    void loadSandboxes({ silent: true })
+  }, 5000)
+}
+
+function stopSandboxesAutoRefresh() {
+  if (sandboxesRefreshTimer !== null) {
+    window.clearInterval(sandboxesRefreshTimer)
+    sandboxesRefreshTimer = null
+  }
+}
+
+function sandboxApiPath(item: SandboxRecord | string, suffix = '') {
+  const sandboxId = typeof item === 'string' ? item : item.sandbox_id
+  return `/api/sandbox/${encodeURIComponent(sandboxId)}${suffix}`
+}
+
+async function sandboxAction(
+  method: 'post' | 'patch' | 'delete',
+  path: string,
+  payload?: Record<string, unknown>,
+  successMessage?: string,
+  config: AxiosRequestConfig = {}
+) {
+  try {
+    let res
+    if (method === 'post') {
+      res = await axios.post(path, payload, config)
+    } else if (method === 'patch') {
+      res = await axios.patch(path, payload, config)
+    } else {
+      res = await axios.delete(path, { ...config, data: payload })
+    }
     if (res.data.status === 'ok') {
       if (successMessage) toast(successMessage)
       await loadSandboxes()
@@ -462,25 +706,272 @@ async function postAction(path: string, payload: Record<string, unknown>, succes
   return null
 }
 
-async function createSandbox() {
-  creating.value = true
-  try {
-    const data = await postAction('/api/sandboxes/create', {
-      provider: createProvider.value,
-      sandbox_name: createName.value || undefined,
-      session_id: 'dashboard'
-    }, tm('messages.created'))
-    if (data) {
-      createDialog.value = false
-      createName.value = ''
+function clearCreatePollingTimer(sandboxId: string) {
+  const timer = createPollingTimers.value[sandboxId]
+  if (timer) {
+    clearTimeout(timer)
+    const next = { ...createPollingTimers.value }
+    delete next[sandboxId]
+    createPollingTimers.value = next
+  }
+}
+
+function stopCreatePolling() {
+  for (const timer of Object.values(createPollingTimers.value)) {
+    clearTimeout(timer)
+  }
+  createPollingTimers.value = {}
+  createGeneration.value++
+  pendingCreateSandboxes.value = {}
+}
+
+function clearDestroyPollingTimer(sandboxId: string) {
+  const timer = destroyPollingTimers.value[sandboxId]
+  if (timer) {
+    clearTimeout(timer)
+    const next = { ...destroyPollingTimers.value }
+    delete next[sandboxId]
+    destroyPollingTimers.value = next
+  }
+}
+
+function stopDestroyPolling() {
+  for (const timer of Object.values(destroyPollingTimers.value)) {
+    clearTimeout(timer)
+  }
+  destroyPollingTimers.value = {}
+  destroyGeneration.value++
+  pendingDestroySandboxes.value = {}
+}
+
+function finishDestroyPolling(sandboxId: string) {
+  clearDestroyPollingTimer(sandboxId)
+  removePendingDestroySandbox(sandboxId)
+  removeSandboxRecord(sandboxId)
+}
+
+function finishCreatePolling(sandboxId: string, record?: SandboxRecord) {
+  clearCreatePollingTimer(sandboxId)
+  removePendingCreateSandbox(sandboxId)
+  if (!record) return
+
+  if (record.status === 'running') {
+    return
+  }
+
+  if (record.status === 'error') {
+    toast(tm('messages.createFailed'), 'error')
+    return
+  }
+
+  if (record.status === 'unknown') {
+    toast(tm('messages.createUnknown'), 'warning')
+    return
+  }
+
+  toast(tm('messages.createUnexpectedStatus', { status: statusLabel(record.status) }), 'warning')
+}
+
+function startCreatePolling(sandboxId: string, placeholder: SandboxRecord) {
+  setPendingCreateSandbox(sandboxId, {
+    placeholder,
+    attempts: 0,
+    refreshFailures: 0
+  })
+  upsertSandboxRecord(placeholder)
+  const currentGen = createGeneration.value
+
+  const poll = async (trackedSandboxId: string) => {
+    if (currentGen !== createGeneration.value) return
+
+    const pending = pendingCreateSandboxes.value[trackedSandboxId]
+    if (!pending) return
+
+    setPendingCreateSandbox(trackedSandboxId, {
+      ...pending,
+      attempts: pending.attempts + 1
+    })
+    const result = await loadSandboxes({ silent: true })
+
+    if (currentGen !== createGeneration.value) return
+
+    const latestPending = pendingCreateSandboxes.value[trackedSandboxId]
+    if (!latestPending) return
+
+    if (!result.ok) {
+      const refreshFailures = latestPending.refreshFailures + 1
+      setPendingCreateSandbox(trackedSandboxId, {
+        ...latestPending,
+        refreshFailures
+      })
+      if (refreshFailures >= CREATE_POLL_MAX_REFRESH_FAILURES || latestPending.attempts >= CREATE_POLL_MAX_ATTEMPTS) {
+        finishCreatePolling(trackedSandboxId)
+        toast(tm('messages.createRefreshUnstable'), 'warning')
+        return
+      }
+      createPollingTimers.value = {
+        ...createPollingTimers.value,
+        [trackedSandboxId]: setTimeout(() => void poll(trackedSandboxId), CREATE_POLL_INTERVAL_MS)
+      }
+      return
     }
+
+    setPendingCreateSandbox(trackedSandboxId, {
+      ...latestPending,
+      refreshFailures: 0
+    })
+    const record = result.records.find((item) => item.sandbox_id === trackedSandboxId)
+
+    if (!record) {
+      upsertSandboxRecord(latestPending.placeholder)
+      if (latestPending.attempts >= CREATE_POLL_MAX_ATTEMPTS) {
+        finishCreatePolling(trackedSandboxId)
+        toast(tm('messages.createNotVisible', { sandboxId: trackedSandboxId }), 'warning')
+        return
+      }
+      createPollingTimers.value = {
+        ...createPollingTimers.value,
+        [trackedSandboxId]: setTimeout(() => void poll(trackedSandboxId), CREATE_POLL_INTERVAL_MS)
+      }
+      return
+    }
+
+    if (isCreatePendingStatus(record.status)) {
+      upsertSandboxRecord(record)
+      if (latestPending.attempts >= CREATE_POLL_MAX_ATTEMPTS) {
+        finishCreatePolling(trackedSandboxId)
+        toast(tm('messages.createTimedOut', { sandboxId: trackedSandboxId }), 'warning')
+        return
+      }
+      createPollingTimers.value = {
+        ...createPollingTimers.value,
+        [trackedSandboxId]: setTimeout(() => void poll(trackedSandboxId), CREATE_POLL_INTERVAL_MS)
+      }
+      return
+    }
+
+    finishCreatePolling(trackedSandboxId, record)
+  }
+
+  createPollingTimers.value = {
+    ...createPollingTimers.value,
+    [sandboxId]: setTimeout(() => void poll(sandboxId), CREATE_POLL_INTERVAL_MS)
+  }
+}
+
+function startDestroyPolling(sandboxId: string) {
+  setPendingDestroySandbox(sandboxId, {
+    attempts: 0,
+    refreshFailures: 0
+  })
+  const currentGen = destroyGeneration.value
+
+  const poll = async (trackedSandboxId: string) => {
+    if (currentGen !== destroyGeneration.value) return
+
+    const pending = pendingDestroySandboxes.value[trackedSandboxId]
+    if (!pending) return
+
+    setPendingDestroySandbox(trackedSandboxId, {
+      ...pending,
+      attempts: pending.attempts + 1
+    })
+    const result = await loadSandboxes({ silent: true })
+
+    if (currentGen !== destroyGeneration.value) return
+
+    const latestPending = pendingDestroySandboxes.value[trackedSandboxId]
+    if (!latestPending) return
+
+    if (!result.ok) {
+      const refreshFailures = latestPending.refreshFailures + 1
+      setPendingDestroySandbox(trackedSandboxId, {
+        ...latestPending,
+        refreshFailures
+      })
+      if (refreshFailures >= DESTROY_POLL_MAX_REFRESH_FAILURES || latestPending.attempts >= DESTROY_POLL_MAX_ATTEMPTS) {
+        clearDestroyPollingTimer(trackedSandboxId)
+        removePendingDestroySandbox(trackedSandboxId)
+        toast(tm('messages.destroyRefreshUnstable'), 'warning')
+        return
+      }
+      destroyPollingTimers.value = {
+        ...destroyPollingTimers.value,
+        [trackedSandboxId]: setTimeout(() => void poll(trackedSandboxId), DESTROY_POLL_INTERVAL_MS)
+      }
+      return
+    }
+
+    const record = result.records.find((item) => item.sandbox_id === trackedSandboxId)
+    if (!record) {
+      finishDestroyPolling(trackedSandboxId)
+      return
+    }
+
+    upsertSandboxRecord(record)
+    if (latestPending.attempts >= DESTROY_POLL_MAX_ATTEMPTS) {
+      clearDestroyPollingTimer(trackedSandboxId)
+      removePendingDestroySandbox(trackedSandboxId)
+      toast(tm('messages.destroyTimedOut', { sandboxId: trackedSandboxId }), 'warning')
+      return
+    }
+
+    destroyPollingTimers.value = {
+      ...destroyPollingTimers.value,
+      [trackedSandboxId]: setTimeout(() => void poll(trackedSandboxId), DESTROY_POLL_INTERVAL_MS)
+    }
+  }
+
+  destroyPollingTimers.value = {
+    ...destroyPollingTimers.value,
+    [sandboxId]: setTimeout(() => void poll(sandboxId), DESTROY_POLL_INTERVAL_MS)
+  }
+}
+
+async function createSandbox() {
+  const providerId = createProvider.value
+  if (!providerId) {
+    toast(tm('messages.operationFailed'), 'error')
+    return
+  }
+  const sandboxName = createName.value || undefined
+
+  creatingRequestPending.value = true
+
+  try {
+    const res = await axios.post('/api/sandbox', {
+      provider_id: providerId,
+      sandbox_name: sandboxName
+    }, { params: { session_id: 'dashboard' } })
+
+    if (res.data.status !== 'ok') {
+      toast(localizedSandboxError(res.data.message), 'error')
+      return
+    }
+
+    const created = res.data.data?.sandbox as SandboxRecord | undefined
+    if (!created?.sandbox_id) {
+      toast(tm('messages.operationFailed'), 'error')
+      return
+    }
+
+    createDialog.value = false
+    createName.value = ''
+    startCreatePolling(created.sandbox_id, created)
+  } catch (e: any) {
+    toast(localizedSandboxError(e?.response?.data?.message), 'error')
   } finally {
-    creating.value = false
+    creatingRequestPending.value = false
   }
 }
 
 function setDefaultSandbox(item: SandboxRecord) {
-  return postAction('/api/sandboxes/default/set', { sandbox_id: item.sandbox_id }, tm('messages.defaultSet'))
+  return sandboxAction(
+    'post',
+    sandboxApiPath(item, '/default'),
+    undefined,
+    tm('messages.defaultSet')
+  )
 }
 
 async function saveConfig() {
@@ -488,13 +979,17 @@ async function saveConfig() {
   savingConfig.value = true
   try {
     const persistent = configRetentionPolicy.value === 'persistent'
-    const data = await postAction('/api/sandboxes/config/update', {
-      sandbox_id: configSandbox.value.sandbox_id,
-      sandbox_name: configSandboxName.value.trim(),
-      retention_policy: configRetentionPolicy.value,
-      idle_timeout: persistent ? null : configIdleTimeout.value,
-      expires_at: persistent ? null : fromDateTimeLocal(configExpiresAt.value)
-    }, tm('messages.configSaved'))
+    const data = await sandboxAction(
+      'patch',
+      sandboxApiPath(configSandbox.value),
+      {
+        sandbox_name: configSandboxName.value.trim(),
+        retention_policy: configRetentionPolicy.value,
+        idle_timeout: persistent ? null : configIdleTimeout.value,
+        expires_at: persistent ? null : fromDateTimeLocal(configExpiresAt.value)
+      },
+      tm('messages.configSaved')
+    )
     if (data) configDialog.value = false
   } finally {
     savingConfig.value = false
@@ -502,12 +997,20 @@ async function saveConfig() {
 }
 
 function releaseSandbox(item: SandboxRecord) {
-  return postAction('/api/sandboxes/release', { session_id: 'dashboard', sandbox_id: item.sandbox_id }, tm('messages.released'))
+  return sandboxAction(
+    'delete',
+    '/api/sandbox/current',
+    undefined,
+    tm('messages.released'),
+    {
+      params: { session_id: 'dashboard', sandbox_id: item.sandbox_id }
+    }
+  )
 }
 
 function openConsole(item: SandboxRecord) {
   consoleSandbox.value = item
-  consoleHistory.value = consoleHistoryBySandbox.value[item.sandbox_id] || []
+  consoleHistory.value = [...(consoleHistoryBySandbox.value[item.sandbox_id] || [])]
   consoleCwd.value = consoleCwdBySandbox.value[item.sandbox_id] || '~'
   consoleOpen.value = true
   requestAnimationFrame(() => {
@@ -522,24 +1025,34 @@ function openDestroyConfirm(item: SandboxRecord) {
 }
 
 async function confirmDestroySandbox() {
-  if (!destroySandboxTarget.value) return
-  destroying.value = true
+  const target = destroySandboxTarget.value
+  if (!target) return
+  const targetId = target.sandbox_id
+  destroyDialog.value = false
+  destroySandboxTarget.value = null
+  startDestroyPolling(targetId)
   try {
-    const data = await postAction('/api/sandboxes/destroy', {
-      session_id: 'dashboard',
-      sandbox_id: destroySandboxTarget.value.sandbox_id
-    }, tm('messages.destroyed'))
-    if (data) {
-      destroyDialog.value = false
-      destroySandboxTarget.value = null
+    const res = await axios.delete(sandboxApiPath(targetId), {
+      params: { session_id: 'dashboard', _t: Date.now() }
+    })
+    if (res.data.status === 'ok') {
+      const sandbox = res.data.data?.sandbox as SandboxRecord | undefined
+      if (sandbox?.sandbox_id) {
+        upsertSandboxRecord(sandbox)
+      }
+      void loadSandboxes({ silent: true })
+    } else {
+      toast(res.data.message || tm('messages.operationFailed'), 'error')
+      await loadSandboxes({ silent: true })
     }
-  } finally {
-    destroying.value = false
+  } catch (e: any) {
+    toast(e?.response?.data?.message || tm('messages.operationFailed'), 'error')
+    await loadSandboxes({ silent: true })
   }
 }
 
 async function screenshotSandbox(item: SandboxRecord) {
-  const data = await postAction('/api/sandboxes/screenshot', { sandbox_id: item.sandbox_id })
+  const data = await sandboxAction('post', sandboxApiPath(item, '/screenshot'))
   if (!data) return
   const screenshot = data?.screenshot
   const legacyResult = data?.result
@@ -552,6 +1065,7 @@ async function screenshotSandbox(item: SandboxRecord) {
 async function runConsoleCommand() {
   if (consoleRunning.value || !consoleSandbox.value || !consoleCommand.value.trim()) return
   const command = consoleCommand.value.trim()
+  if (isDangerousConsoleCommand(command) && !window.confirm(tm('console.dangerConfirm', { command }))) return
   const cwd = consoleCwd.value
   const sandboxId = consoleSandbox.value.sandbox_id
   const entry: ConsoleHistoryEntry = {
@@ -564,40 +1078,50 @@ async function runConsoleCommand() {
     running: true
   }
   consoleHistory.value.push(entry)
+  consoleHistory.value = [...consoleHistory.value]
   consoleHistoryBySandbox.value[sandboxId] = consoleHistory.value
   consoleCommand.value = ''
   await scrollConsoleToBottom()
   consoleRunning.value = true
   try {
     const shellCommand = buildConsoleShellCommand(command, cwd)
-    const data = await postAction('/api/sandboxes/shell', {
-      sandbox_id: sandboxId,
+    const data = await sandboxAction('post', sandboxApiPath(sandboxId, '/shell'), {
       command: shellCommand,
       timeout: 300
     })
     if (data?.result) {
       const { stdout, nextCwd } = parseConsoleShellResult(String(data.result.stdout ?? ''), cwd)
-      entry.stdout = stdout
-      entry.stderr = String(data.result.stderr ?? '')
+      entry.stdout = normalizeTerminalOutput(stdout)
+      entry.stderr = normalizeTerminalOutput(String(data.result.stderr ?? ''))
       entry.exitCode = data.result.exit_code ?? data.result.returncode ?? '-'
       entry.running = false
+      consoleHistory.value = [...consoleHistory.value]
       consoleHistoryBySandbox.value[sandboxId] = consoleHistory.value
       consoleCwd.value = nextCwd
       consoleCwdBySandbox.value[sandboxId] = nextCwd
+      await nextTick()
       await scrollConsoleToBottom()
       focusConsoleInput()
     } else {
       entry.running = false
+      consoleHistory.value = [...consoleHistory.value]
     }
   } catch (e: any) {
     entry.stderr = e?.message || String(e)
     entry.running = false
+    consoleHistory.value = [...consoleHistory.value]
   } finally {
     entry.running = false
+    consoleHistory.value = [...consoleHistory.value]
     consoleRunning.value = false
     await nextTick()
     focusConsoleInput()
   }
+}
+
+function isDangerousConsoleCommand(command: string) {
+  const normalized = command.trim()
+  return DANGEROUS_CONSOLE_COMMAND_PATTERNS.some((pattern) => pattern.test(normalized))
 }
 
 function quoteForShell(value: string) {
@@ -605,22 +1129,74 @@ function quoteForShell(value: string) {
 }
 
 function buildConsoleShellCommand(command: string, cwd: string) {
-  const prefix = cwd && cwd !== '~' ? `cd ${quoteForShell(cwd)} && ` : ''
+  const prefix = cwd && cwd !== '~' ? `cd ${quoteForShell(cwd)}; ` : ''
   return `${prefix}{ ${command}; __astrbot_status=$?; }; printf '\n__ASTRBOT_CWD__%s\n' "$PWD"; exit $__astrbot_status`
 }
 
 function parseConsoleShellResult(stdout: string, fallbackCwd: string) {
   const marker = '\n__ASTRBOT_CWD__'
   const markerIndex = stdout.lastIndexOf(marker)
-  if (markerIndex === -1) return { stdout, nextCwd: fallbackCwd }
+  if (markerIndex === -1) return { stdout: stripConsoleCwdMarkers(stdout), nextCwd: fallbackCwd }
   const visibleStdout = stdout.slice(0, markerIndex).replace(/\n$/, '')
   const nextCwd = stdout.slice(markerIndex + marker.length).trim() || fallbackCwd
-  return { stdout: visibleStdout, nextCwd }
+  return { stdout: stripConsoleCwdMarkers(visibleStdout), nextCwd }
+}
+
+function stripConsoleCwdMarkers(stdout: string) {
+  return stdout
+    .split('\n')
+    .filter((line) => !line.includes('__ASTRBOT_CWD__'))
+    .join('\n')
+}
+
+function normalizeTerminalOutput(value: string) {
+  const withoutAnsi = value
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g, '')
+    .replace(/\r(?!\n)/g, '\n')
+  const lines = withoutAnsi.split('\n')
+  const normalized: string[] = []
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd()
+    const previous = normalized[normalized.length - 1] || ''
+    if (!line && isTransientProgressLine(previous)) continue
+    if (!line && !previous) continue
+    if (shouldReplaceProgressLine(previous, line)) {
+      normalized[normalized.length - 1] = line
+      continue
+    }
+    normalized.push(line)
+  }
+  return normalized.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()
+}
+
+function progressLineKey(value: string) {
+  return value
+    .replace(/\b\d+%\b/g, '%')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:B|kB|MB|GB)\b/gi, '#')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function shouldReplaceProgressLine(previous: string, current: string) {
+  if (!previous || !current) return false
+  if (isTransientProgressLine(previous) && isTransientProgressLine(current)) return true
+  if (!/[%.]/.test(previous) || !/[%.]/.test(current)) return false
+  return progressLineKey(previous) === progressLineKey(current)
+}
+
+function isTransientProgressLine(value: string) {
+  const line = value.trim()
+  return /^\d+%\s+\[/.test(line) || /^\S.+\.\.\.\s+\d+%$/.test(line)
 }
 
 function displayConsoleCwd(cwd: string) {
-  if (cwd === '/home/cua') return '~'
-  if (cwd.startsWith('/home/cua/')) return `~${cwd.slice('/home/cua'.length)}`
+  if (cwd === '/workspace') return '~'
+  if (cwd.startsWith('/workspace/')) return `~${cwd.slice('/workspace'.length)}`
+  const homeMatch = cwd.match(/^\/home\/[^/]+(.*)$/)
+  if (homeMatch) {
+    const suffix = homeMatch[1] || ''
+    return suffix ? `~${suffix}` : '~'
+  }
   return cwd
 }
 
@@ -640,7 +1216,17 @@ async function scrollConsoleToBottom() {
   if (body) body.scrollTop = body.scrollHeight
 }
 
-onMounted(loadSandboxes)
+onMounted(async () => {
+  await loadProviders()
+  await loadSandboxes()
+  startSandboxesAutoRefresh()
+})
+
+onUnmounted(() => {
+  stopSandboxesAutoRefresh()
+  stopCreatePolling()
+  stopDestroyPolling()
+})
 </script>
 
 <style scoped>
@@ -707,6 +1293,14 @@ onMounted(loadSandboxes)
   align-self: flex-start;
   width: fit-content;
   min-width: 0;
+}
+
+.capability-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 280px;
+  min-width: 180px;
 }
 
 .connect-info {

@@ -20,10 +20,7 @@ from enum import Enum
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
-from astrbot.core.computer.computer_client import (
-    cleanup_managed_cua_sandboxes,
-    reconcile_cua_sandboxes_on_startup,
-)
+from astrbot.core.computer import computer_client
 from astrbot.core.config.default import VERSION
 from astrbot.core.context_compaction_scheduler import (
     PeriodicContextCompactionScheduler,
@@ -75,9 +72,8 @@ class AstrBotCoreLifecycle:
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
-        self.context_compaction_scheduler: PeriodicContextCompactionScheduler | None = (
-            None
-        )
+        self._default_chat_provider_warning_emitted = False
+        self._persistent_restore_task: asyncio.Task | None = None
 
         # 设置代理
         proxy_config = self.astrbot_config.get("http_proxy", "")
@@ -531,6 +527,17 @@ class AstrBotCoreLifecycle:
         # 扫描、注册插件、实例化插件类
         await self.plugin_manager.reload()
 
+        # Reconcile sandbox registry on startup to clear stale state and
+        # remove persistent records whose underlying resources no longer exist.
+        try:
+            await computer_client.sandbox_manager.reconcile_on_startup()
+        except Exception as e:
+            logger.warning(
+                "Sandbox startup reconciliation failed: %s",
+                e,
+                exc_info=True,
+            )
+
         # 根据配置实例化各个 Provider
         await self.provider_manager.initialize(init_timeout=mcp_init_timeout)
 
@@ -563,9 +570,40 @@ class AstrBotCoreLifecycle:
 
         asyncio.create_task(update_llm_metadata())
 
-        # Mark runtime ready now that the full initialize() path has completed.
-        self._set_lifecycle_state(LifecycleState.RUNTIME_READY)
-        self.runtime_bootstrap_error = None
+    async def _restore_persistent_sandboxes_background(self) -> None:
+        try:
+            # Do not let persistent sandbox recovery compete with the main
+            # startup path.  Recovery is best-effort and should never delay the
+            # process becoming ready.
+            await asyncio.sleep(0)
+            (
+                restored,
+                deleted,
+            ) = await computer_client.sandbox_manager.restore_persistent_sandboxes(
+                self.star_context,
+                per_sandbox_timeout=30.0,
+            )
+            logger.info(
+                "Persistent sandbox restore finished: restored=%d deleted=%d",
+                restored,
+                deleted,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(
+                "Persistent sandbox restore failed: %s",
+                e,
+                exc_info=True,
+            )
+
+    def _schedule_persistent_sandbox_restore(self) -> None:
+        if self._persistent_restore_task is not None:
+            return
+        self._persistent_restore_task = asyncio.create_task(
+            self._restore_persistent_sandboxes_background(),
+            name="persistent-sandbox-restore",
+        )
 
     def _load(self) -> None:
         """加载事件总线和任务并初始化."""
@@ -643,6 +681,7 @@ class AstrBotCoreLifecycle:
         """
         self._load()
         logger.info("AstrBot started.")
+        self._schedule_persistent_sandbox_restore()
 
         # 执行启动完成事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
@@ -672,6 +711,24 @@ class AstrBotCoreLifecycle:
 
         if self.cron_manager:
             await self.cron_manager.shutdown()
+
+        persistent_restore_task = getattr(self, "_persistent_restore_task", None)
+        if persistent_restore_task is not None:
+            persistent_restore_task.cancel()
+            try:
+                await persistent_restore_task
+            except asyncio.CancelledError:
+                pass
+            self._persistent_restore_task = None
+
+        try:
+            await computer_client.cleanup_managed_sandboxes()
+        except Exception as e:
+            logger.warning(
+                "Managed sandbox cleanup during shutdown failed: %s",
+                e,
+                exc_info=True,
+            )
 
         for plugin in self.plugin_manager.context.get_all_stars():
             try:
@@ -757,7 +814,30 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
-        await cleanup_managed_cua_sandboxes()
+        for task in getattr(self, "curr_tasks", []):
+            task.cancel()
+
+        if self.cron_manager:
+            await self.cron_manager.shutdown()
+
+        persistent_restore_task = getattr(self, "_persistent_restore_task", None)
+        if persistent_restore_task is not None:
+            persistent_restore_task.cancel()
+            try:
+                await persistent_restore_task
+            except asyncio.CancelledError:
+                pass
+            self._persistent_restore_task = None
+
+        try:
+            await computer_client.cleanup_managed_sandboxes()
+        except Exception as e:
+            logger.warning(
+                "Managed sandbox cleanup during restart failed: %s",
+                e,
+                exc_info=True,
+            )
+
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()

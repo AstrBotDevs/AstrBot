@@ -1,111 +1,98 @@
+import time
+
 import pytest
 
-from astrbot.core.computer.sandbox_models import (
-    SandboxRecord,
-    SandboxRetentionPolicy,
-    SandboxStatus,
-)
+from astrbot.core.computer.sandbox_models import SandboxRecord
 
 
-def test_sandbox_record_round_trips_current_api_fields():
-    payload = {
-        "sandbox_id": "sb-1",
-        "sandbox_name": "worker",
-        "booter_type": "cua",
-        "provider": "cua",
-        "managed": True,
-        "created_by_astrbot": True,
-        "is_default": True,
-        "owner_user_id": "user-a",
-        "owner_session_id": "session-a",
-        "controller_user_id": "user-b",
-        "controller_session_id": "session-b",
-        "lease_expires_at": 110.0,
-        "last_used_at": 100.0,
-        "idle_timeout": 30,
-        "expires_at": 200.0,
-        "retention_policy": "persistent",
-        "status": "running",
-        "connect_info": {"name": "worker"},
-        "capabilities": ["create", "destroy"],
-        "labels": {"team": "qa"},
-        "notes": "hello",
-    }
+def test_sandbox_record_round_trips_generic_capabilities_sorted():
+    record = SandboxRecord.from_dict(
+        {
+            "sandbox_id": "sandbox-1",
+            "sandbox_name": "General Sandbox",
+            "provider": "generic-provider",
+            "managed": True,
+            "created_by_astrbot": True,
+            "capabilities": ["keyboard", "shell", "filesystem", "shell"],
+        }
+    )
 
-    record = SandboxRecord.from_dict(payload)
-
-    assert record.retention_policy == SandboxRetentionPolicy.PERSISTENT
-    assert record.status == SandboxStatus.RUNNING
-    assert record.to_dict() == payload
+    assert record.capabilities == ["filesystem", "keyboard", "shell", "shell"]
+    payload = record.to_dict()
+    assert payload["sandbox_id"] == "sandbox-1"
+    assert payload["retention_policy"] == "temporary"
+    assert payload["status"] == "running"
+    assert payload["capabilities"] == ["filesystem", "keyboard", "shell", "shell"]
+    assert "booter_type" not in payload
 
 
-def test_sandbox_record_defaults_match_current_registry_shape():
-    record = SandboxRecord(
-        sandbox_id="sb-1",
-        sandbox_name="worker",
-        booter_type="cua",
-        provider="cua",
-        managed=True,
-        created_by_astrbot=True,
+def test_sandbox_record_aliases_owner_fields_to_created_by_fields():
+    record = SandboxRecord.from_dict(
+        {
+            "sandbox_id": "sandbox-1",
+            "sandbox_name": "General Sandbox",
+            "provider": "generic-provider",
+            "managed": True,
+            "created_by_astrbot": True,
+            "owner_user_id": "legacy-user",
+            "owner_session_id": "legacy-session",
+        }
     )
 
     payload = record.to_dict()
 
-    assert payload["is_default"] is False
-    assert payload["owner_user_id"] is None
-    assert payload["owner_session_id"] is None
-    assert payload["controller_user_id"] is None
-    assert payload["controller_session_id"] is None
-    assert payload["lease_expires_at"] is None
-    assert payload["last_used_at"] is None
-    assert payload["idle_timeout"] is None
-    assert payload["expires_at"] is None
-    assert payload["retention_policy"] == "temporary"
-    assert payload["status"] == "running"
-    assert payload["connect_info"] == {}
-    assert payload["labels"] == {}
-    assert payload["notes"] is None
+    assert payload["created_by_user_id"] == "legacy-user"
+    assert payload["created_by_session_id"] == "legacy-session"
+    assert payload["owner_user_id"] == "legacy-user"
+    assert payload["owner_session_id"] == "legacy-session"
 
 
-def test_sandbox_record_detects_active_control_lease():
+def test_sandbox_record_validates_required_strings():
+    with pytest.raises(ValueError, match="sandbox_id"):
+        SandboxRecord.from_dict(
+            {
+                "sandbox_id": "",
+                "sandbox_name": "General Sandbox",
+                "provider": "generic-provider",
+                "managed": True,
+                "created_by_astrbot": True,
+            }
+        )
+
+
+def test_sandbox_record_reports_active_control_lease():
+    now = time.time()
     record = SandboxRecord.from_dict(
         {
-            "sandbox_id": "sb-1",
-            "sandbox_name": "worker",
-            "booter_type": "cua",
-            "provider": "cua",
+            "sandbox_id": "sandbox-1",
+            "sandbox_name": "General Sandbox",
+            "provider": "generic-provider",
             "managed": True,
             "created_by_astrbot": True,
             "controller_session_id": "session-a",
-            "lease_expires_at": 200.0,
+            "lease_expires_at": now + 60,
         }
     )
 
-    assert record.is_controlled_by("session-a", now=100.0) is True
-    assert record.is_controlled_by("session-b", now=100.0) is False
-    assert record.has_active_lease(now=201.0) is False
+    assert record.has_active_lease(now=now)
+    assert record.is_controlled_by("session-a", now=now)
+    assert not record.is_controlled_by("session-b", now=now)
+    assert not record.has_active_lease(now=now + 120)
 
 
-@pytest.mark.parametrize(
-    "field,value",
-    [
-        ("sandbox_id", None),
-        ("sandbox_id", ""),
-        ("sandbox_name", "   "),
-        ("booter_type", None),
-        ("provider", ""),
-    ],
-)
-def test_sandbox_record_rejects_empty_required_string_fields(field, value):
-    payload = {
-        "sandbox_id": "sb-1",
-        "sandbox_name": "worker",
-        "booter_type": "cua",
-        "provider": "cua",
-        "managed": True,
-        "created_by_astrbot": True,
-    }
-    payload[field] = value
+def test_sandbox_record_migrates_legacy_booter_type_to_provider():
+    record = SandboxRecord.from_dict(
+        {
+            "sandbox_id": "sandbox-1",
+            "sandbox_name": "General Sandbox",
+            "booter_type": "legacy-provider",
+            "managed": True,
+            "created_by_astrbot": True,
+        }
+    )
 
-    with pytest.raises(ValueError, match=field):
-        SandboxRecord.from_dict(payload)
+    payload = record.to_dict()
+
+    assert record.provider == "legacy-provider"
+    assert payload["provider"] == "legacy-provider"
+    assert "booter_type" not in payload

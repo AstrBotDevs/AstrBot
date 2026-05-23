@@ -184,75 +184,41 @@
         },
         "sandbox": {
           "booter": {
-            "description": "Sandbox Environment Driver"
+            "description": "Default Sandbox Driver"
           },
-          "bwrap_rw_binds": {
-            "description": "Bubblewrap Read & Write Binds",
-            "hint": "Additional read-write mount directories for the Bubblewrap sandbox (press Enter to add, multiple can be added. /tmp and /var/tmp are read-write by default)."
+          "sandbox_lease_timeout": {
+            "description": "Sandbox lease timeout",
+            "hint": "Seconds. The lease period after an agent takes control of a sandbox, default 600 seconds. Renew it to extend control. `0` means the lease never expires and must be released manually."
           },
-          "bwrap_ro_binds": {
-            "description": "Bubblewrap Read Only Binds",
-            "hint": "Additional read-only mount directories for the Bubblewrap sandbox (press Enter to add, multiple can be added. Host system directories /usr, /etc, /opt are mounted read-only at the same location by default)."
+          "sandbox_idle_timeout": {
+            "description": "Sandbox idle cleanup timeout",
+            "hint": "Seconds. Starts counting after the sandbox is released. If it stays unclaimed longer than this, it is cleaned up automatically, default 1800 seconds. `0` disables idle cleanup."
           },
-          "shipyard_neo_endpoint": {
-            "description": "Shipyard Neo API Endpoint",
-            "hint": "Bay API address, default http://127.0.0.1:8114."
+          "sandbox_ttl": {
+            "description": "Sandbox lifetime",
+            "hint": "Seconds. Only active when idle cleanup is `0`. Counts from creation time and forces cleanup when it expires. `0` disables automatic expiration."
           },
-          "shipyard_neo_access_token": {
-            "description": "Shipyard Neo Access Token",
-            "hint": "Bay API Key (sk-bay-...). Leave empty for auto-discovery from credentials.json."
+          "max_sandboxes": {
+            "description": "Maximum sandboxes",
+            "hint": "Global managed sandbox limit, default 10. `0` means unlimited."
           },
-          "shipyard_neo_profile": {
-            "description": "Shipyard Neo Profile",
-            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default. Leave empty to auto-select the most capable profile."
-          },
-          "shipyard_neo_ttl": {
-            "description": "Shipyard Neo Sandbox TTL",
-            "hint": "Sandbox time-to-live in seconds."
-          },
-          "cua_image": {
-            "description": "CUA Image",
-            "hint": "CUA sandbox image or OS type. Defaults to linux. Supported values depend on the installed CUA SDK."
-          },
-          "cua_os_type": {
-            "description": "CUA OS Type",
-            "hint": "CUA sandbox operating system type. Defaults to linux."
-          },
-          "cua_idle_timeout": {
-            "description": "CUA Idle Timeout",
-            "hint": "Idle timeout for CUA sandbox sessions in seconds. When greater than 0, AstrBot proactively shuts down an idle CUA sandbox after that amount of inactivity; 0 disables it."
-          },
-          "cua_telemetry_enabled": {
-            "description": "CUA Telemetry",
-            "hint": "Allow the CUA SDK to send telemetry data. Disabled by default."
-          },
-          "cua_local": {
-            "description": "CUA Local Sandbox",
-            "hint": "Prefer a local CUA sandbox. Enabled by default to avoid requiring CUA_API_KEY for cloud sandboxes. Disable this to use CUA cloud sandboxes."
-          },
-          "cua_api_key": {
-            "description": "CUA API Key",
-            "hint": "CUA cloud sandbox API key. Required only when local sandbox is disabled. You can also provide it via the CUA_API_KEY environment variable."
-          },
-          "shipyard_endpoint": {
-            "description": "Shipyard API Endpoint",
-            "hint": "API access address for Shipyard service."
-          },
-          "shipyard_access_token": {
-            "description": "Shipyard Access Token",
-            "hint": "Access token for accessing Shipyard service."
-          },
-          "shipyard_ttl": {
-            "description": "Shipyard Session TTL",
-            "hint": "Session time-to-live in seconds."
-          },
-          "shipyard_max_sessions": {
-            "description": "Shipyard Max Sessions",
-            "hint": "Maximum number of Shipyard sessions an instance can handle."
-          },
-          "bwrap_rw_binds": {
-            "description": "Bubblewrap RW Binds",
-            "hint": "Extra read-write mount directories for Bubblewrap sandbox (press Enter to add, multiple allowed. /tmp and /var/tmp are RW by default, and the entire host system is mounted RO in the same location by default)."
+          "member_permissions": {
+            "create": {
+              "description": "Allow members to create sandboxes",
+              "hint": "Lets non-admin users create new managed sandboxes. Creation still respects the maximum sandbox limit."
+            },
+            "set_retention_policy": {
+              "description": "Allow members to change sandbox retention",
+              "hint": "Lets non-admin users switch sandboxes between temporary and persistent retention. Persistent sandboxes keep their environment for later reuse."
+            },
+            "takeover": {
+              "description": "Allow members to take over sandboxes",
+              "hint": "Lets non-admin users force takeover sandboxes occupied by other sessions. This transfers control of the sandbox, so enable it carefully."
+            },
+            "destroy": {
+              "description": "Allow members to delete sandboxes",
+              "hint": "Lets non-admin users delete managed sandboxes they can access. Deletion removes both the sandbox environment and its managed record."
+            }
           }
         }
       }
