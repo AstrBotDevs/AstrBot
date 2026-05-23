@@ -1,11 +1,11 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
-from typing import Any
 
+from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.30.0-dev"
+VERSION = "4.25.1"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD = 3
 PERSONAL_WECHAT_CONFIG_METADATA = {
@@ -120,8 +120,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "websearch_bocha_key": [],
         "websearch_baidu_app_builder_key": "",
         "websearch_firecrawl_key": [],
-        "websearch_exa_key": [],
-        "websearch_exa_base_url": "https://api.exa.ai",
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -184,17 +182,21 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "computer_use_runtime": "none",
         "computer_use_require_admin": True,
         "sandbox": {
-            "booter": "",
-            "sandbox_lease_timeout": 600,
-            "sandbox_idle_timeout": 1800,
-            "sandbox_ttl": 3600,
-            "max_sandboxes": 10,
-            "member_permissions": {
-                "create": False,
-                "set_retention_policy": False,
-                "takeover": False,
-                "destroy": False,
-            },
+            "booter": "shipyard_neo",
+            "shipyard_endpoint": "",
+            "shipyard_access_token": "",
+            "shipyard_ttl": 3600,
+            "shipyard_max_sessions": 10,
+            "shipyard_neo_endpoint": "",
+            "shipyard_neo_access_token": "",
+            "shipyard_neo_profile": "python-default",
+            "shipyard_neo_ttl": 3600,
+            "cua_image": CUA_DEFAULT_CONFIG["image"],
+            "cua_os_type": CUA_DEFAULT_CONFIG["os_type"],
+            "cua_idle_timeout": CUA_DEFAULT_CONFIG["idle_timeout"],
+            "cua_telemetry_enabled": CUA_DEFAULT_CONFIG["telemetry_enabled"],
+            "cua_local": CUA_DEFAULT_CONFIG["local"],
+            "cua_api_key": CUA_DEFAULT_CONFIG["api_key"],
         },
         "image_compress_enabled": True,
         "image_compress_options": {
@@ -384,7 +386,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
     "kb_agentic_mode": False,
     "disable_builtin_commands": False,
-    "github_api_token": "",
+    "disable_metrics": False,
 }
 
 
@@ -1389,31 +1391,6 @@ CONFIG_METADATA_2: Any = {
                         "custom_headers": {"User-Agent": "claude-code/0.1.0"},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
-                    "Xiaomi": {
-                        "id": "xiaomi",
-                        "provider": "xiaomi",
-                        "type": "xiaomi_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": [],
-                        "api_base": "https://api.xiaomimimo.com/v1",
-                        "timeout": 120,
-                        "proxy": "",
-                        "custom_headers": {},
-                    },
-                    "Xiaomi Token Plan": {
-                        "id": "xiaomi-token-plan",
-                        "provider": "xiaomi-token-plan",
-                        "type": "xiaomi_token_plan",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": [],
-                        "api_base": "https://token-plan-cn.xiaomimimo.com/anthropic",
-                        "timeout": 120,
-                        "proxy": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
-                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
-                    },
                     "xAI": {
                         "id": "xai",
                         "provider": "xai",
@@ -2117,6 +2094,20 @@ CONFIG_METADATA_2: Any = {
                         "timeout": 60,
                         "proxy": "",
                     },
+                    "vLLM Embedding": {
+                        "id": "vllm_embedding",
+                        "type": "vllm_embedding",
+                        "provider": "vllm",
+                        "provider_type": "embedding",
+                        "hint": "面向 vLLM OpenAI-compatible Embedding 接口。请求时会自动跳过 dimensions，并尝试将模型名对齐到 served-model-name。",
+                        "enable": False,
+                        "embedding_api_key": "",
+                        "embedding_api_base": "",
+                        "embedding_model": "",
+                        "embedding_dimensions": 0,
+                        "timeout": 20,
+                        "proxy": "",
+                    },
                     "vLLM Rerank": {
                         "id": "vllm_rerank",
                         "type": "vllm_rerank",
@@ -2356,41 +2347,6 @@ CONFIG_METADATA_2: Any = {
                         "type": "dict",
                         "items": {},
                         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。",
-                    },
-                    "auth_mode": {
-                        "description": "认证方式",
-                        "type": "string",
-                        "invisible": True,
-                    },
-                    "oauth_provider": {
-                        "description": "OAuth 提供方",
-                        "type": "string",
-                        "invisible": True,
-                    },
-                    "oauth_access_token": {
-                        "description": "OAuth Access Token",
-                        "type": "string",
-                        "invisible": True,
-                    },
-                    "oauth_refresh_token": {
-                        "description": "OAuth Refresh Token",
-                        "type": "string",
-                        "invisible": True,
-                    },
-                    "oauth_expires_at": {
-                        "description": "OAuth 过期时间",
-                        "type": "string",
-                        "invisible": True,
-                    },
-                    "oauth_account_email": {
-                        "description": "OAuth 账号邮箱",
-                        "type": "string",
-                        "invisible": True,
-                    },
-                    "oauth_account_id": {
-                        "description": "OAuth 账号 ID",
-                        "type": "string",
-                        "invisible": True,
                     },
                     "ollama_disable_thinking": {
                         "description": "关闭思考模式",
@@ -3768,7 +3724,6 @@ CONFIG_METADATA_3 = {
                             "baidu_ai_search",
                             "bocha",
                             "brave",
-                            "exa",
                             "firecrawl",
                         ],
                         "condition": {
@@ -3824,34 +3779,6 @@ CONFIG_METADATA_3 = {
                             "provider_settings.web_search": True,
                         },
                     },
-                    "provider_settings.websearch_tavily_base_url": {
-                        "description": "Tavily API Base URL",
-                        "type": "string",
-                        "hint": "默认为 https://api.tavily.com，可改为代理地址。",
-                        "condition": {
-                            "provider_settings.websearch_provider": "tavily",
-                            "provider_settings.web_search": True,
-                        },
-                    },
-                    "provider_settings.websearch_exa_key": {
-                        "description": "Exa API Key",
-                        "type": "list",
-                        "items": {"type": "string"},
-                        "hint": "可添加多个 Key 进行轮询。",
-                        "condition": {
-                            "provider_settings.websearch_provider": "exa",
-                            "provider_settings.web_search": True,
-                        },
-                    },
-                    "provider_settings.websearch_exa_base_url": {
-                        "description": "Exa API Base URL",
-                        "type": "string",
-                        "hint": "默认为 https://api.exa.ai，可改为代理地址。",
-                        "condition": {
-                            "provider_settings.websearch_provider": "exa",
-                            "provider_settings.web_search": True,
-                        },
-                    },
                     "provider_settings.web_search_link": {
                         "description": "显示来源引用",
                         "type": "bool",
@@ -3885,22 +3812,126 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱驱动",
                         "type": "string",
-                        "options": [],
-                        "labels": [],
+                        "options": ["shipyard_neo", "shipyard", "cua"],
+                        "labels": ["Shipyard Neo", "Shipyard", "CUA"],
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                         },
                     },
-                    "provider_settings.sandbox.sandbox_lease_timeout": {
-                        "description": "沙箱占用超时",
+                    "provider_settings.sandbox.shipyard_neo_endpoint": {
+                        "description": "Shipyard Neo API Endpoint",
+                        "type": "string",
+                        "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_access_token": {
+                        "description": "Shipyard Neo Access Token",
+                        "type": "string",
+                        "hint": "Bay 的 API Key（sk-bay-...）。留空时自动从 credentials.json 发现。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_profile": {
+                        "description": "Shipyard Neo Profile",
+                        "type": "string",
+                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。留空时自动选择能力更完整的 profile。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_ttl": {
+                        "description": "Shipyard Neo Sandbox TTL",
                         "type": "int",
                         "hint": "单位为秒。Agent 占用沙盒后的租期，默认 600 秒；到期后需要重新占用或续租。`0` 表示占用不会过期，需手动释放。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                         },
                     },
-                    "provider_settings.sandbox.sandbox_idle_timeout": {
-                        "description": "沙箱空闲回收时间",
+                    "provider_settings.sandbox.cua_image": {
+                        "description": "CUA Image",
+                        "type": "string",
+                        "hint": "CUA 沙箱镜像/系统类型，默认 linux。可填写 linux、macos、windows、android，具体取决于 CUA SDK 支持。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_os_type": {
+                        "description": "CUA OS Type",
+                        "type": "string",
+                        "options": ["linux", "macos", "windows", "android"],
+                        "labels": ["Linux", "macOS", "Windows", "Android"],
+                        "hint": "CUA 沙箱操作系统类型，默认 linux。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_idle_timeout": {
+                        "description": "CUA Idle Timeout",
+                        "type": "int",
+                        "hint": "Idle timeout for CUA sandbox sessions in seconds. When greater than 0, AstrBot proactively shuts down an idle CUA sandbox after that amount of inactivity; 0 disables it.",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_telemetry_enabled": {
+                        "description": "CUA Telemetry",
+                        "type": "bool",
+                        "hint": "是否允许 CUA SDK 发送遥测数据。默认关闭。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_local": {
+                        "description": "CUA Local Sandbox",
+                        "type": "bool",
+                        "hint": "是否优先使用 CUA 本地沙箱。默认开启，避免云端沙箱要求 CUA_API_KEY。关闭后可使用 CUA 云端沙箱。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_api_key": {
+                        "description": "CUA API Key",
+                        "type": "string",
+                        "hint": "CUA 云端沙箱 API Key。仅在关闭本地沙箱时需要。也可以通过 CUA_API_KEY 环境变量提供。",
+                        "obvious_hint": True,
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                            "provider_settings.sandbox.cua_local": False,
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_endpoint": {
+                        "description": "Shipyard API Endpoint",
+                        "type": "string",
+                        "hint": "Shipyard 服务的 API 访问地址。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                        "_special": "check_shipyard_connection",
+                    },
+                    "provider_settings.sandbox.shipyard_access_token": {
+                        "description": "Shipyard Access Token",
+                        "type": "string",
+                        "hint": "用于访问 Shipyard 服务的访问令牌。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_ttl": {
+                        "description": "Shipyard Session TTL",
                         "type": "int",
                         "hint": "单位为秒。`0` 表示不启用空闲回收，此时才会启用沙箱存活时间。",
                         "condition": {
@@ -4070,139 +4101,11 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.context_token_counter_mode": {
-                        "description": "Token 计数模式",
-                        "type": "string",
-                        "options": ["estimate", "tokenizer", "auto"],
-                        "labels": ["估算", "Tokenizer", "自动（优先 Tokenizer）"],
-                        "hint": "用于上下文压缩触发判断。tokenizer 模式会优先使用 tiktoken，不可用时回退估算。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.compact_context_after_tool_call": {
-                        "description": "工具调用后立即检查压缩",
-                        "type": "bool",
-                        "hint": "开启后，每次工具执行回写上下文后都会立刻触发一次上下文压缩检查。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.compact_context_soft_ratio": {
-                        "description": "工具后压缩软阈值",
-                        "type": "float",
-                        "hint": "当上下文占比达到该阈值时，按“最小增长量”规则决定是否压缩。支持填写 0~1 或 0~100（百分比）。",
-                        "condition": {
-                            "provider_settings.compact_context_after_tool_call": True,
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.compact_context_hard_ratio": {
-                        "description": "工具后压缩硬阈值",
-                        "type": "float",
-                        "hint": "当上下文占比达到该阈值时，强制执行一次压缩。支持填写 0~1 或 0~100（百分比）。",
-                        "condition": {
-                            "provider_settings.compact_context_after_tool_call": True,
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.compact_context_min_delta_tokens": {
-                        "description": "工具后最小 Token 增长",
+                    "provider_settings.fallback_max_context_tokens": {
+                        "description": "上下文窗口兜底值",
                         "type": "int",
-                        "hint": "在软阈值区间内，Token 增长低于该值时不触发压缩。0 表示不限制。",
+                        "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。",
                         "condition": {
-                            "provider_settings.compact_context_after_tool_call": True,
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.compact_context_min_delta_turns": {
-                        "description": "工具后最小消息增长",
-                        "type": "int",
-                        "hint": "在软阈值区间内，消息增长低于该值时不触发压缩。0 表示不限制。",
-                        "condition": {
-                            "provider_settings.compact_context_after_tool_call": True,
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.compact_context_debounce_seconds": {
-                        "description": "工具后压缩防抖（秒）",
-                        "type": "int",
-                        "hint": "两次工具后压缩检查的最小间隔秒数。0 表示关闭防抖。",
-                        "condition": {
-                            "provider_settings.compact_context_after_tool_call": True,
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    **_build_periodic_context_compaction_dashboard_items(),
-                    "provider_settings.context_memory.enabled": {
-                        "description": "启用上下文记忆注入",
-                        "type": "bool",
-                        "hint": "启用后可将手动维护的顶层记忆注入到 system prompt，并预留向量记忆检索接口。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.context_memory.inject_pinned_memory": {
-                        "description": "注入手动顶层记忆",
-                        "type": "bool",
-                        "hint": "将 `pinned_memories` 作为高优先级记忆注入系统提示词。",
-                        "condition": {
-                            "provider_settings.context_memory.enabled": True,
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.context_memory.pinned_max_items": {
-                        "description": "顶层记忆最大条数",
-                        "type": "int",
-                        "hint": "通过管理命令添加手动顶层记忆时允许保留的最大条目数。",
-                        "condition": {
-                            "provider_settings.context_memory.enabled": True,
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.context_memory.pinned_max_chars_per_item": {
-                        "description": "单条顶层记忆最大字符数",
-                        "type": "int",
-                        "hint": "超出长度的条目会被截断，避免 system prompt 膨胀。",
-                        "condition": {
-                            "provider_settings.context_memory.enabled": True,
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.context_memory.retrieval_enabled": {
-                        "description": "启用检索增强（开发中）",
-                        "type": "bool",
-                        "hint": "预留开关，默认关闭；向量检索增强建议在后续 PR 中实现。",
-                        "condition": {
-                            "provider_settings.context_memory.enabled": True,
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.context_memory.retrieval_backend": {
-                        "description": "检索后端标识（预留）",
-                        "type": "string",
-                        "hint": "例如 zep/mem0/custom，当前版本仅用于配置预留。",
-                        "condition": {
-                            "provider_settings.context_memory.retrieval_enabled": True,
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.context_memory.retrieval_provider_id": {
-                        "description": "检索重排模型提供商 ID（预留）",
-                        "type": "string",
-                        "_special": "select_provider",
-                        "hint": "当前版本仅保留配置，不会触发额外检索调用。",
-                        "condition": {
-                            "provider_settings.context_memory.retrieval_enabled": True,
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.context_memory.retrieval_top_k": {
-                        "description": "检索 Top-K（预留）",
-                        "type": "int",
-                        "hint": "后续检索增强功能默认使用的召回条数。",
-                        "condition": {
-                            "provider_settings.context_memory.retrieval_enabled": True,
                             "provider_settings.agent_runner_type": "local",
                         },
                     },

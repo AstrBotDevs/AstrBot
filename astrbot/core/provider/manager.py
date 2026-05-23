@@ -518,6 +518,10 @@ class ProviderManager:
                 from .sources.ollama_embedding_source import (
                     OllamaEmbeddingProvider as OllamaEmbeddingProvider,
                 )
+            case "vllm_embedding":
+                from .sources.vllm_embedding_source import (
+                    VLLMEmbeddingProvider as VLLMEmbeddingProvider,
+                )
             case "vllm_rerank":
                 from .sources.vllm_rerank_source import (
                     VLLMRerankProvider as VLLMRerankProvider,

@@ -105,10 +105,24 @@ function saveEditedContent() {
   dialog.value = false;
 }
 
-async function getEmbeddingDimensions(providerConfig) {
-  if (loadingEmbeddingDim.value) return;
+function getNumericEmbeddingDimension(value) {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+    return value
+  }
 
-  loadingEmbeddingDim.value = true;
+  if (typeof value === 'string') {
+    const trimmedValue = value.trim()
+    if (/^\d+$/.test(trimmedValue)) {
+      return Number(trimmedValue)
+    }
+  }
+
+  return null
+}
+
+async function getEmbeddingDimensions(providerConfig) {
+  if (loadingEmbeddingDim.value) return
+  loadingEmbeddingDim.value = true
   try {
     const response = await axios.post(
       "/api/config/provider/get_embedding_dim",
@@ -145,10 +159,18 @@ async function getEmbeddingModels(providerConfig) {
     const response = await axios.post('/api/config/provider/get_embedding_models', {
       provider_config: providerConfig
     })
+    if (response.data.status != "error" && response.data.data?.embedding_dimensions) {
+      const detectedDimension = response.data.data.embedding_dimensions
+      const numericDimension = getNumericEmbeddingDimension(detectedDimension)
 
-    if (response.data.status !== 'error' && Array.isArray(response.data.data?.models)) {
-      availableEmbeddingModels.value = response.data.data.models
-      useToast().success(`Fetched: ${response.data.data.models.length}`)
+      console.log(detectedDimension)
+
+      if (numericDimension !== null) {
+        providerConfig.embedding_dimensions = numericDimension
+        useToast().success("获取成功: " + numericDimension)
+      } else {
+        useToast().info(`检测到维度: ${detectedDimension}。如需保存，请手动填入后点保存。`)
+      }
     } else {
       useToast().error(response.data.message)
     }
