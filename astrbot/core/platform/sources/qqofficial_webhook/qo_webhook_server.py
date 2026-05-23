@@ -7,6 +7,7 @@ from botpy import BotAPI, BotHttp, BotWebSocket, Client, ConnectionSession, Toke
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from astrbot.api import logger
+from astrbot.core.platform.platform import Platform
 
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
@@ -18,6 +19,7 @@ class QQOfficialWebhook:
         config: dict,
         event_queue: asyncio.Queue,
         botpy_client: Client,
+        platform: Platform,
     ) -> None:
         self.appid = config["appid"]
         self.secret = config["secret"]
@@ -37,6 +39,7 @@ class QQOfficialWebhook:
         )
         self.client = botpy_client
         self.event_queue = event_queue
+        self.platform = platform
         self.shutdown_event = asyncio.Event()
         self._seen_event_ids: dict[str, float] = {}
         self._dedup_ttl: int = 60
@@ -102,8 +105,19 @@ class QQOfficialWebhook:
         event = msg.get("t")
         opcode = msg.get("op")
         data = msg.get("d")
+
+        context = {
+            "opcode": opcode,
+            "event_type": event,
+            "is_validation": opcode == 13,
+            "request_path": getattr(request, "path", ""),
+            "request_method": getattr(request, "method", ""),
+        }
+        stopped = await self.platform.emit_raw_platform_event(msg, meta=context)
+
         if opcode == 13:
-            signed = await self.webhook_validation(data)
+            # validation
+            signed = await self.webhook_validation(cast(dict, data))
             return signed
         event_id = msg.get("id")
         if event_id:
@@ -119,7 +133,8 @@ class QQOfficialWebhook:
                 logger.debug(f"Duplicate webhook event {event_id!r}, skipping.")
                 return {"opcode": 12}
             self._seen_event_ids[event_id] = now
-        if event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
+
+        if not stopped and event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
             event = msg["t"].lower()
             # Extract extra fields from raw payload before botpy parses and discards them
             if data:

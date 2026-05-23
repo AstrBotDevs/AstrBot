@@ -10,6 +10,7 @@ from .astrbot_message import (
 )
 from .platform import Platform
 from .platform_metadata import PlatformMetadata
+from .raw_platform_event import RawPlatformEvent
 
 __all__ = [
     "ADMIN_MESSAGE_MEMBER_ROLES",
@@ -20,6 +21,5 @@ __all__ = [
     "MessageType",
     "Platform",
     "PlatformMetadata",
-    "VALID_MESSAGE_MEMBER_ROLES",
-    "normalize_message_member_role",
+    "RawPlatformEvent",
 ]

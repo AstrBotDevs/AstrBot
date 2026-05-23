@@ -140,6 +140,14 @@ class StarHandlerRegistry(Generic[T]):
     @overload
     def get_handlers_by_event_type(
         self,
+        event_type: Literal[EventType.OnRawPlatformEvent],
+        only_activated=True,
+        plugins_name: list[str] | None = None,
+    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
+
+    @overload
+    def get_handlers_by_event_type(
+        self,
         event_type: EventType,
         only_activated=True,
         plugins_name: list[str] | None = None,
@@ -237,8 +245,9 @@ class EventType(enum.Enum):
     OnLLMToolRespondEvent = enum.auto()  # 调用函数工具后
     OnAfterMessageSentEvent = enum.auto()  # 发送消息后
     OnPluginErrorEvent = enum.auto()  # 插件处理消息异常时
-    OnBeforeContextCompressionEvent = enum.auto()  # 上下文压缩前事件
-    OnAfterContextCompressionEvent = enum.auto()  # 上下文压缩后事件
+    OnPluginLoadedEvent = enum.auto()  # 插件加载完成
+    OnPluginUnloadedEvent = enum.auto()  # 插件卸载完成
+    OnRawPlatformEvent = enum.auto()  # 收到平台原始事件
 
 
 H = TypeVar("H", bound=Callable[..., Any])

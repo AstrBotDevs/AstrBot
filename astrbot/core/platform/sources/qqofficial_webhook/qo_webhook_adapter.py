@@ -155,6 +155,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             self.config,
             self._event_queue,
             self.client,
+            self,
         )
         await self.webhook_helper.initialize()
         webhook_uuid = self.config.get("webhook_uuid")
