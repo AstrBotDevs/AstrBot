@@ -29,74 +29,28 @@ const commonStore = useCommonStore();
 const theme = useTheme();
 const { t } = useI18n();
 const route = useRoute();
-const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
-const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
-const dialog = ref(false);
-const accountWarning = ref(false);
-const accountWarningLegacy = ref(false);
-const accountWarningUpgrade = ref(false);
-const updateStatusDialog = ref(false);
-const aboutDialog = ref(false);
-const username = localStorage.getItem("user");
-const password = ref("");
-const newPassword = ref("");
-const confirmPassword = ref("");
-const newUsername = ref("");
-const status = ref("");
-const updateStatus = ref("");
-const releaseMessage = ref("");
-const hasNewVersion = ref(false);
-const botCurrVersion = ref("");
-const dashboardHasNewVersion = ref(false);
-const dashboardCurrentVersion = ref("");
-const releases = ref([]);
-const releasesLoading = ref(false);
-const updatingDashboardLoading = ref(false);
-const installLoading = ref(false);
-const showAdvancedUpdateSettings = ref(false);
-const restartWaiting = ref(false);
-const restartStartTime = ref<number | string | null>(null);
-let restartPollTimer: ReturnType<typeof setInterval> | null = null;
-type DownloadStageStatus = "pending" | "running" | "done" | "error";
-type DownloadStage = {
-  status: DownloadStageStatus;
-  downloaded: number;
-  total: number;
-  percent: number;
-  speed: number;
-};
-type UpdateProgress = {
-  id: string;
-  status: "idle" | "running" | "success" | "error";
-  stage: string;
-  version: string;
-  message: string;
-  overall_percent: number;
-  stages: Record<string, DownloadStage>;
-};
-const createEmptyDownloadStage = (
-  status: DownloadStageStatus = "pending",
-): DownloadStage => ({
-  status,
-  downloaded: 0,
-  total: 0,
-  percent: 0,
-  speed: 0,
-});
-const createEmptyUpdateProgress = (): UpdateProgress => ({
-  id: "",
-  status: "idle",
-  stage: "preparing",
-  version: "",
-  message: "",
-  overall_percent: 0,
-  stages: {
-    dashboard: createEmptyDownloadStage(),
-    core: createEmptyDownloadStage(),
-  },
-});
-const updateProgress = ref<UpdateProgress>(createEmptyUpdateProgress());
-let updateProgressTimer: ReturnType<typeof setInterval> | null = null;
+const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
+let dialog = ref(false);
+let accountWarning = ref(false)
+let updateStatusDialog = ref(false);
+let aboutDialog = ref(false);
+const username = localStorage.getItem('user');
+let password = ref('');
+let newPassword = ref('');
+let confirmPassword = ref('');
+let newUsername = ref('');
+let status = ref('');
+let updateStatus = ref('')
+let releaseMessage = ref('');
+let hasNewVersion = ref(false);
+let botCurrVersion = ref('');
+let dashboardHasNewVersion = ref(false);
+let dashboardCurrentVersion = ref('');
+let version = ref('');
+let releases = ref([]);
+let updatingDashboardLoading = ref(false);
+let installLoading = ref(false);
+let commitHashInput = ref('');
 const isDesktopReleaseMode = ref(
   typeof window !== "undefined" && !!window.astrbotDesktop?.isDesktop,
 );
@@ -146,47 +100,13 @@ const releasesHeader = computed(() => [
   { title: t("core.header.updateDialog.table.content"), key: "body" },
   { title: t("core.header.updateDialog.table.actions"), key: "switch" },
 ]);
-const firstReleasePageItems = computed(() => releases.value.slice(0, 6));
-const firstReleasePageHasPreRelease = computed(() =>
-  firstReleasePageItems.value.some((item: any) => isPreRelease(item.tag_name)),
-);
-const updateStageItems = computed(() => [
-  {
-    key: "dashboard",
-    title: t("core.header.updateDialog.progress.dashboard"),
-    progress:
-      updateProgress.value.stages.dashboard || createEmptyDownloadStage(),
-  },
-  {
-    key: "core",
-    title: t("core.header.updateDialog.progress.core"),
-    progress: updateProgress.value.stages.core || createEmptyDownloadStage(),
-  },
+
+const commitHashRegex = /^[0-9a-f]{40}$/i;
+const isCommitHashValid = computed(() => commitHashRegex.test(commitHashInput.value));
+
+const commitHashRules = computed(() => [
+  (v: string) => !v || commitHashRegex.test(v) || t('core.header.updateDialog.commitHash.invalidFormat')
 ]);
-const updateProgressMessage = computed(() => {
-  if (updateProgress.value.status === "error") {
-    return (
-      updateProgress.value.message ||
-      t("core.header.updateDialog.progress.failed")
-    );
-  }
-  if (updateProgress.value.status === "success") {
-    return (
-      updateProgress.value.message ||
-      t("core.header.updateDialog.progress.completed")
-    );
-  }
-  if (updateProgress.value.stage === "dependencies") {
-    return t("core.header.updateDialog.progress.dependencies");
-  }
-  if (updateProgress.value.stage === "restart") {
-    return t("core.header.updateDialog.progress.restart");
-  }
-  return (
-    updateProgress.value.message ||
-    t("core.header.updateDialog.progress.preparing")
-  );
-});
 // Form validation
 const formValid = ref(true);
 const accountFormRef = ref<VForm | null>(null);
@@ -1406,26 +1326,40 @@ onMounted(async () => {
               </v-data-table>
             </div>
 
-            <div v-if="!installLoading" class="advanced-update-settings mt-5">
-              <button
-                class="advanced-settings-toggle"
-                type="button"
-                @click="
-                  showAdvancedUpdateSettings = !showAdvancedUpdateSettings
-                "
-              >
-                <span>{{
-                  t("core.header.updateDialog.advancedSettings")
-                }}</span>
-                <v-icon
-                  :icon="
-                    showAdvancedUpdateSettings
-                      ? 'mdi-chevron-down'
-                      : 'mdi-chevron-right'
-                  "
-                  size="20"
-                ></v-icon>
-              </button>
+            <v-divider class="mt-4 mb-4"></v-divider>
+            <div class="my-4">
+              <h3 class="mb-2">{{ t('core.header.updateDialog.commitHash.title') }}</h3>
+              <small class="mb-3 d-block">{{ t('core.header.updateDialog.commitHash.description') }}</small>
+              <div class="d-flex align-center ga-3">
+                <v-text-field
+                  v-model.trim="commitHashInput"
+                  :label="t('core.header.updateDialog.commitHash.label')"
+                  :rules="commitHashRules"
+                  density="compact"
+                  variant="outlined"
+                  hide-details="auto"
+                  maxlength="40"
+                  class="commit-hash-input"
+                />
+                <v-btn
+                  color="primary"
+                  class="commit-hash-btn"
+                  :disabled="!isCommitHashValid"
+                  :loading="installLoading"
+                  @click="switchVersion(commitHashInput)"
+                >
+                  {{ t('core.header.updateDialog.commitHash.install') }}
+                </v-btn>
+              </div>
+            </div>
+
+            <v-divider class="mt-4 mb-4"></v-divider>
+            <div style="margin-top: 16px;">
+              <h3 class="mb-4">{{ t('core.header.updateDialog.dashboardUpdate.title') }}</h3>
+              <div class="mb-4">
+                <small>{{ t('core.header.updateDialog.dashboardUpdate.currentVersion') }} {{ dashboardCurrentVersion
+                  }}</small>
+                <br>
 
               <div
                 v-if="showAdvancedUpdateSettings"
@@ -2014,5 +1948,14 @@ onMounted(async () => {
     align-items: stretch;
     flex-direction: column;
   }
+}
+
+.commit-hash-input {
+  max-width: 420px;
+  font-family: monospace;
+}
+
+.commit-hash-btn {
+  border-radius: 10px;
 }
 </style>

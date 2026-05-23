@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 248 icons */
+/* Auto-generated MDI subset – 232 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -860,20 +860,8 @@
   content: "\F0A66";
 }
 
-.mdi-puzzle-plus-outline::before {
-  content: "\F14D6";
-}
-
 .mdi-qrcode::before {
   content: "\F0432";
-}
-
-.mdi-radiobox-blank::before {
-  content: "\F043D";
-}
-
-.mdi-radiobox-marked::before {
-  content: "\F043E";
 }
 
 .mdi-refresh::before {
