@@ -975,76 +975,33 @@ class FunctionToolManager:
             logger.error(f"保存 MCP 配置失败: {e}")
             return False
 
-    async def _enable_mcp_servers_with_concurrency_limit(
-        self,
-        server_names: list[str],
-        config: dict,
-        *,
-        max_concurrency: int = 5,
-        timeout_seconds: int = 30,
-    ) -> tuple[int, dict[str, str]]:
-        sem = asyncio.Semaphore(max_concurrency)
-        failures: dict[str, str] = {}
+    async def _detect_mcp_transport(self, url: str) -> str:
+        """通过探测 URL 的响应 Content-Type 自动判断 MCP 传输类型。
 
-        async def _enable_one(name: str) -> bool:
-            async with sem:
-                try:
-                    if name in self.mcp_client_dict:
-                        await self.disable_mcp_server(name, timeout=10)
-                    await self.enable_mcp_server(
-                        name=name,
-                        config=config["mcpServers"][name],
-                        timeout=timeout_seconds,
-                    )
-                    return True
-                except Exception as e:
-                    failures[name] = str(e)
-                    logger.warning(f"启用 MCP 服务器失败: {name}, err={e!s}")
-                    return False
+        - SSE 端点返回 ``text/event-stream``
+        - Streamable HTTP 端点返回 ``application/json`` 或其他非 SSE 类型
+        """
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers={"Accept": "application/json, text/event-stream"},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    content_type = resp.headers.get("Content-Type", "")
+                    if "text/event-stream" in content_type:
+                        return "sse"
+        except Exception:
+            pass
+        return "streamable_http"
 
-        results = await asyncio.gather(*[_enable_one(n) for n in server_names])
-        enabled_count = sum(1 for ok in results if ok)
-        return enabled_count, failures
-
-    async def sync_mcp_servers_from_provider(
-        self,
-        provider_name: str,
-        payload: dict[str, Any],
-        *,
-        max_concurrency: int = 5,
-    ) -> dict[str, Any]:
-        provider = get_mcp_sync_provider(provider_name)
-        servers: list[SyncedMcpServer] = await provider.fetch(payload)
-        if not servers:
-            return {
-                "provider": provider_name,
-                "synced": 0,
-                "enabled": 0,
-                "failed": 0,
-                "failed_servers": [],
-            }
-
-        local_mcp_config = self.load_mcp_config()
-        local_mcp_config.setdefault("mcpServers", {})
-
-        for item in servers:
-            local_mcp_config["mcpServers"][item.name] = item.config
-
-        if not self.save_mcp_config(local_mcp_config):
-            raise RuntimeError("保存 MCP 配置失败，已取消同步启用")
-
-        enabled_count, failures = await self._enable_mcp_servers_with_concurrency_limit(
-            [item.name for item in servers],
-            local_mcp_config,
-            max_concurrency=max_concurrency,
-        )
-
-        return {
-            "provider": provider_name,
-            "synced": len(servers),
-            "enabled": enabled_count,
-            "failed": len(failures),
-            "failed_servers": sorted(failures.keys()),
+    async def sync_modelscope_mcp_servers(self, access_token: str) -> None:
+        """从 ModelScope 平台同步 MCP 服务器配置"""
+        base_url = "https://www.modelscope.cn/openapi/v1"
+        url = f"{base_url}/mcp/servers/operational"
+        headers = {
+            "Authorization": f"Bearer {access_token.strip()}",
+            "Content-Type": "application/json",
         }
 
         try:
@@ -1058,11 +1015,28 @@ class FunctionToolManager:
                         )
                         local_mcp_config = self.load_mcp_config()
 
-    async def sync_modelscope_mcp_servers(self, access_token: str) -> None:
-        await self.sync_mcp_servers_from_provider(
-            "modelscope",
-            {"access_token": access_token},
-        )
+                        synced_count = 0
+                        for server in mcp_server_list:
+                            server_name = server["name"]
+                            operational_urls = server.get("operational_urls", [])
+                            if not operational_urls:
+                                continue
+                            url_info = operational_urls[0]
+                            server_url = url_info.get("url")
+                            if not server_url:
+                                continue
+                            # 自动检测传输类型
+                            transport = await self._detect_mcp_transport(
+                                server_url,
+                            )
+                            # 添加到配置中(同名会覆盖)
+                            local_mcp_config["mcpServers"][server_name] = {
+                                "url": server_url,
+                                "transport": transport,
+                                "active": True,
+                                "provider": "modelscope",
+                            }
+                            synced_count += 1
 
     async def sync_mcprouter_mcp_servers(
         self,

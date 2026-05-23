@@ -46,7 +46,55 @@ for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
 
 
+class ManagedBotWebSocket(BotWebSocket):
+    def __init__(self, session, connection: Any, client: botClient):
+        super().__init__(session, connection)
+        self._client = client
+        # 防止 on_error + on_closed 双重入队导致连接指数增长
+        self._reenqueued = False
+
+    async def on_closed(self, close_status_code, close_msg):
+        if self._client.is_shutting_down:
+            logger.debug("[QQOfficial] Ignore websocket reconnect during shutdown.")
+            return
+        if self._reenqueued:
+            logger.debug("[QQOfficial] Session already re-enqueued, skip on_closed.")
+            return
+        try:
+            self._reenqueued = True
+            await super().on_closed(close_status_code, close_msg)
+        except Exception:
+            self._reenqueued = False
+            raise
+
+    async def on_error(self, exception: BaseException) -> None:
+        if self._reenqueued:
+            logger.debug("[QQOfficial] Session already re-enqueued, skip on_error.")
+            return
+        try:
+            self._reenqueued = True
+            await super().on_error(exception)
+        except Exception:
+            self._reenqueued = False
+            raise
+
+    async def close(self) -> None:
+        self._can_reconnect = False
+        if self._conn is not None and not self._conn.closed:
+            await self._conn.close()
+
+
+# QQ 机器人官方框架
 class botClient(Client):
+    # 消息去重：message_id -> 收到时间戳
+    _DEDUP_TTL = 120  # 去重窗口，秒
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._shutting_down = False
+        self._active_websockets: set[ManagedBotWebSocket] = set()
+        self._seen_message_ids: dict[str, float] = {}
+
     def set_platform(self, platform: QQOfficialPlatformAdapter) -> None:
         # keep a typed reference back to adapter for callbacks to use
         self.platform = platform
@@ -107,7 +155,22 @@ class botClient(Client):
         self._commit(abm)
 
     def _commit(self, abm: AstrBotMessage) -> None:
-        # cache the last message id for a session and commit the platform event
+        msg_id = abm.message_id
+        if msg_id:
+            now = time.monotonic()
+            # 清理过期条目
+            expired = [
+                k
+                for k, ts in self._seen_message_ids.items()
+                if now - ts > self._DEDUP_TTL
+            ]
+            for k in expired:
+                del self._seen_message_ids[k]
+            if msg_id in self._seen_message_ids:
+                logger.debug(f"[QQOfficial] Duplicate message {msg_id}, skipping.")
+                return
+            self._seen_message_ids[msg_id] = now
+
         self.platform.remember_session_message_id(abm.session_id, abm.message_id)
         self.platform.commit_event(
             # QQOfficialMessageEvent expects (message_str, message_obj, platform_meta, session_id, bot)
@@ -123,6 +186,39 @@ class botClient(Client):
                 self.platform.client,
             ),
         )
+
+    async def bot_connect(self, session) -> None:
+        active_count = len(self._active_websockets)
+        if active_count > 0:
+            logger.warning(
+                "[QQOfficial] bot_connect called with %d existing active websocket(s). "
+                "This may indicate a reconnection storm.",
+                active_count,
+            )
+        logger.info(
+            "[QQOfficial] Websocket session starting (active: %d).", active_count + 1
+        )
+
+        websocket = ManagedBotWebSocket(session, self._connection, self)
+        self._active_websockets.add(websocket)
+        try:
+            await websocket.ws_connect()
+        except Exception as e:
+            if not self.is_shutting_down:
+                await websocket.on_error(e)
+        finally:
+            self._active_websockets.discard(websocket)
+
+    async def shutdown(self) -> None:
+        if self.is_shutting_down:
+            return
+
+        self._shutting_down = True
+        await asyncio.gather(
+            *(websocket.close() for websocket in list(self._active_websockets)),
+            return_exceptions=True,
+        )
+        await self.close()
 
 
 @register_platform_adapter("qq_official", "QQ 机器人官方 API 适配器")

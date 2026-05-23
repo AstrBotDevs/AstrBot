@@ -1,10 +1,14 @@
-import httpx
 from openai import AsyncOpenAI
 
+# 使用 openai 库内部引用的 httpx 模块，避免打包后 isinstance 校验失败
+from openai._base_client import httpx as _openai_httpx
+
 from astrbot import logger
-from astrbot.core.provider.entities import ProviderType
-from astrbot.core.provider.provider import EmbeddingProvider
-from astrbot.core.provider.register import register_provider_adapter
+from astrbot.core.utils.network_utils import create_proxy_client
+
+from ..entities import ProviderType
+from ..provider import EmbeddingProvider
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -17,15 +21,12 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         super().__init__(provider_config, provider_settings)
         self.provider_config = provider_config
         self.provider_settings = provider_settings
-        proxy = provider_config.get("proxy", "")
         provider_id = provider_config.get("id", "unknown_id")
-        self._http_client = None
-        if proxy:
-            logger.info(f"[OpenAI Embedding] {provider_id} Using proxy: {proxy}")
-            self._http_client = httpx.AsyncClient(proxy=proxy)
-        # 处理 API base URL：带路径的地址保持原样，纯域名自动补 /v1
-        from urllib.parse import urlsplit
-
+        http_client = create_proxy_client(
+            "OpenAI Embedding",
+            provider_config.get("proxy", ""),
+            httpx_module=_openai_httpx,
+        )
         api_base = (
             provider_config.get("embedding_api_base", "https://api.openai.com/v1")
             .strip()
@@ -74,23 +75,36 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def _embedding_kwargs(self) -> dict:
         """构建嵌入请求的可选参数"""
         kwargs = {}
-        if "embedding_dimensions" in self.provider_config:
+        extra_body = {}
+        dim_val = self.provider_config.get("embedding_dimensions")
+        send_dimensions = self.provider_config.get("embedding_send_dimensions", True)
+        if dim_val not in (None, "", 0) and send_dimensions:
             try:
-                kwargs["dimensions"] = int(self.provider_config["embedding_dimensions"])
+                dim_int = int(dim_val)
+                if dim_int > 0:
+                    kwargs["dimensions"] = dim_int
             except (ValueError, TypeError):
                 logger.warning(
                     f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored.",
                 )
+
+        input_type = self.provider_config.get("embedding_input_type")
+        if input_type:
+            extra_body["input_type"] = input_type
+
+        if extra_body:
+            kwargs["extra_body"] = extra_body
         return kwargs
 
     def get_dim(self) -> int:
         """获取向量的维度"""
-        if "embedding_dimensions" in self.provider_config:
+        dim_val = self.provider_config.get("embedding_dimensions")
+        if dim_val not in (None, ""):
             try:
-                return int(self.provider_config["embedding_dimensions"])
+                return int(dim_val)
             except (ValueError, TypeError):
                 logger.warning(
-                    f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored.",
+                    f"embedding_dimensions in embedding configs is not a valid integer: '{dim_val}', ignored."
                 )
         return 0
 

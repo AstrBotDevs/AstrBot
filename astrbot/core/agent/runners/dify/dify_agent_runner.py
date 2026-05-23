@@ -322,7 +322,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                 case "video":
                     return Comp.Video(file=item["url"])
                 case _:
-                    return Comp.File(name=item["filename"], file=item["url"])
+                    return Comp.File(name=item["filename"], url=item["url"])
 
         output = chunk["data"]["outputs"][self.workflow_output_key]
         chains: list[Comp.BaseMessageComponent] = []

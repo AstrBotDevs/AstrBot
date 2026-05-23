@@ -144,6 +144,12 @@ class WecomAIBotAdapter(Platform):
                 message_handler=self._process_message,
             )
         self.shutdown_event = asyncio.Event()
+
+        # 消息去重：msgid -> monotonic 时间戳
+        self._seen_msg_ids: dict[str, float] = {}
+        self._DEDUP_TTL = 120  # 去重窗口，秒
+
+        # 队列管理器
         self.queue_mgr = WecomAIQueueMgr()
         self.queue_listener = WecomAIQueueListener(
             self.queue_mgr,
@@ -482,7 +488,9 @@ class WecomAIBotAdapter(Platform):
         abm = AstrBotMessage()
         abm.self_id = self.bot_name
         abm.message_str = content or "[未知消息]"
-        abm.message_id = str(uuid.uuid4())
+        # 使用企业微信平台提供的 msgid 而非随机 UUID，以支持去重
+        platform_msgid = message_data.get("msgid")
+        abm.message_id = str(platform_msgid) if platform_msgid else str(uuid.uuid4())
         abm.timestamp = int(time.time())
         abm.raw_message = payload
         abm.sender = MessageMember(
@@ -585,7 +593,21 @@ class WecomAIBotAdapter(Platform):
         return self.metadata
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
-        """处理消息,创建消息事件并提交到事件队列"""
+        """处理消息，创建消息事件并提交到事件队列"""
+        # 消息去重检查
+        msg_id = message.message_id
+        if msg_id:
+            now = time.monotonic()
+            expired = [
+                k for k, ts in self._seen_msg_ids.items() if now - ts > self._DEDUP_TTL
+            ]
+            for k in expired:
+                del self._seen_msg_ids[k]
+            if msg_id in self._seen_msg_ids:
+                logger.debug(f"[WecomAI] Duplicate message {msg_id}, skipping.")
+                return
+            self._seen_msg_ids[msg_id] = now
+
         try:
             message_event = WecomAIBotMessageEvent(
                 message_str=message.message_str,

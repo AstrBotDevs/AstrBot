@@ -112,6 +112,25 @@ class WeixinOCAdapter(Platform):
         self._context_tokens_dirty = False
         self._typing_states: dict[str, TypingSessionState] = {}
         self._last_inbound_error = ""
+        self._recent_message_cache_size = self._get_int_config(
+            "weixin_oc_recent_message_cache_size",
+            self.RECENT_MESSAGE_CACHE_SIZE,
+            1,
+        )
+        self._recent_session_cache_ttl_s = self._get_int_config(
+            "weixin_oc_recent_session_cache_ttl_s",
+            self.RECENT_SESSION_CACHE_TTL_S,
+            60,
+        )
+        self._max_recent_message_sessions = self._get_int_config(
+            "weixin_oc_max_recent_message_sessions",
+            self.MAX_RECENT_MESSAGE_SESSIONS,
+            1,
+        )
+        self._recent_messages: dict[str, WeixinOCRecentSessionCache] = {}
+        # 消息去重
+        self._seen_msg_ids: dict[str, float] = {}
+        self._DEDUP_TTL = 120  # 去重窗口，秒
         self._typing_keepalive_interval_s = max(
             1,
             int(platform_config.get("weixin_oc_typing_keepalive_interval", 5)),
@@ -1069,6 +1088,40 @@ class WeixinOCAdapter(Platform):
         abm.message_str = text
         abm.timestamp = ts
         abm.raw_message = msg
+        abm.is_reply = reply_metadata.is_reply
+        abm.ref_msg = reply_metadata.ref_msg
+        abm.reply_kind = reply_metadata.reply_kind
+        abm.quoted_item_type = reply_metadata.quoted_item_type
+        abm.quoted_text = reply_metadata.quoted_text
+        abm.reply_to = reply_metadata.reply_to
+
+        self._cache_recent_message(
+            from_user_id,
+            message_id=message_id,
+            sender_id=from_user_id,
+            sender_nickname=from_user_id,
+            timestamp=ts,
+            timestamp_ms=create_time_ms,
+            components=cached_components,
+            message_str=text,
+        )
+
+        # 消息去重
+        now = time.monotonic()
+        expired = [
+            k for k, t in self._seen_msg_ids.items() if now - t > self._DEDUP_TTL
+        ]
+        for k in expired:
+            del self._seen_msg_ids[k]
+        if message_id in self._seen_msg_ids:
+            logger.debug(
+                "weixin_oc(%s): duplicate message %s, skipping.",
+                self.meta().id,
+                message_id,
+            )
+            return
+        self._seen_msg_ids[message_id] = now
+
         self.commit_event(
             WeixinOCMessageEvent(
                 message_str=text,

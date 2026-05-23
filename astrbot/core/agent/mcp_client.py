@@ -45,6 +45,31 @@ except (ModuleNotFoundError, ImportError):
         "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
     )
 
+try:
+    import httpx as _httpx
+
+    def _create_no_verify_httpx_client(
+        headers: dict[str, str] | None = None,
+        timeout: _httpx.Timeout | None = None,
+        auth: _httpx.Auth | None = None,
+    ) -> _httpx.AsyncClient:
+        kwargs: dict[str, Any] = {
+            "follow_redirects": True,
+            "verify": False,
+        }
+        if timeout is None:
+            kwargs["timeout"] = _httpx.Timeout(30, read=300)
+        else:
+            kwargs["timeout"] = timeout
+        if headers is not None:
+            kwargs["headers"] = headers
+        if auth is not None:
+            kwargs["auth"] = auth
+        return _httpx.AsyncClient(**kwargs)
+
+except (ModuleNotFoundError, ImportError):
+    _create_no_verify_httpx_client = None
+
 
 class TenacityLogger:
     """Wraps a logging.Logger to satisfy tenacity's LoggerProtocol."""
@@ -75,13 +100,173 @@ def _prepare_config(config: dict) -> dict:
     return config
 
 
+def _normalize_stdio_command_name(command: str) -> str:
+    command = command.strip()
+    if "\\" in command:
+        command_name = PureWindowsPath(command).name
+    else:
+        command_name = Path(command).name
+    command_name = command_name.lower()
+    for suffix in (".exe", ".cmd", ".bat"):
+        if command_name.endswith(suffix):
+            return command_name[: -len(suffix)]
+    return command_name
+
+
+def _get_stdio_command_allowlist() -> set[str]:
+    allowed = set(_DEFAULT_STDIO_COMMAND_ALLOWLIST)
+    configured = os.environ.get(_STDIO_ALLOWLIST_ENV, "")
+    if configured.strip():
+        allowed = {
+            _normalize_stdio_command_name(item)
+            for item in configured.split(",")
+            if item.strip()
+        }
+    return allowed
+
+
+def _is_stdio_config(config: dict) -> bool:
+    cfg = _prepare_config(config.copy())
+    return "url" not in cfg
+
+
+def _validate_stdio_args(command_name: str, args: object) -> None:
+    if args is None:
+        return
+    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+        raise ValueError("MCP stdio args must be a list of strings.")
+
+    for arg in args:
+        if "\x00" in arg or "\r" in arg or "\n" in arg:
+            raise ValueError("MCP stdio args cannot contain control characters.")
+
+    if command_name.startswith("python") or command_name == "py":
+        if any(
+            arg == "-c"
+            or (arg.startswith("-") and not arg.startswith("--") and "c" in arg)
+            for arg in args
+        ):
+            raise ValueError(
+                "MCP stdio Python servers must be launched from a module or file; inline code flags such as -c are not allowed."
+            )
+    elif command_name in {"node", "deno", "bun"} or command_name.startswith("node"):
+        if any(
+            arg in _JS_INLINE_CODE_FLAGS
+            or arg == "eval"
+            or (
+                arg.startswith("-")
+                and not arg.startswith("--")
+                and any(c in arg for c in "ep")
+            )
+            for arg in args
+        ):
+            raise ValueError(
+                "MCP stdio JavaScript servers must be launched from a package or file; inline eval flags are not allowed."
+            )
+    elif command_name == "docker":
+        denied = []
+        for i, arg in enumerate(args):
+            if arg in _DENIED_DOCKER_ARGS:
+                denied.append(arg)
+            elif (
+                arg in {"--network", "--net", "--pid", "--ipc"}
+                and i + 1 < len(args)
+                and args[i + 1] == "host"
+            ):
+                denied.append(f"{arg} {args[i + 1]}")
+        if denied:
+            raise ValueError(
+                f"MCP stdio Docker args are unsafe and not allowed: {', '.join(denied)}."
+            )
+
+
+def validate_mcp_stdio_config(config: dict) -> None:
+    """Validate stdio MCP config before any subprocess can be spawned."""
+    cfg = _prepare_config(config.copy())
+    if "url" in cfg:
+        return
+
+    command = cfg.get("command")
+    if not isinstance(command, str) or not command.strip():
+        raise ValueError("MCP stdio server requires a non-empty command.")
+    if _SHELL_META_RE.search(command):
+        raise ValueError("MCP stdio command contains unsafe shell metacharacters.")
+
+    command_name = _normalize_stdio_command_name(command)
+    if command_name in _DENIED_STDIO_COMMANDS:
+        raise ValueError(f"MCP stdio command `{command_name}` is not allowed.")
+
+    allowed = _get_stdio_command_allowlist()
+    if command_name not in allowed:
+        allowed_display = ", ".join(sorted(allowed))
+        raise ValueError(
+            f"MCP stdio command `{command_name}` is not allowed. "
+            f"Allowed commands: {allowed_display}. "
+            f"Set {_STDIO_ALLOWLIST_ENV} to override this list if you trust another launcher."
+        )
+
+    _validate_stdio_args(command_name, cfg.get("args"))
+
+    env = cfg.get("env")
+    if env is not None and not isinstance(env, dict):
+        raise ValueError("MCP stdio env must be an object.")
+    if isinstance(env, dict) and not all(
+        isinstance(key, str) and isinstance(value, str) for key, value in env.items()
+    ):
+        raise ValueError("MCP stdio env keys and values must be strings.")
+
+
+def _get_certifi_ca_bundle() -> str | None:
+    """Try to locate the certifi CA bundle for SSL_CERT_FILE."""
+    try:
+        import certifi
+
+        return certifi.where()
+    except ImportError:
+        pass
+    # Fallback: look for certifi in common locations
+    for candidate in (
+        os.path.join(
+            os.path.dirname(sys.executable),
+            "Lib",
+            "site-packages",
+            "certifi",
+            "cacert.pem",
+        ),
+        os.path.join(
+            os.path.dirname(sys.executable),
+            "..",
+            "Lib",
+            "site-packages",
+            "certifi",
+            "cacert.pem",
+        ),
+    ):
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
 def _prepare_stdio_env(config: dict) -> dict:
-    """Preserve Windows executable resolution for stdio subprocesses."""
-    if sys.platform != "win32":
-        return config
+    """Prepare environment variables for stdio subprocesses.
+
+    On Windows:
+    - Merges system environment variables (case-insensitive handling).
+    - For uv/uvx commands, sets SSL_CERT_FILE from certifi to avoid
+      ``invalid peer certificate: UnknownIssuer`` errors caused by
+      uv's bundled TLS not trusting the system certificate store.
+    """
     prepared = config.copy()
     env = dict(prepared.get("env") or {})
     env = _merge_environment_variables(env)
+
+    if sys.platform == "win32":
+        command_name = _normalize_stdio_command_name(config.get("command", ""))
+        if command_name in ("uv", "uvx") and "SSL_CERT_FILE" not in env:
+            ca_bundle = _get_certifi_ca_bundle()
+            if ca_bundle:
+                env["SSL_CERT_FILE"] = ca_bundle
+
     prepared["env"] = env
     return prepared
 
@@ -200,8 +385,30 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         return False, f"{e!s}"
 
 
-_EMPTY_MCP_ARGUMENT = object()
+_NONSTANDARD_TYPE_MAP: dict[str, str] = {
+    "int": "integer",
+    "float": "number",
+    "double": "number",
+    "decimal": "number",
+    "bool": "boolean",
+    "str": "string",
+    "dict": "object",
+    "list": "array",
+}
 
+
+def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Normalize common non-standard MCP JSON Schema variants.
+
+    Some MCP servers incorrectly mark required properties with a boolean
+    `required: true` on the property schema itself. Draft 2020-12 requires the
+    parent object to declare `required` as an array of property names instead.
+    We lift those booleans to the parent object so the schema remains usable
+    without disabling validation entirely.
+
+    Also normalizes non-standard type names (e.g. ``"int"`` → ``"integer"``,
+    ``"str"`` → ``"string"``) that some MCP servers emit.
+    """
 
 def _sanitize_mcp_arguments(
     value: Any,
@@ -231,19 +438,22 @@ def _sanitize_mcp_arguments(
                 cleaned_items.append(cleaned_item)
         return cleaned_items
 
-    if isinstance(value, dict):
-        if not value:
-            return value if required else _EMPTY_MCP_ARGUMENT
+        # Normalize non-standard type names
+        type_val = normalized.get("type")
+        if isinstance(type_val, str) and type_val in _NONSTANDARD_TYPE_MAP:
+            normalized["type"] = _NONSTANDARD_TYPE_MAP[type_val]
+        elif isinstance(type_val, list):
+            normalized["type"] = [
+                _NONSTANDARD_TYPE_MAP.get(t, t) if isinstance(t, str) else t
+                for t in type_val
+            ]
 
-        cleaned_dict = {}
-        properties = schema.get("properties", {}) if isinstance(schema, dict) else {}
-        required_keys = set(schema.get("required", [])) if isinstance(schema, dict) else set()
-        for key, item in value.items():
-            child_schema = properties.get(key) if isinstance(properties, dict) else None
-            cleaned_item = _sanitize_mcp_arguments(
-                item,
-                child_schema,
-                required=key in required_keys,
+        properties = normalized.get("properties")
+        if isinstance(properties, dict):
+            original_properties = (
+                node.get("properties")
+                if isinstance(node.get("properties"), dict)
+                else {}
             )
             if cleaned_item is _EMPTY_MCP_ARGUMENT:
                 continue
@@ -330,15 +540,23 @@ class MCPClient:
             else:
                 raise Exception("MCP connection config missing transport or type field")
 
+            _http_client_kwargs: dict[str, Any] = {
+                "url": cfg["url"],
+                "headers": cfg.get("headers", {}),
+            }
+            if _create_no_verify_httpx_client is not None:
+                _http_client_kwargs["httpx_client_factory"] = (
+                    _create_no_verify_httpx_client
+                )
+
             if transport_type != "streamable_http":
                 # SSE transport method
-                self._streams_context = sse_client(
-                    url=cfg["url"],
-                    headers=cfg.get("headers", {}),
-                    timeout=cfg.get("timeout", 5),
-                    sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
+                _http_client_kwargs["timeout"] = cfg.get("timeout", 5)
+                _http_client_kwargs["sse_read_timeout"] = cfg.get(
+                    "sse_read_timeout", 60 * 5
                 )
-                read_stream, write_stream = await self.exit_stack.enter_async_context(
+                self._streams_context = sse_client(**_http_client_kwargs)
+                streams = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
 
@@ -354,17 +572,16 @@ class MCPClient:
                 )
                 self.session = session
             else:
-                timeout = timedelta(seconds=cfg.get("timeout", 30))
-                sse_read_timeout = timedelta(
+                _http_client_kwargs["timeout"] = timedelta(
+                    seconds=cfg.get("timeout", 30)
+                )
+                _http_client_kwargs["sse_read_timeout"] = timedelta(
                     seconds=cfg.get("sse_read_timeout", 60 * 5),
                 )
-                self._streams_context = streamablehttp_client(
-                    url=cfg["url"],
-                    headers=cfg.get("headers", {}),
-                    timeout=timeout,
-                    sse_read_timeout=sse_read_timeout,
-                    terminate_on_close=cfg.get("terminate_on_close", True),
+                _http_client_kwargs["terminate_on_close"] = cfg.get(
+                    "terminate_on_close", True
                 )
+                self._streams_context = streamablehttp_client(**_http_client_kwargs)
                 read_s, write_s, _ = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
