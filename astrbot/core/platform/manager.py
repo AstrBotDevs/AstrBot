@@ -186,9 +186,9 @@ class PlatformManager:
                     from .sources.line.line_adapter import (
                         LinePlatformAdapter,  # noqa: F401
                     )
-                case "heihe":
-                    from .sources.heihe.heihe_adapter import (
-                        HeihePlatformAdapter,  # noqa: F401
+                case "email":
+                    from .sources.email.email_adapter import (
+                        EmailPlatformAdapter,  # noqa: F401
                     )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(

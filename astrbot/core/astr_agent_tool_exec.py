@@ -211,25 +211,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 edit_tool.name: edit_tool,
                 grep_tool.name: grep_tool,
             }
-            if booter == "cua":
-                screenshot_tool = tool_mgr.get_builtin_tool(CuaScreenshotTool)
-                mouse_click_tool = tool_mgr.get_builtin_tool(CuaMouseClickTool)
-                keyboard_type_tool = tool_mgr.get_builtin_tool(CuaKeyboardTypeTool)
-                tools.update(
-                    {
-                        screenshot_tool.name: screenshot_tool,
-                        mouse_click_tool.name: mouse_click_tool,
-                        keyboard_type_tool.name: keyboard_type_tool,
-                    }
-                )
-            return tools
-        if runtime == "local":
-            shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
-            python_tool = tool_mgr.get_builtin_tool(LocalPythonTool)
-            read_tool = tool_mgr.get_builtin_tool(FileReadTool)
-            write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
-            edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
-            grep_tool = tool_mgr.get_builtin_tool(GrepTool)
+        if runtime in {"local", "local_sandboxed"}:
             return {
                 shell_tool.name: shell_tool,
                 python_tool.name: python_tool,

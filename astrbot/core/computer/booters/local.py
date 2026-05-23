@@ -3,24 +3,26 @@ from __future__ import annotations
 import asyncio
 import locale
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import sys
+import uuid
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 from python_ripgrep import search
 
 from astrbot.api import logger
-from astrbot.core.computer.file_read_utils import (
-    detect_text_encoding,
-    read_local_text_range_sync,
-)
 from astrbot.core.utils.astrbot_path import get_astrbot_root
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
 from .shipyard_search_file_util import _truncate_long_lines
+
+SandboxBackend = Literal["none", "bwrap", "seatbelt"]
 
 _BLOCKED_COMMAND_PATTERNS = [
     " rm -rf ",
@@ -44,47 +46,132 @@ def _is_safe_command(command: str) -> bool:
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
 
 
-def _decode_bytes_with_fallback(
-    output: bytes | None,
-    *,
-    preferred_encoding: str | None = None,
-) -> str:
-    if output is None:
-        return ""
+def _escape_seatbelt_string(raw: str) -> str:
+    return raw.replace("\\", "\\\\").replace('"', '\\"')
 
-    preferred = locale.getpreferredencoding(False) or "utf-8"
-    attempted_encodings: list[str] = []
 
-    def _try_decode(encoding: str) -> str | None:
-        normalized = encoding.lower()
-        if normalized in attempted_encodings:
-            return None
-        attempted_encodings.append(normalized)
+def _session_workspace_name(session_id: str) -> str:
+    safe_prefix = re.sub(r"[^A-Za-z0-9._-]+", "_", session_id).strip("._-")
+    if not safe_prefix:
+        safe_prefix = "session"
+    safe_prefix = safe_prefix[:40]
+    suffix = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex[:12]
+    return f"{safe_prefix}_{suffix}"
+
+
+def _detect_sandbox_backend() -> SandboxBackend:
+    if sys.platform.startswith("linux"):
+        if shutil.which("bwrap"):
+            return "bwrap"
+        raise RuntimeError("Local runtime requires 'bwrap' on Linux.")
+
+    if sys.platform == "darwin":
+        if shutil.which("sandbox-exec"):
+            return "seatbelt"
+        raise RuntimeError("Local runtime requires 'sandbox-exec' on macOS.")
+
+    return "none"
+
+
+@dataclass(frozen=True)
+class LocalSandboxPolicy:
+    workspace: Path
+    backend: SandboxBackend
+    sandboxed: bool
+    default_cwd: Path
+
+    @classmethod
+    def build_default(cls, session_id: str, sandboxed: bool) -> LocalSandboxPolicy:
+        workspace_root_raw = os.environ.get(
+            "ASTRBOT_LOCAL_WORKSPACE_ROOT"
+        ) or os.environ.get("ASTRBOT_LOCAL_WORKSPACE", "~/.astrbot/workspace")
+        workspace_root = Path(workspace_root_raw).expanduser().resolve()
+        workspace = workspace_root / _session_workspace_name(session_id)
+        default_cwd = workspace if sandboxed else Path(get_astrbot_root()).resolve()
+        return cls(
+            workspace=workspace,
+            backend=_detect_sandbox_backend() if sandboxed else "none",
+            sandboxed=sandboxed,
+            default_cwd=default_cwd,
+        )
+
+    def ensure_workspace(self) -> None:
         try:
-            return output.decode(encoding)
-        except (LookupError, UnicodeDecodeError):
-            return None
+            self.workspace.mkdir(parents=True, exist_ok=True)
+        except PermissionError as exc:
+            raise RuntimeError(
+                "Cannot create local workspace. "
+                "Set ASTRBOT_LOCAL_WORKSPACE_ROOT to a writable path."
+            ) from exc
 
-    for encoding in filter(None, [preferred_encoding, "utf-8", "utf-8-sig"]):
-        if decoded := _try_decode(encoding):
-            return decoded
+    def resolve_path(self, path: str, base: Path | None = None) -> Path:
+        raw = Path(path).expanduser()
+        resolved = raw if raw.is_absolute() else (base or self.default_cwd) / raw
+        return resolved.resolve()
 
-    if os.name == "nt":
-        for encoding in ("mbcs", "cp936", "gbk", "gb18030", preferred):
-            if decoded := _try_decode(encoding):
-                return decoded
-    elif decoded := _try_decode(preferred):
-        return decoded
+    def ensure_writable_path(self, path: str) -> Path:
+        abs_path = self.resolve_path(path)
+        if self.sandboxed and not abs_path.is_relative_to(self.workspace):
+            raise PermissionError(
+                f"Write path is outside workspace: {self.workspace.as_posix()}"
+            )
+        return abs_path
 
-    return output.decode("utf-8", errors="replace")
+    def normalize_working_dir(self, cwd: str | None) -> Path:
+        target = self.resolve_path(cwd) if cwd else self.default_cwd
+        if not target.exists():
+            raise FileNotFoundError(f"Working directory does not exist: {target}")
+        if not target.is_dir():
+            raise NotADirectoryError(f"Working directory is not a directory: {target}")
+        return target
 
+    def wrap_command(self, command: list[str], working_dir: Path) -> list[str]:
+        if not self.sandboxed:
+            return command
 
-def _decode_shell_output(output: bytes | None) -> str:
-    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
+        if self.backend == "bwrap":
+            return [
+                "bwrap",
+                "--die-with-parent",
+                "--new-session",
+                "--ro-bind",
+                "/",
+                "/",
+                "--bind",
+                str(self.workspace),
+                str(self.workspace),
+                "--proc",
+                "/proc",
+                "--dev",
+                "/dev",
+                "--chdir",
+                str(working_dir),
+                "--",
+                *command,
+            ]
+
+        if self.backend == "seatbelt":
+            workspace_escaped = _escape_seatbelt_string(str(self.workspace))
+            profile = "\n".join(
+                [
+                    "(version 1)",
+                    "(deny default)",
+                    '(import "system.sb")',
+                    "(allow process*)",
+                    "(allow file-read*)",
+                    f'(allow file-write* (subpath "{workspace_escaped}"))',
+                    "(allow network*)",
+                ]
+            )
+            return ["sandbox-exec", "-p", profile, *command]
+
+        raise RuntimeError("Sandbox backend is not available for local_sandboxed mode.")
 
 
 @dataclass
 class LocalShellComponent(ShellComponent):
+    policy: LocalSandboxPolicy
+
     async def exec(
         self,
         command: str,
@@ -98,45 +185,58 @@ class LocalShellComponent(ShellComponent):
             raise PermissionError("Blocked unsafe shell command.")
 
         def _run() -> dict[str, Any]:
+            shell_command = (
+                ["/bin/sh", "-lc", command] if shell else shlex.split(command)
+            )
             run_env = os.environ.copy()
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
-            working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
+
+            working_dir = self.policy.normalize_working_dir(cwd)
+            wrapped_command = self.policy.wrap_command(shell_command, working_dir)
             if background:
-                # `command` is intentionally executed through the current shell so
-                # local computer-use behavior matches existing tool semantics.
-                # Safety relies on `_is_safe_command()` and the allowed-root checks.
-                proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-                    command,
-                    shell=shell,
+                proc = subprocess.Popen(
+                    wrapped_command,
+                    shell=False,
                     cwd=working_dir,
                     env=run_env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
                 )
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
-            # `command` is intentionally executed through the current shell so
-            # local computer-use behavior matches existing tool semantics.
-            # Safety relies on `_is_safe_command()` and the allowed-root checks.
-            result = subprocess.run(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-                command,
-                shell=shell,
-                cwd=working_dir,
-                env=run_env,
-                timeout=timeout or 300,
-                capture_output=True,
-            )
-            return {
-                "stdout": _decode_shell_output(result.stdout),
-                "stderr": _decode_shell_output(result.stderr),
-                "exit_code": result.returncode,
-            }
+            try:
+                result = subprocess.run(
+                    wrapped_command,
+                    shell=False,
+                    cwd=working_dir,
+                    env=run_env,
+                    timeout=timeout,
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True,
+                    text=True,
+                )
+                return {
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                    "exit_code": result.returncode,
+                }
+            except subprocess.TimeoutExpired:
+                timeout_seconds = timeout if timeout is not None else "configured"
+                return {
+                    "stdout": "",
+                    "stderr": f"Execution timed out after {timeout_seconds} seconds.",
+                    "exit_code": 124,
+                }
 
         return await asyncio.to_thread(_run)
 
 
 @dataclass
 class LocalPythonComponent(PythonComponent):
+    policy: LocalSandboxPolicy
+
     async def exec(
         self,
         code: str,
@@ -145,9 +245,13 @@ class LocalPythonComponent(PythonComponent):
         silent: bool = False,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
+            python_command = [os.environ.get("PYTHON", sys.executable), "-c", code]
+            working_dir = self.policy.normalize_working_dir(None)
+            wrapped_command = self.policy.wrap_command(python_command, working_dir)
             try:
                 result = subprocess.run(
-                    [os.environ.get("PYTHON", sys.executable), "-c", code],
+                    wrapped_command,
+                    cwd=working_dir,
                     timeout=timeout,
                     capture_output=True,
                 )
@@ -176,16 +280,18 @@ class LocalPythonComponent(PythonComponent):
 
 @dataclass
 class LocalFileSystemComponent(FileSystemComponent):
+    policy: LocalSandboxPolicy
+
     async def create_file(
         self, path: str, content: str = "", mode: int = 0o644
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = os.path.abspath(path)
-            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-            with open(abs_path, "w", encoding="utf-8") as f:
+            abs_path = self.policy.ensure_writable_path(path)
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+            with abs_path.open("w", encoding="utf-8") as f:
                 f.write(content)
-            os.chmod(abs_path, mode)
-            return {"success": True, "path": abs_path}
+            abs_path.chmod(mode)
+            return {"success": True, "path": str(abs_path)}
 
         return await asyncio.to_thread(_run)
 
@@ -197,56 +303,8 @@ class LocalFileSystemComponent(FileSystemComponent):
         limit: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = os.path.abspath(path)
-            detected_encoding = encoding
-            if encoding == "utf-8":
-                with open(abs_path, "rb") as f:
-                    raw_sample = f.read(8192)
-                detected_encoding = detect_text_encoding(raw_sample) or encoding
-            return {
-                "success": True,
-                "content": read_local_text_range_sync(
-                    abs_path,
-                    encoding=detected_encoding,
-                    offset=offset,
-                    limit=limit,
-                ),
-            }
-
-        return await asyncio.to_thread(_run)
-
-    async def search_files(
-        self,
-        pattern: str,
-        path: str | None = None,
-        glob: str | None = None,
-        after_context: int | None = None,
-        before_context: int | None = None,
-    ) -> dict[str, Any]:
-        def _run() -> dict[str, Any]:
-            results = search(
-                patterns=[pattern],
-                paths=[path] if path else None,
-                globs=[glob] if glob else None,
-                after_context=after_context,
-                before_context=before_context,
-                line_number=True,
-            )
-            return {"success": True, "content": _truncate_long_lines("".join(results))}
-
-        return await asyncio.to_thread(_run)
-
-    async def edit_file(
-        self,
-        path: str,
-        old_string: str,
-        new_string: str,
-        replace_all: bool = False,
-        encoding: str = "utf-8",
-    ) -> dict[str, Any]:
-        def _run() -> dict[str, Any]:
-            abs_path = os.path.abspath(path)
-            with open(abs_path, encoding=encoding) as f:
+            abs_path = self.policy.resolve_path(path)
+            with abs_path.open(encoding=encoding) as f:
                 content = f.read()
             occurrences = content.count(old_string)
             if occurrences == 0:
@@ -275,22 +333,22 @@ class LocalFileSystemComponent(FileSystemComponent):
         self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = os.path.abspath(path)
-            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-            with open(abs_path, mode, encoding=encoding) as f:
+            abs_path = self.policy.ensure_writable_path(path)
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+            with abs_path.open(mode, encoding=encoding) as f:
                 f.write(content)
-            return {"success": True, "path": abs_path}
+            return {"success": True, "path": str(abs_path)}
 
         return await asyncio.to_thread(_run)
 
     async def delete_file(self, path: str) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = os.path.abspath(path)
-            if os.path.isdir(abs_path):
+            abs_path = self.policy.ensure_writable_path(path)
+            if abs_path.is_dir():
                 shutil.rmtree(abs_path)
             else:
-                os.remove(abs_path)
-            return {"success": True, "path": abs_path}
+                abs_path.unlink()
+            return {"success": True, "path": str(abs_path)}
 
         return await asyncio.to_thread(_run)
 
@@ -298,8 +356,8 @@ class LocalFileSystemComponent(FileSystemComponent):
         self, path: str = ".", show_hidden: bool = False
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = os.path.abspath(path)
-            entries = os.listdir(abs_path)
+            abs_path = self.policy.resolve_path(path)
+            entries = [entry.name for entry in abs_path.iterdir()]
             if not show_hidden:
                 entries = [e for e in entries if not e.startswith(".")]
             return {"success": True, "entries": entries}
@@ -308,13 +366,28 @@ class LocalFileSystemComponent(FileSystemComponent):
 
 
 class LocalBooter(ComputerBooter):
-    def __init__(self) -> None:
-        self._fs = LocalFileSystemComponent()
-        self._python = LocalPythonComponent()
-        self._shell = LocalShellComponent()
+    def __init__(self, session_id: str, sandboxed: bool = False) -> None:
+        self._session_id = session_id
+        self._policy = LocalSandboxPolicy.build_default(
+            session_id=session_id, sandboxed=sandboxed
+        )
+        if sandboxed:
+            self._policy.ensure_workspace()
+        if sandboxed and self._policy.backend == "none":
+            logger.warning(
+                f"Local runtime sandbox backend is unavailable on {sys.platform}. "
+                "Only filesystem tools are restricted to workspace."
+            )
+        self._fs = LocalFileSystemComponent(policy=self._policy)
+        self._python = LocalPythonComponent(policy=self._policy)
+        self._shell = LocalShellComponent(policy=self._policy)
 
     async def boot(self, session_id: str) -> None:
-        logger.info(f"Local computer booter initialized for session: {session_id}")
+        logger.info(
+            f"Local computer booter initialized for session: {session_id} "
+            f"(sandboxed={self._policy.sandboxed}, "
+            f"backend={self._policy.backend}, workspace={self._policy.workspace})"
+        )
 
     async def shutdown(self) -> None:
         logger.info("Local computer booter shutdown complete.")
