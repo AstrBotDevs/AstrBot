@@ -312,7 +312,15 @@ class CronJobManager:
         session_str: str,
         extras: dict,
     ) -> None:
-        # 将定时任务消息放入事件队列，由 PipelineScheduler 统一处理。
+        """Woke the main agent to handle the cron job message."""
+        from astrbot.core.astr_main_agent import (
+            MainAgentBuildConfig,
+            _get_session_conv,
+            build_main_agent,
+        )
+        from astrbot.core.astr_main_agent_resources import (
+            PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
+        )
 
         try:
             session = (
@@ -379,7 +387,7 @@ class CronJobManager:
         if not req.func_tool:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(
-            self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
+            self.ctx.get_llm_tool_manager().get_builtin_tool("send_message_to_user")
         )
 
         result = await build_main_agent(

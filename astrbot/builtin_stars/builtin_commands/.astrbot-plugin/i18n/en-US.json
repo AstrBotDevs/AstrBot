@@ -2,5 +2,20 @@
   "metadata": {
     "display_name": "Built-in Commands",
     "desc": "AstrBot's internal plugin, providing built-in commands such as /reset, /help, and /sid."
+  },
+  "config": {
+    "builtin_commands": {
+      "配置": "Config"
+    },
+    "help_language": {
+      "description": "Command Response Language",
+      "hint": "Select the response language for /help and other commands",
+      "labels": {
+        "en-US": "English",
+        "zh-CN": "Simplified Chinese",
+        "zh-TW": "Traditional Chinese",
+        "ru-RU": "Russian"
+      }
+    }
   }
 }
