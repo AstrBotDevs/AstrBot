@@ -13,36 +13,11 @@ from astrbot.api.platform import MessageType
 from astrbot.api.provider import LLMResponse, Provider, ProviderRequest
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
+from .constants import LTM_ACTIVE_REPLY_KEY
 
-@dataclass
-class ChatRecord:
-    """单条聊天记录，用于长期记忆存储。"""
-
-    msg_id: str
-    """消息唯一标识（用户消息取 message_obj.message_id，AI 回复取 'ai:<uuid>'）"""
-    role: Literal["user", "assistant"]
-    """角色：user 表示用户消息，assistant 表示 AI 回复"""
-    text: str
-    """格式化后的文本，如 '[昵称/HH:MM:SS]: ...' 或 '[You/HH:MM:SS]: ...'"""
-    created_at: str = field(default_factory=lambda: datetime.datetime.now().isoformat())
-    """创建时间（ISO 格式），用于调试/扩展"""
-
-
-def _get_event_msg_id(event: AstrMessageEvent) -> str:
-    """
-    获取当前事件对应的消息 ID。
-    以保证同一事件链路（handle_message -> on_req_llm -> after_req_llm）使用同一 ID。
-    """
-    msg_id = getattr(event.message_obj, "message_id", None)
-    if msg_id:
-        return str(msg_id)
-    # fallback: 使用 extra 缓存
-    cached = event.get_extra("_ltm_msg_id")
-    if cached:
-        return cached
-    generated = f"ltm:{uuid.uuid4().hex}"
-    event.set_extra("_ltm_msg_id", generated)
-    return generated
+"""
+聊天记忆增强
+"""
 
 
 class LongTermMemory:
@@ -206,15 +181,21 @@ class LongTermMemory:
         chats_str = "\n---\n".join(filtered_texts)
 
         cfg = self.cfg(event)
-        is_active_reply = getattr(req, "_ltm_active_reply_trigger", False)
+        active_reply_req_id = event.get_extra(LTM_ACTIVE_REPLY_KEY, None)
+        is_active_reply = (
+            active_reply_req_id is not None and id(req) == active_reply_req_id
+        )
+
         if cfg["enable_active_reply"] and is_active_reply:
+            # 仅在本次请求确实由主动回复触发时，才执行 chatroom 改写
+            # 避免普通 @ 请求也被错误地清空 req.contexts
             prompt = req.prompt
             req.prompt = (
                 f"{cfg['context_prompt']}{chats_str}"
                 f"\nNow, a new message is coming: `{prompt}`. "
                 f"{cfg['active_reply_suffix_prompt']}"
             )
-            req.contexts = []  # Only clear contexts for proactive replies; chat history is embedded in the prompt.
+            req.contexts = []  # 清空上下文，主动回复时所有聊天记录都在一个 prompt 中
         else:
             req.system_prompt += cfg["context_prompt"]
             req.system_prompt += chats_str
