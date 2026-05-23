@@ -4,13 +4,15 @@ Agent 执行器是 AstrBot 中用于执行 Agent 的组件。
 
 在 v4.7.0 版本之后，我们将 Dify、Coze、阿里云百炼应用这三个提供商迁移到了 Agent 执行器层面，减少了与 AstrBot 目前功能的一些冲突。请放心，如果您从旧版本升级到 v4.7.0 版本，您无需进行任何操作，AstrBot 会自动为您迁移。此后，AstrBot 也新增了 DeerFlow Agent 执行器支持。
 
-AstrBot 目前支持五种 Agent 执行器：
+AstrBot 目前支持五种内置 Agent 执行器：
 
 - AstrBot 内置 Agent 执行器
 - Dify Agent 执行器
 - Coze Agent 执行器
 - 阿里云百炼应用 Agent 执行器
 - DeerFlow Agent 执行器
+
+此外，插件也可以通过 `context.register_agent_runner()` 注册自定义的 Agent 执行器。
 
 默认情况下，AstrBot 内置 Agent 执行器为默认执行器。
 
@@ -50,3 +52,9 @@ Dify、Coze、百炼应用、DeerFlow 等平台已经内置了这个循环，如
 ![image](https://files.astrbot.app/docs/source/images/use/agent-runner/image.png)
 
 在 WebUI 中，点击「配置」->「Agent 执行方式」，将执行器类型更换为你刚刚创建的 Agent 执行器类型，然后选择 `XX Agent 执行器提供商 ID` 为你刚刚创建的 Agent 执行器提供商的 ID，点击保存即可。
+
+## 插件自定义 Agent 执行器
+
+除了内置的 Agent 执行器，AstrBot 还允许插件动态注册自定义的 Agent 执行器。注册后，新的执行器类型会自动出现在 WebUI 的下拉选项中。
+
+如果你是插件开发者，想要开发自定义的 Agent 执行器，请参阅 [开发文档 · 注册自定义 Agent 执行器](/dev/star/guides/agent-runner)。
