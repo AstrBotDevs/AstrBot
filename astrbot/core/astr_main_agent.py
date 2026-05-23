@@ -1157,39 +1157,36 @@ def _get_compress_provider(
     return provider
 
 
-def _get_fallback_chat_providers(
-    provider: Provider, plugin_context: Context, provider_settings: dict
-) -> list[Provider]:
-    fallback_ids = provider_settings.get("fallback_chat_models", [])
-    if not isinstance(fallback_ids, list):
-        logger.warning(
-            "fallback_chat_models setting is not a list, skip fallback providers."
-        )
-        return []
+def _apply_global_context_info(event: AstrMessageEvent, req: ProviderRequest) -> None:
+    """Add platform and session information to user prompt when in global unified context mode."""
+    from astrbot.core.config.default import (
+        GLOBAL_UNIFIED_CONTEXT_UMO,
+        ORIGINAL_UMO_KEY,
+    )
 
-    provider_id = str(provider.provider_config.get("id", ""))
-    seen_provider_ids: set[str] = {provider_id} if provider_id else set()
-    fallbacks: list[Provider] = []
+    if event.unified_msg_origin != GLOBAL_UNIFIED_CONTEXT_UMO:
+        return
 
-    for fallback_id in fallback_ids:
-        if not isinstance(fallback_id, str) or not fallback_id:
-            continue
-        if fallback_id in seen_provider_ids:
-            continue
-        fallback_provider = plugin_context.get_provider_by_id(fallback_id)
-        if fallback_provider is None:
-            logger.warning("Fallback chat provider `%s` not found, skip.", fallback_id)
-            continue
-        if not isinstance(fallback_provider, Provider):
+    # Get original UMO from extras
+    original_umo = event.get_extra(ORIGINAL_UMO_KEY)
+    if not original_umo:
+        return
+
+    # Parse the original UMO to extract platform, message type, and session info
+    try:
+        parts = original_umo.split(":", 2)
+        if len(parts) != 3:
             logger.warning(
-                "Fallback chat provider `%s` is invalid type: %s, skip.",
-                fallback_id,
-                type(fallback_provider),
+                f"Original UMO format is invalid (expected 3 parts): {original_umo}"
             )
-            continue
-        fallbacks.append(fallback_provider)
-        seen_provider_ids.add(fallback_id)
-    return fallbacks
+            return
+
+        platform_id, message_type, session_id = parts
+        context_info = f"[Context: Platform={platform_id}, Type={message_type}, Session={session_id}]"
+        # Prepend context info to the user prompt
+        req.prompt = f"{context_info} {req.prompt or ''}"
+    except Exception as e:
+        logger.warning(f"Failed to parse original UMO for global context: {e}")
 
 
 async def build_main_agent(
@@ -1373,6 +1370,9 @@ async def build_main_agent(
         )
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
+
+    # Apply global context information if enabled
+    _apply_global_context_info(event, req)
 
     if config.file_extract_enabled:
         try:
