@@ -281,56 +281,32 @@ def test_extract_error_text_candidates_truncates_long_response_text():
 
 
 @pytest.mark.asyncio
-async def test_openai_payload_keeps_reasoning_content_in_assistant_history():
+async def test_parse_openai_completion_accepts_reasoning_only_response(monkeypatch):
     provider = _make_provider()
     try:
-        payloads = {
-            "messages": [
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "think", "think": "step 1"},
-                        {"type": "text", "text": "final answer"},
-                    ],
-                }
-            ]
-        }
+        completion = SimpleNamespace(
+            id="chatcmpl-test",
+            choices=[
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(content=None, tool_calls=[]),
+                )
+            ],
+            usage=None,
+        )
+        monkeypatch.setattr(
+            provider,
+            "_extract_reasoning_content",
+            lambda _completion: "我先思考一下这个问题",
+        )
 
-        provider._finally_convert_payload(payloads)
+        llm_response = await provider._parse_openai_completion(completion, tools=None)
 
-        assistant_message = payloads["messages"][0]
-        assert assistant_message["content"] == [
-            {"type": "text", "text": "final answer"}
-        ]
-        assert assistant_message["reasoning_content"] == "step 1"
-    finally:
-        await provider.terminate()
-
-
-@pytest.mark.asyncio
-async def test_groq_payload_drops_reasoning_content_from_assistant_history():
-    provider = _make_groq_provider()
-    try:
-        payloads = {
-            "messages": [
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "think", "think": "step 1"},
-                        {"type": "text", "text": "final answer"},
-                    ],
-                }
-            ]
-        }
-
-        provider._finally_convert_payload(payloads)
-
-        assistant_message = payloads["messages"][0]
-        assert assistant_message["content"] == [
-            {"type": "text", "text": "final answer"}
-        ]
-        assert "reasoning_content" not in assistant_message
-        assert "reasoning" not in assistant_message
+        assert llm_response.role == "assistant"
+        assert llm_response.completion_text is None
+        assert llm_response.reasoning_content == "我先思考一下这个问题"
+        assert llm_response.raw_completion is completion
+        assert llm_response.id == "chatcmpl-test"
     finally:
         await provider.terminate()
 

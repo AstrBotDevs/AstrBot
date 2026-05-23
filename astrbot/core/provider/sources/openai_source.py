@@ -920,18 +920,13 @@ class ProviderOpenAIOfficial(Provider):
             raise Exception(
                 "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。",
             )
-        has_text_output = bool((llm_response.completion_text or "").strip())
-        has_reasoning_output = bool((llm_response.reasoning_content or "").strip())
         if (
-            not has_text_output
-            and not has_reasoning_output
+            llm_response.completion_text is None
             and not llm_response.tools_call_args
+            and not llm_response.reasoning_content
         ):
-            logger.error(f"OpenAI completion has no usable output: {completion}.")
-            raise EmptyModelOutputError(
-                "OpenAI completion has no usable output. "
-                f"response_id={completion.id}, finish_reason={choice.finish_reason}"
-            )
+            logger.error(f"API 返回的 completion 无法解析：{completion}。")
+            raise Exception(f"API 返回的 completion 无法解析：{completion}。")
 
         llm_response.raw_completion = completion
         llm_response.id = completion.id
