@@ -821,10 +821,19 @@
         },
         "empty_mention_waiting": {
           "description": "Trigger Waiting on Mention-only Messages"
+        },
+        "ignore_unknown_prefix_command": {
+          "description": "Ignore Unrecognized Commands",
+          "hint": "When enabled, messages starting with the command prefix that do not match any registered command will be silently ignored and will not trigger the LLM."
         }
       },
       "wake_prefix": {
-        "description": "Wake Word"
+        "description": "Wake Word",
+        "hint": "Prefix to wake the bot for LLM conversation."
+      },
+      "command_prefix": {
+        "description": "Command Prefix",
+        "hint": "Prefix for triggering plugin commands (e.g. /). Falls back to the wake word when set to empty."
       },
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",
@@ -1341,22 +1350,22 @@
         "hint": "Only effective for qwen3-rerank models. Recommended to write in English."
       },
       "nvidia_rerank_api_base": {
-          "description": "API Base URL"
+        "description": "API Base URL"
       },
       "nvidia_rerank_api_key": {
-          "description": "API Key"
+        "description": "API Key"
       },
       "nvidia_rerank_model": {
-          "description": "Rerank Model Name",
-          "hint": "Please refer to the NVIDIA Docs for the model name."
+        "description": "Rerank Model Name",
+        "hint": "Please refer to the NVIDIA Docs for the model name."
       },
       "nvidia_rerank_model_endpoint": {
-          "description": "Custom Model Endpoint",
-          "hint": "Custom URL suffix endpoint, defaults to /reranking."
+        "description": "Custom Model Endpoint",
+        "hint": "Custom URL suffix endpoint, defaults to /reranking."
       },
       "nvidia_rerank_truncate": {
-          "description": "Text Truncation Strategy",
-          "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
+        "description": "Text Truncation Strategy",
+        "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
       },
       "launch_model_if_not_running": {
         "description": "Auto-start model if not running",

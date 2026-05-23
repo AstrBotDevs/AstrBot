@@ -98,6 +98,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "empty_mention_waiting": True,
         "empty_mention_waiting_need_reply": True,
         "friend_message_needs_wake_prefix": False,
+        "ignore_unknown_prefix_command": False,
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
     },
@@ -337,6 +338,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         },
     },
     "wake_prefix": ["/"],
+    # command_prefix 与 wake_prefix 同层（顶层配置）。
+    # 对应的行为开关 ignore_unknown_prefix_command 位于 platform_settings 下。
+    "command_prefix": ["/"],
     "log_level": "INFO",
     "log_file_enable": False,
     "log_file_path": "logs/astrbot.log",
@@ -3416,6 +3420,10 @@ CONFIG_METADATA_2: Any = {
                 "type": "list",
                 "items": {"type": "string"},
             },
+            "command_prefix": {
+                "type": "list",
+                "items": {"type": "string"},
+            },
             "t2i": {
                 "type": "bool",
             },
@@ -4511,10 +4519,22 @@ CONFIG_METADATA_3 = {
                         "description": "唤醒词",
                         "type": "list",
                         "items": {"type": "string"},
+                        "hint": "触发 LLM 对话的前缀。",
+                    },
+                    "command_prefix": {
+                        "description": "指令前缀",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "触发插件指令的前缀（如 /）。设为空时由唤醒词兜底。",
                     },
                     "platform_settings.friend_message_needs_wake_prefix": {
                         "description": "私聊消息需要唤醒词",
                         "type": "bool",
+                    },
+                    "platform_settings.ignore_unknown_prefix_command": {
+                        "description": "忽略无法识别的指令",
+                        "type": "bool",
+                        "hint": "启用后，以指令前缀开头但不匹配任何已注册指令的消息将被忽略，不触发 LLM。",
                     },
                     "platform_settings.reply_prefix": {
                         "description": "回复时的文本前缀",
