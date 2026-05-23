@@ -1,13 +1,16 @@
 import asyncio
+import asyncio.exceptions
 import json
 import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Literal, NoReturn, cast
+from urllib.parse import quote_plus
 
 import aiohttp
 import dingtalk_stream
+import websockets
 from dingtalk_stream import AckMessage
 
 from astrbot import logger
@@ -33,6 +36,73 @@ from astrbot.core.utils.media_utils import (
 )
 
 from .dingtalk_event import DingtalkMessageEvent
+
+
+class _PatchedStreamClient(dingtalk_stream.DingTalkStreamClient):
+    """Override ``start()`` to pass tolerant WebSocket ping settings.
+
+    The upstream SDK calls ``websockets.connect()`` without configuring
+    ``ping_interval`` / ``ping_timeout``, which default to 20 s in
+    websockets >= 13.  When the DingTalk server is slow to respond, the
+    connection is dropped with a *keepalive ping timeout* error.
+
+    This subclass widens the window to ``ping_interval=30``
+    ``ping_timeout=90`` so that transient network latency no longer
+    causes unnecessary disconnections.
+    """
+
+    WS_PING_INTERVAL = 30  # seconds between WebSocket pings
+    WS_PING_TIMEOUT = 90  # seconds to wait for a pong response
+
+    async def start(self):
+        self.pre_start()
+
+        while True:
+            try:
+                connection = self.open_connection()
+
+                if not connection:
+                    self.logger.error("open connection failed")
+                    await asyncio.sleep(10)
+                    continue
+                self.logger.info("endpoint is %s", connection)
+
+                uri = (
+                    f"{connection['endpoint']}"
+                    f"?ticket={quote_plus(connection['ticket'])}"
+                )
+                async with websockets.connect(
+                    uri,
+                    ping_interval=self.WS_PING_INTERVAL,
+                    ping_timeout=self.WS_PING_TIMEOUT,
+                ) as ws:
+                    self.websocket = ws
+                    asyncio.create_task(self.keepalive(ws))
+                    async for raw_message in ws:
+                        try:
+                            json_message = json.loads(raw_message)
+                        except json.JSONDecodeError as e:
+                            self.logger.warning(
+                                "[start] failed to decode websocket message as JSON, error=%s, raw_message=%r",
+                                e,
+                                raw_message,
+                            )
+                            continue
+
+                        asyncio.create_task(self.background_task(json_message))
+            except KeyboardInterrupt:
+                break
+            except (
+                asyncio.exceptions.CancelledError,
+                websockets.exceptions.ConnectionClosedError,
+            ) as e:
+                self.logger.error("[start] network exception, error=%s", e)
+                await asyncio.sleep(10)
+                continue
+            except Exception:
+                await asyncio.sleep(3)
+                self.logger.exception("钉钉流式客户端循环中发生未知异常")
+                continue
 
 
 class MyEventHandler(dingtalk_stream.EventHandler):
@@ -78,7 +148,7 @@ class DingtalkPlatformAdapter(Platform):
         self.client = AstrCallbackClient()
 
         credential = dingtalk_stream.Credential(self.client_id, self.client_secret)
-        client = dingtalk_stream.DingTalkStreamClient(credential, logger=logger)
+        client = _PatchedStreamClient(credential, logger=logger)
         client.register_all_event_handler(MyEventHandler())
         client.register_callback_handler(
             dingtalk_stream.ChatbotMessage.TOPIC,
@@ -754,50 +824,19 @@ class DingtalkPlatformAdapter(Platform):
         self._event_queue.put_nowait(event)
 
     async def run(self) -> None:
-        # await self.client_.start()
-        # 钉钉的 SDK 并没有实现真正的异步，start() 里面有堵塞方法。
-        # SDK 内部已有 while True 重连循环，但需要监控 task 状态，
-        # 如果 task 意外退出则重新启动。
-        MAX_RETRIES = 5
-        RETRY_INTERVAL = 10
-
+        # The DingTalk SDK's open_connection() uses synchronous requests,
+        # so we run start() from an executor thread.  Use the thread-safe
+        # asyncio.run_coroutine_threadsafe() instead of loop.create_task().
         def start_client(loop: asyncio.AbstractEventLoop) -> None:
-            retry_count = 0
-
-            def handle_retry(error_msg: str) -> bool:
-                """处理重试逻辑，返回 True 表示需要继续重试，False 表示放弃。"""
-                nonlocal retry_count
-                logger.error(error_msg)
-                retry_count += 1
-                if retry_count < MAX_RETRIES:
-                    logger.info(f"钉钉适配器尝试重连 ({retry_count}/{MAX_RETRIES})...")
-                    time.sleep(RETRY_INTERVAL)
-                    return True
-                logger.error("钉钉适配器重连失败，已达最大重试次数")
-                return False
-
-            while retry_count < MAX_RETRIES:
-                task = None
-                try:
-                    self._shutdown_event = threading.Event()
-                    task = loop.create_task(self.client_.start())
-                    # 当 task 完成时唤醒线程（无论是正常退出还是异常退出）
-                    task.add_done_callback(lambda _: self._shutdown_event.set())
-                    self._shutdown_event.wait()
-                    if task.done():
-                        try:
-                            exc = task.exception()
-                        except asyncio.CancelledError:
-                            logger.info("钉钉适配器 task 已取消")
-                            return
-                        if exc:
-                            if "Graceful shutdown" in str(exc):
-                                logger.info("钉钉适配器已被关闭")
-                                return
-                            if handle_retry(f"钉钉 SDK task 异常退出: {exc}"):
-                                continue
-                            return
-                    # task 仍在运行，shutdown_event 被设置（正常关闭）
+            try:
+                self._shutdown_event = threading.Event()
+                future = asyncio.run_coroutine_threadsafe(self.client_.start(), loop)
+                self._shutdown_event.wait()
+                if future.done():
+                    future.result()
+            except Exception as e:
+                if "Graceful shutdown" in str(e):
+                    logger.info("钉钉适配器已被关闭")
                     return
                 except Exception as e:
                     if "Graceful shutdown" in str(e):
