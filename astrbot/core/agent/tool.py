@@ -1,6 +1,6 @@
 import copy
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import Any, Generic
+from typing import Any, Generic, TypedDict
 
 import jsonschema
 import mcp
@@ -16,6 +16,12 @@ ParametersType = dict[str, Any]
 ToolExecResult = str | mcp.types.CallToolResult
 
 
+class ToolArgumentSpec(TypedDict):
+    name: str
+    type: str
+    description: str
+
+
 @dataclass
 class ToolSchema:
     """A class representing the schema of a tool for function calling."""
@@ -26,14 +32,20 @@ class ToolSchema:
     description: str
     """The description of the tool."""
 
-    parameters: ParametersType
+    parameters: ParametersType | None = None
+    """The parameters of the tool, in JSON Schema format."""
+
+    active: bool = True
+    """Whether the tool is active."""
     """The parameters of the tool, in JSON Schema format."""
 
     @model_validator(mode="after")
     def validate_parameters(self) -> "ToolSchema":
-        jsonschema.validate(
-            self.parameters, jsonschema.Draft202012Validator.META_SCHEMA
-        )
+        if self.parameters is not None:
+            jsonschema.validate(
+                self.parameters,
+                jsonschema.Draft202012Validator.META_SCHEMA,
+            )
         return self
 
 
@@ -63,14 +75,23 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     Declare this tool as a background task. Background tasks return immediately
     with a task identifier while the real work continues asynchronously.
     """
+    source: str = "plugin"
+    """
+    Origin of this tool: 'plugin' (from star plugins), 'internal' (AstrBot built-in),
+    or 'mcp' (from MCP servers). Used by WebUI for display grouping.
+    """
 
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
-    async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
+    async def call(
+        self,
+        context: ContextWrapper[TContext],
+        **kwargs: Any,
+    ) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
-            "FunctionTool.call() must be implemented by subclasses or set a handler."
+            "FunctionTool.call() must be implemented by subclasses or set a handler.",
         )
 
 
@@ -82,13 +103,13 @@ class ToolSet:
     convert the tools to different API formats (OpenAI, Anthropic, Google GenAI).
     """
 
-    tools: list[FunctionTool] = Field(default_factory=list)
+    tools: list[ToolSchema] = Field(default_factory=list)
 
     def empty(self) -> bool:
         """Check if the tool set is empty."""
         return len(self.tools) == 0
 
-    def add_tool(self, tool: FunctionTool) -> None:
+    def add_tool(self, tool: ToolSchema) -> None:
         """Add a tool to the set.
 
         If a tool with the same name already exists:
@@ -111,16 +132,26 @@ class ToolSet:
         """Remove a tool by its name."""
         self.tools = [tool for tool in self.tools if tool.name != name]
 
+    def normalize(self) -> None:
+        """Sort tools by name for deterministic serialization.
+
+        This ensures the serialized tool schema sent to the LLM is
+        identical across requests regardless of registration/injection
+        order, enabling LLM provider prefix cache hits.
+        """
+        self.tools.sort(key=lambda t: t.name)
+
     def get_tool(self, name: str) -> FunctionTool | None:
         """Get a tool by its name."""
         for tool in self.tools:
             if tool.name == name:
-                return tool
+                if isinstance(tool, FunctionTool):
+                    return tool
         return None
 
     def get_light_tool_set(self) -> "ToolSet":
         """Return a light tool set with only name/description."""
-        light_tools = []
+        light_tools: list[ToolSchema] = []
         for tool in self.tools:
             if hasattr(tool, "active") and not tool.active:
                 continue
@@ -131,16 +162,16 @@ class ToolSet:
             light_tools.append(
                 FunctionTool(
                     name=tool.name,
-                    parameters=light_params,
                     description=tool.description,
+                    parameters=light_params,
                     handler=None,
-                )
+                ),
             )
         return ToolSet(light_tools)
 
     def get_param_only_tool_set(self) -> "ToolSet":
         """Return a tool set with name/parameters only (no description)."""
-        param_tools = []
+        param_tools: list[ToolSchema] = []
         for tool in self.tools:
             if hasattr(tool, "active") and not tool.active:
                 continue
@@ -152,10 +183,10 @@ class ToolSet:
             param_tools.append(
                 FunctionTool(
                     name=tool.name,
-                    parameters=params,
                     description="",
+                    parameters=params,
                     handler=None,
-                )
+                ),
             )
         return ToolSet(param_tools)
 
@@ -163,17 +194,18 @@ class ToolSet:
     def add_func(
         self,
         name: str,
-        func_args: list,
+        func_args: list[ToolArgumentSpec],
         desc: str,
         handler: Callable[..., Awaitable[Any]],
     ) -> None:
         """Add a function tool to the set."""
+        properties: dict[str, dict[str, str]] = {}
         params = {
             "type": "object",  # hard-coded here
-            "properties": {},
+            "properties": properties,
         }
         for param in func_args:
-            params["properties"][param["name"]] = {
+            properties[param["name"]] = {
                 "type": param["type"],
                 "description": param["description"],
             }
@@ -198,22 +230,28 @@ class ToolSet:
     @property
     def func_list(self) -> list[FunctionTool]:
         """Get the list of function tools."""
-        return self.tools
+        return [t for t in self.tools if isinstance(t, FunctionTool)]
+
+    def list_tools(self) -> list[FunctionTool]:
+        """Get the list of function tools (alias for func_list)."""
+        return [t for t in self.tools if isinstance(t, FunctionTool)]
 
     def openai_schema(self, omit_empty_parameter_field: bool = False) -> list[dict]:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
         for tool in self.tools:
-            func_def = {"type": "function", "function": {"name": tool.name}}
+            function_dict: dict[str, Any] = {"name": tool.name}
             if tool.description:
-                func_def["function"]["description"] = tool.description
-
+                function_dict["description"] = tool.description
             if tool.parameters is not None:
                 if (
                     tool.parameters and tool.parameters.get("properties")
                 ) or not omit_empty_parameter_field:
-                    func_def["function"]["parameters"] = tool.parameters
-
+                    function_dict["parameters"] = tool.parameters
+            func_def: dict[str, Any] = {
+                "type": "function",
+                "function": function_dict,
+            }
             result.append(func_def)
         return result
 

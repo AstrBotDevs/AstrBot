@@ -58,7 +58,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '24.13.0'
+          node-version: "24.13.0"
           cache: "pnpm"
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
@@ -138,7 +138,6 @@ jobs:
         with:
           name: Dashboard-${{ steps.tag.outputs.tag }}
           path: release-assets
-
 
       - name: Resolve release notes
         id: notes

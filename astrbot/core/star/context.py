@@ -17,6 +17,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.exceptions import ProviderNotFoundError
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.memory.memory_manager import MemoryManager
 from astrbot.core.message.message_event_result import MessageChain
@@ -34,20 +35,22 @@ from astrbot.core.provider.provider import (
     STTProvider,
     TTSProvider,
 )
+from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.platform_adapter_type import (
     ADAPTER_NAME_2_TYPE,
     PlatformAdapterType,
+)
+from astrbot.core.star.filter.regex import RegexFilter
+from astrbot.core.star.star import StarMetadata, star_map, star_registry
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    star_handlers_registry,
 )
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.core.utils.trace import TraceSpan
 from astrbot.core.utils.trace import _current_span as _trace_current_span
-
-from ..exceptions import ProviderNotFoundError
-from .filter.command import CommandFilter
-from .filter.regex import RegexFilter
-from .star import StarMetadata, star_map, star_registry
-from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 
 logger = logging.getLogger("astrbot")
 
@@ -73,7 +76,7 @@ class UnifiedWebhook:
 class Context:
     """暴露给插件的接口上下文。"""
 
-    registered_web_apis: list[RegisteredWebApi] = []
+    _registered_web_apis: list[RegisteredWebApi] = []
 
     # 向后兼容的变量
     _register_tasks: list[Awaitable] = []
@@ -146,6 +149,7 @@ class Context:
         Raises:
             ChatProviderNotFoundError: If the specified chat provider ID is not found
             Exception: For other errors during LLM generation
+
         """
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
@@ -203,6 +207,7 @@ class Context:
         Raises:
             ChatProviderNotFoundError: If the specified chat provider ID is not found
             Exception: For other errors during LLM generation
+
         """
         # Import here to avoid circular imports
         from astrbot.core.astr_agent_context import (
@@ -250,10 +255,12 @@ class Context:
         }
         if request.func_tool and request.func_tool.get_tool("astrbot_file_read_tool"):
             other_kwargs.setdefault(
-                "tool_result_overflow_dir", get_astrbot_system_tmp_path()
+                "tool_result_overflow_dir",
+                get_astrbot_system_tmp_path(),
             )
             other_kwargs.setdefault(
-                "read_tool", request.func_tool.get_tool("astrbot_file_read_tool")
+                "read_tool",
+                request.func_tool.get_tool("astrbot_file_read_tool"),
             )
 
         await agent_runner.reset(
@@ -418,6 +425,7 @@ class Context:
 
         Raises:
             ProviderNotFoundError: 未找到。
+
         """
         prov = self.get_using_provider(umo)
         if not prov:
@@ -449,6 +457,7 @@ class Context:
 
         Note:
             注册的工具默认是激活状态。
+
         """
         return self.provider_manager.llm_tools.activate_llm_tool(name, star_map)
 
@@ -460,6 +469,7 @@ class Context:
 
         Returns:
             如果成功停用返回 True，如果没找到工具返回 False。
+
         """
         return self.provider_manager.llm_tools.deactivate_llm_tool(name)
 
@@ -479,11 +489,12 @@ class Context:
 
         Note:
             如果提供者 ID 存在但未找到提供者，会记录警告日志。
+
         """
         prov = self.provider_manager.inst_map.get(provider_id)
         if provider_id and not prov:
             logger.warning(
-                f"没有找到 ID 为 {provider_id} 的提供商，这可能是由于您修改了提供商（模型）ID 导致的。"
+                f"没有找到 ID 为 {provider_id} 的提供商，这可能是由于您修改了提供商（模型）ID 导致的。",
             )
         return prov
 
@@ -515,6 +526,7 @@ class Context:
 
         Raises:
             ValueError: 该会话来源配置的的对话模型（提供商）的类型不正确。
+
         """
         prov = self.provider_manager.get_using_provider(
             provider_type=ProviderType.CHAT_COMPLETION,
@@ -524,7 +536,7 @@ class Context:
             return None
         if not isinstance(prov, Provider):
             raise ValueError(
-                f"该会话来源的对话模型（提供商）的类型不正确: {type(prov)}"
+                f"该会话来源的对话模型（提供商）的类型不正确: {type(prov)}",
             )
         return prov
 
@@ -539,6 +551,7 @@ class Context:
 
         Raises:
             ValueError: 返回的提供者不是 TTSProvider 类型。
+
         """
         prov = self.provider_manager.get_using_provider(
             provider_type=ProviderType.TEXT_TO_SPEECH,
@@ -559,6 +572,7 @@ class Context:
 
         Raises:
             ValueError: 返回的提供者不是 STTProvider 类型。
+
         """
         prov = self.provider_manager.get_using_provider(
             provider_type=ProviderType.SPEECH_TO_TEXT,
@@ -579,6 +593,7 @@ class Context:
 
         Note:
             如果不提供 umo 参数，将返回默认配置。
+
         """
         if not umo:
             # 使用默认配置
@@ -605,19 +620,20 @@ class Context:
         Note:
             当 session 为字符串时，会尝试解析为 MessageSession 对象。(类名为MessageSesion是因为历史遗留拼写错误)
             qq_official(QQ 官方 API 平台) 不支持此方法。
+
         """
         if isinstance(session, str):
             try:
                 session = MessageSesion.from_str(session)
             except BaseException as e:
-                raise ValueError("不合法的 session 字符串: " + str(e))
+                raise ValueError("不合法的 session 字符串: " + str(e)) from e
 
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
                 return True
         logger.warning(
-            f"cannot find platform for session {str(session)}, message not sent"
+            f"cannot find platform for session {session!s}, message not sent",
         )
         return False
 
@@ -629,6 +645,7 @@ class Context:
 
         Note:
             如果工具已存在，会替换已存在的工具。
+
         """
         tool_name = {tool.name for tool in self.provider_manager.llm_tools.func_list}
         module_path = ""
@@ -648,7 +665,7 @@ class Context:
             else:
                 tool.handler_module_path = module_path
             logger.info(
-                f"plugin(module_path {module_path}) added LLM tool: {tool.name}"
+                f"plugin(module_path {module_path}) added LLM tool: {tool.name}",
             )
 
             if tool.name in tool_name:
@@ -673,12 +690,13 @@ class Context:
 
         Note:
             如果相同路由和方法已注册，会替换现有的 API。
+
         """
-        for idx, api in enumerate(self.registered_web_apis):
+        for idx, api in enumerate(self._registered_web_apis):
             if api[0] == route and methods == api[2]:
-                self.registered_web_apis[idx] = (route, view_handler, methods, desc)
+                self._registered_web_apis[idx] = (route, view_handler, methods, desc)
                 return
-        self.registered_web_apis.append((route, view_handler, methods, desc))
+        self._registered_web_apis.append((route, view_handler, methods, desc))
 
     def register_unified_webhook(
         self,
@@ -725,6 +743,7 @@ class Context:
 
         Note:
             该方法已经过时，请使用 get_platform_inst 方法。(>= AstrBot v4.0.0)
+
         """
         for platform in self.platform_manager.platform_insts:
             name = platform.meta().name
@@ -748,6 +767,7 @@ class Context:
 
         Note:
             可以通过 event.get_platform_id() 获取平台 ID。
+
         """
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == platform_id:
@@ -758,6 +778,7 @@ class Context:
 
         Returns:
             数据库实例。
+
         """
         return self._db
 
@@ -766,6 +787,7 @@ class Context:
 
         Args:
             provider: 提供者实例。
+
         """
         self.provider_manager.provider_insts.append(provider)
 
@@ -829,6 +851,7 @@ class Context:
         Note:
             异步处理函数会接收到额外的关键词参数：event: AstrMessageEvent, context: Context。
             该方法已弃用，请使用新的注册方式。
+
         """
         md = StarHandlerMetadata(
             event_type=EventType.OnLLMRequestEvent,
@@ -851,6 +874,7 @@ class Context:
         Note:
             如果再要启用，需要重新注册。
             该方法已弃用。
+
         """
         self.provider_manager.llm_tools.remove_func(name)
 
@@ -877,6 +901,7 @@ class Context:
 
         Note:
             推荐使用装饰器注册指令。该方法将在未来的版本中被移除。
+
         """
         md = StarHandlerMetadata(
             event_type=EventType.AdapterMessageEvent,
@@ -904,5 +929,6 @@ class Context:
 
         Note:
             该方法已弃用。
+
         """
         self._register_tasks.append(task)

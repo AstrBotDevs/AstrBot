@@ -67,13 +67,13 @@ async def check_dashboard_files(webui_dir: str | None = None):
     """下载管理面板文件"""
     # 指定webui目录
     if webui_dir:
-        if os.path.exists(webui_dir):
+        if await asyncio.to_thread(os.path.exists, webui_dir):
             logger.info("Using WebUI directory: %s", webui_dir)
             return webui_dir
         logger.warning("WebUI directory not found: %s. Using default.", webui_dir)
 
     data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
-    if os.path.exists(data_dist_path):
+    if await asyncio.to_thread(os.path.exists, data_dist_path):
         v = await get_dashboard_version()
         if should_use_bundled_dashboard_dist(data_dist_path, VERSION):
             bundled_dist = get_bundled_dashboard_dist_path()
@@ -115,7 +115,7 @@ async def main_async(webui_dir_arg: str | None) -> None:
     if webui_dir is None:
         logger.warning(
             "管理面板文件检查失败，WebUI 功能将不可用。"
-            "请检查网络连接或手动指定 --webui-dir 参数。"
+            "请检查网络连接或手动指定 --webui-dir 参数。",
         )
 
     db = db_helper

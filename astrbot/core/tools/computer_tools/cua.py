@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import mcp
+from mcp.types import ContentBlock
 
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
@@ -41,7 +42,7 @@ async def _get_gui_component(context: ContextWrapper[AstrAgentContext]) -> Any:
     if gui is None:
         raise RuntimeError(
             "Current sandbox booter does not support CUA GUI capability. "
-            "Please switch sandbox booter to cua."
+            "Please switch sandbox booter to cua.",
         )
     return gui
 
@@ -68,7 +69,7 @@ class CuaScreenshotTool(FunctionTool):
                     "default": True,
                 },
             },
-        }
+        },
     )
 
     async def call(
@@ -76,6 +77,7 @@ class CuaScreenshotTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         send_to_user: bool = True,
         return_image_to_llm: bool = True,
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Taking CUA screenshots"):
             return err
@@ -88,8 +90,8 @@ class CuaScreenshotTool(FunctionTool):
                 await context.context.event.send(MessageChain().file_image(path))
                 payload["sent_to_user"] = True
             image_data = payload.pop("base64", "")
-            content: list[mcp.types.TextContent | mcp.types.ImageContent] = [
-                mcp.types.TextContent(type="text", text=_to_json(payload))
+            content: list[ContentBlock] = [
+                mcp.types.TextContent(type="text", text=_to_json(payload)),
             ]
             if return_image_to_llm:
                 content.append(
@@ -97,7 +99,7 @@ class CuaScreenshotTool(FunctionTool):
                         type="image",
                         data=str(image_data),
                         mimeType=str(payload.get("mime_type", "image/png")),
-                    )
+                    ),
                 )
             return mcp.types.CallToolResult(content=content)
         except Exception as e:
@@ -122,15 +124,16 @@ class CuaMouseClickTool(FunctionTool):
                 },
             },
             "required": ["x", "y"],
-        }
+        },
     )
 
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        x: int,
-        y: int,
+        x: int = 0,
+        y: int = 0,
         button: str = "left",
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Using CUA mouse"):
             return err
@@ -153,13 +156,14 @@ class CuaKeyboardTypeTool(FunctionTool):
                 "text": {"type": "string", "description": "Text to type."},
             },
             "required": ["text"],
-        }
+        },
     )
 
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        text: str,
+        text: str = "",
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Using CUA keyboard"):
             return err

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -37,11 +38,15 @@ class TestShipyardNeoBooterCapabilities:
 
     def test_includes_browser_when_present(self):
         booter = self._make_booter(["python", "shell", "filesystem", "browser"])
-        assert "browser" in booter.capabilities
+        caps = booter.capabilities
+        assert caps is not None
+        assert "browser" in caps
 
     def test_no_browser_when_absent(self):
         booter = self._make_booter(["python", "shell", "filesystem"])
-        assert "browser" not in booter.capabilities
+        caps = booter.capabilities
+        assert caps is not None
+        assert "browser" not in caps
 
     def test_returns_immutable(self):
         """Verify capabilities returns an immutable tuple."""
@@ -49,7 +54,7 @@ class TestShipyardNeoBooterCapabilities:
         caps = booter.capabilities
         assert isinstance(caps, tuple)
         with pytest.raises(AttributeError):
-            caps.append("mutated")  # type: ignore[attr-defined]
+            getattr(caps, "append")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -70,9 +75,9 @@ def _make_req():
 def _import_apply_sandbox_tools():
     """Import _apply_sandbox_tools, skipping if circular-import fails."""
     try:
-        from astrbot.core.astr_main_agent import _apply_sandbox_tools
+        from astrbot.core.astr_main_agent import apply_sandbox_tools
 
-        return _apply_sandbox_tools
+        return apply_sandbox_tools
     except ImportError:
         pytest.skip("Cannot import _apply_sandbox_tools (circular import in test env)")
 
@@ -87,26 +92,12 @@ class TestApplySandboxToolsConditional:
         return {t.name for t in req.func_tool.tools}
 
     def test_no_session_registers_all(self):
-        """First request (no booted session) → all tools including browser."""
+        """First request (no booted session) ￫ all tools including browser."""
         fn = _import_apply_sandbox_tools()
-        config = _make_config("shipyard_neo")
-        req = _make_req()
+        config: Any = _make_config("shipyard_neo")
+        req: Any = _make_req()
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_tools",
-                return_value=[],
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_default_sandbox_tools",
-                return_value=self._make_neo_booter().get_default_tools(),
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_prompt_parts",
-                return_value=[],
-            ),
-        ):
-            fn(config, req, "session-1")
+        fn(config, req, "session-1")
 
         names = self._tool_names(req)
         assert "astrbot_execute_browser" in names
@@ -125,10 +116,10 @@ class TestApplySandboxToolsConditional:
         return booter
 
     def test_with_browser_capability(self):
-        """Booted session with browser capability → browser tools registered."""
+        """Booted session with browser capability ￫ browser tools registered."""
         fn = _import_apply_sandbox_tools()
-        config = _make_config("shipyard_neo")
-        req = _make_req()
+        config: Any = _make_config("shipyard_neo")
+        req: Any = _make_req()
         fake_booter = self._make_neo_booter(
             caps=["python", "shell", "filesystem", "browser"]
         )
@@ -153,10 +144,10 @@ class TestApplySandboxToolsConditional:
         assert "astrbot_execute_browser" in names
 
     def test_without_browser_capability(self):
-        """Booted session WITHOUT browser capability → browser tools NOT registered."""
+        """Booted session WITHOUT browser capability ￫ browser tools NOT registered."""
         fn = _import_apply_sandbox_tools()
-        config = _make_config("shipyard_neo")
-        req = _make_req()
+        config: Any = _make_config("shipyard_neo")
+        req: Any = _make_req()
         fake_booter = self._make_neo_booter(caps=["python", "shell", "filesystem"])
 
         with (
@@ -185,25 +176,10 @@ class TestApplySandboxToolsConditional:
     def test_skill_tools_always_registered(self):
         """Skill lifecycle tools are registered regardless of capabilities."""
         fn = _import_apply_sandbox_tools()
-        config = _make_config("shipyard_neo")
-        req = _make_req()
-        fake_booter = self._make_neo_booter(caps=["python"])
+        config: Any = _make_config("shipyard_neo")
+        req: Any = _make_req()
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_tools",
-                return_value=fake_booter.get_tools(),
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_default_sandbox_tools",
-                return_value=[],
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_prompt_parts",
-                return_value=[],
-            ),
-        ):
-            fn(config, req, "session-1")
+        fn(config, req, "session-1")
 
         names = self._tool_names(req)
         assert "astrbot_create_skill_candidate" in names
@@ -229,7 +205,7 @@ class TestResolveProfile:
 
     @pytest.mark.asyncio
     async def test_user_specified_profile_honoured(self):
-        """User explicitly sets a non-default profile → use it directly."""
+        """User explicitly sets a non-default profile ￫ use it directly."""
         booter = self._make_booter(profile="browser-python")
         client = SimpleNamespace()  # list_profiles should NOT be called
         result = await booter._resolve_profile(client)
@@ -268,7 +244,7 @@ class TestResolveProfile:
 
     @pytest.mark.asyncio
     async def test_falls_back_to_default_on_api_error(self):
-        """API error → graceful fallback to python-default."""
+        """API error ￫ graceful fallback to python-default."""
 
         async def _failing_list_profiles():
             raise ConnectionError("Bay unreachable")
@@ -280,7 +256,7 @@ class TestResolveProfile:
 
     @pytest.mark.asyncio
     async def test_falls_back_on_empty_profiles(self):
-        """Empty profile list → python-default."""
+        """Empty profile list ￫ python-default."""
 
         async def _empty_list_profiles():
             return SimpleNamespace(items=[])
@@ -292,7 +268,7 @@ class TestResolveProfile:
 
     @pytest.mark.asyncio
     async def test_single_profile_selected(self):
-        """Only one profile available → use it."""
+        """Only one profile available ￫ use it."""
 
         async def _single_profile():
             return SimpleNamespace(
@@ -329,16 +305,20 @@ class TestResolveProfile:
 
 
 class TestBaseComputerBooter:
-    """Verify base class defaults."""
+    """Verify base class defaults via subclass."""
 
     def test_capabilities_default_none(self):
-        from astrbot.core.computer.booters.base import ComputerBooter
+        """Test that ComputerBooter base capabilities returns None by default."""
+        from astrbot.core.computer.booters.shipyard import ShipyardBooter
 
-        booter = ComputerBooter()
+        # ShipyardBooter is not abstract, can be instantiated to test defaults
+        booter = ShipyardBooter.__new__(ShipyardBooter)
         assert booter.capabilities is None
 
     def test_browser_default_none(self):
-        from astrbot.core.computer.booters.base import ComputerBooter
+        """Test that ComputerBooter base browser returns None by default."""
+        from astrbot.core.computer.booters.shipyard import ShipyardBooter
 
-        booter = ComputerBooter()
+        # ShipyardBooter is not abstract, can be instantiated to test defaults
+        booter = ShipyardBooter.__new__(ShipyardBooter)
         assert booter.browser is None

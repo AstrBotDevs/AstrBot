@@ -166,7 +166,7 @@ class Main(star.Star):
                 """主动回复"""
                 provider = self.context.get_using_provider(event.unified_msg_origin)
                 if not provider:
-                    logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
+                    logger.error("未找到任何 LLM 提供商｡请先配置｡无法主动回复")
                     return
                 try:
                     conv = None
@@ -195,7 +195,7 @@ class Main(star.Star):
                                 logger.exception("主动回复处理图片失败")
 
                     if not conv:
-                        logger.error("未找到对话，无法主动回复")
+                        logger.error("未找到对话,无法主动回复")
                         return
 
                     yield event.request_llm(
@@ -210,9 +210,11 @@ class Main(star.Star):
 
     @filter.on_llm_request()
     async def decorate_llm_req(
-        self, event: AstrMessageEvent, req: ProviderRequest
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
     ) -> None:
-        """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
+        """在请求 LLM 前注入人格信息､Identifier､时间､回复内容等 System Prompt"""
         if self.ltm and self.ltm_enabled(event):
             try:
                 await self.ltm.on_req_llm(event, req)
@@ -221,7 +223,9 @@ class Main(star.Star):
 
     @filter.on_llm_response()
     async def record_llm_resp_to_ltm(
-        self, event: AstrMessageEvent, resp: LLMResponse
+        self,
+        event: AstrMessageEvent,
+        resp: LLMResponse,
     ) -> None:
         """在 LLM 响应后记录对话"""
         if self.ltm and self.ltm_enabled(event):

@@ -4,20 +4,21 @@
  */
 
 // 直接导入已经组织好的翻译数据
-import { translations } from './translations';
+import { translations } from "./translations";
 
 // 导出翻译数据常量，供类型推断使用
 export const translationData = translations;
 
 // 从实际的翻译数据推断完整的翻译结构类型
-export type TranslationSchema = typeof translations[keyof typeof translations];
+export type TranslationSchema =
+  (typeof translations)[keyof typeof translations];
 
 // TypeScript 助手：递归提取嵌套键路径
-type NestedKeyOf<T> = T extends object 
+type NestedKeyOf<T> = T extends object
   ? {
       [K in keyof T & string]: T[K] extends object
         ? `${K}` | `${K}.${NestedKeyOf<T[K]>}`
-        : `${K}`
+        : `${K}`;
     }[keyof T & string]
   : never;
 
@@ -61,10 +62,10 @@ export interface ValidationResult {
 }
 
 export interface ValidationError {
-  type: 'missing' | 'extra' | 'type_mismatch' | 'empty_value';
+  type: "missing" | "extra" | "type_mismatch" | "empty_value";
   key: string;
   message: string;
-  severity: 'error' | 'warning';
+  severity: "error" | "warning";
 }
 
 // 使用情况报告
@@ -126,4 +127,4 @@ declare module '@vue/runtime-core' {
 declare module 'vue-i18n' {
   export interface DefineLocaleMessage extends TranslationSchema {}
 }
-*/ 
+*/

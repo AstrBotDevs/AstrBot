@@ -13,38 +13,23 @@ from .platform import Platform, PlatformStatus
 from .register import platform_cls_map
 from .sources.webchat.webchat_adapter import WebChatAdapter
 
-PLATFORM_IMPORTS: dict[str, tuple[str, str]] = {
-    "aiocqhttp": (
-        ".sources.aiocqhttp.aiocqhttp_platform_adapter",
-        "AiocqhttpAdapter",
-    ),
-    "qq_official": (
-        ".sources.qqofficial.qqofficial_platform_adapter",
-        "QQOfficialPlatformAdapter",
-    ),
-    "qq_official_webhook": (
-        ".sources.qqofficial_webhook.qo_webhook_adapter",
-        "QQOfficialWebhookPlatformAdapter",
-    ),
-    "lark": (".sources.lark.lark_adapter", "LarkPlatformAdapter"),
-    "dingtalk": (".sources.dingtalk.dingtalk_adapter", "DingtalkPlatformAdapter"),
-    "telegram": (".sources.telegram.tg_adapter", "TelegramPlatformAdapter"),
-    "wecom": (".sources.wecom.wecom_adapter", "WecomPlatformAdapter"),
-    "wecom_ai_bot": (".sources.wecom_ai_bot.wecomai_adapter", "WecomAIBotAdapter"),
-    "weixin_official_account": (
-        ".sources.weixin_official_account.weixin_offacc_adapter",
-        "WeixinOfficialAccountPlatformAdapter",
-    ),
-    "discord": (".sources.discord.discord_platform_adapter", "DiscordPlatformAdapter"),
-    "misskey": (".sources.misskey.misskey_adapter", "MisskeyPlatformAdapter"),
-    "slack": (".sources.slack.slack_adapter", "SlackAdapter"),
-    "satori": (".sources.satori.satori_adapter", "SatoriPlatformAdapter"),
-    "line": (".sources.line.line_adapter", "LinePlatformAdapter"),
-    "kook": (".sources.kook.kook_adapter", "KookPlatformAdapter"),
-    "weibo": (".sources.weibo.weibo_adapter", "WeiboPlatformAdapter"),
+PLATFORM_ADAPTER_MODULES: dict[str, str] = {
+    "aiocqhttp": ".sources.aiocqhttp.aiocqhttp_platform_adapter",
+    "qq_official": ".sources.qqofficial.qqofficial_platform_adapter",
+    "qq_official_webhook": ".sources.qqofficial_webhook.qo_webhook_adapter",
+    "lark": ".sources.lark.lark_adapter",
+    "dingtalk": ".sources.dingtalk.dingtalk_adapter",
+    "telegram": ".sources.telegram.tg_adapter",
+    "wecom": ".sources.wecom.wecom_adapter",
+    "wecom_ai_bot": ".sources.wecom_ai_bot.wecomai_adapter",
+    "weixin_official_account": ".sources.weixin_official_account.weixin_offacc_adapter",
+    "discord": ".sources.discord.discord_platform_adapter",
+    "misskey": ".sources.misskey.misskey_adapter",
+    "slack": ".sources.slack.slack_adapter",
+    "satori": ".sources.satori.satori_adapter",
+    "line": ".sources.line.line_adapter",
+    "kook": ".sources.kook.kook_adapter",
 }
-
-BUILTIN_PLATFORM_TYPES: tuple[str, ...] = tuple(PLATFORM_IMPORTS)
 
 
 @dataclass
@@ -64,8 +49,8 @@ class PlatformManager:
         self.astrbot_config = config
         self.platforms_config = config["platform"]
         self.settings = config["platform_settings"]
-        """NOTE: 这里是 default 的配置文件，以保证最大的兼容性；
-        这个配置中的 unique_session 需要特殊处理，
+        """NOTE: 这里是 default 的配置文件,以保证最大的兼容性;
+        这个配置中的 unique_session 需要特殊处理,
         约定整个项目中对 unique_session 的引用都从 default 的配置中获取"""
         self.event_queue = event_queue
 
@@ -168,7 +153,7 @@ class PlatformManager:
                 sanitized_id, changed = self._sanitize_platform_id(platform_id)
                 if sanitized_id and changed:
                     logger.warning(
-                        "平台 ID %r 包含非法字符 ':' 或 '!'，已替换为 %r。",
+                        "平台 ID %r 包含非法字符 ':' 或 '!',已替换为 %r｡",
                         platform_id,
                         sanitized_id,
                     )
@@ -176,7 +161,7 @@ class PlatformManager:
                     self.astrbot_config.save_config()
                 else:
                     logger.error(
-                        f"平台 ID {platform_id!r} 不能为空，跳过加载该平台适配器。",
+                        f"平台 ID {platform_id!r} 不能为空,跳过加载该平台适配器｡",
                     )
                     return
 
@@ -192,13 +177,79 @@ class PlatformManager:
             logger.info(
                 f"载入 {platform_config['type']}({platform_id}) 平台适配器 ...",
             )
-            self.dynamic_import_platform(platform_config["type"])
+            match platform_config["type"]:
+                case "aiocqhttp":
+                    from .sources.aiocqhttp.aiocqhttp_platform_adapter import (  # noqa: F401
+                        AiocqhttpAdapter,
+                    )
+                case "qq_official":
+                    from .sources.qqofficial.qqofficial_platform_adapter import (  # noqa: F401
+                        QQOfficialPlatformAdapter,
+                    )
+                case "qq_official_webhook":
+                    from .sources.qqofficial_webhook.qo_webhook_adapter import (  # noqa: F401
+                        QQOfficialWebhookPlatformAdapter,
+                    )
+                case "lark":
+                    from .sources.lark.lark_adapter import (  # noqa: F401
+                        LarkPlatformAdapter,
+                    )
+                case "dingtalk":
+                    from .sources.dingtalk.dingtalk_adapter import (  # noqa: F401
+                        DingtalkPlatformAdapter,
+                    )
+                case "telegram":
+                    from .sources.telegram.tg_adapter import (  # noqa: F401
+                        TelegramPlatformAdapter,
+                    )
+                case "wecom":
+                    from .sources.wecom.wecom_adapter import (  # noqa: F401
+                        WecomPlatformAdapter,
+                    )
+                case "wecom_ai_bot":
+                    from .sources.wecom_ai_bot.wecomai_adapter import (  # noqa: F401
+                        WecomAIBotAdapter,
+                    )
+                case "weixin_official_account":
+                    from .sources.weixin_official_account.weixin_offacc_adapter import (  # noqa: F401
+                        WeixinOfficialAccountPlatformAdapter,
+                    )
+                case "discord":
+                    from .sources.discord.discord_platform_adapter import (  # noqa: F401
+                        DiscordPlatformAdapter,
+                    )
+                case "misskey":
+                    from .sources.misskey.misskey_adapter import (  # noqa: F401
+                        MisskeyPlatformAdapter,
+                    )
+                case "weixin_oc":
+                    from .sources.weixin_oc.weixin_oc_adapter import (  # noqa: F401
+                        WeixinOCAdapter,
+                    )
+                case "slack":
+                    from .sources.slack.slack_adapter import SlackAdapter  # noqa: F401
+                case "satori":
+                    from .sources.satori.satori_adapter import (  # noqa: F401
+                        SatoriPlatformAdapter,
+                    )
+                case "line":
+                    from .sources.line.line_adapter import (  # noqa: F401
+                        LinePlatformAdapter,
+                    )
+                case "kook":
+                    from .sources.kook.kook_adapter import (  # noqa: F401
+                        KookPlatformAdapter,
+                    )
+                case "mattermost":
+                    from .sources.mattermost.mattermost_adapter import (
+                        MattermostPlatformAdapter,  # noqa: F401
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
-                f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",
+                f"加载平台适配器 {platform_config['type']} 失败,原因:{e}｡请检查依赖库是否安装｡提示:可以在 管理面板->平台日志->安装Pip库 中安装依赖库｡",
             )
         except Exception as e:
-            logger.error(f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。")
+            logger.error(f"加载平台适配器 {platform_config['type']} 失败,原因:{e}｡")
 
         if platform_config["type"] not in platform_cls_map:
             logger.error(
@@ -229,7 +280,9 @@ class PlatformManager:
                 logger.error(traceback.format_exc())
 
     async def _task_wrapper(
-        self, task: asyncio.Task, platform: Platform | None = None
+        self,
+        task: asyncio.Task,
+        platform: Platform | None = None,
     ) -> None:
         # 设置平台状态为运行中
         if platform:
@@ -315,6 +368,7 @@ class PlatformManager:
 
         Returns:
             包含所有平台统计信息的字典
+
         """
         stats_list = []
         total_errors = 0
@@ -331,7 +385,7 @@ class PlatformManager:
                 elif stat.get("status") == PlatformStatus.ERROR.value:
                     error_count += 1
             except Exception as e:
-                # 如果获取统计信息失败，记录基本信息
+                # 如果获取统计信息失败,记录基本信息
                 logger.warning(f"获取平台统计信息失败: {e}")
                 stats_list.append(
                     {
@@ -340,7 +394,7 @@ class PlatformManager:
                         "status": "unknown",
                         "error_count": 0,
                         "last_error": None,
-                    }
+                    },
                 )
 
         return {

@@ -1,5 +1,5 @@
-<script setup>
-import { computed } from "vue";
+<script setup lang="ts">
+import { ref, computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 import { usePluginI18n } from "@/utils/pluginI18n";
@@ -58,10 +58,7 @@ const handlePluginLogoError = (event) => {
     :ripple="false"
     @click="handleOpen"
   >
-
-    <v-card-text
-      class="plugin-card-content"
-    >
+    <v-card-text class="plugin-card-content">
       <div class="plugin-cover">
         <img
           :src="plugin?.logo || defaultPluginIcon"
@@ -83,8 +80,8 @@ const handlePluginLogoError = (event) => {
               plugin.display_name?.length
                 ? plugin.display_name
                 : showPluginFullName
-                ? plugin.name
-                : plugin.trimmedName
+                  ? plugin.name
+                  : plugin.trimmedName
             }}
           </div>
           <v-chip
@@ -112,12 +109,11 @@ const handlePluginLogoError = (event) => {
             icon="mdi-account"
             size="x-small"
             style="color: rgba(var(--v-theme-on-surface), 0.5)"
-          ></v-icon>
+          />
           <a
             v-if="plugin?.social_link"
             :href="plugin.social_link"
             target="_blank"
-            @click.stop
             class="text-subtitle-2 font-weight-medium"
             style="
               text-decoration: none;
@@ -126,6 +122,7 @@ const handlePluginLogoError = (event) => {
               overflow: hidden;
               text-overflow: ellipsis;
             "
+            @click.stop
           >
             {{ plugin.author }}
           </a>
@@ -142,15 +139,22 @@ const handlePluginLogoError = (event) => {
             {{ plugin.author }}
           </span>
           <div
-            v-if="plugin.stars !== undefined"
             class="d-flex align-center text-subtitle-2 ml-2"
             style="color: rgba(var(--v-theme-on-surface), 0.7)"
           >
             <v-icon
-              icon="mdi-star"
+              icon="mdi-source-branch"
               size="x-small"
               style="margin-right: 2px"
-            ></v-icon>
+            />
+            <span>{{ plugin.version }}</span>
+          </div>
+          <div
+            v-if="plugin.stars !== undefined"
+            class="d-flex align-center text-subtitle-2 ml-2"
+            style="color: rgba(var(--v-theme-on-surface), 0.7)"
+          >
+            <v-icon icon="mdi-star" size="x-small" style="margin-right: 2px" />
             <span>{{ plugin.stars }}</span>
           </div>
         </div>
@@ -159,7 +163,7 @@ const handlePluginLogoError = (event) => {
           {{ cardDescription }}
         </div>
 
-        <div class="plugin-stats"></div>
+        <div class="plugin-stats" />
       </div>
     </v-card-text>
 
@@ -168,9 +172,18 @@ const handlePluginLogoError = (event) => {
       @click.stop
     >
       <div
-        v-if="platformDisplayList.length"
+        v-if="platformDisplayList.length || (plugin.tags && plugin.tags.length)"
         class="plugin-badges"
       >
+        <v-chip
+          v-for="tag in plugin.tags"
+          :key="tag"
+          :color="tag === 'danger' ? 'error' : 'primary'"
+          label
+          size="x-small"
+        >
+          {{ tag === "danger" ? tm("tags.danger") : tag }}
+        </v-chip>
         <PluginPlatformChip
           :platforms="plugin.support_platforms"
           size="x-small"
@@ -188,17 +201,17 @@ const handlePluginLogoError = (event) => {
         target="_blank"
         style="height: 32px"
       >
-        <v-icon icon="mdi-github" start size="small"></v-icon>
+        <v-icon icon="mdi-github" start size="small" />
         {{ tm("buttons.viewRepo") }}
       </v-btn>
       <v-btn
         v-if="!plugin?.installed"
         color="primary"
         size="small"
-        @click="handleInstall(plugin)"
         variant="flat"
         class="market-action-btn"
         style="height: 32px"
+        @click="handleInstall(plugin)"
       >
         {{ tm("buttons.install") }}
       </v-btn>

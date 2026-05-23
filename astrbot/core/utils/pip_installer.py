@@ -46,7 +46,7 @@ _PIP_FAILURE_PATTERNS = {
     "dependency_detail": re.compile(r"\bdepends on\b", re.IGNORECASE),
 }
 _SENSITIVE_PIP_VALUE_KEYS = frozenset(
-    {"password", "passwd", "pass", "api_token", "token", "auth_token"}
+    {"password", "passwd", "pass", "api_token", "token", "auth_token"},
 )
 _MAX_PIP_OUTPUT_LINES = 200
 
@@ -55,7 +55,11 @@ class DependencyConflictError(Exception):
     """Raised when pip encounters a dependency conflict."""
 
     def __init__(
-        self, message: str, errors: list[str], *, is_core_conflict: bool
+        self,
+        message: str,
+        errors: list[str],
+        *,
+        is_core_conflict: bool,
     ) -> None:
         super().__init__(message)
         self.errors = errors
@@ -91,7 +95,7 @@ def _get_pip_main():
                 "pip module is unavailable "
                 f"(sys.executable={sys.executable}, "
                 f"frozen={getattr(sys, 'frozen', False)}, "
-                f"ASTRBOT_DESKTOP_CLIENT={os.environ.get('ASTRBOT_DESKTOP_CLIENT')})"
+                f"ASTRBOT_DESKTOP_CLIENT={os.environ.get('ASTRBOT_DESKTOP_CLIENT')})",
             ) from exc
 
     return pip_main
@@ -203,7 +207,7 @@ def _package_specs_override_index(package_specs: list[str]) -> bool:
 class _StreamingLogWriter(io.TextIOBase):
     def __init__(self, log_func, *, max_lines: int | None = None) -> None:
         self._log_func = log_func
-        self._lines = deque(maxlen=max_lines or _MAX_PIP_OUTPUT_LINES)
+        self._lines: deque[str] = deque(maxlen=max_lines or _MAX_PIP_OUTPUT_LINES)
         self._buffer = ""
 
     def write(self, text: str) -> int:
@@ -331,7 +335,7 @@ def _build_packaged_windows_runtime_build_env(
         return {}
 
     include_dir = _normalize_windows_native_build_path(
-        ntpath.join(runtime_dir, "include")
+        ntpath.join(runtime_dir, "include"),
     )
     libs_dir = _normalize_windows_native_build_path(ntpath.join(runtime_dir, "libs"))
     include_exists = os.path.isdir(include_dir)
@@ -460,22 +464,22 @@ def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | 
         detail = (
             " 冲突详情: "
             f"{_normalize_conflict_detail_line(context.requested_lines[0])} vs "
-            f"{_normalize_conflict_detail_line(context.constraint_lines[0])}。"
+            f"{_normalize_conflict_detail_line(context.constraint_lines[0])}｡"
         )
     elif len(context.dependency_detail_lines) >= 2:
         detail = (
             " 冲突详情: "
             f"{_normalize_conflict_detail_line(context.dependency_detail_lines[0])} vs "
-            f"{_normalize_conflict_detail_line(context.dependency_detail_lines[1])}。"
+            f"{_normalize_conflict_detail_line(context.dependency_detail_lines[1])}｡"
         )
 
     if is_core_conflict:
         message = (
-            f"检测到核心依赖版本保护冲突。{detail}插件要求的依赖版本与 AstrBot 核心不兼容，"
-            "为了系统稳定，已阻止该降级行为。请联系插件作者或调整 requirements.txt。"
+            f"检测到核心依赖版本保护冲突｡{detail}插件要求的依赖版本与 AstrBot 核心不兼容,"
+            "为了系统稳定,已阻止该降级行为｡请联系插件作者或调整 requirements.txt｡"
         )
     else:
-        message = f"检测到依赖冲突。{detail}"
+        message = f"检测到依赖冲突｡{detail}"
 
     return DependencyConflictError(
         message,
@@ -518,7 +522,7 @@ def _collect_candidate_modules(
             canonical_name = _canonicalize_distribution_name(distribution_name)
             by_name.setdefault(canonical_name, []).append(distribution)
     except Exception as exc:
-        logger.warning("读取 site-packages 元数据失败，使用回退模块名: %s", exc)
+        logger.warning("读取 site-packages 元数据失败,使用回退模块名: %s", exc)
 
     expanded_requirement_names: set[str] = set()
     pending = deque(requirement_names)
@@ -560,7 +564,8 @@ def _ensure_preferred_modules(
     site_packages_path: str,
 ) -> None:
     unresolved_prefer_reasons = _prefer_modules_from_site_packages(
-        module_names, site_packages_path
+        module_names,
+        site_packages_path,
     )
 
     unresolved_modules: list[str] = []
@@ -581,7 +586,7 @@ def _ensure_preferred_modules(
 
     if unresolved_modules:
         conflict_message = (
-            "检测到插件依赖与当前运行时发生冲突，无法安全加载该插件。"
+            "检测到插件依赖与当前运行时发生冲突,无法安全加载该插件｡"
             f"冲突模块: {', '.join(unresolved_modules)}"
         )
         raise RuntimeError(conflict_message)
@@ -620,7 +625,8 @@ def _is_module_loaded_from_site_packages(
 
 
 def _prefer_module_from_site_packages(
-    module_name: str, site_packages_path: str
+    module_name: str,
+    site_packages_path: str,
 ) -> bool:
     with _SITE_PACKAGES_IMPORT_LOCK:
         base_path = os.path.join(site_packages_path, *module_name.split("."))
@@ -893,12 +899,12 @@ def _patch_distlib_finder_for_frozen_runtime() -> None:
 
     if not isinstance(finder_registry, dict):
         logger.warning(
-            "Skip patching distlib finder because _finder_registry is unavailable."
+            "Skip patching distlib finder because _finder_registry is unavailable.",
         )
         return
     if not callable(register_finder) or resource_finder is None:
         logger.warning(
-            "Skip patching distlib finder because register API is unavailable."
+            "Skip patching distlib finder because register API is unavailable.",
         )
         return
 
@@ -921,7 +927,9 @@ def _patch_distlib_finder_for_frozen_runtime() -> None:
             package_name,
         ):
             finder_registry = getattr(
-                distlib_resources, "_finder_registry", finder_registry
+                distlib_resources,
+                "_finder_registry",
+                finder_registry,
             )
 
 
@@ -951,7 +959,7 @@ class PipInstaller:
 
         if package_name and normalized_requirements_path:
             raise ValueError(
-                "package_name and requirements_path cannot be used together"
+                "package_name and requirements_path cannot be used together",
             )
 
         if package_name:
@@ -962,7 +970,7 @@ class PipInstaller:
         elif normalized_requirements_path:
             args = ["install", "-r", normalized_requirements_path]
             requested_requirements = extract_requirement_names(
-                normalized_requirements_path
+                normalized_requirements_path,
             )
 
         if not args:
@@ -989,13 +997,15 @@ class PipInstaller:
         package_name: str | None = None,
         requirements_path: str | None = None,
         mirror: str | None = None,
-        allow_target_upgrade: bool = True,
+        allow_target_upgrade: bool = False,
     ) -> None:
         args, requested_requirements = self._build_pip_args(
-            package_name, requirements_path, mirror
+            package_name,
+            requirements_path,
+            mirror,
         )
         if not args:
-            logger.info("Pip 包管理器跳过安装：未提供有效的包名或 requirements 文件。")
+            logger.info("Pip 包管理器跳过安装:未提供有效的包名或 requirements 文件｡")
             return
 
         target_site_packages = None
@@ -1003,19 +1013,21 @@ class PipInstaller:
             target_site_packages = get_astrbot_site_packages_path()
             os.makedirs(target_site_packages, exist_ok=True)
             _prepend_sys_path(target_site_packages)
-            # `allow_target_upgrade` only matters for packaged desktop installs that
-            # write into the shared `data/site-packages` target directory.
-            args.extend(["--target", target_site_packages])
-            if allow_target_upgrade:
-                args.extend(
-                    [
-                        "--upgrade",
-                        "--upgrade-strategy",
-                        "only-if-needed",
-                    ]
-                )
+            args.extend(
+                [
+                    "--target",
+                    target_site_packages,
+                    "--upgrade",
+                    "--upgrade-strategy",
+                    "only-if-needed",
+                ],
+            )
+        elif allow_target_upgrade:
+            args.append("--upgrade")
 
-        with self._core_constraints.constraints_file() as constraints_file_path:
+        async with (
+            self._core_constraints.async_constraints_file() as constraints_file_path
+        ):
             if constraints_file_path:
                 args.extend(["-c", constraints_file_path])
 
@@ -1034,7 +1046,7 @@ class PipInstaller:
         importlib.invalidate_caches()
 
     def prefer_installed_dependencies(self, requirements_path: str) -> None:
-        """优先使用已安装在插件 site-packages 中的依赖，不执行安装。"""
+        """优先使用已安装在插件 site-packages 中的依赖,不执行安装｡"""
         if not is_packaged_desktop_runtime():
             return
 
@@ -1077,4 +1089,4 @@ class PipInstaller:
     async def _run_pip_with_classification(self, args: list[str]) -> None:
         result_code = await self._run_pip_in_process(args)
         if result_code != 0:
-            raise PipInstallError(f"安装失败，错误码：{result_code}", code=result_code)
+            raise PipInstallError(f"安装失败,错误码:{result_code}", code=result_code)

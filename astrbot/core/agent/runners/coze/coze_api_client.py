@@ -66,7 +66,7 @@ class CozeAPIClient:
                 timeout=aiohttp.ClientTimeout(total=60),
             ) as response:
                 if response.status == 401:
-                    raise Exception("Coze API 认证失败，请检查 API Key 是否正确")
+                    raise Exception("Coze API 认证失败,请检查 API Key 是否正确")
 
                 response_text = await response.text()
                 logger.debug(
@@ -75,27 +75,27 @@ class CozeAPIClient:
 
                 if response.status != 200:
                     raise Exception(
-                        f"文件上传失败，状态码: {response.status}, 响应: {response_text}",
+                        f"文件上传失败,状态码: {response.status}, 响应: {response_text}",
                     )
 
                 try:
                     result = await response.json()
                 except json.JSONDecodeError:
-                    raise Exception(f"文件上传响应解析失败: {response_text}")
+                    raise Exception(f"文件上传响应解析失败: {response_text}") from None
 
                 if result.get("code") != 0:
                     raise Exception(f"文件上传失败: {result.get('msg', '未知错误')}")
 
                 file_id = result["data"]["id"]
-                logger.debug(f"[Coze] 图片上传成功，file_id: {file_id}")
+                logger.debug(f"[Coze] 图片上传成功,file_id: {file_id}")
                 return file_id
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error("文件上传超时")
-            raise Exception("文件上传超时")
+            raise Exception("文件上传超时") from None
         except Exception as e:
             logger.error(f"文件上传失败: {e!s}")
-            raise Exception(f"文件上传失败: {e!s}")
+            raise Exception(f"文件上传失败: {e!s}") from e
 
     async def download_image(self, image_url: str) -> bytes:
         """下载图片并返回字节数据
@@ -111,14 +111,14 @@ class CozeAPIClient:
         try:
             async with session.get(image_url) as response:
                 if response.status != 200:
-                    raise Exception(f"下载图片失败，状态码: {response.status}")
+                    raise Exception(f"下载图片失败,状态码: {response.status}")
 
                 image_data = await response.read()
                 return image_data
 
         except Exception as e:
             logger.error(f"下载图片失败 {image_url}: {e!s}")
-            raise Exception(f"下载图片失败: {e!s}")
+            raise Exception(f"下载图片失败: {e!s}") from e
 
     async def chat_messages(
         self,
@@ -145,7 +145,7 @@ class CozeAPIClient:
         session = await self._ensure_session()
         url = f"{self.api_base}/v3/chat"
 
-        payload = {
+        payload: dict[str, Any] = {
             "bot_id": bot_id,
             "user_id": user_id,
             "stream": stream,
@@ -169,10 +169,10 @@ class CozeAPIClient:
                 timeout=aiohttp.ClientTimeout(total=timeout),
             ) as response:
                 if response.status == 401:
-                    raise Exception("Coze API 认证失败，请检查 API Key 是否正确")
+                    raise Exception("Coze API 认证失败,请检查 API Key 是否正确")
 
                 if response.status != 200:
-                    raise Exception(f"Coze API 流式请求失败，状态码: {response.status}")
+                    raise Exception(f"Coze API 流式请求失败,状态码: {response.status}")
 
                 # SSE
                 buffer = ""
@@ -203,10 +203,10 @@ class CozeAPIClient:
                                     except json.JSONDecodeError:
                                         event_data = {"content": data_str}
 
-        except asyncio.TimeoutError:
-            raise Exception(f"Coze API 流式请求超时 ({timeout}秒)")
+        except TimeoutError:
+            raise Exception(f"Coze API 流式请求超时 ({timeout}秒)") from None
         except Exception as e:
-            raise Exception(f"Coze API 流式请求失败: {e!s}")
+            raise Exception(f"Coze API 流式请求失败: {e!s}") from e
 
     async def clear_context(self, conversation_id: str):
         """清空会话上下文
@@ -226,20 +226,20 @@ class CozeAPIClient:
                 response_text = await response.text()
 
                 if response.status == 401:
-                    raise Exception("Coze API 认证失败，请检查 API Key 是否正确")
+                    raise Exception("Coze API 认证失败,请检查 API Key 是否正确")
 
                 if response.status != 200:
-                    raise Exception(f"Coze API 请求失败，状态码: {response.status}")
+                    raise Exception(f"Coze API 请求失败,状态码: {response.status}")
 
                 try:
                     return json.loads(response_text)
                 except json.JSONDecodeError:
-                    raise Exception("Coze API 返回非JSON格式")
+                    raise Exception("Coze API 返回非JSON格式") from None
 
-        except asyncio.TimeoutError:
-            raise Exception("Coze API 请求超时")
+        except TimeoutError:
+            raise Exception("Coze API 请求超时") from None
         except aiohttp.ClientError as e:
-            raise Exception(f"Coze API 请求失败: {e!s}")
+            raise Exception(f"Coze API 请求失败: {e!s}") from e
 
     async def get_message_list(
         self,
@@ -275,7 +275,7 @@ class CozeAPIClient:
 
         except Exception as e:
             logger.error(f"获取Coze消息列表失败: {e!s}")
-            raise Exception(f"获取Coze消息列表失败: {e!s}")
+            raise Exception(f"获取Coze消息列表失败: {e!s}") from e
 
     async def close(self) -> None:
         """关闭会话"""
@@ -288,17 +288,18 @@ if __name__ == "__main__":
     import asyncio
     import os
 
+    import anyio
+
     async def test_coze_api_client() -> None:
         api_key = os.getenv("COZE_API_KEY", "")
         bot_id = os.getenv("COZE_BOT_ID", "")
         client = CozeAPIClient(api_key=api_key)
 
         try:
-            with open("README.md", "rb") as f:
-                file_data = f.read()
+            async with await anyio.open_file("README.md", "rb") as f:
+                file_data = await f.read()
             file_id = await client.upload_file(file_data)
-            print(f"Uploaded file_id: {file_id}")
-            async for event in client.chat_messages(
+            async for _event in client.chat_messages(
                 bot_id=bot_id,
                 user_id="test_user",
                 additional_messages=[
@@ -316,7 +317,7 @@ if __name__ == "__main__":
                 ],
                 stream=True,
             ):
-                print(f"Event: {event}")
+                pass
 
         finally:
             await client.close()

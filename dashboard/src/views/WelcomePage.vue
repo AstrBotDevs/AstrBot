@@ -7,7 +7,7 @@
             {{ greetingText }} {{ greetingEmoji }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-0">
-            {{ tm('subtitle') }}
+            {{ tm("subtitle") }}
           </p>
         </v-col>
       </v-row>
@@ -16,50 +16,175 @@
         <v-col cols="12">
           <v-card class="welcome-card pa-6" elevation="0" border>
             <div class="mb-4 text-h3 font-weight-bold">
-              {{ tm('onboard.title') }}
+              {{ tm("onboard.title") }}
             </div>
 
-            <v-timeline align="start" side="end" density="compact" class="welcome-timeline" truncate-line="both">
-              <v-timeline-item :dot-color="providerStepState === 'completed' ? 'success' : 'primary'"
-                icon="mdi-numeric-1" fill-dot size="small">
+            <v-timeline
+              align="start"
+              side="end"
+              density="compact"
+              class="welcome-timeline"
+              truncate-line="both"
+            >
+              <v-timeline-item
+                :dot-color="
+                  backendStepState === 'completed' ? 'success' : 'primary'
+                "
+                :icon="
+                  backendStepState === 'completed'
+                    ? 'mdi-check'
+                    : 'mdi-numeric-1'
+                "
+                fill-dot
+                size="small"
+              >
                 <div class="pl-2">
-                  <div class="text-h6 font-weight-bold mb-1">{{ tm('onboard.step1Title') }}</div>
-                  <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step1Desc') }}</p>
+                  <div class="text-h6 font-weight-bold mb-1">
+                    {{ tm("onboard.step0Title") || "配置后端地址" }}
+                  </div>
+                  <p class="text-body-2 text-medium-emphasis mb-3">
+                    {{
+                      tm("onboard.step0Desc") ||
+                      "配置 AstrBot 的后端 API 地址。"
+                    }}
+                  </p>
                   <div class="d-flex align-center">
-                    <v-btn color="primary" variant="flat" rounded="pill" class="px-6" @click="openProviderDialog">
-                      {{ tm('onboard.configure') }}
+                    <div
+                      style="max-width: 100%; min-width: 200px"
+                      class="flex-grow-1 mr-2"
+                    >
+                      <v-text-field
+                        v-model="apiBaseUrl"
+                        label="Backend URL"
+                        placeholder="http://127.0.0.1:6185"
+                        variant="outlined"
+                        density="compact"
+                        hide-details
+                      />
+                    </div>
+                    <v-btn
+                      color="primary"
+                      variant="flat"
+                      rounded="pill"
+                      class="px-6"
+                      :loading="checkingBackend"
+                      @click="checkAndSaveBackend"
+                    >
+                      {{ t("core.common.save") }}
                     </v-btn>
-                    <div v-if="providerStepState === 'completed'"
-                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3">
-                      {{ tm('onboard.completed') }}
+                    <div
+                      v-if="backendStepState === 'completed'"
+                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3"
+                    >
+                      {{ tm("onboard.completed") }}
                     </div>
                   </div>
                 </div>
               </v-timeline-item>
 
-              <v-timeline-item :dot-color="platformStepState === 'completed' ? 'success' : 'primary'"
-                icon="mdi-numeric-2" fill-dot size="small">
+              <v-timeline-item
+                :dot-color="
+                  platformStepState === 'completed' ? 'success' : 'primary'
+                "
+                :icon="
+                  platformStepState === 'completed'
+                    ? 'mdi-check'
+                    : 'mdi-numeric-2'
+                "
+                fill-dot
+                size="small"
+              >
                 <div class="pl-2">
-                  <div class="text-h6 font-weight-bold mb-1">{{ tm('onboard.step2Title') }}</div>
-                  <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step2Desc') }}</p>
+                  <div
+                    class="text-h6 font-weight-bold mb-1"
+                    :class="{
+                      'text-medium-emphasis': backendStepState !== 'completed',
+                    }"
+                  >
+                    {{ tm("onboard.step1Title") }}
+                  </div>
+                  <p class="text-body-2 text-medium-emphasis mb-3">
+                    {{ tm("onboard.step1Desc") }}
+                  </p>
                   <div class="d-flex align-center">
-                    <v-btn color="primary" variant="flat" rounded="pill" class="px-6" :loading="loadingPlatformDialog"
-                      @click="openPlatformDialog">
-                      {{ tm('onboard.configure') }}
+                    <v-btn
+                      color="primary"
+                      variant="flat"
+                      rounded="pill"
+                      class="px-6"
+                      :loading="loadingPlatformDialog"
+                      :disabled="backendStepState !== 'completed'"
+                      @click="openPlatformDialog"
+                    >
+                      {{ tm("onboard.configure") }}
                     </v-btn>
-                    <div v-if="platformStepState === 'completed'"
-                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3">
-                      {{ tm('onboard.completed') }}
+                    <div
+                      v-if="platformStepState === 'completed'"
+                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3"
+                    >
+                      {{ tm("onboard.completed") }}
                     </div>
                   </div>
                 </div>
               </v-timeline-item>
 
-              <v-timeline-item :dot-color="computerAccessStepState === 'completed' ? 'success' : 'primary'"
-                icon="mdi-numeric-3" fill-dot size="small">
+              <v-timeline-item
+                :dot-color="
+                  providerStepState === 'completed' ? 'success' : 'primary'
+                "
+                :icon="
+                  providerStepState === 'completed'
+                    ? 'mdi-check'
+                    : 'mdi-numeric-3'
+                "
+                fill-dot
+                size="small"
+              >
+                <div class="pl-2">
+                  <div
+                    class="text-h6 font-weight-bold mb-1"
+                    :class="{
+                      'text-medium-emphasis': platformStepState !== 'completed',
+                    }"
+                  >
+                    {{ tm("onboard.step2Title") }}
+                  </div>
+                  <p class="text-body-2 text-medium-emphasis mb-3">
+                    {{ tm("onboard.step2Desc") }}
+                  </p>
+                  <div class="d-flex align-center">
+                    <v-btn
+                      color="primary"
+                      variant="flat"
+                      rounded="pill"
+                      class="px-6"
+                      @click="openProviderDialog"
+                    >
+                      {{ tm("onboard.configure") }}
+                    </v-btn>
+                    <div
+                      v-if="providerStepState === 'completed'"
+                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3"
+                    >
+                      {{ tm("onboard.completed") }}
+                    </div>
+                  </div>
+                </div>
+              </v-timeline-item>
+
+              <v-timeline-item
+                :dot-color="
+                  computerAccessStepState === 'completed' ? 'success' : 'primary'
+                "
+                icon="mdi-numeric-4"
+                fill-dot
+                size="small"
+              >
                 <div class="pl-2">
                   <div class="d-flex align-center mb-1">
-                    <div class="text-h6 font-weight-bold">{{ tm('onboard.step3Title') }}</div>
+                    <div class="text-h6 font-weight-bold">
+                      {{ tm("onboard.step3Title") }}
+                    </div>
                     <v-btn
                       icon
                       variant="text"
@@ -71,7 +196,9 @@
                       <span class="text-body-2 font-weight-bold">?</span>
                     </v-btn>
                   </div>
-                  <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step3Desc') }}</p>
+                  <p class="text-body-2 text-medium-emphasis mb-3">
+                    {{ tm("onboard.step3Desc") }}
+                  </p>
                   <div class="d-flex flex-wrap align-center ga-3">
                     <v-select
                       v-model="computerAccessRuntime"
@@ -91,59 +218,100 @@
               </v-timeline-item>
             </v-timeline>
           </v-card>
-
         </v-col>
       </v-row>
+
+      <v-dialog v-model="showComputerAccessHelpDialog" max-width="640">
+        <v-card>
+          <v-card-title class="text-h3 font-weight-bold pa-4">
+            {{ tm("onboard.step3HelpTitle") }}
+          </v-card-title>
+          <v-card-text>
+            <ol class="computer-access-help-list">
+              <li>{{ tm("onboard.step3HelpItem1") }}</li>
+              <li>{{ tm("onboard.step3HelpItem2") }}</li>
+              <li>{{ tm("onboard.step3HelpItem3") }}</li>
+            </ol>
+          </v-card-text>
+          <v-card-actions class="px-6 pb-4">
+            <v-spacer />
+            <v-btn
+              color="primary"
+              variant="text"
+              @click="showComputerAccessHelpDialog = false"
+            >
+              {{ tm("onboard.step3HelpClose") }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
 
       <v-row class="px-4 mt-4">
         <v-col cols="12">
           <v-card class="welcome-card pa-6" elevation="0" border>
             <div class="mb-4 text-h3 font-weight-bold">
-              {{ tm('resources.title') }}
+              {{ tm("resources.title") }}
             </div>
             <v-row>
               <v-col cols="12" sm="4">
                 <!-- GitHub Card -->
-                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column"
-                  href="https://github.com/AstrBotDevs/AstrBot/" target="_blank">
+                <v-card
+                  variant="outlined"
+                  class="h-100 pa-4 d-flex flex-column"
+                  href="https://github.com/AstrBotDevs/AstrBot/"
+                  target="_blank"
+                >
                   <div class="d-flex align-center mb-3">
-                    <v-icon size="32" class="mr-3">mdi-github</v-icon>
+                    <v-icon size="32" class="mr-3"> mdi-github </v-icon>
                     <span class="text-h6 font-weight-bold">GitHub</span>
                   </div>
                   <p class="text-body-2 text-medium-emphasis mb-0">
-                    {{ tm('resources.githubDesc') }}
+                    {{ tm("resources.githubDesc") }}
                   </p>
                 </v-card>
               </v-col>
 
               <v-col cols="12" sm="4">
                 <!-- Docs Card -->
-                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column" href="https://docs.astrbot.app"
-                  target="_blank">
+                <v-card
+                  variant="outlined"
+                  class="h-100 pa-4 d-flex flex-column"
+                  href="https://docs.astrbot.app"
+                  target="_blank"
+                >
                   <div class="d-flex align-center mb-3">
-                    <v-icon size="32" class="mr-3">mdi-book-open-variant</v-icon>
-                    <span class="text-h6 font-weight-bold">{{ tm('resources.docsTitle') }}</span>
+                    <v-icon size="32" class="mr-3">
+                      mdi-book-open-variant
+                    </v-icon>
+                    <span class="text-h6 font-weight-bold">{{
+                      tm("resources.docsTitle")
+                    }}</span>
                   </div>
                   <p class="text-body-2 text-medium-emphasis mb-0">
-                    {{ tm('resources.docsDesc') }}
+                    {{ tm("resources.docsDesc") }}
                   </p>
                 </v-card>
               </v-col>
 
               <v-col cols="12" sm="4">
                 <!-- Afdian Card -->
-                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column"
-                  href="https://afdian.com/a/astrbot_team" target="_blank">
+                <v-card
+                  variant="outlined"
+                  class="h-100 pa-4 d-flex flex-column"
+                  href="https://afdian.com/a/astrbot_team"
+                  target="_blank"
+                >
                   <div class="d-flex align-center mb-3">
-                    <v-icon size="32" class="mr-3">mdi-hand-heart</v-icon>
-                    <span class="text-h6 font-weight-bold">{{ tm('resources.afdianTitle') }}</span>
+                    <v-icon size="32" class="mr-3"> mdi-hand-heart </v-icon>
+                    <span class="text-h6 font-weight-bold">{{
+                      tm("resources.afdianTitle")
+                    }}</span>
                   </div>
                   <p class="text-body-2 text-medium-emphasis mb-0">
-                    {{ tm('resources.afdianDesc') }}
+                    {{ tm("resources.afdianDesc") }}
                   </p>
                 </v-card>
               </v-col>
-
             </v-row>
           </v-card>
         </v-col>
@@ -153,64 +321,80 @@
         <v-col cols="12">
           <v-card class="welcome-card pa-6" elevation="0" border>
             <div class="mb-4 text-h3 font-weight-bold">
-              {{ tm('announcement.title') }}
+              {{ tm("announcement.title") }}
             </div>
-            <MarkdownRender
-              :content="welcomeAnnouncement"
-              :typewriter="false"
-              class="welcome-announcement-markdown markdown-content"
-            />
+            <div class="welcome-announcement-markdown markdown-content">
+              <MarkdownRender
+                :content="welcomeAnnouncement"
+                :typewriter="false"
+              />
+            </div>
           </v-card>
         </v-col>
       </v-row>
     </v-container>
 
-    <AddNewPlatform v-model:show="showAddPlatformDialog" :metadata="platformMetadata" :config_data="platformConfigData"
-      @refresh-config="loadPlatformConfigBase" />
+    <AddNewPlatform
+      v-model:show="showAddPlatformDialog"
+      :metadata="platformMetadata"
+      :config_data="platformConfigData"
+      @refresh-config="loadPlatformConfigBase"
+    />
     <ProviderConfigDialog v-model="showProviderDialog" />
-    <v-dialog v-model="showComputerAccessHelpDialog" max-width="640">
-      <v-card>
-        <v-card-title class="text-h3 font-weight-bold pa-4">
-          {{ tm('onboard.step3HelpTitle') }}
-        </v-card-title>
-        <v-card-text>
-          <ol class="computer-access-help-list">
-            <li>{{ tm('onboard.step3HelpItem1') }}</li>
-            <li>{{ tm('onboard.step3HelpItem2') }}</li>
-            <li>{{ tm('onboard.step3HelpItem3') }}</li>
-          </ol>
-        </v-card-text>
-        <v-card-actions class="px-6 pb-4">
-          <v-spacer />
-          <v-btn color="primary" variant="text" @click="showComputerAccessHelpDialog = false">
-            {{ tm('onboard.step3HelpClose') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from 'vue';
-import axios from 'axios';
-import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
-import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { useToast } from '@/utils/toast';
-import { MarkdownRender } from 'markstream-vue';
-import 'markstream-vue/index.css';
+import { computed, ref, watch, onMounted } from "vue";
+import axios, {
+  getApiBaseUrlValidationError,
+  normalizeConfiguredApiBaseUrl,
+  setApiBaseUrl,
+} from "@/utils/request";
+import AddNewPlatform from "@/components/platform/AddNewPlatform.vue";
+import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { useToast } from "@/utils/toast";
+import { useApiStore } from "@/stores/api";
+import { MarkdownRender } from "markstream-vue";
+import "markstream-vue/index.css";
+import "highlight.js/styles/github.css";
 
-type StepState = 'pending' | 'completed' | 'skipped';
-type ComputerAccessRuntime = 'local' | 'none';
+interface ProviderPayloadItem {
+  [key: string]: unknown;
+  provider_type?: string;
+  provider_source_id?: string;
+  type?: string;
+  enable?: boolean;
+  id?: string;
+}
 
-const { tm } = useModuleI18n('features/welcome');
-const { locale } = useI18n();
+interface ProviderSourceItem {
+  id: string;
+  provider_type: string;
+  [key: string]: unknown;
+}
+
+interface ApiError {
+  response?: {
+    status?: number;
+    data?: {
+      message?: string;
+    };
+  };
+  message?: string;
+}
+
+type StepState = "pending" | "completed" | "skipped";
+type ComputerAccessRuntime = "local" | "none";
+
+const { tm } = useModuleI18n("features/welcome");
+const { locale, t } = useI18n();
 const { success: showSuccess, error: showError } = useToast();
+const apiStore = useApiStore();
 
 const showAddPlatformDialog = ref(false);
 const showProviderDialog = ref(false);
-const showComputerAccessHelpDialog = ref(false);
 const loadingPlatformDialog = ref(false);
 
 const platformMetadata = ref<Record<string, any>>({});
@@ -218,53 +402,57 @@ const platformConfigData = ref<Record<string, any>>({});
 const platformCountBeforeOpen = ref(0);
 const providerCountBeforeOpen = ref(0);
 
-const platformStepState = ref<StepState>('pending');
-const providerStepState = ref<StepState>('pending');
-const computerAccessStepState = ref<StepState>('pending');
-const computerAccessRuntime = ref<ComputerAccessRuntime>('none');
-const savedComputerAccessRuntime = ref<ComputerAccessRuntime>('none');
+const backendStepState = ref<StepState>("pending");
+const checkingBackend = ref(false);
+const apiBaseUrl = ref(apiStore.apiBaseUrl || "http://127.0.0.1:6185");
+
+const platformStepState = ref<StepState>("pending");
+const providerStepState = ref<StepState>("pending");
+const showComputerAccessHelpDialog = ref(false);
+const computerAccessStepState = ref<StepState>("pending");
+const computerAccessRuntime = ref<ComputerAccessRuntime>("none");
+const savedComputerAccessRuntime = ref<ComputerAccessRuntime>("none");
 const savingComputerAccess = ref(false);
 const welcomeAnnouncementRaw = ref<unknown>(null);
 
 function resolveWelcomeAnnouncement(raw: unknown, currentLocale: string) {
-  if (typeof raw === 'string') {
+  if (typeof raw === "string") {
     return raw.trim();
   }
 
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return '';
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return "";
   }
 
   const localeMap = raw as Record<string, unknown>;
-  const normalized = currentLocale.replace('-', '_');
-  const preferredKeys =
-    normalized.startsWith('zh')
-      ? [normalized, 'zh_CN', 'zh-CN', 'zh', 'en_US', 'en-US', 'en']
-      : [normalized, 'en_US', 'en-US', 'en', 'zh_CN', 'zh-CN', 'zh'];
+  const normalized = currentLocale.replace("-", "_");
+  const preferredKeys = normalized.startsWith("zh")
+    ? [normalized, "zh_CN", "zh-CN", "zh", "en_US", "en-US", "en"]
+    : [normalized, "en_US", "en-US", "en", "zh_CN", "zh-CN", "zh"];
 
   for (const key of preferredKeys) {
     const value = localeMap[key];
-    if (typeof value === 'string' && value.trim().length > 0) {
+    if (typeof value === "string" && value.trim().length > 0) {
       return value.trim();
     }
   }
 
-  return '';
+  return "";
 }
 
 const welcomeAnnouncement = computed(() =>
-  resolveWelcomeAnnouncement(welcomeAnnouncementRaw.value, locale.value)
+  resolveWelcomeAnnouncement(welcomeAnnouncementRaw.value, locale.value),
 );
 const showAnnouncement = computed(() => welcomeAnnouncement.value.length > 0);
 
 const springFestivalDates: Record<number, string> = {
-  2025: '01-29',
-  2026: '02-17',
-  2027: '02-06',
-  2028: '01-26',
-  2029: '02-13',
-  2030: '02-03'
-}
+  2025: "01-29",
+  2026: "02-17",
+  2027: "02-06",
+  2028: "01-26",
+  2029: "02-13",
+  2030: "02-03",
+};
 
 function isSpringFestival() {
   const now = new Date();
@@ -273,7 +461,7 @@ function isSpringFestival() {
 
   if (!dateStr) return false;
 
-  const [month, day] = dateStr.split('-').map(Number);
+  const [month, day] = dateStr.split("-").map(Number);
   const festivalDate = new Date(year, month - 1, day);
 
   const start = new Date(festivalDate);
@@ -297,7 +485,7 @@ function isExactSpringFestivalDay() {
 
   if (!dateStr) return false;
 
-  const [month, day] = dateStr.split('-').map(Number);
+  const [month, day] = dateStr.split("-").map(Number);
   const festivalDate = new Date(year, month - 1, day);
 
   const nowTime = new Date(now).setHours(0, 0, 0, 0);
@@ -308,66 +496,112 @@ function isExactSpringFestivalDay() {
 
 const greetingEmoji = computed(() => {
   if (isExactSpringFestivalDay()) {
-    return '🧨';
+    return "🧨";
   }
   const hour = new Date().getHours();
   if (hour >= 0 && hour < 5) {
-    return '😴';
+    return "😴";
   }
-  return '😊';
+  return "😊";
 });
 
 const greetingText = computed(() => {
   if (isSpringFestival()) {
-    return tm('greeting.newYear');
+    return tm("greeting.newYear");
   }
   const hour = new Date().getHours();
-  if (hour < 12) return tm('greeting.morning');
-  if (hour < 18) return tm('greeting.afternoon');
-  return tm('greeting.evening');
+  if (hour < 12) return tm("greeting.morning");
+  if (hour < 18) return tm("greeting.afternoon");
+  return tm("greeting.evening");
 });
 
 async function loadPlatformConfigBase() {
-  const res = await axios.get('/api/config/get');
+  const res = await axios.get("/api/config/get");
   platformMetadata.value = res.data.data.metadata || {};
   platformConfigData.value = res.data.data.config || {};
 }
 
-async function fetchDefaultConfig() {
-  const res = await axios.get('/api/config/abconf', { params: { id: 'default' } });
-  return res.data?.data?.config || {};
+async function checkAndSaveBackend() {
+  checkingBackend.value = true;
+  const originalBase = axios.defaults.baseURL;
+  const normalizedUrl = normalizeConfiguredApiBaseUrl(apiBaseUrl.value);
+  const validationError = getApiBaseUrlValidationError(normalizedUrl);
+
+  if (validationError) {
+    backendStepState.value = "pending";
+    showError(validationError);
+    checkingBackend.value = false;
+    return;
+  }
+
+  try {
+    setApiBaseUrl(normalizedUrl);
+    await axios.get("/api/stat/version");
+
+    apiStore.setApiBaseUrl(normalizedUrl);
+    apiBaseUrl.value = normalizedUrl;
+    backendStepState.value = "completed";
+    showSuccess("Connected to AstrBot Backend successfully!");
+
+    await loadPlatformConfigBase();
+    if ((platformConfigData.value.platform || []).length > 0) {
+      platformStepState.value = "completed";
+    }
+  } catch (error: unknown) {
+    setApiBaseUrl(originalBase);
+    backendStepState.value = "pending";
+    const apiErr = error as ApiError;
+    if (apiErr?.response?.status === 401) {
+      showError("无访问权限！请点击右上角退出登录！");
+    } else {
+      showError(`Failed to connect to backend: ${error}`);
+    }
+  } finally {
+    checkingBackend.value = false;
+  }
 }
 
-function getChatProvidersFromTemplatePayload(payload: any) {
-  const providers = payload?.providers || [];
-  const sources = payload?.provider_sources || [];
-  const sourceMap = new Map();
-  sources.forEach((s: any) => sourceMap.set(s.id, s.provider_type));
+function getChatProvidersFromTemplatePayload(payload: Record<string, unknown>) {
+  const providers: ProviderPayloadItem[] = (payload?.providers as ProviderPayloadItem[] | undefined) || [];
+  const sources: ProviderSourceItem[] = (payload?.provider_sources as ProviderSourceItem[] | undefined) || [];
+  const sourceMap = new Map<string, string>();
+  sources.forEach((s: ProviderSourceItem) => {
+    sourceMap.set(s.id, s.provider_type);
+  });
 
-  return providers.filter((provider: any) => {
+  return providers.filter((provider: ProviderPayloadItem) => {
     if (provider.provider_type) {
-      return provider.provider_type === 'chat_completion';
+      return provider.provider_type === "chat_completion";
     }
     if (provider.provider_source_id) {
       const type = sourceMap.get(provider.provider_source_id);
-      if (type === 'chat_completion') return true;
+      if (type === "chat_completion") return true;
     }
-    return String(provider.type || '').includes('chat_completion');
+    return String(provider.type || "").includes("chat_completion");
   });
 }
 
+async function fetchDefaultConfig() {
+  const res = await axios.get("/api/config/abconf", {
+    params: { id: "default" },
+  });
+  return res.data?.data?.config || {};
+}
+
 async function fetchChatProviders() {
-  const response = await axios.get('/api/config/provider/template');
-  if (response.data.status !== 'ok') {
-    throw new Error(response.data.message || tm('onboard.providerLoadFailed'));
+  const response = await axios.get("/api/config/provider/template");
+  if (response.data.status !== "ok") {
+    throw new Error(response.data.message || tm("onboard.providerLoadFailed"));
   }
   return getChatProvidersFromTemplatePayload(response.data.data);
 }
 
-function pickDefaultProviderId(providers: any[]) {
-  if (!providers.length) return '';
-  const enabledProvider = providers.find((provider) => provider.enable !== false);
-  return (enabledProvider || providers[0]).id || '';
+function pickDefaultProviderId(providers: ProviderPayloadItem[]) {
+  if (!providers.length) return "";
+  const enabledProvider = providers.find(
+    (provider) => provider.enable !== false,
+  );
+  return (enabledProvider || providers[0]).id || "";
 }
 
 async function syncDefaultConfigProviderIfNeeded() {
@@ -377,86 +611,39 @@ async function syncDefaultConfigProviderIfNeeded() {
   const targetProviderId = pickDefaultProviderId(providers);
   if (!targetProviderId) return;
 
-  const configData = await fetchDefaultConfig();
+  const configRes = await axios.get("/api/config/abconf", {
+    params: { id: "default" },
+  });
+  const configData = configRes.data?.data?.config || {};
   if (!configData.provider_settings) {
     configData.provider_settings = {};
   }
 
-  if (configData.provider_settings.default_provider_id === targetProviderId) return;
+  if (configData.provider_settings.default_provider_id === targetProviderId)
+    return;
 
   configData.provider_settings.default_provider_id = targetProviderId;
 
-  const updateRes = await axios.post('/api/config/astrbot/update', {
-    conf_id: 'default',
-    config: configData
+  const updateRes = await axios.post("/api/config/astrbot/update", {
+    conf_id: "default",
+    config: configData,
   });
-  if (updateRes.data.status !== 'ok') {
-    throw new Error(updateRes.data.message || tm('onboard.providerUpdateFailed'));
-  }
-
-  showSuccess(tm('onboard.providerDefaultUpdated', { id: targetProviderId }));
-}
-
-function normalizeComputerAccessRuntime(runtime: unknown): ComputerAccessRuntime {
-  return runtime === 'local' || runtime === 'sandbox' ? 'local' : 'none';
-}
-
-function syncComputerAccessRuntime(configData: any) {
-  const providerSettings = configData?.provider_settings || {};
-  const currentRuntime = providerSettings?.computer_use_runtime;
-  const normalizedRuntime = normalizeComputerAccessRuntime(currentRuntime);
-
-  computerAccessRuntime.value = normalizedRuntime;
-  savedComputerAccessRuntime.value = normalizedRuntime;
-  computerAccessStepState.value =
-    currentRuntime === 'local' || currentRuntime === 'none' || currentRuntime === 'sandbox'
-      ? 'completed'
-      : 'pending';
-}
-
-const computerAccessOptions = computed(() => [
-  { title: tm('onboard.step3Allow'), value: 'local' },
-  { title: tm('onboard.step3Deny'), value: 'none' }
-]);
-
-async function saveComputerAccessRuntime() {
-  savingComputerAccess.value = true;
-  try {
-    const configData = await fetchDefaultConfig();
-    if (!configData.provider_settings) {
-      configData.provider_settings = {};
-    }
-
-    configData.provider_settings.computer_use_runtime = computerAccessRuntime.value;
-
-    const updateRes = await axios.post('/api/config/astrbot/update', {
-      conf_id: 'default',
-      config: configData
-    });
-    if (updateRes.data.status !== 'ok') {
-      throw new Error(updateRes.data.message || tm('onboard.computerAccessUpdateFailed'));
-    }
-
-    savedComputerAccessRuntime.value = computerAccessRuntime.value;
-    computerAccessStepState.value = 'completed';
-    showSuccess(
-      tm(
-        computerAccessRuntime.value === 'local'
-          ? 'onboard.computerAccessAllowed'
-          : 'onboard.computerAccessDenied'
-      )
+  if (updateRes.data.status !== "ok") {
+    throw new Error(
+      updateRes.data.message || tm("onboard.providerUpdateFailed"),
     );
-  } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.computerAccessUpdateFailed'));
-  } finally {
-    savingComputerAccess.value = false;
   }
+
+  showSuccess(tm("onboard.providerDefaultUpdated", { id: targetProviderId }));
 }
 
 async function loadWelcomeAnnouncement() {
   try {
-    const res = await axios.get('https://cloud.astrbot.app/api/v1/announcement');
-    welcomeAnnouncementRaw.value = res?.data?.data?.notice?.welcome_page ?? null;
+    const res = await axios.get(
+      "https://cloud.astrbot.app/api/v1/announcement",
+    );
+    welcomeAnnouncementRaw.value =
+      res?.data?.data?.notice?.welcome_page ?? null;
   } catch (e) {
     welcomeAnnouncementRaw.value = null;
     console.error(e);
@@ -466,29 +653,96 @@ async function loadWelcomeAnnouncement() {
 onMounted(async () => {
   await loadWelcomeAnnouncement();
 
-  try {
-    await loadPlatformConfigBase();
-    if ((platformConfigData.value.platform || []).length > 0) {
-      platformStepState.value = 'completed';
-    }
-  } catch (e) {
-    console.error(e);
-  }
+  // Check if backend is already configured and working
+  if (apiStore.apiBaseUrl) {
+    try {
+      await axios.get("/api/stat/version");
+      backendStepState.value = "completed";
 
-  try {
-    const providers = await fetchChatProviders();
-    if (providers.length > 0) {
-      providerStepState.value = 'completed';
-    }
-  } catch (e) {
-    console.error(e);
-  }
+      try {
+        await loadPlatformConfigBase();
+        if ((platformConfigData.value.platform || []).length > 0) {
+          platformStepState.value = "completed";
+        }
+      } catch (e) {
+        console.error(e);
+      }
 
+      try {
+        const providers = await fetchChatProviders();
+        if (providers.length > 0) {
+          providerStepState.value = "completed";
+        }
+      } catch (e) {
+        console.error(e);
+      }
+
+      try {
+        const defaultConfig = await fetchDefaultConfig();
+        syncComputerAccessRuntime(defaultConfig);
+      } catch (e) {
+        console.error(e);
+      }
+    } catch (e) {
+      // Backend configured but not reachable
+      backendStepState.value = "pending";
+    }
+  }
+});
+
+function normalizeComputerAccessRuntime(runtime: unknown): ComputerAccessRuntime {
+  if (runtime === "local") return "local";
+  return "none";
+}
+
+function syncComputerAccessRuntime(configData: any) {
+  const currentRuntime = configData?.provider_settings?.computer_use_runtime;
+  const normalizedRuntime = normalizeComputerAccessRuntime(currentRuntime);
+  computerAccessRuntime.value = normalizedRuntime;
+  savedComputerAccessRuntime.value = normalizedRuntime;
+  if (normalizedRuntime !== "none") {
+    computerAccessStepState.value = "completed";
+  }
+}
+
+const computerAccessOptions = computed(() => [
+  { title: tm("onboard.step3Allow"), value: "local" },
+  { title: tm("onboard.step3Deny"), value: "none" },
+]);
+
+async function saveComputerAccessRuntime() {
+  savingComputerAccess.value = true;
   try {
-    const defaultConfig = await fetchDefaultConfig();
-    syncComputerAccessRuntime(defaultConfig);
-  } catch (e) {
-    console.error(e);
+    const configData = await fetchDefaultConfig();
+    if (!configData.provider_settings) {
+      configData.provider_settings = {};
+    }
+    configData.provider_settings.computer_use_runtime =
+      computerAccessRuntime.value;
+    const updateRes = await axios.post("/api/config/astrbot/update", {
+      conf_id: "default",
+      config: configData,
+    });
+    if (updateRes.data.status !== "ok") {
+      throw new Error(updateRes.data.message || "保存失败");
+    }
+    savedComputerAccessRuntime.value = computerAccessRuntime.value;
+    computerAccessStepState.value = "completed";
+  } catch (err: unknown) {
+    computerAccessRuntime.value = savedComputerAccessRuntime.value;
+  } finally {
+    savingComputerAccess.value = false;
+  }
+}
+
+watch(computerAccessRuntime, async (value, oldValue) => {
+  if (value === oldValue) return;
+  if (value === savedComputerAccessRuntime.value) return;
+  if (savingComputerAccess.value) return;
+  try {
+    await saveComputerAccessRuntime();
+  } catch {
+    computerAccessRuntime.value = savedComputerAccessRuntime.value;
   }
 });
 
@@ -496,10 +750,17 @@ async function openPlatformDialog() {
   loadingPlatformDialog.value = true;
   try {
     await loadPlatformConfigBase();
-    platformCountBeforeOpen.value = (platformConfigData.value.platform || []).length;
+    platformCountBeforeOpen.value = (
+      platformConfigData.value.platform || []
+    ).length;
     showAddPlatformDialog.value = true;
-  } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.platformLoadFailed'));
+  } catch (err: unknown) {
+    const apiErr = err as ApiError;
+    showError(
+      apiErr?.response?.data?.message ||
+        apiErr?.message ||
+        tm("onboard.platformLoadFailed"),
+    );
   } finally {
     loadingPlatformDialog.value = false;
   }
@@ -510,8 +771,13 @@ async function openProviderDialog() {
     const providers = await fetchChatProviders();
     providerCountBeforeOpen.value = providers.length;
     showProviderDialog.value = true;
-  } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.providerLoadFailed'));
+  } catch (err: unknown) {
+    const apiErr = err as ApiError;
+    showError(
+      apiErr?.response?.data?.message ||
+        apiErr?.message ||
+        tm("onboard.providerLoadFailed"),
+    );
   }
 }
 
@@ -521,10 +787,15 @@ watch(showAddPlatformDialog, async (visible, wasVisible) => {
     await loadPlatformConfigBase();
     const newCount = (platformConfigData.value.platform || []).length;
     if (newCount > platformCountBeforeOpen.value) {
-      platformStepState.value = 'completed';
+      platformStepState.value = "completed";
     }
-  } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.platformLoadFailed'));
+  } catch (err: unknown) {
+    const apiErr = err as ApiError;
+    showError(
+      apiErr?.response?.data?.message ||
+        apiErr?.message ||
+        tm("onboard.platformLoadFailed"),
+    );
   }
 });
 
@@ -533,23 +804,16 @@ watch(showProviderDialog, async (visible, wasVisible) => {
   try {
     const providers = await fetchChatProviders();
     if (providers.length > providerCountBeforeOpen.value) {
-      providerStepState.value = 'completed';
+      providerStepState.value = "completed";
       await syncDefaultConfigProviderIfNeeded();
     }
-  } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.providerUpdateFailed'));
-  }
-});
-
-watch(computerAccessRuntime, async (value, oldValue) => {
-  if (value === oldValue) return;
-  if (value === savedComputerAccessRuntime.value) return;
-  if (savingComputerAccess.value) return;
-
-  try {
-    await saveComputerAccessRuntime();
-  } catch {
-    computerAccessRuntime.value = savedComputerAccessRuntime.value;
+  } catch (err: unknown) {
+    const apiErr = err as ApiError;
+    showError(
+      apiErr?.response?.data?.message ||
+        apiErr?.message ||
+        tm("onboard.providerUpdateFailed"),
+    );
   }
 });
 </script>
@@ -557,14 +821,6 @@ watch(computerAccessRuntime, async (value, oldValue) => {
 <style scoped>
 .welcome-page {
   height: 100%;
-}
-
-.welcome-card {
-  border-radius: 16px;
-}
-
-.welcome-announcement-markdown {
-  line-height: 1.7;
 }
 
 .computer-access-select {
@@ -575,5 +831,87 @@ watch(computerAccessRuntime, async (value, oldValue) => {
 .computer-access-help-list {
   margin: 0;
   padding-left: 1.25rem;
+}
+
+.welcome-card {
+  border-radius: 16px;
+}
+
+.welcome-announcement-markdown {
+  line-height: 1.7;
+}
+
+.welcome-announcement-markdown ::v-deep(p > code),
+.welcome-announcement-markdown ::v-deep(li > code) {
+  background-color: rgba(var(--v-theme-on-surface), 0.08) !important;
+  color: rgb(var(--v-theme-primary)) !important;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+/* === Welcome hero text: industrial precision — restrained monospace === */
+.welcome-page .text-h1 {
+  font-family: "JetBrains Mono", "Fira Code", monospace !important;
+  font-size: clamp(1.8rem, 4vw, 3rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px;
+  position: relative;
+  padding-left: 16px;
+  animation: welcomeFadeIn 0.8s ease-out both;
+  /* Dark: cyan tick mark; Light: prussian blue tick mark */
+  &::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 55%;
+    background: rgba(var(--v-theme-primary), 0.45);
+    border-radius: 1px;
+  }
+}
+
+.welcome-page .text-subtitle-1 {
+  font-family: "JetBrains Mono", monospace !important;
+  font-size: 0.9rem !important;
+  color: var(--v-theme-on-surface-variant);
+  animation: welcomeFadeIn 0.8s ease-out 0.3s both;
+  letter-spacing: 0.3px;
+}
+
+.welcome-page .text-h3 {
+  font-family: "JetBrains Mono", monospace !important;
+  font-weight: 600 !important;
+  color: var(--v-theme-on-surface);
+  font-size: 1rem !important;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-left: 2px solid rgba(var(--v-theme-primary), 0.3) !important;
+  padding-left: 10px !important;
+}
+
+@keyframes welcomeFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes energyPulse {
+  0%,
+  100% {
+    opacity: 0.6;
+    box-shadow: 0 0 6px rgba(0, 242, 255, 0.4);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 14px rgba(0, 242, 255, 0.8);
+  }
 }
 </style>

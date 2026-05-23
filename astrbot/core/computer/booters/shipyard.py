@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 import functools
-from typing import TYPE_CHECKING
+import shlex
+from typing import TYPE_CHECKING, Any
 
 from shipyard import ShipyardClient, Spec
 
 from astrbot.api import logger
 
-from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
+if TYPE_CHECKING:
+    from astrbot.core.agent.tool import ToolSchema
+
+from astrbot.core.computer.olayer import (
+    FileSystemComponent,
+    PythonComponent,
+    ShellComponent,
+)
+
 from .base import ComputerBooter
 from .shell_background import build_detached_shell_command
 from .shipyard_search_file_util import search_files_via_shell
@@ -35,7 +44,9 @@ class ShipyardShellWrapper:
         timeout: int | None = 300,
         shell: bool = True,
         background: bool = False,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
+        _ = session_id
         if not shell:
             return {
                 "stdout": "",
@@ -98,13 +109,18 @@ class ShipyardShellWrapper:
 
 class ShipyardFileSystemWrapper:
     def __init__(
-        self, _shipyard_fs: ShipyardFileSystemComponent, _shipyard_shell: ShellComponent
+        self,
+        _shipyard_fs: FileSystemComponent,
+        _shipyard_shell: ShellComponent,
     ):
         self._fs = _shipyard_fs
         self._shell = _shipyard_shell
 
     async def create_file(
-        self, path: str, content: str = "", mode: int = 420
+        self,
+        path: str,
+        content: str = "",
+        mode: int = 420,
     ) -> dict[str, Any]:
         return await self._fs.create_file(path=path, content=content, mode=mode)
 
@@ -116,18 +132,30 @@ class ShipyardFileSystemWrapper:
         limit: int | None = None,
     ) -> dict[str, Any]:
         return await self._fs.read_file(
-            path=path, encoding=encoding, offset=offset, limit=limit
+            path=path,
+            encoding=encoding,
+            offset=offset,
+            limit=limit,
         )
 
     async def write_file(
-        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
     ) -> dict[str, Any]:
         return await self._fs.write_file(
-            path=path, content=content, mode=mode, encoding=encoding
+            path=path,
+            content=content,
+            mode=mode,
+            encoding=encoding,
         )
 
     async def list_dir(
-        self, path: str = ".", show_hidden: bool = False
+        self,
+        path: str = ".",
+        show_hidden: bool = False,
     ) -> dict[str, Any]:
         return await self._fs.list_dir(path=path, show_hidden=show_hidden)
 
@@ -174,10 +202,13 @@ if TYPE_CHECKING:
 class ShipyardBooter(ComputerBooter):
     @classmethod
     @functools.cache
-    def _default_tools(cls) -> tuple[FunctionTool, ...]:
-        from astrbot.core.computer.tools.fs import FileDownloadTool, FileUploadTool
-        from astrbot.core.computer.tools.python import PythonTool
-        from astrbot.core.computer.tools.shell import ExecuteShellTool
+    def _default_tools(cls) -> tuple[ToolSchema, ...]:
+        from astrbot.core.computer.tools import (
+            ExecuteShellTool,
+            FileDownloadTool,
+            FileUploadTool,
+            PythonTool,
+        )
 
         return (
             ExecuteShellTool(),
@@ -185,6 +216,10 @@ class ShipyardBooter(ComputerBooter):
             FileUploadTool(),
             FileDownloadTool(),
         )
+
+    @classmethod
+    def get_default_tools(cls) -> list[ToolSchema]:
+        return list(cls._default_tools())
 
     def __init__(
         self,
@@ -194,7 +229,8 @@ class ShipyardBooter(ComputerBooter):
         session_num: int = 10,
     ) -> None:
         self._sandbox_client = ShipyardClient(
-            endpoint_url=endpoint_url, access_token=access_token
+            endpoint_url=endpoint_url,
+            access_token=access_token,
         )
         self._ttl = ttl
         self._session_num = session_num
@@ -212,15 +248,15 @@ class ShipyardBooter(ComputerBooter):
             session_id,
         )
         self._ship = ship
-        self._shell = ShipyardShellWrapper(self._ship.shell)
-        self._fs = ShipyardFileSystemWrapper(self._ship.fs, self._shell)
+        self._shell = ShipyardShellWrapper(self._ship.shell)  # type: ignore[arg-type]
+        self._fs = ShipyardFileSystemWrapper(self._ship.fs, self._shell)  # type: ignore[arg-type]
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, **kwargs) -> None:
         logger.info("[Computer] booter_shutdown booter=shipyard status=done")
 
     @property
     def fs(self) -> FileSystemComponent:
-        return self._fs
+        return self._ship.fs  # type: ignore[return-value]
 
     @property
     def python(self) -> PythonComponent:

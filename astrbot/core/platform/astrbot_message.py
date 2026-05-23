@@ -1,5 +1,6 @@
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from astrbot.core.message.components import BaseMessageComponent
 
@@ -24,10 +25,7 @@ class MessageMember:
 
     def __str__(self) -> str:
         # 使用 f-string 来构建返回的字符串表示形式
-        return (
-            f"User ID: {self.user_id},"
-            f"Nickname: {self.nickname if self.nickname else 'N/A'}"
-        )
+        return f"User ID: {self.user_id},Nickname: {self.nickname or 'N/A'}"
 
 
 @dataclass
@@ -49,10 +47,10 @@ class Group:
         # 使用 f-string 来构建返回的字符串表示形式
         return (
             f"Group ID: {self.group_id}\n"
-            f"Name: {self.group_name if self.group_name else 'N/A'}\n"
-            f"Avatar: {self.group_avatar if self.group_avatar else 'N/A'}\n"
-            f"Owner ID: {self.group_owner if self.group_owner else 'N/A'}\n"
-            f"Admin IDs: {self.group_admins if self.group_admins else 'N/A'}\n"
+            f"Name: {self.group_name or 'N/A'}\n"
+            f"Avatar: {self.group_avatar or 'N/A'}\n"
+            f"Owner ID: {self.group_owner or 'N/A'}\n"
+            f"Admin IDs: {self.group_admins or 'N/A'}\n"
             f"Members Len: {len(self.members) if self.members else 0}\n"
             f"First Member: {self.members[0] if self.members else 'N/A'}\n"
         )
@@ -62,26 +60,16 @@ class AstrBotMessage:
     """Represents a message received from the platform, after parsing and normalization.
     This is the main message object that will be passed to plugins and handlers."""
 
-    type: MessageType
-    """GroupMessage, FriendMessage, etc"""
-    self_id: str
-    """Bot's ID"""
-    session_id: str
-    """Session ID, which is the last part of UMO"""
-    message_id: str
-    """Message ID"""
-    group: Group | None
-    """The group info, None if it's a friend message"""
-    sender: MessageMember
-    """The sender info"""
-    message: list[BaseMessageComponent]
-    """Sorted list of message components after parsing"""
-    message_str: str
-    """The parsed message text after parsing, without any formatting or special components"""
-    raw_message: object
-    """The raw message object, the specific type depends on the platform"""
-    timestamp: int
-    """The timestamp when the message is received, in seconds"""
+    type: MessageType  # 消息类型
+    self_id: str  # 机器人的识别id
+    session_id: str  # 会话id｡取决于 unique_session 的设置｡
+    message_id: str  # 消息id
+    group: Group | None  # 群组
+    sender: MessageMember  # 发送者
+    message: list[BaseMessageComponent]  # 消息链使用 Nakuru 的消息链格式
+    message_str: str  # 最直观的纯文本消息字符串
+    raw_message: Any
+    timestamp: int  # 消息时间戳
 
     def __init__(self) -> None:
         self.timestamp = int(time.time())
@@ -92,6 +80,9 @@ class AstrBotMessage:
 
     @property
     def group_id(self) -> str:
+        """向后兼容的 group_id 属性
+        群组id,如果为私聊,则为空
+        """
         if self.group:
             return self.group.group_id
         return ""

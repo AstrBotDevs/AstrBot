@@ -1,14 +1,15 @@
+"""MCP client
+This file exists solely for backward compatibility and will be removed in a future version.
+"""
+
 import asyncio
 import copy
 import logging
 import os
-import re
 import sys
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from pathlib import Path, PureWindowsPath
-from typing import Any, Generic
-from urllib.parse import quote
+from typing import Any, Generic, TextIO
 
 from tenacity import (
     before_sleep_log,
@@ -18,34 +19,13 @@ from tenacity import (
     wait_exponential,
 )
 
-from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.utils.log_pipe import LogPipe
 
 from .run_context import TContext
 from .tool import FunctionTool
 
-
-class _McpSseNoiseFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        try:
-            msg = record.getMessage().strip()
-        except Exception:
-            return True
-        if msg.startswith("Unknown SSE event:"):
-            event_name = msg.split(":", 1)[1].strip()
-            if event_name in {"stream", "connection"}:
-                return False
-        return True
-
-
-def _install_mcp_noise_filters() -> None:
-    for logger_name in ("mcp.client.streamable_http", "mcp.client.sse"):
-        log = logging.getLogger(logger_name)
-        if any(isinstance(f, _McpSseNoiseFilter) for f in log.filters):
-            continue
-        log.addFilter(_McpSseNoiseFilter())
-
+logger = logging.getLogger("astrbot")
 
 try:
     import anyio
@@ -55,7 +35,7 @@ try:
     _install_mcp_noise_filters()
 except (ModuleNotFoundError, ImportError):
     logger.warning(
-        "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
+        "Warning: Missing 'mcp' dependency, MCP services will be unavailable.",
     )
 
 try:
@@ -66,131 +46,33 @@ except (ModuleNotFoundError, ImportError):
     )
 
 
+class TenacityLogger:
+    """Wraps a logging.Logger to satisfy tenacity's LoggerProtocol."""
+
+    __slots__ = ("_logger",)
+    _logger: logging.Logger
+
+    def __init__(self, logger: logging.Logger) -> None:
+        self._logger = logger
+
+    def log(
+        self,
+        level: int,
+        msg: str,
+        /,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        self._logger.log(level, msg, *args, **kwargs)
+
+
 def _prepare_config(config: dict) -> dict:
     """Prepare configuration, handle nested format"""
     if config.get("mcpServers"):
         first_key = next(iter(config["mcpServers"]))
-        config = dict(config["mcpServers"][first_key])
-    else:
-        config = dict(config)
+        config = config["mcpServers"][first_key]
     config.pop("active", None)
     return config
-
-
-def _normalize_stdio_command_name(command: str) -> str:
-    command = command.strip()
-    if "\\" in command:
-        command_name = PureWindowsPath(command).name
-    else:
-        command_name = Path(command).name
-    command_name = command_name.lower()
-    for suffix in (".exe", ".cmd", ".bat"):
-        if command_name.endswith(suffix):
-            return command_name[: -len(suffix)]
-    return command_name
-
-
-def _get_stdio_command_allowlist() -> set[str]:
-    allowed = set(_DEFAULT_STDIO_COMMAND_ALLOWLIST)
-    configured = os.environ.get(_STDIO_ALLOWLIST_ENV, "")
-    if configured.strip():
-        allowed = {
-            _normalize_stdio_command_name(item)
-            for item in configured.split(",")
-            if item.strip()
-        }
-    return allowed
-
-
-def _is_stdio_config(config: dict) -> bool:
-    cfg = _prepare_config(config.copy())
-    return "url" not in cfg
-
-
-def _validate_stdio_args(command_name: str, args: object) -> None:
-    if args is None:
-        return
-    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
-        raise ValueError("MCP stdio args must be a list of strings.")
-
-    for arg in args:
-        if "\x00" in arg or "\r" in arg or "\n" in arg:
-            raise ValueError("MCP stdio args cannot contain control characters.")
-
-    if command_name.startswith("python") or command_name == "py":
-        if any(
-            arg == "-c"
-            or (arg.startswith("-") and not arg.startswith("--") and "c" in arg)
-            for arg in args
-        ):
-            raise ValueError(
-                "MCP stdio Python servers must be launched from a module or file; inline code flags such as -c are not allowed."
-            )
-    elif command_name in {"node", "deno", "bun"} or command_name.startswith("node"):
-        if any(
-            arg in _JS_INLINE_CODE_FLAGS
-            or arg == "eval"
-            or (
-                arg.startswith("-")
-                and not arg.startswith("--")
-                and any(c in arg for c in "ep")
-            )
-            for arg in args
-        ):
-            raise ValueError(
-                "MCP stdio JavaScript servers must be launched from a package or file; inline eval flags are not allowed."
-            )
-    elif command_name == "docker":
-        denied = []
-        for i, arg in enumerate(args):
-            if arg in _DENIED_DOCKER_ARGS:
-                denied.append(arg)
-            elif (
-                arg in {"--network", "--net", "--pid", "--ipc"}
-                and i + 1 < len(args)
-                and args[i + 1] == "host"
-            ):
-                denied.append(f"{arg} {args[i + 1]}")
-        if denied:
-            raise ValueError(
-                f"MCP stdio Docker args are unsafe and not allowed: {', '.join(denied)}."
-            )
-
-
-def validate_mcp_stdio_config(config: dict) -> None:
-    """Validate stdio MCP config before any subprocess can be spawned."""
-    cfg = _prepare_config(config.copy())
-    if "url" in cfg:
-        return
-
-    command = cfg.get("command")
-    if not isinstance(command, str) or not command.strip():
-        raise ValueError("MCP stdio server requires a non-empty command.")
-    if _SHELL_META_RE.search(command):
-        raise ValueError("MCP stdio command contains unsafe shell metacharacters.")
-
-    command_name = _normalize_stdio_command_name(command)
-    if command_name in _DENIED_STDIO_COMMANDS:
-        raise ValueError(f"MCP stdio command `{command_name}` is not allowed.")
-
-    allowed = _get_stdio_command_allowlist()
-    if command_name not in allowed:
-        allowed_display = ", ".join(sorted(allowed))
-        raise ValueError(
-            f"MCP stdio command `{command_name}` is not allowed. "
-            f"Allowed commands: {allowed_display}. "
-            f"Set {_STDIO_ALLOWLIST_ENV} to override this list if you trust another launcher."
-        )
-
-    _validate_stdio_args(command_name, cfg.get("args"))
-
-    env = cfg.get("env")
-    if env is not None and not isinstance(env, dict):
-        raise ValueError("MCP stdio env must be an object.")
-    if isinstance(env, dict) and not all(
-        isinstance(key, str) and isinstance(value, str) for key, value in env.items()
-    ):
-        raise ValueError("MCP stdio env keys and values must be strings.")
 
 
 def _prepare_stdio_env(config: dict) -> dict:
@@ -312,7 +194,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                         return True, ""
                     return False, await _format_http_error(response)
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return False, f"Connection timeout: {timeout} seconds"
     except Exception as e:
         return False, f"{e!s}"
@@ -351,7 +233,7 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
                 if not isinstance(prop_schema, dict):
                     continue
 
-                original_prop_schema = original_properties.get(prop_name, {})
+                original_prop_schema = (original_properties or {}).get(prop_name, {})
                 prop_required = (
                     original_prop_schema.get("required")
                     if isinstance(original_prop_schema, dict)
@@ -385,12 +267,31 @@ class MCPClient:
         self.tools: list[mcp.Tool] = []
         self.server_errlogs: list[str] = []
         self.running_event = asyncio.Event()
+        self.process_pid: int | None = None
 
         # Store connection config for reconnection
         self._mcp_server_config: dict | None = None
         self._server_name: str | None = None
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False  # For logging and debugging
+
+    @staticmethod
+    def _extract_stdio_process_pid(streams_context: object) -> int | None:
+        """Best-effort extraction for stdio subprocess PID used by lease cleanup.
+
+        TODO(refactor): replace this async-generator frame introspection with a
+        stable MCP library hook once the upstream transport exposes process PID.
+        """
+        generator = getattr(streams_context, "gen", None)
+        frame = getattr(generator, "ag_frame", None)
+        if frame is None:
+            return None
+        process = frame.f_locals.get("process")
+        pid = getattr(process, "pid", None)
+        try:
+            return int(pid) if pid is not None else None
+        except (TypeError, ValueError):
+            return None
 
     async def connect_to_server(self, mcp_server_config: dict, name: str) -> None:
         """Connect to MCP server
@@ -407,25 +308,17 @@ class MCPClient:
         # Store config for reconnection
         self._mcp_server_config = mcp_server_config
         self._server_name = name
+        self.process_pid = None
 
         cfg = _prepare_config(mcp_server_config.copy())
 
-        def logging_callback(
-            msg: str | mcp.types.LoggingMessageNotificationParams,
+        async def logging_callback(
+            params: mcp.types.LoggingMessageNotificationParams,
         ) -> None:
             # Handle MCP service error logs
-            if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
-                if msg.level in ("warning", "error", "critical", "alert", "emergency"):
-                    log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
-                    self.server_errlogs.append(log_msg)
-                return
-            normalized = msg.strip()
-            if normalized.startswith("Unknown SSE event:"):
-                event_name = normalized.split(":", 1)[1].strip()
-                if event_name in {"stream", "connection"}:
-                    return
-            print(f"MCP Server {name} Error: {msg}")
-            self.server_errlogs.append(msg)
+            if params.level in ("warning", "error", "critical", "alert", "emergency"):
+                log_msg = f"[{params.level.upper()}] {params.data!s}"
+                self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
             success, error_msg = await _quick_test_mcp_connection(cfg)
@@ -447,19 +340,21 @@ class MCPClient:
                     timeout=cfg.get("timeout", 5),
                     sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
                 )
-                streams = await self.exit_stack.enter_async_context(
+                read_stream, write_stream = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
 
                 # Create a new client session
                 read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
-                self.session = await self.exit_stack.enter_async_context(
+                session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
-                        *streams,
+                        read_stream=read_stream,
+                        write_stream=write_stream,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
+                        logging_callback=logging_callback,
                     ),
                 )
+                self.session = session
             else:
                 timeout = timedelta(seconds=cfg.get("timeout", 30))
                 sse_read_timeout = timedelta(
@@ -478,17 +373,17 @@ class MCPClient:
 
                 # Create a new client session
                 read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
-                self.session = await self.exit_stack.enter_async_context(
+                session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
                         read_stream=read_s,
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
+                        logging_callback=logging_callback,
                     ),
                 )
+                self.session = session
 
         else:
-            validate_mcp_stdio_config(cfg)
             cfg = _prepare_stdio_env(cfg)
             server_params = mcp.StdioServerParameters(
                 **cfg,
@@ -504,25 +399,35 @@ class MCPClient:
                         "alert",
                         "emergency",
                     ):
-                        log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                        log_msg = f"[{msg.level.upper()}] {msg.data!s}"
                         self.server_errlogs.append(log_msg)
 
+            log_pipe = self.exit_stack.enter_context(
+                LogPipe(
+                    level=logging.INFO,
+                    logger=logger,
+                    identifier=f"MCPServer-{name}",
+                    callback=callback,
+                ),
+            )
+            errlog_stream: TextIO = self.exit_stack.enter_context(
+                os.fdopen(os.dup(log_pipe.fileno()), "w"),
+            )
             stdio_transport = await self.exit_stack.enter_async_context(
                 mcp.stdio_client(
                     server_params,
-                    errlog=LogPipe(
-                        level=logging.INFO,
-                        logger=logger,
-                        identifier=f"MCPServer-{name}",
-                        callback=callback,
-                    ),  # type: ignore
+                    errlog=errlog_stream,
                 ),
             )
+            self.process_pid = self._extract_stdio_process_pid(stdio_transport)
 
             # Create a new client session
-            self.session = await self.exit_stack.enter_async_context(
+            session = await self.exit_stack.enter_async_context(
                 mcp.ClientSession(*stdio_transport),
             )
+            self.session = session
+
+        assert self.session is not None
         await self.session.initialize()
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
@@ -540,12 +445,13 @@ class MCPClient:
 
         Raises:
             Exception: raised when reconnection fails
+
         """
         async with self._reconnect_lock:
             # Check if already reconnecting (useful for logging)
             if self._reconnecting:
                 logger.debug(
-                    f"MCP Client {self._server_name} is already reconnecting, skipping"
+                    f"MCP Client {self._server_name} is already reconnecting, skipping",
                 )
                 return
 
@@ -555,7 +461,7 @@ class MCPClient:
             self._reconnecting = True
             try:
                 logger.info(
-                    f"Attempting to reconnect to MCP server {self._server_name}..."
+                    f"Attempting to reconnect to MCP server {self._server_name}...",
                 )
 
                 # Save old exit_stack for later cleanup (don't close it now to avoid cancel scope issues)
@@ -573,11 +479,11 @@ class MCPClient:
                 await self.list_tools_and_save()
 
                 logger.info(
-                    f"Successfully reconnected to MCP server {self._server_name}"
+                    f"Successfully reconnected to MCP server {self._server_name}",
                 )
             except Exception as e:
                 logger.error(
-                    f"Failed to reconnect to MCP server {self._server_name}: {e}"
+                    f"Failed to reconnect to MCP server {self._server_name}: {e}",
                 )
                 raise
             finally:
@@ -602,13 +508,14 @@ class MCPClient:
         Raises:
             ValueError: MCP session is not available
             anyio.ClosedResourceError: raised after reconnection failure
+
         """
 
         @retry(
             retry=retry_if_exception_type(anyio.ClosedResourceError),
             stop=stop_after_attempt(2),
             wait=wait_exponential(multiplier=1, min=1, max=3),
-            before_sleep=before_sleep_log(logger, logging.WARNING),
+            before_sleep=before_sleep_log(TenacityLogger(logger), logging.WARNING),
             reraise=True,
         )
         async def _call_with_retry():
@@ -623,7 +530,7 @@ class MCPClient:
                 )
             except anyio.ClosedResourceError:
                 logger.warning(
-                    f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect..."
+                    f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect...",
                 )
                 # Attempt to reconnect
                 await self._reconnect()
@@ -647,13 +554,18 @@ class MCPClient:
 
         # Set running_event first to unblock any waiting tasks
         self.running_event.set()
+        self.process_pid = None
 
 
 class MCPTool(FunctionTool, Generic[TContext]):
     """A function tool that calls an MCP service."""
 
     def __init__(
-        self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
+        self,
+        mcp_tool: mcp.Tool,
+        mcp_client: MCPClient,
+        mcp_server_name: str,
+        **kwargs,
     ) -> None:
         # Add namespace prefix to avoid conflicts with plugin tools
         # URL-encode the server name to create a safe and unique identifier part
@@ -669,12 +581,12 @@ class MCPTool(FunctionTool, Generic[TContext]):
         self.mcp_tool = mcp_tool
         self.mcp_client = mcp_client
         self.mcp_server_name = mcp_server_name
-        self.original_tool_name = (
-            mcp_tool.name
-        )  # Store original name for display and calling
+        self.source = "mcp"
 
     async def call(
-        self, context: ContextWrapper[TContext], **kwargs
+        self,
+        context: ContextWrapper[TContext],
+        **kwargs,
     ) -> mcp.types.CallToolResult:
         # Use original tool name when calling MCP server
         return await self.mcp_client.call_tool_with_reconnect(

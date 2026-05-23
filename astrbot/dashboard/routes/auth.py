@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import os
+import secrets
 
 import jwt
 from quart import current_app, g, jsonify, make_response, request
@@ -8,9 +9,11 @@ from quart import current_app, g, jsonify, make_response, request
 from astrbot import logger
 from astrbot.core import DEMO_MODE
 from astrbot.core.utils.auth_password import (
+    get_dashboard_login_challenge,
     is_default_dashboard_password,
     is_legacy_dashboard_password,
     validate_dashboard_password,
+    verify_dashboard_login_proof,
     verify_dashboard_password,
 )
 from astrbot.dashboard.password_state import (
@@ -51,7 +54,9 @@ class AuthRoute(Route):
     def __init__(self, context: RouteContext, db) -> None:
         super().__init__(context)
         self.db = db
+        self._login_challenges: dict[str, dict[str, object]] = {}
         self.routes = {
+            "/auth/login/challenge": ("POST", self.login_challenge),
             "/auth/login": ("POST", self.login),
             "/auth/logout": ("POST", self.logout),
             "/auth/setup-status": ("GET", self.setup_status),
@@ -60,6 +65,40 @@ class AuthRoute(Route):
             "/auth/account/edit": ("POST", self.edit_account),
         }
         self.register_routes()
+
+    async def login_challenge(self):
+        password = self.config["dashboard"]["password"]
+        self._prune_login_challenges()
+
+        try:
+            challenge = get_dashboard_login_challenge(password)
+        except ValueError as exc:
+            logger.error("Failed to create dashboard login challenge: %s", exc)
+            return (
+                Response()
+                .error("Unsupported dashboard password configuration")
+                .__dict__
+            )
+
+        challenge_id = secrets.token_hex(16)
+        nonce = secrets.token_hex(32)
+        self._login_challenges[challenge_id] = {
+            "nonce": nonce,
+            "expires_at": datetime.datetime.now(datetime.UTC)
+            + datetime.timedelta(minutes=1),
+        }
+
+        return (
+            Response()
+            .ok(
+                {
+                    "challenge_id": challenge_id,
+                    "nonce": nonce,
+                    **challenge,
+                },
+            )
+            .__dict__
+        )
 
     async def setup_status(self):
         return (
@@ -72,7 +111,7 @@ class AuthRoute(Route):
                         self.db,
                         self.config,
                     ),
-                }
+                },
             )
             .__dict__
         )
@@ -147,12 +186,39 @@ class AuthRoute(Route):
         req_password = (
             post_data.get("password") if isinstance(post_data, dict) else None
         )
-        if not isinstance(req_username, str) or not isinstance(req_password, str):
+        req_challenge_id = (
+            post_data.get("challenge_id") if isinstance(post_data, dict) else None
+        )
+        req_password_proof = (
+            post_data.get("password_proof") if isinstance(post_data, dict) else None
+        )
+        if not isinstance(req_username, str):
+            return Response().error("Invalid request payload").__dict__
+        has_password = isinstance(req_password, str)
+        has_challenge = isinstance(req_challenge_id, str) and isinstance(
+            req_password_proof,
+            str,
+        )
+        if not has_password and not has_challenge:
             return Response().error("Invalid request payload").__dict__
 
-        login_verified = req_username == username and verify_dashboard_password(
-            password, req_password
-        )
+        login_verified = False
+        if has_password:
+            login_verified = req_username == username and verify_dashboard_password(
+                password,
+                req_password,
+            )
+        if not login_verified and has_challenge:
+            challenge_nonce = self._consume_login_challenge(req_challenge_id)
+            login_verified = (
+                req_username == username
+                and isinstance(challenge_nonce, str)
+                and verify_dashboard_login_proof(
+                    password,
+                    challenge_nonce,
+                    req_password_proof,
+                )
+            )
 
         if login_verified:
             change_pwd_hint = False
@@ -194,7 +260,7 @@ class AuthRoute(Route):
 
     async def logout(self):
         response = await make_response(
-            jsonify(Response().ok(None, "已退出登录").__dict__)
+            jsonify(Response().ok(None, "已退出登录").__dict__),
         )
         self._clear_dashboard_jwt_cookie(response)
         return response
@@ -255,8 +321,7 @@ class AuthRoute(Route):
     def generate_jwt(self, username):
         payload = {
             "username": username,
-            "exp": datetime.datetime.now(datetime.timezone.utc)
-            + datetime.timedelta(days=7),
+            "exp": datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=7),
         }
         jwt_token = self.config["dashboard"].get("jwt_secret", None)
         if not jwt_token:
@@ -281,9 +346,9 @@ class AuthRoute(Route):
             return False
 
         return dashboard_config.get(
-            "username"
+            "username",
         ) == "astrbot" and is_default_dashboard_password(
-            dashboard_config.get("pbkdf2_password", "")
+            dashboard_config.get("pbkdf2_password", ""),
         )
 
     def _can_skip_default_password_auth(self) -> bool:
@@ -309,7 +374,7 @@ class AuthRoute(Route):
             current_app.config.get(
                 "DASHBOARD_JWT_COOKIE_SECURE",
                 not current_app.debug and not current_app.testing,
-            )
+            ),
         )
 
     @staticmethod
@@ -333,3 +398,21 @@ class AuthRoute(Route):
             secure=AuthRoute._use_secure_dashboard_jwt_cookie(),
             path="/",
         )
+
+    def _prune_login_challenges(self) -> None:
+        now = datetime.datetime.now(datetime.UTC)
+        expired_ids = [
+            challenge_id
+            for challenge_id, challenge in self._login_challenges.items()
+            if challenge.get("expires_at") <= now
+        ]
+        for challenge_id in expired_ids:
+            self._login_challenges.pop(challenge_id, None)
+
+    def _consume_login_challenge(self, challenge_id: str) -> str | None:
+        self._prune_login_challenges()
+        challenge = self._login_challenges.pop(challenge_id, None)
+        if not isinstance(challenge, dict):
+            return None
+        nonce = challenge.get("nonce")
+        return nonce if isinstance(nonce, str) else None

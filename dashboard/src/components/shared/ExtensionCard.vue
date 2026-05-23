@@ -32,6 +32,7 @@ const emit = defineEmits([
   "configure",
   "update",
   "reload",
+  "install",
   "uninstall",
   "toggle-activation",
   "view-handlers",
@@ -61,6 +62,20 @@ const astrbotVersionRequirement = computed(() => {
   return typeof versionSpec === "string" && versionSpec.trim().length
     ? versionSpec.trim()
     : "";
+});
+
+// 作者显示（兼容多种字段名）
+const authorDisplay = computed(() => {
+  const ext = props.extension || {};
+  if (typeof ext.author === "string" && ext.author.trim()) return ext.author;
+  if (Array.isArray(ext.authors) && ext.authors.length)
+    return ext.authors.join(", ");
+  if (typeof ext.author_name === "string" && ext.author_name.trim())
+    return ext.author_name;
+  if (typeof ext.owner === "string" && ext.owner.trim()) return ext.owner;
+  if (ext.author && typeof ext.author === "object" && ext.author.name)
+    return ext.author.name;
+  return "";
 });
 
 const logoLoadFailed = ref(false);
@@ -97,6 +112,10 @@ const updateExtension = () => {
 
 const reloadExtension = () => {
   emit("reload", props.extension);
+};
+
+const installExtension = async () => {
+  emit("install", props.extension);
 };
 
 const uninstallExtension = async () => {
@@ -141,18 +160,12 @@ const viewExtensionPage = () => {
     variant="outlined"
     :style="{
       position: 'relative',
-      backgroundColor:
-        useCustomizerStore().uiTheme === 'PurpleTheme'
-          ? marketMode
-            ? '#f8f0dd'
-            : '#ffffff'
-          : marketMode
-            ? '#3a3425'
-            : '#282833',
-      color:
-        useCustomizerStore().uiTheme === 'PurpleTheme'
-          ? '#000000dd'
-          : '#ffffffdd',
+      backgroundColor: !useCustomizerStore().isDarkTheme
+        ? marketMode
+          ? '#f8f0dd'
+          : '#ffffff'
+        : '#282833',
+      color: !useCustomizerStore().isDarkTheme ? '#000000dd' : '#ffffff',
     }"
   >
     <v-card-text class="extension-card-text">
@@ -181,10 +194,12 @@ const viewExtensionPage = () => {
                     : extension.name
                 "
               >
-                <template v-slot:activator="{ props: titleTooltipProps }">
-                  <span v-bind="titleTooltipProps" class="extension-title__text">{{
-                    localizedName
-                  }}</span>
+                <template #activator="{ props: titleTooltipProps }">
+                  <span
+                    v-bind="titleTooltipProps"
+                    class="extension-title__text"
+                    >{{ localizedName }}</span
+                  >
                 </template>
               </v-tooltip>
               <span v-if="extension.version" class="extension-version">
@@ -199,10 +214,10 @@ const viewExtensionPage = () => {
                 {{ tm("status.system") }}
               </v-chip>
               <v-tooltip
-                location="top"
                 v-if="extension?.has_update && !marketMode"
+                location="top"
               >
-                <template v-slot:activator="{ props: tooltipProps }">
+                <template #activator="{ props: tooltipProps }">
                   <v-icon
                     v-bind="tooltipProps"
                     color="warning"
@@ -211,7 +226,7 @@ const viewExtensionPage = () => {
                     size="small"
                     style="cursor: pointer"
                     @click.stop="updateExtension"
-                  ></v-icon>
+                  />
                 </template>
                 <span
                   >{{ tm("card.status.hasUpdate") }}:
@@ -222,7 +237,7 @@ const viewExtensionPage = () => {
 
             <template v-if="!marketMode">
               <v-tooltip location="left">
-                <template v-slot:activator="{ props: tooltipProps }">
+                <template #activator="{ props: tooltipProps }">
                   <div class="extension-switch-wrap" @click.stop>
                     <div
                       v-bind="tooltipProps"
@@ -235,18 +250,24 @@ const viewExtensionPage = () => {
                         hide-details
                         inset
                         @update:model-value="toggleActivation"
-                      ></v-switch>
+                      />
                     </div>
                   </div>
                 </template>
                 <span>{{
-                  extension.activated ? tm("buttons.disable") : tm("buttons.enable")
+                  extension.activated
+                    ? tm("buttons.disable")
+                    : tm("buttons.enable")
                 }}</span>
               </v-tooltip>
             </template>
           </div>
 
           <div class="extension-chip-group d-flex flex-wrap">
+            <v-chip color="primary" label size="small">
+              <v-icon icon="mdi-source-branch" start />
+              {{ extension.version }}
+            </v-chip>
             <v-chip
               v-if="extension?.has_update"
               color="warning"
@@ -255,8 +276,20 @@ const viewExtensionPage = () => {
               style="cursor: pointer"
               @click.stop="updateExtension"
             >
-              <v-icon icon="mdi-arrow-up-bold" start></v-icon>
+              <v-icon icon="mdi-arrow-up-bold" start />
               {{ extension.online_version }}
+            </v-chip>
+            <v-chip
+              v-if="extension.handlers?.length"
+              color="primary"
+              label
+              size="small"
+              style="cursor: pointer"
+              @click.stop="viewHandlers"
+            >
+              <v-icon icon="mdi-cogs" start />
+              {{ extension.handlers?.length
+              }}{{ tm("card.status.handlersCount") }}
             </v-chip>
             <v-chip
               v-for="tag in extension.tags"
@@ -268,6 +301,10 @@ const viewExtensionPage = () => {
               {{ tag === "danger" ? tm("tags.danger") : tag }}
             </v-chip>
             <PluginPlatformChip :platforms="supportPlatforms" />
+            <v-chip v-if="authorDisplay" color="info" label size="small">
+              <v-icon icon="mdi-account" start></v-icon>
+              {{ authorDisplay }}
+            </v-chip>
             <v-chip
               v-if="astrbotVersionRequirement"
               color="secondary"
@@ -290,21 +327,116 @@ const viewExtensionPage = () => {
     </v-card-text>
 
     <v-card-actions class="extension-actions">
-      <v-btn color="primary" size="small" @click="viewReadme">
-        {{ tm("buttons.viewDocs") }}
-      </v-btn>
-      <v-btn v-if="!marketMode" color="primary" size="small" @click="configure">
-        {{ tm("card.actions.pluginConfig") }}
-      </v-btn>
-      <v-btn
-        v-if="!marketMode && extension.extension_page"
-        color="secondary"
-        size="small"
-        prepend-icon="mdi-web"
-        @click="viewExtensionPage"
-      >
-        {{ tm("card.actions.extensionPage") }}
-      </v-btn>
+      <template v-if="!marketMode">
+        <v-spacer></v-spacer>
+        <v-tooltip location="top">
+          <template #activator="{ props: pinTooltipProps }">
+            <v-btn
+              v-bind="pinTooltipProps"
+              :aria-label="isPinned ? tm('buttons.unpin') : tm('buttons.pin')"
+              :color="isPinned ? 'primary' : 'secondary'"
+              :icon="isPinned ? 'mdi-pin' : 'mdi-pin-outline'"
+              size="small"
+              variant="tonal"
+              class="extension-pin-btn"
+              @click.stop="togglePin"
+            ></v-btn>
+          </template>
+          <span>{{ isPinned ? tm("buttons.unpin") : tm("buttons.pin") }}</span>
+        </v-tooltip>
+
+        <v-tooltip location="top" :text="tm('buttons.viewDocs')">
+          <template #activator="{ props: actionProps }">
+            <v-btn
+              v-bind="actionProps"
+              icon="mdi-book-open-page-variant"
+              size="small"
+              variant="tonal"
+              color="info"
+              @click.stop="viewReadme"
+            ></v-btn>
+          </template>
+        </v-tooltip>
+
+        <v-tooltip location="top" :text="tm('card.actions.pluginConfig')">
+          <template #activator="{ props: actionProps }">
+            <v-btn
+              v-bind="actionProps"
+              icon="mdi-cog"
+              size="small"
+              variant="tonal"
+              color="primary"
+              @click.stop="configure"
+            ></v-btn>
+          </template>
+        </v-tooltip>
+
+        <v-tooltip
+          v-if="extension?.repo"
+          location="top"
+          :text="tm('buttons.viewRepo')"
+        >
+          <template #activator="{ props: actionProps }">
+            <v-btn
+              v-bind="actionProps"
+              icon="mdi-github"
+              size="small"
+              variant="tonal"
+              color="secondary"
+              :href="extension.repo"
+              target="_blank"
+              @click.stop
+            ></v-btn>
+          </template>
+        </v-tooltip>
+
+        <v-tooltip location="top" :text="tm('card.actions.reloadPlugin')">
+          <template #activator="{ props: actionProps }">
+            <v-btn
+              v-bind="actionProps"
+              icon="mdi-refresh"
+              size="small"
+              variant="tonal"
+              color="primary"
+              @click.stop="reloadExtension"
+            ></v-btn>
+          </template>
+        </v-tooltip>
+
+        <StyledMenu location="top end" offset="8">
+          <template #activator="{ props: menuProps }">
+            <v-btn
+              v-bind="menuProps"
+              icon="mdi-dots-horizontal"
+              size="small"
+              variant="tonal"
+              color="secondary"
+              @click.stop
+            ></v-btn>
+          </template>
+
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-information" @click.stop="viewHandlers">
+            <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
+          </v-list-item>
+
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click.stop="updateExtension">
+            <v-list-item-title>{{
+              extension.has_update
+                ? tm("card.actions.updateTo") + " " + extension.online_version
+                : tm("card.actions.reinstall")
+            }}</v-list-item-title>
+          </v-list-item>
+
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click.stop="uninstallExtension">
+            <v-list-item-title class="text-error">{{ tm("card.actions.uninstallPlugin") }}</v-list-item-title>
+          </v-list-item>
+        </StyledMenu>
+      </template>
+      <template v-else>
+        <v-btn color="primary" size="small" @click.stop="viewReadme">
+          {{ tm("buttons.viewDocs") }}
+        </v-btn>
+      </template>
     </v-card-actions>
   </v-card>
 

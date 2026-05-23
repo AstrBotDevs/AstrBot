@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import enum
 import json
@@ -9,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+import aiofiles
 from anthropic.types import Message as AnthropicMessage
 from google.genai.types import GenerateContentResponse
 from openai.types.chat.chat_completion import ChatCompletion
@@ -230,7 +232,7 @@ class ProviderRequest:
                     parsed_url = urlparse(audio_url)
                     suffix = Path(parsed_url.path).suffix
                     temp_dir = Path(get_astrbot_temp_path())
-                    temp_dir.mkdir(parents=True, exist_ok=True)
+                    await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
                     temp_audio_path = (
                         temp_dir / f"provider_request_audio_{uuid.uuid4().hex}{suffix}"
                     )
@@ -284,8 +286,8 @@ class ProviderRequest:
         """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
-        with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
+        async with aiofiles.open(image_url, "rb") as f:
+            image_bs64 = base64.b64encode(await f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
 
     async def _encode_audio_bs64(
@@ -299,8 +301,8 @@ class ProviderRequest:
         if audio_path.startswith("base64://"):
             return audio_path.replace("base64://", f"data:{mime_type};base64,", 1)
 
-        with open(audio_path, "rb") as f:
-            audio_bs64 = base64.b64encode(f.read()).decode("utf-8")
+        async with aiofiles.open(audio_path, "rb") as f:
+            audio_bs64 = base64.b64encode(await f.read()).decode("utf-8")
             return f"data:{mime_type};base64," + audio_bs64
 
 
@@ -478,7 +480,7 @@ class LLMResponse:
                     ),
                     # the extra_content will not serialize if it's None when calling ToolCall.model_dump()
                     extra_content=self.tools_call_extra_content.get(
-                        self.tools_call_ids[idx]
+                        self.tools_call_ids[idx],
                     ),
                 ),
             )

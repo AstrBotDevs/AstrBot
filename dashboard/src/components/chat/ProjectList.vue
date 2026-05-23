@@ -1,61 +1,80 @@
 <template>
-  <div class="project-list-shell">
+  <div>
     <!-- 项目按钮 -->
-    <div class="project-button-wrap">
-      <v-btn block variant="text" class="project-btn" @click="toggleExpanded">
-        <v-icon size="20" class="project-action-icon mr-2">
-          mdi-folder-outline
-        </v-icon>
-        <span class="project-btn-title">{{ tm("project.title") }}</span>
-        <v-spacer />
-        <v-icon size="18" class="project-toggle-icon">
-          {{ expanded ? "mdi-chevron-up" : "mdi-chevron-down" }}
-        </v-icon>
+    <div style="padding: 0 8px 0px 8px; opacity: 0.6">
+      <v-btn
+        block
+        variant="text"
+        class="project-btn"
+        prepend-icon="mdi-folder-outline"
+        @click="toggleExpanded"
+      >
+        {{ tm("project.title") }}
+        <template #append>
+          <v-icon size="small">
+            {{ expanded ? "mdi-chevron-up" : "mdi-chevron-down" }}
+          </v-icon>
+        </template>
       </v-btn>
     </div>
 
     <!-- 项目列表 -->
     <v-expand-transition>
-      <div v-show="expanded" class="project-list-wrap">
-        <button
-          class="project-row create-project-item"
-          type="button"
-          @click="$emit('createProject')"
+      <div v-show="expanded" style="padding: 0 8px">
+        <v-list
+          density="compact"
+          nav
+          class="project-list"
+          style="background-color: transparent"
         >
-          <span class="project-emoji">
-            <v-icon size="18">mdi-plus</v-icon>
-          </span>
-          <span class="project-title">{{ tm("project.create") }}</span>
-        </button>
-
-        <button
-          v-for="project in projects"
-          :key="project.project_id"
-          class="project-row project-item"
-          :class="{ active: selectedProjectId === project.project_id }"
-          type="button"
-          @click="$emit('selectProject', project.project_id)"
-        >
-          <span class="project-emoji">{{ project.emoji || "📁" }}</span>
-          <span class="project-title">{{ project.title }}</span>
-          <span class="project-actions">
-            <v-btn
-              icon="mdi-pencil"
-              size="x-small"
-              variant="text"
-              class="edit-project-btn"
-              @click.stop="$emit('editProject', project)"
-            />
-            <v-btn
-              icon="mdi-delete"
-              size="x-small"
-              variant="text"
-              class="delete-project-btn"
-              color="error"
-              @click.stop="handleDeleteProject(project)"
-            />
-          </span>
-        </button>
+          <v-list-item
+            class="create-project-item"
+            rounded="lg"
+            @click="$emit('createProject')"
+          >
+            <template #prepend>
+              <span class="project-emoji"
+                ><v-icon size="small">mdi-plus</v-icon></span
+              >
+            </template>
+            <v-list-item-title style="font-size: 13px">
+              {{ tm("project.create") }}
+            </v-list-item-title>
+          </v-list-item>
+          <v-list-item
+            v-for="project in projects"
+            :key="project.project_id"
+            rounded="lg"
+            class="project-item"
+            @click="$emit('selectProject', project.project_id)"
+          >
+            <template #prepend>
+              <span class="project-emoji">{{ project.emoji || "📁" }}</span>
+            </template>
+            <v-list-item-title class="project-title">
+              {{ project.title }}
+            </v-list-item-title>
+            <template #append>
+              <div class="project-actions">
+                <v-btn
+                  icon="mdi-pencil"
+                  size="x-small"
+                  variant="text"
+                  class="edit-project-btn"
+                  @click.stop="$emit('editProject', project)"
+                />
+                <v-btn
+                  icon="mdi-delete"
+                  size="x-small"
+                  variant="text"
+                  class="delete-project-btn"
+                  color="error"
+                  @click.stop="handleDeleteProject(project)"
+                />
+              </div>
+            </template>
+          </v-list-item>
+        </v-list>
       </div>
     </v-expand-transition>
   </div>
@@ -78,12 +97,10 @@ export interface Project {
 interface Props {
   projects: Project[];
   initialExpanded?: boolean;
-  selectedProjectId?: string | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   initialExpanded: false,
-  selectedProjectId: null,
 });
 
 const emit = defineEmits<{
@@ -119,60 +136,22 @@ async function handleDeleteProject(project: Project) {
 </script>
 
 <style scoped>
-.project-list-shell {
-  margin-top: 6px;
-}
-
-.project-button-wrap {
-  opacity: 0.6;
-}
-
 .project-btn {
   justify-content: flex-start;
   background-color: transparent !important;
-  border-radius: 8px;
-  padding: 8px 12px !important;
+  border-radius: 20px;
+  padding: 8px 16px !important;
   text-transform: none;
-  font-weight: 500;
 }
 
-.project-action-icon {
-  color: currentcolor;
+.project-item {
+  border-radius: 16px !important;
+  padding: 4px 12px !important;
+  margin-bottom: 2px;
 }
 
-.project-btn-title {
-  min-width: 0;
-}
-
-.project-toggle-icon {
-  margin-left: 10px;
-}
-
-.project-list-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 8px;
-}
-
-.project-row {
-  width: 100%;
-  min-height: 38px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  text-align: left;
-}
-
-.project-row:hover,
-.project-row.active {
-  background: var(--chat-session-active-bg);
+.project-item:hover {
+  background-color: rgba(103, 58, 183, 0.05);
 }
 
 .project-item:hover .project-actions {
@@ -181,21 +160,12 @@ async function handleDeleteProject(project: Project) {
 }
 
 .project-emoji {
-  width: 20px;
-  flex: 0 0 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   font-size: 16px;
+  margin-right: 6px;
 }
 
 .project-title {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -219,10 +189,13 @@ async function handleDeleteProject(project: Project) {
 }
 
 .create-project-item {
+  border-radius: 16px !important;
+  padding: 4px 12px !important;
   opacity: 0.7;
 }
 
 .create-project-item:hover {
+  background-color: rgba(103, 58, 183, 0.08);
   opacity: 1;
 }
 </style>

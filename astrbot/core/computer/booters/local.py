@@ -13,14 +13,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from python_ripgrep import search
-
 from astrbot.api import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_root
+from astrbot.core.computer.olayer import (
+    FileSystemComponent,
+    PythonComponent,
+    ShellComponent,
+)
+from astrbot.core.computer.shell_session import PersistentShellSession
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_root,
+    get_astrbot_temp_path,
+    get_astrbot_workspaces_path,
+)
 
-from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
-from .shipyard_search_file_util import _truncate_long_lines
+from .bwrap import _decode_shell_output
 
 SandboxBackend = Literal["none", "bwrap", "seatbelt"]
 
@@ -46,8 +54,26 @@ def _is_safe_command(command: str) -> bool:
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
 
 
-def _escape_seatbelt_string(raw: str) -> str:
-    return raw.replace("\\", "\\\\").replace('"', '\\"')
+def _ensure_safe_path(path: str) -> str:
+    abs_path = os.path.abspath(path)
+    allowed_roots = [
+        os.path.abspath(get_astrbot_root()),
+        os.path.abspath(get_astrbot_data_path()),
+        os.path.abspath(get_astrbot_temp_path()),
+        os.path.abspath(get_astrbot_workspaces_path()),
+    ]
+    if not any(abs_path.startswith(root) for root in allowed_roots):
+        raise PermissionError("Path is outside the allowed computer roots.")
+    return abs_path
+
+
+def _decode_bytes_with_fallback(
+    output: bytes | None,
+    *,
+    preferred_encoding: str | None = None,
+) -> str:
+    if output is None:
+        return ""
 
 
 def _session_workspace_name(session_id: str) -> str:
@@ -129,45 +155,6 @@ class LocalSandboxPolicy:
         if not self.sandboxed:
             return command
 
-        if self.backend == "bwrap":
-            return [
-                "bwrap",
-                "--die-with-parent",
-                "--new-session",
-                "--ro-bind",
-                "/",
-                "/",
-                "--bind",
-                str(self.workspace),
-                str(self.workspace),
-                "--proc",
-                "/proc",
-                "--dev",
-                "/dev",
-                "--chdir",
-                str(working_dir),
-                "--",
-                *command,
-            ]
-
-        if self.backend == "seatbelt":
-            workspace_escaped = _escape_seatbelt_string(str(self.workspace))
-            profile = "\n".join(
-                [
-                    "(version 1)",
-                    "(deny default)",
-                    '(import "system.sb")',
-                    "(allow process*)",
-                    "(allow file-read*)",
-                    f'(allow file-write* (subpath "{workspace_escaped}"))',
-                    "(allow network*)",
-                ]
-            )
-            return ["sandbox-exec", "-p", profile, *command]
-
-        raise RuntimeError("Sandbox backend is not available for local_sandboxed mode.")
-
-
 @dataclass
 class LocalShellComponent(ShellComponent):
     policy: LocalSandboxPolicy
@@ -180,57 +167,24 @@ class LocalShellComponent(ShellComponent):
         timeout: int | None = 300,
         shell: bool = True,
         background: bool = False,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
         if not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
 
-        def _run() -> dict[str, Any]:
-            shell_command = (
-                ["/bin/sh", "-lc", command] if shell else shlex.split(command)
-            )
-            run_env = os.environ.copy()
-            if env:
-                run_env.update({str(k): str(v) for k, v in env.items()})
+        key = session_id or "default"
+        session = PersistentShellSession.get_or_create(key)
+        return await session.exec(
+            command,
+            cwd=cwd,
+            env=env,
+            timeout=timeout,
+            background=background,
+        )
 
-            working_dir = self.policy.normalize_working_dir(cwd)
-            wrapped_command = self.policy.wrap_command(shell_command, working_dir)
-            if background:
-                proc = subprocess.Popen(
-                    wrapped_command,
-                    shell=False,
-                    cwd=working_dir,
-                    env=run_env,
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
-                return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
-            try:
-                result = subprocess.run(
-                    wrapped_command,
-                    shell=False,
-                    cwd=working_dir,
-                    env=run_env,
-                    timeout=timeout,
-                    stdin=subprocess.DEVNULL,
-                    capture_output=True,
-                    text=True,
-                )
-                return {
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                    "exit_code": result.returncode,
-                }
-            except subprocess.TimeoutExpired:
-                timeout_seconds = timeout if timeout is not None else "configured"
-                return {
-                    "stdout": "",
-                    "stderr": f"Execution timed out after {timeout_seconds} seconds.",
-                    "exit_code": 124,
-                }
-
-        return await asyncio.to_thread(_run)
+    @staticmethod
+    async def shutdown_all() -> None:
+        await PersistentShellSession.cleanup_all()
 
 
 @dataclass
@@ -252,7 +206,8 @@ class LocalPythonComponent(PythonComponent):
                 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 # Executes the current interpreter with a fixed argv list and shell=False.
                 result = subprocess.run(
-                    [sys.executable, "-c", code],
+                    [os.environ.get("PYTHON", sys.executable), "-c", code],
+                    check=False,
                     timeout=timeout,
                     capture_output=True,
                     text=True,
@@ -268,14 +223,14 @@ class LocalPythonComponent(PythonComponent):
                     "data": {
                         "output": {"text": stdout, "images": []},
                         "error": stderr,
-                    }
+                    },
                 }
             except subprocess.TimeoutExpired:
                 return {
                     "data": {
                         "output": {"text": "", "images": []},
                         "error": "Execution timed out.",
-                    }
+                    },
                 }
 
         return await asyncio.to_thread(_run)
@@ -286,12 +241,15 @@ class LocalFileSystemComponent(FileSystemComponent):
     policy: LocalSandboxPolicy
 
     async def create_file(
-        self, path: str, content: str = "", mode: int = 0o644
+        self,
+        path: str,
+        content: str = "",
+        mode: int = 0o644,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = self.policy.ensure_writable_path(path)
-            abs_path.parent.mkdir(parents=True, exist_ok=True)
-            with abs_path.open("w", encoding="utf-8") as f:
+            abs_path = _ensure_safe_path(path)
+            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+            with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(content)
             abs_path.chmod(mode)
             return {"success": True, "path": str(abs_path)}
@@ -306,39 +264,107 @@ class LocalFileSystemComponent(FileSystemComponent):
         limit: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = self.policy.resolve_path(path)
-            with abs_path.open(encoding=encoding) as f:
-                content = f.read()
-            occurrences = content.count(old_string)
-            if occurrences == 0:
+            abs_path = _ensure_safe_path(path)
+            with open(abs_path, "rb") as f:
+                raw_content = f.read()
+            content = _decode_bytes_with_fallback(
+                raw_content,
+                preferred_encoding=encoding,
+            )
+            if offset is not None:
+                lines = content.splitlines(keepends=True)
+                start = offset
+                if limit is not None:
+                    lines = lines[start : start + limit]
+                else:
+                    lines = lines[start:]
+                content = "".join(lines)
+            elif limit is not None:
+                lines = content.splitlines(keepends=True)[:limit]
+                content = "".join(lines)
+            return {"success": True, "content": content}
+
+        return await asyncio.to_thread(_run)
+
+    async def search_files(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        after_context: int | None = None,
+        before_context: int | None = None,
+    ) -> dict[str, Any]:
+        """Search file contents using grep-like pattern matching."""
+
+        def _run() -> dict[str, Any]:
+            search_path = _ensure_safe_path(path) if path else "."
+            cmd = ["grep", "-rn", pattern, search_path]
+            if after_context is not None:
+                cmd.extend(["-A", str(after_context)])
+            if before_context is not None:
+                cmd.extend(["-B", str(before_context)])
+            if glob:
+                cmd.extend(["--include", glob])
+            try:
+                result = subprocess.run(
+                    cmd,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                return {
+                    "success": True,
+                    "content": result.stdout,
+                    "error": result.stderr if result.returncode != 0 else "",
+                }
+            except subprocess.TimeoutExpired:
                 return {
                     "success": False,
-                    "error": "old string not found in file",
-                    "replacements": 0,
+                    "output": "",
+                    "error": "Search timed out.",
                 }
+
+        return await asyncio.to_thread(_run)
+
+    async def edit_file(
+        self,
+        path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+        encoding: str = "utf-8",
+    ) -> dict[str, Any]:
+        def _run() -> dict[str, Any]:
+            abs_path = _ensure_safe_path(path)
+            with open(abs_path, encoding=encoding) as f:
+                content = f.read()
             if replace_all:
-                updated = content.replace(old_string, new_string)
-                replacements = occurrences
+                new_content = content.replace(old_string, new_string)
             else:
-                updated = content.replace(old_string, new_string, 1)
-                replacements = 1
+                new_content = content.replace(old_string, new_string, 1)
+            if new_content == content:
+                return {
+                    "success": False,
+                    "error": f"String '{old_string}' not found in file.",
+                }
             with open(abs_path, "w", encoding=encoding) as f:
-                f.write(updated)
-            return {
-                "success": True,
-                "path": abs_path,
-                "replacements": replacements,
-            }
+                f.write(new_content)
+            return {"success": True, "path": abs_path}
 
         return await asyncio.to_thread(_run)
 
     async def write_file(
-        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = self.policy.ensure_writable_path(path)
-            abs_path.parent.mkdir(parents=True, exist_ok=True)
-            with abs_path.open(mode, encoding=encoding) as f:
+            abs_path = _ensure_safe_path(path)
+            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+            with open(abs_path, mode, encoding=encoding) as f:
                 f.write(content)
             return {"success": True, "path": str(abs_path)}
 
@@ -346,8 +372,8 @@ class LocalFileSystemComponent(FileSystemComponent):
 
     async def delete_file(self, path: str) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = self.policy.ensure_writable_path(path)
-            if abs_path.is_dir():
+            abs_path = _ensure_safe_path(path)
+            if os.path.isdir(abs_path):
                 shutil.rmtree(abs_path)
             else:
                 abs_path.unlink()
@@ -356,11 +382,13 @@ class LocalFileSystemComponent(FileSystemComponent):
         return await asyncio.to_thread(_run)
 
     async def list_dir(
-        self, path: str = ".", show_hidden: bool = False
+        self,
+        path: str = ".",
+        show_hidden: bool = False,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = self.policy.resolve_path(path)
-            entries = [entry.name for entry in abs_path.iterdir()]
+            abs_path = _ensure_safe_path(path)
+            entries = os.listdir(abs_path)
             if not show_hidden:
                 entries = [e for e in entries if not e.startswith(".")]
             return {"success": True, "entries": entries}
@@ -392,7 +420,8 @@ class LocalBooter(ComputerBooter):
             f"backend={self._policy.backend}, workspace={self._policy.workspace})"
         )
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, **kwargs) -> None:
+        await LocalShellComponent.shutdown_all()
         logger.info("Local computer booter shutdown complete.")
 
     @property
@@ -409,12 +438,12 @@ class LocalBooter(ComputerBooter):
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         raise NotImplementedError(
-            "LocalBooter does not support upload_file operation. Use shell instead."
+            "LocalBooter does not support upload_file operation. Use shell instead.",
         )
 
     async def download_file(self, remote_path: str, local_path: str) -> None:
         raise NotImplementedError(
-            "LocalBooter does not support download_file operation. Use shell instead."
+            "LocalBooter does not support download_file operation. Use shell instead.",
         )
 
     async def available(self) -> bool:

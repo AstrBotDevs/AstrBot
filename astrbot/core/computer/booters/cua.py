@@ -1,18 +1,30 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import importlib
 import inspect
 import shlex
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any
 
 from astrbot.api import logger
-
-from ..olayer import FileSystemComponent, GUIComponent, PythonComponent, ShellComponent
-from .base import ComputerBooter
-from .cua_defaults import CUA_CONFIG_KEYS, CUA_DEFAULT_CONFIG
-from .shipyard_search_file_util import search_files_via_shell
+from astrbot.core.computer.booters.base import ComputerBooter
+from astrbot.core.computer.booters.cua_defaults import (
+    CUA_CONFIG_KEYS,
+    CUA_DEFAULT_CONFIG,
+)
+from astrbot.core.computer.booters.shipyard_search_file_util import (
+    search_files_via_shell,
+)
+from astrbot.core.computer.olayer import (
+    FileSystemComponent,
+    GUIComponent,
+    PythonComponent,
+    ShellComponent,
+)
 
 _POSIX_OS_TYPES = {"linux", "darwin", "macos"}
 
@@ -58,7 +70,7 @@ async def _write_base64_via_shell(
         "pathlib.Path(sys.argv[1]).write_bytes(base64.b64decode(sys.stdin.read()))"
     )
     return await shell.exec(
-        f"python3 -c {shlex.quote(decoder)} {shlex.quote(path)} <<'EOF'\n{encoded}\nEOF"
+        f"python3 -c {shlex.quote(decoder)} {shlex.quote(path)} <<'EOF'\n{encoded}\nEOF",
     )
 
 
@@ -75,12 +87,14 @@ def _maybe_model_dump(value: Any) -> dict[str, Any]:
         return value
     if is_dataclass(value) and not isinstance(value, type):
         return asdict(value)
-    if hasattr(value, "model_dump"):
-        dumped = value.model_dump()
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
         if isinstance(dumped, dict):
             return dumped
-    if hasattr(value, "dict"):
-        dumped = value.dict()
+    dict_method = getattr(value, "dict", None)
+    if callable(dict_method):
+        dumped = dict_method()
         if isinstance(dumped, dict):
             return dumped
     attr_payload = {
@@ -129,13 +143,15 @@ def _normalize_process_result(raw: Any) -> ProcessResult:
 
     stdout = first_text("stdout", "output")
     stderr = first_text("stderr", "error")
-    exit_code = payload.get("exit_code")
-    if exit_code is None:
-        exit_code = payload.get("returncode")
-    if exit_code is None:
-        exit_code = payload.get("return_code")
-    if exit_code is None:
+    raw_exit_code = payload.get("exit_code")
+    if raw_exit_code is None:
+        raw_exit_code = payload.get("returncode")
+    if raw_exit_code is None:
+        raw_exit_code = payload.get("return_code")
+    if raw_exit_code is None:
         exit_code = 0 if not stderr else 1
+    else:
+        exit_code = int(raw_exit_code)
     success = bool(payload.get("success", not stderr and exit_code in (0, None)))
     return ProcessResult(
         stdout=stdout,
@@ -223,7 +239,7 @@ def _missing_component_method_error(
     candidates = ", ".join(f"{component_name}.{name}" for name in names)
     return RuntimeError(
         f"CUA sandbox does not provide any of: {candidates}. "
-        "Please check the installed CUA SDK version and sandbox backend."
+        "Please check the installed CUA SDK version and sandbox backend.",
     )
 
 
@@ -274,9 +290,10 @@ class CuaShellComponent(ShellComponent):
         self._sandbox = sandbox
         self._os_type = os_type.lower()
         shell = sandbox.shell
-        self._exec_raw = getattr(shell, "exec", None) or getattr(shell, "run", None)
-        if self._exec_raw is None:
+        exec_raw = getattr(shell, "exec", None) or getattr(shell, "run", None)
+        if exec_raw is None:
             raise RuntimeError("CUA sandbox shell must provide `.exec` or `.run`.")
+        self._exec_raw: Callable[..., Any] = exec_raw
 
     async def exec(
         self,
@@ -286,7 +303,9 @@ class CuaShellComponent(ShellComponent):
         timeout: int | None = 30,
         shell: bool = True,
         background: bool = False,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
+        _ = session_id
         if not shell:
             return {
                 "stdout": "",
@@ -344,7 +363,9 @@ class CuaPythonComponent(PythonComponent):
         self._python_exec = None
         if python is not None:
             self._python_exec = getattr(python, "exec", None) or getattr(
-                python, "run", None
+                python,
+                "run",
+                None,
             )
 
     async def exec(
@@ -392,9 +413,19 @@ def _write_result(path: str, result: dict[str, Any]) -> dict[str, Any]:
     return {"success": True, "path": path, **result}
 
 
+CUA_DEFAULT_IMAGE = str(CUA_DEFAULT_CONFIG["image"])
+CUA_DEFAULT_OS_TYPE = str(CUA_DEFAULT_CONFIG["os_type"])
+CUA_DEFAULT_TTL = int(CUA_DEFAULT_CONFIG["ttl"])
+CUA_DEFAULT_TELEMETRY_ENABLED = bool(CUA_DEFAULT_CONFIG["telemetry_enabled"])
+CUA_DEFAULT_LOCAL = bool(CUA_DEFAULT_CONFIG["local"])
+CUA_DEFAULT_API_KEY = str(CUA_DEFAULT_CONFIG["api_key"])
+
+
 class CuaFileSystemComponent(FileSystemComponent):
     def __init__(
-        self, sandbox: Any, os_type: str = CUA_DEFAULT_CONFIG["os_type"]
+        self,
+        sandbox: Any,
+        os_type: str = CUA_DEFAULT_OS_TYPE,
     ) -> None:
         self._shell = CuaShellComponent(sandbox, os_type=os_type)
         self._fs_components = _resolve_files_components(sandbox)
@@ -420,19 +451,21 @@ class CuaFileSystemComponent(FileSystemComponent):
         limit: int | None = None,
     ) -> dict[str, Any]:
         read_file = _resolve_files_method(
-            self._fs_components, ("read_file", "read_text")
+            self._fs_components,
+            ("read_file", "read_text"),
         )
         if read_file is None:
             return await self._fallback.read_file(path, encoding, offset, limit)
-        else:
-            content = await _maybe_await(read_file(path))
+        content = await _maybe_await(read_file(path))
         if isinstance(content, bytes):
             content = content.decode(encoding, errors="replace")
         return {
             "success": True,
             "path": path,
             "content": _slice_content_by_lines(
-                str(content), offset=offset, limit=limit
+                str(content),
+                offset=offset,
+                limit=limit,
             ),
         }
 
@@ -445,22 +478,22 @@ class CuaFileSystemComponent(FileSystemComponent):
     ) -> dict[str, Any]:
         _ = mode
         write_file = _resolve_files_method(
-            self._fs_components, ("write_file", "write_text")
+            self._fs_components,
+            ("write_file", "write_text"),
         )
         if write_file is None:
             return await self._fallback.write_file(path, content, mode, encoding)
-        else:
-            await _maybe_await(write_file(path, content))
+        await _maybe_await(write_file(path, content))
         return {"success": True, "path": path}
 
     async def delete_file(self, path: str) -> dict[str, Any]:
         delete = _resolve_files_method(
-            self._fs_components, ("delete", "delete_file", "remove")
+            self._fs_components,
+            ("delete", "delete_file", "remove"),
         )
         if delete is None:
             return await self._fallback.delete_file(path)
-        else:
-            await _maybe_await(delete(path))
+        await _maybe_await(delete(path))
         return {"success": True, "path": path}
 
     async def list_dir(
@@ -530,6 +563,26 @@ class _PosixShellFileSystem(FileSystemComponent):
             return None
         return _non_posix_filesystem_result(path, self._os_type)
 
+    async def create_file(
+        self,
+        path: str,
+        content: str = "",
+        mode: int = 0o644,
+    ) -> dict[str, Any]:
+        write_result = await self.write_file(path, content)
+        if not write_result.get("success"):
+            return {**write_result, "mode": mode, "mode_applied": False}
+        chmod_result = await self._shell.exec(f"chmod {mode:o} {shlex.quote(path)}")
+        if chmod_result.get("stderr"):
+            return {
+                "success": True,
+                "path": path,
+                "mode": mode,
+                "mode_applied": False,
+                "mode_error": chmod_result["stderr"],
+            }
+        return {"success": True, "path": path, "mode": mode, "mode_applied": True}
+
     async def read_file(
         self,
         path: str,
@@ -547,7 +600,9 @@ class _PosixShellFileSystem(FileSystemComponent):
             "success": True,
             "path": path,
             "content": _slice_content_by_lines(
-                str(result.get("stdout", "")), offset=offset, limit=limit
+                str(result.get("stdout", "")),
+                offset=offset,
+                limit=limit,
             ),
         }
 
@@ -562,7 +617,9 @@ class _PosixShellFileSystem(FileSystemComponent):
         if error := self._ensure_posix(path):
             return error
         result = await _write_base64_via_shell(
-            self._shell, path, content.encode(encoding)
+            self._shell,
+            path,
+            content.encode(encoding),
         )
         return _write_result(path, result)
 
@@ -603,6 +660,36 @@ class _PosixShellFileSystem(FileSystemComponent):
             before_context=before_context,
         )
 
+    async def edit_file(
+        self,
+        path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+        encoding: str = "utf-8",
+    ) -> dict[str, Any]:
+        read_result = await self.read_file(path, encoding=encoding)
+        if not read_result.get("success"):
+            return read_result
+        content = str(read_result.get("content", ""))
+        occurrences = content.count(old_string)
+        if occurrences == 0:
+            return {
+                "success": False,
+                "path": path,
+                "error": "old string not found in file",
+                "replacements": 0,
+            }
+        updated = content.replace(old_string, new_string, -1 if replace_all else 1)
+        write_result = await self.write_file(path, updated, encoding=encoding)
+        if not write_result.get("success"):
+            return write_result
+        return {
+            "success": True,
+            "path": path,
+            "replacements": occurrences if replace_all else 1,
+        }
+
 
 async def _list_dir_via_shell(
     shell: CuaShellComponent,
@@ -628,15 +715,17 @@ class CuaGUIComponent(GUIComponent):
         self._click = _resolve_component_method(mouse, "click")
         self._type_text = _resolve_component_method(keyboard, "type")
         self._press_key = _resolve_component_method(
-            keyboard, ("press", "key_press", "press_key")
+            keyboard,
+            ("press", "key_press", "press_key"),
         )
 
     async def screenshot(self, path: str | None = None) -> dict[str, Any]:
         raw = await self._sandbox.screenshot()
         data = _screenshot_to_bytes(raw)
         if path:
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
-            Path(path).write_bytes(data)
+            _p = Path(path)
+            await asyncio.to_thread(_p.parent.mkdir, parents=True, exist_ok=True)
+            await asyncio.to_thread(_p.write_bytes, data)
         return {
             "success": True,
             "path": path,
@@ -661,7 +750,8 @@ class CuaGUIComponent(GUIComponent):
     async def press_key(self, key: str) -> dict[str, Any]:
         if self._press_key is None:
             raise _missing_component_method_error(
-                "keyboard", ("press", "key_press", "press_key")
+                "keyboard",
+                ("press", "key_press", "press_key"),
             )
         result = await _maybe_await(self._press_key(key))
         payload = _maybe_model_dump(result)
@@ -711,12 +801,12 @@ class _CuaRuntime:
 class CuaBooter(ComputerBooter):
     def __init__(
         self,
-        image: str = CUA_DEFAULT_CONFIG["image"],
-        os_type: str = CUA_DEFAULT_CONFIG["os_type"],
-        ttl: int = CUA_DEFAULT_CONFIG["ttl"],
-        telemetry_enabled: bool = CUA_DEFAULT_CONFIG["telemetry_enabled"],
-        local: bool = CUA_DEFAULT_CONFIG["local"],
-        api_key: str = CUA_DEFAULT_CONFIG["api_key"],
+        image: str = CUA_DEFAULT_IMAGE,
+        os_type: str = CUA_DEFAULT_OS_TYPE,
+        ttl: int = CUA_DEFAULT_TTL,
+        telemetry_enabled: bool = CUA_DEFAULT_TELEMETRY_ENABLED,
+        local: bool = CUA_DEFAULT_LOCAL,
+        api_key: str = CUA_DEFAULT_API_KEY,
     ) -> None:
         self.image = image
         self.os_type = os_type
@@ -729,12 +819,15 @@ class CuaBooter(ComputerBooter):
     async def boot(self, session_id: str) -> None:
         _ = session_id
         try:
-            from cua import Image, Sandbox
+            cua_module = importlib.import_module("cua")
         except ImportError as exc:
             raise RuntimeError(
                 "CUA sandbox support requires the optional `cua` package. "
-                "Install it with `pip install cua` in the AstrBot environment."
+                "Install it with `pip install cua` in the AstrBot environment.",
             ) from exc
+
+        Image = vars(cua_module)["Image"]
+        Sandbox = vars(cua_module)["Sandbox"]
 
         image_obj = self._build_image(Image)
         ephemeral_kwargs = self._build_ephemeral_kwargs(Sandbox.ephemeral)
@@ -785,7 +878,7 @@ class CuaBooter(ComputerBooter):
             kwargs["api_key"] = self.api_key
         return kwargs
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, **kwargs) -> None:
         if self._runtime is not None:
             await self._runtime.sandbox_cm.__aexit__(None, None, None)
             self._runtime = None
@@ -834,12 +927,12 @@ class CuaBooter(ComputerBooter):
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         local_path = Path(path)
-        if not local_path.is_file():
+        if not await asyncio.to_thread(local_path.is_file):
             return {"success": False, "error": f"File not found: {path}"}
         sandbox = None if self._runtime is None else self._runtime.sandbox
         if sandbox is not None and hasattr(sandbox, "upload_file"):
             return _maybe_model_dump(
-                await sandbox.upload_file(str(local_path), file_name)
+                await sandbox.upload_file(str(local_path), file_name),
             )
         files_components = () if sandbox is None else _resolve_files_components(sandbox)
         upload = _resolve_files_method(files_components, "upload")
@@ -848,12 +941,16 @@ class CuaBooter(ComputerBooter):
             return _normalize_native_upload_result(result, file_name)
         write_bytes = _resolve_files_method(files_components, "write_bytes")
         if write_bytes is not None:
-            result = await _maybe_await(write_bytes(file_name, local_path.read_bytes()))
+            data = await asyncio.to_thread(local_path.read_bytes)
+            result = await _maybe_await(write_bytes(file_name, data))
             return _normalize_native_upload_result(result, file_name)
         if not _is_posix_os_type(self.os_type):
             return _non_posix_filesystem_result(file_name, self.os_type)
+        data = await asyncio.to_thread(local_path.read_bytes)
         result = await _write_base64_via_shell(
-            self.shell, file_name, local_path.read_bytes()
+            self.shell,
+            file_name,
+            data,
         )
         return {
             "success": not bool(result.get("stderr")),
@@ -871,8 +968,12 @@ class CuaBooter(ComputerBooter):
         result = await self.shell.exec(f"base64 {shlex.quote(remote_path)}")
         if result.get("stderr"):
             raise RuntimeError(result["stderr"])
-        Path(local_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(local_path).write_bytes(base64.b64decode(result.get("stdout", "")))
+        _p = Path(local_path)
+        await asyncio.to_thread(_p.parent.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(
+            _p.write_bytes,
+            base64.b64decode(result.get("stdout", "")),
+        )
 
     async def available(self) -> bool:
         return self._runtime is not None

@@ -1,17 +1,11 @@
-<script setup>
+<script setup lang="ts">
 import { ref, watch, computed, onUnmounted } from "vue";
-import { useTheme } from "vuetify";
 import MarkdownIt from "markdown-it";
-import axios from "axios";
+import hljs from "highlight.js";
+import axios from "@/utils/request";
 import DOMPurify from "dompurify";
+import "highlight.js/styles/github.css";
 import { useI18n } from "@/i18n/composables";
-import { copyToClipboard } from "@/utils/clipboard";
-import {
-  escapeHtml,
-  ensureShikiLanguages,
-  normalizeShikiLanguage,
-  renderShikiCode,
-} from "@/utils/shiki";
 
 // 1. 在 setup 作用域创建 MarkdownIt 实例
 const md = new MarkdownIt({
@@ -41,119 +35,23 @@ const props = defineProps({
   mode: {
     type: String,
     default: "readme",
-    validator: (value) => ["readme", "changelog", "first-notice"].includes(value),
+    validator: (value) =>
+      ["readme", "changelog", "first-notice"].includes(value),
   },
 });
 
 const emit = defineEmits(["update:show"]);
 const { t, locale } = useI18n();
-const theme = useTheme();
 
-const content = ref(null);
-const error = ref(null);
+const content = ref<string | null>(null);
+const error = ref<string | null>(null);
 const loading = ref(false);
 const isEmpty = ref(false);
-const copyFeedbackTimer = ref(null);
+const copyFeedbackTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const lastRequestId = ref(0);
-const lastRenderId = ref(0);
-const scrollContainer = ref(null);
-const renderedHtml = ref("");
-const isDark = computed(() => theme.global.current.value.dark);
+const scrollContainer = ref<HTMLElement | null>(null);
 
-const MARKDOWN_SANITIZE_OPTIONS = {
-  ALLOWED_TAGS: [
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "p",
-    "br",
-    "hr",
-    "ul",
-    "ol",
-    "li",
-    "blockquote",
-    "pre",
-    "code",
-    "a",
-    "img",
-    "table",
-    "thead",
-    "tbody",
-    "tr",
-    "th",
-    "td",
-    "strong",
-    "em",
-    "del",
-    "s",
-    "details",
-    "summary",
-    "div",
-    "span",
-    "input",
-    "button",
-    "svg",
-    "rect",
-    "path",
-    "polyline",
-  ],
-  ALLOWED_ATTR: [
-    "href",
-    "src",
-    "alt",
-    "title",
-    "class",
-    "id",
-    "target",
-    "rel",
-    "type",
-    "checked",
-    "disabled",
-    "open",
-    "align",
-    "width",
-    "height",
-    "viewBox",
-    "fill",
-    "stroke",
-    "stroke-width",
-    "points",
-    "d",
-    "x",
-    "y",
-    "rx",
-    "ry",
-    "data-code-block-index",
-  ],
-};
-
-const CODE_BLOCK_SANITIZE_OPTIONS = {
-  ALLOWED_TAGS: ["div", "span", "button", "svg", "rect", "path", "polyline", "pre", "code"],
-  ALLOWED_ATTR: [
-    "class",
-    "title",
-    "type",
-    "width",
-    "height",
-    "viewBox",
-    "fill",
-    "stroke",
-    "stroke-width",
-    "points",
-    "d",
-    "x",
-    "y",
-    "rx",
-    "ry",
-    "style",
-    "tabindex",
-  ],
-};
-
-function slugifyHeading(text, slugCounts) {
+function slugifyHeading(text: string | null, slugCounts: Map<string, number>) {
   const base = (text || "")
     .trim()
     .toLowerCase()
@@ -174,77 +72,24 @@ onUnmounted(() => {
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
 });
 
-// 解析 GitHub 仓库信息
-function parseGitHubRepoInfo(repoUrl) {
-  if (!repoUrl) return null;
-  // 支持格式: https://github.com/user/repo, /user/repo.git, /user/my.repo 等
-  const match = repoUrl.match(
-    /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/|$)/,
-  );
-  if (!match) return null;
-  const owner = match[1];
-  const repo = match[2].replace(/\.git$/, "");
-  return { owner, repo };
-}
+md.renderer.rules.fence = (tokens, idx) => {
+  const token = tokens[idx];
+  const lang = token.info.trim() || "";
+  const code = token.content;
 
-// 获取用户配置的 GitHub 代理
-function getGitHubProxy() {
-  return localStorage.getItem("selectedGitHubProxy") || "";
-}
+  const highlighted =
+    lang && hljs.getLanguage(lang)
+      ? hljs.highlight(code, { language: lang }).value
+      : md.utils.escapeHtml(code);
 
-// 将相对路径转换为 GitHub Raw URL
-function convertToRawUrl(relativePath, repoInfo, branch = "main") {
-  if (!repoInfo) return relativePath;
-  // 清理路径：移除开头的 ./ 或 /
-  const cleanPath = relativePath.replace(/^\.?\//, "");
-  const rawUrl = `https://raw.githubusercontent.com/${repoInfo.owner}/${repoInfo.repo}/${branch}/${cleanPath}`;
-  const proxy = getGitHubProxy();
-  // 如果有代理，添加代理前缀
-  return proxy ? `${proxy.replace(/\/+$/, "")}/${rawUrl}` : rawUrl;
-}
-
-// 检查是否为相对路径（用于图片）
-function isRelativePath(src) {
-  if (!src) return false;
-  // 绝对路径或 data URI 不需要转换
-  return (
-    !src.startsWith("http://") &&
-    !src.startsWith("https://") &&
-    !src.startsWith("//") &&
-    !src.startsWith("data:")
-  );
-}
-
-// 检查是否为仓库内的相对链接（用于文档链接）
-function isRepoRelativeLink(href) {
-  if (!href) return false;
-  // 排除绝对 URL
-  if (
-    href.startsWith("http://") ||
-    href.startsWith("https://") ||
-    href.startsWith("//")
-  )
-    return false;
-  // 排除纯锚点链接
-  if (href.startsWith("#")) return false;
-  // 排除协议链接（mailto:, tel:, javascript: 等）
-  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return false;
-  // 剩余的被视为相对链接（如 ./file.md, ../docs/readme.md, path/to/file）
-  return true;
-}
-
-// 将相对链接转换为 GitHub Blob URL（用于代码和文档查看）
-function convertToBlobUrl(relativePath, repoInfo, branch = "main") {
-  if (!repoInfo) return relativePath;
-  // 分离路径和锚点
-  const [pathPart, anchor] = relativePath.split("#");
-  // 清理路径：移除开头的 ./ 或 /
-  const cleanPath = pathPart.replace(/^\.?\//, "");
-  let blobUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${branch}/${cleanPath}`;
-  // 保留锚点
-  if (anchor) blobUrl += `#${anchor}`;
-  return blobUrl;
-}
+  return `<div class="code-block-wrapper">
+      ${lang ? `<span class="code-lang-label">${lang}</span>` : ""}
+      <button class="copy-code-btn" title="${t("core.common.copy")}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      </button>
+      <pre class="hljs"><code class="language-${lang}">${highlighted}</code></pre>
+    </div>`;
+};
 
 // 渲染后的 HTML
 const renderedHtml = computed(() => {
@@ -252,31 +97,78 @@ const renderedHtml = computed(() => {
   const _ = locale?.value;
   if (!content.value) return "";
 
-  md.renderer.rules.fence = (tokens, idx) => {
-    const token = tokens[idx];
-    const lang = normalizeShikiLanguage(token.info);
-    const code = token.content;
-    const escapedLangLabel =
-      lang && lang !== "text" ? escapeHtml(lang) : "";
-    const highlighted = highlighter
-      ? renderShikiCode(highlighter, code, lang, isDark.value ? "dark" : "light")
-      : `<pre class="shiki shiki-fallback"><code>${escapeHtml(code)}</code></pre>`;
-    const html = sanitizeHighlightedBlock(`<div class="code-block-wrapper">
-      ${escapedLangLabel ? `<span class="code-lang-label">${escapedLangLabel}</span>` : ""}
-      <button class="copy-code-btn" title="${t("core.common.copy")}">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-      </button>
-      ${highlighted}
-    </div>`);
+  const rawHtml = md.render(content.value);
 
-    const placeholderIndex = highlightedBlocks.push(html) - 1;
-    return `<div data-code-block-index="${placeholderIndex}"></div>`;
-  };
+  const cleanHtml = DOMPurify.sanitize(rawHtml, {
+    ALLOWED_TAGS: [
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "p",
+      "br",
+      "hr",
+      "ul",
+      "ol",
+      "li",
+      "blockquote",
+      "pre",
+      "code",
+      "a",
+      "img",
+      "table",
+      "thead",
+      "tbody",
+      "tr",
+      "th",
+      "td",
+      "strong",
+      "em",
+      "del",
+      "s",
+      "details",
+      "summary",
+      "div",
+      "span",
+      "input",
+      "button",
+      "svg",
+      "rect",
+      "path",
+      "polyline",
+    ],
+    ALLOWED_ATTR: [
+      "href",
+      "src",
+      "alt",
+      "title",
+      "class",
+      "id",
+      "target",
+      "rel",
+      "type",
+      "checked",
+      "disabled",
+      "open",
+      "align",
+      "width",
+      "height",
+      "viewBox",
+      "fill",
+      "stroke",
+      "stroke-width",
+      "points",
+      "d",
+      "x",
+      "y",
+      "rx",
+      "ry",
+    ],
+  });
 
-  const rawHtml = md.renderer.render(tokens, md.options, env);
-
-  const cleanHtml = DOMPurify.sanitize(rawHtml, MARKDOWN_SANITIZE_OPTIONS);
-
+  // 3. 后处理方案：完全隔离，安全性最高
   const tempDiv = document.createElement("div");
   tempDiv.innerHTML = cleanHtml;
 
@@ -286,30 +178,12 @@ const renderedHtml = computed(() => {
   // 4. 处理链接
   tempDiv.querySelectorAll("a").forEach((link) => {
     const href = link.getAttribute("href");
-    if (!href) return;
-
-    // 外部链接：添加安全属性
-    if (href.startsWith("http") || href.startsWith("//")) {
-      link.setAttribute("target", "_blank");
-      link.setAttribute("rel", "noopener noreferrer");
-    }
-    // 仓库内相对链接：转换为 GitHub Blob URL
-    else if (repoInfo && isRepoRelativeLink(href)) {
-      link.setAttribute("href", convertToBlobUrl(href, repoInfo));
+    // 强制所有外部链接使用安全的 _blank 策略
+    if (href && (href.startsWith("http") || href.startsWith("//"))) {
       link.setAttribute("target", "_blank");
       link.setAttribute("rel", "noopener noreferrer");
     }
   });
-
-  // 5. 转换图片相对路径为 GitHub Raw URL
-  if (repoInfo) {
-    tempDiv.querySelectorAll("img").forEach((img) => {
-      const src = img.getAttribute("src");
-      if (isRelativePath(src)) {
-        img.setAttribute("src", convertToRawUrl(src, repoInfo));
-      }
-    });
-  }
 
   return tempDiv.innerHTML;
 });
@@ -381,8 +255,8 @@ async function fetchContent() {
     } else {
       error.value = res.data.message;
     }
-  } catch (err) {
-    if (requestId === lastRequestId.value) error.value = err.message;
+  } catch (err: unknown) {
+    if (requestId === lastRequestId.value) error.value = err instanceof Error ? err.message : String(err);
   } finally {
     if (requestId === lastRequestId.value) loading.value = false;
   }
@@ -398,22 +272,26 @@ watch(
   { immediate: true },
 );
 
-watch([content, locale, isDark], () => {
-  updateRenderedHtml();
-}, { immediate: true });
-
-async function handleContainerClick(event) {
-  const btn = event.target.closest(".copy-code-btn");
+function handleContainerClick(event: MouseEvent) {
+  const clickTarget = event.target;
+  if (!(clickTarget instanceof Element)) return;
+  const btn = clickTarget.closest(".copy-code-btn");
   if (btn) {
     const code = btn.closest(".code-block-wrapper")?.querySelector("code");
     if (code) {
-      const success = await copyToClipboard(code.textContent || "");
-      showCopyFeedback(btn, success);
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard
+          .writeText(code.textContent ?? "")
+          .then(() => showCopyFeedback(btn, true))
+          .catch(() => tryFallbackCopy(code.textContent ?? "", btn));
+      } else {
+        tryFallbackCopy(code.textContent ?? "", btn);
+      }
     }
     return;
   }
 
-  const anchor = event.target.closest('a[href^="#"]');
+  const anchor = clickTarget.closest('a[href^="#"]');
   if (!anchor) return;
 
   const rawHref = anchor.getAttribute("href");
@@ -429,7 +307,31 @@ async function handleContainerClick(event) {
   target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function showCopyFeedback(btn, success) {
+function tryFallbackCopy(text: string, btn: Element) {
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    Object.assign(textArea.style, {
+      position: "absolute",
+      opacity: "0",
+      zIndex: "-1",
+    });
+    const parent = btn.parentNode;
+    if (parent) {
+      parent.appendChild(textArea);
+      textArea.select();
+      const success = document.execCommand("copy");
+      parent.removeChild(textArea);
+      showCopyFeedback(btn, success);
+    } else {
+      showCopyFeedback(btn, false);
+    }
+  } catch (_err: unknown) {
+    showCopyFeedback(btn, false);
+  }
+}
+
+function showCopyFeedback(btn: Element, success: boolean) {
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
   btn.setAttribute("title", t(`core.common.${success ? "copied" : "error"}`));
   btn.innerHTML = success ? ICONS.SUCCESS : ICONS.ERROR;
@@ -451,7 +353,7 @@ const _show = computed({
 });
 
 // 安全打开外部链接
-function openExternalLink(url) {
+function openExternalLink(url: string | null) {
   if (!url) return;
   window.open(url, "_blank", "noopener,noreferrer");
 }
@@ -467,7 +369,7 @@ const showActionArea = computed(() => {
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
         <span class="text-h2 pa-2">{{ modeConfig.title }}</span>
-        <v-btn icon @click="_show = false" variant="text">
+        <v-btn icon variant="text" @click="_show = false">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -501,25 +403,28 @@ const showActionArea = computed(() => {
             color="primary"
             size="64"
             class="mb-4"
-          ></v-progress-circular>
-          <p class="text-body-1 text-center">{{ modeConfig.loading }}</p>
+          />
+          <p class="text-body-1 text-center">
+            {{ modeConfig.loading }}
+          </p>
         </div>
 
+        <!-- eslint-disable-next-line vue/no-v-html -->
         <div
           v-else-if="renderedHtml"
           class="markdown-body"
-          v-html="renderedHtml"
           @click="handleContainerClick"
-        ></div>
+          v-html="renderedHtml"
+        />
 
         <div
           v-else-if="error"
           class="d-flex flex-column align-center justify-center"
           style="height: 100%"
         >
-          <v-icon size="64" color="error" class="mb-4"
-            >mdi-alert-circle-outline</v-icon
-          >
+          <v-icon size="64" color="error" class="mb-4">
+            mdi-alert-circle-outline
+          </v-icon>
           <p class="text-body-1 text-center mb-2">
             {{ t("core.common.error") }}
           </p>
@@ -533,9 +438,9 @@ const showActionArea = computed(() => {
           class="d-flex flex-column align-center justify-center"
           style="height: 100%"
         >
-          <v-icon size="64" color="warning" class="mb-4"
-            >mdi-file-question-outline</v-icon
-          >
+          <v-icon size="64" color="warning" class="mb-4">
+            mdi-file-question-outline
+          </v-icon>
           <p class="text-body-1 text-center mb-2">
             {{ modeConfig.emptyTitle }}
           </p>
@@ -545,7 +450,7 @@ const showActionArea = computed(() => {
         </div>
       </v-card-text>
       <v-card-actions>
-        <v-spacer></v-spacer>
+        <v-spacer />
         <v-btn color="primary" variant="tonal" @click="_show = false">
           {{ t("core.common.close") }}
         </v-btn>
@@ -555,28 +460,28 @@ const showActionArea = computed(() => {
 </template>
 
 <style scoped>
-:deep(.markdown-body) {
+::v-deep(.markdown-body) {
   --markdown-border: rgba(128, 128, 128, 0.3);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
-    sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   line-height: 1.6;
   padding: 8px 0;
   color: var(--v-theme-secondaryText);
 }
 
-:deep(.markdown-body [align="center"]) {
+::v-deep(.markdown-body [align="center"]) {
   text-align: center;
 }
-:deep(.markdown-body [align="right"]) {
+::v-deep(.markdown-body [align="right"]) {
   text-align: right;
 }
 
-:deep(.markdown-body h1),
-:deep(.markdown-body h2),
-:deep(.markdown-body h3),
-:deep(.markdown-body h4),
-:deep(.markdown-body h5),
-:deep(.markdown-body h6) {
+::v-deep(.markdown-body h1),
+::v-deep(.markdown-body h2),
+::v-deep(.markdown-body h3),
+::v-deep(.markdown-body h4),
+::v-deep(.markdown-body h5),
+::v-deep(.markdown-body h6) {
   margin-top: 24px;
   margin-bottom: 16px;
   font-weight: 600;
@@ -584,26 +489,26 @@ const showActionArea = computed(() => {
   scroll-margin-top: 12px;
 }
 
-:deep(.markdown-body h1) {
+::v-deep(.markdown-body h1) {
   font-size: 2em;
   border-bottom: 1px solid var(--v-theme-border);
   padding-bottom: 0.3em;
 }
-:deep(.markdown-body h2) {
+::v-deep(.markdown-body h2) {
   font-size: 1.5em;
   border-bottom: 1px solid var(--v-theme-border);
   padding-bottom: 0.3em;
 }
-:deep(.markdown-body p) {
+::v-deep(.markdown-body p) {
   margin-top: 0;
   margin-bottom: 16px;
 }
 
-:deep(.markdown-body .code-block-wrapper) {
+::v-deep(.markdown-body .code-block-wrapper) {
   position: relative;
   margin-bottom: 16px;
 }
-:deep(.markdown-body .code-lang-label) {
+::v-deep(.markdown-body .code-lang-label) {
   position: absolute;
   top: 8px;
   left: 12px;
@@ -614,7 +519,7 @@ const showActionArea = computed(() => {
   z-index: 1;
 }
 
-:deep(.markdown-body .copy-code-btn) {
+::v-deep(.markdown-body .copy-code-btn) {
   position: absolute;
   top: 8px;
   right: 8px;
@@ -633,12 +538,12 @@ const showActionArea = computed(() => {
   z-index: 1;
 }
 
-:deep(.markdown-body .copy-code-btn:hover) {
+::v-deep(.markdown-body .copy-code-btn:hover) {
   background: rgba(110, 118, 129, 0.6);
   color: #fff;
 }
 
-:deep(.markdown-body code) {
+::v-deep(.markdown-body code) {
   padding: 0.2em 0.4em;
   margin: 0;
   background-color: rgba(110, 118, 129, 0.2);
@@ -647,40 +552,30 @@ const showActionArea = computed(() => {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
-:deep(.markdown-body pre.shiki) {
+::v-deep(.markdown-body pre.hljs) {
   padding: 16px;
   padding-top: 32px;
   overflow: auto;
   font-size: 85%;
   line-height: 1.45;
+  background-color: #0d1117;
   border-radius: 6px;
   margin: 0;
-  border: 1px solid rgba(128, 128, 128, 0.18);
 }
 
-:deep(.markdown-body pre.shiki code) {
+::v-deep(.markdown-body pre.hljs code) {
   background-color: transparent;
   padding: 0;
   border-radius: 0;
-  color: inherit;
+  color: #c9d1d9;
 }
-
-:deep(.markdown-body pre.shiki .line) {
-  display: block;
-  min-height: 1.45em;
-}
-
-:deep(.markdown-body pre.shiki.shiki-fallback) {
-  background-color: #f6f8fa;
-  color: #24292f;
-}
-:deep(.markdown-body ul),
-:deep(.markdown-body ol) {
+::v-deep(.markdown-body ul),
+::v-deep(.markdown-body ol) {
   padding-left: 2em;
   margin-bottom: 16px;
 }
 
-:deep(.markdown-body img) {
+::v-deep(.markdown-body img) {
   max-width: 100%;
   margin: 8px 0;
   box-sizing: border-box;
@@ -688,8 +583,8 @@ const showActionArea = computed(() => {
   border-radius: 3px;
 }
 
-:deep(.markdown-body img[src*="shields.io"]),
-:deep(.markdown-body img[src*="badge"]) {
+::v-deep(.markdown-body img[src*="shields.io"]),
+::v-deep(.markdown-body img[src*="badge"]) {
   display: inline-block;
   vertical-align: middle;
   height: auto;
@@ -697,29 +592,29 @@ const showActionArea = computed(() => {
   background-color: transparent;
 }
 
-:deep(.markdown-body blockquote) {
+::v-deep(.markdown-body blockquote) {
   padding: 0 1em;
   color: var(--v-theme-secondaryText);
   border-left: 0.25em solid var(--v-theme-border);
   margin-bottom: 16px;
 }
 
-:deep(.markdown-body a) {
+::v-deep(.markdown-body a) {
   color: var(--v-theme-primary);
   text-decoration: none;
 }
-:deep(.markdown-body a:hover) {
+::v-deep(.markdown-body a:hover) {
   text-decoration: underline;
 }
 
-:deep(.markdown-body table) {
+::v-deep(.markdown-body table) {
   border-spacing: 0;
   border-collapse: collapse;
   width: 100%;
   margin-bottom: 0;
   border: 1px solid var(--markdown-border);
 }
-:deep(.markdown-body .table-container) {
+::v-deep(.markdown-body .table-container) {
   width: 100%;
   overflow-x: auto;
   margin-bottom: 16px;
@@ -727,23 +622,23 @@ const showActionArea = computed(() => {
   border-radius: 6px;
 }
 
-:deep(.markdown-body table th),
-:deep(.markdown-body table td) {
+::v-deep(.markdown-body table th),
+::v-deep(.markdown-body table td) {
   padding: 6px 13px;
   border: 1px solid var(--markdown-border);
 }
-:deep(.markdown-body table th) {
+::v-deep(.markdown-body table th) {
   font-weight: 600;
   background-color: rgba(128, 128, 128, 0.1);
 }
-:deep(.markdown-body table tr) {
+::v-deep(.markdown-body table tr) {
   background-color: transparent;
 }
-:deep(.markdown-body table tr:nth-child(2n)) {
+::v-deep(.markdown-body table tr:nth-child(2n)) {
   background-color: rgba(128, 128, 128, 0.05);
 }
 
-:deep(.markdown-body hr) {
+::v-deep(.markdown-body hr) {
   height: 0.25em;
   padding: 0;
   margin: 24px 0;
@@ -751,7 +646,7 @@ const showActionArea = computed(() => {
   border: 0;
 }
 
-:deep(.markdown-body details) {
+::v-deep(.markdown-body details) {
   margin-bottom: 16px;
   border: 1px solid var(--v-theme-border);
   border-radius: 6px;
@@ -759,10 +654,10 @@ const showActionArea = computed(() => {
   background-color: var(--v-theme-surface);
 }
 
-:deep(.markdown-body details[open]) {
+::v-deep(.markdown-body details[open]) {
   padding-bottom: 12px;
 }
-:deep(.markdown-body summary) {
+::v-deep(.markdown-body summary) {
   cursor: pointer;
   font-weight: 600;
   padding: 4px 0;
@@ -772,19 +667,28 @@ const showActionArea = computed(() => {
   gap: 6px;
 }
 
-:deep(.markdown-body summary::before) {
+::v-deep(.markdown-body summary::before) {
   content: "▶";
   font-size: 0.75em;
   transition: transform 0.2s ease;
 }
-:deep(.markdown-body details[open] summary::before) {
+::v-deep(.markdown-body details[open] summary::before) {
   transform: rotate(90deg);
 }
-:deep(.markdown-body summary::-webkit-details-marker) {
+::v-deep(.markdown-body summary::-webkit-details-marker) {
   display: none;
 }
-:deep(.markdown-body details > *:not(summary)) {
+::v-deep(.markdown-body details > *:not(summary)) {
   margin-top: 12px;
 }
 
+::v-deep(.markdown-body .hljs-keyword),
+::v-deep(.markdown-body .hljs-selector-tag),
+::v-deep(.markdown-body .hljs-title),
+::v-deep(.markdown-body .hljs-section),
+::v-deep(.markdown-body .hljs-doctag),
+::v-deep(.markdown-body .hljs-name),
+::v-deep(.markdown-body .hljs-strong) {
+  font-weight: bold;
+}
 </style>

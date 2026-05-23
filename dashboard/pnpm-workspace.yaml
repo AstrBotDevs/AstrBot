@@ -1,0 +1,3 @@
+allowBuilds:
+  '@parcel/watcher': false
+  vue-demi: false

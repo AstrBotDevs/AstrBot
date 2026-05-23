@@ -150,6 +150,70 @@ PY_TO_JSON_TYPE = {
 FuncTool = FunctionTool
 
 
+def _prepare_config(config: dict) -> dict:
+    """准备配置，处理嵌套格式"""
+    if config.get("mcpServers"):
+        first_key = next(iter(config["mcpServers"]))
+        config = config["mcpServers"][first_key]
+    config.pop("active", None)
+    return config
+
+
+async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
+    """快速测试 MCP 服务器可达性"""
+    import aiohttp
+
+    cfg = _prepare_config(config.copy())
+
+    url = cfg["url"]
+    headers = cfg.get("headers", {})
+    timeout = cfg.get("timeout", 10)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            if cfg.get("transport") == "streamable_http":
+                test_payload = {
+                    "jsonrpc": "2.0",
+                    "method": "initialize",
+                    "id": 0,
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test-client", "version": "1.2.3"},
+                    },
+                }
+                async with session.post(
+                    url,
+                    headers={
+                        **headers,
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    json=test_payload,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as response:
+                    if response.status == 200:
+                        return True, ""
+                    return False, f"HTTP {response.status}: {response.reason}"
+            else:
+                async with session.get(
+                    url,
+                    headers={
+                        **headers,
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as response:
+                    if response.status == 200:
+                        return True, ""
+                    return False, f"HTTP {response.status}: {response.reason}"
+
+    except TimeoutError:
+        return False, f"连接超时: {timeout}秒"
+    except Exception as e:
+        return False, f"{e!s}"
+
+
 class FunctionToolManager:
     def __init__(self) -> None:
         self.func_list: list[FuncTool] = []
@@ -526,7 +590,7 @@ class FunctionToolManager:
                 self._init_mcp_client(name, cfg),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise MCPInitTimeoutError(
                 f"Connected to MCP server {name} timeout ({timeout:g} seconds)"
             ) from exc
@@ -600,7 +664,7 @@ class FunctionToolManager:
                 asyncio.gather(*lifecycle_tasks, return_exceptions=True),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pending_names = [
                 runtime.name
                 for runtime in runtimes

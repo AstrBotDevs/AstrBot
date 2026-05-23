@@ -64,7 +64,7 @@ async def is_password_change_required(
 
     required = bool(
         getattr(config, "_generated_dashboard_password_change_required", False)
-        or getattr(config, "_dashboard_password_change_required_from_config", False)
+        or getattr(config, "_dashboard_password_change_required_from_config", False),
     )
     if required:
         _set_dashboard_flag(config, PASSWORD_CHANGE_REQUIRED_KEY, True)

@@ -113,9 +113,7 @@
     "title": "Конфигурация"
   },
   "reasoning": {
-    "thinking": "Рассуждение",
-    "think": "Размышление",
-    "toolUsed": "Использование инструмента"
+    "thinking": "Рассуждение"
   },
   "reply": {
     "replyTo": "В ответ на",
@@ -137,9 +135,9 @@
   },
   "stats": {
     "tokens": "Токены",
-    "inputTokens": "Входящие (прочие)",
+    "inputTokens": "Входящие",
     "outputTokens": "Исходящие",
-    "cachedTokens": "Входящие (кэш)",
+    "cachedTokens": "Кэшированные",
     "duration": "Время",
     "ttft": "Время до первого токена"
   },

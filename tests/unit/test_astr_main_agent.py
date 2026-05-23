@@ -41,9 +41,7 @@ def mock_context():
         return_value=(None, None, None, False)
     )
     ctx.persona_manager.get_persona_v3_by_id = MagicMock(return_value=None)
-    tool_mgr = MagicMock()
-    tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
-    ctx.get_llm_tool_manager.return_value = tool_mgr
+    ctx.get_llm_tool_manager.return_value = MagicMock()
     ctx.subagent_orchestrator = None
     return ctx
 
@@ -438,13 +436,13 @@ class TestBuiltinToolInjection:
         mock_context.get_config.return_value = {
             "provider_settings": {
                 "web_search": True,
-                "websearch_provider": "firecrawl",
+                "websearch_provider": "tavily",
             }
         }
         search_tool = MagicMock(spec=FunctionTool)
-        search_tool.name = "web_search_firecrawl"
+        search_tool.name = "web_search_tavily"
         extract_tool = MagicMock(spec=FunctionTool)
-        extract_tool.name = "firecrawl_extract_web_page"
+        extract_tool.name = "tavily_extract_web_page"
         tool_mgr = MagicMock()
         tool_mgr.get_builtin_tool.side_effect = [search_tool, extract_tool]
         mock_context.get_llm_tool_manager.return_value = tool_mgr
@@ -452,12 +450,12 @@ class TestBuiltinToolInjection:
         await module._apply_web_search_tools(mock_event, req, mock_context)
 
         assert tool_mgr.get_builtin_tool.call_args_list == [
-            ((module.FirecrawlWebSearchTool,),),
-            ((module.FirecrawlExtractWebPageTool,),),
+            ((module.TavilyWebSearchTool,),),
+            ((module.TavilyExtractWebPageTool,),),
         ]
         assert req.func_tool is not None
-        assert req.func_tool.get_tool("web_search_firecrawl") is search_tool
-        assert req.func_tool.get_tool("firecrawl_extract_web_page") is extract_tool
+        assert req.func_tool.get_tool("web_search_tavily") is search_tool
+        assert req.func_tool.get_tool("tavily_extract_web_page") is extract_tool
 
     def test_proactive_cron_job_tools_uses_builtin_tool_manager(self, mock_context):
         """Test cron tool injection through the builtin tool manager."""
@@ -752,10 +750,9 @@ class TestEnsurePersonaAndSkills:
         tmgr = mock_context.get_llm_tool_manager.return_value
         tmgr.func_list = [tool_a, tool_b]
         tmgr.get_full_tool_set.return_value = ToolSet([tool_a, tool_b])
-        tmgr.get_func.side_effect = lambda name: {
-            "tool_a": tool_a,
-            "tool_b": tool_b,
-        }.get(name)
+        tmgr.get_func.side_effect = lambda name: {"tool_a": tool_a, "tool_b": tool_b}.get(
+            name
+        )
 
         handoff = MagicMock()
         handoff.name = "transfer_to_planner"
@@ -891,6 +888,7 @@ class TestPluginToolFix:
 
             module._plugin_tool_fix(mock_event, req)
 
+        assert req.func_tool is not None
         assert "mcp_tool" in req.func_tool.names()
         assert "plugin_tool" in req.func_tool.names()
 
@@ -1295,6 +1293,45 @@ class TestBuildMainAgent:
         assert result is not None
         assert result.provider_request == existing_req
 
+    @pytest.mark.asyncio
+    async def test_build_main_agent_passes_streaming_config_to_agent_runner(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test build_main_agent passes streaming_response config to agent runner."""
+        module = ama
+        mock_provider.provider_config = {
+            "id": "google_gemini",
+            "type": "googlegenai_chat_completion",
+        }
+        mock_provider.get_model.return_value = "gemini-2.0-flash"
+        mock_event.get_platform_name.return_value = "webchat"
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    streaming_response=True,
+                ),
+            )
+
+        assert result is not None
+        assert mock_runner.reset.call_args.kwargs["streaming"] is True
+
 
 class TestHandleWebchat:
     """Tests for _handle_webchat function."""
@@ -1669,8 +1706,25 @@ class TestApplySandboxTools:
 
         assert "sandboxed environment" in req.system_prompt
 
-    def test_apply_sandbox_tools_with_shipyard_booter(self):
-        """Test sandbox tools with shipyard booter registers 4 basic tools."""
+    def test_apply_sandbox_tools_cua_runs_without_error(self, mock_context):
+        """Test that CUA booter config does not cause errors."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={"booter": "cua"},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("astrbot_execute_shell") is not None
+
+    def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):
+        """Test sandbox tools with shipyard booter configuration."""
+        import os
+
         module = ama
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,

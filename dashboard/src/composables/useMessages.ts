@@ -6,7 +6,6 @@ export type TransportMode = "sse" | "websocket";
 export interface MessagePart {
   type: string;
   text?: string;
-  think?: string;
   message_id?: string | number;
   selected_text?: string;
   embedded_url?: string;
@@ -34,11 +33,6 @@ export interface ChatContent {
   isLoading?: boolean;
   agentStats?: any;
   refs?: any;
-}
-
-export interface MessageDisplayBlock {
-  kind: "thinking" | "content";
-  parts: MessagePart[];
 }
 
 export interface ChatRecord {
@@ -634,7 +628,7 @@ export function useMessages(options: UseMessagesOptions) {
       created_at: new Date().toISOString(),
       content: {
         type: "bot",
-        message: [],
+        message: [{ type: "plain", text: "" }],
         reasoning: "",
         isLoading: true,
       },
@@ -743,7 +737,7 @@ export function useMessages(options: UseMessagesOptions) {
       created_at: new Date().toISOString(),
       content: {
         type: "bot",
-        message: [],
+        message: [{ type: "plain", text: "" }],
         reasoning: "",
         isLoading: true,
       },
@@ -777,7 +771,7 @@ export function useMessages(options: UseMessagesOptions) {
     botRecord.created_at = new Date().toISOString();
     botRecord.content = {
       type: "bot",
-      message: [],
+      message: [{ type: "plain", text: "" }],
       reasoning: "",
       isLoading: true,
     };
@@ -842,14 +836,10 @@ export function useMessages(options: UseMessagesOptions) {
 
   function normalizeHistoryRecord(record: any): ChatRecord {
     const content = record.content || {};
-    const normalizedMessage = normalizeMessageParts(
-      content.message || [],
-      content.reasoning || "",
-    );
     const normalizedContent: ChatContent = {
       type: content.type || (record.sender_id === "bot" ? "bot" : "user"),
-      message: normalizedMessage,
-      reasoning: extractReasoningText(normalizedMessage, content.reasoning || ""),
+      message: normalizeParts(content.message || []),
+      reasoning: content.reasoning || "",
       agentStats: content.agentStats || content.agent_stats,
       refs: content.refs,
     };
@@ -872,6 +862,18 @@ export function useMessages(options: UseMessagesOptions) {
       const key = record.id == null ? "" : String(record.id);
       record.threads = threadsByMessage.get(key) || [];
     }
+  }
+
+  function normalizeParts(parts: unknown): MessagePart[] {
+    if (typeof parts === "string") {
+      return parts ? [{ type: "plain", text: parts }] : [];
+    }
+    if (!Array.isArray(parts)) return [];
+    return parts.map((part: any) => {
+      if (!part || typeof part !== "object")
+        return { type: "plain", text: String(part ?? "") };
+      return part;
+    });
   }
 
   function startSseStream(
@@ -1049,7 +1051,9 @@ export function useMessages(options: UseMessagesOptions) {
     if (msgType === "plain") {
       markMessageStarted(botRecord);
       if (chainType === "reasoning") {
-        appendReasoningPart(botRecord, payloadText(data));
+        messageContent(botRecord).reasoning = `${
+          messageContent(botRecord).reasoning || ""
+        }${payloadText(data)}`;
         return;
       }
       if (chainType === "tool_call") {
@@ -1104,4 +1108,163 @@ export function useMessages(options: UseMessagesOptions) {
     stopSession,
     cleanupConnections,
   };
+}
+
+function cloneContentWithEditedText(
+  record: ChatRecord,
+  editedText: string,
+): ChatContent {
+  const content = record.content || { type: "bot", message: [] };
+  const message = Array.isArray(content.message)
+    ? content.message.map((part) => ({ ...part }))
+    : [];
+  let replaced = false;
+  for (const part of message) {
+    if (part.type === "plain") {
+      part.text = editedText;
+      replaced = true;
+      break;
+    }
+  }
+  if (!replaced && editedText) {
+    message.push({ type: "plain", text: editedText });
+  }
+  return {
+    ...content,
+    message,
+  };
+}
+
+function stripUploadOnlyFields(part: MessagePart): MessagePart {
+  const copied = { ...part };
+  delete copied.path;
+  return copied;
+}
+
+function normalizeSessionProject(value: unknown): ChatSessionProject | null {
+  if (!value || typeof value !== "object") return null;
+  const project = value as Record<string, unknown>;
+  if (
+    typeof project.project_id !== "string" ||
+    typeof project.title !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    project_id: project.project_id,
+    title: project.title,
+    emoji: typeof project.emoji === "string" ? project.emoji : undefined,
+  };
+}
+
+function partToPayload(part: MessagePart) {
+  if (part.type === "plain") return { type: "plain", text: part.text || "" };
+  if (part.type === "reply") {
+    return {
+      type: "reply",
+      message_id: part.message_id,
+      selected_text: part.selected_text || "",
+    };
+  }
+  return {
+    type: part.type,
+    attachment_id: part.attachment_id,
+    filename: part.filename,
+  };
+}
+
+async function readSseStream(
+  body: ReadableStream<Uint8Array>,
+  onPayload: (payload: any) => void,
+) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || "";
+
+    for (const event of events) {
+      const data = event
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart())
+        .join("\n");
+      if (!data) continue;
+      try {
+        onPayload(JSON.parse(data));
+      } catch (error) {
+        console.error("Failed to parse SSE payload:", error, data);
+      }
+    }
+  }
+}
+
+function appendPlain(record: ChatRecord, text: string, append = true) {
+  markMessageStarted(record);
+  const content = record.content;
+  let last = content.message[content.message.length - 1];
+  if (!last || last.type !== "plain") {
+    last = { type: "plain", text: "" };
+    content.message.push(last);
+  }
+  last.text = append ? `${last.text || ""}${text}` : text;
+}
+
+function upsertToolCall(record: ChatRecord, toolCall: any) {
+  markMessageStarted(record);
+  if (!toolCall || typeof toolCall !== "object") return;
+  record.content.message.push({ type: "tool_call", tool_calls: [toolCall] });
+}
+
+function finishToolCall(record: ChatRecord, result: any) {
+  markMessageStarted(record);
+  if (!result || typeof result !== "object") return;
+  const targetId = result.id;
+  for (const part of record.content.message) {
+    if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
+    const tool = part.tool_calls.find((item) => item.id === targetId);
+    if (tool) {
+      tool.result = result.result;
+      tool.finished_ts = result.ts || Date.now() / 1000;
+      return;
+    }
+  }
+}
+
+function markMessageStarted(record: ChatRecord) {
+  record.content.isLoading = false;
+}
+
+function hasPlainText(record: ChatRecord) {
+  return record.content.message.some(
+    (part) =>
+      part.type === "plain" && typeof part.text === "string" && part.text,
+  );
+}
+
+function payloadText(value: unknown) {
+  if (typeof value === "string") return value;
+  if (value == null) return "";
+  if (typeof value === "object") {
+    const payload = value as Record<string, unknown>;
+    if (typeof payload.text === "string") return payload.text;
+    if (typeof payload.content === "string") return payload.content;
+    if (typeof payload.message === "string") return payload.message;
+  }
+  return String(value);
+}
+
+function parseJsonSafe(value: unknown) {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }

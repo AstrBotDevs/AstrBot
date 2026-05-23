@@ -1,15 +1,15 @@
 import os
 import uuid
 
+import aiofiles
 import httpx
 from openai import NOT_GIVEN, AsyncOpenAI
 
 from astrbot import logger
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -113,30 +113,18 @@ class ProviderOpenAITTSAPI(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
-        os.makedirs(temp_dir, exist_ok=True)
-        async with self.client.audio.speech.with_streaming_response.create(
-            model=self.model_name,
-            voice=self.voice,
-            response_format="wav",
-            input=text,
-        ) as response:
-            chunks = []
+        path = os.path.join(temp_dir, f"openai_tts_api_{uuid.uuid4()}.wav")
+        async with (
+            self.client.audio.speech.with_streaming_response.create(
+                model=self.model_name,
+                voice=self.voice,
+                response_format="wav",
+                input=text,
+            ) as response,
+            aiofiles.open(path, "wb") as f,
+        ):
             async for chunk in response.iter_bytes(chunk_size=1024):
-                if chunk:
-                    chunks.append(chunk)
-
-            if not chunks:
-                raise RuntimeError("[OpenAI TTS] empty audio response")
-
-            audio_bytes = b"".join(chunks)
-            content_type = None
-            if getattr(response, "headers", None):
-                content_type = response.headers.get("content-type")
-
-        ext = self._resolve_audio_extension(content_type, audio_bytes)
-        path = os.path.join(temp_dir, f"openai_tts_api_{uuid.uuid4()}{ext}")
-        with open(path, "wb") as f:
-            f.write(audio_bytes)
+                await f.write(chunk)
         return path
 
     async def terminate(self):

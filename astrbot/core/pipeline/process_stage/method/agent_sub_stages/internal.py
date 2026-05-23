@@ -13,6 +13,7 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
@@ -28,6 +29,15 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook
+from astrbot.core.pipeline.process_stage.follow_up import (
+    FollowUpCapture,
+    finalize_follow_up_capture,
+    prepare_follow_up_capture,
+    register_active_runner,
+    try_capture_follow_up,
+    unregister_active_runner,
+)
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
@@ -38,17 +48,6 @@ from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 from astrbot.core.utils.trace import _current_span
-
-from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
-from ....context import PipelineContext, call_event_hook
-from ...follow_up import (
-    FollowUpCapture,
-    finalize_follow_up_capture,
-    prepare_follow_up_capture,
-    register_active_runner,
-    try_capture_follow_up,
-    unregister_active_runner,
-)
 
 
 class InternalAgentSubStage(Stage):
@@ -78,6 +77,7 @@ class InternalAgentSubStage(Stage):
             "buffer_intermediate_messages",
             False,
         )
+        self.provider_wake_prefix: str = settings.get("wake_prefix", "")
         self.show_reasoning = settings.get("display_reasoning_text", False)
         self.sanitize_context_by_modalities: bool = settings.get(
             "sanitize_context_by_modalities",
@@ -89,19 +89,23 @@ class InternalAgentSubStage(Stage):
         self.file_extract_enabled: bool = file_extract_conf.get("enable", False)
         self.file_extract_prov: str = file_extract_conf.get("provider", "moonshotai")
         self.file_extract_msh_api_key: str = file_extract_conf.get(
-            "moonshotai_api_key", ""
+            "moonshotai_api_key",
+            "",
         )
 
         # 上下文管理相关
         self.context_limit_reached_strategy: str = settings.get(
-            "context_limit_reached_strategy", "truncate_by_turns"
+            "context_limit_reached_strategy",
+            "truncate_by_turns",
         )
         self.llm_compress_instruction: str = settings.get(
-            "llm_compress_instruction", ""
+            "llm_compress_instruction",
+            "",
         )
         self.llm_compress_keep_recent: int = settings.get("llm_compress_keep_recent", 4)
         self.llm_compress_provider_id: str = settings.get(
-            "llm_compress_provider_id", ""
+            "llm_compress_provider_id",
+            "",
         )
         self.llm_compress_use_compact_api: bool = settings.get(
             "llm_compress_use_compact_api", True
@@ -114,12 +118,14 @@ class InternalAgentSubStage(Stage):
         if self.dequeue_context_length <= 0:
             self.dequeue_context_length = 1
         self.fallback_max_context_tokens: int = settings.get(
-            "fallback_max_context_tokens", 128000
+            "fallback_max_context_tokens",
+            128000,
         )
 
         self.llm_safety_mode = settings.get("llm_safety_mode", True)
         self.safety_mode_strategy = settings.get(
-            "safety_mode_strategy", "system_prompt"
+            "safety_mode_strategy",
+            "system_prompt",
         )
 
         self.computer_use_runtime = settings.get("computer_use_runtime")
@@ -159,14 +165,8 @@ class InternalAgentSubStage(Stage):
             tool_call_approval=self.tool_call_approval,
         )
 
-    async def _send_llm_error_message(
-        self, event: AstrMessageEvent, message: object
-    ) -> None:
-        await event.send(MessageChain().message(str(message)))
-
-    async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
-    ) -> AsyncGenerator[None, None]:
+    async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None, None]:
+        provider_wake_prefix = self.provider_wake_prefix
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
@@ -304,13 +304,13 @@ class InternalAgentSubStage(Stage):
                         # 获取 TTS Provider
                         tts_provider = (
                             self.ctx.plugin_manager.context.get_using_tts_provider(
-                                event.unified_msg_origin
+                                event.unified_msg_origin,
                             )
                         )
 
                         if not tts_provider:
                             logger.warning(
-                                "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
+                                "[Live Mode] TTS Provider 未配置，将使用普通流式模式",
                             )
 
                         # 使用 run_live_agent，总是使用流式响应
@@ -415,7 +415,7 @@ class InternalAgentSubStage(Stage):
                             req,
                             agent_runner,
                             final_resp,
-                        )
+                        ),
                     )
 
                     # 检查事件是否被停止，如果被停止则不保存历史记录
@@ -448,9 +448,9 @@ class InternalAgentSubStage(Stage):
                         _current_span.reset(_llm_span_token)
 
         except Exception as e:
-            logger.error(f"Error occurred while processing agent: {e}")
+            logger.error(f"Error occurred while processing agent: {e}", exc_info=True)
             custom_error_message = extract_persona_custom_error_message_from_event(
-                event
+                event,
             )
             error_text = custom_error_message or (
                 f"Error occurred while processing agent request: {e}"
@@ -518,7 +518,7 @@ class InternalAgentSubStage(Stage):
             message_to_save.append(
                 CheckpointMessageSegment(
                     content=CheckpointData(id=checkpoint_id),
-                ).model_dump()
+                ).model_dump(),
             )
 
         # if user_aborted:

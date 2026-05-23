@@ -1,299 +1,313 @@
 <script setup>
-defineOptions({ name: 'TraceDisplayer' });
+import { shallowRef, onMounted, onBeforeUnmount } from "vue";
+import { EventSourcePolyfill } from "event-source-polyfill";
+import axios, { resolveApiUrl } from "@/utils/request";
 
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import axios from 'axios';
-import { EventSourcePolyfill } from 'event-source-polyfill';
-
-const props = defineProps({
-  selectedTraceId: {
-    type: String,
-    default: null
-  }
-});
-
-const emit = defineEmits(['select-trace']);
-
-// ── state ──────────────────────────────────────────────────────────────────
-const traces = ref([]);
-const pagination = ref({ page: 1, page_size: 20, total: 0 });
-const loading = ref(false);
-const searchText = ref('');
-const umoFilter = ref('');
-const senderFilter = ref(null);
-const senderSources = ref([]);
-const highlightMap = ref({});
-const traceCount = ref(0);
-const traceDiskUsage = ref('0 B');
-const dbDiskUsage = ref('0 B');
-
-const senderSourceItems = computed(() =>
-  senderSources.value.map(s => ({ title: s, value: s }))
-);
-
-let highlightTimers = {};
+let isMounted = false;
+const events = shallowRef([]);
+const eventIndex = {};
+const highlightMap = shallowRef({});
+const highlightTimers = {};
 let eventSource = null;
 let retryTimer = null;
 let retryAttempts = 0;
-const MAX_RETRY = 10;
+const maxRetryAttempts = 10;
+const baseRetryDelay = 1000;
+let lastEventId = null;
 
-// ── fetch ───────────────────────────────────────────────────────────────────
-async function fetchTraces(page = 1) {
-  loading.value = true;
+onMounted(async () => {
+  isMounted = true;
+  await fetchTraceHistory();
+  connectSSE();
+});
+
+onBeforeUnmount(() => {
+  isMounted = false;
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+  Object.values(highlightTimers).forEach((timer) => clearTimeout(timer));
+  retryAttempts = 0;
+});
+
+async function fetchTraceHistory() {
+  if (!isMounted) return;
   try {
-    const params = { page, page_size: pagination.value.page_size };
-    if (searchText.value) params.search = searchText.value;
-    if (umoFilter.value) params.umo = umoFilter.value;
-    if (senderFilter.value) params.sender = senderFilter.value;
-    const res = await axios.get('/api/trace/list', { params });
-    if (res.data?.status === 'ok') {
-      traces.value = res.data.data.traces;
-      pagination.value = { ...pagination.value, ...res.data.data.pagination };
-      traceCount.value = res.data.data.pagination.total;
-      traceDiskUsage.value = res.data.data.trace_disk_usage;
-      dbDiskUsage.value = res.data.data.db_disk_usage;
-    }
+    const res = await axios.get("/api/log-history");
+    if (!isMounted) return;
+    const logs = res.data?.data?.logs || [];
+    const traces = logs.filter((item) => item.type === "trace");
+    processNewTraces(traces);
   } catch (err) {
-    console.error('Failed to fetch traces:', err);
-  } finally {
-    loading.value = false;
+    console.error("Failed to fetch trace history:", err);
   }
 }
 
-async function fetchSources() {
-  try {
-    const res = await axios.get('/api/trace/sources');
-    if (res.data?.status === 'ok') {
-      senderSources.value = res.data.data.sources || [];
-    }
-  } catch (err) {
-    console.error('Failed to fetch trace sources:', err);
-  }
-}
-
-function onSearch() {
-  pagination.value.page = 1;
-  fetchTraces(1);
-}
-
-function onSenderChange() {
-  pagination.value.page = 1;
-  fetchTraces(1);
-}
-
-function onPageChange(page) {
-  fetchTraces(page);
-}
-
-// ── SSE (real-time new traces) ─────────────────────────────────────────────
 function connectSSE() {
   if (eventSource) {
     eventSource.close();
     eventSource = null;
   }
-  const token = localStorage.getItem('token');
-  eventSource = new EventSourcePolyfill('/api/live-log', {
-    headers: { Authorization: token ? `Bearer ${token}` : '' },
+  const token = localStorage.getItem("token");
+  eventSource = new EventSourcePolyfill(resolveApiUrl("/api/live-log"), {
+    headers: { Authorization: token ? `Bearer ${token}` : "" },
     heartbeatTimeout: 300000,
-    withCredentials: true
   });
-
-  eventSource.onopen = () => { retryAttempts = 0; };
-
-  eventSource.onmessage = (e) => {
+  eventSource.onopen = () => {
+    retryAttempts = 0;
+    if (!lastEventId) fetchTraceHistory();
+  };
+  eventSource.onmessage = (event) => {
+    if (!isMounted) return;
     try {
-      const payload = JSON.parse(e.data);
-      if (payload?.type !== 'trace_complete') return;
-      // new trace completed – prepend if on first page
-      if (pagination.value.page === 1) {
-        prependTrace(payload);
-      }
-    } catch {}
+      if (event.lastEventId) lastEventId = event.lastEventId;
+      const payload = JSON.parse(event.data);
+      if (payload?.type !== "trace") return;
+      processNewTraces([payload]);
+    } catch (e) {
+      console.error("Failed to parse trace payload:", e);
+    }
   };
-
   eventSource.onerror = () => {
-    if (eventSource) { eventSource.close(); eventSource = null; }
-    if (retryAttempts >= MAX_RETRY) return;
-    const delay = Math.min(1000 * Math.pow(2, retryAttempts), 30000);
-    retryTimer = setTimeout(() => { retryAttempts++; connectSSE(); }, delay);
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    if (retryAttempts >= maxRetryAttempts) {
+      console.error("Trace stream reached max retry attempts.");
+      return;
+    }
+    const delay = Math.min(baseRetryDelay * Math.pow(2, retryAttempts), 30000);
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+    retryTimer = setTimeout(async () => {
+      retryAttempts++;
+      if (!lastEventId) await fetchTraceHistory();
+      connectSSE();
+    }, delay);
   };
 }
 
-function prependTrace(payload) {
-  // Avoid duplicates
-  if (traces.value.some(t => t.trace_id === payload.trace_id)) return;
-  // Respect active sender filter
-  if (senderFilter.value && (payload.sender_name || '') !== senderFilter.value) return;
-  traces.value.unshift({
-    trace_id: payload.trace_id,
-    umo: payload.umo,
-    sender_name: payload.sender_name,
-    message_outline: payload.message_outline,
-    started_at: payload.started_at,
-    finished_at: payload.finished_at,
-    duration_ms: payload.duration_ms,
-    status: payload.status,
-    total_input_tokens: payload.total_input_tokens ?? 0,
-    total_output_tokens: payload.total_output_tokens ?? 0
+function processNewTraces(newTraces) {
+  if (!isMounted || !newTraces || newTraces.length === 0) return;
+  const touched = [];
+  const currentEvents = [...events.value];
+  newTraces.forEach((trace) => {
+    if (!trace.span_id) return;
+    const recordKey = `${trace.time}-${trace.span_id}-${trace.action}`;
+    let evt = eventIndex[trace.span_id];
+    if (!evt) {
+      evt = {
+        span_id: trace.span_id,
+        name: trace.name,
+        umo: trace.umo,
+        sender_name: trace.sender_name,
+        message_outline: trace.message_outline,
+        first_time: trace.time,
+        last_time: trace.time,
+        collapsed: true,
+        visibleCount: 20,
+        records: [],
+        hasAgentPrepare: trace.action === "astr_agent_prepare",
+      };
+      eventIndex[trace.span_id] = evt;
+      currentEvents.push(evt);
+    }
+    const exists = evt.records.some((item) => item.key === recordKey);
+    if (exists) return;
+    evt.records.push({
+      time: trace.time,
+      action: trace.action,
+      fieldsText: formatFields(trace.fields),
+      timeLabel: formatTime(trace.time),
+      key: recordKey,
+    });
+    if (trace.action === "astr_agent_prepare") evt.hasAgentPrepare = true;
+    if (!evt.first_time || trace.time < evt.first_time)
+      evt.first_time = trace.time;
+    if (!evt.last_time || trace.time > evt.last_time)
+      evt.last_time = trace.time;
+    if (!evt.sender_name && trace.sender_name)
+      evt.sender_name = trace.sender_name;
+    if (!evt.message_outline && trace.message_outline)
+      evt.message_outline = trace.message_outline;
+    touched.push(trace.span_id);
   });
-  pagination.value.total += 1;
-  traceCount.value += 1; // Update traceCount as well
-  // trim to page_size
-  if (traces.value.length > pagination.value.page_size) {
-    traces.value.pop();
-  }
-  pulseTrace(payload.trace_id);
-  // Dynamically add new source to dropdown
-  const name = payload.sender_name || '';
-  if (name && !senderSources.value.includes(name)) {
-    senderSources.value = [...senderSources.value, name].sort();
+  if (touched.length > 0) {
+    currentEvents.forEach((e) => {
+      e.records.sort((a, b) => b.time - a.time);
+    });
+    currentEvents.sort((a, b) => b.first_time - a.first_time);
+    if (currentEvents.length > 300) {
+      const removed = currentEvents.splice(300);
+      removed.forEach((e) => {
+        delete eventIndex[e.span_id];
+      });
+    }
+    events.value = currentEvents;
+    touched.forEach((spanId) => {
+      pulseEvent(spanId);
+    });
   }
 }
 
-function pulseTrace(traceId) {
-  if (highlightTimers[traceId]) clearTimeout(highlightTimers[traceId]);
-  highlightMap.value = { ...highlightMap.value, [traceId]: true };
-  highlightTimers[traceId] = setTimeout(() => {
+function pulseEvent(spanId) {
+  if (!spanId || !isMounted) return;
+  if (highlightTimers[spanId]) clearTimeout(highlightTimers[spanId]);
+  highlightMap.value = { ...highlightMap.value, [spanId]: true };
+  const remove = setTimeout(() => {
+    if (!isMounted) return;
     const next = { ...highlightMap.value };
-    delete next[traceId];
+    delete next[spanId];
     highlightMap.value = next;
-    delete highlightTimers[traceId];
+    delete highlightTimers[spanId];
   }, 1500);
+  highlightTimers[spanId] = remove;
 }
 
-// ── utils ───────────────────────────────────────────────────────────────────
+function toggleEvent(spanId) {
+  const evt = eventIndex[spanId];
+  if (evt) {
+    evt.collapsed = !evt.collapsed;
+    events.value = [...events.value];
+  }
+}
+
+function showMore(spanId) {
+  const evt = eventIndex[spanId];
+  if (evt) {
+    evt.visibleCount = Math.min(evt.records.length, evt.visibleCount + 20);
+    events.value = [...events.value];
+  }
+}
+
+function getVisibleRecords(evt) {
+  if (!evt.records.length) return [];
+  return evt.records.slice(0, evt.visibleCount);
+}
 function formatTime(ts) {
-  if (!ts) return '-';
-  return new Date(ts * 1000).toLocaleString();
+  if (!ts) return "";
+  const date = new Date(ts * 1000);
+  return `${date.toLocaleString()}.${String(date.getMilliseconds()).padStart(3, "0")}`;
 }
-
-function formatDuration(ms) {
-  if (ms == null) return '-';
-  if (ms < 1000) return `${ms.toFixed(0)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
+function shortSpan(spanId) {
+  return spanId ? spanId.slice(0, 8) : "";
 }
-
-function statusColor(status) {
-  if (status === 'ok') return 'success';
-  if (status === 'error') return 'error';
-  if (status === 'filtered') return 'warning';
-  return 'default';
+function formatFields(fields) {
+  if (!fields) return "";
+  try {
+    return JSON.stringify(fields, null, 2);
+  } catch (_error) {
+    return String(fields);
+  }
 }
-
-// ── lifecycle ────────────────────────────────────────────────────────────────
-onMounted(async () => {
-  await Promise.all([fetchTraces(), fetchSources()]);
-  connectSSE();
-});
-
-onBeforeUnmount(() => {
-  if (eventSource) { eventSource.close(); eventSource = null; }
-  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-  Object.values(highlightTimers).forEach(clearTimeout);
-  highlightTimers = {};
-});
 </script>
 
 <template>
-  <div class="trace-displayer">
-    <!-- toolbar -->
-    <div class="trace-toolbar">
-      <v-text-field
-        v-model="searchText"
-        density="compact"
-        variant="outlined"
-        rounded="lg"
-        hide-details
-        placeholder="Search message..."
-        prepend-inner-icon="mdi-magnify"
-        clearable
-        style="max-width: 260px;"
-        @keyup.enter="onSearch"
-        @click:clear="onSearch"
-      />
-      <v-text-field
-        v-model="umoFilter"
-        density="compact"
-        variant="outlined"
-        rounded="lg"
-        hide-details
-        placeholder="Filter UMO..."
-        clearable
-        style="max-width: 200px;"
-        @keyup.enter="onSearch"
-        @click:clear="onSearch"
-      />
-      <v-select
-        v-model="senderFilter"
-        :items="senderSourceItems"
-        density="compact"
-        variant="outlined"
-        rounded="lg"
-        hide-details
-        placeholder="Source"
-        clearable
-        style="max-width: 200px;"
-        @update:model-value="onSenderChange"
-      />
-      <v-btn
-        density="compact"
-        variant="tonal"
-        color="primary"
-        icon="mdi-magnify"
-        rounded="lg"
-        @click="onSearch"
-      />
-      <v-spacer />
-      <div class="trace-toolbar-left">
-        <span class="trace-count">Count: {{ traceCount }}</span>
-        <div v-if="traceDiskUsage" class="trace-disk-tag ml-3" title="Trace Log Size">
-          <v-icon size="12" class="mr-1">mdi-harddisk</v-icon>
-          <span>{{ traceDiskUsage }}</span>
+  <div class="timeline-container">
+    <div class="trace-timeline">
+      <!-- Empty state -->
+      <div v-if="events.length === 0" class="tl-empty">
+        <div class="tl-empty-icon">⏳</div>
+        <div
+          class="tl-empty-text"
+          style="
+            color: var(--trace-title, #f4feff) !important;
+            -webkit-text-fill-color: var(--trace-title, #f4feff) !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+          "
+        >
+          暂无追踪数据
+        </div>
+        <div
+          class="tl-empty-hint"
+          style="
+            color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important;
+            -webkit-text-fill-color: var(
+              --trace-muted,
+              rgba(203, 213, 225, 0.76)
+            ) !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+          "
+        >
+          发送消息后即可看到调用链路
         </div>
       </div>
-    </div>
 
-    <!-- table -->
-    <div class="trace-table-wrap">
-      <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-1" />
-
-      <div v-if="traces.length === 0 && !loading" class="trace-empty">
-        <v-icon size="40" color="grey-lighten-1" class="mb-2">mdi-chart-timeline-variant</v-icon>
-        <div>No traces yet. Enable tracing and send a message.</div>
-      </div>
-
+      <!-- Timeline items -->
       <div
-        v-for="trace in traces"
-        :key="trace.trace_id"
-        class="trace-row"
+        v-for="(event, idx) in events"
+        :key="event.span_id"
+        class="tl-item"
         :class="{
-          highlight: highlightMap[trace.trace_id],
-          selected: trace.trace_id === selectedTraceId
+          'tl-item-active': highlightMap[event.span_id],
+          'tl-item-expanded': !event.collapsed,
         }"
-        @click="$emit('select-trace', trace.trace_id)"
       >
-        <!-- status indicator -->
-        <div class="trace-status-bar" :class="`status-${trace.status}`" />
+        <!-- Timeline line + dot -->
+        <div class="tl-track">
+          <div
+            class="tl-dot"
+            :class="{ 'tl-dot-active': event.hasAgentPrepare }"
+          ></div>
+          <div v-if="idx < events.length - 1" class="tl-line"></div>
+        </div>
 
-        <div class="trace-row-content">
-          <div class="trace-row-top">
-            <v-chip size="x-small" :color="statusColor(trace.status)" variant="flat" rounded="pill" class="mr-2">
-              {{ trace.status }}
-            </v-chip>
-            <span class="trace-sender">{{ trace.sender_name || '-' }}</span>
-            <span class="trace-outline">{{ trace.message_outline || '-' }}</span>
-            <v-spacer />
-            <span class="trace-duration">{{ formatDuration(trace.duration_ms) }}</span>
+        <!-- Event card -->
+        <div class="tl-card">
+          <!-- Card header -->
+          <div class="tl-card-header" @click="toggleEvent(event.span_id)">
+            <div class="tl-card-top">
+              <span class="tl-event-id">{{ shortSpan(event.span_id) }}</span>
+              <span class="tl-umo">{{ event.umo || "-" }}</span>
+              <span class="tl-time">{{ formatTime(event.first_time) }}</span>
+            </div>
+            <div class="tl-card-bottom">
+              <span class="tl-sender">{{
+                event.sender_name || "Unknown"
+              }}</span>
+              <span class="tl-outline">{{ event.message_outline || "-" }}</span>
+              <span class="tl-expand-btn">{{
+                event.collapsed ? "展开" : "收起"
+              }}</span>
+            </div>
           </div>
-          <div class="trace-row-bottom">
-            <span class="trace-time">{{ formatTime(trace.started_at) }}</span>
-            <span class="trace-umo ml-2">{{ trace.umo || '' }}</span>
-            <v-spacer />
-            <div v-if="trace.total_input_tokens" class="trace-tokens-tag">
-              <v-icon size="10" color="grey" class="mr-1">mdi-arrow-up-bold-outline</v-icon>
-              <span>{{ trace.total_input_tokens }}</span>
-              <v-icon size="10" color="grey" class="ml-2 mr-1">mdi-arrow-down-bold-outline</v-icon>
-              <span>{{ trace.total_output_tokens }}</span>
+
+          <!-- Expanded records -->
+          <div
+            v-if="!event.collapsed && event.records.length > 0"
+            class="tl-records"
+          >
+            <div class="tl-records-header">
+              调用链 · {{ event.records.length }} 条记录
+            </div>
+            <div
+              v-for="record in getVisibleRecords(event)"
+              :key="record.key"
+              class="tl-record"
+            >
+              <div class="tl-record-left">
+                <div class="tl-record-time">{{ record.timeLabel }}</div>
+                <div class="tl-record-action">{{ record.action }}</div>
+              </div>
+              <pre class="tl-record-fields">{{ record.fieldsText }}</pre>
+            </div>
+            <div
+              v-if="event.visibleCount < event.records.length"
+              class="tl-records-more"
+            >
+              <button @click.stop="showMore(event.span_id)">
+                加载更多 (+{{ event.records.length - event.visibleCount }})
+              </button>
             </div>
           </div>
         </div>
@@ -301,198 +315,365 @@ onBeforeUnmount(() => {
         <v-icon size="16" color="grey" class="trace-row-arrow">mdi-chevron-right</v-icon>
       </div>
     </div>
-
-    <!-- pagination -->
-    <div class="trace-pagination" v-show="pagination.total > pagination.page_size">
-      <v-pagination
-        v-model="pagination.page"
-        :length="Math.max(1, Math.ceil(pagination.total / pagination.page_size))"
-        density="compact"
-        rounded
-        @update:model-value="onPageChange"
-      />
-    </div>
   </div>
 </template>
 
 <style scoped>
-.trace-displayer {
+.timeline-container {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
-}
-
-.trace-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-
-.trace-toolbar-left {
-  display: flex;
-  align-items: center;
-}
-
-.trace-count {
-  font-size: 14px;
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.trace-disk-tag {
-  display: inline-flex;
-  align-items: center;
-  font-size: 12px;
-  color: rgba(var(--v-theme-primary), 0.8);
-  background: rgba(var(--v-theme-primary), 0.1);
-  padding: 1px 10px;
-  border-radius: 20px;
-  border: 1px solid rgba(var(--v-theme-primary), 0.2);
-}
-
-.trace-table-wrap {
-  flex: 1;
-  overflow-y: auto;
   min-height: 0;
-}
-
-.trace-row {
-  display: flex;
-  align-items: stretch;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05);
-  cursor: pointer;
-  transition: background 0.12s;
-  position: relative;
-}
-
-.trace-row:hover {
-  background: rgba(var(--v-theme-primary), 0.04);
-}
-
-.trace-row.selected {
-  background: rgba(var(--v-theme-primary), 0.08);
-  border-left: 2px solid rgba(var(--v-theme-primary), 0.6);
-}
-
-.trace-row.highlight {
-  animation: pulse-bg 1.5s ease;
-}
-
-@keyframes pulse-bg {
-  0% { background: rgba(var(--v-theme-primary), 0.18); }
-  100% { background: transparent; }
-}
-
-.trace-status-bar {
-  width: 4px;
-  flex-shrink: 0;
-  border-radius: 2px 0 0 2px;
-}
-
-.status-ok { background: rgb(var(--v-theme-success)); }
-.status-error { background: rgb(var(--v-theme-error)); }
-.status-filtered { background: rgb(var(--v-theme-warning)); }
-
-.trace-row-content {
-  flex: 1;
-  padding: 10px 14px;
-  min-width: 0;
-}
-
-.trace-row-top {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 2px;
-}
-
-.trace-sender {
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.trace-outline {
-  font-size: 13px;
-  color: rgba(var(--v-theme-on-surface), 0.6);
+  color: var(--trace-text, rgba(226, 232, 240, 0.92));
+  font-family: inherit;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
+}
+
+.trace-timeline {
   flex: 1;
-}
-
-.trace-duration {
-  font-size: 13px;
-  color: rgba(var(--v-theme-on-surface), 0.5);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.trace-row-bottom {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
 }
 
-.trace-time {
-  font-size: 12px;
-  color: rgba(var(--v-theme-on-surface), 0.45);
-  white-space: nowrap;
-}
-
-.trace-umo {
-  font-size: 12px;
-  color: rgba(var(--v-theme-on-surface), 0.35);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 200px;
-}
-
-.trace-tokens-tag {
-  display: inline-flex;
-  align-items: center;
-  font-size: 11px;
-  color: rgba(var(--v-theme-on-surface), 0.55);
-  background: rgba(var(--v-theme-on-surface), 0.05);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  padding: 1px 8px;
-  border-radius: 6px;
-  white-space: nowrap;
-}
-
-.trace-row-arrow {
-  flex-shrink: 0;
-  align-self: center;
-  margin-right: 8px;
-}
-
-.trace-empty {
+.tl-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 200px;
-  color: rgba(var(--v-theme-on-surface), 0.4);
-  font-size: 14px;
+  flex: 1;
+  min-height: 320px;
+  padding: 48px 24px;
   text-align: center;
-  gap: 4px;
+  border: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+  border-radius: 14px;
+  background: var(--trace-empty-surface, rgba(7, 16, 24, 0.8));
 }
 
-.trace-pagination {
+.tl-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+  font-size: 24px;
+  border-radius: 999px;
+  background: var(--trace-empty-icon-bg, rgba(0, 242, 255, 0.12));
+  box-shadow: inset 0 0 0 1px
+    var(--trace-border-strong, rgba(0, 242, 255, 0.18));
+}
+
+.tl-empty-text {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--trace-title, #f4feff) !important;
+  -webkit-text-fill-color: var(--trace-title, #f4feff);
+  margin-bottom: 8px;
+}
+
+.tl-empty-hint {
+  max-width: 38ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76));
+}
+
+.tl-item {
   display: flex;
-  justify-content: center;
+  gap: 0;
+  margin-bottom: 0;
+}
+
+.tl-item:last-child .tl-line {
+  display: none;
+}
+
+/* Track: dot + line */
+.tl-track {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 8px;
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   flex-shrink: 0;
-  min-height: 56px;
+  width: 32px;
+}
+
+.tl-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--trace-card-bg, rgba(10, 18, 25, 0.94));
+  border: 2px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+  flex-shrink: 0;
+  margin-top: 18px;
+  z-index: 1;
+  transition: all 0.3s ease;
+}
+
+.tl-dot-active {
+  background: var(--trace-primary, #00f2ff);
+  border-color: var(--trace-primary, #00f2ff);
+  box-shadow: 0 0 8px rgba(0, 242, 255, 0.5);
+}
+
+.tl-item-active .tl-dot {
+  background: var(--trace-primary, #00f2ff);
+  border-color: var(--trace-primary, #00f2ff);
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.8);
+  transform: scale(1.3);
+}
+
+.tl-line {
+  width: 2px;
+  flex: 1;
+  background: var(--trace-track, rgba(71, 85, 105, 0.42));
+  margin-top: 4px;
+  min-height: 20px;
+}
+
+.tl-item-active .tl-line {
+  background: var(--trace-track-active, rgba(0, 242, 255, 0.3));
+}
+
+/* Card */
+.tl-card {
+  flex: 1;
+  margin-left: 12px;
+  margin-bottom: 16px;
+  background: var(--trace-card-bg, rgba(10, 18, 25, 0.94));
+  border: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+  border-radius: 12px;
   overflow: hidden;
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease,
+    transform 0.3s ease;
+}
+
+.tl-item-active .tl-card {
+  border-color: var(--trace-border-active, rgba(0, 242, 255, 0.38));
+  box-shadow: var(--trace-shadow, 0 10px 24px rgba(15, 23, 42, 0.08));
+}
+
+.tl-item-expanded .tl-card {
+  border-color: var(--trace-border-strong, rgba(0, 242, 255, 0.18));
+}
+
+.tl-card-header {
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.tl-card-header:hover {
+  background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
+}
+
+.tl-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.tl-event-id {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--trace-primary, #00f2ff);
+  background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18));
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
+}
+
+.tl-umo {
+  font-size: 11px;
+  color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76));
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-time {
+  font-size: 10px;
+  color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76));
+  flex-shrink: 0;
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
+}
+
+.tl-card-bottom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tl-sender {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--trace-text, rgba(226, 232, 240, 0.92)) !important;
+  -webkit-text-fill-color: var(--trace-text, rgba(226, 232, 240, 0.92));
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-outline {
+  flex: 1;
+  font-size: 13px;
+  color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-expand-btn {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--trace-primary, #00f2ff);
+  background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
+  border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18));
+  padding: 4px 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
+}
+
+/* Records */
+.tl-records {
+  border-top: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+  background: var(--trace-record-bg, rgba(3, 10, 16, 0.52));
+  padding: 14px 16px;
+}
+
+.tl-records-header {
+  font-size: 11px;
+  color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76));
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
+}
+
+.tl-record {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+}
+
+.tl-record:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.tl-record-left {
+  flex-shrink: 0;
+  width: 200px;
+}
+
+.tl-record-time {
+  font-size: 10px;
+  color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76));
+  margin-bottom: 2px;
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
+}
+
+.tl-record-action {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--trace-primary, #00f2ff);
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
+}
+
+.tl-record-fields {
+  flex: 1;
+  margin: 0;
+  font-size: 11px;
+  color: var(--trace-text, rgba(226, 232, 240, 0.92)) !important;
+  -webkit-text-fill-color: var(--trace-text, rgba(226, 232, 240, 0.92));
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  line-height: 1.6;
+}
+
+.tl-records-more {
+  text-align: center;
+  padding-top: 10px;
+}
+
+.tl-records-more button {
+  background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
+  border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18));
+  color: var(--trace-primary, #00f2ff);
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
+  transition: all 0.2s ease;
+}
+
+.tl-records-more button:hover {
+  background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
+  border-color: var(--trace-border-active, rgba(0, 242, 255, 0.38));
+}
+
+.timeline-container :is(div, span, pre, button) {
+  mix-blend-mode: normal;
+}
+
+@media (max-width: 700px) {
+  .tl-umo {
+    display: none;
+  }
+
+  .tl-card-top,
+  .tl-card-bottom,
+  .tl-record {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .tl-record-left,
+  .tl-sender {
+    width: 100%;
+    max-width: none;
+  }
+
+  .trace-timeline,
+  .timeline-container {
+    padding: 16px;
+  }
+
+  .tl-empty {
+    min-height: 260px;
+    padding: 40px 20px;
+  }
 }
 </style>

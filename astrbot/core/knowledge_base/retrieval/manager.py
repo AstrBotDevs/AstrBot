@@ -1,23 +1,19 @@
 """检索管理器
 
-协调稠密检索、稀疏检索和 Rerank,提供统一的检索接口
+协调稠密检索､稀疏检索和 Rerank,提供统一的检索接口
 """
 
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from astrbot import logger
 from astrbot.core.db.vec_db.base import Result
+from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.retrieval.rank_fusion import RankFusion
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseRetriever
 from astrbot.core.provider.provider import RerankProvider
-
-from ..kb_helper import KBHelper
-
-if TYPE_CHECKING:
-    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 
 @dataclass
@@ -38,7 +34,7 @@ class RetrievalManager:
     """检索管理器
 
     职责:
-    - 协调稠密检索、稀疏检索和 Rerank
+    - 协调稠密检索､稀疏检索和 Rerank
     - 结果融合和排序
     """
 
@@ -173,20 +169,18 @@ class RetrievalManager:
         first_rerank = None
         for kb_id in kb_ids:
             vec_db = kb_options[kb_id]["vec_db"]
-            rerank_provider = (
-                getattr(vec_db, "rerank_provider", None) if vec_db else None
-            )
-            if rerank_provider is None:
+            if not isinstance(vec_db, FaissVecDB):
+                logger.warning(f"vec_db for kb_id {kb_id} is not FaissVecDB")
                 continue
 
             rerank_pi = kb_options[kb_id]["rerank_provider_id"]
             if (
                 vec_db
-                and rerank_provider
+                and vec_db.rerank_provider
                 and rerank_pi
-                and rerank_pi == rerank_provider.meta().id
+                and rerank_pi == vec_db.rerank_provider.meta().id
             ):
-                first_rerank = rerank_provider
+                first_rerank = vec_db.rerank_provider
                 break
         if first_rerank and retrieval_results:
             try:
@@ -209,7 +203,7 @@ class RetrievalManager:
     ):
         """稠密检索 (向量相似度)
 
-        为每个知识库使用独立的向量数据库进行检索,然后合并结果。
+        为每个知识库使用独立的向量数据库进行检索,然后合并结果｡
 
         Args:
             query: 查询文本

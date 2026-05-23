@@ -1,4 +1,4 @@
-from typing import Any, Generic
+from typing import Any, Generic, cast
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -13,7 +13,7 @@ TContext = TypeVar("TContext", default=Any)
 class ContextWrapper(Generic[TContext]):
     """A context for running an agent, which can be used to pass additional data or state."""
 
-    context: TContext
+    context: TContext = cast("TContext", None)
     messages: list[Message] = Field(default_factory=list)
     """This field stores the llm message context for the agent run, agent runners will maintain this field automatically."""
     tool_call_timeout: int = 60  # Default tool call timeout in seconds

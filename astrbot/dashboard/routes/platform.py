@@ -1,6 +1,6 @@
 """统一 Webhook 路由
 
-提供统一的 webhook 回调入口，支持多个平台使用同一端口接收回调。
+提供统一的 webhook 回调入口,支持多个平台使用同一端口接收回调｡
 """
 
 import secrets
@@ -48,7 +48,7 @@ class PlatformRoute(Route):
 
     def _register_webhook_routes(self) -> None:
         """注册 webhook 路由"""
-        # 统一 webhook 入口，支持 GET 和 POST
+        # 统一 webhook 入口,支持 GET 和 POST
         self.app.add_url_rule(
             "/api/platform/webhook/<webhook_uuid>",
             view_func=self.unified_webhook_callback,
@@ -76,13 +76,14 @@ class PlatformRoute(Route):
 
         Returns:
             根据平台适配器返回相应的响应
+
         """
         # 根据 webhook_uuid 查找对应的平台
         platform_adapter = self._find_platform_by_uuid(webhook_uuid)
 
         if not platform_adapter:
             logger.warning(f"未找到 webhook_uuid 为 {webhook_uuid} 的平台")
-            return Response().error("未找到对应平台").__dict__, 404
+            return Response().error("未找到对应平台").to_json(), 404
 
         # 调用平台适配器的 webhook_callback 方法
         try:
@@ -90,12 +91,12 @@ class PlatformRoute(Route):
             return result
         except NotImplementedError:
             logger.error(
-                f"平台 {platform_adapter.meta().name} 未实现 webhook_callback 方法"
+                f"平台 {platform_adapter.meta().name} 未实现 webhook_callback 方法",
             )
-            return Response().error("平台未支持统一 Webhook 模式").__dict__, 500
+            return Response().error("平台未支持统一 Webhook 模式").to_json(), 500
         except Exception as e:
             logger.error(f"处理 webhook 回调时发生错误: {e}", exc_info=True)
-            return Response().error("处理回调失败").__dict__, 500
+            return Response().error("处理回调失败").to_json(), 500
 
     def _find_platform_by_uuid(self, webhook_uuid: str) -> Platform | None:
         """根据 webhook_uuid 查找对应的平台适配器
@@ -104,8 +105,11 @@ class PlatformRoute(Route):
             webhook_uuid: webhook UUID
 
         Returns:
-            平台适配器实例，未找到则返回 None
+            平台适配器实例,未找到则返回 None
+
         """
+        if self.platform_manager is None:
+            return None
         for platform in self.platform_manager.platform_insts:
             if platform.config.get("webhook_uuid") == webhook_uuid:
                 if platform.unified_webhook():
@@ -117,10 +121,14 @@ class PlatformRoute(Route):
 
         Returns:
             包含平台统计信息的响应
+
         """
         try:
-            stats = self.platform_manager.get_all_stats()
-            return Response().ok(stats).__dict__
+            mgr = self.platform_manager
+            if mgr is None:
+                return Response().error("Platform manager not available").to_json()
+            stats = mgr.get_all_stats()
+            return Response().ok(stats).to_json()
         except Exception as e:
             logger.error(f"获取平台统计信息失败: {e}", exc_info=True)
             return Response().error(f"获取统计信息失败: {e}").__dict__, 500
@@ -153,7 +161,7 @@ class PlatformRoute(Route):
                 return await self._handle_dingtalk_registration(action, payload)
 
             return Response().error(
-                f"Unsupported platform registration: {platform_type}"
+                f"Unsupported platform registration: {platform_type}",
             ).__dict__, 404
         except Exception as e:
             logger.error(f"处理平台一键创建请求失败: {e}", exc_info=True)
@@ -181,14 +189,14 @@ class PlatformRoute(Route):
                         "verification_uri_complete": registration.verification_uri_complete,
                         "expires_in": registration.expires_in,
                         "interval": registration.interval,
-                    }
+                    },
                 )
                 .__dict__
             )
 
         if action == "poll":
             device_code = str(
-                payload.get("device_code") or payload.get("registration_code") or ""
+                payload.get("device_code") or payload.get("registration_code") or "",
             ).strip()
             if not device_code:
                 return Response().error("Missing device_code").__dict__, 400
@@ -228,14 +236,14 @@ class PlatformRoute(Route):
                         "verification_uri_complete": registration.verification_uri_complete,
                         "expires_in": registration.expires_in,
                         "interval": registration.interval,
-                    }
+                    },
                 )
                 .__dict__
             )
 
         if action == "poll":
             device_code = str(
-                payload.get("device_code") or payload.get("registration_code") or ""
+                payload.get("device_code") or payload.get("registration_code") or "",
             ).strip()
             if not device_code:
                 return Response().error("Missing device_code").__dict__, 400
@@ -263,14 +271,14 @@ class PlatformRoute(Route):
                         "qrcode": registration.qrcode,
                         "qrcode_img_content": registration.qrcode_img_content,
                         "interval": registration.interval,
-                    }
+                    },
                 )
                 .__dict__
             )
 
         if action == "poll":
             qrcode = str(
-                payload.get("qrcode") or payload.get("registration_code") or ""
+                payload.get("qrcode") or payload.get("registration_code") or "",
             ).strip()
             if not qrcode:
                 return Response().error("Missing qrcode").__dict__, 400

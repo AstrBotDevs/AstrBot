@@ -26,7 +26,7 @@ def _get_open_api_route(app: Quart):
         (
             item
             for item in app.url_map.iter_rules()
-            if item.rule == "/api/v1/chat" and "POST" in item.methods
+            if item.rule == "/api/v1/chat" and item.methods is not None and "POST" in item.methods
         ),
         None,
     )
@@ -55,9 +55,22 @@ async def _create_api_key(
 
 @pytest_asyncio.fixture(scope="module")
 async def core_lifecycle_td(tmp_path_factory):
+    from astrbot.core import astrbot_config as _astrbot_config
+    from astrbot.core.utils.auth_password import hash_dashboard_password
+
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_api_key.db"
     db = SQLiteDatabase(str(tmp_db_path))
     log_broker = LogBroker()
+
+    # Override the dashboard password to a known test value so the login
+    # credential resolution works during test. _resolve_dashboard_password
+    # detects the hash prefix and sends back "astrbot-test-password" as
+    # the plaintext credential.
+    orig_password = _astrbot_config.get("dashboard", {}).get("password")
+    _astrbot_config["dashboard"]["password"] = hash_dashboard_password(
+        "astrbot-test-password"
+    )
+
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
     generated_password = getattr(
@@ -81,6 +94,8 @@ async def core_lifecycle_td(tmp_path_factory):
     try:
         yield core_lifecycle
     finally:
+        if orig_password is not None:
+            _astrbot_config["dashboard"]["password"] = orig_password
         try:
             stop_result = core_lifecycle.stop()
             if asyncio.iscoroutine(stop_result):
@@ -522,13 +537,14 @@ async def test_open_chat_send_config_resolution(
 
     update_route = AsyncMock()
     delete_route = AsyncMock()
+    config_router = getattr(open_api_route.core_lifecycle, 'umop_config_router')
     monkeypatch.setattr(
-        open_api_route.core_lifecycle.umop_config_router,
+        config_router,
         "update_route",
         update_route,
     )
     monkeypatch.setattr(
-        open_api_route.core_lifecycle.umop_config_router,
+        config_router,
         "delete_route",
         delete_route,
     )

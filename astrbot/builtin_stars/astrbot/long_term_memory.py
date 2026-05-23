@@ -61,10 +61,10 @@ class LongTermMemory:
             max_cnt = 300
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
         image_caption_provider_id = cfg["provider_ltm_settings"].get(
-            "image_caption_provider_id"
+            "image_caption_provider_id",
         )
         image_caption = cfg["provider_ltm_settings"]["image_caption"] and bool(
-            image_caption_provider_id
+            image_caption_provider_id,
         )
         active_reply = cfg["provider_ltm_settings"]["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
@@ -105,7 +105,7 @@ class LongTermMemory:
             if not provider:
                 raise Exception(f"没有找到 ID 为 {image_caption_provider_id} 的提供商")
         if not isinstance(provider, Provider):
-            raise Exception(f"提供商类型错误({type(provider)})，无法获取图片描述")
+            raise Exception(f"提供商类型错误({type(provider)}),无法获取图片描述")
         response = await provider.text_chat(
             prompt=image_caption_prompt,
             session_id=uuid.uuid4().hex,
@@ -155,7 +155,7 @@ class LongTermMemory:
                 elif isinstance(comp, Image):
                     if cfg["image_caption"]:
                         try:
-                            url = comp.url if comp.url else comp.file
+                            url = comp.url or comp.file
                             if not url:
                                 raise Exception("图片 URL 为空")
                             caption = await self.get_image_caption(
@@ -182,7 +182,7 @@ class LongTermMemory:
                 self.session_chats[event.unified_msg_origin].pop(0)
 
     async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
-        """当触发 LLM 请求前，调用此方法修改 req"""
+        """当触发 LLM 请求前,调用此方法修改 req"""
         if event.unified_msg_origin not in self.session_chats:
             return
 
@@ -204,7 +204,7 @@ class LongTermMemory:
                 "Please react to it. Only output your response and do not output any other information. "
                 "You MUST use the SAME language as the chatroom is using."
             )
-            req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
+            req.contexts = []  # 清空上下文,当使用了主动回复,所有聊天记录都在一个prompt中｡
         else:
             req.system_prompt += (
                 "You are now in a chatroom. The chat history is as follows: \n"
@@ -212,7 +212,9 @@ class LongTermMemory:
             req.system_prompt += chats_str
 
     async def after_req_llm(
-        self, event: AstrMessageEvent, llm_resp: LLMResponse
+        self,
+        event: AstrMessageEvent,
+        llm_resp: LLMResponse,
     ) -> None:
         if event.unified_msg_origin not in self.session_chats:
             return
@@ -220,7 +222,7 @@ class LongTermMemory:
         if llm_resp.completion_text:
             final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {llm_resp.completion_text}"
             logger.debug(
-                f"Recorded AI response: {event.unified_msg_origin} | {final_message}"
+                f"Recorded AI response: {event.unified_msg_origin} | {final_message}",
             )
 
             ai_msg_id = f"ai:{uuid.uuid4().hex}"

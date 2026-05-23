@@ -1,9 +1,10 @@
 [project]
 name = "AstrBot"
-version = "4.19.1"
+version = "4.30.0-dev"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
-requires-python = ">=3.11"
+license = { text = "AGPL-3.0-or-later" }
+requires-python = ">=3.12,<3.14"
 
 keywords = ["AstrBot", "Agent", "Chatbot", "IM"]
 
@@ -37,11 +38,10 @@ dependencies = [
   "psutil>=5.8.0,<7.2.0",
   "py-cord>=2.6.1",
   "pydantic>=2.12.5",
-  "pydub>=0.25.1",
+  "quart>=0.19.0,<0.20.0",
   "pyjwt>=2.10.1",
   "python-telegram-bot>=22.6",
   "qq-botpy>=1.2.1",
-  "quart>=0.20.0",
   "readability-lxml>=0.8.4.1",
   "silk-python>=0.2.6",
   "slack-sdk>=3.35.0",
@@ -64,25 +64,49 @@ dependencies = [
   "shipyard-neo-sdk @ git+https://github.com/AstrBotDevs/shipyard-neo.git#subdirectory=shipyard-neo-sdk",
   "python-socks>=2.8.0",
   "packaging>=24.2",
+  "quart-cors>=0.8.0",
+  "anyio>=4.12.1",
+  "argon2-cffi>=23.1.0",
+  "plumbum>=1.10.0",
+  "openai-agents>=0.12.5",
+  "fastapi>=0.135.1",
+  "pytest-asyncio>=0.25.0",
 ]
+[project.urls]
+Homepage = "https://astrbot.app"
+Repository = "https://github.com/AstrBotDevs/AstrBot"
+[project.scripts]
+astrbot = "astrbot:cli"
 
 [dependency-groups]
 dev = [
   "commitizen>=4.9.1",
+  "mypy>=1.19.1",
   "pytest>=8.4.1",
-  "pytest-asyncio>=1.1.0",
+  "pytest-asyncio>=0.25.0",
   "pytest-cov>=6.2.1",
   "ruff>=0.15.0",
+  "textual-dev>=1.8.0",
 ]
 
-[project.scripts]
-astrbot = "astrbot.cli.__main__:cli"
-
-[project.urls]
-Repository = "https://github.com/AstrBotDevs/AstrBot"
-
 [tool.ruff]
-exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]
+exclude = [
+    "astrbot/core/utils/t2i/local_strategy.py",
+    "astrbot/api/all.py",
+    "astrbot/api/message_components.py",
+    "astrbot/api/platform/__init__.py",
+    "astrbot/api/star/__init__.py",
+    "astrbot/core/config/__init__.py",
+    "astrbot/core/provider/func_tool_manager.py",
+    "astrbot/core/skills/__init__.py",
+    "astrbot/core/tools/__init__.py",
+    "tests",
+    "tests/**",
+    "rust",
+    "examples",
+    "**/tests/**",
+    "**/scripts",
+]
 line-length = 88
 target-version = "py310"
 
@@ -91,40 +115,63 @@ select = [
   "F",     # Pyflakes
   "W",     # pycodestyle warnings
   "E",     # pycodestyle errors
+  "B",     # bugbear
+  "I",     # isort
+  "UP",    # pyupgrade
   "ASYNC", # flake8-async
   "C4",    # flake8-comprehensions
+  "T10",   # flake8-debugger
+  "T20",   # flake8-print
+  "PYI",   # flake8-pyi
+  "PT",    # flake8-pytest-style
   "Q",     # flake8-quotes
-  "I",     # import-order
-  "UP",    # pyupgrade
-  # "SIM", # flake8-simplify 
+  "TID",   # flake8-tidy-imports
 ]
 ignore = [
-  "F403",
-  "F405",
   "E501",
-  "ASYNC230", # TODO: handle ASYNC230 in AstrBot
-  "ASYNC240", # TODO: handle ASYNC240 in AstrBot
 ]
 
 [tool.pyright]
+stubPath = "types"
 typeCheckingMode = "basic"
-pythonVersion = "3.10"
+pythonVersion = "3.12"
 reportMissingTypeStubs = false
 reportMissingImports = false
 include = ["astrbot"]
-exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
+exclude = [
+    "dashboard",
+    "node_modules",
+    "dist",
+    "data",
+    "tests",
+    "tests/**",
+    "**/tests/**",
+    "**/__pycache__",
+]
+
+[tool.ty.src]
+include = ["astrbot"]
+exclude = [
+    "dashboard",
+    "node_modules",
+    "dist",
+    "data",
+    "tests",
+    "tests/**",
+    "**/tests/**",
+    "**/__pycache__",
+]
+
+[tool.ty.rules]
+all = "ignore"
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+mypy_path = "types"
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
-# Include bundled dashboard dist even though it is not tracked by VCS.
-[tool.hatch.build.targets.wheel]
-artifacts = ["astrbot/dashboard/dist/**"]
-
-# Custom build hook: builds the Vue dashboard and copies dist into the package.
-[tool.hatch.build.hooks.custom]
-path = "scripts/hatch_build.py"
-
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"

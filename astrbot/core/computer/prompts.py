@@ -1,3 +1,9 @@
+"""Booter-specific system prompt fragments.
+
+Kept separate from ``tools/prompts.py`` (which holds agent-level prompts)
+so that booter subclasses can import without pulling in unrelated constants.
+"""
+
 NEO_FILE_PATH_PROMPT = (
     "\n[Shipyard Neo File Path Rule]\n"
     "When using sandbox filesystem tools (upload/download/read/write/list/delete), "
