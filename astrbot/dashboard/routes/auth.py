@@ -8,22 +8,7 @@ from quart import current_app, g, jsonify, make_response, request
 
 from astrbot import logger
 from astrbot.core import DEMO_MODE
-from astrbot.core.utils.auth_password import (
-    get_dashboard_login_challenge,
-    is_default_dashboard_password,
-    is_legacy_dashboard_password,
-    validate_dashboard_password,
-    verify_dashboard_login_proof,
-    verify_dashboard_password,
-)
-from astrbot.dashboard.password_state import (
-    get_dashboard_password_hash,
-    is_password_change_required,
-    is_password_storage_upgraded,
-    set_dashboard_password_hashes,
-    set_password_change_required,
-    set_password_storage_upgraded,
-)
+from astrbot.core.db import BaseDatabase
 
 from .route import Response, Route, RouteContext
 
@@ -51,10 +36,9 @@ LEGACY_PASSWORD_LOGIN_FAILURE_MESSAGE = (
 
 
 class AuthRoute(Route):
-    def __init__(self, context: RouteContext, db) -> None:
+    def __init__(self, context: RouteContext, db: BaseDatabase) -> None:
         super().__init__(context)
         self.db = db
-        self._login_challenges: dict[str, dict[str, object]] = {}
         self.routes = {
             "/auth/login/challenge": ("POST", self.login_challenge),
             "/auth/login": ("POST", self.login),
@@ -304,15 +288,15 @@ class AuthRoute(Route):
             confirm_pwd = post_data.get("confirm_password", None)
             if not isinstance(confirm_pwd, str) or confirm_pwd != new_pwd:
                 return Response().error("两次输入的新密码不一致").__dict__
-            try:
-                validate_dashboard_password(new_pwd)
-            except ValueError as e:
-                return Response().error(str(e)).__dict__
-            set_dashboard_password_hashes(self.config, new_pwd)
-            await set_password_storage_upgraded(self.db, self.config, True)
-            await set_password_change_required(self.db, self.config, False)
+            self.config["dashboard"]["password"] = new_pwd
+
+        old_username = self.config["dashboard"]["username"]
         if new_username:
             self.config["dashboard"]["username"] = new_username
+
+        # Migrate webchat user data before saving config to keep them in sync.
+        if new_username and new_username != old_username:
+            await self.db.migrate_user_webchat_data(old_username, new_username)
 
         self.config.save_config()
 
