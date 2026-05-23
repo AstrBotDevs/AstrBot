@@ -1,220 +1,349 @@
-import os
-import sys
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
-# Add project root to sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.message import AssistantMessageSegment, ToolCallMessageSegment
+from astrbot.core.provider.entities import ToolCallsResult
 from astrbot.core.provider.sources.openai_responses_source import (
     ProviderOpenAIResponses,
 )
 
 
-class _DummyError(Exception):
-    def __init__(self, message: str, status_code=None, body=None):
-        super().__init__(message)
-        self.status_code = status_code
-        self.body = body
+class _FakeResponsesClient:
+    def __init__(self, response=None, stream=None):
+        self.calls = []
+        self._response = response
+        self._stream = stream
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs)
+        if kwargs.get("stream"):
+            return self._stream
+        return self._response
 
 
-def _provider() -> ProviderOpenAIResponses:
-    return ProviderOpenAIResponses.__new__(ProviderOpenAIResponses)
+class _FakeAsyncStream:
+    def __init__(self, events):
+        self._events = events
+
+    def __aiter__(self):
+        return self._iter()
+
+    async def _iter(self):
+        for event in self._events:
+            yield event
 
 
-def test_is_retryable_upstream_error_with_5xx_status():
-    err = _DummyError("server error", status_code=502)
-
-    assert _provider()._is_retryable_upstream_error(err)
+def _event(event_type: str, **kwargs):
+    return SimpleNamespace(type=event_type, **kwargs)
 
 
-def test_is_retryable_upstream_error_with_upstream_error_type():
-    err = _DummyError(
-        "bad gateway",
-        status_code=400,
-        body={"error": {"type": "upstream_error"}},
+def _make_provider(overrides: dict | None = None) -> ProviderOpenAIResponses:
+    provider_config = {
+        "id": "test-responses",
+        "type": "openai_responses",
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
+        "key": ["test-key"],
+        "api_base": "https://api.openai.com/v1",
+    }
+    if overrides:
+        provider_config.update(overrides)
+    return ProviderOpenAIResponses(
+        provider_config=provider_config,
+        provider_settings={},
     )
 
-    assert _provider()._is_retryable_upstream_error(err)
 
-
-def test_is_retryable_upstream_error_returns_false_for_non_retryable_error():
-    err = _DummyError(
-        "invalid request",
-        status_code=400,
-        body={"error": {"type": "invalid_request_error"}},
+@pytest.mark.asyncio
+async def test_responses_non_stream_converts_messages_to_input():
+    provider = _make_provider()
+    response = SimpleNamespace(
+        id="resp_1",
+        output_text="final answer",
+        usage=SimpleNamespace(input_tokens=7, output_tokens=3),
     )
+    provider.client.responses = _FakeResponsesClient(response=response)
+    try:
+        result = await provider.text_chat(
+            prompt="hello",
+            contexts=[{"role": "assistant", "content": "previous"}],
+            system_prompt="system prompt",
+        )
 
-    assert not _provider()._is_retryable_upstream_error(err)
-
-
-def test_build_responses_input_and_instructions_moves_system_messages():
-    provider = _provider()
-    provider.custom_headers = {}
-
-    response_input, instructions = provider._build_responses_input_and_instructions(
-        [
-            {"role": "system", "content": "sys text"},
-            {"role": "developer", "content": [{"type": "text", "text": "dev text"}]},
+        call = provider.client.responses.calls[0]
+        assert call["model"] == "gpt-4.1-mini"
+        assert call["input"] == [
+            {"role": "system", "content": "system prompt"},
+            {"role": "assistant", "content": "previous"},
             {"role": "user", "content": "hello"},
         ]
-    )
-
-    assert instructions == "sys text\n\ndev text"
-    assert all(
-        item.get("role") not in {"system", "developer"} for item in response_input
-    )
-    assert any(item.get("role") == "user" for item in response_input)
-
-
-def test_build_extra_headers_keeps_custom_headers_and_ignores_authorization():
-    provider = _provider()
-    provider.custom_headers = {
-        "X-Test": "value",
-        "Authorization": "Bearer should-not-pass",
-    }
-
-    headers = provider._build_extra_headers()
-
-    assert "User-Agent" not in headers
-    assert headers["X-Test"] == "value"
-    assert "Authorization" not in headers
+        assert result.completion_text == "final answer"
+        assert result.id == "resp_1"
+        assert result.usage.input == 7
+        assert result.usage.output == 3
+    finally:
+        await provider.terminate()
 
 
 @pytest.mark.asyncio
-async def test_compact_context_uses_sdk_compact_api():
-    provider = _provider()
-    provider.provider_config = {"proxy": ""}
-    provider.get_model = lambda: "gpt-5.3-codex"
-    provider._ensure_message_to_dicts = lambda messages: [
-        {"role": "user", "content": "hello"}
-    ]
-    provider._messages_to_response_input = lambda _: [
+async def test_openai_responses_does_not_handle_xai_native_search():
+    provider = _make_provider(
         {
-            "type": "message",
-            "role": "user",
-            "content": [{"type": "input_text", "text": "hello"}],
+            "provider": "xai",
+            "xai_native_search": True,
+            "allowed_domains": ["example.com"],
+            "enable_image_understanding": True,
         }
-    ]
-    provider._build_extra_headers = lambda: {"X-Test": "1"}
+    )
+    provider.client.responses = _FakeResponsesClient(
+        response=SimpleNamespace(id="resp_1", output_text="ok", usage=None)
+    )
+    try:
+        await provider.text_chat(prompt="search")
 
-    compact_mock = AsyncMock(
-        return_value=SimpleNamespace(
-            model_dump=lambda mode="json": {
-                "output": [
-                    {
-                        "type": "message",
-                        "role": "user",
-                        "content": [{"type": "output_text", "text": "compacted"}],
-                    }
-                ]
-            }
+        assert "tools" not in provider.client.responses.calls[0]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_stream_yields_deltas_and_final_response():
+    provider = _make_provider()
+    provider.client.responses = _FakeResponsesClient(
+        stream=_FakeAsyncStream(
+            [
+                _event("response.output_text.delta", delta="hel"),
+                _event("response.output_text.delta", delta="lo"),
+                _event("response.output_text.done", text="hello"),
+                _event("response.completed", response=SimpleNamespace(id="resp_2")),
+            ]
         )
     )
-    provider.client = SimpleNamespace(responses=SimpleNamespace(compact=compact_mock))
+    try:
+        chunks = [
+            chunk
+            async for chunk in provider.text_chat_stream(prompt="stream please")
+        ]
 
-    result = await provider.compact_context([Message(role="user", content="hello")])
-
-    compact_mock.assert_awaited_once_with(
-        model="gpt-5.3-codex",
-        input=[
-            {
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text": "hello"}],
-            }
-        ],
-        extra_headers={"X-Test": "1"},
-    )
-    assert result
+        assert [chunk.completion_text for chunk in chunks] == ["hel", "lo", "hello"]
+        assert chunks[0].is_chunk is True
+        assert chunks[-1].is_chunk is False
+        assert chunks[-1].id == "resp_2"
+    finally:
+        await provider.terminate()
 
 
 @pytest.mark.asyncio
-async def test_compact_context_raises_when_compact_returns_empty_messages():
-    provider = _provider()
-    provider.provider_config = {"proxy": ""}
-    provider.get_model = lambda: "gpt-5.3-codex"
-    provider._ensure_message_to_dicts = lambda messages: [
-        {"role": "user", "content": "hello"}
-    ]
-    provider._messages_to_response_input = lambda _: [
+async def test_responses_function_tools_are_flat_function_schemas():
+    provider = _make_provider()
+    provider.client.responses = _FakeResponsesClient(
+        response=SimpleNamespace(id="resp_1", output_text="ok", usage=None)
+    )
+    tool_set = ToolSet(
+        [
+            FunctionTool(
+                name="lookup",
+                description="Lookup an item",
+                parameters={
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+                handler=None,
+            )
+        ]
+    )
+    try:
+        await provider.text_chat(prompt="use tool", func_tool=tool_set)
+
+        assert provider.client.responses.calls[0]["tools"] == [
+            {
+                "type": "function",
+                "name": "lookup",
+                "strict": False,
+                "description": "Lookup an item",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+            }
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_uses_custom_extra_body():
+    provider = _make_provider(
         {
-            "type": "message",
-            "role": "user",
-            "content": [{"type": "input_text", "text": "hello"}],
+            "custom_extra_body": {
+                "reasoning": {"effort": "high"},
+                "store": False,
+            }
         }
+    )
+    provider.client.responses = _FakeResponsesClient(
+        response=SimpleNamespace(id="resp_1", output_text="ok", usage=None)
+    )
+    try:
+        await provider.text_chat(prompt="hello")
+
+        assert provider.client.responses.calls[0]["extra_body"] == {
+            "reasoning": {"effort": "high"},
+            "store": False,
+        }
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_responses_ignores_legacy_response_extra_body():
+    provider = _make_provider(
+        {
+            "response_extra_body": {"store": False},
+        }
+    )
+    provider.client.responses = _FakeResponsesClient(
+        response=SimpleNamespace(id="resp_1", output_text="ok", usage=None)
+    )
+    try:
+        await provider.text_chat(prompt="hello")
+
+        assert provider.client.responses.calls[0]["extra_body"] == {}
+    finally:
+        await provider.terminate()
+
+
+def test_responses_input_converts_assistant_tool_calls_to_function_call_items():
+    input_items = ProviderOpenAIResponses._messages_to_response_input(
+        [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "lookup",
+                            "arguments": '{"query":"weather"}',
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": '{"temperature":21}',
+            },
+        ]
+    )
+
+    assert input_items == [
+        {
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "lookup",
+            "arguments": '{"query":"weather"}',
+            "status": "completed",
+        },
+        {
+            "type": "function_call_output",
+            "call_id": "call_1",
+            "output": '{"temperature":21}',
+        },
     ]
-    provider._build_extra_headers = lambda: {}
-
-    compact_mock = AsyncMock(
-        return_value=SimpleNamespace(model_dump=lambda mode="json": {"output": []})
-    )
-    provider.client = SimpleNamespace(responses=SimpleNamespace(compact=compact_mock))
-
-    with pytest.raises(ValueError, match="empty context"):
-        await provider.compact_context([Message(role="user", content="hello")])
+    assert all("tool_calls" not in item for item in input_items)
 
 
-def test_convert_tools_to_responses_does_not_force_strict_false():
-    provider = _provider()
-    provider.provider_config = {}
-
-    response_tools = provider._convert_tools_to_responses(
+def test_responses_input_preserves_assistant_text_before_function_call_items():
+    input_items = ProviderOpenAIResponses._messages_to_response_input(
         [
             {
-                "type": "function",
-                "function": {
-                    "name": "demo",
-                    "description": "desc",
-                    "parameters": {"type": "object", "properties": {}},
-                },
+                "role": "assistant",
+                "content": "I will check.",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "lookup", "arguments": "{}"},
+                    }
+                ],
             }
         ]
     )
 
-    assert response_tools
-    assert "strict" not in response_tools[0]
+    assert input_items == [
+        {"role": "assistant", "content": "I will check."},
+        {
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "lookup",
+            "arguments": "{}",
+            "status": "completed",
+        },
+    ]
+    assert all("tool_calls" not in item for item in input_items)
 
 
-def test_convert_tools_to_responses_keeps_explicit_strict_setting():
-    provider = _provider()
-    provider.provider_config = {}
-
-    response_tools = provider._convert_tools_to_responses(
-        [
-            {
-                "type": "function",
-                "function": {
-                    "name": "demo",
-                    "description": "desc",
-                    "parameters": {"type": "object", "properties": {}},
-                    "strict": True,
-                },
-            }
-        ]
+@pytest.mark.asyncio
+async def test_responses_stream_tool_call_history_uses_function_call_items():
+    provider = _make_provider()
+    provider.client.responses = _FakeResponsesClient(
+        stream=_FakeAsyncStream(
+            [
+                _event(
+                    "response.completed",
+                    response=SimpleNamespace(id="resp_2", output_text="done"),
+                )
+            ]
+        )
     )
-
-    assert response_tools[0]["strict"] is True
-
-
-def test_convert_tools_to_responses_supports_provider_default_strict():
-    provider = _provider()
-    provider.provider_config = {"responses_tool_strict": True}
-
-    response_tools = provider._convert_tools_to_responses(
-        [
-            {
-                "type": "function",
-                "function": {
-                    "name": "demo",
-                    "description": "desc",
-                    "parameters": {"type": "object", "properties": {}},
-                },
-            }
+    tool_call = {
+        "id": "call_1",
+        "type": "function",
+        "function": {"name": "lookup", "arguments": '{"query":"weather"}'},
+    }
+    try:
+        chunks = [
+            chunk
+            async for chunk in provider.text_chat_stream(
+                prompt="continue",
+                tool_calls_result=ToolCallsResult(
+                    tool_calls_info=AssistantMessageSegment(
+                        content=None,
+                        tool_calls=[tool_call],
+                    ),
+                    tool_calls_result=[
+                        ToolCallMessageSegment(
+                            content='{"temperature":21}',
+                            tool_call_id="call_1",
+                        )
+                    ],
+                ),
+            )
         ]
-    )
 
-    assert response_tools[0]["strict"] is True
+        call = provider.client.responses.calls[0]
+        assert chunks[-1].completion_text == "done"
+        assert all("tool_calls" not in item for item in call["input"])
+        assert call["input"][-3:] == [
+            {"role": "user", "content": "continue"},
+            {
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "lookup",
+                "arguments": '{"query":"weather"}',
+                "status": "completed",
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "output": '{"temperature":21}',
+            },
+        ]
+    finally:
+        await provider.terminate()

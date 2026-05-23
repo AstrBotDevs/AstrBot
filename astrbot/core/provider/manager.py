@@ -388,11 +388,11 @@ class ProviderManager:
                 from .sources.openai_responses_source import (
                     ProviderOpenAIResponses as ProviderOpenAIResponses,
                 )
-            case "xiaomi_chat_completion":
-                from .sources.xiaomi_source import ProviderXiaomi as ProviderXiaomi
-            case "xiaomi_token_plan":
-                from .sources.xiaomi_token_plan_source import (
-                    ProviderXiaomiTokenPlan as ProviderXiaomiTokenPlan,
+            case "longcat_chat_completion":
+                from .sources.longcat_source import ProviderLongCat as ProviderLongCat
+            case "minimax_token_plan":
+                from .sources.minimax_token_plan_source import (
+                    ProviderMiniMaxTokenPlan as ProviderMiniMaxTokenPlan,
                 )
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
@@ -400,6 +400,10 @@ class ProviderManager:
                 from .sources.groq_source import ProviderGroq as ProviderGroq
             case "xai_chat_completion":
                 from .sources.xai_source import ProviderXAI as ProviderXAI
+            case "xai_responses":
+                from .sources.xai_source import (
+                    ProviderXAIResponses as ProviderXAIResponses,
+                )
             case "aihubmix_chat_completion":
                 from .sources.oai_aihubmix_source import (
                     ProviderAIHubMix as ProviderAIHubMix,
