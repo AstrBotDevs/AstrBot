@@ -495,9 +495,9 @@ class ProviderManager:
                 from .sources.bailian_rerank_source import (
                     BailianRerankProvider as BailianRerankProvider,
                 )
-            case "openai_rerank":
-                from .sources.openai_rerank_source import (
-                    OpenAIRerankProvider as OpenAIRerankProvider,
+            case "volcengine_stt":
+                from .sources.volcengine_stt import (
+                    ProviderVolcengineSTT as ProviderVolcengineSTT,
                 )
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
