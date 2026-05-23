@@ -62,4 +62,7 @@ GenieData/
 .kilocode/
 .serena
 .worktrees/
-.planning/
+
+dashboard/bun.lock
+.claude
+.env

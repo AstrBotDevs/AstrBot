@@ -1,11 +1,10 @@
-import { readFileSync } from 'fs';
-import { fileURLToPath, URL } from 'url';
-import { defineConfig, type Plugin } from 'vite';
-import vue from '@vitejs/plugin-vue';
-import vuetify from 'vite-plugin-vuetify';
-import webfontDl from 'vite-plugin-webfont-dl';
+import { fileURLToPath, URL } from "url";
+import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
+import vuetify from "vite-plugin-vuetify";
+import webfontDl from "vite-plugin-webfont-dl";
 // @ts-ignore — .mjs not in TS project scope; Vite resolves this at runtime
-import { runMdiSubset } from './scripts/subset-mdi-font.mjs';
+import { runMdiSubset } from "./scripts/subset-mdi-font.mjs";
 
 const t2iShikiRuntimePath = fileURLToPath(
   new URL('../astrbot/core/utils/t2i/template/shiki_runtime.iife.js', import.meta.url)
@@ -14,9 +13,9 @@ const t2iShikiRuntimePath = fileURLToPath(
 // Vite plugin: run MDI icon font subsetting (build only)
 function mdiSubset() {
   return {
-    name: 'vite-plugin-mdi-subset',
+    name: "vite-plugin-mdi-subset",
     async buildStart() {
-      console.log('\n🔧 Running MDI icon font subsetting...');
+      console.log("\n🔧 Running MDI icon font subsetting...");
       await runMdiSubset();
     },
   };
@@ -59,62 +58,50 @@ function t2iShikiRuntimeAsset(): Plugin {
 export default defineConfig(({ command }) => ({
   plugins: [
     // Only run MDI subsetting during production builds, skip in dev server
-    ...(command === 'build' ? [mdiSubset()] : []),
-    t2iShikiRuntimeAsset(),
+    ...(command === "build" ? [mdiSubset()] : []),
     vue({
       template: {
         compilerOptions: {
-          isCustomElement: (tag) => ['v-list-recognize-title'].includes(tag)
-        }
-      }
+          isCustomElement: (tag) => ["v-list-recognize-title"].includes(tag),
+        },
+      },
     }),
     vuetify({
-      autoImport: true
+      autoImport: true,
     }),
-    webfontDl()
+    webfontDl(),
   ],
   resolve: {
-    alias: [
-      {
-        find: /^shiki$/,
-        replacement: fileURLToPath(new URL('./src/utils/shikiLimitedBundle.js', import.meta.url))
-      },
-      {
-        find: /^stream-monaco$/,
-        replacement: fileURLToPath(new URL('./src/utils/streamMonacoDisabled.js', import.meta.url))
-      },
-      {
-        find: 'mermaid',
-        replacement: 'mermaid/dist/mermaid.js'
-      },
-      {
-        find: '@',
-        replacement: fileURLToPath(new URL('./src', import.meta.url))
-      }
-    ]
+    alias: {
+      mermaid: "mermaid/dist/mermaid.js",
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
   },
   css: {
     preprocessorOptions: {
-      scss: {}
-    }
+      scss: {
+        api: "modern-compiler",
+        silenceDeprecations: ["import", "global-builtin"],
+      },
+    },
   },
   build: {
     sourcemap: false,
-    chunkSizeWarningLimit: 1024 * 1024 // Set the limit to 1 MB
+    chunkSizeWarningLimit: 1024 * 1024, // Set the limit to 1 MB
   },
   optimizeDeps: {
-    exclude: ['vuetify'],
-    entries: ['./src/**/*.vue']
+    exclude: ["vuetify"],
+    entries: ["./src/**/*.vue"],
   },
   server: {
-    host: '0.0.0.0',
+    host: "0.0.0.0",
     port: 3000,
     proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:6185/',
+      "/api": {
+        target: "http://127.0.0.1:6185/",
         changeOrigin: true,
-        ws: true
-      }
-    }
-  }
+        ws: true,
+      },
+    },
+  },
 }));
