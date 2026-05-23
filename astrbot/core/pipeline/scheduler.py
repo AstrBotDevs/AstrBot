@@ -11,6 +11,7 @@ from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.trace import _current_span
 
 from .bootstrap import ensure_builtin_stages_registered
+from .pre_ack_emoji import PreAckEmojiManager
 from .context import PipelineContext
 from .stage import registered_stages
 from .stage_order import STAGES_ORDER
@@ -25,7 +26,8 @@ class PipelineScheduler:
             key=lambda x: STAGES_ORDER.index(x.__name__),
         )  # 按照顺序排序
         self.ctx = context  # 上下文对象
-        self.stages: list[Any] = []  # 存储阶段实例
+        self.stages = []  # 存储阶段实例
+        self.pre_ack_emoji_mgr = PreAckEmojiManager(context.astrbot_config)
 
     async def initialize(self) -> None:
         """初始化管道调度器时, 初始化所有阶段"""
@@ -49,7 +51,9 @@ class PipelineScheduler:
 
             if isinstance(coroutine, AsyncGenerator):
                 # 如果返回的是异步生成器, 实现洋葱模型的核心
+                did_yield = False
                 async for _ in coroutine:
+                    did_yield = True
                     # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
                     if event.is_stopped():
                         logger.debug(
@@ -66,6 +70,14 @@ class PipelineScheduler:
                             f"阶段 {stage.__class__.__name__} 已终止事件传播｡",
                         )
                         break
+
+                # 洋葱阶段已通过递归处理了后续所有阶段，跳出外层循环避免重复执行
+                if did_yield:
+                    break
+            else:
+                # 如果返回的是普通协程(不含yield的async函数), 则不进入下一层(基线条件)
+                # 简单地等待它执行完成, 然后继续执行下一个阶段
+                await coroutine
 
                 if event.is_stopped():
                     break
@@ -89,10 +101,7 @@ class PipelineScheduler:
 
         """
         active_event_registry.register(event)
-        # Expose the root trace span via ContextVar so any downstream code
-        # (including plugin handlers and decorators) can access it without
-        # needing an explicit reference to the event.
-        span_token = _current_span.set(event.trace)
+        emoji = await self.pre_ack_emoji_mgr.add_emoji(event)
         try:
             await self._process_stages(event)
 
@@ -102,11 +111,5 @@ class PipelineScheduler:
 
             logger.debug("pipeline 执行完毕｡")
         finally:
-            sdk_plugin_bridge = getattr(
-                self.ctx.plugin_manager.context,
-                "sdk_plugin_bridge",
-                None,
-            )
-            if sdk_plugin_bridge is not None:
-                sdk_plugin_bridge.close_request_overlay_for_event(event)
+            await self.pre_ack_emoji_mgr.remove_emoji(event, emoji)
             active_event_registry.unregister(event)

@@ -21,6 +21,7 @@ from lark_oapi.api.im.v1 import (
     CreateImageRequestBody,
     CreateMessageReactionRequest,
     CreateMessageReactionRequestBody,
+    DeleteMessageReactionRequest,
     Emoji,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
@@ -824,7 +825,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_in_thread=reply_in_thread,
         )
 
-    async def react(self, emoji: str) -> None:
+    async def react(self, emoji: str) -> str | None:
         if self.bot.im is None:
             logger.error("[Lark] API Client im 模块未初始化，无法发送表情")
             return
@@ -843,171 +844,33 @@ class LarkMessageEvent(AstrMessageEvent):
         response = await self.bot.im.v1.message_reaction.acreate(request)
         if not response.success():
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
-            return
-
-    async def _create_streaming_card(self) -> str | None:
-        """创建一个开启流式更新模式的卡片实体，返回 card_id。"""
-        if self.bot.cardkit is None:
-            logger.error("[Lark] API Client cardkit 模块未初始化")
             return None
 
-        card_json = {
-            "schema": "2.0",
-            "header": {
-                "title": {"content": "", "tag": "plain_text"},
-            },
-            "config": {
-                "streaming_mode": True,
-                "summary": {"content": ""},
-                "streaming_config": {
-                    "print_frequency_ms": {"default": 50},
-                    "print_step": {"default": 2},
-                    "print_strategy": "fast",
-                },
-            },
-            "body": {
-                "elements": [
-                    {
-                        "tag": "markdown",
-                        "content": "",
-                        "element_id": "markdown_1",
-                    },
-                ],
-            },
-        }
+        # 返回 reaction_id 供调用方保存（如 PreAckEmojiManager 用于后续撤回）
+        if response.data and response.data.reaction_id:
+            return response.data.reaction_id
+        return None
+
+    async def remove_react(self, emoji: str, reaction_id: str | None = None) -> None:
+        if not reaction_id:
+            return
+
+        if self.bot.im is None:
+            logger.warning("[Lark] API Client im 模块未初始化，无法撤回表情")
+            return
 
         request = (
-            CreateCardRequest.builder()
-            .request_body(
-                CreateCardRequestBody.builder()
-                .type("card_json")
-                .data(json.dumps(card_json, ensure_ascii=False))
-                .build(),
-            )
+            DeleteMessageReactionRequest.builder()
+            .message_id(self.message_obj.message_id)
+            .reaction_id(reaction_id)
             .build()
         )
 
-        try:
-            response = await self.bot.cardkit.v1.card.acreate(request)
-        except Exception as e:
-            logger.error(f"[Lark] 创建流式卡片实体失败: {e}")
-            return None
-
+        response = await self.bot.im.v1.message_reaction.adelete(request)
         if not response.success():
-            logger.error(
-                f"[Lark] 创建流式卡片实体失败({response.code}): {response.msg}",
-            )
-            return None
+            logger.warning(f"撤回飞书表情回应失败({response.code}): {response.msg}")
 
-        if response.data is None or not response.data.card_id:
-            logger.error("[Lark] 创建流式卡片实体成功但未返回 card_id")
-            return None
-
-        card_id = response.data.card_id
-        logger.debug(f"[Lark] 创建流式卡片实体成功: {card_id}")
-        return card_id
-
-    async def _send_card_message(
-        self,
-        card_id: str,
-        reply_message_id: str | None = None,
-        receive_id: str | None = None,
-        receive_id_type: str | None = None,
-        reply_in_thread: bool = False,
-    ) -> bool:
-        """将卡片实体作为 interactive 消息发送。"""
-        content = json.dumps(
-            {"type": "card", "data": {"card_id": card_id}},
-            ensure_ascii=False,
-        )
-        return await self._send_im_message(
-            self.bot,
-            content=content,
-            msg_type="interactive",
-            reply_message_id=reply_message_id,
-            receive_id=receive_id,
-            receive_id_type=receive_id_type,
-            reply_in_thread=reply_in_thread,
-        )
-
-    async def _update_streaming_text(
-        self,
-        card_id: str,
-        content: str,
-        sequence: int,
-    ) -> bool:
-        """调用 CardKit 流式更新文本接口，向 markdown_1 组件推送全量文本。"""
-        if self.bot.cardkit is None:
-            logger.error("[Lark] API Client cardkit 模块未初始化")
-            return False
-
-        request = (
-            ContentCardElementRequest.builder()
-            .card_id(card_id)
-            .element_id("markdown_1")
-            .request_body(
-                ContentCardElementRequestBody.builder()
-                .content(content)
-                .sequence(sequence)
-                .uuid(str(uuid.uuid4()))
-                .build(),
-            )
-            .build()
-        )
-
-        try:
-            response = await self.bot.cardkit.v1.card_element.acontent(request)
-        except Exception as e:
-            logger.debug(f"[Lark] 流式更新文本失败 (ignored): {e}")
-            return False
-
-        if not response.success():
-            logger.debug(f"[Lark] 流式更新文本失败({response.code}): {response.msg}")
-            return False
-
-        return True
-
-    async def _close_streaming_mode(
-        self,
-        card_id: str,
-        sequence: int,
-    ) -> None:
-        """关闭卡片的流式更新模式，使其可正常转发、摘要恢复。"""
-        if self.bot.cardkit is None:
-            logger.error("[Lark] API Client cardkit 模块未初始化")
-            return
-
-        settings_json = json.dumps(
-            {"config": {"streaming_mode": False}},
-            ensure_ascii=False,
-        )
-
-        request = (
-            SettingsCardRequest.builder()
-            .card_id(card_id)
-            .request_body(
-                SettingsCardRequestBody.builder()
-                .settings(settings_json)
-                .sequence(sequence)
-                .uuid(str(uuid.uuid4()))
-                .build(),
-            )
-            .build()
-        )
-
-        try:
-            response = await self.bot.cardkit.v1.card.asettings(request)
-        except Exception as e:
-            logger.error(f"[Lark] 关闭流式模式失败: {e}")
-            return
-
-        if not response.success():
-            logger.error(f"[Lark] 关闭流式模式失败({response.code}): {response.msg}")
-        else:
-            logger.debug(f"[Lark] 流式模式已关闭: {card_id}")
-
-    async def _fallback_send_streaming(self, generator, use_fallback: bool = False):
-        """回退到非流式发送：缓冲全部文本后一次性发送，并保留父类副作用。"""
+    async def send_streaming(self, generator, use_fallback: bool = False):
         buffer = None
         async for chain in generator:
             if not buffer:

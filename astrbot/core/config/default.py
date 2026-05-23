@@ -285,10 +285,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "platform_specific": {
         # 平台特异配置：按平台分类，平台下按功能分组
         "lark": {
-            "pre_ack_emoji": {"enable": False, "emojis": ["Typing"]},
+            "pre_ack_emoji": {"enable": False, "emojis": ["Typing"], "auto_remove": True},
         },
         "telegram": {
-            "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
+            "pre_ack_emoji": {"enable": False, "emojis": ["✍️"], "auto_remove": True},
+        },
+        "discord": {
+            "pre_ack_emoji": {"enable": False, "emojis": ["✍️"], "auto_remove": True},
         },
         "discord": {
             "pre_ack_emoji": {"enable": False, "emojis": ["🤔"]},
@@ -4483,6 +4486,13 @@ CONFIG_METADATA_3 = {
                             "platform_specific.lark.pre_ack_emoji.enable": True,
                         },
                     },
+                    "platform_specific.lark.pre_ack_emoji.auto_remove": {
+                        "description": "[飞书] 处理完毕后自动撤回表情",
+                        "type": "bool",
+                        "condition": {
+                            "platform_specific.lark.pre_ack_emoji.enable": True,
+                        },
+                    },
                     "platform_specific.telegram.pre_ack_emoji.enable": {
                         "description": "[Telegram] 启用预回应表情",
                         "type": "bool",
@@ -4496,6 +4506,13 @@ CONFIG_METADATA_3 = {
                             "platform_specific.telegram.pre_ack_emoji.enable": True,
                         },
                     },
+                    "platform_specific.telegram.pre_ack_emoji.auto_remove": {
+                        "description": "[Telegram] 处理完毕后自动撤回表情",
+                        "type": "bool",
+                        "condition": {
+                            "platform_specific.telegram.pre_ack_emoji.enable": True,
+                        },
+                    },
                     "platform_specific.discord.pre_ack_emoji.enable": {
                         "description": "[Discord] 启用预回应表情",
                         "type": "bool",
@@ -4505,6 +4522,13 @@ CONFIG_METADATA_3 = {
                         "type": "list",
                         "items": {"type": "string"},
                         "hint": "填写 Unicode 表情符号，例如：👍、🤔、⏳",
+                        "condition": {
+                            "platform_specific.discord.pre_ack_emoji.enable": True,
+                        },
+                    },
+                    "platform_specific.discord.pre_ack_emoji.auto_remove": {
+                        "description": "[Discord] 处理完毕后自动撤回表情",
+                        "type": "bool",
                         "condition": {
                             "platform_specific.discord.pre_ack_emoji.enable": True,
                         },
