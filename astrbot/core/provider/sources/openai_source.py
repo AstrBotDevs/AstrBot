@@ -979,22 +979,25 @@ class ProviderOpenAIOfficial(Provider):
         thinking_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
         async for chunk in stream:
-            try:
-                # Fix for #6661: Add missing 'index' field to tool_call deltas
-                # Gemini and some OpenAI-compatible proxies omit this field
-                if chunk.choices:
-                    for choice in chunk.choices:
-                        if choice.delta and choice.delta.tool_calls:
-                            for idx, tc in enumerate(choice.delta.tool_calls):
-                                if not hasattr(tc, "index") or tc.index is None:
-                                    tc.index = idx
-                state.handle_chunk(chunk)
-            except Exception as e:
-                logger.warning("Saving chunk state error: " + str(e))
-            if not chunk.choices:
-                continue
-            choice = chunk.choices[0]
-            delta = choice.delta
+            choice = chunk.choices[0] if chunk.choices else None
+            delta = choice.delta if choice else None
+
+            if delta and (dtcs := delta.tool_calls):
+                for idx, tc in enumerate(dtcs):
+                    # siliconflow workaround
+                    if tc.function and tc.function.arguments:
+                        tc.type = "function"
+                    # Fix for #6661: Add missing 'index' field to tool_call deltas
+                    # Gemini and some OpenAI-compatible proxies omit this field
+                    if not hasattr(tc, "index") or tc.index is None:
+                        tc.index = idx
+            # Skip delta=None chunks to avoid openai-python snapshot conversion
+            # errors, but keep final usage-only chunks so token usage survives.
+            if delta is not None or chunk.usage:
+                try:
+                    state.handle_chunk(chunk)
+                except Exception as e:
+                    logger.error("Saving chunk state error: " + str(e))
             # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)
