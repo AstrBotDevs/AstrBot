@@ -235,7 +235,7 @@ class AstrMessageEvent(abc.ABC):
 
     def get_sender_avatar(self) -> str | None:
         """获取消息发送者的头像 URL。(可能会返回 None)"""
-        if hasattr(self.message_obj.sender, 'avatar'):
+        if hasattr(self.message_obj.sender, "avatar"):
             return self.message_obj.sender.avatar
         return None
 
@@ -333,9 +333,11 @@ class AstrMessageEvent(abc.ABC):
         QQ 官方:
         0=成功, 1=操作失败, 2=操作频繁, 3=重复操作, 4=没有权限, 5=仅管理员。
         """
+        return None
 
     async def _pre_send(self) -> None:
         """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
+        return None
 
     @abc.abstractmethod
     async def _post_send(self) -> None:
@@ -547,7 +549,7 @@ class AstrMessageEvent(abc.ABC):
             emoji: 要移除的表情
             reaction_id: 平台特定的 reaction 标识符（如飞书的 reaction_id）
         """
-        pass
+        return None
 
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
@@ -556,3 +558,13 @@ class AstrMessageEvent(abc.ABC):
 
         - aiocqhttp(OneBotv11)
         """
+        return None
+
+    def can_be_mentioned(self) -> bool:
+        """Whether the sender of this event can be @-mentioned in a reply.
+
+        Returns:
+            True if the sender can be mentioned (default), False otherwise.
+            Override in subclasses for events with synthetic senders.
+        """
+        return True

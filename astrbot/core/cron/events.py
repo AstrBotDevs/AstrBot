@@ -79,5 +79,9 @@ class CronMessageEvent(AstrMessageEvent):
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         return None
 
+    def can_be_mentioned(self) -> bool:
+        """Cron events have a synthetic sender and cannot be @-mentioned."""
+        return False
+
 
 __all__ = ["CronMessageEvent"]

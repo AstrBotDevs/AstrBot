@@ -6,7 +6,17 @@ from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
 from astrbot.core.i18n import t
-from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
+from astrbot.core.message.components import (
+    At,
+    BaseMessageComponent,
+    File,
+    Image,
+    Json,
+    Node,
+    Plain,
+    Record,
+    Reply,
+)
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
 from astrbot.core.pipeline.context import PipelineContext
@@ -256,6 +266,12 @@ class ResultDecorateStage(Stage):
             tts_provider = self.ctx.plugin_manager.context.get_using_tts_provider(
                 event.unified_msg_origin,
             )
+            tts_all_messages = bool(
+                self.ctx.astrbot_config["provider_tts_settings"].get(
+                    "all_messages",
+                    False,
+                )
+            )
 
             tts_requested = (
                 bool(self.ctx.astrbot_config["provider_tts_settings"]["enable"])
@@ -440,6 +456,7 @@ class ResultDecorateStage(Stage):
                 if (
                     self.reply_with_mention
                     and event.get_message_type() != MessageType.FRIEND_MESSAGE
+                    and event.can_be_mentioned()
                 ):
                     result.chain.insert(
                         0,
