@@ -482,9 +482,6 @@ class QQOfficialPlatformAdapter(Platform):
                     payload.pop("markdown", None)
                     payload["content"] = plain_text or None
 
-            if payload.get("msg_type") == 7:
-                self._normalize_media_payload(payload, plain_text)
-
             ret = await QQOfficialMessageEvent.post_c2c_message(
                 send_helper,  # type: ignore
                 openid=session.session_id,
