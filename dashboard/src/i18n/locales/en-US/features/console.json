@@ -14,5 +14,15 @@
   },
   "debugHint": {
     "text": "Debug logs can be enabled in \"Configuration File → System → Console Log Level\""
+  },
+  "filters": {
+    "searchLabel": "Search",
+    "searchPlaceholder": "Search message, tag, plugin, platform, or UMO",
+    "tagLabel": "Tag",
+    "tagPlaceholder": "Filter by logcat tag",
+    "clearButton": "Clear Filters",
+    "summary": "{count} logs",
+    "emptyFiltered": "No logs match the active filters.",
+    "emptyIdle": "No logs yet."
   }
 }

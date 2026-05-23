@@ -17,7 +17,7 @@ class MyPlugin(Star):
         '''这是一个 hello world 指令''' # 这是 handler 的描述，将会被解析方便用户了解插件内容。非常建议填写。
         user_name = event.get_sender_name()
         message_str = event.message_str # 获取消息的纯文本内容
-        logger.info("触发hello world指令!")
+        logger.info("触发hello world指令!", extra={"tag": "plugin:my_plugin"})
         yield event.plain_result(f"Hello, {user_name}!") # 发送一条纯文本消息
 
     async def terminate(self):
@@ -37,5 +37,7 @@ class MyPlugin(Star):
 > `Handler` 一定需要在插件类中注册，前两个参数必须为 `self` 和 `event`。如果文件行数过长，可以将服务写在外部，然后在 `Handler` 中调用。
 >
 > 插件类所在的文件名需要命名为 `main.py`。
+>
+> 新版日志控制台支持按 `tag` 筛选。开发插件时，建议为关键日志补充 `extra={"tag": "plugin:your_plugin"}`；如果需要更细的筛选维度，也可以额外传入 `tags`、`platform_id`、`plugin_name`、`umo` 等字段。
 
 所有的处理函数都需写在插件类中。为了精简内容，在之后的章节中，我们可能会忽略插件类的定义。

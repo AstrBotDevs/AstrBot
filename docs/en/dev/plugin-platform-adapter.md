@@ -85,8 +85,12 @@ class FakePlatformAdapter(Platform):
 
         # FakeClient is defined by us — this is just an example. This is its callback function.
         async def on_received(data):
-            logger.info(data)
-            abm = await self.convert_message(data=data) # Convert to AstrBotMessage
+            logger.info(
+                "Received platform message: %s",
+                data,
+                extra={"tag": "platform:fake", "platform_id": "fake"},
+            )
+            abm = await self.convert_message(data=data) # 转换成 AstrBotMessage
             await self.handle_msg(abm) 
         
         # Initialize FakeClient
@@ -122,6 +126,10 @@ class FakePlatformAdapter(Platform):
         )
         self.commit_event(message_event) # Submit the event to the event queue. Don't forget this!
 ```
+
+> [!TIP]
+>
+> The new console supports filtering by fields such as `tag`, `platform_id`, and `umo`. For platform adapters, it is recommended to attach at least a stable `tag` to important logs, for example `extra={"tag": "platform:fake", "platform_id": "fake"}`, so WebUI troubleshooting stays straightforward.
 
 
 `fake_platform_event.py`:
@@ -183,4 +191,4 @@ After starting, you can see it working correctly:
 ![image](https://files.astrbot.app/docs/source/images/plugin-platform-adapter/QQ_1738156166893.png)
 
 
-If you have any questions, feel free to join the community group and ask~
+有任何疑问欢迎加群询问~

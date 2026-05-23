@@ -14,7 +14,7 @@ import asyncio
 from asyncio import Queue
 from typing import Any
 
-from astrbot.core import logger
+from astrbot.core import LogManager, logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.utils.number_utils import safe_positive_float
@@ -53,16 +53,20 @@ class EventBus:
             if self._deduplicator.is_duplicate(event):
                 continue
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
-            conf_id = conf_info.get("id", "")
-            conf_name = conf_info.get("name", conf_id)
-            self._print_event(event, conf_name)
-            scheduler = self.pipeline_scheduler_mapping.get(conf_id)
-            if not scheduler:
-                logger.error(
-                    f"PipelineScheduler not found for id: {conf_id}, event ignored.",
-                )
-                continue
-            asyncio.create_task(scheduler.execute(event))  # noqa: RUF006
+            conf_id = conf_info["id"]
+            conf_name = conf_info.get("name") or conf_id
+            with LogManager.contextualize(
+                umo=event.unified_msg_origin,
+                platform_id=event.get_platform_id(),
+            ):
+                self._print_event(event, conf_name)
+                scheduler = self.pipeline_scheduler_mapping.get(conf_id)
+                if not scheduler:
+                    logger.error(
+                        f"PipelineScheduler not found for id: {conf_id}, event ignored."
+                    )
+                    continue
+                asyncio.create_task(scheduler.execute(event))
 
     def _print_event(self, event: AstrMessageEvent, conf_name: str) -> None:
         """用于记录事件信息
