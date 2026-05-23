@@ -27,9 +27,15 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_workspaces_path,
 )
 
+from ..olayer import (
+    FileSystemComponent,
+    InteractiveShellComponent,
+    PythonComponent,
+    ShellComponent,
+)
 from .base import ComputerBooter
-
-_MAX_SEARCH_LINE_COLUMNS = 1000
+from .local_interactive_shell import LocalInteractiveShellComponent
+from .shipyard_search_file_util import _truncate_long_lines
 
 _BLOCKED_COMMAND_PATTERNS = [
     " rm -rf ",
@@ -448,21 +454,11 @@ class LocalFileSystemComponent(FileSystemComponent):
 
 
 class LocalBooter(ComputerBooter):
-    def __init__(self, session_id: str, sandboxed: bool = False) -> None:
-        self._session_id = session_id
-        self._policy = LocalSandboxPolicy.build_default(
-            session_id=session_id, sandboxed=sandboxed
-        )
-        if sandboxed:
-            self._policy.ensure_workspace()
-        if sandboxed and self._policy.backend == "none":
-            logger.warning(
-                f"Local runtime sandbox backend is unavailable on {sys.platform}. "
-                "Only filesystem tools are restricted to workspace."
-            )
-        self._fs = LocalFileSystemComponent(policy=self._policy)
-        self._python = LocalPythonComponent(policy=self._policy)
-        self._shell = LocalShellComponent(policy=self._policy)
+    def __init__(self) -> None:
+        self._fs = LocalFileSystemComponent()
+        self._python = LocalPythonComponent()
+        self._shell = LocalShellComponent()
+        self._interactive_shell = LocalInteractiveShellComponent()
 
     async def boot(self, session_id: str) -> None:
         logger.info(
@@ -486,6 +482,10 @@ class LocalBooter(ComputerBooter):
     @property
     def shell(self) -> ShellComponent:
         return self._shell
+
+    @property
+    def interactive_shell(self) -> InteractiveShellComponent:
+        return self._interactive_shell
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         raise NotImplementedError(

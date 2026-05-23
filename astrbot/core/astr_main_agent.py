@@ -82,6 +82,13 @@ from astrbot.core.tools.computer_tools import (
     TakeoverSandboxTool,
     normalize_umo_for_workspace,
 )
+from astrbot.core.tools.computer_tools.interactive_shell import (
+    InteractiveShellListTool,
+    InteractiveShellReadTool,
+    InteractiveShellSendTool,
+    InteractiveShellStartTool,
+    InteractiveShellStopTool,
+)
 from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
@@ -419,6 +426,11 @@ def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> Non
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellStartTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellStopTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellSendTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellReadTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellListTool))
     req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
 
 

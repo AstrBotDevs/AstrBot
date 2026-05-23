@@ -7,6 +7,7 @@ from astrbot.core.computer.olayer import (
     BrowserComponent,
     FileSystemComponent,
     GUIComponent,
+    InteractiveShellComponent,
     PythonComponent,
     ShellComponent,
 )
@@ -30,6 +31,15 @@ class ComputerBooter(abc.ABC):
     @abc.abstractmethod
     def shell(self) -> ShellComponent:
         raise NotImplementedError("Subclass must implement shell property")
+
+    @property
+    def interactive_shell(self) -> InteractiveShellComponent | None:
+        """Interactive shell component for stateful bidirectional shell sessions.
+
+        Returns None if the booter does not support interactive shell operations.
+        This default preserves backward compatibility with existing booters.
+        """
+        return None
 
     @property
     def capabilities(self) -> tuple[str, ...] | None:
