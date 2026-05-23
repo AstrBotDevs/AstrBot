@@ -193,15 +193,9 @@ export function useMediaHandling() {
     }
 
     // 计算属性：获取图片的 URL 列表（用于预览）
-    const stagedImagesUrl = computed(() => 
-        stagedFiles.value.filter(f => f.type === 'image').map(f => f.url)
-    );
-  }
-
-  async function getMediaFile(filename: string): Promise<string> {
-    if (mediaCache.value[filename]) {
-      return mediaCache.value[filename];
-    }
+  const stagedImagesUrl = computed(() =>
+      stagedFiles.value.filter(f => f.type === 'image').map(f => f.url)
+  );
 
     function chatWidgetSetApiPackage(apiPackage: Record<string, string>) {
         chatWidgetApi = true;

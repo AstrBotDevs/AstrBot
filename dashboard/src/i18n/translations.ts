@@ -39,7 +39,6 @@ import zhCNCommand from './locales/zh-CN/features/command.json';
 import zhCNSubagent from './locales/zh-CN/features/subagent.json';
 import zhCNSandbox from './locales/zh-CN/features/sandbox.json';
 import zhCNWelcome from './locales/zh-CN/features/welcome.json';
-import zhCNSandbox from './locales/zh-CN/features/sandbox.json';
 
 import zhCNErrors from "./locales/zh-CN/messages/errors.json";
 import zhCNSuccess from "./locales/zh-CN/messages/success.json";
@@ -165,7 +164,6 @@ import enUSCommand from './locales/en-US/features/command.json';
 import enUSSubagent from './locales/en-US/features/subagent.json';
 import enUSSandbox from './locales/en-US/features/sandbox.json';
 import enUSWelcome from './locales/en-US/features/welcome.json';
-import enUSSandbox from './locales/en-US/features/sandbox.json';
 
 import enUSErrors from "./locales/en-US/messages/errors.json";
 import enUSSuccess from "./locales/en-US/messages/success.json";
@@ -209,7 +207,6 @@ import ruRUCommand from './locales/ru-RU/features/command.json';
 import ruRUSubagent from './locales/ru-RU/features/subagent.json';
 import ruRUSandbox from './locales/ru-RU/features/sandbox.json';
 import ruRUWelcome from './locales/ru-RU/features/welcome.json';
-import ruRUSandbox from './locales/ru-RU/features/sandbox.json';
 
 import ruRUErrors from "./locales/ru-RU/messages/errors.json";
 import ruRUSuccess from "./locales/ru-RU/messages/success.json";

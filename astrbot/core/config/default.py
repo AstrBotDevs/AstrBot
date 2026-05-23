@@ -1,11 +1,33 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
+import binascii
+import hashlib
 import os
+import secrets
+from importlib import metadata
+from typing import Any
 
+from astrbot.builtin_stars.web_searcher.provider_constants import (
+    DEFAULT_WEB_SEARCH_PROVIDER,
+)
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
+from astrbot.core.i18n import Language
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.25.1"
+
+def _generate_random_dashboard_password_hash() -> str:
+    iterations = 200_000
+    salt = secrets.token_bytes(16)
+    secret = secrets.token_bytes(32)
+    dk = hashlib.pbkdf2_hmac("sha256", secret, salt, iterations)
+    return f"pbkdf2_sha256${iterations}${binascii.hexlify(salt).decode()}${dk.hex()}"
+
+
+try:
+    __version__ = metadata.version("AstrBot")
+except metadata.PackageNotFoundError:
+    __version__ = "unknown"
+VERSION = __version__
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD = 3
 PERSONAL_WECHAT_CONFIG_METADATA = {
@@ -52,6 +74,176 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 ]
 
 DEFAULT_MAX_HANDOFF_CALLS_PER_RUN = 8
+
+PERIODIC_CONTEXT_COMPACTION_DEFAULTS = {
+    "enabled": False,
+    "interval_minutes": 30,
+    "startup_delay_seconds": 120,
+    "max_conversations_per_run": 8,
+    "max_scan_per_run": 120,
+    "scan_page_size": 40,
+    "min_idle_minutes": 15,
+    "min_messages": 14,
+    "target_tokens": 4096,
+    "trigger_tokens": 0,
+    "trigger_min_context_ratio": 0.3,
+    "max_rounds": 3,
+    "truncate_turns": 1,
+    "keep_recent": 6,
+    "provider_id": "",
+    "instruction": "",
+    "dry_run": False,
+}
+
+PERIODIC_CONTEXT_COMPACTION_FIELD_META: dict[str, dict[str, Any]] = {
+    "enabled": {
+        "schema_type": "bool",
+        "ui_type": "bool",
+        "description": "启用定时历史压缩",
+        "hint": "后台定时扫描会话历史，使用 LLM 摘要旧消息并回写对话历史，实现多轮 compact context。",
+    },
+    "interval_minutes": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "定时间隔（分钟）",
+        "hint": "每隔多少分钟执行一次压缩扫描。",
+    },
+    "startup_delay_seconds": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "启动延迟（秒）",
+        "hint": "AstrBot 启动后，等待指定秒数再执行首次压缩任务。",
+    },
+    "max_conversations_per_run": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "单次最多压缩会话数",
+        "hint": "每次任务最多实际压缩多少个会话。",
+    },
+    "max_scan_per_run": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "单次最多扫描会话数",
+        "hint": "每次任务最多扫描多少会话（包括被跳过的会话）。",
+    },
+    "scan_page_size": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "分页扫描大小",
+        "hint": "扫描 conversations 表时每页读取条数。",
+    },
+    "min_idle_minutes": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "最小静默时长（分钟）",
+        "hint": "会话最近更新时间小于该值时跳过，避免压缩活跃会话。",
+    },
+    "min_messages": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "最小消息条数",
+        "hint": "少于该消息条数的会话不参与压缩。",
+    },
+    "target_tokens": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "目标 Token 阈值",
+        "hint": "压缩目标上下文大小（token 估算值）。",
+    },
+    "trigger_tokens": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "触发 Token 阈值",
+        "hint": "会话估算 token 超过此值才触发压缩。<=0 表示自动按模型最大上下文比例计算。",
+    },
+    "trigger_min_context_ratio": {
+        "schema_type": "float",
+        "ui_type": "float",
+        "description": "自动触发比例",
+        "hint": "当触发 Token 阈值 <= 0 时生效。默认 0.3（即模型最大上下文的 30%）。支持填写 0~1 或 0~100（百分比）。",
+    },
+    "max_rounds": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "每会话最大压缩轮数",
+        "hint": "单个会话一次任务内最多执行几轮摘要压缩（实现 multiple compact context）。",
+    },
+    "truncate_turns": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "截断轮数（后备）",
+        "hint": "LLM 压缩后仍超限时，按轮截断的每次丢弃轮数。",
+    },
+    "keep_recent": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "保留最近轮数",
+        "hint": "压缩时始终保留最近 N 轮消息。",
+    },
+    "provider_id": {
+        "schema_type": "string",
+        "ui_type": "string",
+        "description": "压缩模型提供商 ID",
+        "hint": "可自定义指定任意可用对话模型；留空时按会话当前模型执行压缩。建议优先选择成本较低、响应较快的模型。",
+        "_special": "select_provider",
+    },
+    "instruction": {
+        "schema_type": "string",
+        "ui_type": "text",
+        "description": "定时压缩提示词",
+        "hint": "留空时复用 provider_settings.llm_compress_instruction。",
+    },
+    "dry_run": {
+        "schema_type": "bool",
+        "ui_type": "bool",
+        "description": "演练模式（不回写）",
+        "hint": "开启后只记录日志，不实际写回数据库。",
+    },
+}
+
+
+def _build_periodic_context_compaction_schema_properties() -> dict[str, dict[str, str]]:
+    return {
+        key: {"type": str(meta["schema_type"])}
+        for key, meta in PERIODIC_CONTEXT_COMPACTION_FIELD_META.items()
+    }
+
+
+def _build_periodic_context_compaction_dashboard_items() -> dict[str, dict[str, Any]]:
+    items: dict[str, dict[str, Any]] = {}
+    base_enabled_condition = {
+        "provider_settings.periodic_context_compaction.enabled": True,
+        "provider_settings.agent_runner_type": "local",
+    }
+    for key, meta in PERIODIC_CONTEXT_COMPACTION_FIELD_META.items():
+        condition = (
+            {"provider_settings.agent_runner_type": "local"}
+            if key == "enabled"
+            else dict(base_enabled_condition)
+        )
+        field: dict[str, Any] = {
+            "description": meta["description"],
+            "type": meta["ui_type"],
+            "hint": meta["hint"],
+            "condition": condition,
+        }
+        if "_special" in meta:
+            field["_special"] = meta["_special"]
+        items[f"provider_settings.periodic_context_compaction.{key}"] = field
+    return items
+
+
+CONTEXT_MEMORY_DEFAULTS = {
+    "enabled": False,
+    "inject_pinned_memory": True,
+    "pinned_memories": [],
+    "pinned_max_items": 8,
+    "pinned_max_chars_per_item": 400,
+    "retrieval_enabled": False,
+    "retrieval_backend": "",
+    "retrieval_provider_id": "",
+    "retrieval_top_k": 5,
+}
 
 # 默认配置
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -141,6 +333,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "llm_compress_provider_id": "",
         "max_context_length": 25,
         "dequeue_context_length": 10,
+        "periodic_context_compaction": dict(PERIODIC_CONTEXT_COMPACTION_DEFAULTS),
+        "context_memory": dict(CONTEXT_MEMORY_DEFAULTS),
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
@@ -362,10 +556,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "pre_ack_emoji": {"enable": False, "emojis": ["✍️"], "auto_remove": True},
         },
         "discord": {
-            "pre_ack_emoji": {"enable": False, "emojis": ["✍️"], "auto_remove": True},
-        },
-        "discord": {
-            "pre_ack_emoji": {"enable": False, "emojis": ["🤔"]},
+            "pre_ack_emoji": {"enable": False, "emojis": ["🤔"], "auto_remove": True},
         },
     },
     "wake_prefix": ["/"],
@@ -2045,20 +2236,6 @@ CONFIG_METADATA_2: Any = {
                         "timeout": 20,
                         "proxy": "",
                     },
-                    "Ollama Embedding": {
-                        "id": "ollama_embedding",
-                        "type": "openai_embedding",
-                        "provider": "ollama",
-                        "provider_type": "embedding",
-                        "hint": "provider_group.provider.ollama_embedding.hint",
-                        "enable": True,
-                        "embedding_api_key": "ollama",
-                        "embedding_api_base": "http://127.0.0.1:11434",
-                        "embedding_model": "embeddinggemma",
-                        "embedding_dimensions": 768,
-                        "timeout": 20,
-                        "proxy": "",
-                    },
                     "Gemini Embedding": {
                         "id": "gemini_embedding",
                         "type": "gemini_embedding",
@@ -2096,7 +2273,7 @@ CONFIG_METADATA_2: Any = {
                         "hint": "provider_group.provider.ollama_embedding.hint",
                         "enable": True,
                         "embedding_api_base": "http://localhost:11434",
-                        "embedding_model": "nomic-embed-text",
+                        "embedding_model": "embeddinggemma",
                         "embedding_dimensions": 768,
                         "timeout": 60,
                         "proxy": "",
@@ -4316,6 +4493,79 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
+                    **_build_periodic_context_compaction_dashboard_items(),
+                    "provider_settings.context_memory.enabled": {
+                        "description": "启用上下文记忆注入",
+                        "type": "bool",
+                        "hint": "启用后可将手动维护的顶层记忆注入到 system prompt，并预留向量记忆检索接口。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.inject_pinned_memory": {
+                        "description": "注入手动顶层记忆",
+                        "type": "bool",
+                        "hint": "将 `pinned_memories` 作为高优先级记忆注入系统提示词。",
+                        "condition": {
+                            "provider_settings.context_memory.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.pinned_max_items": {
+                        "description": "顶层记忆最大条数",
+                        "type": "int",
+                        "hint": "通过管理命令添加手动顶层记忆时允许保留的最大条目数。",
+                        "condition": {
+                            "provider_settings.context_memory.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.pinned_max_chars_per_item": {
+                        "description": "单条顶层记忆最大字符数",
+                        "type": "int",
+                        "hint": "超出长度的条目会被截断，避免 system prompt 膨胀。",
+                        "condition": {
+                            "provider_settings.context_memory.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.retrieval_enabled": {
+                        "description": "启用检索增强（开发中）",
+                        "type": "bool",
+                        "hint": "预留开关，默认关闭；向量检索增强建议在后续 PR 中实现。",
+                        "condition": {
+                            "provider_settings.context_memory.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.retrieval_backend": {
+                        "description": "检索后端标识（预留）",
+                        "type": "string",
+                        "hint": "例如 zep/mem0/custom，当前版本仅用于配置预留。",
+                        "condition": {
+                            "provider_settings.context_memory.retrieval_enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.retrieval_provider_id": {
+                        "description": "检索重排模型提供商 ID（预留）",
+                        "type": "string",
+                        "_special": "select_provider",
+                        "hint": "当前版本仅保留配置，不会触发额外检索调用。",
+                        "condition": {
+                            "provider_settings.context_memory.retrieval_enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.retrieval_top_k": {
+                        "description": "检索 Top-K（预留）",
+                        "type": "int",
+                        "hint": "后续检索增强功能默认使用的召回条数。",
+                        "condition": {
+                            "provider_settings.context_memory.retrieval_enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
                     "provider_settings.tool_call_approval.enable": {
                         "description": "启用工具调用确认",
                         "type": "bool",
@@ -4402,6 +4652,7 @@ CONFIG_METADATA_3 = {
                         "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
+                        "collapsed": True,
                     },
                     "provider_settings.max_quoted_fallback_images": {
                         "description": "引用图片回退解析上限",

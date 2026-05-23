@@ -51,21 +51,6 @@
               @delete-provider-source="deleteProviderSource"
             />
           </div>
-
-            <v-col cols="12" md="8" lg="9" class="provider-workbench__settings">
-              <v-card class="provider-config-card provider-settings-panel h-100" elevation="0">
-                <div v-if="selectedProviderSource" class="provider-config-header">
-                  <div class="provider-config-headline">
-                    <div class="provider-config-kicker">{{ tm('providers.settings') }}</div>
-                    <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
-                    <div class="provider-config-subtitle">
-                      {{ selectedProviderSource.api_base || 'N/A' }}
-                    </div>
-                    <div v-if="deepseekSourceNote" class="provider-config-note">
-                      {{ deepseekSourceNote }}
-                    </div>
-                  </div>
-
           <div class="provider-workbench__main">
             <div v-if="selectedProviderSource" class="provider-config-shell">
               <div class="provider-config-header">

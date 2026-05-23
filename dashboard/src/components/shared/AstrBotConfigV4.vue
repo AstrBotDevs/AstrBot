@@ -23,6 +23,7 @@ interface ConfigMetaItem {
   obvious_hint?: boolean;
   type?: string;
   invisible?: boolean;
+  collapsed?: boolean;
   condition?: Record<string, unknown>;
   _special?: string;
   editor_mode?: boolean;
@@ -105,6 +106,7 @@ const getTranslatedLabels = (
 };
 
 const dialog = ref(false);
+const showCollapsedItems = ref(false);
 const currentEditingKey = ref("");
 const currentEditingLanguage = ref("json");
 const currentEditingTheme = ref("vs-light");
@@ -208,6 +210,36 @@ function shouldShowItem(itemMeta: object | null | undefined, itemKey: string): b
   return searchableText.includes(keyword);
 }
 
+function getVisibleItemEntries(collapsed = false): [string, ConfigMetaItem][] {
+  const sectionItems = props.metadata?.[props.metadataKey]?.items || {};
+  return Object.entries(sectionItems).filter(([itemKey, itemMeta]) => {
+    const isCollapsed = Boolean((itemMeta as ConfigMetaItem | null)?._special === "collapsed" || (itemMeta as ConfigMetaItem | null)?.collapsed);
+    return isCollapsed === collapsed && shouldShowItem(itemMeta, itemKey);
+  }) as [string, ConfigMetaItem][];
+}
+
+function hasCollapsedItems(): boolean {
+  return getVisibleItemEntries(true).length > 0;
+}
+
+function hasVisibleEntriesAfter(entries: [string, ConfigMetaItem][], currentIndex: number): boolean {
+  return currentIndex < entries.length - 1;
+}
+
+function areCollapsedItemsVisible(): boolean {
+  if (!hasCollapsedItems()) {
+    return false;
+  }
+  if (String(props.searchKeyword || "").trim()) {
+    return true;
+  }
+  return showCollapsedItems.value;
+}
+
+function toggleCollapsedItems(): void {
+  showCollapsedItems.value = !showCollapsedItems.value;
+}
+
 // 检查最外层的 object 是否应该显示
 function shouldShowSection(): boolean {
   const sectionMeta = props.metadata[props.metadataKey];
@@ -289,7 +321,7 @@ function getSpecialSubtype(value: unknown): string {
     <!-- Object Type Configuration with JSON Selector Support -->
     <div v-if="metadata[metadataKey]?.type === 'object'" class="object-config">
       <div
-        v-for="(itemMeta, itemKey, index) in metadata[metadataKey].items"
+        v-for="([itemKey, itemMeta], index) in getVisibleItemEntries(false)"
         :key="itemKey"
         class="config-item"
       >
@@ -302,7 +334,7 @@ function getSpecialSubtype(value: unknown): string {
               </v-list-item-title>
 
               <v-list-item-subtitle class="property-hint">
-                <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
+                <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">!!</span>
                 <span v-html="renderHint(getItemHint(itemKey, itemMeta))"></span>
               </v-list-item-subtitle>
             </v-list-item>
@@ -330,132 +362,157 @@ function getSpecialSubtype(value: unknown): string {
           </v-col>
         </v-row>
 
-          <!-- Plugin Set Selector 全宽显示区域 -->
-          <v-row
-            v-if="
-              !itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'
-            "
-            class="plugin-set-display-row"
-          >
-            {{ tmConfig('sections.moreConfig') }}
+        <v-row
+          v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
+          class="plugin-set-display-row"
+        >
+          <v-col cols="12" class="plugin-set-display">
+            <div
+              v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
+              class="selected-plugins-full-width"
+            >
+              <div class="plugins-header">
+                <small class="text-grey">{{ t("core.shared.pluginSetSelector.selectedPluginsLabel") }}</small>
+              </div>
+              <div class="d-flex flex-wrap ga-2 mt-2">
+                <v-chip
+                  v-for="plugin in (createSelectorModel(itemKey).value || [])"
+                  :key="plugin"
+                  size="small"
+                  label
+                  color="primary"
+                  variant="outlined"
+                >
+                  {{ plugin === "*" ? t("core.shared.pluginSetSelector.allPluginsLabel") : plugin }}
+                </v-chip>
+              </div>
+            </div>
+          </v-col>
+        </v-row>
+
+        <v-row
+          v-if="
+            !itemMeta?.invisible &&
+            itemMeta?._special === 'select_persona' &&
+            itemKey === 'provider_settings.default_personality'
+          "
+          class="persona-preview-row"
+        >
+          <v-col cols="12" class="persona-preview-display">
+            <PersonaQuickPreview
+              :model-value="createSelectorModel(itemKey).value"
+            />
+          </v-col>
+        </v-row>
+
+        <v-divider
+          v-if="hasVisibleEntriesAfter(getVisibleItemEntries(false), index)"
+          class="config-divider"
+        />
+      </div>
+
+      <div v-if="hasCollapsedItems()" class="collapsed-config-section">
+        <div class="collapsed-config-toggle-row">
+          <span class="collapsed-config-toggle" @click="toggleCollapsedItems">
+            {{ tmConfig("sections.moreConfig") }}
             <v-icon end size="18">
-              {{ areCollapsedItemsVisible() ? 'mdi-chevron-up' : 'mdi-chevron-down' }}
+              {{ areCollapsedItemsVisible() ? "mdi-chevron-up" : "mdi-chevron-down" }}
             </v-icon>
           </span>
         </div>
+
         <div v-if="areCollapsedItemsVisible()">
-            <div
-              v-for="([itemKey, itemMeta], index) in getVisibleItemEntries(true)"
-              :key="itemKey"
-              class="config-item"
-            >
-              <v-row v-if="!itemMeta?.invisible" class="config-row">
-                <v-col cols="12" sm="6" class="property-info">
-                  <v-list-item density="compact">
-                    <v-list-item-title class="property-name">
-                      {{ getItemDescription(itemKey, itemMeta) }}
-                      <span class="property-key">({{ itemKey }})</span>
-                    </v-list-item-title>
-
-                    <v-list-item-subtitle class="property-hint">
-                      <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
-                      <span v-html="renderHint(getItemHint(itemKey, itemMeta))"></span>
-                    </v-list-item-subtitle>
-                  </v-list-item>
-                </v-col>
-                <v-col cols="12" sm="6" class="config-input">
-                  <TemplateListEditor
-                    v-if="itemMeta?.type === 'template_list'"
-                    v-model="createSelectorModel(itemKey).value"
-                    :templates="itemMeta?.templates || {}"
-                    :plugin-name="pluginName"
-                    :plugin-i18n="pluginI18n"
-                    :config-path="getItemPath(itemKey)"
-                    class="config-field"
-                  />
-                  <ConfigItemRenderer
-                    v-else
-                    v-model="createSelectorModel(itemKey).value"
-                    :item-meta="itemMeta || null"
-                    :plugin-name="pluginName"
-                    :plugin-i18n="pluginI18n"
-                    :config-key="getItemPath(itemKey)"
-                    :show-fullscreen-btn="!!itemMeta?.editor_mode"
-                    @open-fullscreen="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
-                  />
-                </v-col>
-              </v-row>
-
-              <v-row v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
-                class="plugin-set-display-row">
-                <v-col cols="12" class="plugin-set-display">
-                  <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
-                    class="selected-plugins-full-width">
-                    <div class="plugins-header">
-                      <small class="text-grey">{{ t('core.shared.pluginSetSelector.selectedPluginsLabel') }}</small>
-                    </div>
-                    <div class="d-flex flex-wrap ga-2 mt-2">
-                      <v-chip v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
-                        color="primary" variant="outlined">
-                        {{ plugin === '*' ? t('core.shared.pluginSetSelector.allPluginsLabel') : plugin }}
-                      </v-chip>
-                    </div>
-                  </div>
-                </v-col>
-              </v-row>
-
-              <v-row
-                v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona' && itemKey === 'provider_settings.default_personality'"
-                class="persona-preview-row"
-              >
-                <div class="plugins-header">
-                  <small class="text-grey">{{
-                    t("core.shared.pluginSetSelector.selectedPluginsLabel")
-                  }}</small>
-                </div>
-                <div class="d-flex flex-wrap ga-2 mt-2">
-                  <v-chip
-                    v-for="plugin in createSelectorModel(itemKey).value || []"
-                    :key="plugin"
-                    size="small"
-                    label
-                    color="primary"
-                    variant="outlined"
-                  >
-                    {{
-                      plugin === "*"
-                        ? t("core.shared.pluginSetSelector.allPluginsLabel")
-                        : plugin
-                    }}
-                  </v-chip>
-                </div>
-              </div>
-            </v-col>
-          </v-row>
-
-          <!-- Default Persona Quick Preview 全宽显示区域 -->
-          <v-row
-            v-if="
-              !itemMeta?.invisible &&
-              itemMeta?._special === 'select_persona' &&
-              itemKey === 'provider_settings.default_personality'
-            "
-            class="persona-preview-row"
+          <div
+            v-for="([itemKey, itemMeta], index) in getVisibleItemEntries(true)"
+            :key="itemKey"
+            class="config-item"
           >
-            <v-col cols="12" class="persona-preview-display">
-              <PersonaQuickPreview
-                :model-value="createSelectorModel(itemKey).value"
-              />
-            </v-col>
-          </v-row>
-        </template>
-        <v-divider
-          v-if="
-            shouldShowItem(itemMeta, itemKey) &&
-            hasVisibleItemsAfter(metadata[metadataKey].items, index)
-          "
-          class="config-divider"
-        />
+            <v-row v-if="!itemMeta?.invisible" class="config-row">
+              <v-col cols="12" sm="6" class="property-info">
+                <v-list-item density="compact">
+                  <v-list-item-title class="property-name">
+                    {{ getItemDescription(itemKey, itemMeta) }}
+                    <span class="property-key">({{ itemKey }})</span>
+                  </v-list-item-title>
+
+                  <v-list-item-subtitle class="property-hint">
+                    <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">!!</span>
+                    <span v-html="renderHint(getItemHint(itemKey, itemMeta))"></span>
+                  </v-list-item-subtitle>
+                </v-list-item>
+              </v-col>
+              <v-col cols="12" sm="6" class="config-input">
+                <TemplateListEditor
+                  v-if="itemMeta?.type === 'template_list'"
+                  v-model="createSelectorModel(itemKey).value"
+                  :templates="itemMeta?.templates || {}"
+                  :plugin-name="pluginName"
+                  :plugin-i18n="pluginI18n"
+                  :config-path="getItemPath(itemKey)"
+                  class="config-field"
+                />
+                <ConfigItemRenderer
+                  v-else
+                  v-model="createSelectorModel(itemKey).value"
+                  :item-meta="itemMeta || null"
+                  :plugin-name="pluginName"
+                  :plugin-i18n="pluginI18n"
+                  :config-key="getItemPath(itemKey)"
+                  :show-fullscreen-btn="!!itemMeta?.editor_mode"
+                  @open-fullscreen="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
+                />
+              </v-col>
+            </v-row>
+
+            <v-row
+              v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
+              class="plugin-set-display-row"
+            >
+              <v-col cols="12" class="plugin-set-display">
+                <div
+                  v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
+                  class="selected-plugins-full-width"
+                >
+                  <div class="plugins-header">
+                    <small class="text-grey">{{ t("core.shared.pluginSetSelector.selectedPluginsLabel") }}</small>
+                  </div>
+                  <div class="d-flex flex-wrap ga-2 mt-2">
+                    <v-chip
+                      v-for="plugin in (createSelectorModel(itemKey).value || [])"
+                      :key="plugin"
+                      size="small"
+                      label
+                      color="primary"
+                      variant="outlined"
+                    >
+                      {{ plugin === "*" ? t("core.shared.pluginSetSelector.allPluginsLabel") : plugin }}
+                    </v-chip>
+                  </div>
+                </div>
+              </v-col>
+            </v-row>
+
+            <v-row
+              v-if="
+                !itemMeta?.invisible &&
+                itemMeta?._special === 'select_persona' &&
+                itemKey === 'provider_settings.default_personality'
+              "
+              class="persona-preview-row"
+            >
+              <v-col cols="12" class="persona-preview-display">
+                <PersonaQuickPreview
+                  :model-value="createSelectorModel(itemKey).value"
+                />
+              </v-col>
+            </v-row>
+
+            <v-divider
+              v-if="hasVisibleEntriesAfter(getVisibleItemEntries(true), index)"
+              class="config-divider"
+            />
+          </div>
+        </div>
       </div>
     </div>
   </v-card>

@@ -2,15 +2,20 @@ import asyncio
 import datetime
 import json
 import os
+import re
 import uuid
 from contextlib import asynccontextmanager
 from copy import deepcopy
+from pathlib import Path
 from typing import Any, cast
 
 from quart import Response as QuartResponse
 from quart import g, make_response, request, send_file
 
 from astrbot.core import logger, sp
+from astrbot.core.agent.mcp_elicitation_registry import (
+    submit_pending_mcp_elicitation_reply,
+)
 from astrbot.core.agent.message import get_checkpoint_id, is_checkpoint_message
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
@@ -142,6 +147,10 @@ class BotMessageAccumulator:
         self._flush_pending_text()
         self.parts.append(part)
 
+    def add_elicitation(self, payload: dict) -> None:
+        self._flush_pending_text()
+        self.parts.append({"type": "elicitation", "payload": payload})
+
     def build_message_parts(
         self,
         *,
@@ -226,6 +235,7 @@ class ChatRoute(Route):
             "/chat/sessions": ("GET", self.get_sessions),
             "/chat/get_session": ("GET", self.get_session),
             "/chat/stop": ("POST", self.stop_session),
+            "/chat/respond_elicitation": ("POST", self.respond_elicitation),
             "/chat/delete_session": ("GET", self.delete_webchat_session),
             "/chat/batch_delete_sessions": ("POST", self.batch_delete_sessions),
             "/chat/update_session_display_name": (
@@ -266,6 +276,18 @@ class ChatRoute(Route):
         if not file_path.is_absolute():
             file_path = (attachments_dir / file_path).resolve(strict=False)
         return file_path
+
+    @staticmethod
+    def _build_webchat_session_umo(session) -> str:
+        message_type = (
+            MessageType.GROUP_MESSAGE.value
+            if session.is_group
+            else MessageType.FRIEND_MESSAGE.value
+        )
+        return (
+            f"{session.platform_id}:{message_type}:"
+            f"{session.platform_id}!{session.creator}!{session.session_id}"
+        )
 
     async def get_file(self):
         filename = request.args.get("filename")
@@ -700,21 +722,16 @@ class ChatRoute(Route):
     async def _save_bot_message(
         self,
         webchat_conv_id: str,
-        text: str,
-        media_parts: list,
-        reasoning: str,
+        message_parts: list[dict],
         agent_stats: dict,
         refs: dict,
         llm_checkpoint_id: str | None = None,
         platform_history_id: str = "webchat",
     ):
         """保存 bot 消息到历史记录，返回保存的记录"""
-        bot_message_parts: list[dict[str, str]] = []
-        bot_message_parts.extend(media_parts)
-        if text:
-            bot_message_parts.append({"type": "plain", "text": text})
-
-        new_his: dict[str, str | list[dict[str, str]] | dict[str, str] | None] = {
+        bot_message_parts = strip_message_parts_path_fields(message_parts)
+        reasoning = extract_reasoning_from_message_parts(bot_message_parts)
+        new_his: dict[str, Any] = {
             "type": "bot",
             "message": bot_message_parts,
         }
@@ -783,10 +800,7 @@ class ChatRoute(Route):
 
         async def stream():
             client_disconnected = False
-            accumulated_parts = []
-            accumulated_text = ""
-            accumulated_reasoning = ""
-            tool_calls = {}
+            message_accumulator = BotMessageAccumulator()
             agent_stats = {}
             refs = {}
 
@@ -869,9 +883,7 @@ class ChatRoute(Route):
                         )
                         if should_break:
                             client_disconnected = True
-                        except Exception as e:
-                            logger.error(f"WebChat stream error: {e}")
-                            continue
+                            break
 
                         if not result:
                             # Send an SSE comment as keep-alive so the client
@@ -888,7 +900,7 @@ class ChatRoute(Route):
                             logger.warning("webchat stream message_id mismatch")
                             continue
 
-                        result_text = result["data"]
+                        result_text = result.get("data", "")
                         msg_type = result.get("type")
                         streaming = result.get("streaming", False)
                         chain_type = result.get("chain_type")
@@ -929,75 +941,66 @@ class ChatRoute(Route):
                             logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
                             client_disconnected = True
 
-                        # 累积消息部分
                         if msg_type == "plain":
-                            chain_type = result.get("chain_type")
-                            if chain_type == "tool_call":
-                                tool_call = json.loads(result_text)
-                                tool_calls[tool_call.get("id")] = tool_call
-                                if accumulated_text:
-                                    # 如果累积了文本，则先保存文本
-                                    accumulated_parts.append(
-                                        {"type": "plain", "text": accumulated_text},
-                                    )
-                                    accumulated_text = ""
-                            elif chain_type == "tool_call_result":
-                                tcr = json.loads(result_text)
-                                tc_id = tcr.get("id")
-                                if tc_id in tool_calls:
-                                    tool_calls[tc_id]["result"] = tcr.get("result")
-                                    tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
-                                    accumulated_parts.append(
-                                        {
-                                            "type": "tool_call",
-                                            "tool_calls": [tool_calls[tc_id]],
-                                        },
-                                    )
-                                    tool_calls.pop(tc_id, None)
-                            elif chain_type == "reasoning":
-                                accumulated_reasoning += result_text
-                            elif streaming:
-                                accumulated_text += result_text
-                            else:
-                                accumulated_text = result_text
+                            message_accumulator.add_plain(
+                                str(result_text),
+                                chain_type=chain_type,
+                                streaming=streaming,
+                            )
                         elif msg_type == "image":
-                            filename = result_text.replace("[IMAGE]", "")
+                            filename = str(result_text).replace("[IMAGE]", "")
                             part = await self._create_attachment_from_file(
                                 filename,
                                 "image",
                             )
-                            if part:
-                                accumulated_parts.append(part)
+                            message_accumulator.add_attachment(part)
+                            saved_event = build_attachment_saved_event(part)
+                            if saved_event and not client_disconnected:
+                                yield saved_event
                         elif msg_type == "record":
-                            filename = result_text.replace("[RECORD]", "")
+                            filename = str(result_text).replace("[RECORD]", "")
                             part = await self._create_attachment_from_file(
                                 filename,
                                 "record",
                             )
-                            if part:
-                                accumulated_parts.append(part)
+                            message_accumulator.add_attachment(part)
+                            saved_event = build_attachment_saved_event(part)
+                            if saved_event and not client_disconnected:
+                                yield saved_event
                         elif msg_type == "file":
-                            # 格式: [FILE]filename
-                            filename = result_text.replace("[FILE]", "")
+                            filename = str(result_text).replace("[FILE]", "")
                             part = await self._create_attachment_from_file(
                                 filename,
                                 "file",
                             )
-                            if part:
-                                accumulated_parts.append(part)
+                            message_accumulator.add_attachment(part)
+                            saved_event = build_attachment_saved_event(part)
+                            if saved_event and not client_disconnected:
+                                yield saved_event
+                        elif msg_type == "video":
+                            filename = str(result_text).replace("[VIDEO]", "")
+                            part = await self._create_attachment_from_file(
+                                filename,
+                                "video",
+                            )
+                            message_accumulator.add_attachment(part)
+                            saved_event = build_attachment_saved_event(part)
+                            if saved_event and not client_disconnected:
+                                yield saved_event
+                        elif msg_type == "elicitation":
+                            if isinstance(result_text, dict):
+                                message_accumulator.add_elicitation(result_text)
 
-                        # 消息结束处理
+                        should_save = False
                         if msg_type == "end":
-                            break
+                            should_save = bool(
+                                message_accumulator.has_content() or refs or agent_stats
+                            )
                         elif (
                             (streaming and msg_type == "complete") or not streaming
-                            # or msg_type == "break"
                         ):
-                            if (
-                                chain_type == "tool_call"
-                                or chain_type == "tool_call_result"
-                            ):
-                                continue
+                            if chain_type not in ("tool_call", "tool_call_result"):
+                                should_save = True
 
                         if should_save:
                             flush_result = await flush_pending_bot_message()
@@ -1013,12 +1016,8 @@ class ChatRoute(Route):
                                     yield f"data: {json.dumps(saved_info, ensure_ascii=False)}\n\n"
                                 except Exception:
                                     pass
-                            accumulated_parts = []
-                            accumulated_text = ""
-                            accumulated_reasoning = ""
-                            # tool_calls = {}
-                            agent_stats = {}
-                            refs = {}
+                        if msg_type == "end":
+                            break
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
             finally:
@@ -1087,18 +1086,71 @@ class ChatRoute(Route):
         if session.creator != username:
             return Response().error("Permission denied").__dict__
 
-        message_type = (
-            MessageType.GROUP_MESSAGE.value
-            if session.is_group
-            else MessageType.FRIEND_MESSAGE.value
-        )
-        umo = (
-            f"{session.platform_id}:{message_type}:"
-            f"{session.platform_id}!{username}!{session_id}"
-        )
+        umo = self._build_webchat_session_umo(session)
         stopped_count = active_event_registry.request_agent_stop_all(umo)
 
         return Response().ok(data={"stopped_count": stopped_count}).__dict__
+
+    async def respond_elicitation(self):
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_id = str(post_data.get("session_id", "")).strip()
+        reply_text = str(post_data.get("reply_text", "")).strip()
+        display_text = str(post_data.get("display_text", reply_text)).strip()
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if not reply_text:
+            return Response().error("Missing key: reply_text").__dict__
+
+        username = g.get("username", "guest")
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        umo = self._build_webchat_session_umo(session)
+        if not submit_pending_mcp_elicitation_reply(
+            umo,
+            username,
+            reply_text,
+            reply_outline=display_text,
+        ):
+            return (
+                Response().error("No pending MCP elicitation for this session").__dict__
+            )
+
+        saved_record = await self.platform_history_mgr.insert(
+            platform_id=session.platform_id,
+            user_id=session_id,
+            content={
+                "type": "user",
+                "message": [{"type": "plain", "text": display_text or reply_text}],
+            },
+            sender_id=username,
+            sender_name=username,
+        )
+
+        return (
+            Response()
+            .ok(
+                data={
+                    "saved_message": {
+                        "id": saved_record.id,
+                        "created_at": to_utc_isoformat(saved_record.created_at),
+                        "content": {
+                            "type": "user",
+                            "message": [
+                                {"type": "plain", "text": display_text or reply_text}
+                            ],
+                        },
+                    }
+                }
+            )
+            .__dict__
+        )
 
     async def _delete_session_internal(self, session, username: str) -> None:
         """Delete a single session and all its related data."""

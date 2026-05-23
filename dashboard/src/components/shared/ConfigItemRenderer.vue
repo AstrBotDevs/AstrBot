@@ -337,22 +337,9 @@
   </div>
 </template>
 
-<script setup>
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import ListConfigItem from './ListConfigItem.vue'
-import FileConfigItem from './FileConfigItem.vue'
-import ObjectEditor from './ObjectEditor.vue'
-import ProviderSelector from './ProviderSelector.vue'
-import PersonaSelector from './PersonaSelector.vue'
-import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
-import PluginSetSelector from './PluginSetSelector.vue'
-import T2ITemplateEditor from './T2ITemplateEditor.vue'
-import DashboardTotpManager from './DashboardTotpManager.vue'
-import { computed, ref } from 'vue'
-import { useI18n, useModuleI18n } from '@/i18n/composables'
-import { usePluginI18n } from '@/utils/pluginI18n'
-
+<script setup lang="ts">
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
+import { computed, ref, type PropType } from "vue";
 import ListConfigItem from "./ListConfigItem.vue";
 import FileConfigItem from "./FileConfigItem.vue";
 import ObjectEditor from "./ObjectEditor.vue";
@@ -361,6 +348,7 @@ import PersonaSelector from "./PersonaSelector.vue";
 import KnowledgeBaseSelector from "./KnowledgeBaseSelector.vue";
 import PluginSetSelector from "./PluginSetSelector.vue";
 import T2ITemplateEditor from "./T2ITemplateEditor.vue";
+import DashboardTotpManager from "./DashboardTotpManager.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 

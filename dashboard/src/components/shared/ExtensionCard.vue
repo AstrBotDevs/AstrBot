@@ -296,60 +296,6 @@ const safeSocialLink = computed(() => {
             </template>
           </div>
 
-          <div class="extension-chip-group d-flex flex-wrap">
-            <v-chip color="primary" label size="small">
-              <v-icon icon="mdi-source-branch" start />
-              {{ extension.version }}
-            </v-chip>
-            <v-chip
-              v-if="extension?.has_update"
-              color="warning"
-              label
-              size="small"
-              style="cursor: pointer"
-              @click.stop="updateExtension"
-            >
-              <v-icon icon="mdi-arrow-up-bold" start />
-              {{ extension.online_version }}
-            </v-chip>
-            <v-chip
-              v-if="extension.handlers?.length"
-              color="primary"
-              label
-              size="small"
-              style="cursor: pointer"
-              @click.stop="viewHandlers"
-            >
-              <v-icon icon="mdi-cogs" start />
-              {{ extension.handlers?.length
-              }}{{ tm("card.status.handlersCount") }}
-            </v-chip>
-            <v-chip
-              v-for="tag in extension.tags"
-              :key="tag"
-              :color="tag === 'danger' ? 'error' : 'primary'"
-              label
-              size="small"
-            >
-              {{ tag === "danger" ? tm("tags.danger") : tag }}
-            </v-chip>
-            <PluginPlatformChip :platforms="supportPlatforms" />
-            <v-chip v-if="authorDisplay" color="info" label size="small">
-              <v-icon icon="mdi-account" start></v-icon>
-              {{ authorDisplay }}
-            </v-chip>
-            <v-chip
-              v-if="astrbotVersionRequirement"
-              color="secondary"
-              variant="outlined"
-              label
-              size="small"
-            >
-              AstrBot: {{ astrbotVersionRequirement }}
-            </v-chip>
-          </div>
-
-            <div class="extension-meta-group">
               <div class="extension-chip-group d-flex flex-wrap">
                 <v-chip color="primary" label size="small">
                   <v-icon icon="mdi-source-branch" start></v-icon>
@@ -448,18 +394,8 @@ const safeSocialLink = computed(() => {
               >
                 {{ extension.desc }}
               </div>
-
-              <div
-                v-if="extension.author"
-                class="extension-author text-caption text-medium-emphasis mt-1"
-              >
-                <v-icon icon="mdi-account" size="x-small" class="mr-1"></v-icon>
-                {{ extension.author }}
-              </div>
-            </div>
           </div>
         </div>
-      </div>
     </v-card-text>
 
     <v-card-actions class="extension-actions">

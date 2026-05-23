@@ -468,6 +468,9 @@ class OpenApiRoute(Route):
                         "video",
                     )
                     message_accumulator.add_attachment(part)
+                elif msg_type == "elicitation":
+                    if isinstance(result_text, dict):
+                        message_accumulator.add_elicitation(result_text)
 
                 should_save = False
                 if msg_type == "end":

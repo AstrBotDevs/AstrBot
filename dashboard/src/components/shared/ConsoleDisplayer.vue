@@ -1,103 +1,135 @@
 <template>
-  <div class="console-displayer-wrapper" id="console-wrapper">
-    <div class="filter-controls mb-2" v-if="showLevelBtns">
-      <v-chip-group v-model="selectedLevels" column multiple>
-        <v-chip v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter variant="flat" size="small"
-          :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'" class="font-weight-medium">
-          {{ level }}
-        </v-chip>
-      </v-chip-group>
-      <v-spacer></v-spacer>
-      <v-btn
-        :icon="flushMode ? 'mdi-format-columns' : 'mdi-format-align-left'"
-        variant="text"
-        density="compact"
-        class="fullscreen-btn"
-        @click="toggleFlushMode"
-      ></v-btn>
-      <v-btn
-        :icon="isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
-        variant="text"
-        density="compact"
-        class="me-4 fullscreen-btn"
-        @click="toggleFullscreen"
-      ></v-btn>
+  <div class="console-displayer" id="console-wrapper">
+    <div v-if="showLevelBtns || enableAdvancedFilters" class="console-toolbar">
+      <div v-if="showLevelBtns" class="filter-controls">
+        <v-chip-group v-model="selectedLevels" column multiple>
+          <v-chip
+            v-for="level in logLevels"
+            :key="level"
+            :value="level"
+            :color="getLevelColor(level)"
+            filter
+            variant="flat"
+            size="small"
+            :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'"
+            class="font-weight-medium"
+          >
+            {{ level }}
+          </v-chip>
+        </v-chip-group>
+        <v-spacer></v-spacer>
+        <v-btn
+          :icon="flushMode ? 'mdi-format-columns' : 'mdi-format-align-left'"
+          variant="text"
+          density="compact"
+          class="fullscreen-btn"
+          @click="toggleFlushMode"
+        ></v-btn>
+        <v-btn
+          :icon="isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
+          variant="text"
+          density="compact"
+          class="me-4 fullscreen-btn"
+          @click="toggleFullscreen"
+        ></v-btn>
+      </div>
+
+      <div v-if="enableAdvancedFilters" class="advanced-filters">
+        <v-text-field
+          v-model="keyword"
+          :label="tm('filters.searchLabel')"
+          :placeholder="tm('filters.searchPlaceholder')"
+          density="compact"
+          hide-details
+          clearable
+          variant="outlined"
+          class="filter-input"
+        />
+        <v-combobox
+          v-model="selectedTags"
+          v-model:search="tagSearch"
+          :items="tagOptions"
+          :label="tm('filters.tagLabel')"
+          :placeholder="tm('filters.tagPlaceholder')"
+          :menu-props="{ maxHeight: 360, contentClass: 'tag-filter-menu' }"
+          density="compact"
+          hide-details
+          clearable
+          multiple
+          variant="outlined"
+          class="filter-input filter-input-tags"
+        >
+          <template #selection="{ index }">
+            <span
+              v-if="index === 0 && selectedTagPreview"
+              class="tag-selection-summary"
+            >
+              {{ selectedTagPreview }}
+            </span>
+          </template>
+        </v-combobox>
+        <v-btn variant="text" size="small" @click="clearFilters">
+          {{ tm('filters.clearButton') }}
+        </v-btn>
+        <span class="filter-summary">
+          {{ tm('filters.summary', { count: localLogCache.length }) }}
+        </span>
+      </div>
     </div>
 
-    <div id="term" class="console-term" :class="{ 'console-term--flush': flushMode }">
+    <div ref="term" class="console-terminal" :class="{ 'console-terminal--flush': flushMode }">
+      <pre
+        v-for="entry in localLogCache"
+        :key="entry.uuid"
+        class="console-log-line fade-in"
+        :class="{ 'console-log-line--structured': !flushMode }"
+        :style="getLineStyle(entry)"
+      >{{ entry.displayText }}</pre>
+      <div v-if="localLogCache.length === 0" class="console-empty">
+        {{ emptyStateText }}
+      </div>
     </div>
   </div>
 </template>
 
 <script>
+import { EventSourcePolyfill } from 'event-source-polyfill';
+import { useModuleI18n } from '@/i18n/composables';
+import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
+import axios, { resolveApiUrl } from '@/utils/request';
+
+const LEADING_ANSI_PATTERN = /^(\u001b\[[0-9;]+m)/;
+const ANSI_PATTERN = /\u001b\[[0-9;]+m/g;
 
 const lightColorAnsiMap = {
   '\u001b[1;34m': 'color: #39C5BB; font-weight: bold;',
   '\u001b[1;36m': 'color: #00FFFF; font-weight: bold;',
-  '\u001b[1;33m': 'color: #FFFF00; font-weight: bold;',
+  '\u001b[1;33m': 'color: #FFFF00;',
   '\u001b[31m': 'color: #FF0000;',
   '\u001b[1;31m': 'color: #FF0000; font-weight: bold;',
   '\u001b[0m': 'color: inherit; font-weight: normal;',
   '\u001b[32m': 'color: #00FF00;',
-  'default': 'color: #FFFFFF;'
+  default: 'color: #FFFFFF;'
 };
 
 const darkColorAnsiMap = {
   '\u001b[1;34m': 'color: #6cb6d9; font-weight: bold;',
   '\u001b[1;36m': 'color: #72c4cc; font-weight: bold;',
-  '\u001b[1;33m': 'color: #d4b95e; font-weight: bold;',
+  '\u001b[1;33m': 'color: #d4b95e;',
   '\u001b[31m': 'color: #d46a6a;',
   '\u001b[1;31m': 'color: #e06060; font-weight: bold;',
   '\u001b[0m': 'color: inherit; font-weight: normal;',
   '\u001b[32m': 'color: #6cc070;',
-  'default': 'color: #c8c8c8;'
+  default: 'color: #c8c8c8;'
 };
+
+function stripAnsi(value) {
+  return String(value || '').replace(ANSI_PATTERN, '');
+}
 
 export default {
   name: 'ConsoleDisplayer',
-  data() {
-    return {
-      autoScroll: true,
-      isFullscreen: false,
-      flushMode: localStorage.getItem('console_flush_mode') === 'true',
-      logColorAnsiMap: {
-        '\u001b[1;34m': 'color: #6cb6d9; font-weight: bold;',
-        '\u001b[1;36m': 'color: #72c4cc; font-weight: bold;',
-        '\u001b[1;33m': 'color: #d4b95e; font-weight: bold;',
-        '\u001b[31m': 'color: #d46a6a;',
-        '\u001b[1;31m': 'color: #e06060; font-weight: bold;',
-        '\u001b[0m': 'color: inherit; font-weight: normal;',
-        '\u001b[32m': 'color: #6cc070;',
-        'default': 'color: #c8c8c8;'
-      },
-      logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-      selectedLevels: [0, 1, 2, 3, 4],
-      levelColors: {
-        'DEBUG': 'grey',
-        'INFO': 'blue-lighten-3',
-        'WARNING': 'amber',
-        'ERROR': 'red',
-        'CRITICAL': 'purple'
-      },
-      localLogCache: [],
-      eventSource: null,
-      retryTimer: null,
-      retryAttempts: 0,
-      maxRetryAttempts: 10,
-      baseRetryDelay: 1000,
-      lastEventId: null,
-    }
-  },
-  computed: {
-    commonStore() {
-      return useCommonStore();
-    },
-    logColorAnsiMap() {
-      const customizerStore = useCustomizerStore();
-      return customizerStore.uiTheme === 'PurpleThemeDark' ? darkColorAnsiMap : lightColorAnsiMap;
-    },
-  },
   props: {
     historyNum: {
       type: String,
@@ -127,16 +159,8 @@ export default {
   },
   data() {
     return {
-      logColorAnsiMap: {
-        '\u001b[1;34m': 'color: #39C5BB; font-weight: bold;',
-        '\u001b[1;36m': 'color: #00FFFF; font-weight: bold;',
-        '\u001b[1;33m': 'color: #FFFF00; font-weight: bold;',
-        '\u001b[31m': 'color: #FF0000;',
-        '\u001b[1;31m': 'color: #FF0000; font-weight: bold;',
-        '\u001b[0m': 'color: inherit; font-weight: normal;',
-        '\u001b[32m': 'color: #00FF00;',
-        default: 'color: #FFFFFF;'
-      },
+      isFullscreen: false,
+      flushMode: localStorage.getItem('console_flush_mode') === 'true',
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
       selectedLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
       selectedTags: [],
@@ -164,6 +188,12 @@ export default {
     };
   },
   computed: {
+    logColorAnsiMap() {
+      const customizerStore = useCustomizerStore();
+      return customizerStore.uiTheme === 'PurpleThemeDark'
+        ? darkColorAnsiMap
+        : lightColorAnsiMap;
+    },
     tagOptions() {
       return [...new Set([...this.availableTags, ...this.selectedTags].filter(Boolean))].sort();
     },
@@ -194,9 +224,21 @@ export default {
   watch: {
     selectedLevels: {
       handler() {
-        this.refreshDisplay();
+        this.queueFilterReload();
+        this.persistState();
       },
       deep: true
+    },
+    selectedTags: {
+      handler() {
+        this.queueFilterReload();
+        this.persistState();
+      },
+      deep: true
+    },
+    keyword() {
+      this.queueFilterReload();
+      this.persistState();
     },
     flushMode(val) {
       localStorage.setItem('console_flush_mode', val);
@@ -204,13 +246,19 @@ export default {
   },
   async mounted() {
     this.restorePersistedState();
+    document.addEventListener('fullscreenchange', this.handleFullscreenChange);
     await this.reloadLogSource();
   },
   beforeUnmount() {
+    document.removeEventListener('fullscreenchange', this.handleFullscreenChange);
     this.teardownEventSource();
     if (this.filterSyncTimer) {
       clearTimeout(this.filterSyncTimer);
       this.filterSyncTimer = null;
+    }
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
     }
     this.retryAttempts = 0;
   },
@@ -277,10 +325,7 @@ export default {
       return this.buildLogQueryParams();
     },
 
-    buildLogQueryParams({
-      includeTag = true,
-      includeLimit = true
-    } = {}) {
+    buildLogQueryParams({ includeTag = true, includeLimit = true } = {}) {
       const params = {};
       const historyLimit = Number.parseInt(this.historyNum, 10);
 
@@ -289,7 +334,9 @@ export default {
       }
 
       if (this.selectedLevels.length !== this.logLevels.length) {
-        params.levels = this.selectedLevels.length > 0 ? this.selectedLevels.join(',') : '__none__';
+        params.levels = this.selectedLevels.length > 0
+          ? this.selectedLevels.join(',')
+          : '__none__';
       }
 
       if (includeTag && this.selectedTags.length > 0) {
@@ -314,7 +361,9 @@ export default {
         }
       });
 
-      return query.toString() ? `/api/live-log?${query.toString()}` : '/api/live-log';
+      return resolveApiUrl(
+        query.toString() ? `/api/live-log?${query.toString()}` : '/api/live-log'
+      );
     },
 
     teardownEventSource() {
@@ -322,28 +371,27 @@ export default {
         this.eventSource.close();
         this.eventSource = null;
       }
+    },
 
-      console.log(`正在连接日志流... (尝试次数: ${this.retryAttempts})`);
-
-      const token = localStorage.getItem('token');
-
-    connectSSE() {
+    connectSSE(sequence = this.reloadSequence) {
       this.teardownEventSource();
 
-      const token = localStorage.getItem('token');
-      const options = {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : ''
-        },
-        heartbeatTimeout: 300000,
-        withCredentials: true
+      this.eventSource = new EventSourcePolyfill(this.buildLogStreamUrl(), {
+        heartbeatTimeout: 300000
       });
 
       this.eventSource.onopen = () => {
+        if (sequence !== this.reloadSequence) {
+          return;
+        }
         this.retryAttempts = 0;
       };
 
       this.eventSource.onmessage = (event) => {
+        if (sequence !== this.reloadSequence) {
+          return;
+        }
+
         try {
           if (event.lastEventId) {
             this.lastEventId = event.lastEventId;
@@ -357,20 +405,21 @@ export default {
       };
 
       this.eventSource.onerror = (error) => {
+        if (sequence !== this.reloadSequence) {
+          return;
+        }
+
         if (error.status === 401) {
           console.error('Log stream authentication failed (401).');
         } else {
           console.warn('Log stream connection failed.', error);
         }
 
-        if (this.eventSource) {
-          this.eventSource.close();
-          this.eventSource = null;
-        }
+        this.teardownEventSource();
 
         if (this.retryAttempts >= this.maxRetryAttempts) {
-            console.error('❌ 已达到最大重试次数，停止重连。请刷新页面重试。');
-            return;
+          console.error('Max log stream retry attempts reached.');
+          return;
         }
 
         const delay = Math.min(
@@ -378,22 +427,22 @@ export default {
           30000
         );
 
-        console.log(`⏳ ${delay}ms 后尝试第 ${this.retryAttempts + 1} 次重连...`);
-
         if (this.retryTimer) {
           clearTimeout(this.retryTimer);
           this.retryTimer = null;
         }
 
-        const sequence = this.reloadSequence;
         this.retryTimer = setTimeout(async () => {
-          this.retryAttempts++;
-
-          if (!this.lastEventId) {
-             await this.fetchLogHistory();
+          if (sequence !== this.reloadSequence) {
+            return;
           }
 
-          this.connectSSE();
+          this.retryAttempts++;
+          if (!this.lastEventId) {
+            await this.fetchLogHistory(sequence);
+          }
+
+          this.connectSSE(sequence);
         }, delay);
       };
     },
@@ -433,35 +482,21 @@ export default {
       };
     },
 
-        const exists = this.localLogCache.some(existing =>
-          existing.time === log.time &&
-          existing.data === log.data &&
-          existing.level === log.level
-        );
+    replaceLogHistory(logs) {
+      const knownLogIds = new Set();
+      const normalizedLogs = [];
 
-        if (!exists) {
-            this.localLogCache.push(log);
-            hasUpdate = true;
-
-            if (this.isLevelSelected(log.level)) {
-              this.printLog(log.data);
-            }
-        }
-      });
-
-      if (hasUpdate) {
-        this.localLogCache.sort((a, b) => a.time - b.time);
-
-        const maxSize = this.commonStore.log_cache_max_len || 200;
-        if (this.localLogCache.length > maxSize) {
-           this.localLogCache.splice(0, this.localLogCache.length - maxSize);
+      logs.forEach((log) => {
+        const entry = this.normalizeLogEntry(log);
+        if (!entry || knownLogIds.has(entry.uuid)) {
+          return;
         }
 
         knownLogIds.add(entry.uuid);
         normalizedLogs.push(entry);
       });
 
-      normalizedLogs.sort((left, right) => left.time - right.time);
+      normalizedLogs.sort((left, right) => Number(left.time || 0) - Number(right.time || 0));
 
       const maxSize = this.commonStore.log_cache_max_len || 200;
       if (normalizedLogs.length > maxSize) {
@@ -509,7 +544,7 @@ export default {
 
       const nextCache = [...this.localLogCache, ...appendedLogs];
       if (shouldSort) {
-        nextCache.sort((left, right) => left.time - right.time);
+        nextCache.sort((left, right) => Number(left.time || 0) - Number(right.time || 0));
       }
 
       const maxSize = this.commonStore.log_cache_max_len || 200;
@@ -573,19 +608,7 @@ export default {
         return this.logColorAnsiMap[leadingAnsi];
       }
 
-    refreshDisplay() {
-      const termElement = document.getElementById('term');
-      if (termElement) {
-        termElement.innerHTML = '';
-
-        if (this.localLogCache && this.localLogCache.length > 0) {
-          this.localLogCache.forEach(logItem => {
-            if (this.isLevelSelected(logItem.level)) {
-              this.printLog(logItem.data);
-            }
-          });
-        }
-      }
+      return this.logColorAnsiMap.default;
     },
 
     toggleAutoScroll() {
@@ -598,9 +621,13 @@ export default {
 
     toggleFullscreen() {
       const container = document.getElementById('console-wrapper');
+      if (!container) {
+        return;
+      }
+
       if (!document.fullscreenElement) {
-        container.requestFullscreen().catch(err => {
-          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+        container.requestFullscreen().catch((error) => {
+          console.error(`Error attempting to enable full-screen mode: ${error.message}`);
         });
       } else {
         document.exitFullscreen();
@@ -611,51 +638,92 @@ export default {
       this.isFullscreen = !!document.fullscreenElement;
     },
 
-    appendLogContent(element, log) {
-      const levelMatch = log.match(/\[(DBUG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/);
-      if (!levelMatch) {
-        element.innerText = `${log}`;
-        return;
-      }
-
-      const levelStart = levelMatch.index;
-      const levelEnd = levelStart + levelMatch[0].length;
-      const prefix = log.slice(0, levelStart).trimEnd();
-      const message = log.slice(levelEnd).trimStart();
-
-      const prefixSpan = document.createElement('span');
-      prefixSpan.className = 'console-log-prefix';
-      prefixSpan.innerText = prefix;
-
-      const levelSpan = document.createElement('span');
-      levelSpan.className = 'console-log-level';
-      levelSpan.innerText = levelMatch[0];
-
-      const messageSpan = document.createElement('span');
-      messageSpan.className = 'console-log-message';
-      messageSpan.innerText = message;
-
-      element.classList.add('console-log-line--structured');
-      element.appendChild(prefixSpan);
-      element.appendChild(levelSpan);
-      element.appendChild(messageSpan);
+    clearFilters() {
+      this.selectedLevels = [...this.logLevels];
+      this.selectedTags = [];
+      this.keyword = '';
+      this.tagSearch = '';
+      this.persistState();
+      this.queueFilterReload(0);
     },
 
-    printLog(log) {
-      let ele = document.getElementById('term')
-      if (!ele) {
+    queueFilterReload(delay = 300) {
+      if (this.suspendFilterSync) {
         return;
       }
 
-      let span = document.createElement('pre')
-      let style = this.logColorAnsiMap['default']
-      for (let key in this.logColorAnsiMap) {
-        if (log.startsWith(key)) {
-          style = this.logColorAnsiMap[key]
-          log = log.replace(key, '').replace('\u001b[0m', '')
-          break
+      if (this.filterSyncTimer) {
+        clearTimeout(this.filterSyncTimer);
+      }
+
+      this.filterSyncTimer = setTimeout(() => {
+        this.filterSyncTimer = null;
+        this.reloadLogSource();
+      }, delay);
+    },
+
+    async reloadLogSource() {
+      this.reloadSequence++;
+      const sequence = this.reloadSequence;
+      this.lastEventId = null;
+      this.teardownEventSource();
+
+      if (this.retryTimer) {
+        clearTimeout(this.retryTimer);
+        this.retryTimer = null;
+      }
+
+      this.retryAttempts = 0;
+      await Promise.all([
+        this.fetchLogHistory(sequence),
+        this.fetchTagOptions(sequence)
+      ]);
+
+      if (sequence === this.reloadSequence) {
+        this.connectSSE(sequence);
+      }
+    },
+
+    updateAvailableTags(logs) {
+      const nextTags = new Set(this.availableTags);
+
+      logs.forEach((log) => {
+        const tag = typeof log.tag === 'string' && log.tag.trim()
+          ? log.tag.trim()
+          : '';
+        if (tag) {
+          nextTags.add(tag);
         }
-        element.scrollTop = element.scrollHeight;
+      });
+
+      this.availableTags = [...nextTags].sort();
+    },
+
+    setLastEventIdFromLogs(logs) {
+      if (!logs.length) {
+        return;
+      }
+
+      const lastLog = logs[logs.length - 1];
+      if (lastLog.uuid) {
+        this.lastEventId = lastLog.uuid;
+      }
+    },
+
+    rebuildKnownLogIds() {
+      this.knownLogIds = new Set(this.localLogCache.map((entry) => entry.uuid));
+    },
+
+    scheduleAutoScroll() {
+      if (!this.autoScroll) {
+        return;
+      }
+
+      this.$nextTick(() => {
+        const element = this.$refs.term;
+        if (element) {
+          element.scrollTop = element.scrollHeight;
+        }
       });
     }
   }
@@ -738,11 +806,16 @@ export default {
   padding: 16px;
 }
 
-.fullscreen-btn {
-    color: rgba(255, 255, 255, 0.7) !important;
+#console-wrapper:fullscreen {
+  background-color: #1e1e1e;
+  padding: 20px;
 }
 
-:deep(.console-log-line) {
+.fullscreen-btn {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.console-log-line {
   display: block;
   margin: 0 0 2px;
   font-family:
@@ -752,59 +825,14 @@ export default {
   white-space: pre-wrap;
 }
 
-:deep(.console-log-line--structured) {
-  display: grid;
-  grid-template-columns: max-content max-content minmax(0, 1fr);
-  column-gap: 8px;
-  align-items: start;
-  white-space: normal;
-}
-
-.console-term--flush :deep(.console-log-line--structured) {
+.console-log-line--structured {
   display: block;
   white-space: pre-wrap;
 }
 
-.console-term--flush :deep(.console-log-prefix),
-.console-term--flush :deep(.console-log-level),
-.console-term--flush :deep(.console-log-message) {
-  display: inline;
-}
-
-.console-term--flush :deep(.console-log-prefix),
-.console-term--flush :deep(.console-log-level) {
-  margin-right: 4px;
-}
-
-:deep(.console-log-prefix),
-:deep(.console-log-level),
-:deep(.console-log-message) {
-  min-width: 0;
-  white-space: pre-wrap;
-}
-
-:deep(.console-log-level) {
-  font-variant-numeric: tabular-nums;
-}
-
-:deep(.console-log-message) {
-  overflow-wrap: anywhere;
-}
-
-@media (max-width: 768px) {
-  .console-term {
-    padding: 12px;
-  }
-
-  :deep(.console-log-line--structured) {
-    min-width: max-content;
-  }
-
-  :deep(.console-log-message) {
-    overflow-wrap: normal;
-    word-break: normal;
-    white-space: pre;
-  }
+.console-empty {
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 13px;
 }
 
 :deep(.fade-in) {
@@ -818,6 +846,16 @@ export default {
 
   to {
     opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .console-terminal {
+    padding: 12px;
+  }
+
+  .console-log-line {
+    white-space: pre;
   }
 }
 

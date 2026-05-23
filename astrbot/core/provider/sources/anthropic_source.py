@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-import aiofiles
+import anyio
 import httpx
 from anthropic import AsyncAnthropic
 from anthropic.types import (
@@ -13,7 +13,6 @@ from anthropic.types import (
     RawContentBlockDeltaEvent,
     RawContentBlockStartEvent,
     RawContentBlockStopEvent,
-    RawMessageDeltaEvent,
     RawMessageStartEvent,
     SignatureDelta,
     TextDelta,
@@ -37,14 +36,13 @@ from astrbot.core.utils.network_utils import (
     log_connection_failure,
 )
 
+DEFAULT_ANTHROPIC_MAX_TOKENS = 4096
+
 
 @register_provider_adapter(
     "anthropic_chat_completion",
     "Anthropic Claude API 提供商适配器",
 )
-DEFAULT_ANTHROPIC_MAX_TOKENS = 4096
-
-
 class ProviderAnthropic(Provider):
     IMAGE_PLACEHOLDER_TEXT = "[Image Attachment]"
     DEEPSEEK_PROVIDER_NAME = "deepseek"
@@ -277,7 +275,7 @@ class ProviderAnthropic(Provider):
             tools: The current tool set, used for Anthropic-specific overrides
         Returns:
             system_prompt: 系统提示内容
-            new_messages: 处理后的消息列表,去除系统提示
+            new_messages: 处理后的消息列表，去除系统提示
 
         """
         system_prompt = ""
@@ -361,20 +359,18 @@ class ProviderAnthropic(Provider):
                     formatted_content = tool_search_formatter(message["content"])
                     if formatted_content:
                         tool_result_content = formatted_content
-                new_messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": message["tool_call_id"],
-                                "content": tool_result_content,
-                            },
-                        ],
-                    },
+                tool_result_block = {
+                    "type": "tool_result",
+                    "tool_use_id": message["tool_call_id"],
+                    "content": tool_result_content,
+                }
+                last_message = new_messages[-1] if new_messages else None
+                last_content = (
+                    last_message.get("content")
+                    if isinstance(last_message, dict)
+                    else None
                 )
-
-                if (
+                can_append_to_previous_tool_results = (
                     last_message is not None
                     and last_message.get("role") == "user"
                     and isinstance(last_content, list)
@@ -383,6 +379,11 @@ class ProviderAnthropic(Provider):
                         isinstance(block, dict) and block.get("type") == "tool_result"
                         for block in last_content
                     )
+                )
+
+                if can_append_to_previous_tool_results and isinstance(
+                    last_content,
+                    list,
                 ):
                     last_content.append(tool_result_block)
                 else:
@@ -900,7 +901,7 @@ class ProviderAnthropic(Provider):
         audio_urls: list[str] | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
     ):
-        """组装上下文,支持文本和图片"""
+        """组装上下文，支持文本和图片"""
 
         async def resolve_image_url(image_url: str) -> dict | None:
             if not self._supports_image_input():
@@ -915,7 +916,7 @@ class ProviderAnthropic(Provider):
                 image_data, mime_type = await self.encode_image_bs64(image_url)
 
             if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空,将忽略｡")
+                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                 return None
 
             return {
@@ -933,7 +934,7 @@ class ProviderAnthropic(Provider):
 
         content = []
 
-        # 1. 用户原始发言(OpenAI 建议:用户发言在前)
+        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
         if text:
             content.append({"type": "text", "text": text})
         elif image_urls:
@@ -951,10 +952,10 @@ class ProviderAnthropic(Provider):
         elif audio_urls:
             content.append({"type": "text", "text": "[Audio]"})
         elif extra_user_content_parts:
-            # 如果只有额外内容块,也需要添加占位文本
+            # 如果只有额外内容块，也需要添加占位文本
             content.append({"type": "text", "text": " "})
 
-        # 2. 额外的内容块(系统提醒､指令等)
+        # 2. 额外的内容块（系统提醒、指令等）
         if extra_user_content_parts:
             for block in extra_user_content_parts:
                 if isinstance(block, TextPart):
@@ -978,7 +979,7 @@ class ProviderAnthropic(Provider):
             for _audio_path in audio_urls:
                 content.append({"type": "text", "text": "[Audio]"})
 
-        # 如果只有主文本且没有额外内容块和图片,返回简单格式以保持向后兼容
+        # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
             text
             and not extra_user_content_parts
@@ -993,7 +994,7 @@ class ProviderAnthropic(Provider):
         return {"role": "user", "content": content}
 
     async def encode_image_bs64(self, image_url: str) -> tuple[str, str]:
-        """将图片转换为 base64,同时检测实际 MIME 类型"""
+        """将图片转换为 base64，同时检测实际 MIME 类型"""
         if image_url.startswith("base64://"):
             raw_base64 = image_url.replace("base64://", "")
             try:
@@ -1002,12 +1003,10 @@ class ProviderAnthropic(Provider):
             except Exception:
                 mime_type = "image/jpeg"
             return f"data:{mime_type};base64,{raw_base64}", mime_type
-        async with aiofiles.open(image_url, "rb") as f:
-            image_bytes = await f.read()
-            mime_type = self._detect_image_mime_type(image_bytes)
-            image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
-            return f"data:{mime_type};base64,{image_bs64}", mime_type
-        return "", "image/jpeg"
+        image_bytes = await anyio.Path(image_url).read_bytes()
+        mime_type = self._detect_image_mime_type(image_bytes)
+        image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
+        return f"data:{mime_type};base64,{image_bs64}", mime_type
 
     def get_current_key(self) -> str:
         return self.chosen_api_key

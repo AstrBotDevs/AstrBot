@@ -66,6 +66,17 @@
       </transition-group>
     </div>
 
+    <ElicitationCard
+      v-else-if="
+        renderPart.type === 'part' &&
+        renderPart.part?.type === 'elicitation' && renderPart.part?.payload
+      "
+      :payload="renderPart.part.payload"
+      :is-dark="isDark"
+      :interactive="interactiveElicitation"
+      :submit-elicitation="submitElicitation"
+    />
+
     <!-- Text (Markdown) -->
     <div
       v-else-if="
@@ -198,6 +209,7 @@
 import type { PropType } from "vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { MarkdownRender } from "markstream-vue";
+import ElicitationCard from "./ElicitationCard.vue";
 import IPythonToolBlock from "./IPythonToolBlock.vue";
 import ToolCallItem from "./ToolCallItem.vue";
 import type { MessagePart } from "@/composables/useMessages";
@@ -218,6 +230,14 @@ const props = defineProps({
   downloadingFiles: {
     type: Object as PropType<Set<string>>,
     default: () => new Set<string>(),
+  },
+  interactiveElicitation: {
+    type: Boolean,
+    default: false,
+  },
+  submitElicitation: {
+    type: Function,
+    default: null,
   },
 });
 

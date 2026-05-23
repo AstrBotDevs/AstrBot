@@ -11,8 +11,17 @@
       </v-card-text>
     </v-card>
 
-    <div
-        style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 24px;">
+    <!-- Sidebar Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-menu</v-icon>
+        {{ tm("sidebar.title") }}
+      </v-card-title>
+      <v-card-subtitle>{{ tm("sidebar.customize.subtitle") }}</v-card-subtitle>
+      <v-card-text>
+        <SidebarCustomizer />
+      </v-card-text>
+    </v-card>
 
     <!-- Theme Card -->
     <v-card class="mb-4" variant="flat">
@@ -165,202 +174,176 @@
       </v-card-text>
     </v-card>
 
-            <v-list-item :subtitle="tm('sidebar.customize.subtitle')" :title="tm('sidebar.customize.title')">
-                <SidebarCustomizer></SidebarCustomizer>
-            </v-list-item>
-
-            <v-list-subheader>{{ tm('theme.title') }}</v-list-subheader>
-
-            <v-list-item :subtitle="tm('theme.subtitle')" :title="tm('theme.customize.title')">
-                <v-row class="mt-2" dense>
-                    <v-col cols="4" sm="3">
-                        <div class="d-flex align-center" style="gap: 4px">
-                            <v-text-field v-model="primaryColor" :label="tm('theme.customize.primary')" hide-details
-                                variant="outlined" density="compact" style="flex: 1" />
-                            <input v-model="primaryColor" type="color"
-                                style="width: 32px; height: 32px; border: none; border-radius: 4px; cursor: pointer; padding: 0; flex-shrink: 0" />
-                        </div>
-                    </v-col>
-                    <v-col cols="4" sm="3">
-                        <div class="d-flex align-center" style="gap: 4px">
-                            <v-text-field v-model="secondaryColor" :label="tm('theme.customize.secondary')" hide-details
-                                variant="outlined" density="compact" style="flex: 1" />
-                            <input v-model="secondaryColor" type="color"
-                                style="width: 32px; height: 32px; border: none; border-radius: 4px; cursor: pointer; padding: 0; flex-shrink: 0" />
-                        </div>
-                    </v-col>
-                    <v-col cols="4" sm="3">
-                        <div class="d-flex align-center" style="gap: 4px">
-                            <v-text-field v-model="infoColor" :label="tm('theme.customize.info')" hide-details
-                                variant="outlined" density="compact" style="flex: 1" />
-                            <input v-model="infoColor" type="color"
-                                style="width: 32px; height: 32px; border: none; border-radius: 4px; cursor: pointer; padding: 0; flex-shrink: 0" />
-                        </div>
-                    </v-col>
-                    <v-col cols="12">
-                        <div class="d-flex align-center flex-wrap" style="gap: 6px; margin-top: 4px">
-                            <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('theme.customize.presets')
-                                }}</span>
-                            <v-btn v-for="preset in colorPresets" :key="preset.name" size="small" variant="outlined"
-                                :style="{ borderColor: preset.primary, color: preset.primary }" class="preset-btn"
-                                @click="applyPreset(preset)">
-                                <span class="preset-dot" :style="{ backgroundColor: preset.primary }"></span>
-                                {{ tm('theme.customize.presetNames.' + preset.name) }}
-                            </v-btn>
-                        </div>
-                    </v-col>
-                    <v-col cols="12">
-                        <v-btn size="small" variant="tonal" color="primary" @click="resetThemeColors">
-                            <v-icon class="mr-2">mdi-restore</v-icon>
-                            {{ tm('theme.customize.reset') }}
-                        </v-btn>
-                    </v-col>
-                </v-row>
-            </v-list-item>
-
-            <v-list-subheader>{{ tm('system.title') }}</v-list-subheader>
-
-            <v-list-item :subtitle="tm('system.backup.subtitle')" :title="tm('system.backup.title')">
-                <v-btn style="margin-top: 16px;" color="primary" @click="openBackupDialog">
-                    <v-icon class="mr-2">mdi-backup-restore</v-icon>
-                    {{ tm('system.backup.button') }}
+    <!-- API Key Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-key</v-icon>
+        {{ tm("apiKey.manageTitle") }}
+        <v-tooltip location="top">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              icon
+              size="x-small"
+              variant="text"
+              class="ml-2"
+              :aria-label="tm('apiKey.docsLink')"
+              href="https://docs.astrbot.app/dev/openapi.html"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <v-icon size="18">mdi-help-circle-outline</v-icon>
+            </v-btn>
+          </template>
+          <span>{{ tm("apiKey.docsLink") }}</span>
+        </v-tooltip>
+      </v-card-title>
+      <v-card-subtitle>{{ tm("apiKey.subtitle") }}</v-card-subtitle>
+      <v-card-text>
+        <v-row density="compact">
+          <v-col cols="12" md="4">
+            <v-text-field
+              v-model="newApiKeyName"
+              :label="tm('apiKey.name')"
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
+          </v-col>
+          <v-col cols="12" md="3">
+            <v-select
+              v-model="newApiKeyExpiresInDays"
+              :items="apiKeyExpiryOptions"
+              :label="tm('apiKey.expiresInDays')"
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
+          </v-col>
+          <v-col cols="12" md="5" class="d-flex align-center">
+            <v-btn
+              color="primary"
+              :loading="apiKeyCreating"
+              @click="createApiKey"
+            >
+              <v-icon class="mr-2">mdi-key-plus</v-icon>
+              {{ tm("apiKey.create") }}
+            </v-btn>
+          </v-col>
+          <v-col v-if="newApiKeyExpiresInDays === 'permanent'" cols="12">
+            <v-alert type="warning" variant="tonal" density="comfortable">
+              {{ tm("apiKey.permanentWarning") }}
+            </v-alert>
+          </v-col>
+          <v-col cols="12">
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ tm("apiKey.scopes") }}
+            </div>
+            <v-chip-group v-model="newApiKeyScopes" multiple>
+              <v-chip
+                v-for="scope in availableScopes"
+                :key="scope.value"
+                :value="scope.value"
+                :color="
+                  newApiKeyScopes.includes(scope.value) ? 'primary' : undefined
+                "
+                :variant="
+                  newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'
+                "
+              >
+                {{ scope.label }}
+              </v-chip>
+            </v-chip-group>
+          </v-col>
+          <v-col v-if="createdApiKeyPlaintext" cols="12">
+            <v-alert type="warning" variant="tonal">
+              <div class="d-flex align-center justify-space-between flex-wrap">
+                <span>{{ tm("apiKey.plaintextHint") }}</span>
+                <v-btn
+                  size="small"
+                  variant="text"
+                  color="primary"
+                  @click="copyCreatedApiKey"
+                >
+                  <v-icon class="mr-1">mdi-content-copy</v-icon>
+                  {{ tm("apiKey.copy") }}
                 </v-btn>
-            </v-list-item>
-
-            <v-list-item :subtitle="tm('system.restart.subtitle')" :title="tm('system.restart.title')">
-                <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">{{ tm('system.restart.button')
-                }}</v-btn>
-            </v-list-item>
-
-            <v-list-item class="py-2">
-                <StorageCleanupPanel />
-            </v-list-item>
-
-            <v-list-subheader>{{ tm('apiKey.title') }}</v-list-subheader>
-
-            <v-list-item :subtitle="tm('apiKey.subtitle')">
-                <template #title>
-                    <div class="d-flex align-center">
-                        <span>{{ tm('apiKey.manageTitle') }}</span>
-                        <v-tooltip location="top">
-                            <template #activator="{ props }">
-                                <v-btn v-bind="props" icon size="x-small" variant="text" class="ml-2"
-                                    :aria-label="tm('apiKey.docsLink')" href="https://docs.astrbot.app/dev/openapi.html"
-                                    target="_blank" rel="noopener noreferrer">
-                                    <v-icon size="18">mdi-help-circle-outline</v-icon>
-                                </v-btn>
-                            </template>
-                            <span>{{ tm('apiKey.docsLink') }}</span>
-                        </v-tooltip>
-                    </div>
-                </template>
-                <v-row class="mt-2" dense>
-                    <v-col cols="12" md="4">
-                        <v-text-field v-model="newApiKeyName" :label="tm('apiKey.name')" variant="outlined"
-                            density="compact" hide-details />
-                    </v-col>
-                    <v-col cols="12" md="3">
-                        <v-select v-model="newApiKeyExpiresInDays" :items="apiKeyExpiryOptions"
-                            :label="tm('apiKey.expiresInDays')" variant="outlined" density="compact" hide-details />
-                    </v-col>
-                    <v-col v-if="newApiKeyExpiresInDays === 'permanent'" cols="12">
-                        <v-alert type="warning" variant="tonal" density="comfortable">
-                            {{ tm('apiKey.permanentWarning') }}
-                        </v-alert>
-                    </v-col>
-                    <v-col cols="12" md="5" class="d-flex align-center">
-                        <v-btn color="primary" :loading="apiKeyCreating" @click="createApiKey">
-                            <v-icon class="mr-2">mdi-key-plus</v-icon>
-                            {{ tm('apiKey.create') }}
-                        </v-btn>
-                    </v-col>
-
-                    <v-col cols="12">
-                        <div class="text-caption text-medium-emphasis mb-1">{{ tm('apiKey.scopes') }}</div>
-                        <v-chip-group v-model="newApiKeyScopes" multiple>
-                            <v-chip v-for="scope in availableScopes" :key="scope.value" :value="scope.value"
-                                :color="newApiKeyScopes.includes(scope.value) ? 'primary' : undefined"
-                                :variant="newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'">
-                                {{ scope.label }}
-                            </v-chip>
-                        </v-chip-group>
-                    </v-col>
-
-                    <v-col v-if="createdApiKeyPlaintext" cols="12">
-                        <v-alert type="warning" variant="tonal">
-                            <div class="d-flex align-center justify-space-between flex-wrap">
-                                <span>{{ tm('apiKey.plaintextHint') }}</span>
-                                <v-btn size="small" variant="text" color="primary" @click="copyCreatedApiKey">
-                                    <v-icon class="mr-1">mdi-content-copy</v-icon>{{ tm('apiKey.copy') }}
-                                </v-btn>
-                            </div>
-                            <code style="word-break: break-all;">{{ createdApiKeyPlaintext }}</code>
-                        </v-alert>
-                    </v-col>
-
-                    <v-col cols="12">
-                        <v-table density="compact">
-                            <thead>
-                                <tr>
-                                    <th>{{ tm('apiKey.table.id') }}</th>
-                                    <th>{{ tm('apiKey.table.name') }}</th>
-                                    <th>{{ tm('apiKey.table.prefix') }}</th>
-                                    <th>{{ tm('apiKey.table.scopes') }}</th>
-                                    <th>{{ tm('apiKey.table.status') }}</th>
-                                    <th>{{ tm('apiKey.table.lastUsed') }}</th>
-                                    <th>{{ tm('apiKey.table.createdAt') }}</th>
-                                    <th>{{ tm('apiKey.table.actions') }}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="item in apiKeys" :key="item.key_id">
-                                    <td>{{ item.key_id }}</td>
-                                    <td>{{ item.name }}</td>
-                                    <td><code>{{ item.key_prefix }}</code></td>
-                                    <td>{{ (item.scopes || []).join(', ') }}</td>
-                                    <td>
-                                        <v-chip size="small"
-                                            :color="item.is_revoked || item.is_expired ? 'error' : 'success'"
-                                            variant="tonal">
-                                            {{ item.is_revoked || item.is_expired ? tm('apiKey.status.inactive') :
-                                                tm('apiKey.status.active') }}
-                                        </v-chip>
-                                    </td>
-                                    <td>{{ formatDate(item.last_used_at) }}</td>
-                                    <td>{{ formatDate(item.created_at) }}</td>
-                                    <td>
-                                        <v-btn v-if="!item.is_revoked" size="x-small" color="warning" variant="tonal"
-                                            class="mr-2" @click="revokeApiKey(item.key_id)">
-                                            {{ tm('apiKey.revoke') }}
-                                        </v-btn>
-                                        <v-btn size="x-small" color="error" variant="tonal"
-                                            @click="deleteApiKey(item.key_id)">
-                                            {{ tm('apiKey.delete') }}
-                                        </v-btn>
-                                    </td>
-                                </tr>
-                                <tr v-if="apiKeys.length === 0">
-                                    <td colspan="7" class="text-center text-medium-emphasis">
-                                        {{ tm('apiKey.empty') }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </v-table>
-                    </v-col>
-                </v-row>
-            </v-list-item>
-        </v-list>
-
-        <v-list-item :subtitle="tm('system.migration.subtitle')" :title="tm('system.migration.title')">
-            <v-btn style="margin-top: 16px;" color="primary" @click="startMigration">{{ tm('system.migration.button')
-            }}</v-btn>
-        </v-list-item>
-
-    </div>
-
-    <WaitingForRestart ref="wfr"></WaitingForRestart>
-    <MigrationDialog ref="migrationDialog"></MigrationDialog>
-    <BackupDialog ref="backupDialog"></BackupDialog>
+              </div>
+              <code style="word-break: break-all">{{
+                createdApiKeyPlaintext
+              }}</code>
+            </v-alert>
+          </v-col>
+          <v-col cols="12">
+            <v-table density="compact">
+              <thead>
+                <tr>
+                  <th>{{ tm("apiKey.table.name") }}</th>
+                  <th>{{ tm("apiKey.table.prefix") }}</th>
+                  <th>{{ tm("apiKey.table.scopes") }}</th>
+                  <th>{{ tm("apiKey.table.status") }}</th>
+                  <th>{{ tm("apiKey.table.lastUsed") }}</th>
+                  <th>{{ tm("apiKey.table.createdAt") }}</th>
+                  <th>{{ tm("apiKey.table.actions") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in apiKeys" :key="item.key_id">
+                  <td>{{ item.name }}</td>
+                  <td>
+                    <code>{{ item.key_prefix }}</code>
+                  </td>
+                  <td>{{ (item.scopes || []).join(", ") }}</td>
+                  <td>
+                    <v-chip
+                      size="small"
+                      :color="
+                        item.is_revoked || item.is_expired ? 'error' : 'success'
+                      "
+                      variant="tonal"
+                    >
+                      {{
+                        item.is_revoked || item.is_expired
+                          ? tm("apiKey.status.inactive")
+                          : tm("apiKey.status.active")
+                      }}
+                    </v-chip>
+                  </td>
+                  <td>{{ formatDate(item.last_used_at) }}</td>
+                  <td>{{ formatDate(item.created_at) }}</td>
+                  <td>
+                    <v-btn
+                      v-if="!item.is_revoked"
+                      size="x-small"
+                      color="warning"
+                      variant="tonal"
+                      class="mr-2"
+                      @click="revokeApiKey(item.key_id)"
+                    >
+                      {{ tm("apiKey.revoke") }}
+                    </v-btn>
+                    <v-btn
+                      size="x-small"
+                      color="error"
+                      variant="tonal"
+                      @click="deleteApiKey(item.key_id)"
+                    >
+                      {{ tm("apiKey.delete") }}
+                    </v-btn>
+                  </td>
+                </tr>
+                <tr v-if="apiKeys.length === 0">
+                  <td colspan="7" class="text-center text-medium-emphasis">
+                    {{ tm("apiKey.empty") }}
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+          </v-col>
+        </v-row>
+      </v-card-text>
+    </v-card>
+  </div>
 
   <WaitingForRestart ref="wfr" />
   <MigrationDialog ref="migrationDialog" />
@@ -396,19 +379,6 @@ import {
   ApiKeyListResponse,
 } from "@/types/api";
 
-interface WfrHandle {
-  check: (initialStartTime?: number | null) => void | Promise<void>;
-  stop?: () => void;
-}
-
-interface MigrationDialogHandle {
-  open: () => Promise<{ success: boolean; message: string }>;
-}
-
-interface BackupDialogHandle {
-  open: () => void;
-}
-
 const { tm } = useModuleI18n("features/settings");
 const toastStore = useToastStore();
 const theme = useTheme();
@@ -439,64 +409,129 @@ const getStoredColor = (key: string, fallback: string) => {
   return stored || fallback;
 };
 
-const primaryColor = ref(getStoredColor('themePrimary', PurpleTheme.colors.primary));
-const secondaryColor = ref(getStoredColor('themeSecondary', PurpleTheme.colors.secondary));
-const infoColor = ref(getStoredColor('themeInfo', PurpleTheme.colors.info));
+const primaryColor = ref(
+  getStoredColor("themePrimary", BlueBusinessLightTheme.colors.primary),
+);
+const secondaryColor = ref(
+  getStoredColor("themeSecondary", BlueBusinessLightTheme.colors.secondary),
+);
 
-const colorPresets = [
-    { name: 'Indigo', primary: '#6366F1', secondary: '#6366F1', info: '#818CF8' },
-    { name: 'Violet', primary: '#8B5CF6', secondary: '#8B5CF6', info: '#A78BFA' },
-    { name: 'Rose', primary: '#F43F5E', secondary: '#F43F5E', info: '#FB7185' },
-    { name: 'Pink', primary: '#F472B6', secondary: '#F472B6', info: '#F9A8D4' },
-    { name: 'Orange', primary: '#F97316', secondary: '#F97316', info: '#FB923C' },
-    { name: 'Emerald', primary: '#10B981', secondary: '#10B981', info: '#34D399' },
-    { name: 'Sky', primary: '#0EA5E9', secondary: '#0EA5E9', info: '#38BDF8' },
-    { name: 'Slate', primary: '#64748B', secondary: '#64748B', info: '#94A3B8' },
-    { name: 'Zinc', primary: '#52525B', secondary: '#52525B', info: '#71717A' },
+// Theme presets based on MD3 color system
+const themePresets = [
+  {
+    id: "blue-business",
+    name: "活力商务蓝",
+    nameEn: "Business Blue",
+    primary: "#005FB0",
+    secondary: "#565E71",
+    tertiary: "#006B5B",
+  },
+  {
+    id: "purple-default",
+    name: "优雅紫",
+    nameEn: "Elegant Purple",
+    primary: "#6750A4",
+    secondary: "#625B71",
+    tertiary: "#7D5260",
+  },
+  {
+    id: "teal-fresh",
+    name: "自然清新绿",
+    nameEn: "Nature Green",
+    primary: "#386A20",
+    secondary: "#55624C",
+    tertiary: "#19686A",
+  },
+  {
+    id: "orange-warm",
+    name: "温暖橙棕",
+    nameEn: "Warm Orange",
+    primary: "#9C4323",
+    secondary: "#77574E",
+    tertiary: "#6C5D2F",
+  },
+  {
+    id: "ocean-breeze",
+    name: "海洋清风",
+    nameEn: "Ocean Breeze",
+    primary: "#0077B6",
+    secondary: "#4A5568",
+    tertiary: "#00B4D8",
+  },
+  {
+    id: "rose-romantic",
+    name: "浪漫玫瑰",
+    nameEn: "Romantic Rose",
+    primary: "#BE185D",
+    secondary: "#9F1239",
+    tertiary: "#DB2777",
+  },
 ];
 
-const applyPreset = (preset) => {
-    primaryColor.value = preset.primary;
-    secondaryColor.value = preset.secondary;
-    infoColor.value = preset.info;
+// Get stored preset or default to blue-business name
+const selectedThemePreset = ref(
+  localStorage.getItem("themePreset") || themePresets[0].name,
+);
+
+// Simple array for dropdown display
+const presetOptions = themePresets.map((p) => p.name);
+
+const applyThemePreset = (presetName: string) => {
+  const preset = themePresets.find((p) => p.name === presetName);
+  if (!preset) return;
+
+  // Store the preset selection (store by name for display consistency)
+  localStorage.setItem("themePreset", presetName);
+  selectedThemePreset.value = presetName;
+
+  // Update primary and secondary colors
+  primaryColor.value = preset.primary;
+  secondaryColor.value = preset.secondary;
+  localStorage.setItem("themePrimary", preset.primary);
+  localStorage.setItem("themeSecondary", preset.secondary);
+
+  // Apply to themes
+  applyThemeColors(preset.primary, preset.secondary);
+
+  toastStore.add({
+    message: tm("theme.customize.presetApplied") || "主题已应用",
+    color: "success",
+  });
 };
 
 const resolveThemes = () => {
-  return theme?.global?.themes?.value ?? null;
+  if (theme?.themes?.value) return theme.themes.value;
+  if (theme?.global?.themes?.value) return theme.global.themes.value;
+  return null;
 };
 
-const applyThemeColors = (primary, secondary, info) => {
-    const themes = resolveThemes();
-    if (!themes) return;
-    ['PurpleTheme', 'PurpleThemeDark'].forEach((name) => {
-        const themeDef = themes[name];
-        if (!themeDef?.colors) return;
-        if (primary) themeDef.colors.primary = primary;
-        if (secondary) themeDef.colors.secondary = secondary;
-        if (info) themeDef.colors.info = info;
-        if (primary && themeDef.colors.darkprimary) themeDef.colors.darkprimary = primary;
-        if (secondary && themeDef.colors.darksecondary) themeDef.colors.darksecondary = secondary;
-    });
+const applyThemeColors = (primary: string, secondary: string) => {
+  const themes = resolveThemes();
+  if (!themes) return;
+  [LIGHT_THEME_NAME, DARK_THEME_NAME].forEach((name) => {
+    const themeDef = themes[name];
+    if (!themeDef?.colors) return;
+    if (primary) themeDef.colors.primary = primary;
+    if (secondary) themeDef.colors.secondary = secondary;
+    if (primary && themeDef.colors.darkprimary)
+      themeDef.colors.darkprimary = primary;
+    if (secondary && themeDef.colors.darksecondary)
+      themeDef.colors.darksecondary = secondary;
+  });
 };
 
-applyThemeColors(primaryColor.value, secondaryColor.value, infoColor.value);
+applyThemeColors(primaryColor.value, secondaryColor.value);
 
 watch(primaryColor, (value) => {
-    if (!value) return;
-    localStorage.setItem('themePrimary', value);
-    applyThemeColors(value, secondaryColor.value, infoColor.value);
+  if (!value) return;
+  localStorage.setItem("themePrimary", value);
+  applyThemeColors(value, secondaryColor.value);
 });
 
 watch(secondaryColor, (value) => {
-    if (!value) return;
-    localStorage.setItem('themeSecondary', value);
-    applyThemeColors(primaryColor.value, value, infoColor.value);
-});
-
-watch(infoColor, (value) => {
-    if (!value) return;
-    localStorage.setItem('themeInfo', value);
-    applyThemeColors(primaryColor.value, secondaryColor.value, value);
+  if (!value) return;
+  localStorage.setItem("themeSecondary", value);
+  applyThemeColors(primaryColor.value, value);
 });
 
 const resetThemeColors = () => {
@@ -507,15 +542,15 @@ const resetThemeColors = () => {
   applyThemeColors(primaryColor.value, secondaryColor.value);
 };
 
-const wfr = ref<WfrHandle | null>(null);
-const migrationDialog = ref<MigrationDialogHandle | null>(null);
-const backupDialog = ref<BackupDialogHandle | null>(null);
+const wfr = ref(null);
+const migrationDialog = ref(null);
+const backupDialog = ref(null);
 const apiKeys = ref<ApiKey[]>([]);
 const apiKeyCreating = ref(false);
-const newApiKeyName = ref('');
-const newApiKeyExpiresInDays = ref(30);
-const newApiKeyScopes = ref(['chat', 'config', 'file', 'im', 'chat_widget', 'stats']);
-const createdApiKeyPlaintext = ref('');
+const newApiKeyName = ref("");
+const newApiKeyExpiresInDays = ref<ApiKeyExpiresDays>(30);
+const newApiKeyScopes = ref(["chat", "config", "file", "im", "chat_widget", "stats"]);
+const createdApiKeyPlaintext = ref("");
 const apiKeyExpiryOptions = computed(() => [
   { title: tm("apiKey.expiryOptions.day1"), value: 1 },
   { title: tm("apiKey.expiryOptions.day7"), value: 7 },
@@ -525,18 +560,15 @@ const apiKeyExpiryOptions = computed(() => [
 ]);
 
 const availableScopes = [
-    { value: 'chat', label: 'chat' },
-    { value: 'config', label: 'config' },
-    { value: 'file', label: 'file' },
-    { value: 'im', label: 'im' },
-    { value: 'chat_widget', label: 'chat_widget' },
-    { value: 'stats', label: 'stats'},
+  { value: "chat", label: "chat" },
+  { value: "config", label: "config" },
+  { value: "file", label: "file" },
+  { value: "im", label: "im" },
+  { value: "chat_widget", label: "chat_widget" },
+  { value: "stats", label: "stats" },
 ];
 
-const showToast = (
-  message: string,
-  color: "success" | "error" | "warning" = "success",
-) => {
+const showToast = (message: string, color = "success") => {
   toastStore.add({
     message,
     color,
@@ -561,9 +593,8 @@ const loadApiKeys = async () => {
     apiKeys.value = res.data.data;
   } catch (e: unknown) {
     if (e instanceof AxiosError) {
-      const data = e.response?.data as { message?: string } | undefined;
       showToast(
-        data?.message || tm("apiKey.messages.loadFailed"),
+        e?.response?.data?.message || tm("apiKey.messages.loadFailed"),
         "error",
       );
     } else {
@@ -666,9 +697,8 @@ const createApiKey = async () => {
     await loadApiKeys();
   } catch (e: unknown) {
     if (e instanceof AxiosError) {
-      const data = e.response?.data as { message?: string } | undefined;
       showToast(
-        data?.message || tm("apiKey.messages.createFailed"),
+        e?.response?.data?.message || tm("apiKey.messages.createFailed"),
         "error",
       );
     } else {
@@ -696,9 +726,8 @@ const revokeApiKey = async (keyId: string) => {
     await loadApiKeys();
   } catch (e: unknown) {
     if (e instanceof AxiosError) {
-      const data = e.response?.data as { message?: string } | undefined;
       showToast(
-        data?.message || tm("apiKey.messages.revokeFailed"),
+        e?.response?.data?.message || tm("apiKey.messages.revokeFailed"),
         "error",
       );
     } else {
@@ -724,9 +753,8 @@ const deleteApiKey = async (keyId: string) => {
     await loadApiKeys();
   } catch (e: unknown) {
     if (e instanceof AxiosError) {
-      const data = e.response?.data as { message?: string } | undefined;
       showToast(
-        data?.message || tm("apiKey.messages.deleteFailed"),
+        e?.response?.data?.message || tm("apiKey.messages.deleteFailed"),
         "error",
       );
     } else {
@@ -741,9 +769,8 @@ const restartAstrBot = async () => {
     await restartAstrBotRuntime(wfr.value);
   } catch (error: unknown) {
     if (error instanceof AxiosError) {
-      const data = error.response?.data as { message?: string } | undefined;
       showToast(
-        data?.message || tm("apiKey.messages.restartFailed"),
+        error?.response?.data?.message || tm("apiKey.messages.restartFailed"),
         "error",
       );
     } else {
@@ -770,37 +797,12 @@ const startMigration = async () => {
 };
 
 const openBackupDialog = () => {
-    if (backupDialog.value) {
-        backupDialog.value.open();
-    }
-}
-
-const resetThemeColors = () => {
-    localStorage.removeItem('themePrimary');
-    localStorage.removeItem('themeSecondary');
-    localStorage.removeItem('themeInfo');
-    primaryColor.value = PurpleTheme.colors.primary;
-    secondaryColor.value = PurpleTheme.colors.secondary;
-    infoColor.value = PurpleTheme.colors.info;
+  if (backupDialog.value) {
+    backupDialog.value.open();
+  }
 };
 
 onMounted(() => {
   loadApiKeys();
 });
 </script>
-
-<style scoped>
-.preset-btn {
-    font-weight: 500;
-    letter-spacing: 0;
-    text-transform: none;
-}
-
-.preset-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-right: 6px;
-    flex-shrink: 0;
-}
-</style>

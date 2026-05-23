@@ -1,4 +1,16 @@
-"""MCP client
+"""
+MCP client - DEPRECATED
+
+.. deprecated::
+    This module has been moved to :mod:`astrbot._internal.mcp`.
+    Please update your imports accordingly.
+
+    Old import (deprecated):
+        from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+
+    New import:
+        from astrbot._internal.mcp import MCPClient, MCPTool
+
 This file exists solely for backward compatibility and will be removed in a future version.
 """
 
@@ -6,10 +18,13 @@ import asyncio
 import copy
 import logging
 import os
+import re
 import sys
+import warnings
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Any, Generic
+from urllib.parse import quote
 
 from tenacity import (
     before_sleep_log,
@@ -19,24 +34,54 @@ from tenacity import (
     wait_exponential,
 )
 
-from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.mcp_prompt_bridge import build_mcp_prompt_tool_names
+from astrbot.core.agent.run_context import ContextWrapper, TContext
 from astrbot.core.utils.log_pipe import LogPipe
 
+from .mcp_elicitation_registry import cleanup_elicitation_periodically
 from .mcp_oauth import create_mcp_http_auth, has_mcp_oauth_config
-from .run_context import TContext
+from .mcp_resource_bridge import build_mcp_resource_tool_names
+from .mcp_stdio_client import tolerant_stdio_client
+from .mcp_subcapability_bridge import (
+    MCPClientSubCapabilityBridge,
+    normalize_mcp_server_config,
+)
 from .tool import FunctionTool
 
 logger = logging.getLogger("astrbot")
 
+_STDIO_ALLOWLIST_ENV = "ASTRBOT_MCP_STDIO_ALLOWLIST"
+_DEFAULT_STDIO_COMMAND_ALLOWLIST = {
+    "uv",
+    "uvx",
+    "python",
+    "python3",
+    "py",
+    "node",
+    "npx",
+    "pnpm",
+    "bun",
+    "deno",
+    "docker",
+}
+_DENIED_STDIO_COMMANDS = {"cmd", "powershell", "pwsh", "sh", "bash", "wsl"}
+_DENIED_DOCKER_ARGS = {"--privileged"}
+_JS_INLINE_CODE_FLAGS = {"-e", "--eval", "-p", "--print"}
+_SHELL_META_RE = re.compile(r"[;&|<>`$]")
+
+warnings.warn(
+    "astrbot.core.agent.mcp_client has been moved to astrbot._internal.mcp. "
+    "Please update your imports.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 try:
     import anyio
     import mcp
     from mcp.client.sse import sse_client
-
-    _install_mcp_noise_filters()
 except (ModuleNotFoundError, ImportError):
     logger.warning(
-        "Warning: Missing 'mcp' dependency, MCP services will be unavailable.",
+        "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
     )
 
 try:
@@ -45,6 +90,7 @@ except (ModuleNotFoundError, ImportError):
     logger.warning(
         "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
     )
+
 
 try:
     import httpx as _httpx
@@ -97,17 +143,31 @@ def _prepare_config(config: dict) -> dict:
     if config.get("mcpServers"):
         first_key = next(iter(config["mcpServers"]))
         config = config["mcpServers"][first_key]
+    config = normalize_mcp_server_config(config)
     config.pop("active", None)
+    config.pop("client_capabilities", None)
+    config.pop("provider", None)
     return config
 
 
+def _prepare_stdio_env(config: dict) -> dict:
+    """Preserve Windows executable resolution for stdio subprocesses."""
+    if sys.platform != "win32":
+        return config
+
+    pathext = os.environ.get("PATHEXT")
+    if not pathext:
+        return config
+
+    prepared = config.copy()
+    env = dict(prepared.get("env") or {})
+    env.setdefault("PATHEXT", pathext)
+    prepared["env"] = env
+    return prepared
+
+
 def _normalize_stdio_command_name(command: str) -> str:
-    command = command.strip()
-    if "\\" in command:
-        command_name = PureWindowsPath(command).name
-    else:
-        command_name = Path(command).name
-    command_name = command_name.lower()
+    command_name = os.path.basename(command.strip().replace("\\", "/")).lower()
     for suffix in (".exe", ".cmd", ".bat"):
         if command_name.endswith(suffix):
             return command_name[: -len(suffix)]
@@ -115,20 +175,14 @@ def _normalize_stdio_command_name(command: str) -> str:
 
 
 def _get_stdio_command_allowlist() -> set[str]:
-    allowed = set(_DEFAULT_STDIO_COMMAND_ALLOWLIST)
     configured = os.environ.get(_STDIO_ALLOWLIST_ENV, "")
     if configured.strip():
-        allowed = {
+        return {
             _normalize_stdio_command_name(item)
             for item in configured.split(",")
             if item.strip()
         }
-    return allowed
-
-
-def _is_stdio_config(config: dict) -> bool:
-    cfg = _prepare_config(config.copy())
-    return "url" not in cfg
+    return set(_DEFAULT_STDIO_COMMAND_ALLOWLIST)
 
 
 def _validate_stdio_args(command_name: str, args: object) -> None:
@@ -182,7 +236,7 @@ def _validate_stdio_args(command_name: str, args: object) -> None:
 
 
 def validate_mcp_stdio_config(config: dict) -> None:
-    """Validate stdio MCP config before any subprocess can be spawned."""
+    """Validate stdio MCP config before a subprocess can be spawned."""
     cfg = _prepare_config(config.copy())
     if "url" in cfg:
         return
@@ -217,81 +271,8 @@ def validate_mcp_stdio_config(config: dict) -> None:
         raise ValueError("MCP stdio env keys and values must be strings.")
 
 
-def _get_certifi_ca_bundle() -> str | None:
-    """Try to locate the certifi CA bundle for SSL_CERT_FILE."""
-    try:
-        import certifi
-
-        return certifi.where()
-    except ImportError:
-        pass
-    # Fallback: look for certifi in common locations
-    for candidate in (
-        os.path.join(
-            os.path.dirname(sys.executable),
-            "Lib",
-            "site-packages",
-            "certifi",
-            "cacert.pem",
-        ),
-        os.path.join(
-            os.path.dirname(sys.executable),
-            "..",
-            "Lib",
-            "site-packages",
-            "certifi",
-            "cacert.pem",
-        ),
-    ):
-        if os.path.isfile(candidate):
-            return candidate
-    return None
-
-
-def _prepare_stdio_env(config: dict) -> dict:
-    """Prepare environment variables for stdio subprocesses.
-
-    On Windows:
-    - Merges system environment variables (case-insensitive handling).
-    - For uv/uvx commands, sets SSL_CERT_FILE from certifi to avoid
-      ``invalid peer certificate: UnknownIssuer`` errors caused by
-      uv's bundled TLS not trusting the system certificate store.
-    """
-    prepared = config.copy()
-    env = dict(prepared.get("env") or {})
-    env = _merge_environment_variables(env)
-
-    if sys.platform == "win32":
-        command_name = _normalize_stdio_command_name(config.get("command", ""))
-        if command_name in ("uv", "uvx") and "SSL_CERT_FILE" not in env:
-            ca_bundle = _get_certifi_ca_bundle()
-            if ca_bundle:
-                env["SSL_CERT_FILE"] = ca_bundle
-
-    prepared["env"] = env
-    return prepared
-
-
-def _merge_environment_variables(env: dict) -> dict:
-    """合并环境变量，处理Windows不区分大小写的情况"""
-    merged = env.copy()
-
-    # 将用户环境变量转换为统一的大小写形式便于比较
-    user_keys_lower = {k.lower(): k for k in merged.keys()}
-
-    for sys_key, sys_value in os.environ.items():
-        sys_key_lower = sys_key.lower()
-        if sys_key_lower not in user_keys_lower:
-            # 使用系统环境变量中的原始大小写
-            merged[sys_key] = sys_value
-
-    return merged
-
-
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     """Quick test MCP server connectivity"""
-    import json
-
     import aiohttp
 
     cfg = _prepare_config(config.copy())
@@ -299,40 +280,6 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     url = cfg["url"]
     headers = cfg.get("headers", {})
     timeout = cfg.get("timeout", 10)
-
-    async def _format_http_error(response: aiohttp.ClientResponse) -> str:
-        reason = response.reason or ""
-        detail = ""
-        try:
-            raw = await response.content.read(2048)
-            if raw:
-                text = raw.decode(errors="replace").strip()
-                if text:
-                    try:
-                        data = json.loads(text)
-                    except Exception:
-                        detail = text
-                    else:
-                        if isinstance(data, dict):
-                            msg = (
-                                data.get("message")
-                                or data.get("error")
-                                or data.get("detail")
-                            )
-                            code = data.get("code")
-                            if msg is not None:
-                                detail = (
-                                    f"{code}: {msg}" if code is not None else str(msg)
-                                )
-                            else:
-                                detail = text
-                        else:
-                            detail = text
-        except Exception:
-            detail = ""
-        if detail:
-            return f"HTTP {response.status}: {reason} ({detail})"
-        return f"HTTP {response.status}: {reason}"
 
     try:
         if "transport" in cfg:
@@ -342,14 +289,14 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         else:
             raise Exception("MCP connection config missing transport or type field")
 
-        async with aiohttp.ClientSession(trust_env=True) as session:
+        async with aiohttp.ClientSession() as session:
             if transport_type == "streamable_http":
                 test_payload = {
                     "jsonrpc": "2.0",
                     "method": "initialize",
                     "id": 0,
                     "params": {
-                        "protocolVersion": mcp.types.LATEST_PROTOCOL_VERSION,
+                        "protocolVersion": "2024-11-05",
                         "capabilities": {},
                         "clientInfo": {"name": "test-client", "version": "1.2.3"},
                     },
@@ -366,7 +313,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                 ) as response:
                     if response.status == 200:
                         return True, ""
-                    return False, await _format_http_error(response)
+                    return False, f"HTTP {response.status}: {response.reason}"
             else:
                 async with session.get(
                     url,
@@ -378,9 +325,9 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                 ) as response:
                     if response.status == 200:
                         return True, ""
-                    return False, await _format_http_error(response)
+                    return False, f"HTTP {response.status}: {response.reason}"
 
-    except TimeoutError:
+    except asyncio.TimeoutError:
         return False, f"Connection timeout: {timeout} seconds"
     except Exception as e:
         return False, f"{e!s}"
@@ -399,47 +346,17 @@ _NONSTANDARD_TYPE_MAP: dict[str, str] = {
 
 
 def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    """Normalize common non-standard MCP JSON Schema variants.
+    """Normalize common non-standard MCP JSON Schema variants."""
 
-    Some MCP servers incorrectly mark required properties with a boolean
-    `required: true` on the property schema itself. Draft 2020-12 requires the
-    parent object to declare `required` as an array of property names instead.
-    We lift those booleans to the parent object so the schema remains usable
-    without disabling validation entirely.
+    def _normalize(node: Any) -> Any:
+        if isinstance(node, list):
+            return [_normalize(item) for item in node]
 
-    Also normalizes non-standard type names (e.g. ``"int"`` → ``"integer"``,
-    ``"str"`` → ``"string"``) that some MCP servers emit.
-    """
+        if not isinstance(node, dict):
+            return node
 
-def _sanitize_mcp_arguments(
-    value: Any,
-    schema: dict[str, Any] | None = None,
-    *,
-    required: bool = False,
-) -> Any:
-    """Remove empty optional payload values before sending to MCP tools."""
-    if value is None:
-        return value if required else _EMPTY_MCP_ARGUMENT
+        normalized = {key: _normalize(value) for key, value in node.items()}
 
-    if isinstance(value, str):
-        return value if value != "" or required else _EMPTY_MCP_ARGUMENT
-
-    if isinstance(value, list):
-        if not value:
-            return value if required else _EMPTY_MCP_ARGUMENT
-        cleaned_items = []
-        item_schema = schema.get("items") if isinstance(schema, dict) else None
-        for item in value:
-            cleaned_item = _sanitize_mcp_arguments(item, item_schema)
-            # Preserve list positions. If sanitizing an item would remove it,
-            # keep the original item instead of reindexing the payload.
-            if cleaned_item is _EMPTY_MCP_ARGUMENT:
-                cleaned_items.append(item)
-            else:
-                cleaned_items.append(cleaned_item)
-        return cleaned_items
-
-        # Normalize non-standard type names
         type_val = normalized.get("type")
         if isinstance(type_val, str) and type_val in _NONSTANDARD_TYPE_MAP:
             normalized["type"] = _NONSTANDARD_TYPE_MAP[type_val]
@@ -457,10 +374,92 @@ def _sanitize_mcp_arguments(
             required = normalized.get("required")
             required_list = required[:] if isinstance(required, list) else []
 
+            for prop_name, prop_schema in properties.items():
+                if not isinstance(prop_schema, dict):
+                    continue
+
+                original_prop_schema = original_properties.get(prop_name, {})
+                prop_required = (
+                    original_prop_schema.get("required")
+                    if isinstance(original_prop_schema, dict)
+                    else None
+                )
+                if isinstance(prop_required, bool):
+                    if prop_schema.get("required") is prop_required:
+                        prop_schema.pop("required", None)
+                    if prop_required:
+                        required_list.append(prop_name)
+
+            if required_list:
+                normalized["required"] = list(dict.fromkeys(required_list))
+            elif isinstance(required, list):
+                normalized.pop("required", None)
+
+        return normalized
+
+    return _normalize(copy.deepcopy(schema))
+
+
+class _EmptyMCPArgument:
+    pass
+
+
+_EMPTY_MCP_ARGUMENT = _EmptyMCPArgument()
+
+
+def _sanitize_mcp_arguments(
+    value: Any,
+    schema: dict[str, Any] | None = None,
+    *,
+    required: bool = False,
+) -> Any:
+    """Remove empty optional payload values before sending to MCP tools."""
+    if value is None:
+        return value if required else _EMPTY_MCP_ARGUMENT
+
+    if isinstance(value, str):
+        return value if value != "" or required else _EMPTY_MCP_ARGUMENT
+
+    if isinstance(value, list):
+        if not value:
+            return value if required else _EMPTY_MCP_ARGUMENT
+        item_schema = schema.get("items") if isinstance(schema, dict) else None
+        cleaned_items = []
+        for item in value:
+            cleaned_item = _sanitize_mcp_arguments(item, item_schema)
+            cleaned_items.append(item if cleaned_item is _EMPTY_MCP_ARGUMENT else cleaned_item)
+        return cleaned_items
+
+    if isinstance(value, dict):
+        if not value:
+            return value if required else _EMPTY_MCP_ARGUMENT
+
+        properties = schema.get("properties", {}) if isinstance(schema, dict) else {}
+        required_names = schema.get("required", []) if isinstance(schema, dict) else []
+        if not isinstance(properties, dict):
+            properties = {}
+        if not isinstance(required_names, list):
+            required_names = []
+
+        cleaned: dict[str, Any] = {}
+        for key, item in value.items():
+            item_required = key in required_names
+            item_schema = properties.get(key)
+            cleaned_item = _sanitize_mcp_arguments(
+                item,
+                item_schema if isinstance(item_schema, dict) else None,
+                required=item_required,
+            )
+            if cleaned_item is not _EMPTY_MCP_ARGUMENT:
+                cleaned[key] = cleaned_item
+        if not cleaned:
+            return value if required else _EMPTY_MCP_ARGUMENT
+        return cleaned
+
     return value
 
 
-class MCPClient:
+class MCPClient(Generic[TContext]):
     def __init__(self) -> None:
         # Initialize session and client objects
         self.session: mcp.ClientSession | None = None
@@ -470,6 +469,12 @@ class MCPClient:
         self.name: str | None = None
         self.active: bool = True
         self.tools: list[mcp.Tool] = []
+        self.prompts: list[mcp.types.Prompt] = []
+        self.prompt_bridge_tool_names: list[str] = []
+        self.resources: list[mcp.types.Resource] = []
+        self.resource_templates: list[mcp.types.ResourceTemplate] = []
+        self.resource_templates_supported: bool = False
+        self.resource_bridge_tool_names: list[str] = []
         self.server_errlogs: list[str] = []
         self.running_event = asyncio.Event()
         self.process_pid: int | None = None
@@ -477,8 +482,23 @@ class MCPClient:
         # Store connection config for reconnection
         self._mcp_server_config: dict | None = None
         self._server_name: str | None = None
+        self._server_capabilities: mcp.types.ServerCapabilities | None = None
+        self._streams_context: Any = None
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False  # For logging and debugging
+        self.subcapability_bridge = MCPClientSubCapabilityBridge[TContext]()
+
+        # Elicitation cleanup task
+        self._elicitation_cleanup_task: asyncio.Task[None] | None = None
+        self._start_elicitation_cleanup()
+
+    def _start_elicitation_cleanup(self) -> None:
+        """启动后台 elicitation 清理任务。"""
+        self._elicitation_cleanup_task = asyncio.create_task(
+            cleanup_elicitation_periodically(interval=60),
+            name="mcp-elicitation-cleanup",
+        )
+        logger.debug("已启动 MCP elicitation 后台清理任务")
 
     @staticmethod
     def _extract_stdio_process_pid(streams_context: object) -> int | None:
@@ -513,17 +533,20 @@ class MCPClient:
         # Store config for reconnection
         self._mcp_server_config = mcp_server_config
         self._server_name = name
+        self.subcapability_bridge.set_server_name(name)
+        self.subcapability_bridge.configure_from_server_config(mcp_server_config)
         self.process_pid = None
 
         cfg = _prepare_config(mcp_server_config.copy())
 
-        async def logging_callback(
-            params: mcp.types.LoggingMessageNotificationParams,
+        def logging_callback(
+            msg: str | mcp.types.LoggingMessageNotificationParams,
         ) -> None:
             # Handle MCP service error logs
-            if params.level in ("warning", "error", "critical", "alert", "emergency"):
-                log_msg = f"[{params.level.upper()}] {params.data!s}"
-                self.server_errlogs.append(log_msg)
+            if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
+                if msg.level in ("warning", "error", "critical", "alert", "emergency"):
+                    log_msg = f"[{msg.level.upper()}] {msg.data!s}"
+                    self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
             auth = await create_mcp_http_auth(cfg)
@@ -540,71 +563,96 @@ class MCPClient:
             else:
                 raise Exception("MCP connection config missing transport or type field")
 
-            _http_client_kwargs: dict[str, Any] = {
+            http_client_kwargs: dict[str, Any] = {
                 "url": cfg["url"],
                 "headers": cfg.get("headers", {}),
             }
+            if auth is not None:
+                http_client_kwargs["auth"] = auth
             if _create_no_verify_httpx_client is not None:
-                _http_client_kwargs["httpx_client_factory"] = (
+                http_client_kwargs["httpx_client_factory"] = (
                     _create_no_verify_httpx_client
                 )
 
             if transport_type != "streamable_http":
                 # SSE transport method
-                self._streams_context = sse_client(
-                    url=cfg["url"],
-                    headers=cfg.get("headers", {}),
-                    timeout=cfg.get("timeout", 5),
-                    sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
-                    auth=auth,
+                http_client_kwargs["timeout"] = cfg.get("timeout", 5)
+                http_client_kwargs["sse_read_timeout"] = cfg.get(
+                    "sse_read_timeout",
+                    60 * 5,
                 )
-                self._streams_context = sse_client(**_http_client_kwargs)
+                self._streams_context = sse_client(**http_client_kwargs)
                 streams = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
 
                 # Create a new client session
                 read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
-                session = await self.exit_stack.enter_async_context(
+                self.session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
-                        read_stream=read_stream,
-                        write_stream=write_stream,
+                        *streams,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,
+                        logging_callback=logging_callback,  # type: ignore[arg-type]
+                        sampling_callback=(
+                            self.subcapability_bridge.handle_sampling
+                            if self.subcapability_bridge.sampling_enabled
+                            else None
+                        ),
+                        elicitation_callback=(
+                            self.subcapability_bridge.handle_elicitation
+                            if self.subcapability_bridge.elicitation_enabled
+                            else None
+                        ),
+                        list_roots_callback=(
+                            self.subcapability_bridge.handle_list_roots
+                            if self.subcapability_bridge.roots_enabled
+                            else None
+                        ),
+                        sampling_capabilities=self.subcapability_bridge.get_sampling_capabilities(),
                     ),
                 )
-                self.session = session
             else:
-                _http_client_kwargs["timeout"] = timedelta(
+                http_client_kwargs["timeout"] = timedelta(
                     seconds=cfg.get("timeout", 30)
                 )
-                _http_client_kwargs["sse_read_timeout"] = timedelta(
+                http_client_kwargs["sse_read_timeout"] = timedelta(
                     seconds=cfg.get("sse_read_timeout", 60 * 5),
                 )
-                self._streams_context = streamablehttp_client(
-                    url=cfg["url"],
-                    headers=cfg.get("headers", {}),
-                    timeout=timeout,
-                    sse_read_timeout=sse_read_timeout,
-                    terminate_on_close=cfg.get("terminate_on_close", True),
-                    auth=auth,
+                http_client_kwargs["terminate_on_close"] = cfg.get(
+                    "terminate_on_close",
+                    True,
                 )
-                self._streams_context = streamablehttp_client(**_http_client_kwargs)
+                self._streams_context = streamablehttp_client(**http_client_kwargs)
                 read_s, write_s, _ = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
 
                 # Create a new client session
                 read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
-                session = await self.exit_stack.enter_async_context(
+                self.session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
                         read_stream=read_s,
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,
+                        logging_callback=logging_callback,  # type: ignore[arg-type]
+                        sampling_callback=(
+                            self.subcapability_bridge.handle_sampling
+                            if self.subcapability_bridge.sampling_enabled
+                            else None
+                        ),
+                        elicitation_callback=(
+                            self.subcapability_bridge.handle_elicitation
+                            if self.subcapability_bridge.elicitation_enabled
+                            else None
+                        ),
+                        list_roots_callback=(
+                            self.subcapability_bridge.handle_list_roots
+                            if self.subcapability_bridge.roots_enabled
+                            else None
+                        ),
+                        sampling_capabilities=self.subcapability_bridge.get_sampling_capabilities(),
                     ),
                 )
-                self.session = session
 
         else:
             cfg = _prepare_stdio_env(cfg)
@@ -625,33 +673,56 @@ class MCPClient:
                         log_msg = f"[{msg.level.upper()}] {msg.data!s}"
                         self.server_errlogs.append(log_msg)
 
-            log_pipe = self.exit_stack.enter_context(
-                LogPipe(
-                    level=logging.INFO,
-                    logger=logger,
-                    identifier=f"MCPServer-{name}",
-                    callback=callback,
-                ),
-            )
-            errlog_stream: TextIO = self.exit_stack.enter_context(
-                os.fdopen(os.dup(log_pipe.fileno()), "w"),
-            )
             stdio_transport = await self.exit_stack.enter_async_context(
-                mcp.stdio_client(
+                tolerant_stdio_client(
                     server_params,
-                    errlog=errlog_stream,
+                    errlog=LogPipe(
+                        level=logging.INFO,
+                        logger=logger,
+                        identifier=f"MCPServer-{name}",
+                        callback=callback,
+                    ),
                 ),
             )
             self.process_pid = self._extract_stdio_process_pid(stdio_transport)
 
             # Create a new client session
-            session = await self.exit_stack.enter_async_context(
-                mcp.ClientSession(*stdio_transport),
+            self.session = await self.exit_stack.enter_async_context(
+                mcp.ClientSession(
+                    *stdio_transport,
+                    sampling_callback=(
+                        self.subcapability_bridge.handle_sampling
+                        if self.subcapability_bridge.sampling_enabled
+                        else None
+                    ),
+                    elicitation_callback=(
+                        self.subcapability_bridge.handle_elicitation
+                        if self.subcapability_bridge.elicitation_enabled
+                        else None
+                    ),
+                    list_roots_callback=(
+                        self.subcapability_bridge.handle_list_roots
+                        if self.subcapability_bridge.roots_enabled
+                        else None
+                    ),
+                    sampling_capabilities=self.subcapability_bridge.get_sampling_capabilities(),
+                ),
             )
-            self.session = session
-
-        assert self.session is not None
         await self.session.initialize()
+        get_server_capabilities = getattr(
+            self.session,
+            "get_server_capabilities",
+            None,
+        )
+        self._server_capabilities = (
+            get_server_capabilities() if callable(get_server_capabilities) else None
+        )
+        self.resources = []
+        self.resource_templates = []
+        self.resource_templates_supported = False
+        self.prompts = []
+        self.prompt_bridge_tool_names = []
+        self.resource_bridge_tool_names = []
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
         """List all tools from the server and save them to self.tools"""
@@ -661,6 +732,120 @@ class MCPClient:
         self.tools = response.tools
         return response
 
+    @property
+    def supports_resources(self) -> bool:
+        return bool(self._server_capabilities and self._server_capabilities.resources)
+
+    @property
+    def supports_prompts(self) -> bool:
+        return bool(self._server_capabilities and self._server_capabilities.prompts)
+
+    async def load_resource_capabilities(self) -> None:
+        self.resources = []
+        self.resource_templates = []
+        self.resource_templates_supported = False
+        self.resource_bridge_tool_names = []
+
+        if not self._server_name or not self.supports_resources:
+            return
+
+        try:
+            await self.list_resources_and_save()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to preload MCP resources for server %s: %s",
+                self._server_name,
+                exc,
+            )
+
+        try:
+            await self.list_resource_templates_and_save()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "Skipping MCP resource templates for server %s: %s",
+                self._server_name,
+                exc,
+            )
+
+        self.resource_bridge_tool_names = build_mcp_resource_tool_names(
+            self._server_name,
+            include_templates=self.resource_templates_supported,
+        )
+
+    async def load_prompt_capabilities(self) -> None:
+        self.prompts = []
+        self.prompt_bridge_tool_names = []
+
+        if not self._server_name or not self.supports_prompts:
+            return
+
+        try:
+            await self.list_prompts_and_save()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to preload MCP prompts for server %s: %s",
+                self._server_name,
+                exc,
+            )
+
+        self.prompt_bridge_tool_names = build_mcp_prompt_tool_names(
+            self._server_name,
+        )
+
+    async def list_prompts_and_save(
+        self,
+        cursor: str | None = None,
+    ) -> mcp.types.ListPromptsResult:
+        if not self.session:
+            raise ValueError("MCP session is not available for prompt listing.")
+
+        params = (
+            mcp.types.PaginatedRequestParams(cursor=cursor)
+            if cursor is not None
+            else None
+        )
+        response = await self.session.list_prompts(params=params)
+        if cursor is None:
+            self.prompts = response.prompts
+        return response
+
+    async def list_resources_and_save(
+        self,
+        cursor: str | None = None,
+    ) -> mcp.types.ListResourcesResult:
+        if not self.session:
+            raise ValueError("MCP session is not available for resource listing.")
+
+        params = (
+            mcp.types.PaginatedRequestParams(cursor=cursor)
+            if cursor is not None
+            else None
+        )
+        response = await self.session.list_resources(params=params)
+        if cursor is None:
+            self.resources = response.resources
+        return response
+
+    async def list_resource_templates_and_save(
+        self,
+        cursor: str | None = None,
+    ) -> mcp.types.ListResourceTemplatesResult:
+        if not self.session:
+            raise ValueError(
+                "MCP session is not available for resource template listing."
+            )
+
+        params = (
+            mcp.types.PaginatedRequestParams(cursor=cursor)
+            if cursor is not None
+            else None
+        )
+        response = await self.session.list_resource_templates(params=params)
+        self.resource_templates_supported = True
+        if cursor is None:
+            self.resource_templates = response.resourceTemplates
+        return response
+
     async def _reconnect(self) -> None:
         """Reconnect to the MCP server using the stored configuration.
 
@@ -668,13 +853,12 @@ class MCPClient:
 
         Raises:
             Exception: raised when reconnection fails
-
         """
         async with self._reconnect_lock:
             # Check if already reconnecting (useful for logging)
             if self._reconnecting:
                 logger.debug(
-                    f"MCP Client {self._server_name} is already reconnecting, skipping",
+                    f"MCP Client {self._server_name} is already reconnecting, skipping"
                 )
                 return
 
@@ -684,8 +868,9 @@ class MCPClient:
             self._reconnecting = True
             try:
                 logger.info(
-                    f"Attempting to reconnect to MCP server {self._server_name}...",
+                    f"Attempting to reconnect to MCP server {self._server_name}..."
                 )
+                self.subcapability_bridge.clear_runtime_state()
 
                 # Save old exit_stack for later cleanup (don't close it now to avoid cancel scope issues)
                 if self.exit_stack:
@@ -700,13 +885,15 @@ class MCPClient:
                 # Reconnect using stored config
                 await self.connect_to_server(self._mcp_server_config, self._server_name)
                 await self.list_tools_and_save()
+                await self.load_resource_capabilities()
+                await self.load_prompt_capabilities()
 
                 logger.info(
-                    f"Successfully reconnected to MCP server {self._server_name}",
+                    f"Successfully reconnected to MCP server {self._server_name}"
                 )
             except Exception as e:
                 logger.error(
-                    f"Failed to reconnect to MCP server {self._server_name}: {e}",
+                    f"Failed to reconnect to MCP server {self._server_name}: {e}"
                 )
                 raise
             finally:
@@ -717,6 +904,7 @@ class MCPClient:
         tool_name: str,
         arguments: dict,
         read_timeout_seconds: timedelta,
+        run_context: ContextWrapper[TContext] | None = None,
     ) -> mcp.types.CallToolResult:
         """Call MCP tool with automatic reconnection on failure, max 2 retries.
 
@@ -731,7 +919,6 @@ class MCPClient:
         Raises:
             ValueError: MCP session is not available
             anyio.ClosedResourceError: raised after reconnection failure
-
         """
 
         tool_schema = next(
@@ -757,33 +944,115 @@ class MCPClient:
             reraise=True,
         )
         async def _call_with_retry():
-            if not self.session:
-                raise ValueError("MCP session is not available for MCP function tools.")
+            async with self.subcapability_bridge.interactive_call(run_context):
+                if not self.session:
+                    raise ValueError(
+                        "MCP session is not available for MCP function tools."
+                    )
 
-            try:
-                return await self.session.call_tool(
-                    name=tool_name,
-                    arguments=sanitized_arguments,
-                    read_timeout_seconds=read_timeout_seconds,
-                )
-            except anyio.ClosedResourceError:
-                logger.warning(
-                    f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect...",
-                )
-                # Attempt to reconnect
-                await self._reconnect()
-                # Reraise the exception to trigger tenacity retry
-                raise
+                try:
+                    return await self.session.call_tool(
+                        name=tool_name,
+                        arguments=sanitized_arguments,
+                        read_timeout_seconds=read_timeout_seconds,
+                    )
+                except anyio.ClosedResourceError:
+                    logger.warning(
+                        f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect..."
+                    )
+                    # Attempt to reconnect
+                    await self._reconnect()
+                    # Reraise the exception to trigger tenacity retry
+                    raise
 
         return await _call_with_retry()
 
+    async def read_resource_with_reconnect(
+        self,
+        uri: str,
+        read_timeout_seconds: timedelta,
+    ) -> mcp.types.ReadResourceResult:
+        _ = read_timeout_seconds
+
+        @retry(
+            retry=retry_if_exception_type(anyio.ClosedResourceError),
+            stop=stop_after_attempt(2),
+            wait=wait_exponential(multiplier=1, min=1, max=3),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True,
+        )
+        async def _read_with_retry():
+            if not self.session:
+                raise ValueError("MCP session is not available for MCP resources.")
+
+            try:
+                return await self.session.read_resource(uri=uri)
+            except anyio.ClosedResourceError:
+                logger.warning(
+                    "MCP resource read for %s failed (ClosedResourceError), attempting to reconnect...",
+                    uri,
+                )
+                await self._reconnect()
+                raise
+
+        return await _read_with_retry()
+
+    async def get_prompt_with_reconnect(
+        self,
+        name: str,
+        arguments: dict[str, str] | None,
+        read_timeout_seconds: timedelta,
+    ) -> mcp.types.GetPromptResult:
+        @retry(
+            retry=retry_if_exception_type(anyio.ClosedResourceError),
+            stop=stop_after_attempt(2),
+            wait=wait_exponential(multiplier=1, min=1, max=3),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True,
+        )
+        async def _get_with_retry():
+            if not self.session:
+                raise ValueError("MCP session is not available for MCP prompts.")
+
+            try:
+                return await self.session.get_prompt(
+                    name=name,
+                    arguments=arguments,
+                )
+            except anyio.ClosedResourceError:
+                logger.warning(
+                    "MCP prompt read for %s failed (ClosedResourceError), attempting to reconnect...",
+                    name,
+                )
+                await self._reconnect()
+                raise
+
+        _ = read_timeout_seconds
+        return await _get_with_retry()
+
     async def cleanup(self) -> None:
         """Clean up resources including old exit stacks from reconnections"""
+        self.subcapability_bridge.clear_runtime_state()
+        self._server_capabilities = None
+        self.prompts = []
+        self.prompt_bridge_tool_names = []
+        self.resources = []
+        self.resource_templates = []
+        self.resource_templates_supported = False
+        self.resource_bridge_tool_names = []
         # Close current exit stack
         try:
             await self.exit_stack.aclose()
         except Exception as e:
             logger.debug(f"Error closing current exit stack: {e}")
+
+        # Cancel elicitation cleanup task
+        if self._elicitation_cleanup_task:
+            self._elicitation_cleanup_task.cancel()
+            try:
+                await self._elicitation_cleanup_task
+            except asyncio.CancelledError:
+                logger.debug("Elicitation cleanup task cancelled")
 
         # Don't close old exit stacks as they may be in different task contexts
         # They will be garbage collected naturally
@@ -799,18 +1068,10 @@ class MCPTool(FunctionTool, Generic[TContext]):
     """A function tool that calls an MCP service."""
 
     def __init__(
-        self,
-        mcp_tool: mcp.Tool,
-        mcp_client: MCPClient,
-        mcp_server_name: str,
-        **kwargs,
+        self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
     ) -> None:
-        # Add namespace prefix to avoid conflicts with plugin tools
-        # URL-encode the server name to create a safe and unique identifier part
         normalized_server_name = quote(mcp_server_name, safe="")
-        # Format: mcp_<normalized_server_name>__<tool_name>
         namespaced_name = f"mcp_{normalized_server_name}__{mcp_tool.name}"
-
         super().__init__(
             name=namespaced_name,
             description=mcp_tool.description or "",
@@ -819,16 +1080,15 @@ class MCPTool(FunctionTool, Generic[TContext]):
         self.mcp_tool = mcp_tool
         self.mcp_client = mcp_client
         self.mcp_server_name = mcp_server_name
+        self.original_tool_name = mcp_tool.name
         self.source = "mcp"
 
     async def call(
-        self,
-        context: ContextWrapper[TContext],
-        **kwargs,
+        self, context: ContextWrapper[TContext], **kwargs
     ) -> mcp.types.CallToolResult:
-        # Use original tool name when calling MCP server
         return await self.mcp_client.call_tool_with_reconnect(
-            tool_name=self.original_tool_name,
+            tool_name=self.mcp_tool.name,
             arguments=kwargs,
             read_timeout_seconds=timedelta(seconds=context.tool_call_timeout),
+            run_context=context,
         )

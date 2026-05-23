@@ -220,20 +220,6 @@ const canEditPermission = (cmd: CommandItem): boolean =>
         </div>
       </template>
 
-      <template #item.description="{ item }">
-        <div
-          class="text-body-2 text-medium-emphasis"
-          style="
-            max-width: 280px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          "
-        >
-          {{ item.description || "-" }}
-        </div>
-      </template>
-
       <template #item.permission="{ item }">
         <v-menu location="bottom">
           <template #activator="{ props }">

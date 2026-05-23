@@ -123,6 +123,14 @@
                   :custom-html-tags="customMarkdownTags"
                 />
 
+                <ElicitationCard
+                  v-else-if="part.type === 'elicitation' && part.payload"
+                  :payload="part.payload"
+                  :is-dark="isDark"
+                  :interactive="isActiveElicitationMessage(msg, msgIndex)"
+                  :submit-elicitation="submitElicitation"
+                />
+
                 <button
                   v-else-if="part.type === 'image'"
                   class="image-part"
@@ -338,6 +346,7 @@ import RegenerateMenu, {
   type RegenerateModelSelection,
 } from "@/components/chat/RegenerateMenu.vue";
 import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
+import ElicitationCard from "@/components/chat/message_list_comps/ElicitationCard.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
@@ -373,6 +382,7 @@ const props = withDefaults(
     editingMessageId?: string | number | null;
     editDraft?: string;
     savingEdit?: boolean;
+    submitElicitation?: ((replyText: string, displayText: string) => Promise<void>) | null;
   }>(),
   {
     isDark: false,
@@ -386,6 +396,7 @@ const props = withDefaults(
     editingMessageId: null,
     editDraft: "",
     savingEdit: false,
+    submitElicitation: null,
   },
 );
 
@@ -436,6 +447,14 @@ function messageParts(message: ChatRecord): MessagePart[] {
 }
 
 function isMessageStreaming(message: ChatRecord, messageIndex: number) {
+  return (
+    props.isStreaming &&
+    !isUserMessage(message) &&
+    messageIndex === props.messages.length - 1
+  );
+}
+
+function isActiveElicitationMessage(message: ChatRecord, messageIndex: number) {
   return (
     props.isStreaming &&
     !isUserMessage(message) &&

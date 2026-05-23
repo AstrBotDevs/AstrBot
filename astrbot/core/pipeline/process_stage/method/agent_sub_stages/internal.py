@@ -6,6 +6,9 @@ from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot.core import db_helper, logger
+from astrbot.core.agent.mcp_elicitation_registry import (
+    try_capture_pending_mcp_elicitation,
+)
 from astrbot.core.agent.message import (
     CheckpointData,
     CheckpointMessageSegment,
@@ -15,7 +18,10 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_agent_run_util import (
     DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
+    AgentRunner,
     normalize_config_repeat_reply_guard_threshold,
+    run_agent,
+    run_live_agent,
 )
 from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
@@ -271,6 +277,12 @@ class InternalAgentSubStage(Stage):
                 return
 
             logger.debug("ready to request llm provider")
+            if try_capture_pending_mcp_elicitation(event):
+                logger.info(
+                    "Captured MCP elicitation reply for active agent run, umo=%s",
+                    event.unified_msg_origin,
+                )
+                return
             follow_up_capture = try_capture_follow_up(event)
             if follow_up_capture:
                 (

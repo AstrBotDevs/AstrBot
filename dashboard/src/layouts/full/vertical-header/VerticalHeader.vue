@@ -267,10 +267,6 @@ async function accountEdit() {
     return;
   }
 
-  const passwordHash = password.value ? md5(password.value) : '';
-  const newPasswordHash = newPassword.value ? md5(newPassword.value) : '';
-  const confirmPasswordHash = confirmPassword.value ? md5(confirmPassword.value) : '';
-
   const passwordHash = password.value ? md5(password.value) : "";
   const newPasswordHash = newPassword.value ? md5(newPassword.value) : "";
   const confirmPasswordHash = confirmPassword.value
@@ -1354,17 +1350,10 @@ onMounted(async () => {
             </div>
 
             <v-divider class="mt-4 mb-4"></v-divider>
-            <div style="margin-top: 16px;">
-              <h3 class="mb-4">{{ t('core.header.updateDialog.dashboardUpdate.title') }}</h3>
-              <div class="mb-4">
-                <small>{{ t('core.header.updateDialog.dashboardUpdate.currentVersion') }} {{ dashboardCurrentVersion
-                  }}</small>
-                <br>
-
-              <div
-                v-if="showAdvancedUpdateSettings"
-                class="dashboard-update-banner mt-3"
-              >
+            <div
+              v-if="showAdvancedUpdateSettings"
+              class="dashboard-update-banner mt-3"
+            >
                 <div>
                   <div class="font-weight-medium">
                     {{ t("core.header.updateDialog.dashboardUpdate.title") }}
@@ -1399,7 +1388,6 @@ onMounted(async () => {
                     )
                   }}
                 </v-btn>
-              </div>
             </div>
           </v-container>
         </v-card-text>

@@ -464,43 +464,30 @@ export default {
       lastSavedConfigSnapshot: "",
       refreshingConfig: false,
 
-// 检查未保存的更改
-  async beforeRouteLeave(to, from, next) {
-    if (this.hasUnsavedChanges) {
-      const confirmed = await this.$refs.unsavedChangesDialog?.open({
-        title: this.tm('unsavedChangesWarning.dialogTitle'),
-        message: this.tm('unsavedChangesWarning.leavePage'),
-        confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
-        cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
-        closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`
-      });
-      // 关闭弹窗不跳转
-      if (confirmed === 'close') {
-        next(false);
-      } else if (confirmed) {
-        const result = await this.updateConfig();
-        if (this.isSystemConfig) {
-          if (result?.success && !result?.restarted) {
-            await new Promise(resolve => setTimeout(resolve, 800));
-            next();
-          } else {
-            next(false);
-          }
-        } else {
-          if (result?.success) {
-            await new Promise(resolve => setTimeout(resolve, 800));
-            next();
-          } else {
-            next(false);
-          }
-        }
-      } else {
-        this.hasUnsavedChanges = false;
-        next();
-      }
-    } else {
-      next();
-    }
+      // Config type switching
+      configType: "normal",
+      configSearchKeyword: "",
+
+      // System config switch
+      isSystemConfig: false,
+
+      // Multi-config management
+      selectedConfigID: null,
+      currentConfigId: null,
+      configInfoList: [],
+      configFormData: {
+        name: "",
+      },
+      editingConfigId: null,
+
+      // Test chat
+      testChatDrawer: false,
+      testConfigId: null,
+
+      // Unsaved change state
+      originalConfigData: null,
+      hasUnsavedChanges: false,
+    };
   },
 
   computed: {
@@ -779,7 +766,8 @@ export default {
           this.save_message_snack = true;
           this.save_message_success = "error";
           return { success: false };
-        });
+        }
+      });
     },
     // 重置未保存状态
     onConfigSaved() {
@@ -874,9 +862,6 @@ export default {
           }
           return;
         }
-        this.selectedConfigID = value;
-        this.getConfig(value);
-      } else {
         this.selectedConfigID = value;
         this.getConfig(value);
       }

@@ -141,7 +141,6 @@
                 <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
                   @change="handleFileSelect" />
               </div>
-              </div>
 
               <div v-if="selectedFiles.length > 0" class="mt-4">
                 <div class="d-flex align-center justify-space-between mb-2">
