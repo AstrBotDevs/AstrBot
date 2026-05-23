@@ -243,8 +243,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         types.push({
           value: templateName,
           label: templateName,
-          icon: getProviderIcon(template.provider),
-        });
+          icon: getProviderIcon(template.provider || template.id || template.type || templateName)
+        })
       }
     }
 
@@ -432,8 +432,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   function resolveSourceIcon(source: any) {
-    if (!source) return "";
-    return getProviderIcon(source.provider) || "";
+    if (!source) return ''
+    return getProviderIcon(source.provider || source.id || source.type || source.templateKey) || ''
   }
 
   function getSourceDisplayName(source: any) {
@@ -737,9 +737,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   function buildModelProviderConfig(modelName: string) {
     if (!selectedProviderSource.value) return;
 
-    const sourceId =
-      editableProviderSource.value?.id || selectedProviderSource.value.id;
-    const newId = `${sourceId}/${modelName}`;
+    const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
+    const newId = modelName.startsWith(`${sourceId}/`)
+      ? modelName
+      : `${sourceId}/${modelName}`
 
     const metadata = getModelMetadata(modelName);
     let modalities: string[];

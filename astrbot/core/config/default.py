@@ -1300,6 +1300,20 @@ CONFIG_METADATA_2: Any = {
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                         "max_tokens": 4096,
                     },
+                    "OpenCode Go": {
+                        "id": "opencode-go",
+                        "provider": "opencode-go",
+                        "type": "opencode_go_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://opencode.ai/zen/go/v1",
+                        "model": "opencode-go/kimi-k2.6",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                        "force_tool_call_reasoning_content": True,
+                    },
                     "Moonshot": {
                         "id": "moonshot",
                         "provider": "moonshot",
@@ -1311,6 +1325,7 @@ CONFIG_METADATA_2: Any = {
                         "api_base": "https://api.moonshot.cn/v1",
                         "proxy": "",
                         "custom_headers": {},
+                        "force_tool_call_reasoning_content": True,
                     },
                     "MiniMax": {
                         "id": "minimax",
@@ -2344,6 +2359,11 @@ CONFIG_METADATA_2: Any = {
                         "description": "关闭思考模式",
                         "type": "bool",
                         "hint": "关闭 Ollama 思考模式。",
+                    },
+                    "force_tool_call_reasoning_content": {
+                        "description": "工具调用历史强制保留思考内容",
+                        "type": "bool",
+                        "hint": "部分兼容 OpenAI 的模型服务在启用思考模式后，要求 assistant 工具调用历史包含 reasoning_content。",
                     },
                     "custom_extra_body": {
                         "description": "自定义请求体参数",

@@ -663,6 +663,41 @@ class ProviderOpenAIOfficial(Provider):
         extra_body.pop("think", None)
         extra_body["reasoning_effort"] = "none"
 
+    def _requires_tool_call_reasoning_content(
+        self,
+        payloads: dict,
+        extra_body: dict[str, Any],
+    ) -> bool:
+        thinking = extra_body.get("thinking")
+        if isinstance(thinking, dict) and thinking.get("type") == "disabled":
+            return False
+
+        value = self.provider_config.get("force_tool_call_reasoning_content", False)
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    def _ensure_tool_call_reasoning_content(
+        self,
+        payloads: dict,
+        extra_body: dict[str, Any],
+    ) -> None:
+        if not self._requires_tool_call_reasoning_content(payloads, extra_body):
+            return
+
+        messages = payloads.get("messages")
+        if not isinstance(messages, list):
+            return
+
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            if message.get("role") != "assistant" or not message.get("tool_calls"):
+                continue
+            reasoning_content = message.get("reasoning_content")
+            if not isinstance(reasoning_content, str) or not reasoning_content.strip():
+                message["reasoning_content"] = " "
+
     async def get_models(self):
         await self._ensure_client()
         try:
@@ -842,6 +877,7 @@ class ProviderOpenAIOfficial(Provider):
             f"Querying OpenAI API with model: {model}, payloads: {payloads}, extra_body: {extra_body}, tools: {tools.func_list if tools else None}"
         )
 
+        self._ensure_tool_call_reasoning_content(payloads, extra_body)
         self._sanitize_assistant_messages(payloads)
         self._normalize_tool_call_ids(payloads)
 
@@ -922,6 +958,7 @@ class ProviderOpenAIOfficial(Provider):
             del payloads[key]
         self._apply_provider_specific_extra_body_overrides(extra_body)
 
+        self._ensure_tool_call_reasoning_content(payloads, extra_body)
         self._sanitize_assistant_messages(payloads)
         self._normalize_tool_call_ids(payloads)
 

@@ -384,9 +384,9 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
-            case "openai_responses":
-                from .sources.openai_responses_source import (
-                    ProviderOpenAIResponses as ProviderOpenAIResponses,
+            case "opencode_go_chat_completion":
+                from .sources.opencode_go_source import (
+                    ProviderOpenCodeGo as ProviderOpenCodeGo,
                 )
             case "longcat_chat_completion":
                 from .sources.longcat_source import ProviderLongCat as ProviderLongCat
