@@ -1534,20 +1534,14 @@ async def build_main_agent(
         asyncio.create_task(_handle_webchat(event, req, provider))
 
     if req.func_tool and req.func_tool.tools:
-        tool_prompt = (
-            TOOL_CALL_PROMPT
-            if config.tool_schema_mode == "full"
-            else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
-        )
-
-        if config.computer_use_runtime == "local":
-            tool_prompt += (
-                f"\nCurrent workspace you can use: "
-                f"`{_get_workspace_path_for_umo(event.unified_msg_origin)}`\n"
-                "Unless the user explicitly specifies a different directory, "
-                "perform all file-related operations in this workspace.\n"
-            )
-
+        if config.tool_schema_mode == "skills_like":
+            tool_prompt = TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
+        elif config.tool_schema_mode in ("tool_search", "auto"):
+            # tool_search/auto prompt is injected by the runner AFTER mode resolution
+            # in reset(). Injecting here would double-inject or inject for auto→full fallback.
+            tool_prompt = TOOL_CALL_PROMPT
+        else:
+            tool_prompt = TOOL_CALL_PROMPT
         req.system_prompt += f"\n{tool_prompt}\n"
 
     action_type = event.get_extra("action_type")
@@ -1585,6 +1579,7 @@ async def build_main_agent(
         read_tool=(
             req.func_tool.get_tool("astrbot_file_read_tool") if req.func_tool else None
         ),
+        tool_search_config=config.provider_settings.get("tool_search", {}),
     )
 
     if apply_reset:
