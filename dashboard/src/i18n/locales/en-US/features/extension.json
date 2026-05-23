@@ -208,7 +208,7 @@
       "deleteConfig": "Also delete plugin configuration file",
       "deleteData": "Also delete plugin persistent data",
       "configHint": "Configuration file located in data/config directory",
-      "dataHint": "Deletes data in data/plugin_data and data/plugins_data"
+      "dataHint": "Deletes data in data/plugin_data and data/plugins_data, as well as KV preference data in the database"
     },
     "install": {
       "title": "Install Extension",

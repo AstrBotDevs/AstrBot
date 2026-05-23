@@ -786,6 +786,8 @@ class PluginManager:
         try:
             metadata = self._load_plugin_metadata(plugin_path=plugin_dir_path)
             if metadata:
+                p_name = (metadata.name or "unknown").lower().replace("/", "_")
+                p_author = (metadata.author or "unknown").lower().replace("/", "_")
                 record.update(
                     {
                         "name": metadata.name,
@@ -797,7 +799,8 @@ class PluginManager:
                         "display_name": metadata.display_name,
                         "support_platforms": metadata.support_platforms,
                         "astrbot_version": metadata.astrbot_version,
-                    },
+                        "plugin_id": f"{p_author}/{p_name}",
+                    }
                 )
         except Exception as metadata_error:
             logger.debug(
@@ -1052,6 +1055,7 @@ class PluginManager:
                     p_name = (metadata.name or "unknown").lower().replace("/", "_")
                     p_author = (metadata.author or "unknown").lower().replace("/", "_")
                     plugin_id = f"{p_author}/{p_name}"
+                    metadata.plugin_id = plugin_id
 
                     # 在实例化前注入类属性，保证插件 __init__ 可读取这些值
                     if metadata.star_cls_type:
@@ -1327,11 +1331,12 @@ class PluginManager:
                     f"清理安装失败插件配置失败: {plugin_config_path}，原因: {e!s}",
                 )
 
-    def _cleanup_plugin_optional_artifacts(
+    async def _cleanup_plugin_optional_artifacts(
         self,
         *,
         root_dir_name: str,
         plugin_label: str,
+        plugin_id: str | None = None,
         delete_config: bool,
         delete_data: bool,
     ) -> None:
@@ -1365,6 +1370,13 @@ class PluginManager:
                         logger.warning(
                             f"删除插件持久化数据失败 ({data_dir_name}, {plugin_label}): {e!s}",
                         )
+
+            if plugin_id:
+                try:
+                    await self.context.get_db().clear_preferences("plugin", plugin_id)
+                    logger.info(f"已清除插件 {plugin_label}({plugin_id}) 的 KV 数据")
+                except Exception as e:
+                    logger.warning(f"清除插件 KV 数据失败 ({plugin_label}): {e!s}")
 
     def _track_failed_install_dir(
         self,
@@ -1569,9 +1581,12 @@ class PluginManager:
                     f"移除插件成功，但是删除插件文件夹失败: {e!s}。您可以手动删除该文件夹，位于 addons/plugins/ 下。",
                 ) from e
 
-            self._cleanup_plugin_optional_artifacts(
+            plugin_id = plugin.plugin_id
+
+            await self._cleanup_plugin_optional_artifacts(
                 root_dir_name=root_dir_name,
                 plugin_label=plugin_name,
+                plugin_id=plugin_id,
                 delete_config=delete_config,
                 delete_data=delete_data,
             )
@@ -1615,16 +1630,19 @@ class PluginManager:
                 )
 
             plugin_label = dir_name
+            plugin_id = None
             if isinstance(failed_info, dict):
                 plugin_label = (
                     failed_info.get("display_name")
                     or failed_info.get("name")
                     or dir_name
                 )
+                plugin_id = failed_info.get("plugin_id")
 
-            self._cleanup_plugin_optional_artifacts(
+            await self._cleanup_plugin_optional_artifacts(
                 root_dir_name=dir_name,
                 plugin_label=plugin_label,
+                plugin_id=plugin_id,
                 delete_config=delete_config,
                 delete_data=delete_data,
             )
