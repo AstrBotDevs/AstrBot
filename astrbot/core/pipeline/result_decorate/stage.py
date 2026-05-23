@@ -246,7 +246,7 @@ class ResultDecorateStage(Stage):
                                 if self.content_cleanup_rule:
                                     seg = re.sub(self.content_cleanup_rule, "", seg)
                                 if seg.strip():
-                                    new_chain.append(Plain(seg))
+                                    new_chain.append(Plain(seg.strip()))
                         else:
                             # 非 Plain 类型的消息段不分段
                             new_chain.append(comp)
@@ -368,7 +368,7 @@ class ResultDecorateStage(Stage):
                         return
                     if time.time() - render_start > 3:
                         logger.warning(
-                            "文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。",
+                            "文本转图片耗时超过了 3 秒，如果觉得很慢可以在 WebUI 中关闭文本转图片模式。",
                         )
                     if url:
                         if url.startswith("http"):
