@@ -43,12 +43,20 @@
       "preset": "配色方案",
       "primary": "主色",
       "secondary": "辅助色",
-      "reset": "恢复默认",
-      "presetApplied": "主题已应用",
-      "light": "浅色",
-      "dark": "深色",
-      "auto": "系统",
-      "autoSwitchDesc": "应用系统主题后，主题将根据您的浏览器外观设置自动切换"
+      "info": "信息色",
+      "presets": "预设",
+      "presetNames": {
+        "Indigo": "靛蓝",
+        "Violet": "紫罗兰",
+        "Rose": "玫瑰",
+        "Pink": "粉色",
+        "Orange": "橙色",
+        "Emerald": "翡翠",
+        "Sky": "天蓝",
+        "Slate": "板岩",
+        "Zinc": "锌灰"
+      },
+      "reset": "恢复默认"
     }
   },
   "reset": {

@@ -43,12 +43,20 @@
       "preset": "Color Scheme",
       "primary": "Primary Color",
       "secondary": "Secondary Color",
-      "reset": "Reset to Default",
-      "presetApplied": "Theme applied",
-      "light": "Light Mode",
-      "dark": "Dark Mode",
-      "auto": "System Mode",
-      "autoSwitchDesc": "Theme will automatically switch based on your browser's appearance setting when enable system mode"
+      "info": "Info Color",
+      "presets": "Presets",
+      "presetNames": {
+        "Indigo": "Indigo",
+        "Violet": "Violet",
+        "Rose": "Rose",
+        "Pink": "Pink",
+        "Orange": "Orange",
+        "Emerald": "Emerald",
+        "Sky": "Sky",
+        "Slate": "Slate",
+        "Zinc": "Zinc"
+      },
+      "reset": "Reset to Default"
     }
   },
   "reset": {
