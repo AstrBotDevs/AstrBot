@@ -125,6 +125,8 @@ class SessionWaiter:
 
         self._lock = asyncio.Lock()
         """需要保证一个 session 同时只有一个 trigger"""
+        self._handler_task: asyncio.Task | None = None
+        """当前正在执行的 handler 任务，用于追踪和取消"""
 
         self.curr_task: asyncio.Task | None = None
         """当前正在执行的处理任务"""
@@ -187,9 +189,26 @@ class SessionWaiter:
 
                 session.curr_task = asyncio.create_task(_task())
                 try:
-                    await session.curr_task
-                except asyncio.CancelledError:
-                    pass
+                    # 取消之前的 handler 任务（如果还在运行）
+                    if session._handler_task and not session._handler_task.done():
+                        session._handler_task.cancel()
+                        try:
+                            await session._handler_task
+                        except asyncio.CancelledError:
+                            pass
+
+                    assert session.handler is not None
+                    # 创建任务以便追踪和取消
+                    session._handler_task = asyncio.create_task(
+                        session.handler(session.session_controller, event),
+                    )
+                    try:
+                        await session._handler_task
+                    finally:
+                        # 任务完成后重置引用，明确当前没有 handler 在运行
+                        session._handler_task = None
+                except Exception as e:
+                    session.session_controller.stop(e)
 
 
 def session_waiter(timeout: int = 30, record_history_chains: bool = False):
