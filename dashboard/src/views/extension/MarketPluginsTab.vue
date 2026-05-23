@@ -310,6 +310,91 @@ const openMarketPluginDetail = (plugin) => {
           ></v-select>
 
             <div class="mt-4">
+              <div
+                class="d-flex align-center mb-2"
+                style="
+                  justify-content: space-between;
+                  flex-wrap: wrap;
+                  gap: 8px;
+                "
+              >
+                <div class="d-flex align-center" style="gap: 6px">
+                  <h2>
+                    {{ tm("market.allPlugins") }}
+                  </h2>
+                  <v-btn
+                    icon
+                    variant="text"
+                    @click="refreshPluginMarket"
+                    :loading="loading_ || refreshingMarket"
+                    :disabled="loading_ || refreshingMarket"
+                  >
+                    <v-icon>mdi-refresh</v-icon>
+                  </v-btn>
+                </div>
+
+                <div
+                  class="d-flex align-center"
+                  style="gap: 8px; flex-wrap: wrap"
+                >
+                  <v-select
+                    v-if="marketCategoryItems.length > 0"
+                    v-model="marketCategoryFilter"
+                    :items="marketCategorySelectItems"
+                    item-title="title"
+                    item-value="value"
+                    :label="tm('market.category')"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="market-filter-control"
+                    :menu-props="{ openOnHover: true, closeOnContentClick: false }"
+                  ></v-select>
+
+                  <PluginSortControl
+                    v-model="sortBy"
+                    :items="marketSortItems"
+                    :label="tm('sort.by')"
+                    :order="sortOrder"
+                    :ascending-label="tm('sort.ascending')"
+                    :descending-label="tm('sort.descending')"
+                    :show-order="sortBy !== 'default'"
+                    @update:order="sortOrder = $event"
+                  />
+                </div>
+              </div>
+
+              <v-row style="min-height: 26rem" dense>
+                <v-col
+                  v-for="plugin in paginatedPlugins"
+                  :key="plugin.name"
+                  cols="12"
+                  md="6"
+                  lg="4"
+                  class="pb-2"
+                >
+                  <MarketPluginCard
+                    :plugin="plugin"
+                    :default-plugin-icon="defaultPluginIcon"
+                    :show-plugin-full-name="showPluginFullName"
+                    @install="handleInstallPlugin"
+                    @view-readme="viewReadme"
+                  />
+                </v-col>
+              </v-row>
+
+              <div
+                class="d-flex justify-center mt-4"
+                v-if="totalPages > 1"
+              >
+                <v-pagination
+                  v-model="currentPage"
+                  :length="totalPages"
+                  :total-visible="7"
+                  size="small"
+                ></v-pagination>
+              </div>
+
               <v-expand-transition>
                 <div v-if="showRandomPlugins">
                   <div
@@ -344,6 +429,7 @@ const openMarketPluginDetail = (plugin) => {
                         :default-plugin-icon="defaultPluginIcon"
                         :show-plugin-full-name="showPluginFullName"
                         @install="handleInstallPlugin"
+                        @view-readme="viewReadme"
                       />
                     </v-col>
                   </v-row>

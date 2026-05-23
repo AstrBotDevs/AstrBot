@@ -78,6 +78,26 @@ const authorDisplay = computed(() => {
   return "";
 });
 
+// 从 repo URL 提取作者主页链接
+const authorHomepageUrl = computed(() => {
+  const repoUrl = props.extension?.repo;
+  if (!repoUrl) return null;
+
+  try {
+    // 解析 GitHub URL，提取 owner
+    const url = new URL(repoUrl);
+    if (url.hostname.toLowerCase() !== 'github.com') return null;
+
+    const pathParts = url.pathname.split('/').filter(p => p);
+    if (pathParts.length < 1) return null;
+
+    const owner = pathParts[0];
+    return `https://github.com/${owner}`;
+  } catch {
+    return null;
+  }
+});
+
 const logoLoadFailed = ref(false);
 
 const logoSrc = computed(() => {
@@ -368,6 +388,22 @@ const safeSocialLink = computed(() => {
                   {{ tag === "danger" ? tm("tags.danger") : tag }}
                 </v-chip>
                 <PluginPlatformChip :platforms="supportPlatforms" />
+                <a
+                  v-if="authorDisplay && authorHomepageUrl"
+                  :href="authorHomepageUrl"
+                  target="_blank"
+                  @click.stop
+                  style="text-decoration: none"
+                >
+                  <v-chip color="info" label size="small" style="cursor: pointer">
+                    <v-icon icon="mdi-account" start></v-icon>
+                    {{ authorDisplay }}
+                  </v-chip>
+                </a>
+                <v-chip v-else-if="authorDisplay" color="info" label size="small">
+                  <v-icon icon="mdi-account" start></v-icon>
+                  {{ authorDisplay }}
+                </v-chip>
                 <v-chip
                   v-if="astrbotVersionRequirement"
                   color="secondary"
@@ -548,7 +584,11 @@ const safeSocialLink = computed(() => {
             }}</v-list-item-title>
           </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click.stop="uninstallExtension">
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-file-document-edit-outline" @click="viewChangelog">
+            <v-list-item-title>{{ tm("buttons.viewChangelog") }}</v-list-item-title>
+          </v-list-item>
+
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click="uninstallExtension">
             <v-list-item-title class="text-error">{{ tm("card.actions.uninstallPlugin") }}</v-list-item-title>
           </v-list-item>
         </StyledMenu>

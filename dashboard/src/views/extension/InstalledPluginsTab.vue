@@ -98,6 +98,25 @@ const handlePinnedImgError = (e: Event) => {
   img.src = defaultPluginIcon;
 };
 
+// 从 repo URL 提取作者主页链接
+const getAuthorHomepageUrl = (repoUrl) => {
+  if (!repoUrl) return null;
+
+  try {
+    // 解析 GitHub URL，提取 owner
+    const url = new URL(repoUrl);
+    if (url.hostname.toLowerCase() !== 'github.com') return null;
+
+    const pathParts = url.pathname.split('/').filter(p => p);
+    if (pathParts.length < 1) return null;
+
+    const owner = pathParts[0];
+    return `https://github.com/${owner}`;
+  } catch {
+    return null;
+  }
+};
+
 // --- 拖拽功能实现 ---
 const draggedIndex = ref(-1);
 let lastSwapTime = 0;
@@ -444,20 +463,459 @@ const pinnedPlugins = computed(() => {
             </div>
           </template>
 
-          <template #item.desc="{ item }">
-            <div class="py-2">
-              <div
-                class="text-body-2 text-medium-emphasis"
-                style="
-                  display: -webkit-box;
-                  -webkit-line-clamp: 3;
-                  line-clamp: 3;
-                  -webkit-box-orient: vertical;
-                  overflow: hidden;
-                  text-overflow: ellipsis;
-                "
-              >
-                {{ item.desc }}
+            <v-row class="mb-4">
+              <v-col cols="12">
+                <div class="installed-toolbar">
+                  <div class="installed-toolbar__actions">
+                    <v-btn variant="tonal" @click="toggleShowReserved">
+                      <v-icon>{{
+                        showReserved ? "mdi-eye-off" : "mdi-eye"
+                      }}</v-icon>
+                      {{
+                        showReserved
+                          ? tm("buttons.hideSystemPlugins")
+                          : tm("buttons.showSystemPlugins")
+                      }}
+                    </v-btn>
+
+                    <v-btn
+                      color="warning"
+                      variant="tonal"
+                      :disabled="updatableExtensions.length === 0"
+                      :loading="updatingAll"
+                      @click="showUpdateAllConfirm"
+                    >
+                      <v-icon>mdi-update</v-icon>
+                      {{ tm("buttons.updateAll") }}
+                    </v-btn>
+                  </div>
+
+                  <div class="installed-toolbar__controls">
+                    <v-btn-toggle
+                      v-model="installedStatusFilter"
+                      mandatory
+                      divided
+                      density="compact"
+                      color="primary"
+                      class="installed-status-toggle"
+                    >
+                      <v-btn value="all" prepend-icon="mdi-filter-variant">
+                        {{ tm("filters.all") }}
+                      </v-btn>
+                      <v-btn value="enabled" prepend-icon="mdi-play-circle-outline">
+                        {{ tm("status.enabled") }}
+                      </v-btn>
+                      <v-btn value="disabled" prepend-icon="mdi-pause-circle-outline">
+                        {{ tm("status.disabled") }}
+                      </v-btn>
+                    </v-btn-toggle>
+
+                    <PluginSortControl
+                      v-model="installedSortBy"
+                      :items="installedSortItems"
+                      :label="tm('sort.by')"
+                      :order="installedSortOrder"
+                      :ascending-label="tm('sort.ascending')"
+                      :descending-label="tm('sort.descending')"
+                      :show-order="installedSortUsesOrder"
+                      @update:order="installedSortOrder = $event"
+                    />
+                  </div>
+                </div>
+              </v-col>
+            </v-row>
+
+            <!-- 置顶插件列表 -->
+            <v-row v-if="pinnedPlugins.length > 0" class="mb-4">
+              <v-col cols="12">
+                <v-card class="rounded-lg overflow-hidden elevation-0" variant="flat">
+                  <v-card-text class="pa-4">
+                    <div class="d-flex align-center justify-space-between">
+                      <h3 class="text-h6 mb-0">{{ tm('titles.pinnedPlugins') }}</h3>
+                    </div>
+
+                    <v-row class="mt-3 relative" dense align="center" style="gap:12px">
+                      <transition-group name="list" class="v-row v-row--dense">
+                        <v-col
+                          cols="auto"
+                          v-for="(p, index) in pinnedPlugins"
+                          :key="p.name"
+                        >
+                          <PinnedPluginItem
+                            :plugin="p"
+                            :is-pinned="isPinned(p.name)"
+                            :tm="tm"
+                            :dragged="draggedIndex === index"
+                            @toggle-pin="togglePin"
+                            @view-readme="viewReadme"
+                            @open-config="openExtensionConfig"
+                            @reload="reloadPlugin"
+                            @update="updateExtension"
+                            @show-info="showPluginInfo"
+                            @uninstall="uninstallExtension"
+                            @dragstart="onDragStart(index)"
+                            @dragover="onDragOver($event)"
+                            @dragenter="onDragEnter($event, index)"
+                            @dragend="onDragEnd($event)"
+                            @drop="onDrop($event)"
+                          />
+                        </v-col>
+                      </transition-group>
+                    </v-row>
+                  </v-card-text>
+                </v-card>
+              </v-col>
+            </v-row>
+
+            
+            <v-card
+              v-if="failedPluginItems.length > 0"
+              class="mb-4 rounded-lg"
+              variant="tonal"
+              color="warning"
+            >
+              <v-card-title class="d-flex align-center">
+                <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
+                {{ tm("failedPlugins.title", { count: failedPluginItems.length }) }}
+              </v-card-title>
+              <v-card-text class="pt-0">
+                <div class="text-body-2 mb-3">
+                  {{ tm("failedPlugins.hint") }}
+                </div>
+                <v-table density="compact">
+                  <thead>
+                    <tr>
+                      <th>{{ tm("failedPlugins.columns.plugin") }}</th>
+                      <th>{{ tm("failedPlugins.columns.error") }}</th>
+                      <th class="text-right">{{ tm("buttons.actions") }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="plugin in failedPluginItems" :key="plugin.dir_name">
+                      <td>
+                        <div class="font-weight-medium">
+                          {{ plugin.display_name }}
+                        </div>
+                        <div class="text-caption text-medium-emphasis">
+                          {{ plugin.dir_name }}
+                        </div>
+                      </td>
+                      <td style="max-width: 520px">
+                        <div
+                          class="text-caption text-medium-emphasis"
+                          style="
+                            display: -webkit-box;
+                            -webkit-line-clamp: 2;
+                            line-clamp: 2;
+                            -webkit-box-orient: vertical;
+                            overflow: hidden;
+                          "
+                        >
+                          {{ plugin.error || tm("status.unknown") }}
+                        </div>
+                      </td>
+                      <td class="text-right">
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="primary"
+                          class="mr-2"
+                          prepend-icon="mdi-refresh"
+                          @click="reloadFailedPlugin(plugin.dir_name)"
+                        >
+                          {{ tm("buttons.reload") }}
+                        </v-btn>
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="error"
+                          prepend-icon="mdi-delete"
+                          :disabled="plugin.reserved"
+                          @click="requestUninstallFailedPlugin(plugin.dir_name)"
+                        >
+                          {{ tm("buttons.uninstall") }}
+                        </v-btn>
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </v-card-text>
+            </v-card>
+
+            <v-fade-transition hide-on-leave>
+              <!-- 表格视图 -->
+              <div v-if="isListView">
+                <v-card class="rounded-lg overflow-hidden elevation-0">
+                  <v-data-table
+                    class="plugin-list-table"
+                    :headers="pluginHeaders"
+                    :items="filteredPlugins"
+                    :loading="loading_"
+                    item-key="name"
+                    hover
+                  >
+                    <template v-slot:item.name="{ item }">
+                      <div class="d-flex">
+                        <div class="mr-3" style="flex-shrink: 0">
+                          <img
+                            :src="(typeof item.logo === 'string' && item.logo.trim()) ? item.logo : defaultPluginIcon"
+                            :alt="item.name"
+                            style="height: 40px; width: 40px; border-radius: 8px; object-fit: cover;"
+                          />
+                        </div>
+
+                        <div>
+                          <div class="text-h5" style="font-family: inherit;">
+                            {{ item.display_name && item.display_name.length ? item.display_name : item.name }}
+                          </div>
+
+                          <div v-if="item.display_name && item.display_name.length" class="text-caption text-medium-emphasis mt-1">
+                            {{ item.name }}
+                          </div>
+
+                          <div v-if="item.reserved" class="d-flex align-center mt-1">
+                            <v-chip color="primary" size="x-small" class="font-weight-medium">{{ tm("status.system") }}</v-chip>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+
+                    <template v-slot:item.desc="{ item }">
+                      <div class="py-2">
+                        <div
+                          class="text-body-2 text-medium-emphasis"
+                          style="
+                            display: -webkit-box;
+                            -webkit-line-clamp: 3;
+                            line-clamp: 3;
+                            -webkit-box-orient: vertical;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                          "
+                        >
+                          {{ item.desc }}
+                        </div>
+                        <div
+                          v-if="item.support_platforms?.length"
+                          class="d-flex align-center flex-wrap mt-2"
+                        >
+                          <span class="text-caption text-medium-emphasis mr-2">
+                            {{ tm("card.status.supportPlatform") }}:
+                          </span>
+                          <v-chip
+                            v-for="platformId in item.support_platforms"
+                            :key="platformId"
+                            size="x-small"
+                            color="info"
+                            variant="outlined"
+                            class="mr-1 mb-1"
+                          >
+                            {{ platformId }}
+                          </v-chip>
+                        </div>
+                        <div
+                          v-if="item.astrbot_version"
+                          class="d-flex align-center flex-wrap mt-1"
+                        >
+                          <span class="text-caption text-medium-emphasis mr-2">
+                            {{ tm("card.status.astrbotVersion") }}:
+                          </span>
+                          <v-chip
+                            size="x-small"
+                            color="secondary"
+                            variant="outlined"
+                            class="mr-1 mb-1"
+                          >
+                            {{ item.astrbot_version }}
+                          </v-chip>
+                        </div>
+                      </div>
+                    </template>
+
+                    <template v-slot:item.version="{ item }">
+                      <div class="d-flex align-center">
+                        <span class="text-body-2">{{ item.version }}</span>
+                        <v-tooltip v-if="item.has_update" location="top">
+                          <template v-slot:activator="{ props: tooltipProps }">
+                            <v-icon
+                              v-bind="tooltipProps"
+                              color="warning"
+                              size="small"
+                              class="ml-1"
+                              style="cursor: pointer"
+                              @click.stop="updateExtension(item.name)"
+                              >mdi-alert</v-icon
+                            >
+                          </template>
+                          <span
+                            >{{ tm("messages.hasUpdate") }}
+                            {{ item.online_version }}</span
+                          >
+                        </v-tooltip>
+                        <v-tooltip v-if="item.has_update" location="top">
+                          <template v-slot:activator="{ props: tooltipProps }">
+                            <span
+                              v-bind="tooltipProps"
+                              class="ml-1 text-caption text-warning"
+                              style="cursor: pointer"
+                              @click.stop="updateExtension(item.name)"
+                            >
+                              {{ item.online_version }}
+                            </span>
+                          </template>
+                          <span>{{ tm("buttons.update") }}</span>
+                        </v-tooltip>
+                      </div>
+                    </template>
+
+                    <template v-slot:item.author="{ item }">
+                      <a
+                        v-if="getAuthorHomepageUrl(item.repo)"
+                        :href="getAuthorHomepageUrl(item.repo)"
+                        target="_blank"
+                        @click.stop
+                        class="text-body-2"
+                        style="text-decoration: none; color: rgb(var(--v-theme-primary))"
+                      >
+                        {{ item.author }}
+                      </a>
+                      <div v-else class="text-body-2">{{ item.author }}</div>
+                    </template>
+
+                    <template v-slot:item.actions="{ item }">
+                      <div class="table-action-row d-flex align-center flex-nowrap justify-start ga-2 py-1">
+                        <v-btn
+                          icon
+                          size="small"
+                          variant="tonal"
+                          color="secondary"
+                          class="table-action-btn pin-action"
+                          @click.stop="togglePin(item)"
+                          :title="isPinned(item.name) ? tm('buttons.unpin') : tm('buttons.pin')"
+                        >
+                          <v-icon size="18">{{ isPinned(item.name) ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
+                        </v-btn>
+
+                        <v-btn
+                          v-if="!item.activated"
+                          size="small"
+                          variant="tonal"
+                          color="success"
+                          class="table-action-btn"
+                          prepend-icon="mdi-play"
+                          @click="pluginOn(item)"
+                        >
+                          {{ tm("buttons.enable") }}
+                        </v-btn>
+                        <v-btn
+                          v-else
+                          size="small"
+                          variant="tonal"
+                          color="error"
+                          class="table-action-btn"
+                          prepend-icon="mdi-pause"
+                          @click="pluginOff(item)"
+                        >
+                          {{ tm("buttons.disable") }}
+                        </v-btn>
+
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="primary"
+                          class="table-action-btn"
+                          prepend-icon="mdi-refresh"
+                          @click="reloadPlugin(item.name)"
+                        >
+                          {{ tm("buttons.reload") }}
+                        </v-btn>
+
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="primary"
+                          class="table-action-btn"
+                          prepend-icon="mdi-cog"
+                          @click="openExtensionConfig(item.name)"
+                        >
+                          {{ tm("buttons.configure") }}
+                        </v-btn>
+
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="info"
+                          class="table-action-btn"
+                          prepend-icon="mdi-book-open-page-variant"
+                          :disabled="!item.repo"
+                          @click="item.repo && viewReadme(item)"
+                        >
+                          {{ tm("buttons.viewDocs") }}
+                        </v-btn>
+
+                        <StyledMenu location="bottom end" offset="8">
+                          <template #activator="{ props: menuProps }">
+                            <v-btn
+                              v-bind="menuProps"
+                              icon="mdi-dots-horizontal"
+                              size="small"
+                              variant="tonal"
+                              color="secondary"
+                              class="table-action-btn"
+                            ></v-btn>
+                          </template>
+
+                          <v-list-item
+                            class="styled-menu-item"
+                            prepend-icon="mdi-information"
+                            @click="showPluginInfo(item)"
+                        >
+                          <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
+                        </v-list-item>
+
+                          <v-list-item
+                            class="styled-menu-item"
+                            prepend-icon="mdi-update"
+                            @click="updateExtension(item.name)"
+                          >
+                            <v-list-item-title>{{ tm("buttons.update") }}</v-list-item-title>
+                          </v-list-item>
+
+                          <v-list-item
+                            class="styled-menu-item"
+                            prepend-icon="mdi-file-document-edit-outline"
+                            @click="viewChangelog(item)"
+                          >
+                            <v-list-item-title>{{ tm("buttons.viewChangelog") }}</v-list-item-title>
+                          </v-list-item>
+
+                          <v-list-item
+                            class="styled-menu-item"
+                            prepend-icon="mdi-delete"
+                            :disabled="item.reserved"
+                            @click="uninstallExtension(item.name)"
+                          >
+                            <v-list-item-title>{{ tm("buttons.uninstall") }}</v-list-item-title>
+                          </v-list-item>
+                        </StyledMenu>
+                      </div>
+                    </template>
+
+                    <template v-slot:no-data>
+                      <div class="text-center pa-8">
+                        <v-icon size="64" color="info" class="mb-4"
+                          >mdi-puzzle-outline</v-icon
+                        >
+                        <div class="text-h5 mb-2">
+                          {{ tm("empty.noPlugins") }}
+                        </div>
+                        <div class="text-body-1 mb-4">
+                          {{ tm("empty.noPluginsDesc") }}
+                        </div>
+                      </div>
+                    </template>
+                  </v-data-table>
+                </v-card>
               </div>
               <div
                 v-if="item.support_platforms?.length"

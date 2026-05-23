@@ -22,7 +22,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["install", "open"]);
+const emit = defineEmits(["install", "viewReadme"]);
 
 const normalizePlatformList = (platforms) => {
   if (!Array.isArray(platforms)) return [];
@@ -41,12 +41,29 @@ const handleInstall = (plugin) => {
   emit("install", plugin);
 };
 
-const handlePluginLogoError = (event) => {
-  const target = event?.target;
-  if (!target || target.dataset.fallbackApplied === "1") return;
-  target.dataset.fallbackApplied = "1";
-  target.src = props.defaultPluginIcon;
+const handleViewReadme = (plugin) => {
+  emit("viewReadme", plugin);
 };
+
+// 从 repo URL 提取作者主页链接
+const authorHomepageUrl = computed(() => {
+  const repoUrl = props.plugin?.repo;
+  if (!repoUrl) return null;
+
+  try {
+    // 解析 GitHub URL，提取 owner
+    const url = new URL(repoUrl);
+    if (url.hostname.toLowerCase() !== 'github.com') return null;
+
+    const pathParts = url.pathname.split('/').filter(p => p);
+    if (pathParts.length < 1) return null;
+
+    const owner = pathParts[0];
+    return `https://github.com/${owner}`;
+  } catch {
+    return null;
+  }
+});
 
 </script>
 
@@ -126,6 +143,22 @@ const handlePluginLogoError = (event) => {
           >
             {{ plugin.author }}
           </a>
+          <a
+            v-else-if="authorHomepageUrl"
+            :href="authorHomepageUrl"
+            target="_blank"
+            @click.stop
+            class="text-subtitle-2 font-weight-medium"
+            style="
+              text-decoration: none;
+              color: rgb(var(--v-theme-primary));
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            "
+          >
+            {{ plugin.author }}
+          </a>
           <span
             v-else
             class="text-subtitle-2 font-weight-medium"
@@ -191,6 +224,18 @@ const handlePluginLogoError = (event) => {
         />
       </div>
       <v-spacer></v-spacer>
+      <v-btn
+        v-if="plugin?.repo"
+        color="info"
+        size="small"
+        variant="tonal"
+        class="market-action-btn"
+        @click="handleViewReadme(plugin)"
+        style="height: 32px"
+      >
+        <v-icon icon="mdi-file-document-outline" start size="small"></v-icon>
+        {{ tm("buttons.viewDocs") }}
+      </v-btn>
       <v-btn
         v-if="plugin?.repo"
         color="secondary"
