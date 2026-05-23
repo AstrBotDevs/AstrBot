@@ -120,6 +120,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "websearch_bocha_key": [],
         "websearch_baidu_app_builder_key": "",
         "websearch_firecrawl_key": [],
+        "websearch_metaso_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -3725,6 +3726,7 @@ CONFIG_METADATA_3 = {
                             "bocha",
                             "brave",
                             "firecrawl",
+                            "metaso",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3767,6 +3769,16 @@ CONFIG_METADATA_3 = {
                         "hint": "可添加多个 Key 进行轮询。",
                         "condition": {
                             "provider_settings.websearch_provider": "firecrawl",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_metaso_key": {
+                        "description": "Metaso API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。内置 Key 每天有 100 次免费查询额度，配置自己的 Key 可获得更高配额。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "metaso",
                             "provider_settings.web_search": True,
                         },
                     },

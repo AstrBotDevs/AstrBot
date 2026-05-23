@@ -105,6 +105,7 @@ from astrbot.core.tools.web_search_tools import (
     ExaWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
+    MetasoWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
     normalize_legacy_web_search_config,
@@ -1505,10 +1506,8 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BraveWebSearchTool))
     elif provider == "baidu_ai_search":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
-    elif provider == "exa":
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaWebSearchTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaExtractWebPageTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaFindSimilarTool))
+    elif provider == "metaso":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(MetasoWebSearchTool))
 
 
 def _get_compress_provider(
