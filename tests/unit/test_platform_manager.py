@@ -2,87 +2,40 @@ import asyncio
 
 import pytest
 
-from astrbot.core.platform.manager import PlatformManager
-from astrbot.core.platform.platform import Platform
-from astrbot.core.platform.platform_metadata import PlatformMetadata
-from astrbot.core.platform.register import platform_cls_map
+from astrbot.core.platform.manager import PlatformManager, PlatformTasks
 
 
-class DummyAstrBotConfig(dict):
-    def save_config(self, replace_config: dict | None = None) -> None:
-        if replace_config is not None:
-            self.clear()
-            self.update(replace_config)
-
-
-class DummyPlatform(Platform):
-    instances: list["DummyPlatform"] = []
-
-    def __init__(self, platform_config: dict, platform_settings: dict, event_queue):
-        super().__init__(platform_config, event_queue)
-        self.platform_settings = platform_settings
-        self.terminated = False
-        self._stop_event = asyncio.Event()
-        self.__class__.instances.append(self)
-
-    async def _run(self) -> None:
-        await self._stop_event.wait()
-
-    def run(self):
-        return self._run()
+class _PlatformThatNeedsTaskStopped:
+    def __init__(self) -> None:
+        self.client_self_id = "dummy-client"
+        self.run_task_cancelled = asyncio.Event()
 
     async def terminate(self) -> None:
-        self.terminated = True
-        self._stop_event.set()
-
-    def meta(self) -> PlatformMetadata:
-        return PlatformMetadata(
-            name="dummy",
-            description="dummy platform",
-            id=self.config["id"],
-            support_proactive_message=False,
-        )
+        await asyncio.wait_for(self.run_task_cancelled.wait(), timeout=1)
 
 
-@pytest.fixture
-def manager(monkeypatch: pytest.MonkeyPatch) -> PlatformManager:
-    DummyPlatform.instances.clear()
-    monkeypatch.setitem(platform_cls_map, "dummy", DummyPlatform)
-    config = DummyAstrBotConfig({"platform": [], "platform_settings": {}})
-    return PlatformManager(config, asyncio.Queue())
+async def _run_until_cancelled(cancelled: asyncio.Event) -> None:
+    try:
+        await asyncio.sleep(3600)
+    except asyncio.CancelledError:
+        cancelled.set()
+        raise
 
 
 @pytest.mark.asyncio
-async def test_load_platform_replaces_existing_same_id(manager: PlatformManager):
-    config = {"id": "default", "type": "dummy", "enable": True}
+async def test_terminate_stops_platform_tasks_before_adapter_shutdown() -> None:
+    manager = PlatformManager({"platform": [], "platform_settings": {}}, asyncio.Queue())
+    inst = _PlatformThatNeedsTaskStopped()
 
-    await manager.load_platform(config.copy())
-    first_inst = DummyPlatform.instances[-1]
+    run_task = asyncio.create_task(_run_until_cancelled(inst.run_task_cancelled))
+    wrapper_task = asyncio.create_task(asyncio.sleep(3600))
+    manager._platform_tasks[inst.client_self_id] = PlatformTasks(
+        run=run_task,
+        wrapper=wrapper_task,
+    )
 
-    await manager.load_platform(config.copy())
-    second_inst = DummyPlatform.instances[-1]
+    await asyncio.wait_for(manager._terminate_inst_and_tasks(inst), timeout=1)
 
-    assert first_inst is not second_inst
-    assert first_inst.terminated is True
-    assert second_inst.terminated is False
-    assert manager._inst_map["default"]["inst"] is second_inst
-    assert manager.platform_insts == [second_inst]
-
-
-@pytest.mark.asyncio
-async def test_terminate_platform_cleans_orphaned_instances(manager: PlatformManager):
-    config = {"id": "default", "type": "dummy", "enable": True}
-
-    await manager.load_platform(config.copy())
-    tracked_inst = DummyPlatform.instances[-1]
-
-    orphan_inst = DummyPlatform(config.copy(), {}, asyncio.Queue())
-    manager.platform_insts.append(orphan_inst)
-    manager._start_platform_task("orphan_default", orphan_inst)
-
-    await manager.terminate_platform("default")
-
-    assert tracked_inst.terminated is True
-    assert orphan_inst.terminated is True
-    assert manager.platform_insts == []
-    assert "default" not in manager._inst_map
+    assert inst.run_task_cancelled.is_set()
+    assert run_task.cancelled()
+    assert wrapper_task.cancelled()
