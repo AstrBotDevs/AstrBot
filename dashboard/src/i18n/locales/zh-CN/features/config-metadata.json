@@ -571,6 +571,10 @@
         "description": "启用文件上传到 Misskey",
         "hint": "启用后，适配器会尝试将消息链中的文件上传到 Misskey。URL 文件会先尝试服务器端上传，异步上传失败时会回退到下载后本地上传。"
       },
+      "misskey_include_reply_context": {
+        "description": "在评论 @ 时注入原帖上下文",
+        "hint": "启用后，当用户在某条帖子下评论或回复并 @机器人时，机器人将拿到被回复/被引用的原帖文本作为上下文，从而做出针对原帖的有意义回复。"
+      },
       "misskey_instance_url": {
         "description": "Misskey 实例 URL",
         "hint": "例如 https://misskey.example，填写 Bot 账号所在的 Misskey 实例地址"
@@ -582,6 +586,14 @@
       "misskey_max_download_bytes": {
         "description": "最大允许下载字节数（超出则中止）",
         "hint": "如果希望限制下载文件的最大大小以防止 OOM，请填写最大字节数；留空或 null 表示不限制。"
+      },
+      "misskey_reply_context_max_depth": {
+        "description": "原帖追溯最大层数",
+        "hint": "向上追溯多少层 reply/renote 链。1 表示仅取直接父帖，最大允许 5。深度越大对 Misskey API 的串行调用越多，会拉高响应延迟。"
+      },
+      "misskey_reply_context_max_text_length": {
+        "description": "单层原帖正文截断长度",
+        "hint": "每层原帖正文超过该字符数时会被截断，避免过长帖子刷爆 LLM prompt。最小 50，建议 500。填 -1 表示不限制（完整保留原文）。"
       },
       "misskey_token": {
         "description": "Misskey Access Token",

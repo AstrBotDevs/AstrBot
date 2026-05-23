@@ -561,6 +561,10 @@
         "description": "Enable File Upload to Misskey",
         "hint": "When enabled, the adapter uploads files in message chains to Misskey. URL files try server-side upload first; if async upload fails, it falls back to local download and upload."
       },
+      "misskey_include_reply_context": {
+        "description": "Inject Parent Note as Context",
+        "hint": "When enabled, replying to or quoting a post and @-mentioning the bot will surface the parent post's text as context, so the bot can respond with awareness of the original post."
+      },
       "misskey_instance_url": {
         "description": "Misskey Instance URL",
         "hint": "e.g. https://misskey.example. The Misskey instance where the bot account lives."
@@ -572,6 +576,14 @@
       "misskey_max_download_bytes": {
         "description": "Max Download Size (bytes)",
         "hint": "To limit download size to prevent OOM, set the maximum bytes; empty or null means no limit."
+      },
+      "misskey_reply_context_max_depth": {
+        "description": "Parent Note Trace Max Depth",
+        "hint": "How many levels of reply/renote chain to walk up. 1 = direct parent only; max 5. Higher depth means more sequential Misskey API calls and higher latency."
+      },
+      "misskey_reply_context_max_text_length": {
+        "description": "Per-Level Parent Text Max Length",
+        "hint": "Truncate each parent note's body to this character count to keep prompts compact. Minimum 50, recommended 500. Set to -1 for no limit (keep full text)."
       },
       "misskey_token": {
         "description": "Misskey Access Token",
