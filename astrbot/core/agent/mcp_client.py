@@ -24,79 +24,34 @@ from astrbot.core.utils.log_pipe import LogPipe
 from .run_context import TContext
 from .tool import FunctionTool
 
-_DEFAULT_STDIO_COMMAND_ALLOWLIST = frozenset(
-    {
-        "python",
-        "python3",
-        "py",
-        "node",
-        "npx",
-        "npm",
-        "pnpm",
-        "yarn",
-        "bun",
-        "bunx",
-        "deno",
-        "uv",
-        "uvx",
-    }
-)
-_DENIED_STDIO_COMMANDS = frozenset(
-    {
-        "bash",
-        "sh",
-        "zsh",
-        "fish",
-        "cmd",
-        "cmd.exe",
-        "powershell",
-        "powershell.exe",
-        "pwsh",
-        "pwsh.exe",
-        "osascript",
-        "open",
-        "curl",
-        "wget",
-        "nc",
-        "netcat",
-        "telnet",
-        "ssh",
-        "scp",
-        "rm",
-        "mv",
-        "cp",
-        "dd",
-        "mkfs",
-        "sudo",
-        "su",
-        "chmod",
-        "chown",
-        "kill",
-        "killall",
-        "shutdown",
-        "reboot",
-        "poweroff",
-        "halt",
-    }
-)
-_SHELL_META_RE = re.compile(r"[\r\n\x00;&|<>`$]")
-_PYTHON_INLINE_CODE_FLAGS = frozenset({"-c"})
-_JS_INLINE_CODE_FLAGS = frozenset({"-e", "--eval", "-p", "--print"})
-_DENIED_DOCKER_ARGS = frozenset(
-    {
-        "--privileged",
-        "--pid=host",
-        "--network=host",
-        "--net=host",
-        "--ipc=host",
-    }
-)
-_STDIO_ALLOWLIST_ENV = "ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS"
+
+class _McpSseNoiseFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage().strip()
+        except Exception:
+            return True
+        if msg.startswith("Unknown SSE event:"):
+            event_name = msg.split(":", 1)[1].strip()
+            if event_name in {"stream", "connection"}:
+                return False
+        return True
+
+
+def _install_mcp_noise_filters() -> None:
+    for logger_name in ("mcp.client.streamable_http", "mcp.client.sse"):
+        log = logging.getLogger(logger_name)
+        if any(isinstance(f, _McpSseNoiseFilter) for f in log.filters):
+            continue
+        log.addFilter(_McpSseNoiseFilter())
+
 
 try:
     import anyio
     import mcp
     from mcp.client.sse import sse_client
+
+    _install_mcp_noise_filters()
 except (ModuleNotFoundError, ImportError):
     logger.warning(
         "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
@@ -266,6 +221,8 @@ def _merge_environment_variables(env: dict) -> dict:
 
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     """Quick test MCP server connectivity"""
+    import json
+
     import aiohttp
 
     cfg = _prepare_config(config.copy())
@@ -273,6 +230,40 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     url = cfg["url"]
     headers = cfg.get("headers", {})
     timeout = cfg.get("timeout", 10)
+
+    async def _format_http_error(response: aiohttp.ClientResponse) -> str:
+        reason = response.reason or ""
+        detail = ""
+        try:
+            raw = await response.content.read(2048)
+            if raw:
+                text = raw.decode(errors="replace").strip()
+                if text:
+                    try:
+                        data = json.loads(text)
+                    except Exception:
+                        detail = text
+                    else:
+                        if isinstance(data, dict):
+                            msg = (
+                                data.get("message")
+                                or data.get("error")
+                                or data.get("detail")
+                            )
+                            code = data.get("code")
+                            if msg is not None:
+                                detail = (
+                                    f"{code}: {msg}" if code is not None else str(msg)
+                                )
+                            else:
+                                detail = text
+                        else:
+                            detail = text
+        except Exception:
+            detail = ""
+        if detail:
+            return f"HTTP {response.status}: {reason} ({detail})"
+        return f"HTTP {response.status}: {reason}"
 
     try:
         if "transport" in cfg:
@@ -289,7 +280,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                     "method": "initialize",
                     "id": 0,
                     "params": {
-                        "protocolVersion": "2024-11-05",
+                        "protocolVersion": mcp.types.LATEST_PROTOCOL_VERSION,
                         "capabilities": {},
                         "clientInfo": {"name": "test-client", "version": "1.2.3"},
                     },
@@ -306,7 +297,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                 ) as response:
                     if response.status == 200:
                         return True, ""
-                    return False, f"HTTP {response.status}: {response.reason}"
+                    return False, await _format_http_error(response)
             else:
                 async with session.get(
                     url,
@@ -318,7 +309,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                 ) as response:
                     if response.status == 200:
                         return True, ""
-                    return False, f"HTTP {response.status}: {response.reason}"
+                    return False, await _format_http_error(response)
 
     except asyncio.TimeoutError:
         return False, f"Connection timeout: {timeout} seconds"
@@ -426,6 +417,14 @@ class MCPClient:
                 if msg.level in ("warning", "error", "critical", "alert", "emergency"):
                     log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
                     self.server_errlogs.append(log_msg)
+                return
+            normalized = msg.strip()
+            if normalized.startswith("Unknown SSE event:"):
+                event_name = normalized.split(":", 1)[1].strip()
+                if event_name in {"stream", "connection"}:
+                    return
+            print(f"MCP Server {name} Error: {msg}")
+            self.server_errlogs.append(msg)
 
         if "url" in cfg:
             success, error_msg = await _quick_test_mcp_connection(cfg)
