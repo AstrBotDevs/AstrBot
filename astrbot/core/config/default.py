@@ -1167,7 +1167,7 @@ CONFIG_METADATA_2 = {
                 "config_template": {
                     "OpenAI Compatible": {
                         "id": "openai",
-                        "provider": "openai",
+                        "provider": "generic",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -1900,18 +1900,16 @@ CONFIG_METADATA_2 = {
                         "return_documents": False,
                         "instruct": "",
                     },
-                    "NVIDIA Rerank": {
-                        "id": "nvidia_rerank",
-                        "type": "nvidia_rerank",
-                        "provider": "nvidia",
+                    "通用 Rerank": {
+                        "id": "openai_rerank",
+                        "type": "openai_rerank",
+                        "provider": "generic",
                         "provider_type": "rerank",
                         "enable": True,
-                        "nvidia_rerank_api_key": "",
-                        "nvidia_rerank_api_base": "https://ai.api.nvidia.com/v1/retrieval",
-                        "nvidia_rerank_model": "nv-rerank-qa-mistral-4b:1",
-                        "nvidia_rerank_model_endpoint": "/reranking",
-                        "timeout": 20,
-                        "nvidia_rerank_truncate": "",
+                        "rerank_api_key": "",
+                        "rerank_api_url": "https://api.example.com/v1/rerank",
+                        "rerank_model": "",
+                        "timeout": 30,
                     },
                     "Xinference STT": {
                         "id": "xinference_stt",
@@ -1956,6 +1954,11 @@ CONFIG_METADATA_2 = {
                         "description": "API URL 路径后缀",
                         "type": "string",
                         "hint": "追加到 base_url 后的路径，如 /v1/rerank。留空则不追加。",
+                    },
+                    "rerank_api_url": {
+                        "description": "通用 Rerank 完整请求 URL",
+                        "type": "string",
+                        "hint": "仅对通用 Rerank 适配器生效。请填写完整请求 URL（例如 https://api.example.com/v1/rerank）。",
                     },
                     "rerank_api_key": {
                         "description": "API Key",
