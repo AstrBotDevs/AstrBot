@@ -72,35 +72,22 @@
           </div>
         </v-fade-transition>
 
-        <!-- 内容区域 -->
-        <div v-if="!loading">
-          <!-- 子文件夹区域 -->
-          <div v-if="currentFolders.length > 0" class="folders-section mb-6">
-            <h3 class="text-subtitle-1 font-weight-medium mb-3">
-              <v-icon size="small" class="mr-1">mdi-folder</v-icon>
-              {{ tm("folder.foldersTitle") }} ({{ currentFolders.length }})
-            </h3>
-            <v-row>
-              <v-col
-                v-for="folder in currentFolders"
-                :key="folder.folder_id"
-                cols="12"
-                sm="6"
-                lg="4"
-                xl="3"
-              >
-                <FolderCard
-                  :folder="folder"
-                  @click="navigateToFolder(folder.folder_id)"
-                  @open="navigateToFolder(folder.folder_id)"
-                  @rename="openRenameFolderDialog(folder)"
-                  @move="openMoveFolderDialog(folder)"
-                  @delete="confirmDeleteFolder(folder)"
-                  @persona-dropped="handlePersonaDropped"
-                />
-              </v-col>
-            </v-row>
-          </div>
+                    <!-- 操作按钮组 -->
+                    <div class="d-flex ga-2">
+                        <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="openCreatePersonaDialog"
+                            rounded="lg">
+                            {{ tm('buttons.create') }}
+                        </v-btn>
+                        <v-btn color="purple" variant="tonal" prepend-icon="mdi-star-cog" @click="openCreateAdvancedPersonaDialog"
+                            rounded="lg">
+                            {{ tm('buttons.createAdvanced') }}
+                        </v-btn>
+                        <v-btn variant="outlined" prepend-icon="mdi-folder-plus" @click="showCreateFolderDialog = true"
+                            rounded="lg">
+                            {{ tm('folder.createButton') }}
+                        </v-btn>
+                    </div>
+                </div>
 
           <!-- Persona 区域 -->
           <div v-if="currentPersonas.length > 0" class="personas-section">
@@ -598,11 +585,167 @@ export default defineComponent({
       },
       immediate: true,
     },
-  },
-  beforeUnmount() {
-    // 组件卸载时清除定时器
-    if (this.skeletonTimer) {
-      clearTimeout(this.skeletonTimer);
+    async mounted() {
+        await this.initialize();
+    },
+    methods: {
+        ...mapActions(usePersonaStore, ['loadFolderTree', 'navigateToFolder', 'updateFolder', 'deleteFolder', 'deletePersona', 'refreshCurrentFolder', 'movePersonaToFolder']),
+
+        async initialize() {
+            await Promise.all([
+                this.loadFolderTree(),
+                this.navigateToFolder(null)
+            ]);
+        },
+
+        // Persona 操作
+        openCreatePersonaDialog() {
+            this.editingPersona = null;
+            this.showPersonaDialog = true;
+        },
+
+        openCreateAdvancedPersonaDialog() {
+            this.$router.push('/persona/advanced');
+        },
+
+        editPersona(persona: Persona) {
+            if (persona.is_advanced) {
+                this.$router.push(`/persona/advanced/${encodeURIComponent(persona.persona_id)}`);
+                return;
+            }
+            this.editingPersona = persona;
+            this.showPersonaDialog = true;
+        },
+
+        viewPersona(persona: Persona) {
+            this.viewingPersona = persona;
+            this.showViewDialog = true;
+        },
+
+        openEditFromViewDialog() {
+            if (!this.viewingPersona) return;
+            if (this.viewingPersona.is_advanced) {
+                this.showViewDialog = false;
+                this.$router.push(`/persona/advanced/${encodeURIComponent(this.viewingPersona.persona_id)}`);
+                return;
+            }
+            this.editingPersona = this.viewingPersona;
+            this.showViewDialog = false;
+            this.showPersonaDialog = true;
+        },
+
+        handlePersonaSaved(message: string) {
+            this.showSuccess(message);
+            this.refreshCurrentFolder();
+        },
+
+        handlePersonaDeleted(message: string) {
+            this.showSuccess(message);
+            this.refreshCurrentFolder();
+        },
+
+        async confirmDeletePersona(persona: Persona) {
+            if (
+                !(await askForConfirmationDialog(
+                    this.tm('messages.deleteConfirm', { id: persona.persona_id }),
+                    this.confirmDialog,
+                ))
+            ) {
+                return;
+            }
+
+            try {
+                await this.deletePersona(persona.persona_id);
+                this.showSuccess(this.tm('messages.deleteSuccess'));
+            } catch (error: any) {
+                this.showError(error.message || this.tm('messages.deleteError'));
+            }
+        },
+
+        openMovePersonaDialog(persona: Persona) {
+            this.moveDialogType = 'persona';
+            this.moveDialogItem = persona;
+            this.showMoveDialog = true;
+        },
+
+        async handlePersonaDropped({ persona_id, target_folder_id }: { persona_id: string; target_folder_id: string | null }) {
+            try {
+                await this.movePersonaToFolder(persona_id, target_folder_id);
+                this.showSuccess(this.tm('persona.messages.moveSuccess'));
+                // Navigate to the target folder
+                await this.navigateToFolder(target_folder_id);
+            } catch (error: any) {
+                this.showError(error.message || this.tm('persona.messages.moveError'));
+            }
+        },
+
+        // 文件夹操作
+        openRenameFolderDialog(folder: Folder) {
+            this.renameFolderData = { folder, name: folder.name };
+            this.showRenameFolderDialog = true;
+        },
+
+        async submitRenameFolder() {
+            if (!this.renameFolderData.name || !this.renameFolderData.folder) return;
+
+            this.renameLoading = true;
+            try {
+                await this.updateFolder({
+                    folder_id: this.renameFolderData.folder.folder_id,
+                    name: this.renameFolderData.name
+                });
+                this.showSuccess(this.tm('folder.messages.renameSuccess'));
+                this.showRenameFolderDialog = false;
+            } catch (error: any) {
+                this.showError(error.message || this.tm('folder.messages.renameError'));
+            } finally {
+                this.renameLoading = false;
+            }
+        },
+
+        openMoveFolderDialog(folder: Folder) {
+            this.moveDialogType = 'folder';
+            this.moveDialogItem = folder;
+            this.showMoveDialog = true;
+        },
+
+        confirmDeleteFolder(folder: Folder) {
+            this.deleteFolderData = folder;
+            this.showDeleteFolderDialog = true;
+        },
+
+        async submitDeleteFolder() {
+            if (!this.deleteFolderData) return;
+
+            this.deleteLoading = true;
+            try {
+                await this.deleteFolder(this.deleteFolderData.folder_id);
+                this.showSuccess(this.tm('folder.messages.deleteSuccess'));
+                this.showDeleteFolderDialog = false;
+            } catch (error: any) {
+                this.showError(error.message || this.tm('folder.messages.deleteError'));
+            } finally {
+                this.deleteLoading = false;
+            }
+        },
+
+        // 辅助方法
+        formatDate(dateString: string | undefined | null): string {
+            if (!dateString) return '';
+            return new Date(dateString).toLocaleString();
+        },
+
+        showSuccess(message: string) {
+            this.message = message;
+            this.messageType = 'success';
+            this.showMessage = true;
+        },
+
+        showError(message: string) {
+            this.message = message;
+            this.messageType = 'error';
+            this.showMessage = true;
+        }
     }
   },
   async mounted() {

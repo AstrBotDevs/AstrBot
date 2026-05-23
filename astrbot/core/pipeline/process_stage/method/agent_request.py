@@ -7,6 +7,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 
 from .agent_sub_stages.internal import InternalAgentSubStage
+from .agent_sub_stages.internal_mind import InternalMindSubStage
 from .agent_sub_stages.third_party import ThirdPartyAgentSubStage
 
 
@@ -28,9 +29,13 @@ class AgentRequestSubStage(Stage):
         self.agent_sub_stage: InternalAgentSubStage | ThirdPartyAgentSubStage
         if agent_runner_type == "local":
             self.agent_sub_stage = InternalAgentSubStage()
+            self.mind_sub_stage = InternalMindSubStage()
         else:
             self.agent_sub_stage = ThirdPartyAgentSubStage()
+            self.mind_sub_stage = None
         await self.agent_sub_stage.initialize(ctx)
+        if self.mind_sub_stage:
+            await self.mind_sub_stage.initialize(ctx)
 
     async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None, None]:
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
@@ -45,9 +50,16 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        if isinstance(self.agent_sub_stage, InternalAgentSubStage):
-            async for _ in self.agent_sub_stage.process(event, self.prov_wake_prefix):
-                yield None
-        else:
-            async for _ in self.agent_sub_stage.process(event):
-                yield None
+        # 根据是否为高级人格选择子阶段
+        sub_stage = self.agent_sub_stage
+        if event.is_advanced_persona and self.mind_sub_stage:
+            logger.debug(
+                f"会话 {event.unified_msg_origin} 使用高级人格，使用 InternalMindSubStage"
+            )
+            sub_stage = self.mind_sub_stage
+
+        # 将事件和提供商唤醒前缀传递给代理子阶段处理
+        # 异步生成所有响应
+        async for resp in sub_stage.process(event, self.prov_wake_prefix):
+            # 生成每个响应
+            yield resp

@@ -75,9 +75,20 @@ const MainRoutes = {
       component: () => import("@/views/ConversationPage.vue"),
     },
     {
-      name: "SessionManagement",
-      path: "/session-management",
-      component: () => import("@/views/SessionManagementPage.vue"),
+      name: 'AdvancedPersona',
+      path: '/persona/advanced',
+      component: () => import('@/components/shared/AdvancedPersonaPage.vue')
+    },
+    {
+      name: 'AdvancedPersonaEdit',
+      path: '/persona/advanced/:personaId',
+      component: () => import('@/components/shared/AdvancedPersonaPage.vue'),
+      props: true
+    },
+    {
+      name: 'SubAgent',
+      path: '/subagent',
+      component: () => import('@/views/SubAgentPage.vue')
     },
     {
       name: "Persona",
