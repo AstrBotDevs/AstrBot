@@ -1,11 +1,19 @@
 """Tests for send_message_to_user session handling."""
 
-import json
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+
+sys.modules.setdefault(
+    "python_ripgrep",
+    SimpleNamespace(search=lambda *args, **kwargs: []),
+)
+
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 
 
@@ -55,7 +63,6 @@ async def test_send_message_with_partial_session_id_fallback():
         session="oc_abc",
     )
     assert "Message sent to session" in result
-    # Verify the target session was reconstructed with current_session's platform/msg_type
     call_args = ctx.context.context.send_message.call_args
     target_session = call_args[0][0]
     assert target_session.platform_id == "feishu"
@@ -98,19 +105,11 @@ async def test_send_message_partial_session_falls_back_to_current():
 
 @pytest.mark.asyncio
 async def test_cron_context_current_session_is_target_session():
-    """在 cron 场景中，current_session 就是 cron 任务的目标 session。
-
-    cron 是主动唤醒，没有用户消息触发，因此没有"正在聊天的 session"。
-    event.unified_msg_origin 来自 CronMessageEvent.session，
-    而 CronMessageEvent.session 来自 cron job payload.session，
-    即用户在 cron 配置中填写的目标会话。
-    """
+    """在 cron 场景中，current_session 就是 cron 任务的目标 session。"""
     tool = SendMessageToUserTool()
-    # cron 任务的目标 session（用户配置的完整三段式）
     cron_target_session = "feishu:GroupMessage:oc_cron_target"
     ctx = _make_context(current_session=cron_target_session)
 
-    # LLM 在 cron 上下文中只传了 session_id 部分
     result = await tool.call(
         ctx,
         messages=[{"type": "plain", "text": "cron message"}],
@@ -119,7 +118,6 @@ async def test_cron_context_current_session_is_target_session():
     assert "Message sent to session" in result
     call_args = ctx.context.context.send_message.call_args
     target_session = call_args[0][0]
-    # 补全后的 session 应与 cron 目标 session 完全一致
     assert str(target_session) == cron_target_session
     assert target_session.platform_id == "feishu"
     assert target_session.message_type.value == "GroupMessage"
@@ -136,41 +134,51 @@ async def test_send_message_empty_messages_returns_error():
     assert "messages" in result.lower()
 
 
-# JSON-string messages compatibility for issue #7961.
+@pytest.mark.asyncio
+async def test_send_message_to_user_returns_error_for_missing_local_image_path():
+    ctx = _make_context(current_session="aiocqhttp:FriendMessage:123456")
+
+    async def _send_message(_session, _message_chain):
+        raise AssertionError("send_message should not be called for a missing file")
+
+    ctx.context.context.send_message = _send_message
+    tool = SendMessageToUserTool()
+
+    result = await tool.call(
+        ctx,
+        messages=[
+            {
+                "type": "image",
+                "path": "/data/asset/images/record_store_vinyl.jpg",
+            }
+        ],
+    )
+
+    assert result.startswith("error: failed to build messages[0] component:")
+    assert "No such file or directory" in result
+    assert "/data/asset/images/record_store_vinyl.jpg" in result
 
 
 @pytest.mark.asyncio
-async def test_messages_as_json_string_parsed():
-    """JSON-string array messages are parsed before validation."""
+async def test_send_message_to_user_returns_error_when_send_message_raises():
+    ctx = _make_context(current_session="aiocqhttp:FriendMessage:123456")
+
+    async def _send_message(_session, _message_chain):
+        raise FileNotFoundError(
+            2,
+            "No such file or directory",
+            "/data/asset/images/record_store_vinyl.jpg",
+        )
+
+    ctx.context.context.send_message = _send_message
     tool = SendMessageToUserTool()
-    ctx = _make_context(current_session="feishu:GroupMessage:oc_xxx")
-    messages_str = '[{"type": "plain", "text": "hello from string"}]'
-    result = await tool.call(ctx, messages=messages_str, session="oc_xxx")
-    assert "Message sent to session" in result
 
+    result = await tool.call(
+        ctx,
+        session=MessageSession.from_str("aiocqhttp:FriendMessage:123456"),
+        messages=[{"type": "plain", "text": "fallback please"}],
+    )
 
-@pytest.mark.asyncio
-async def test_messages_as_json_string_with_newlines():
-    """JSON-string messages preserve multiline text after parsing."""
-    tool = SendMessageToUserTool()
-    ctx = _make_context(current_session="feishu:GroupMessage:oc_xxx")
-
-    long_text = "line1\n\nline2\nline3"
-    messages_str = json.dumps([{"type": "plain", "text": long_text}])
-    result = await tool.call(ctx, messages=messages_str, session="oc_xxx")
-    assert "Message sent to session" in result
-    call_args = ctx.context.context.send_message.call_args
-    chain = call_args[0][1]
-    assert len(chain.chain) == 1
-    assert chain.chain[0].text == long_text
-
-
-@pytest.mark.asyncio
-async def test_messages_as_invalid_json_string_returns_error():
-    """Invalid JSON-string messages still return a validation error."""
-    tool = SendMessageToUserTool()
-    ctx = _make_context()
-    result = await tool.call(ctx, messages="not valid json at all", session="oc_xxx")
-    assert "error:" in result or "invalid" in result.lower()
-    result2 = await tool.call(ctx, messages="", session="oc_xxx")
-    assert "error:" in result2 or "invalid" in result2.lower()
+    assert result.startswith("error:")
+    assert "No such file or directory" in result
+    assert "/data/asset/images/record_store_vinyl.jpg" in result

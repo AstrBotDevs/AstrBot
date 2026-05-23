@@ -1,3 +1,4 @@
+import errno
 import json
 import os
 import shlex
@@ -156,6 +157,15 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         raise FileNotFoundError(f"{component_type} path does not exist: {path}")
 
+    def _require_existing_file(self, resolved_path: str, original_path: str) -> str:
+        if os.path.isfile(resolved_path):
+            return resolved_path
+        raise FileNotFoundError(
+            errno.ENOENT,
+            os.strerror(errno.ENOENT),
+            original_path,
+        )
+
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
@@ -209,6 +219,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                             path,
                             component_type="image",
                         )
+                        local_path = self._require_existing_file(local_path, path)
                         components.append(Comp.Image.fromFileSystem(path=local_path))
                     elif url:
                         components.append(Comp.Image.fromURL(url=url))
@@ -223,6 +234,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                             path,
                             component_type="record",
                         )
+                        local_path = self._require_existing_file(local_path, path)
                         components.append(Comp.Record.fromFileSystem(path=local_path))
                     elif url:
                         components.append(Comp.Record.fromURL(url=url))
@@ -237,6 +249,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                             path,
                             component_type="video",
                         )
+                        local_path = self._require_existing_file(local_path, path)
                         components.append(Comp.Video.fromFileSystem(path=local_path))
                     elif url:
                         components.append(Comp.Video.fromURL(url=url))
@@ -257,6 +270,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                             path,
                             component_type="file",
                         )
+                        local_path = self._require_existing_file(local_path, path)
                         components.append(Comp.File(name=name, file=local_path))
                     elif url:
                         components.append(Comp.File(name=name, url=url))
@@ -304,10 +318,19 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             else:
                 return f"error: invalid session: {session}"
 
-        await context.context.context.send_message(
-            target_session,
-            MessageChain(chain=components),
-        )
+        try:
+            await context.context.context.send_message(
+                target_session,
+                MessageChain(chain=components),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to send proactive message to session %s: %s",
+                target_session,
+                exc,
+                exc_info=True,
+            )
+            return f"error: {exc}"
         return f"Message sent to session {target_session}"
 
 
