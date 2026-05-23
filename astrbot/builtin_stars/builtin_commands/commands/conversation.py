@@ -133,7 +133,7 @@ class ConversationCommands:
         return conv.persona_id
 
     async def reset(self, message: AstrMessageEvent) -> None:
-        """重置 LLM 会话"""
+        """重置 LLM 会话（创建新对话并标记为 reset）"""
         umo = message.unified_msg_origin
         cfg = self.context.get_config(umo=message.unified_msg_origin)
         is_unique_session = cfg["platform_settings"]["unique_session"]
@@ -182,26 +182,23 @@ class ConversationCommands:
                 ),
             )
             return
-        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
-        if not cid:
-            message.set_result(
-                MessageEventResult().message(
-                    t(self.context, "conversation.no_conversation"),
-                ),
-            )
-            return
-        active_event_registry.stop_all(umo, exclude=message)
 
-        await self.context.conversation_manager.update_conversation(
+        active_event_registry.stop_all(umo, exclude=message)
+        cpersona = await self._get_current_persona_id(umo)
+        cid = await self.context.conversation_manager.new_conversation(
             umo,
-            cid,
-            [],
+            message.get_platform_id(),
+            persona_id=cpersona,
+            is_reset=True,
         )
 
-        ret = t(self.context, "conversation.reset_success")
-
         message.set_extra("_clean_ltm_session", True)
-        message.set_result(MessageEventResult().message(ret))
+
+        message.set_result(
+            MessageEventResult().message(
+                f"✅ Conversation reset. Switched to new conversation: {cid[:4]}。"
+            ),
+        )
 
     async def stop(self, message: AstrMessageEvent) -> None:
         """停止当前会话正在运行的 Agent"""
