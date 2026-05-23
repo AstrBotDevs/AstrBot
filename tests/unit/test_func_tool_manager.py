@@ -6,8 +6,10 @@ import pytest
 
 from astrbot.api import FunctionTool
 from astrbot.core import sp
-from astrbot.core.computer.cua_registry import CuaSandboxRegistry
-from astrbot.core.provider.func_tool_manager import FunctionToolManager
+from astrbot.core.provider.func_tool_manager import (
+    FunctionToolManager,
+    _modelscope_mcp_transport_from_url_info,
+)
 from astrbot.core.tools.computer_tools.shell import ExecuteShellTool
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.tools.web_search_tools import (
@@ -530,6 +532,20 @@ def test_is_self_detached_command_handles_quotes_and_comments(command, expected)
     from astrbot.core.tools.computer_tools.shell import _is_self_detached_command
 
     assert _is_self_detached_command(command) is expected
+
+
+@pytest.mark.parametrize(
+    ("url_info", "expected"),
+    [
+        ({"transport": "Streamable HTTP", "url": "https://example.com/mcp"}, "streamable_http"),
+        ({"transport_type": "sse", "url": "https://example.com/mcp"}, "sse"),
+        ({"type": "streamable_http", "url": "https://example.com/mcp"}, "streamable_http"),
+        ({"url": "https://example.com/mcp/sse"}, "sse"),
+        ({"url": "https://example.com/mcp"}, "streamable_http"),
+    ],
+)
+def test_modelscope_mcp_transport_from_url_info(url_info, expected):
+    assert _modelscope_mcp_transport_from_url_info(url_info) == expected
 
 
 @pytest.mark.asyncio
