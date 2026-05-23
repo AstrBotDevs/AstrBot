@@ -9,8 +9,16 @@ import click
 from click.shell_completion import get_completion_class
 
 from . import __version__
-from .commands import bk, config, init, password, plugin, run, service, uninstall
-from .i18n import t
+from .commands import conf, init, migrate, plug, run
+
+logo_tmpl = r"""
+     ___           _______.___________..______      .______     ______   .___________.
+    /   \         /       |           ||   _  \     |   _  \   /  __  \  |           |
+   /  ^  \       |   (----`---|  |----`|  |_)  |    |  |_)  | |  |  |  | `---|  |----`
+  /  /_\  \       \   \       |  |     |      /     |   _  <  |  |  |  |     |  |
+ /  _____  \  .----)   |      |  |     |  |\  \----.|  |_)  | |  `--'  |     |  |
+/__/     \__\ |_______/       |__|     | _| `._____||______/   \______/      |__|
+"""
 
 
 def print_version_detail() -> None:
@@ -132,56 +140,9 @@ def help(command_name: str | None, all: bool) -> None:
 cli.add_command(init)
 cli.add_command(run)
 cli.add_command(help)
-cli.add_command(plugin)
-cli.add_command(config)
-cli.add_command(uninstall)
-cli.add_command(bk)
-cli.add_command(password)
-cli.add_command(service)
-
-
-@click.command()
-@click.argument("shell", required=False, type=click.Choice(["bash", "zsh", "fish"]))
-def completion(shell: str | None) -> None:
-    """Generate shell completion script"""
-    if shell is None:
-        shell_path = os.environ.get("SHELL", "")
-        if "zsh" in shell_path:
-            shell = "zsh"
-        elif "bash" in shell_path:
-            shell = "bash"
-        elif "fish" in shell_path:
-            shell = "fish"
-        else:
-            click.echo(
-                "Could not detect shell. Please specify one of: bash, zsh, fish",
-                err=True,
-            )
-            sys.exit(1)
-
-    comp_cls = get_completion_class(shell)
-    if comp_cls is None:
-        click.echo(f"No completion support for shell: {shell}", err=True)
-        sys.exit(1)
-    comp = comp_cls(
-        cli,
-        ctx_args={},
-        prog_name="astrbot",
-        complete_var="_ASTRBOT_COMPLETE",
-    )
-    click.echo(comp.source())
-
-
-cli.add_command(completion)
-
-
-@click.command(name="version")
-def version_cmd() -> None:
-    """Display detailed version information"""
-    print_version_detail()
-
-
-cli.add_command(version_cmd)
+cli.add_command(plug)
+cli.add_command(conf)
+cli.add_command(migrate)
 
 if __name__ == "__main__":
     cli()

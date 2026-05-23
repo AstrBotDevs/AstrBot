@@ -90,3 +90,17 @@ If there are no errors, you will see a log message similar to `🌈 Dashboard st
 
 
 Next, you need to deploy any messaging platform to use AstrBot on that platform.
+
+## OpenClaw Migration (Preliminary)
+
+If you previously used OpenClaw, AstrBot now provides a preliminary migration command that can import OpenClaw workspace snapshots into AstrBot migration artifacts (including memory entries, workspace files, config conversion, and a generated `time_brief_history.md`):
+
+```bash
+# Preview only (no writes to disk)
+astrbot migrate openclaw --dry-run
+
+# Execute migration
+astrbot migrate openclaw
+```
+
+By default, AstrBot reads from `~/.openclaw` and writes migration artifacts to `data/migrations/openclaw/run-<timestamp>` under your AstrBot root.
