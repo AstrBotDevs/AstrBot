@@ -415,7 +415,38 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         return {t.name: t for t in tools}
 
     @classmethod
-    async def _build_handoff_toolset(
+    def _apply_web_search_tools(
+        cls,
+        toolset: ToolSet,
+        tool_mgr: T.Any,
+        cfg: dict,
+    ) -> None:
+        """根据配置添加 Web 搜索工具，复用主代理的逻辑。"""
+        prov_settings = cfg.get("provider_settings", {})
+        if not prov_settings.get("web_search", False):
+            return
+
+        provider = prov_settings.get("websearch_provider", "tavily")
+        try:
+            if provider == "tavily":
+                toolset.add_tool(tool_mgr.get_builtin_tool("web_search_tavily"))
+                toolset.add_tool(tool_mgr.get_builtin_tool("tavily_extract_web_page"))
+            elif provider == "bocha":
+                toolset.add_tool(tool_mgr.get_builtin_tool("web_search_bocha"))
+            elif provider == "brave":
+                toolset.add_tool(tool_mgr.get_builtin_tool("web_search_brave"))
+            elif provider == "firecrawl":
+                toolset.add_tool(tool_mgr.get_builtin_tool("web_search_firecrawl"))
+                toolset.add_tool(
+                    tool_mgr.get_builtin_tool("firecrawl_extract_web_page")
+                )
+            elif provider == "baidu_ai_search":
+                toolset.add_tool(tool_mgr.get_builtin_tool("web_search_baidu"))
+        except KeyError:
+            pass
+
+    @classmethod
+    def _build_handoff_toolset(
         cls,
         run_context: ContextWrapper[AstrAgentContext],
         tools: list[str | FunctionTool] | None,
@@ -436,7 +467,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
         if tools is None:
             toolset = ToolSet()
-            for registered_tool in llm_tools.func_list:
+            # 使用 tool_mgr 代替全局 llm_tools，确保多租户环境一致性
+            for registered_tool in tool_mgr.func_list:
                 if isinstance(registered_tool, HandoffTool):
                     continue
                 if registered_tool.active and cls._tool_enabled_for_session(
@@ -444,8 +476,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     session_config,
                 ):
                     toolset.add_tool(registered_tool)
+            # 添加计算机工具（根据 computer_use_runtime 配置）
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)
+            # 添加 Web 搜索工具（根据配置）
+            cls._apply_web_search_tools(toolset, tool_mgr, cfg)
             return None if toolset.empty() else toolset
         if not tools:
             return None
