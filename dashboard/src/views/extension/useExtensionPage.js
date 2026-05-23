@@ -104,7 +104,8 @@ export const useExtensionPage = () => {
   const curr_namespace = ref("");
   const currentConfigPlugin = ref("");
   const updatingAll = ref(false);
-
+  const reinstallingFailedPluginDirName = ref("");
+  
   const readmeDialog = reactive({
     show: false,
     pluginName: "",
@@ -538,6 +539,36 @@ export const useExtensionPage = () => {
       await getExtensions();
     } catch (err) {
       toast(resolveErrorMessage(err, tm("messages.reloadFailed")), "error");
+    }
+  };
+
+  const reinstallFailedPlugin = async (dirName, pluginLabel = dirName) => {
+    if (!dirName || reinstallingFailedPluginDirName.value === dirName) return;
+
+    reinstallingFailedPluginDirName.value = dirName;
+    toast(`${tm("messages.reinstalling")} ${pluginLabel}`, "primary");
+
+    try {
+      const res = await axios.post("/api/plugin/reinstall-failed", {
+        dir_name: dirName,
+        proxy: getSelectedGitHubProxy(),
+      });
+      if (res.data.status === "error") {
+        toast(res.data.message || tm("messages.reinstallFailed"), "error");
+        return;
+      }
+      if (res.data.status === "warning") {
+        toast(res.data.message || tm("messages.reinstallFailed"), "warning");
+        return;
+      }
+      toast(res.data.message || tm("messages.reinstallSuccess"), "success");
+      await getExtensions();
+    } catch (err) {
+      toast(resolveErrorMessage(err, tm("messages.reinstallFailed")), "error");
+    } finally {
+      if (reinstallingFailedPluginDirName.value === dirName) {
+        reinstallingFailedPluginDirName.value = "";
+      }
     }
   };
 
@@ -1781,6 +1812,7 @@ export const useExtensionPage = () => {
     loadingDialog,
     curr_namespace,
     updatingAll,
+    reinstallingFailedPluginDirName,
     readmeDialog,
     forceUpdateDialog,
     updateConfirmDialog,
@@ -1843,6 +1875,7 @@ export const useExtensionPage = () => {
     getExtensions,
     handleReloadAllFailed,
     reloadFailedPlugin,
+    reinstallFailedPlugin,
     checkUpdate,
     uninstallExtension,
     requestUninstallPlugin,
