@@ -106,19 +106,14 @@ const MainRoutes = {
       component: () => import("@/views/CronJobPage.vue"),
     },
     {
-      name: "Console",
-      path: "/console",
-      component: () => import("@/views/ConsolePage.vue"),
+      name: 'ErrorAnalysis',
+      path: '/error-analysis',
+      component: () => import('@/views/ErrorAnalysisPage.vue')
     },
     {
-      name: "Trace",
-      path: "/trace",
-      component: () => import("@/views/TracePage.vue"),
-    },
-    {
-      name: "NativeKnowledgeBase",
-      path: "/knowledge-base",
-      component: () => import("@/views/knowledge-base/index.vue"),
+      name: 'NativeKnowledgeBase',
+      path: '/knowledge-base',
+      component: () => import('@/views/knowledge-base/index.vue'),
       children: [
         {
           path: "",

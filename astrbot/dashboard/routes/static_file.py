@@ -20,6 +20,7 @@ class StaticFileRoute(Route):
             "/alkaid/long-term-memory",
             "/alkaid/other",
             "/console",
+            "/error-analysis",
             "/chat",
             "/settings",
             "/platforms",

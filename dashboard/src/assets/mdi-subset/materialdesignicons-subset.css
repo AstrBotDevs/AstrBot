@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 248 icons */
+/* Auto-generated MDI subset – 260 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -50,6 +50,10 @@
 
 .mdi-alert-circle-outline::before {
   content: "\F05D6";
+}
+
+.mdi-alert-decagram-outline::before {
+  content: "\F0CE5";
 }
 
 .mdi-alert-outline::before {
@@ -162,6 +166,10 @@
 
 .mdi-chat::before {
   content: "\F0B79";
+}
+
+.mdi-chat-outline::before {
+  content: "\F0EDE";
 }
 
 .mdi-chat-processing::before {
@@ -420,6 +428,10 @@
   content: "\F0209";
 }
 
+.mdi-eye-off-outline::before {
+  content: "\F06D1";
+}
+
 .mdi-eye-outline::before {
   content: "\F06D0";
 }
@@ -438,6 +450,10 @@
 
 .mdi-file-code-outline::before {
   content: "\F102B";
+}
+
+.mdi-file-delimited-outline::before {
+  content: "\F0EA5";
 }
 
 .mdi-file-delimited-outline::before {

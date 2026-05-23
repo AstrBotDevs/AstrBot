@@ -22,6 +22,7 @@
     "sessionManagement": "Пользовательские правила",
     "console": "Логи платформы",
     "trace": "Трассировка",
+    "errorAnalysis": "Диагностика ошибок",
     "alkaid": "Alkaid Lab",
     "knowledgeBase": "База знаний",
     "about": "О программе",

@@ -7,6 +7,7 @@ from .command import CommandRoute
 from .config import ConfigRoute
 from .conversation import ConversationRoute
 from .cron import CronRoute
+from .error_analysis import ErrorAnalysisRoute
 from .file import FileRoute
 from .knowledge_base import KnowledgeBaseRoute
 from .live_chat import LiveChatRoute
@@ -35,6 +36,7 @@ __all__ = [
     "ConfigRoute",
     "ConversationRoute",
     "CronRoute",
+    "ErrorAnalysisRoute",
     "FileRoute",
     "KnowledgeBaseRoute",
     "LiveChatRoute",

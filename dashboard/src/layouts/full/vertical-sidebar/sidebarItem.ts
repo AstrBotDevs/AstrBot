@@ -131,8 +131,13 @@ const sidebarItem: menu[] = [
         icon: "mdi-timeline-text-outline",
         to: "/trace",
       },
-    ],
-  },
+      {
+        title: 'core.navigation.errorAnalysis',
+        icon: 'mdi-alert-decagram-outline',
+        to: '/error-analysis'
+      },
+    ]
+  }
   // {
   //   title: 'Project ATRI',
   //   icon: 'mdi-grain',

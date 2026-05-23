@@ -366,29 +366,26 @@ class LogQueueHandler(logging.Handler):
         self.log_broker = log_broker
 
     def emit(self, record: logging.LogRecord) -> None:
-        metadata = _ensure_record_metadata(record)
-        rendered = self.format(record)
-        message = record.getMessage()
-        timestamp = time.time()
-        event = {
-            "type": "log",
-            "level": record.levelname,
-            "time": timestamp,
-            "message": message,
-            "rendered": rendered,
-            "data": rendered,
-            "tag": metadata["tag"],
-            "tags": metadata["tags"],
-            "platform_id": metadata["platform_id"],
-            "plugin_name": metadata["plugin_name"],
-            "plugin_display_name": metadata["plugin_display_name"],
-            "umo": metadata["umo"],
-            "logger_name": metadata["logger_name"],
-            "source_file": metadata["source_file"],
-            "source_line": metadata["source_line"],
-            "is_trace": False,
-        }
-        self.log_broker.publish(event)
+        log_entry = self.format(record)
+        exc_text = ""
+        if record.exc_info:
+            try:
+                exc_text = self.formatter.formatException(record.exc_info)
+            except Exception:
+                exc_text = ""
+        self.log_broker.publish(
+            {
+                "level": record.levelname,
+                "time": time.time(),
+                "data": log_entry,
+                "message": record.getMessage(),
+                "plugin_tag": getattr(record, "plugin_tag", ""),
+                "source_file": getattr(record, "source_file", ""),
+                "source_line": getattr(record, "source_line", 0),
+                "pathname": getattr(record, "pathname", ""),
+                "exc_text": exc_text,
+            },
+        )
 
 
 class LogManager:
