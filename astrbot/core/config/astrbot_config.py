@@ -175,7 +175,7 @@ class AstrBotConfig(dict):
         # 先按照参考配置的顺序添加配置项
         for key, value in refer_conf.items():
             if key not in conf:
-                # 配置项不存在,插入默认值
+                # 配置项不存在，插入默认值
                 path_ = path + "." + key if path else key
                 logger.info("Config key missing; added default.")
                 new_conf[key] = value
@@ -206,13 +206,9 @@ class AstrBotConfig(dict):
         # 检查不在参考配置中的项：如果在动态白名单中则保留，否则删除
         for key in list(conf.keys()):
             if key not in refer_conf:
-                full_path = path + "." + key if path else key
-                if full_path in self._dynamic_config_keys:
-                    logger.debug(f"配置项 {full_path} 为动态注册项，保留")
-                    new_conf[key] = conf[key]
-                else:
-                    logger.info(f"检查到配置项 {full_path} 不存在，将从当前配置中删除")
-                    has_new = True
+                path_ = path + "." + key if path else key
+                logger.info("Config key removed: %s", path_)
+                has_new = True
 
         # 顺序不一致也算作变更
         if list(conf.keys()) != list(new_conf.keys()):

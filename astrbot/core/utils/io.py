@@ -191,26 +191,14 @@ async def download_file(
             ) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f"Failed to download file from {url}. HTTP status code: {resp.status}",
+                        f"Failed to download file from {url}. HTTP status code: {resp.status}"
                     )
                 total_size = int(resp.headers.get("content-length", 0))
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    logger.info(
-                        f"Downloading: {url} | Size: {total_size / 1024:.2f} KB",
-                    )
-                await _emit_download_progress(
-                    progress_callback,
-                    {
-                        "url": url,
-                        "downloaded": 0,
-                        "total": total_size,
-                        "percent": 0,
-                        "speed": 0,
-                    },
-                )
-                async with await anyio.open_file(path, "wb") as f:
+                    print(f"Downloading: {url} | Size: {total_size / 1024:.2f} KB")
+                with open(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
                         if not chunk:
@@ -235,8 +223,15 @@ async def download_file(
                             },
                         )
                         if show_progress:
-                            logger.info(
-                                f"Progress: {percent:.2%} Speed: {speed:.2f} KB/s",
+                            elapsed_time = (
+                                time.time() - start_time
+                                if time.time() - start_time > 0
+                                else 1
+                            )
+                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
+                            print(
+                                f"\rProgress: {downloaded_size / total_size:.2%} Speed: {speed:.2f} KB/s",
+                                end="",
                             )
                 await _emit_download_progress(
                     progress_callback,
@@ -252,7 +247,7 @@ async def download_file(
         # 关闭SSL验证(仅在证书验证失败时作为fallback)
         logger.warning(
             f"SSL certificate verification failed for {url}. "
-            "Falling back to unverified connection (CERT_NONE). ",
+            "Falling back to unverified connection (CERT_NONE). "
         )
         logger.warning(
             f"SSL certificate verification failed for {url}. "
@@ -263,65 +258,27 @@ async def download_file(
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
-        async with (
-            aiohttp.ClientSession() as session,
-            session.get(
-                url,
-                ssl=ssl_context,
-                timeout=aiohttp.ClientTimeout(total=120),
-            ) as resp,
-        ):
-            total_size = int(resp.headers.get("content-length", 0))
-            downloaded_size = 0
-            start_time = time.time()
-            if show_progress:
-                logger.info(f"Size: {total_size / 1024:.2f} KB | URL: {url}")
-            await _emit_download_progress(
-                progress_callback,
-                {
-                    "url": url,
-                    "downloaded": 0,
-                    "total": total_size,
-                    "percent": 0,
-                    "speed": 0,
-                },
-            )
-            async with await anyio.open_file(path, "wb") as f:
-                while True:
-                    chunk = await resp.content.read(8192)
-                    if not chunk:
-                        break
-                    await f.write(chunk)
-                    downloaded_size += len(chunk)
-                    elapsed_time = (
-                        time.time() - start_time if time.time() - start_time > 0 else 1
-                    )
-                    speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                    percent = downloaded_size / total_size if total_size > 0 else 0
-                    await _emit_download_progress(
-                        progress_callback,
-                        {
-                            "url": url,
-                            "downloaded": downloaded_size,
-                            "total": total_size,
-                            "percent": percent,
-                            "speed": speed,
-                        },
-                    )
-                    if show_progress:
-                        logger.info(
-                            f"Progress: {percent:.2%} Speed: {speed:.2f} KB/s",
-                        )
-            await _emit_download_progress(
-                progress_callback,
-                {
-                    "url": url,
-                    "downloaded": downloaded_size,
-                    "total": total_size,
-                    "percent": 1,
-                    "speed": 0,
-                },
-            )
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, ssl=ssl_context, timeout=120) as resp:
+                total_size = int(resp.headers.get("content-length", 0))
+                downloaded_size = 0
+                start_time = time.time()
+                if show_progress:
+                    print(f"Size: {total_size / 1024:.2f} KB | URL: {url}")
+                with open(path, "wb") as f:
+                    while True:
+                        chunk = await resp.content.read(8192)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        if show_progress:
+                            elapsed_time = time.time() - start_time
+                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
+                            print(
+                                f"\rProgress: {downloaded_size / total_size:.2%} Speed: {speed:.2f} KB/s",
+                                end="",
+                            )
     if show_progress:
         logger.info("下载完成")
 

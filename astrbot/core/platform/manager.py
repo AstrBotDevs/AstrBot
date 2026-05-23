@@ -176,7 +176,9 @@ class PlatformManager:
                 await self.terminate_platform(platform_id)
 
             logger.info(
-                f"载入 {platform_config['type']}({platform_id}) 平台适配器 ...",
+                "Loading IM platform adapter %s(%s) ...",
+                platform_config["type"],
+                platform_config["id"],
             )
             match platform_config["type"]:
                 case "aiocqhttp":

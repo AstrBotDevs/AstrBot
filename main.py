@@ -71,7 +71,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
     """下载管理面板文件"""
     # 指定webui目录
     if webui_dir:
-        if await asyncio.to_thread(os.path.exists, webui_dir):
+        if os.path.exists(webui_dir):
             logger.info("Using WebUI directory: %s", webui_dir)
             return webui_dir
         logger.warning("WebUI directory not found: %s. Using default.", webui_dir)

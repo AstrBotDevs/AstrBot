@@ -953,7 +953,13 @@ class PluginManager:
                 path = "data.plugins." if not reserved else "astrbot.builtin_stars."
                 path += root_dir_name + "." + module_str
 
-                logger.info(f"正在载入插件 {root_dir_name} ...")
+                # 检查是否需要载入指定的插件
+                if specified_module_path and path != specified_module_path:
+                    continue
+                if specified_dir_name and root_dir_name != specified_dir_name:
+                    continue
+
+                logger.info("Loading plugin %s ...", root_dir_name)
 
                 # 尝试导入模块
                 try:

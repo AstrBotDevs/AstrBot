@@ -860,6 +860,10 @@ class AstrBotDashboard:
         if host == "::" and platform.system() in ("Windows", "Darwin"):
             binds.append(self._build_bind("0.0.0.0", port))
 
+        if not enable:
+            logger.info("WebUI disabled.")
+            return None
+
         logger.info("Starting WebUI at %s://%s:%s", scheme, host, port)
         if host == "0.0.0.0":
             logger.info(
@@ -889,7 +893,7 @@ class AstrBotDashboard:
         parts.append(f"   ➜  Local: {scheme}://localhost:{port}\n")
         for ip in ip_addr:
             parts.append(f"   ➜  Network: {scheme}://{ip}:{port}\n")
-        parts.append(self._build_dashboard_credentials_display())
+        parts.append("   ➜  Default username/password: astrbot / astrbot\n ✨✨✨\n")
         display = "".join(parts)
 
         if not ip_addr:
