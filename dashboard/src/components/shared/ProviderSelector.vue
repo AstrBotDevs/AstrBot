@@ -376,6 +376,7 @@ function closeProviderDrawer() {
   white-space: nowrap;
   max-width: calc(100% - 80px);
   display: inline-block;
+  font-size: 13px;
 }
 
 .selected-preview {
