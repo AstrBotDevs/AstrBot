@@ -1,77 +1,30 @@
 <template>
-  <div class="console-displayer">
-    <div v-if="showLevelBtns || enableAdvancedFilters" class="console-toolbar">
-      <div v-if="showLevelBtns" class="filter-controls">
-        <v-chip-group v-model="selectedLevels" column multiple>
-          <v-chip
-            v-for="level in logLevels"
-            :key="level"
-            :value="level"
-            :color="getLevelColor(level)"
-            filter
-            variant="flat"
-            size="small"
-            :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'"
-            class="font-weight-medium"
-          >
-            {{ level }}
-          </v-chip>
-        </v-chip-group>
-      </div>
-
-      <div v-if="enableAdvancedFilters" class="advanced-filters">
-        <v-text-field
-          v-model="keyword"
-          :label="tm('filters.searchLabel')"
-          :placeholder="tm('filters.searchPlaceholder')"
-          density="compact"
-          hide-details
-          clearable
-          variant="outlined"
-          class="filter-input"
-        />
-        <v-combobox
-          v-model="selectedTags"
-          v-model:search="tagSearch"
-          :items="tagOptions"
-          :label="tm('filters.tagLabel')"
-          :placeholder="tm('filters.tagPlaceholder')"
-          :menu-props="{ maxHeight: 360, contentClass: 'tag-filter-menu' }"
-          density="compact"
-          hide-details
-          clearable
-          multiple
-          variant="outlined"
-          class="filter-input filter-input-tags"
-        >
-          <template #selection="{ index }">
-            <span
-              v-if="index === 0 && selectedTagPreview"
-              class="tag-selection-summary"
-            >
-              {{ selectedTagPreview }}
-            </span>
-          </template>
-        </v-combobox>
-        <v-btn variant="text" size="small" @click="clearFilters">
-          {{ tm('filters.clearButton') }}
-        </v-btn>
-        <span class="filter-summary">
-          {{ tm('filters.summary', { count: localLogCache.length }) }}
-        </span>
-      </div>
+  <div class="console-displayer-wrapper" id="console-wrapper">
+    <div class="filter-controls mb-2" v-if="showLevelBtns">
+      <v-chip-group v-model="selectedLevels" column multiple>
+        <v-chip v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter variant="flat" size="small"
+          :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'" class="font-weight-medium">
+          {{ level }}
+        </v-chip>
+      </v-chip-group>
+      <v-spacer></v-spacer>
+      <v-btn
+        :icon="flushMode ? 'mdi-format-columns' : 'mdi-format-align-left'"
+        variant="text"
+        density="compact"
+        class="fullscreen-btn"
+        @click="toggleFlushMode"
+      ></v-btn>
+      <v-btn
+        :icon="isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
+        variant="text"
+        density="compact"
+        class="me-4 fullscreen-btn"
+        @click="toggleFullscreen"
+      ></v-btn>
     </div>
 
-    <div ref="term" class="console-terminal">
-      <pre
-        v-for="entry in localLogCache"
-        :key="entry.uuid"
-        class="console-log-line fade-in"
-        :style="getLineStyle(entry)"
-      >{{ entry.displayText }}</pre>
-      <div v-if="localLogCache.length === 0" class="console-empty">
-        {{ emptyStateText }}
-      </div>
+    <div id="term" class="console-term" :class="{ 'console-term--flush': flushMode }">
     </div>
   </div>
 </template>
@@ -107,6 +60,17 @@ export default {
     return {
       autoScroll: true,
       isFullscreen: false,
+      flushMode: localStorage.getItem('console_flush_mode') === 'true',
+      logColorAnsiMap: {
+        '\u001b[1;34m': 'color: #6cb6d9; font-weight: bold;',
+        '\u001b[1;36m': 'color: #72c4cc; font-weight: bold;',
+        '\u001b[1;33m': 'color: #d4b95e; font-weight: bold;',
+        '\u001b[31m': 'color: #d46a6a;',
+        '\u001b[1;31m': 'color: #e06060; font-weight: bold;',
+        '\u001b[0m': 'color: inherit; font-weight: normal;',
+        '\u001b[32m': 'color: #6cc070;',
+        'default': 'color: #c8c8c8;'
+      },
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
       selectedLevels: [0, 1, 2, 3, 4],
       levelColors: {
@@ -234,8 +198,8 @@ export default {
       },
       deep: true
     },
-    logColorAnsiMap() {
-      this.refreshDisplay();
+    flushMode(val) {
+      localStorage.setItem('console_flush_mode', val);
     }
   },
   async mounted() {
@@ -628,6 +592,10 @@ export default {
       this.autoScroll = !this.autoScroll;
     },
 
+    toggleFlushMode() {
+      this.flushMode = !this.flushMode;
+    },
+
     toggleFullscreen() {
       const container = document.getElementById('console-wrapper');
       if (!document.fullscreenElement) {
@@ -790,6 +758,22 @@ export default {
   column-gap: 8px;
   align-items: start;
   white-space: normal;
+}
+
+.console-term--flush :deep(.console-log-line--structured) {
+  display: block;
+  white-space: pre-wrap;
+}
+
+.console-term--flush :deep(.console-log-prefix),
+.console-term--flush :deep(.console-log-level),
+.console-term--flush :deep(.console-log-message) {
+  display: inline;
+}
+
+.console-term--flush :deep(.console-log-prefix),
+.console-term--flush :deep(.console-log-level) {
+  margin-right: 4px;
 }
 
 :deep(.console-log-prefix),
