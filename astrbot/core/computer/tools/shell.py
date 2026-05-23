@@ -75,11 +75,10 @@ class ExecuteShellTool(FunctionTool):
                 event.unified_msg_origin,
             )
         try:
+            # 从上下文获取工具调用超时时间配置，传递给 shell.exec
+            timeout = context.tool_call_timeout
             result = await sb.shell.exec(
-                command,
-                cwd=cwd,
-                background=background,
-                env=env,
+                command, background=background, env=env, timeout=timeout
             )
             return json.dumps(result)
         except Exception as e:
