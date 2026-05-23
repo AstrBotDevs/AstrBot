@@ -129,19 +129,26 @@ axios.interceptors.request.use((config) => {
   return config;
 });
 
-// 1. 定义加载配置的函数
-async function loadAppConfig() {
-  try {
-    const configUrl = new URL(resolvePublicUrl("config.json"));
-    configUrl.searchParams.set("t", `${Date.now()}`);
-    const response = await fetch(configUrl.toString());
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 429 && error.response?.data?.message) {
+      return Promise.reject(error.response.data.message);
     }
-    return await response.json();
-  } catch (error) {
-    console.warn("Failed to load config.json, falling back to default.", error);
-    return {};
+    return Promise.reject(error);
+  }
+);
+
+// Keep fetch() calls consistent with axios by automatically attaching the JWT.
+// Some parts of the UI use fetch directly; without this, those requests will 401.
+const _origFetch = window.fetch.bind(window);
+window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  const token = localStorage.getItem('token');
+  if (!token) return _origFetch(input, init);
+
+  const headers = new Headers(init?.headers || (typeof input !== 'string' && 'headers' in input ? (input as Request).headers : undefined));
+  if (!headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
   }
 }
 

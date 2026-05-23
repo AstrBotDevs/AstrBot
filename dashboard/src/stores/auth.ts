@@ -5,8 +5,9 @@ import { createLoginProof, type LoginChallenge } from "@/utils/authLoginProof";
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
-    username: "",
-    returnUrl: null as string | null,
+    // @ts-ignore
+    username: '',
+    returnUrl: null,
   }),
   actions: {
     async finishAuthenticatedSession(data: any): Promise<void> {
@@ -46,30 +47,27 @@ export const useAuthStore = defineStore("auth", {
         router.push("/welcome");
       }
     },
-    async login(username: string, password: string): Promise<void> {
+    async login(
+      username: string,
+      password: string,
+      code?: string,
+      trustDeviceToken = false,
+    ): Promise<'totp_required' | void> {
       try {
-        const challengeRes = await axios.post("/api/auth/login/challenge");
-        const challenge = challengeRes.data?.data as LoginChallenge | undefined;
-        if (!challenge) {
-          return Promise.reject("Failed to initialize secure login");
+        const res = await axios.post('/api/auth/login', {
+          username: username,
+          password: password,
+          code: code,
+          trust_device_flag: trustDeviceToken,
+        }, {
+          validateStatus: (status) => (status >= 200 && status < 300) || status === 401
+        });
+
+        if (res.status === 401 && res.data?.data?.totp_required) {
+          return 'totp_required';
         }
 
-        let res;
-        if (challenge.algorithm === "argon2") {
-          res = await axios.post("/api/auth/login", {
-            username: username,
-            password: password,
-          });
-        } else {
-          const passwordProof = await createLoginProof(password, challenge);
-          res = await axios.post("/api/auth/login", {
-            username: username,
-            challenge_id: challenge.challenge_id,
-            password_proof: passwordProof,
-          });
-        }
-
-        if (res.data.status === "error") {
+        if (res.data.status === 'error') {
           return Promise.reject(res.data.message);
         }
 
@@ -78,10 +76,14 @@ export const useAuthStore = defineStore("auth", {
         return Promise.reject(error);
       }
     },
-    async setup(username: string, password: string, confirmPassword: string): Promise<void> {
+    async setup(
+      username: string,
+      password: string,
+      confirmPassword: string,
+    ): Promise<void> {
       try {
-        const setupEndpoint = this.has_token() ? "/api/auth/setup-authenticated" : "/api/auth/setup";
-        const res = await axios.post(setupEndpoint, {
+        const endpoint = this.has_token() ? '/api/auth/setup-authenticated' : '/api/auth/setup';
+        const res = await axios.post(endpoint, {
           username: username,
           password: password,
           confirm_password: confirmPassword,

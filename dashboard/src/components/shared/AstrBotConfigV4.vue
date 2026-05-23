@@ -282,39 +282,29 @@ function getSpecialSubtype(value: unknown): string {
                   <span class="property-key">({{ itemKey }})</span>
                 </v-list-item-title>
 
-                <v-list-item-subtitle class="property-hint">
-                  <span
-                    v-if="itemMeta?.obvious_hint && itemMeta?.hint"
-                    class="important-hint"
-                    >‼️</span
-                  >
-                  <span v-html="renderHint(itemMeta?.hint)" />
-                </v-list-item-subtitle>
-              </v-list-item>
-            </v-col>
-            <v-col cols="12" sm="6" class="config-input">
-              <TemplateListEditor
-                v-if="itemMeta?.type === 'template_list'"
-                v-model="createSelectorModel(itemKey).value"
-                :templates="itemMeta?.templates || {}"
-                class="config-field"
-              />
-              <ConfigItemRenderer
-                v-else
-                v-model="createSelectorModel(itemKey).value"
-                :item-meta="itemMeta || null"
-                :show-fullscreen-btn="!!itemMeta?.editor_mode"
-                @open-fullscreen="
-                  openEditorDialog(
-                    itemKey,
-                    iterable,
-                    itemMeta?.editor_theme,
-                    itemMeta?.editor_language,
-                  )
-                "
-              />
-            </v-col>
-          </v-row>
+              <v-list-item-subtitle class="property-hint">
+                <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
+                <span v-html="renderHint(itemMeta?.hint)"></span>
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-col>
+          <v-col cols="12" sm="6" class="config-input">
+            <TemplateListEditor
+              v-if="itemMeta?.type === 'template_list'"
+              v-model="createSelectorModel(itemKey).value"
+              :templates="itemMeta?.templates || {}"
+              class="config-field"
+            />
+            <ConfigItemRenderer
+              v-else
+              v-model="createSelectorModel(itemKey).value"
+              :item-meta="itemMeta || null"
+              :config-root="iterable"
+              :show-fullscreen-btn="!!itemMeta?.editor_mode"
+              @open-fullscreen="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
+            />
+          </v-col>
+        </v-row>
 
           <!-- Plugin Set Selector 全宽显示区域 -->
           <v-row
@@ -323,13 +313,71 @@ function getSpecialSubtype(value: unknown): string {
             "
             class="plugin-set-display-row"
           >
-            <v-col cols="12" class="plugin-set-display">
-              <div
-                v-if="
-                  createSelectorModel(itemKey).value &&
-                  createSelectorModel(itemKey).value.length > 0
-                "
-                class="selected-plugins-full-width"
+            {{ tmConfig('sections.moreConfig') }}
+            <v-icon end size="18">
+              {{ areCollapsedItemsVisible() ? 'mdi-chevron-up' : 'mdi-chevron-down' }}
+            </v-icon>
+          </span>
+        </div>
+        <div v-if="areCollapsedItemsVisible()">
+            <div
+              v-for="([itemKey, itemMeta], index) in getVisibleItemEntries(true)"
+              :key="itemKey"
+              class="config-item"
+            >
+              <v-row v-if="!itemMeta?.invisible" class="config-row">
+                <v-col cols="12" sm="6" class="property-info">
+                  <v-list-item density="compact">
+                    <v-list-item-title class="property-name">
+                      {{ translateIfKey(itemMeta?.description) || itemKey }}
+                      <span class="property-key">({{ itemKey }})</span>
+                    </v-list-item-title>
+
+                    <v-list-item-subtitle class="property-hint">
+                      <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
+                      <span v-html="renderHint(itemMeta?.hint)"></span>
+                    </v-list-item-subtitle>
+                  </v-list-item>
+                </v-col>
+                <v-col cols="12" sm="6" class="config-input">
+                  <TemplateListEditor
+                    v-if="itemMeta?.type === 'template_list'"
+                    v-model="createSelectorModel(itemKey).value"
+                    :templates="itemMeta?.templates || {}"
+                    class="config-field"
+                  />
+                  <ConfigItemRenderer
+                    v-else
+                    v-model="createSelectorModel(itemKey).value"
+                    :item-meta="itemMeta || null"
+                    :config-root="iterable"
+                    :show-fullscreen-btn="!!itemMeta?.editor_mode"
+                    @open-fullscreen="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
+                  />
+                </v-col>
+              </v-row>
+
+              <v-row v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
+                class="plugin-set-display-row">
+                <v-col cols="12" class="plugin-set-display">
+                  <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
+                    class="selected-plugins-full-width">
+                    <div class="plugins-header">
+                      <small class="text-grey">{{ t('core.shared.pluginSetSelector.selectedPluginsLabel') }}</small>
+                    </div>
+                    <div class="d-flex flex-wrap ga-2 mt-2">
+                      <v-chip v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
+                        color="primary" variant="outlined">
+                        {{ plugin === '*' ? t('core.shared.pluginSetSelector.allPluginsLabel') : plugin }}
+                      </v-chip>
+                    </div>
+                  </div>
+                </v-col>
+              </v-row>
+
+              <v-row
+                v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona' && itemKey === 'provider_settings.default_personality'"
+                class="persona-preview-row"
               >
                 <div class="plugins-header">
                   <small class="text-grey">{{

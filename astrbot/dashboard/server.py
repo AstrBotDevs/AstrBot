@@ -6,7 +6,7 @@ import os
 import platform
 import re
 import socket
-import ssl
+import time
 from datetime import datetime
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path
@@ -79,35 +79,41 @@ from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
 from .routes.widget import ChatWidget
 
-_PUBLIC_ALLOWED_ENDPOINT_PREFIXES = (
-    "/api/auth/login",
-    "/api/file",
-    "/api/platform/webhook",
-    "/api/stat/start-time",
-    "/api/backup/download",
+_RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
+    {
+        "/api/auth/totp/disable",
+        "/api/auth/totp/setup",
+        "/api/auth/login",
+        "/api/auth/totp/verify-setup",
+    }
 )
-_RUNTIME_EXTRA_BYPASS_ENDPOINT_PREFIXES = (
-    "/api/stat/version",
-    "/api/stat/runtime-status",
-    "/api/stat/restart-core",
-    "/api/stat/changelog",
-    "/api/stat/changelog/list",
-    "/api/stat/first-notice",
-)
-_RUNTIME_BYPASS_ENDPOINT_PREFIXES = (
-    tuple(
-        prefix
-        for prefix in _PUBLIC_ALLOWED_ENDPOINT_PREFIXES
-        if prefix != "/api/platform/webhook"
-    )
-    + _RUNTIME_EXTRA_BYPASS_ENDPOINT_PREFIXES
-)
-_RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES = (
-    "/api/config/",
-    "/api/plugin/reload-failed",
-    "/api/plugin/uninstall-failed",
-    "/api/plugin/source/get-failed-plugins",
-)
+
+
+class _AuthRateLimiter:
+    def __init__(self, capacity: int, refill_rate: float):
+        self.capacity = capacity
+        self.refill_rate = refill_rate
+        self.tokens = float(capacity)
+        self.last_refill = time.monotonic()
+        self.lock = asyncio.Lock()
+
+    async def acquire(self) -> bool:
+        async with self.lock:
+            now = time.monotonic()
+            elapsed = now - self.last_refill
+            self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+            self.last_refill = now
+            if self.tokens >= 1:
+                self.tokens -= 1
+                return True
+            return False
+
+
+_rate_limiters: dict[str, _AuthRateLimiter] = {}
+
+
+class _AddrWithPort(Protocol):
+    port: int
 
 
 APP: Quart
@@ -531,13 +537,35 @@ class AstrBotDashboard:
                 return guard_resp
             return None
 
-        if request.path.startswith("/api/widget"):
-            try:
-                return await self._auth_middleware_widget()
-            except Exception as err:
-                r = jsonify(Response().error(str(err)).__dict__)
-                r.status_code = 403
-                return r
+        if (
+            os.environ.get("ASTRBOT_TEST_MODE") != "true"
+            and request.path in _RATE_LIMITED_ENDPOINTS
+        ):
+            rl_config = self.config.get("dashboard", {}).get("auth_rate_limit", {})
+            rl_enabled = rl_config.get("enable", True)
+            if rl_enabled:
+                average_interval = float(rl_config.get("average_interval", 1.0))
+                max_burst = int(rl_config.get("max_burst", 3))
+                if average_interval <= 0:
+                    average_interval = 1.0
+                if max_burst <= 0:
+                    max_burst = 3
+                refill_rate = 1.0 / average_interval
+                client_ip = self._get_request_client_ip()
+                limiter = _rate_limiters.get(client_ip)
+                if limiter is None:
+                    limiter = _AuthRateLimiter(
+                        capacity=max_burst, refill_rate=refill_rate
+                    )
+                    _rate_limiters[client_ip] = limiter
+                if not await limiter.acquire():
+                    r = jsonify(
+                        Response()
+                        .error("验证尝试过于频繁，系统可能正在遭受暴力破解")
+                        .__dict__
+                    )
+                    r.status_code = 429
+                    return r
 
         allowed_exact_endpoints = {
             "/api/auth/login",
@@ -651,6 +679,26 @@ class AstrBotDashboard:
             r.status_code = 403
             return r
         return None
+
+    def _get_request_client_ip(self) -> str:
+        trust_proxy_headers = bool(
+            self.config.get("dashboard", {}).get("trust_proxy_headers", False)
+        )
+        if trust_proxy_headers:
+            forwarded_for = request.headers.get("X-Forwarded-For", "").strip()
+            if forwarded_for:
+                first_ip = forwarded_for.split(",", 1)[0].strip()
+                if first_ip and first_ip.lower() != "unknown":
+                    return first_ip
+
+            real_ip = request.headers.get("X-Real-IP", "").strip()
+            if real_ip and real_ip.lower() != "unknown":
+                return real_ip
+
+        remote_addr = request.remote_addr
+        if remote_addr:
+            return str(remote_addr)
+        return "unknown"
 
     @staticmethod
     def _extract_dashboard_jwt() -> str | None:

@@ -11,11 +11,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
+import pyotp
 import pytest
 import pytest_asyncio
 from quart import Quart, jsonify
 from werkzeug.datastructures import FileStorage
 
+import astrbot.dashboard.server as dashboard_server
 from astrbot.core import LogBroker
 from astrbot.core.computer.cua_registry import CuaSandboxRegistry
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -29,6 +31,10 @@ from astrbot.core.utils.auth_password import (
     verify_dashboard_password,
 )
 from astrbot.core.utils.pip_installer import PipInstallError
+from astrbot.core.utils.totp import (
+    TOTP_TRUSTED_DEVICE_COOKIE_NAME,
+    generate_recovery_code,
+)
 from astrbot.dashboard.password_state import (
     get_dashboard_password_hash,
     is_password_change_required,
@@ -1063,6 +1069,449 @@ async def test_auth_login_secure_cookie_override(
     assert jwt_cookie_header
     assert "Secure" in jwt_cookie_header
     assert "SameSite=Strict" in jwt_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_auth_rate_limit_uses_client_ip_bucket_across_paths(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
+    dashboard_server._rate_limiters.clear()
+    original_value = core_lifecycle_td.astrbot_config["dashboard"].get(
+        "trust_proxy_headers", False
+    )
+    core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = True
+
+    try:
+        test_client = app.test_client()
+        headers = {"X-Forwarded-For": "198.51.100.10"}
+        await test_client.post(
+            "/api/auth/login",
+            json={"username": "wrong", "password": "wrong"},
+            headers=headers,
+        )
+        await test_client.post("/api/auth/totp/setup", json={}, headers=headers)
+
+        assert len(dashboard_server._rate_limiters) == 1
+        assert "198.51.100.10" in dashboard_server._rate_limiters
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = (
+            original_value
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_rate_limit_separates_different_client_ips(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
+    dashboard_server._rate_limiters.clear()
+    original_value = core_lifecycle_td.astrbot_config["dashboard"].get(
+        "trust_proxy_headers", False
+    )
+    core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = True
+
+    try:
+        test_client = app.test_client()
+        await test_client.post(
+            "/api/auth/login",
+            json={"username": "wrong", "password": "wrong"},
+            headers={"X-Forwarded-For": "198.51.100.10"},
+        )
+        await test_client.post(
+            "/api/auth/login",
+            json={"username": "wrong", "password": "wrong"},
+            headers={"X-Forwarded-For": "198.51.100.11"},
+        )
+
+        assert len(dashboard_server._rate_limiters) == 2
+        assert "198.51.100.10" in dashboard_server._rate_limiters
+        assert "198.51.100.11" in dashboard_server._rate_limiters
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = (
+            original_value
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_rate_limit_ignores_proxy_headers_by_default(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
+    dashboard_server._rate_limiters.clear()
+    original_value = core_lifecycle_td.astrbot_config["dashboard"].get(
+        "trust_proxy_headers", False
+    )
+    core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = False
+
+    try:
+        test_client = app.test_client()
+        await test_client.post(
+            "/api/auth/login",
+            json={"username": "wrong", "password": "wrong"},
+            headers={"X-Forwarded-For": "198.51.100.20"},
+        )
+        await test_client.post(
+            "/api/auth/login",
+            json={"username": "wrong", "password": "wrong"},
+            headers={"X-Forwarded-For": "198.51.100.21"},
+        )
+
+        assert len(dashboard_server._rate_limiters) == 1
+        assert "198.51.100.20" not in dashboard_server._rate_limiters
+        assert "198.51.100.21" not in dashboard_server._rate_limiters
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = (
+            original_value
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_login_requires_totp_when_enabled_and_not_trusted(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+        )
+        data = await response.get_json()
+        assert response.status_code == 401
+        assert data["status"] == "error"
+        assert data["data"]["totp_required"] is True
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_login_accepts_valid_totp_code(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "code": pyotp.TOTP(secret).now(),
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert "token" in data["data"]
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_login_rejects_invalid_totp_code(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        valid_code = pyotp.TOTP(secret).now()
+        invalid_code = str((int(valid_code) + 1) % 1_000_000).zfill(6)
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "code": invalid_code,
+            },
+        )
+        data = await response.get_json()
+        assert response.status_code == 401
+        assert data["status"] == "error"
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_login_with_recovery_code_disables_totp(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    recovery_code, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "code": recovery_code,
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        }
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "code": pyotp.TOTP(secret).now(),
+                "trust_device_flag": True,
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        set_cookie_headers = response.headers.getlist("Set-Cookie")
+        trusted_cookie_header = next(
+            (
+                value
+                for value in set_cookie_headers
+                if TOTP_TRUSTED_DEVICE_COOKIE_NAME in value
+            ),
+            "",
+        )
+        assert trusted_cookie_header
+        assert "HttpOnly" in trusted_cookie_header
+        assert "SameSite=Strict" in trusted_cookie_header
+        assert "Path=/api/auth" in trusted_cookie_header
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_login_skips_totp_when_trusted_cookie_valid(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        first_login = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "code": pyotp.TOTP(secret).now(),
+                "trust_device_flag": True,
+            },
+        )
+        first_data = await first_login.get_json()
+        assert first_data["status"] == "ok"
+
+        second_login = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+        )
+        second_data = await second_login.get_json()
+        assert second_login.status_code == 200
+        assert second_data["status"] == "ok"
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_totp_disable_by_totp_code(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.post(
+            "/api/auth/totp/disable",
+            headers=authenticated_header,
+            json={"code": pyotp.TOTP(secret).now()},
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        }
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_totp_verify_setup_with_valid_code_returns_recovery_code(
+    app: Quart,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+    secret = pyotp.random_base32()
+    response = await test_client.post(
+        "/api/auth/totp/verify-setup",
+        headers=authenticated_header,
+        json={"secret": secret, "code": pyotp.TOTP(secret).now()},
+    )
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert isinstance(data["data"]["recovery_code"], str)
+    assert isinstance(data["data"]["recovery_code_hash"], str)
+    assert data["data"]["recovery_code"]
+    assert data["data"]["recovery_code_hash"]
+
+
+@pytest.mark.asyncio
+async def test_auth_totp_disable_by_recovery_code(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    recovery_code, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.post(
+            "/api/auth/totp/disable",
+            headers=authenticated_header,
+            json={"code": recovery_code},
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        }
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
 
 
 @pytest.mark.asyncio
