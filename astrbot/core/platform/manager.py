@@ -186,13 +186,9 @@ class PlatformManager:
                     from .sources.line.line_adapter import (
                         LinePlatformAdapter,  # noqa: F401
                     )
-                case "kook":
-                    from .sources.kook.kook_adapter import (
-                        KookPlatformAdapter,  # noqa: F401
-                    )
-                case "mattermost":
-                    from .sources.mattermost.mattermost_adapter import (
-                        MattermostPlatformAdapter,  # noqa: F401
+                case "heihe":
+                    from .sources.heihe.heihe_adapter import (
+                        HeihePlatformAdapter,  # noqa: F401
                     )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
