@@ -22,9 +22,41 @@
         </div>
       </div>
 
-      <div v-if="hasUnsavedChanges" class="unsaved-banner">
-        <v-icon size="18" color="warning">mdi-alert-circle-outline</v-icon>
-        <span>{{ tm('messages.unsavedChangesNotice') }}</span>
+      <div class="d-flex align-center gap-2">
+        <v-btn
+          variant="text"
+          color="primary"
+          prepend-icon="mdi-download"
+          @click="exportConfig"
+        >
+          {{ tm('actions.export') }}
+        </v-btn>
+        <v-btn
+          variant="text"
+          color="primary"
+          prepend-icon="mdi-upload"
+          @click="openImportDialog"
+        >
+          {{ tm('actions.import') }}
+        </v-btn>
+        <v-btn
+          variant="text"
+          color="primary"
+          prepend-icon="mdi-refresh"
+          :loading="loading"
+          @click="reload"
+        >
+          {{ tm('actions.refresh') }}
+        </v-btn>
+        <v-btn
+          variant="flat"
+          color="primary"
+          prepend-icon="mdi-content-save"
+          :loading="saving"
+          @click="save"
+        >
+          {{ tm('actions.save') }}
+        </v-btn>
       </div>
 
       <div class="dashboard-section-head">
@@ -227,13 +259,30 @@
         </section>
       </div>
 
-      <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000" location="top">
-        {{ snackbar.message }}
-        <template #actions>
-          <v-btn variant="text" @click="snackbar.show = false">{{ tm('actions.close') }}</v-btn>
-        </template>
-      </v-snackbar>
-    </v-container>
+    <!-- Empty State -->
+    <div v-if="cfg.agents.length === 0" class="d-flex flex-column align-center justify-center py-12 text-medium-emphasis">
+      <v-icon icon="mdi-robot-off" size="64" class="mb-4 opacity-50" />
+      <div class="text-h6">{{ tm('empty.title') }}</div>
+      <div class="text-body-2 mb-4">{{ tm('empty.subtitle') }}</div>
+      <v-btn color="primary" variant="tonal" @click="addAgent">
+        {{ tm('empty.action') }}
+      </v-btn>
+    </div>
+
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000" location="top">
+      {{ snackbar.message }}
+      <template #actions>
+         <v-btn variant="text" @click="snackbar.show = false">{{ tm('actions.close') }}</v-btn>
+      </template>
+    </v-snackbar>
+
+    <input
+      ref="importFileInputRef"
+      type="file"
+      accept="application/json,.json"
+      style="display: none;"
+      @change="handleImportFile"
+    />
   </div>
 </template>
 
@@ -269,7 +318,7 @@ const confirmDialog = useConfirmDialog()
 
 const loading = ref(false)
 const saving = ref(false)
-const isDark = computed(() => theme.global.current.value.dark)
+const importFileInputRef = ref<HTMLInputElement | null>(null)
 
 const snackbar = ref({
   show: false,
@@ -297,7 +346,7 @@ const mainStateDescription = computed(() =>
 const hasUnsavedChanges = computed(() => hasLoaded.value && serializeConfig(cfg.value) !== initialSnapshot.value)
 
 function normalizeConfig(raw: any): SubAgentConfig {
-  const main_enable = !!raw?.main_enable
+  const main_enable = raw?.main_enable !== undefined ? !!raw.main_enable : !!raw?.enable
   const remove_main_duplicate_tools = !!raw?.remove_main_duplicate_tools
   const agentsRaw = Array.isArray(raw?.agents) ? raw.agents : []
 
@@ -374,6 +423,82 @@ function toggleAgentExpanded(key: string) {
   expandedAgents.value[key] = !isAgentExpanded(key)
 }
 
+function toPersistedConfig(source: SubAgentConfig) {
+  return {
+    main_enable: !!source.main_enable,
+    remove_main_duplicate_tools: !!source.remove_main_duplicate_tools,
+    agents: source.agents.map((a) => ({
+      name: (a.name || '').trim(),
+      persona_id: (a.persona_id || '').trim(),
+      public_description: a.public_description || '',
+      enabled: a.enabled,
+      provider_id: a.provider_id
+    }))
+  }
+}
+
+function exportConfig() {
+  let url: string | null = null
+  let link: HTMLAnchorElement | null = null
+
+  try {
+    const payload = toPersistedConfig(cfg.value)
+    const json = JSON.stringify(payload, null, 2)
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' })
+    url = URL.createObjectURL(blob)
+    link = document.createElement('a')
+    const date = new Date().toISOString().slice(0, 10)
+    link.href = url
+    link.download = `subagent-config-${date}.json`
+    document.body.appendChild(link)
+    link.click()
+    toast(tm('messages.exportSuccess'), 'success')
+  } catch (e: unknown) {
+    toast(tm('messages.exportFailed'), 'error')
+  } finally {
+    if (link?.parentNode) {
+      link.parentNode.removeChild(link)
+    }
+    if (url) {
+      URL.revokeObjectURL(url)
+    }
+  }
+}
+
+function openImportDialog() {
+  importFileInputRef.value?.click()
+}
+
+async function handleImportFile(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  const file = target?.files?.[0]
+  if (!file) return
+
+  try {
+    const text = await file.text()
+    const parsed = JSON.parse(text) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      toast(tm('messages.importInvalidJson'), 'error')
+      return
+    }
+
+    const obj = parsed as Record<string, unknown>
+    const hasExpectedTopLevelKey =
+      'agents' in obj || 'main_enable' in obj || 'enable' in obj
+    if (!hasExpectedTopLevelKey) {
+      toast(tm('messages.importInvalidJson'), 'error')
+      return
+    }
+
+    cfg.value = normalizeConfig(parsed)
+    toast(tm('messages.importSuccess'), 'success')
+  } catch (e: unknown) {
+    toast(tm('messages.importFailed'), 'error')
+  } finally {
+    if (target) target.value = ''
+  }
+}
+
 function validateBeforeSave(): boolean {
   const nameRe = /^[a-z][a-z0-9_]{0,63}$/
   const seen = new Set<string>()
@@ -406,17 +531,7 @@ async function save() {
   if (!validateBeforeSave()) return
   saving.value = true
   try {
-    const payload = {
-      main_enable: cfg.value.main_enable,
-      remove_main_duplicate_tools: cfg.value.remove_main_duplicate_tools,
-      agents: cfg.value.agents.map((agent) => ({
-        name: agent.name,
-        persona_id: agent.persona_id,
-        public_description: agent.public_description,
-        enabled: agent.enabled,
-        provider_id: agent.provider_id
-      }))
-    }
+    const payload = toPersistedConfig(cfg.value)
 
     const res = await axios.post('/api/subagent/config', payload)
     if (res.data.status === 'ok') {
