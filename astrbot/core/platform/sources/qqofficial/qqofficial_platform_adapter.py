@@ -15,9 +15,8 @@ import logging
 import os
 import random
 import time
-import uuid
-from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import botpy
 import botpy.message
@@ -34,16 +33,164 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.message.components import BaseMessageComponent
+from astrbot.core.message.utils import build_sender_content_dedup_key
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.platform.register import register_platform_adapter
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file
+from astrbot.core.utils.number_utils import safe_positive_float
+from astrbot.core.utils.ttl_registry import TTLKeyRegistry
 
 from .qqofficial_message_event import QQOfficialMessageEvent
 
-# Remove root handlers to avoid duplicate logs from botpy
+# pyright: reportUnreachable=false
+
+# remove logger handler
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
+
+
+class ManagedBotWebSocket(BotWebSocket):
+    def __init__(self, session, connection: Any, client: botClient):
+        super().__init__(session, connection)
+        self._client = client
+
+    async def on_closed(self, close_status_code, close_msg):
+        if self._client.is_shutting_down:
+            logger.debug("[QQOfficial] Ignore websocket reconnect during shutdown.")
+            return
+        await super().on_closed(close_status_code, close_msg)
+
+    async def close(self) -> None:
+        self._can_reconnect = False
+        if self._conn is not None and not self._conn.closed:
+            await self._conn.close()
+
+
+# QQ 机器人官方框架
+def _extract_sender_id(message) -> str:
+    """Extract sender ID from a QQ message object.
+
+    This is the central location for sender ID extraction logic to avoid
+    precedence drift between different code paths.
+
+    The precedence order is:
+    1. author.user_openid
+    2. author.member_openid
+    3. author.id
+
+    Args:
+        message: The message object with an author attribute.
+
+    Returns:
+        The sender ID as a string, or empty string if not found.
+    """
+    author = getattr(message, "author", None)
+    if not author:
+        return ""
+
+    sender_id = (
+        getattr(author, "user_openid", None)
+        or getattr(author, "member_openid", None)
+        or getattr(author, "id", None)
+    )
+    if sender_id is None:
+        return ""
+
+    sender_id_str = str(sender_id).strip()
+    if not sender_id_str:
+        return ""
+    return sender_id_str
+
+
+class MessageDeduplicator:
+    def __init__(
+        self,
+        message_id_ttl_seconds: float = 30 * 60,
+        content_key_ttl_seconds: float = 3.0,
+        cleanup_interval_seconds: float = 1.0,
+    ) -> None:
+        self._message_ids = TTLKeyRegistry(
+            ttl_seconds=message_id_ttl_seconds,
+            cleanup_interval_seconds=cleanup_interval_seconds,
+        )
+        self._content_keys = TTLKeyRegistry(
+            ttl_seconds=content_key_ttl_seconds,
+            cleanup_interval_seconds=cleanup_interval_seconds,
+        )
+        self._lock = asyncio.Lock()
+
+    def _id_dedup_enabled(self, message_id: str) -> bool:
+        return self._message_ids.ttl_seconds > 0 and bool(message_id)
+
+    def _content_dedup_enabled(self) -> bool:
+        return self._content_keys.ttl_seconds > 0
+
+    def _register_message_id(self, message_id: str) -> bool:
+        """Return True if duplicate by ID, False otherwise (and register)."""
+        if self._message_ids.contains(message_id):
+            logger.debug(
+                "[QQOfficial] Duplicate message detected (by ID): %s...",
+                message_id[:50],
+            )
+            return True
+
+        self._message_ids.add(message_id)
+        return False
+
+    def _register_content(
+        self,
+        message_id: str,
+        content: str,
+        sender_id: str,
+        id_dedup_enabled: bool,
+    ) -> bool:
+        """Return True if duplicate by content, False otherwise (and register)."""
+        content_key = build_sender_content_dedup_key(content, sender_id)
+        if content_key is None:
+            logger.debug("[QQOfficial] New message registered: %s...", message_id[:50])
+            return False
+
+        if self._content_keys.contains(content_key):
+            logger.debug(
+                "[QQOfficial] Duplicate message detected (by content): %s",
+                content_key,
+            )
+            # Preserve existing behavior: do not keep message_id on content duplicates
+            if id_dedup_enabled:
+                self._message_ids.discard(message_id)
+            return True
+
+        self._content_keys.add(content_key)
+        logger.debug("[QQOfficial] New message registered: %s...", message_id[:50])
+        return False
+
+    async def is_duplicate(
+        self,
+        message_id: str,
+        content: str = "",
+        sender_id: str = "",
+    ) -> bool:
+        async with self._lock:
+            id_dedup_enabled = self._id_dedup_enabled(message_id)
+            content_dedup_enabled = self._content_dedup_enabled()
+
+            if not id_dedup_enabled and not content_dedup_enabled:
+                return False
+
+            if id_dedup_enabled and self._register_message_id(message_id):
+                return True
+
+            # 2) Content-based dedup
+            if not content_dedup_enabled:
+                logger.debug(
+                    "[QQOfficial] New message registered: %s...", message_id[:50]
+                )
+                return False
+
+            return self._register_content(
+                message_id=message_id,
+                content=content,
+                sender_id=sender_id,
+                id_dedup_enabled=id_dedup_enabled,
+            )
 
 
 class botClient(Client):
@@ -51,10 +198,22 @@ class botClient(Client):
         # keep a typed reference back to adapter for callbacks to use
         self.platform = platform
 
+    @property
+    def is_shutting_down(self) -> bool:
+        return self._shutting_down or self.is_closed()
+
+    async def _should_drop_message(self, message) -> bool:
+        sender_id = _extract_sender_id(message)
+        content = getattr(message, "content", "") or ""
+        return await self.platform._is_duplicate_message(message.id, content, sender_id)
+
+    # 收到群消息
     async def on_group_at_message_create(
         self,
         message: botpy.message.GroupMessage,
     ) -> None:
+        if await self._should_drop_message(message):
+            return
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
@@ -66,6 +225,8 @@ class botClient(Client):
         self._commit(abm)
 
     async def on_at_message_create(self, message: botpy.message.Message) -> None:
+        if await self._should_drop_message(message):
+            return
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
@@ -79,6 +240,8 @@ class botClient(Client):
         self,
         message: botpy.message.DirectMessage,
     ) -> None:
+        if await self._should_drop_message(message):
+            return
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
@@ -93,6 +256,8 @@ class botClient(Client):
         self._commit(abm)
 
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
+        if await self._should_drop_message(message):
+            return
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
@@ -157,6 +322,38 @@ class QQOfficialPlatformAdapter(Platform):
         self._session_last_message_id: dict[str, str] = {}
         self._session_scene: dict[str, str] = {}
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
+
+        message_id_ttl_seconds = safe_positive_float(
+            platform_config.get("dedup_message_id_ttl_seconds"),
+            30 * 60,
+        )
+        content_key_ttl_seconds = safe_positive_float(
+            platform_config.get("dedup_content_key_ttl_seconds"),
+            3.0,
+        )
+        cleanup_interval_seconds = safe_positive_float(
+            platform_config.get("dedup_cleanup_interval_seconds"),
+            1.0,
+        )
+
+        self._deduplicator = MessageDeduplicator(
+            message_id_ttl_seconds=message_id_ttl_seconds,
+            content_key_ttl_seconds=content_key_ttl_seconds,
+            cleanup_interval_seconds=cleanup_interval_seconds,
+        )
+
+    async def should_handle_raw_message(self, message: Any) -> bool:
+        """Return False if the raw incoming message should be dropped."""
+        sender_id = _extract_sender_id(message)
+        message_id = str(getattr(message, "id", "") or "")
+        raw_content = getattr(message, "content", "")
+        content = str(raw_content or "")
+        is_duplicate = await self._deduplicator.is_duplicate(
+            message_id,
+            content,
+            sender_id,
+        )
+        return not is_duplicate
 
     async def send_by_session(
         self,
@@ -474,23 +671,20 @@ class QQOfficialPlatformAdapter(Platform):
         # normalize message_id to string
         abm.message_id = str(getattr(message, "id", "") or uuid.uuid4().hex)
         msg: list[BaseMessageComponent] = []
+        message = cast(Any, message)
 
         # Group-like messages (GroupMessage or C2C in some contexts)
         if isinstance(message, botpy.message.GroupMessage) or isinstance(
             message,
             botpy.message.C2CMessage,
         ):
+            sender_user_id = _extract_sender_id(message)
             if isinstance(message, botpy.message.GroupMessage):
-                abm.sender = MessageMember(
-                    str(getattr(message.author, "member_openid", "") or ""),
-                    "",
-                )
-                abm.group_id = str(getattr(message, "group_openid", "") or "")
+                abm.sender = MessageMember(sender_user_id, "")
+                abm.group_id = message.group_openid
             else:
-                abm.sender = MessageMember(
-                    str(getattr(message.author, "user_openid", "") or ""),
-                    "",
-                )
+                abm.sender = MessageMember(sender_user_id, "")
+            # Parse face messages to readable text
             abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
                 (getattr(message, "content", "") or "").strip(),
             )
@@ -528,10 +722,10 @@ class QQOfficialPlatformAdapter(Platform):
             )
             abm.message = msg
             abm.message_str = plain_content
-            # normalize sender fields with safe fallbacks
+            sender_user_id = _extract_sender_id(message)
             abm.sender = MessageMember(
-                str(getattr(message.author, "id", "") or ""),
-                str(getattr(message.author, "username", "") or ""),
+                sender_user_id,
+                str(message.author.username),
             )
             msg.append(At(qq="qq_official"))
             msg.append(Plain(plain_content))
