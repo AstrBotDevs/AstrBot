@@ -217,6 +217,22 @@
               variant="text"
               @click="copyMessage(msg)"
             />
+            <v-btn
+              v-if="enableCopy && !isUserMessage(msg)"
+              icon="mdi-download"
+              size="x-small"
+              variant="text"
+              @click="downloadMessage(msg)"
+            />
+            <v-btn
+              v-if="enableCopy && !isUserMessage(msg)"
+              icon="mdi-file-document-edit-outline"
+              size="x-small"
+              variant="text"
+              @click="printMessage(msg)"
+
+            />
+            <!-- 不知为何打印机图标全都显示不了，只能这个代替了 -->
             <v-menu
               v-if="messageContent(msg).agentStats"
               location="bottom"
@@ -340,6 +356,8 @@ import type {
   MessagePart,
 } from "@/composables/useMessages";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { copyToClipboard } from "@/utils/clipboard";
+import { printMarkdown } from "@/utils/print";
 
 const props = withDefaults(
   defineProps<{
@@ -633,6 +651,23 @@ async function copyMessage(message: ChatRecord) {
   const text = plainTextFromMessage(message);
   if (!text) return;
   await navigator.clipboard?.writeText(text);
+}
+
+async function downloadMessage(message: ChatRecord) {
+  const text = plainTextFromMessage(message);
+  if (!text) return;
+  const blob = new Blob([text]);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = message.id + '.md';
+  a.click();
+}
+
+async function printMessage(message: ChatRecord) {
+  const text = plainTextFromMessage(message);
+  if (!text) return;
+  printMarkdown(text);
 }
 
 async function downloadPart(part: MessagePart) {

@@ -1,76 +1,95 @@
 <template>
-  <v-card class="standalone-chat-card" elevation="0" rounded="0">
-    <v-card-text class="standalone-chat-container">
-      <div class="chat-layout">
-        <!-- 聊天内容区域 -->
-        <div class="chat-content-panel">
-          <MessageList
-            v-if="messages && messages.length > 0"
-            ref="messageList"
-            :messages="messages"
-            :is-dark="isDark"
-            :is-streaming="isStreaming || isConvRunning"
-            @openImagePreview="openImagePreview"
-          />
-          <div v-else class="welcome-container fade-in">
-            <div class="welcome-title">
-              <span>Hello, I'm</span>
-              <span class="bot-name">AstrBot ⭐</span>
-            </div>
-            <p class="text-caption text-medium-emphasis mt-2">
-              测试配置: {{ configId || "default" }}
-            </p>
-          </div>
+  <div class="standalone-chat">
+    <section ref="messagesContainer" class="standalone-messages">
+      <div v-if="initializing" class="standalone-state">
+        <v-progress-circular indeterminate size="28" width="3" />
+      </div>
 
-          <!-- 输入区域 -->
-          <ChatInput
-            ref="chatInputRef"
-            v-model:prompt="prompt"
-            :staged-images-url="stagedImagesUrl"
-            :staged-audio-url="stagedAudioUrl"
-            :disabled="isStreaming"
-            :is-running="isStreaming || isConvRunning"
-            :enable-streaming="enableStreaming"
-            :is-recording="isRecording"
-            :session-id="currSessionId || null"
-            :current-session="getCurrentSession"
-            :config-id="configId"
-            @send="handleSendMessage"
-            @stop="handleStopMessage"
-            @toggleStreaming="toggleStreaming"
-            @removeImage="removeImage"
-            @removeAudio="removeAudio"
-            @startRecording="handleStartRecording"
-            @stopRecording="handleStopRecording"
-            @pasteImage="handlePaste"
-            @fileSelect="handleFileSelect"
-          />
-        </div>
+      <div v-else-if="!activeMessages.length" class="standalone-state">
+        <div class="welcome-title">{{ welcomeTitle ? welcomeTitle : tm("welcome.title") }}</div>
+      </div>
+
+      <div v-else class="message-list">
+        <ChatMessageList
+          :messages="activeMessages"
+          :is-dark="isDark"
+          :is-streaming="
+            Boolean(currSessionId && isSessionRunning(currSessionId))
+          "
+          :enable-edit="false"
+          :enable-regenerate="false"
+          :enable-copy="true"
+          :manage-refs-sidebar="false"
+        />
       </div>
     </v-card-text>
   </v-card>
 
-  <!-- 图片预览对话框 -->
-  <v-dialog v-model="imagePreviewDialog" max-width="90vw" max-height="90vh">
-    <v-card class="image-preview-card" elevation="8">
-      <v-card-title class="d-flex justify-space-between align-center pa-4">
-        <span>{{ t("core.common.imagePreview") }}</span>
-        <v-btn
-          icon="mdi-close"
-          variant="text"
-          @click="imagePreviewDialog = false"
-        />
-      </v-card-title>
-      <v-card-text class="text-center pa-4">
-        <img :src="previewImageUrl" class="preview-image-large" />
-      </v-card-text>
-    </v-card>
-  </v-dialog>
+    <section class="standalone-composer">
+      <ChatInput
+        ref="inputRef"
+        v-model:prompt="draft"
+        :staged-images-url="stagedImagesUrl"
+        :staged-audio-url="stagedAudioUrl"
+        :staged-files="stagedNonImageFiles"
+        :disabled="sending || initializing"
+        :enable-streaming="enableStreaming"
+        :is-recording="false"
+        :is-running="Boolean(currSessionId && isSessionRunning(currSessionId))"
+        :session-id="currSessionId || null"
+        :current-session="currentSession"
+        :config-id="configId || 'default'"
+        send-shortcut="enter"
+        @send="sendCurrentMessage"
+        @stop="stopCurrentSession"
+        @toggle-streaming="enableStreaming = !enableStreaming"
+        @remove-image="removeImage"
+        @remove-audio="removeAudio"
+        @remove-file="removeFile"
+        @paste-image="(e: ClipboardEvent) => handlePaste(e, currSessionId)"
+        @file-select="handleFilesSelected"
+        :uploadFilesDisabled="!attachmentEnabled"
+        :providerModelMenuDisabled="widgetModel"
+        :config-selector-disabled="widgetModel"
+        :recordDisabled="!attachmentEnabled"
+      />
+    </section>
+
+    <v-overlay
+      v-model="imagePreview.visible"
+      class="image-preview-overlay"
+      scrim="rgba(0, 0, 0, 0.86)"
+      @click="closeImage"
+    >
+      <img class="preview-image" :src="imagePreview.url" alt="preview" />
+    </v-overlay>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
-import axios from "@/utils/request";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+} from "vue";
+import axios from "axios";
+import { setCustomComponents } from "markstream-vue";
+import "markstream-vue/index.css";
+import ChatInput from "@/components/chat/ChatInput.vue";
+import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
+import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import { useMediaHandling } from "@/composables/useMediaHandling";
+import ChatMessageList from "@/components/chat/ChatMessageList.vue";
+import {
+  useMessages,
+  type MessagePart,
+  type TransportMode,
+} from "@/composables/useMessages";
+import type { Session } from "@/composables/useSessions";
+import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import MessageList from "@/components/chat/MessageList.vue";
@@ -81,13 +100,24 @@ import { useRecording } from "@/composables/useRecording";
 import { useToast } from "@/utils/toast";
 import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
 
-interface Props {
-  configId?: string | null;
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  configId: null,
-});
+const props = withDefaults(
+  defineProps<{
+    configId?: string | null,
+    widgetModel?: boolean,
+    apiPackage?: Record<string, string> | null,
+    apiPackageData?: Record<string, string> | null,
+    attachmentEnabled?: boolean,
+    welcomeTitle?: string,
+  }>(),
+  {
+    configId: "default",
+    widgetModel: false,
+    apiPackage: null,
+    apiPackageData: null,
+    attachmentEnabled: true,
+    welcomeTitle: '',
+  }
+);
 
 const { t } = useI18n();
 const { error: showError } = useToast();
@@ -100,46 +130,10 @@ const previewImageUrl = ref("");
 const currSessionId = ref("");
 const getCurrentSession = computed(() => null); // 独立测试模式不需要会话信息
 
-async function bindConfigToSession(sessionId: string) {
-  const confId = (props.configId || "").trim();
-  if (!confId || confId === "default") {
-    return;
-  }
+const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
 
-  const umoDetails = buildWebchatUmoDetails(sessionId, false);
-
-  await axios.post("/api/config/umo_abconf_route/update", {
-    umo: umoDetails.umo,
-    conf_id: confId,
-  });
-}
-
-async function newSession() {
-  try {
-    const response = await axios.get("/api/chat/new_session");
-    const sessionId = response.data.data.session_id;
-
-    try {
-      await bindConfigToSession(sessionId);
-    } catch (err) {
-      console.error("Failed to bind config to session", err);
-    }
-
-    currSessionId.value = sessionId;
-
-    return sessionId;
-  } catch (err) {
-    console.error(err);
-    throw err;
-  }
-}
-
-function updateSessionTitle(sessionId: string, title: string) {
-  // 独立模式不需要更新会话标题
-}
-
-function getSessions() {
-  // 独立模式不需要加载会话列表
+if (props.widgetModel) {
+  currSessionId.value = props.apiPackageData?.session_id ?? '';
 }
 
 const {
@@ -153,13 +147,26 @@ const {
   removeAudio,
   clearStaged,
   cleanupMediaCache,
+  chatWidgetSetApiPackage,
 } = useMediaHandling();
 
 const {
-  isRecording,
-  startRecording: startRec,
-  stopRecording: stopRec,
-} = useRecording();
+  sending,
+  activeMessages,
+  isSessionRunning,
+  createLocalExchange,
+  sendMessageStream,
+  stopSession,
+  widgetSetApiPackage,
+  loadSessionMessages,
+} = useMessages({
+  currentSessionId: currSessionId,
+  onStreamUpdate: () => {
+    if (shouldStickToBottom.value) {
+      scrollToBottom();
+    }
+  },
+});
 
 const {
   messages,
@@ -258,18 +265,120 @@ async function handleStopMessage() {
 }
 
 onMounted(async () => {
-  // 独立模式在挂载时创建新会话
-  try {
-    await newSession();
-  } catch (err) {
-    console.error("Failed to create initial session:", err);
-    showError(t("features.chat.errors.createSessionFailed"));
+  await ensureSession();
+  inputRef.value?.focusInput();
+  if (props.widgetModel) {
+    initializing.value = true;
+    chatWidgetSetApiPackage(props.apiPackage ?? {});
+    widgetSetApiPackage(props.apiPackage ?? {});
+    loadSessionMessages(props.apiPackageData?.session_id ?? '')
+    .then()
+    .finally(() => {
+      initializing.value = false
+    });
   }
 });
 
 onBeforeUnmount(() => {
   cleanupMediaCache();
 });
+
+async function ensureSession() {
+  if (currSessionId.value) return currSessionId.value;
+  initializing.value = true;
+  try {
+    const response = await axios.get("/api/chat/new_session");
+    const session = response.data?.data as Session;
+    currSessionId.value = session.session_id;
+    currentSession.value = session;
+    await bindConfigToSession(session.session_id);
+    return session.session_id;
+  } finally {
+    initializing.value = false;
+  }
+}
+
+async function bindConfigToSession(sessionId: string) {
+  const confId = props.configId || "default";
+  const umo = buildWebchatUmoDetails(sessionId, false).umo;
+  await axios.post("/api/config/umo_abconf_route/update", {
+    umo,
+    conf_id: confId,
+  });
+}
+
+async function sendCurrentMessage() {
+  if (!draft.value.trim() && !stagedFiles.value.length) return;
+  const sessionId = await ensureSession();
+  const text = draft.value.trim();
+  const parts = buildOutgoingParts(text);
+  const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  const selection = inputRef.value?.getCurrentSelection();
+  const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
+
+  sendMessageStream({
+    sessionId,
+    messageId,
+    parts,
+    transport: props.widgetModel ? 'sse' : transportMode.value,
+    enableStreaming: enableStreaming.value,
+    selectedProvider: props.widgetModel ? '' : (selection?.providerId || ""),
+    selectedModel: props.widgetModel ? '' : (selection?.modelName || ""),
+    botRecord,
+  });
+  // 等半秒后再清理，有些浏览器清理太快会导致图片显示异常
+  setTimeout(() => {
+    draft.value = "";
+    clearStaged({ revokeUrls: false });
+    scrollToBottom();
+  }, 500)
+}
+
+function buildOutgoingParts(text: string): MessagePart[] {
+  const parts: MessagePart[] = [];
+  if (text) {
+    parts.push({ type: "plain", text });
+  }
+  stagedFiles.value.forEach((file) => {
+    parts.push({
+      type: file.type,
+      attachment_id: file.attachment_id,
+      filename: file.filename,
+      embedded_url: file.url,
+    });
+  });
+  return parts;
+}
+
+async function stopCurrentSession() {
+  if (!currSessionId.value) return;
+  await stopSession(currSessionId.value);
+}
+
+async function handleFilesSelected(files: FileList) {
+  const selectedFiles = Array.from(files || []);
+  for (const file of selectedFiles) {
+    if (file.type.startsWith("image/")) {
+      await processAndUploadImage(file, currSessionId.value);
+    } else {
+      await processAndUploadFile(file, currSessionId.value);
+    }
+  }
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    const container = messagesContainer.value;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+    shouldStickToBottom.value = true;
+  });
+}
+
+function closeImage() {
+  imagePreview.visible = false;
+  imagePreview.url = "";
+}
 </script>
 
 <style scoped>
@@ -362,9 +471,61 @@ onBeforeUnmount(() => {
   animation: fadeIn 0.3s ease-in-out;
 }
 
-.preview-image-large {
-  max-width: 100%;
-  max-height: 70vh;
+.image-part img {
+  max-width: min(360px, 100%);
+  max-height: 320px;
+  border-radius: 8px;
   object-fit: contain;
+}
+
+.message-bubble.bot
+  > .tool-call-block:first-child
+  :deep(.tool-call-card:first-child) {
+  margin-top: 0;
+}
+
+.standalone-composer {
+  position: relative;
+  z-index: 1;
+  padding-bottom: 10px;
+  background: rgb(var(--v-theme-background));
+}
+
+.standalone-composer::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 0;
+  top: -32px;
+  height: 32px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(var(--v-theme-background), 0),
+    rgb(var(--v-theme-background))
+  );
+}
+
+.standalone-composer :deep(.input-area) {
+  border-top: 0;
+}
+
+.image-preview-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-image {
+  max-width: min(92vw, 1000px);
+  max-height: 88vh;
+  border-radius: 8px;
+  object-fit: contain;
+}
+@media (max-width: 760px) {
+  .standalone-composer {
+    padding-bottom: 0;
+  }
 }
 </style>

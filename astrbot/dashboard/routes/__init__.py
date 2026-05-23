@@ -25,6 +25,7 @@ from .subagent import SubAgentRoute
 from .t2i import T2iRoute
 from .tools import ToolsRoute
 from .update import UpdateRoute
+from .widget import ChatWidget
 
 __all__ = [
     "ApiKeyRoute",
@@ -55,4 +56,5 @@ __all__ = [
     "T2iRoute",
     "ToolsRoute",
     "UpdateRoute",
+    "ChatWidget",
 ]
