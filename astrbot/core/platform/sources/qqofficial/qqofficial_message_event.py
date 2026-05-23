@@ -10,6 +10,7 @@ import aiofiles
 import anyio
 import botpy
 import botpy.errors
+import botpy.interaction
 import botpy.message
 import botpy.types
 import botpy.types.message
@@ -33,30 +34,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 
-# 导入分片上传模块
-from .chunked_upload import (
-    QQBotHttpClient,
-    QQBotHttpClientManager,
-    chunked_upload_c2c,
-    chunked_upload_group,
-    ChunkedUploadProgress,
-    UploadDailyLimitExceededError,
-    ApiError as ChunkedApiError,
-)
-
-# 导入限流器
-from .rate_limiter import (
-    MessageReplyLimiter,
-    check_message_reply_limit,
-    record_message_reply,
-)
-
-# 导入文件工具
-from .file_utils import (
-    format_file_size,
-    get_max_upload_size,
-    get_file_type_name,
-)
+from ._markdown_media import image_to_markdown_fragment
+from .components import QQCButton, QQCKeyboard
 
 
 def _patch_qq_botpy_formdata() -> None:
@@ -140,19 +119,13 @@ def chunk_text(
 
 
 class QQOfficialMessageEvent(AstrMessageEvent):
-    MARKDOWN_NOT_ALLOWED_ERROR = "不允许发送原生 markdown"
     IMAGE_FILE_TYPE = 1
     VIDEO_FILE_TYPE = 2
     VOICE_FILE_TYPE = 3
     FILE_FILE_TYPE = 4
-    STREAM_MARKDOWN_NEWLINE_ERROR = "流式消息md片段需要\\n结束"
-
-    # 分片上传阈值：超过此大小使用分片上传
-    CHUNKED_UPLOAD_THRESHOLD = 1024 * 1024  # 1MB
-
-    # 消息回复限制配置
-    MESSAGE_REPLY_LIMIT = 4
-    MESSAGE_REPLY_TTL_MS = 60 * 60 * 1000  # 1小时
+    STREAM_MARKDOWN_NEWLINE_ERROR = "流式消息md分片需要\\n结束"
+    # 没有正文但带 keyboard 时的占位（QQ markdown content 不可为空）
+    EMPTY_MARKDOWN_PLACEHOLDER = "​"
 
     def __init__(
         self,
@@ -167,6 +140,35 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.send_buffer = None
+        self._interaction_acked = False
+        self._interaction_ack_done = asyncio.Event()
+        self._interaction_ack_code: int = 0
+
+    async def ack_interaction(self, code: int = 0) -> None:
+        """向 QQ 官方上报按钮交互结果。
+
+        code: 0=成功, 1=操作失败, 2=操作频繁, 3=重复操作, 4=没有权限, 5=仅管理员。
+
+        每个 interaction 只会真正上报一次，重复调用会被忽略。
+        非 interaction 事件调用本方法是 no-op。
+        """
+        if self._interaction_acked:
+            logger.debug(f"[QQOfficial] ack_interaction 跳过(已 ack)，请求 code={code}")
+            return
+        interaction = self.message_obj.raw_message
+        if not isinstance(interaction, botpy.interaction.Interaction):
+            return
+        self._interaction_acked = True
+        self._interaction_ack_code = code
+        logger.debug(
+            f"[QQOfficial] ack_interaction 发送 code={code} id={interaction.id}"
+        )
+        try:
+            await self.bot.api.on_interaction_result(interaction.id, code)
+        except Exception as e:
+            logger.warning(f"[QQOfficial] interaction ack 失败: {e}")
+        finally:
+            self._interaction_ack_done.set()
 
         # 凭据配置
         self.appid = appid
@@ -369,23 +371,23 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             botpy.message.Message
             | botpy.message.GroupMessage
             | botpy.message.DirectMessage
-            | botpy.message.C2CMessage,
+            | botpy.message.C2CMessage
+            | botpy.interaction.Interaction,
         ):
             logger.warning(f"[QQOfficial] 不支持的消息源类型: {type(source)}")
             return None
 
-        # ========== P0-2 & P0-3: 消息限流检查和自动降级 ==========
-        msg_id = self.message_obj.message_id
-        use_passive, fallback_reason = self._should_use_passive_reply(source)
+        # 先预扫消息链判断是否存在 keyboard / 裸按钮：有的话强制 markdown，
+        # 并让 _parse_to_qqofficial 把图片转成 markdown 语法以便共存。
+        use_md = getattr(self.send_buffer, "use_markdown_", None)
+        has_keyboard_component = any(
+            isinstance(seg, (QQCKeyboard, QQCButton)) for seg in self.send_buffer.chain
+        )
+        if has_keyboard_component and use_md is False:
+            logger.warning("[QQOfficial] 检测到 QQC 按钮组件，自动启用 markdown 模式")
+            use_md = True
+        convert_img = has_keyboard_component and use_md is not False
 
-        if not use_passive:
-            # 降级为主动消息，移除 msg_id
-            effective_msg_id = None
-            logger.info(f"[QQOfficial] 消息回复降级为主动消息，原因: {fallback_reason}")
-        else:
-            effective_msg_id = msg_id
-
-        # ========== 解析消息内容 ==========
         (
             plain_text,
             image_source,
@@ -393,7 +395,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             video_file_source,
             file_source,
             file_name,
-        ) = await QQOfficialMessageEvent._parse_to_qqofficial(self.send_buffer)
+            keyboard_payload,
+        ) = await QQOfficialMessageEvent._parse_to_qqofficial(
+            self.send_buffer,
+            convert_image_to_markdown=convert_img,
+        )
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送
         if stream and (
@@ -407,6 +413,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             and not record_file_path
             and not video_file_source
             and not file_source
+            and not keyboard_payload
         ):
             return None
 
@@ -418,27 +425,45 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             plain_text = plain_text + "\n"
 
-        # ========== P1-2: 长文本分块处理 ==========
-        # 检查是否需要分块
-        needs_chunking = len(plain_text) > TEXT_CHUNK_LIMIT if plain_text else False
-        text_chunks = []
+        # keyboard 要求 markdown content 非空，补零宽占位
+        if keyboard_payload and not plain_text:
+            plain_text = self.EMPTY_MARKDOWN_PLACEHOLDER
 
-        if needs_chunking and not stream:
-            text_chunks = chunk_text(plain_text)
-            logger.info(
-                f"[QQOfficial] 文本长度 {len(plain_text)} 超过限制，将分 {len(text_chunks)} 块发送"
-            )
+        is_interaction = isinstance(source, botpy.interaction.Interaction)
+        if use_md is False:
+            payload: dict = {
+                "content": plain_text,
+                "msg_type": 0,
+            }
+        else:
+            payload = {
+                "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
+                "msg_type": 2,
+            }
+            if keyboard_payload is not None:
+                payload["keyboard"] = keyboard_payload
 
-        # 构建 payload（使用 effective_msg_id 而不是直接使用 message_id）
-        payload: dict = {
-            "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
-            "msg_type": 2,
-            "msg_id": effective_msg_id,  # P0-3: 使用可能降级后的 msg_id
-        }
+        # 按钮回调用 event_id 换取被动回复配额；其余用 msg_id。
+        # message_id 在 _parse_interaction_to_abm 里已经被设为 interaction.event_id，
+        # 这里两条分支只是字段名不同。
+        if is_interaction:
+            payload["event_id"] = self.message_obj.message_id
+        else:
+            payload["msg_id"] = self.message_obj.message_id
 
-        if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
+        if not isinstance(
+            source,
+            botpy.message.Message | botpy.message.DirectMessage,
+        ):
             payload["msg_seq"] = random.randint(1, 10000)
         ret = None
+        # 若 keyboard 和非 markdown-内联媒体同时存在，媒体路径会把 msg_type 改成 7
+        # 并 pop markdown/keyboard。这里预先探测，稍后补发一条带 keyboard 的 markdown 消息。
+        media_overrides_keyboard = keyboard_payload is not None and (
+            image_base64 or record_file_path or video_file_source or file_source
+        )
+        if media_overrides_keyboard:
+            payload.pop("keyboard", None)
 
         # ========== P1-1 & P1-3 & P1-4: 媒体处理增强 ==========
         # 媒体上传失败标记
@@ -512,28 +537,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload["media"] = media
                         payload["msg_type"] = 7
                         payload.pop("markdown", None)
-                        payload["content"] = plain_text if plain_text else None
-                        payload.pop("msg_id", None)  # 文件消息不需要 msg_id
-                    else:
-                        media_upload_failed = True
-                        if not upload_error_hint:
-                            upload_error_hint = "文件"
-
-                # P1-1: 如果有文本内容且媒体上传失败，添加提示
-                if media_upload_failed and plain_text:
-                    hint = f"[提示: {upload_error_hint}发送失败]"
-                    if not plain_text.endswith(hint):
-                        payload["content"] = plain_text + "\n" + hint
-                        payload["msg_type"] = 0
-                        payload.pop("markdown", None)
-
-                ret = await self._send_with_markdown_fallback(
+                        payload["content"] = plain_text or None
+                ret = await self._send_with_stream_newline_fix(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
                         group_openid=source.group_openid,
                         **retry_payload,
                     ),
                     payload=payload,
-                    plain_text=plain_text,
                     stream=stream,
                 )
 
@@ -601,59 +611,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload["media"] = media
                         payload["msg_type"] = 7
                         payload.pop("markdown", None)
-                        payload["content"] = plain_text if plain_text else None
-                    else:
-                        media_upload_failed = True
-                        if not upload_error_hint:
-                            upload_error_hint = "文件"
-
-                # P1-1: 如果有文本内容且媒体上传失败，添加提示
-                if media_upload_failed and plain_text:
-                    hint = f"[提示: {upload_error_hint}发送失败]"
-                    if not plain_text.endswith(hint):
-                        payload["content"] = plain_text + "\n" + hint
-                        payload["msg_type"] = 0
-                        payload.pop("markdown", None)
-
-                # P1-2: 分块发送（如果有多个文本块）
-                if text_chunks and len(text_chunks) > 1:
-                    logger.info(f"[QQOfficial] 开始分块发送 {len(text_chunks)} 条消息")
-                    for i, chunk_text in enumerate(text_chunks):
-                        chunk_payload = payload.copy()
-                        chunk_payload["msg_id"] = effective_msg_id if i == 0 else None
-                        chunk_payload["markdown"] = MarkdownPayload(content=chunk_text)
-                        chunk_payload["content"] = chunk_text
-                        chunk_payload["msg_type"] = 2
-
-                        try:
-                            ret = await self._send_with_markdown_fallback(
-                                send_func=lambda p: self.post_c2c_message(
-                                    openid=source.author.user_openid,
-                                    **p,
-                                ),
-                                payload=chunk_payload,
-                                plain_text=chunk_text,
-                                stream=None,
-                            )
-                            logger.debug(
-                                f"[QQOfficial] 块 {i + 1}/{len(text_chunks)} 发送成功"
-                            )
-
-                            # 记录被动回复
-                            if i == 0 and use_passive and effective_msg_id:
-                                record_message_reply(effective_msg_id)
-
-                            # 避免发送过快
-                            if i < len(text_chunks) - 1:
-                                await asyncio.sleep(0.5)
-                        except Exception as e:
-                            logger.error(f"[QQOfficial] 块 {i + 1} 发送失败: {e}")
-                            # 继续发送其他块
-
-                    self.send_buffer = None
-                    return ret
-                elif stream:
-                    ret = await self._send_with_markdown_fallback(
+                        payload["content"] = plain_text or None
+                if stream:
+                    ret = await self._send_with_stream_newline_fix(
                         send_func=lambda retry_payload: self.post_c2c_message(
                             self.bot,
                             openid=source.author.user_openid,
@@ -661,18 +621,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                             stream=stream,
                         ),
                         payload=payload,
-                        plain_text=plain_text,
                         stream=stream,
                     )
                 else:
-                    ret = await self._send_with_markdown_fallback(
+                    ret = await self._send_with_stream_newline_fix(
                         send_func=lambda retry_payload: self.post_c2c_message(
                             self.bot,
                             openid=source.author.user_openid,
                             **retry_payload,
                         ),
                         payload=payload,
-                        plain_text=plain_text,
                         stream=stream,
                     )
 
@@ -685,30 +643,84 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 if image_source and os.path.exists(image_source):
                     payload["file_image"] = image_source
                 payload.pop("msg_type", None)
-                ret = await self._send_with_markdown_fallback(
+                ret = await self._send_with_stream_newline_fix(
                     send_func=lambda retry_payload: self.bot.api.post_message(
                         channel_id=source.channel_id,
                         **retry_payload,
                     ),
                     payload=payload,
-                    plain_text=plain_text,
                     stream=stream,
                 )
             case botpy.message.DirectMessage():
                 if image_source and os.path.exists(image_source):
                     payload["file_image"] = image_source
                 payload.pop("msg_type", None)
-                ret = await self._send_with_markdown_fallback(
+                ret = await self._send_with_stream_newline_fix(
                     send_func=lambda retry_payload: self.bot.api.post_dms(
                         guild_id=source.guild_id,
                         **retry_payload,
                     ),
                     payload=payload,
-                    plain_text=plain_text,
                     stream=stream,
                 )
+
+            case botpy.interaction.Interaction():
+                # 按钮点击回调的回复：按 chat_type 路由
+                # chat_type: 0=频道 / 1=群 / 2=C2C
+                #
+                # 已知限制：本分支不上传 QQ 富媒体（msg_type=7），因此不支持语音/视频/文件
+                if record_file_path or video_file_source or file_source:
+                    logger.warning(
+                        "[QQOfficial] Interaction 回调暂不支持发送语音/视频/文件，"
+                        "本次发送已跳过（chain 中检测到非图片媒体）。"
+                    )
+                    return None
+                chat_type = source.chat_type
+                if chat_type == 1 and source.group_openid:
+                    ret = await self._send_with_stream_newline_fix(
+                        send_func=lambda retry_payload: self.bot.api.post_group_message(
+                            group_openid=source.group_openid,  # type: ignore
+                            **retry_payload,
+                        ),
+                        payload=payload,
+                        stream=stream,
+                    )
+                elif chat_type == 2 and source.user_openid:
+                    ret = await self._send_with_stream_newline_fix(
+                        send_func=lambda retry_payload: self.post_c2c_message(
+                            openid=source.user_openid,  # type: ignore
+                            **retry_payload,
+                        ),
+                        payload=payload,
+                        stream=stream,
+                    )
+                elif chat_type == 0 and source.channel_id:
+                    # 频道：v1 接口不接受 msg_type / msg_seq / event_id
+                    guild_payload = payload.copy()
+                    guild_payload.pop("msg_type", None)
+                    guild_payload.pop("msg_seq", None)
+                    # 频道接口用 msg_id 或 event_id 都可，保留 event_id
+                    ret = await self._send_with_stream_newline_fix(
+                        send_func=lambda retry_payload: self.bot.api.post_message(
+                            channel_id=source.channel_id,  # type: ignore
+                            **retry_payload,
+                        ),
+                        payload=guild_payload,
+                        stream=stream,
+                    )
+                else:
+                    logger.warning(
+                        "[QQOfficial] interaction 无法路由: chat_type=%s",
+                        chat_type,
+                    )
+
             case _:
                 pass
+
+        # 非图片媒体抢占了 msg_type=7，补发一条 markdown+keyboard
+        if media_overrides_keyboard and keyboard_payload:
+            await self._send_keyboard_followup(source, plain_text, keyboard_payload)
+
         await super().send(self.send_buffer)
         self.send_buffer = None
 
@@ -717,342 +729,79 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return ret
 
-    async def _upload_image_enhanced(
+    async def _send_keyboard_followup(
         self,
-        image_source: str,
-        file_type: int,
-        **kwargs,
-    ) -> botpy.types.message.Media | None:
-        """
-        增强版图片上传：根据文件大小自动选择 base64 直传或分片上传
-        P1-4: 完善 URL 下载的错误处理
-        """
-        # 判断文件大小
-        file_path = None
-        file_size = 0
-        download_error = None
-
+        source,
+        plain_text: str,
+        keyboard_payload: dict,
+    ) -> None:
+        """在媒体消息之后补发一条仅含 markdown+keyboard 的 msg_type=2 消息。"""
+        content = plain_text or self.EMPTY_MARKDOWN_PLACEHOLDER
+        followup: dict = {
+            "markdown": MarkdownPayload(content=content),
+            "msg_type": 2,
+            "msg_id": self.message_obj.message_id,
+            "keyboard": keyboard_payload,
+            "msg_seq": random.randint(1, 10000),
+        }
         try:
-            if os.path.exists(image_source):
-                file_path = image_source
-                file_size = os.path.getsize(file_path)
-            elif image_source.startswith("http"):
-                # P1-4: URL 图片：先下载，增加错误处理
-                try:
-                    file_path = await download_image_by_url(image_source)
-                    if file_path and os.path.exists(file_path):
-                        file_size = os.path.getsize(file_path)
-                    else:
-                        download_error = "下载图片失败"
-                        logger.error(f"[QQOfficial] 下载图片失败: {image_source}")
-                except Exception as e:
-                    download_error = f"下载图片出错: {str(e)}"
-                    logger.error(f"[QQOfficial] 下载图片异常: {e}")
-            elif image_source.startswith("base64://"):
-                # Base64 数据，保存为临时文件
-                try:
-                    b64_data = image_source[9:]
-                    temp_dir = get_astrbot_temp_path()
-                    temp_path = os.path.join(
-                        temp_dir, f"qqofficial_{uuid.uuid4().hex}.png"
-                    )
-                    with open(temp_path, "wb") as f:
-                        f.write(base64.b64decode(b64_data))
-                    file_path = temp_path
-                    self._temp_files.append(temp_path)
-                    file_size = os.path.getsize(file_path)
-                except Exception as e:
-                    download_error = f"解析 Base64 图片失败: {str(e)}"
-                    logger.error(f"[QQOfficial] 解析 Base64 图片异常: {e}")
+            if isinstance(source, botpy.message.GroupMessage):
+                if not source.group_openid:
+                    return
+                await self.bot.api.post_group_message(
+                    group_openid=source.group_openid,
+                    **followup,
+                )
+            elif isinstance(source, botpy.message.C2CMessage):
+                await self.post_c2c_message(
+                    openid=source.author.user_openid,
+                    **followup,
+                )
             else:
-                download_error = f"不支持的图片来源: {image_source[:50]}..."
-                logger.warning(f"[QQOfficial] {download_error}")
-
-            # 如果下载失败但有 URL，记录用于兜底
-            if download_error and image_source.startswith("http"):
-                self._upload_failed_media["image"] = image_source
                 logger.debug(
-                    f"[QQOfficial] 保存图片 URL 用于兜底: {image_source[:50]}..."
+                    "[QQOfficial] 消息源 %s 不支持 keyboard，忽略补发", type(source)
                 )
         except Exception as e:
-            logger.error(f"[QQOfficial] 处理图片文件时出错: {e}")
-            return None
+            logger.warning(f"[QQOfficial] keyboard 补发失败: {e}")
 
-        # 检查文件大小限制
-        max_size = get_max_upload_size(file_type)
-        if file_size > max_size:
-            type_name = get_file_type_name(file_type)
-            size_mb = file_size / (1024 * 1024)
-            limit_mb = max_size / (1024 * 1024)
-            logger.error(
-                f"[QQOfficial] {type_name}过大（{size_mb:.1f}MB），超过{limit_mb:.0f}MB限制"
-            )
-            return None
+    def is_button_interaction(self) -> bool:
+        """当前事件是否来自 QQ 消息按钮点击回调。"""
+        raw = getattr(self.message_obj, "raw_message", None)
+        return isinstance(raw, botpy.interaction.Interaction)
 
-        # 始终使用分片上传（与 openclaw-qqbot 行为一致）
-        # openclaw-qqbot 不使用 base64 上传，所有图片都通过分片上传
-        if file_path and os.path.exists(file_path):
-            return await self._chunked_upload(
-                file_path,
-                file_type,
-                openid=kwargs.get("openid"),
-                group_openid=kwargs.get("group_openid"),
-                on_progress=kwargs.get("on_progress"),
-            )
-        else:
-            logger.error(
-                f"[QQOfficial] 图片文件不存在: {image_source[:50] if image_source else 'None'}..."
-            )
-            return None
+    def get_message_outline(self) -> str:
+        """interaction 事件没有消息链，构造按钮摘要供日志使用。"""
+        if not self.is_button_interaction():
+            return super().get_message_outline()
+        button_id = self.get_interaction_button_id() or "?"
+        button_data = self.get_interaction_button_data()
+        if button_data:
+            return f"[Button] id={button_id} data={button_data}"
+        return f"[Button] id={button_id}"
 
-    async def _upload_media_enhanced(
-        self,
-        file_source: str,
-        file_type: int,
-        srv_send_msg: bool = False,
-        file_name: str | None = None,
-        **kwargs,
-    ) -> Media | None:
-        """
-        增强版媒体上传：始终使用分片上传（与 openclaw-qqbot 行为一致）
-        """
-        file_path = None
-        file_size = 0
+    def get_interaction_button_id(self) -> str:
+        """获取被点击按钮的 id（`QQCButton.id`）；非交互事件返回空串。"""
+        if not self.is_button_interaction():
+            return ""
+        raw = cast(botpy.interaction.Interaction, self.message_obj.raw_message)
+        resolved = getattr(getattr(raw, "data", None), "resolved", None)
+        return getattr(resolved, "button_id", "") or ""
 
-        if os.path.exists(file_source):
-            file_path = file_source
-            file_size = os.path.getsize(file_path)
-        else:
-            # URL 或其他来源 - 记录用于兜底
-            if file_source.startswith("http"):
-                self._upload_failed_media[f"media_{file_type}"] = file_source
-            file_size = 0
+    def get_interaction_button_data(self) -> str:
+        """获取被点击按钮的 data（`QQCButton.data`）；非交互事件返回空串。"""
+        if not self.is_button_interaction():
+            return ""
+        raw = cast(botpy.interaction.Interaction, self.message_obj.raw_message)
+        resolved = getattr(getattr(raw, "data", None), "resolved", None)
+        return getattr(resolved, "button_data", "") or ""
 
-        # 检查文件大小限制
-        max_size = get_max_upload_size(file_type)
-        if file_size > max_size:
-            type_name = get_file_type_name(file_type)
-            size_mb = file_size / (1024 * 1024)
-            limit_mb = max_size / (1024 * 1024)
-            logger.error(
-                f"[QQOfficial] {type_name}过大（{size_mb:.1f}MB），超过{limit_mb:.0f}MB限制"
-            )
-            return None
-
-        # 始终使用分片上传（与 openclaw-qqbot 行为一致）
-        if file_path:
-            return await self._chunked_upload(
-                file_path,
-                file_type,
-                openid=kwargs.get("openid"),
-                group_openid=kwargs.get("group_openid"),
-                on_progress=kwargs.get("on_progress"),
-            )
-        else:
-            logger.error(f"[QQOfficial] 媒体文件不存在: {file_source}")
-            return None
-
-    async def _chunked_upload(
-        self,
-        file_path: str,
-        file_type: int,
-        openid: Optional[str] = None,
-        group_openid: Optional[str] = None,
-        on_progress: Optional[Callable[[ChunkedUploadProgress], None]] = None,
-    ) -> Media | None:
-        """
-        分片上传（大文件）
-
-        Args:
-            file_path: 文件路径
-            file_type: 文件类型（1=图片, 2=视频, 3=语音, 4=文件）
-            openid: 用户 openid（C2C 目标）
-            group_openid: 群 openid（Group 目标）
-            on_progress: 进度回调函数
-
-        Returns:
-            Media 对象，失败返回 None
-        """
-
-        # 创建默认进度回调（类似 TypeScript 版本的日志）
-        def default_progress_callback(progress: ChunkedUploadProgress) -> None:
-            file_type_name = get_file_type_name(file_type)
-            logger.debug(
-                f"[QQOfficial] chunked upload progress: "
-                f"{progress.completed_parts}/{progress.total_parts} parts, "
-                f"{format_file_size(progress.uploaded_bytes)}/{format_file_size(progress.total_bytes)}"
-            )
-
-        # 使用传入的回调或默认回调
-        progress_callback = (
-            on_progress if on_progress is not None else default_progress_callback
-        )
-
-        try:
-            http_client = await self._get_http_client()
-            log_prefix = "[QQOfficial:chunked]"
-            file_name = os.path.basename(file_path)
-            file_size = os.path.getsize(file_path)
-
-            # 判断目标是 C2C 还是 Group
-            if openid:
-                logger.info(
-                    f"{log_prefix} Starting C2C chunked upload: "
-                    f"file={file_name}, size={format_file_size(file_size)}, type={file_type}"
-                )
-                result = await chunked_upload_c2c(
-                    http_client,
-                    openid,
-                    file_path,
-                    file_type,
-                    on_progress=progress_callback,
-                    log_prefix=log_prefix,
-                )
-            elif group_openid:
-                logger.info(
-                    f"{log_prefix} Starting group chunked upload: "
-                    f"file={file_name}, size={format_file_size(file_size)}, type={file_type}"
-                )
-                result = await chunked_upload_group(
-                    http_client,
-                    group_openid,
-                    file_path,
-                    file_type,
-                    on_progress=progress_callback,
-                    log_prefix=log_prefix,
-                )
-            else:
-                raise ValueError(
-                    "Invalid upload parameters: must provide openid or group_openid"
-                )
-
-            return Media(
-                file_uuid=result.file_uuid,
-                file_info=result.file_info,
-                ttl=result.ttl,
-            )
-
-        except UploadDailyLimitExceededError as e:
-            # P1-1: 每日上传限额超限
-            logger.error(f"[QQOfficial] 每日上传限额超限: {e}")
-            return None
-        except ChunkedApiError as e:
-            # P1-1: API 错误处理
-            logger.error(f"[QQOfficial] 分片上传 API 错误: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"[QQOfficial] 分片上传失败: {e}", exc_info=True)
-            return None
-
-    async def _base64_upload(
-        self,
-        file_source: str,
-        file_type: int,
-        srv_send_msg: bool = False,
-        file_name: str | None = None,
-        **kwargs,
-    ) -> Media | None:
-        """
-        Base64 直传（小文件）- 使用自定义 HTTP 客户端确保超时配置
-
-        使用 QQBotHttpClient 的 base64_upload 方法，该方法配置了 120 秒超时，
-        相比 botpy 默认超时更适合文件上传场景。
-        """
-        # 处理文件数据
-        file_data = None
-        if os.path.exists(file_source):
-            try:
-                async with aiofiles.open(file_source, "rb") as f:
-                    file_content = await f.read()
-                    file_data = base64.b64encode(file_content).decode("utf-8")
-            except Exception as e:
-                logger.error(f"[QQOfficial] 读取文件失败: {e}")
-                return None
-        elif file_source.startswith("http"):
-            # 对于 URL，使用 botpy 的方式（因为 URL 上传不需要 base64 编码）
-            pass  # 降级到原有逻辑
-        else:
-            logger.error(f"[QQOfficial] 不支持的图片来源: {file_source[:50]}...")
-            return None
-
-        # 如果是 URL，降级到原有逻辑
-        if file_data is None:
-            payload = {"file_type": file_type, "srv_send_msg": srv_send_msg}
-            if file_name:
-                payload["file_name"] = file_name
-            payload["url"] = file_source
-
-            if "openid" in kwargs:
-                payload["openid"] = kwargs["openid"]
-                route = Route(
-                    "POST", "/v2/users/{openid}/files", openid=kwargs["openid"]
-                )
-            elif "group_openid" in kwargs:
-                payload["group_openid"] = kwargs["group_openid"]
-                route = Route(
-                    "POST",
-                    "/v2/groups/{group_openid}/files",
-                    group_openid=kwargs["group_openid"],
-                )
-            else:
-                return None
-
-            try:
-                result = await self.bot.api._http.request(route, json=payload)
-                if result and isinstance(result, dict):
-                    return Media(
-                        file_uuid=result["file_uuid"],
-                        file_info=result["file_info"],
-                        ttl=result.get("ttl", 0),
-                    )
-            except Exception as e:
-                logger.error(f"[QQOfficial] URL上传请求错误: {e}")
-            return None
-
-        # 使用自定义 HTTP 客户端上传
-        try:
-            http_client = await self._get_http_client()
-
-            if "openid" in kwargs:
-                result = await http_client.base64_upload(
-                    file_type=file_type,
-                    file_data=file_data,
-                    file_name=file_name,
-                    srv_send_msg=srv_send_msg,
-                    target_type="c2c",
-                    target_id=kwargs["openid"],
-                )
-            elif "group_openid" in kwargs:
-                result = await http_client.base64_upload(
-                    file_type=file_type,
-                    file_data=file_data,
-                    file_name=file_name,
-                    srv_send_msg=srv_send_msg,
-                    target_type="group",
-                    target_id=kwargs["group_openid"],
-                )
-            else:
-                return None
-
-            return Media(
-                file_uuid=result.file_uuid,
-                file_info=result.file_info,
-                ttl=result.ttl,
-            )
-        except ChunkedApiError as e:
-            logger.error(f"[QQOfficial] Base64上传 API 错误: {e}")
-        except Exception as e:
-            logger.error(f"[QQOfficial] Base64上传失败: {e}", exc_info=True)
-
-        return None
-
-    async def _send_with_markdown_fallback(
+    async def _send_with_stream_newline_fix(
         self,
         send_func,
         payload: dict,
-        plain_text: str,
         stream: dict | None = None,
     ):
+        """发送包装：流式 markdown 分片若因缺失换行被拒，补 `\\n` 重试一次。"""
         try:
             return await send_func(payload)
         except botpy.errors.ServerError as err:
@@ -1070,23 +819,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     "[QQOfficial] 流式 markdown 分片换行校验失败,已修正后重试一次｡",
                 )
                 return await send_func(retry_payload)
-            if (
-                self.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
-                or not payload.get("markdown")
-                or (not plain_text)
-            ):
-                raise
-            logger.warning("[QQOfficial] markdown 发送被拒绝,回退到 content 模式重试｡")
-            fallback_payload = payload.copy()
-            fallback_payload.pop("markdown", None)
-            fallback_payload["content"] = plain_text
-            if fallback_payload.get("msg_type") == 2:
-                fallback_payload["msg_type"] = 0
-            if stream:
-                fallback_content = fallback_payload.get("content") or ""
-                if fallback_content and (not fallback_content.endswith("\n")):
-                    fallback_payload["content"] = fallback_content + "\n"
-            return await send_func(fallback_payload)
+            raise
 
     @staticmethod
     async def upload_group_and_c2c_image(
@@ -1193,18 +926,52 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return result
 
     @staticmethod
-    async def _parse_to_qqofficial(message: MessageChain):
+    async def _parse_to_qqofficial(
+        message: MessageChain,
+        convert_image_to_markdown: bool = False,
+    ):
+        """将 MessageChain 解析为发送 payload 所需要素。
+
+        Args:
+            message: 消息链
+            convert_image_to_markdown: 若为 True 且图片能注册到文件服务，则将图片
+                转成 markdown `![](url)` 语法追加到 plain_text，并跳过 base64 上传；
+                这样图片能和 keyboard/markdown 共存于同一条 msg_type=2 消息。
+
+        Returns:
+            (plain_text, image_base64, image_file_path, record_file_path,
+             video_file_source, file_source, file_name, keyboard_payload)
+        """
         plain_text = ""
-        image_source = None  # 图片来源（路径或 URL）
+        image_base64 = None  # only one img supported for msg_type=7 path
+        image_file_path = None
         record_file_path = None
         video_file_source = None
         file_source = None
         file_name = None
-
+        keyboard_payload: dict | None = None
+        pending_buttons: list[QQCButton] = []
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
-            elif isinstance(i, Image) and not image_source:
+            elif isinstance(i, QQCKeyboard):
+                keyboard_payload = i.to_dict()
+            elif isinstance(i, QQCButton):
+                pending_buttons.append(i)
+            elif isinstance(i, Image):
+                # markdown 模式下尽量把图片转成 markdown 语法，以便与 keyboard 共存
+                if convert_image_to_markdown:
+                    fragment = await image_to_markdown_fragment(i)
+                    if fragment is not None:
+                        plain_text += fragment
+                        continue
+                    # 失败时回退到 msg_type=7 路径
+                    logger.warning(
+                        "[QQOfficial] 图片转 markdown 失败，回退到 msg_type=7；"
+                        "若消息链包含 keyboard 则 keyboard 会被丢弃。"
+                    )
+                if image_base64:
+                    continue  # msg_type=7 路径只带第一张
                 if i.file and i.file.startswith("file:///"):
                     image_source = i.file[8:]
                 elif i.file and i.file.startswith("http"):
@@ -1271,6 +1038,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
 
+        # 裸 QQCButton 自动包一层 keyboard（仅当未显式传 QQCKeyboard 时）
+        if keyboard_payload is None and pending_buttons:
+            keyboard_payload = QQCKeyboard(rows=[pending_buttons]).to_dict()
+
         return (
             plain_text,
             image_source,
@@ -1278,4 +1049,5 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             video_file_source,
             file_source,
             file_name,
+            keyboard_payload,
         )

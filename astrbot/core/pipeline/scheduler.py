@@ -113,3 +113,4 @@ class PipelineScheduler:
         finally:
             await self.pre_ack_emoji_mgr.remove_emoji(event, emoji)
             active_event_registry.unregister(event)
+            event._pipeline_finished.set()
