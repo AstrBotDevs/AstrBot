@@ -537,18 +537,40 @@ class ProviderAnthropic(Provider):
                 elif isinstance(event, RawContentBlockStopEvent):
                     if event.index in tool_use_buffer:
                         tool_info = tool_use_buffer[event.index]
+                        parsed_ok = False
+
                         try:
                             if isinstance(tool_info.get("input_json"), str) and tool_info["input_json"]:
                                 tool_info["input"] = json.loads(tool_info["input_json"])
+                            else:
+                                tool_info["input"] = {}
+                            parsed_ok = True
 
-                            final_tool_calls.append(
-                                {
-                                    "id": tool_info["id"],
-                                    "name": tool_info["name"],
-                                    "input": tool_info["input"],
-                                },
+                        except json.JSONDecodeError as e:
+                            raw_json = tool_info.get("input_json", "")
+                            logger.warning(
+                                f"工具调用参数 JSON 解析失败: {e}。"
+                                f"len={len(raw_json)}; head={raw_json[:120]!r}; tail={raw_json[-120:]!r}"
                             )
+                            # Fallback：尝试补全可能截断的尾部
+                            for suffix in ["}", "]", '"}', '"]']:
+                                if raw_json and not raw_json.rstrip().endswith(suffix):
+                                    try:
+                                        tool_info["input"] = json.loads(raw_json + suffix)
+                                        parsed_ok = True
+                                        logger.info(
+                                            f"工具调用参数 JSON 解析成功 (fallback，修复后缀 '{suffix}')"
+                                        )
+                                        break
+                                    except json.JSONDecodeError:
+                                        pass
 
+                        if parsed_ok:
+                            final_tool_calls.append({
+                                "id": tool_info["id"],
+                                "name": tool_info["name"],
+                                "input": tool_info["input"],
+                            })
                             yield LLMResponse(
                                 role="tool",
                                 completion_text="",
@@ -559,11 +581,14 @@ class ProviderAnthropic(Provider):
                                 usage=usage,
                                 id=id,
                             )
-                        except json.JSONDecodeError:
-                            logger.warning(f"工具调用参数 JSON 解析失败: {tool_info}")
+                        else:
+                            logger.warning(
+                                f"工具调用参数 JSON 解析最终失败，跳过工具调用: {tool_info['name']}"
+                            )
 
-                        del tool_use_buffer[event.index]
-                elif isinstance(event, RawMessageDeltaEvent):
+                        tool_use_buffer.pop(event.index, None)
+
+                elif event.type == "message_delta":
                     if event.usage:
                         self._update_usage(usage, event.usage)
 
