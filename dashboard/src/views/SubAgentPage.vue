@@ -155,6 +155,34 @@
                     density="comfortable"
                     hide-details="auto"
                   />
+                </v-col>
+                <v-col cols="12" md="7" class="subagent-actions">
+                  <ProviderSelector
+                    v-model="agent.provider_id"
+                    provider-type="chat_completion,agent_runner"
+                    :label="tm('form.providerLabel')"
+                    :hint="tm('form.providerHint')"
+                    persistent-hint
+                    clearable
+                    class="subagent-provider"
+                  />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-autocomplete
+                    v-model="agent.persona_id"
+                    :items="personaOptions"
+                    item-title="title"
+                    item-value="value"
+                    :label="tm('form.personaLabel')"
+                    variant="outlined"
+                    density="comfortable"
+                    clearable
+                    :loading="personaLoading"
+                    :disabled="personaLoading"
+                    :hint="tm('form.personaHint')"
+                    persistent-hint
+                  />
+                </v-col>
 
                   <div class="selector-wrap">
                     <div class="selector-label">{{ tm('form.providerLabel') }}</div>
