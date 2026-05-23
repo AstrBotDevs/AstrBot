@@ -9,7 +9,7 @@ import os
 import sys
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Any, Generic, TextIO
+from typing import Any, Generic
 
 from tenacity import (
     before_sleep_log,
@@ -200,59 +200,57 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         return False, f"{e!s}"
 
 
-def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    """Normalize common non-standard MCP JSON Schema variants.
+_EMPTY_MCP_ARGUMENT = object()
 
-    Some MCP servers incorrectly mark required properties with a boolean
-    `required: true` on the property schema itself. Draft 2020-12 requires the
-    parent object to declare `required` as an array of property names instead.
-    We lift those booleans to the parent object so the schema remains usable
-    without disabling validation entirely.
-    """
 
-    def _normalize(node: Any) -> Any:
-        if isinstance(node, list):
-            return [_normalize(item) for item in node]
+def _sanitize_mcp_arguments(
+    value: Any,
+    schema: dict[str, Any] | None = None,
+    *,
+    required: bool = False,
+) -> Any:
+    """Remove empty optional payload values before sending to MCP tools."""
+    if value is None:
+        return value if required else _EMPTY_MCP_ARGUMENT
 
-        if not isinstance(node, dict):
-            return node
+    if isinstance(value, str):
+        return value if value != "" or required else _EMPTY_MCP_ARGUMENT
 
-        normalized = {key: _normalize(value) for key, value in node.items()}
+    if isinstance(value, list):
+        if not value:
+            return value if required else _EMPTY_MCP_ARGUMENT
+        cleaned_items = []
+        item_schema = schema.get("items") if isinstance(schema, dict) else None
+        for item in value:
+            cleaned_item = _sanitize_mcp_arguments(item, item_schema)
+            # Preserve list positions. If sanitizing an item would remove it,
+            # keep the original item instead of reindexing the payload.
+            if cleaned_item is _EMPTY_MCP_ARGUMENT:
+                cleaned_items.append(item)
+            else:
+                cleaned_items.append(cleaned_item)
+        return cleaned_items
 
-        properties = normalized.get("properties")
-        if isinstance(properties, dict):
-            original_properties = (
-                node.get("properties")
-                if isinstance(node.get("properties"), dict)
-                else {}
+    if isinstance(value, dict):
+        if not value:
+            return value if required else _EMPTY_MCP_ARGUMENT
+
+        cleaned_dict = {}
+        properties = schema.get("properties", {}) if isinstance(schema, dict) else {}
+        required_keys = set(schema.get("required", [])) if isinstance(schema, dict) else set()
+        for key, item in value.items():
+            child_schema = properties.get(key) if isinstance(properties, dict) else None
+            cleaned_item = _sanitize_mcp_arguments(
+                item,
+                child_schema,
+                required=key in required_keys,
             )
-            required = normalized.get("required")
-            required_list = required[:] if isinstance(required, list) else []
+            if cleaned_item is _EMPTY_MCP_ARGUMENT:
+                continue
+            cleaned_dict[key] = cleaned_item
+        return cleaned_dict if cleaned_dict or required else _EMPTY_MCP_ARGUMENT
 
-            for prop_name, prop_schema in properties.items():
-                if not isinstance(prop_schema, dict):
-                    continue
-
-                original_prop_schema = (original_properties or {}).get(prop_name, {})
-                prop_required = (
-                    original_prop_schema.get("required")
-                    if isinstance(original_prop_schema, dict)
-                    else None
-                )
-                if isinstance(prop_required, bool):
-                    if prop_schema.get("required") is prop_required:
-                        prop_schema.pop("required", None)
-                    if prop_required:
-                        required_list.append(prop_name)
-
-            if required_list:
-                normalized["required"] = list(dict.fromkeys(required_list))
-            elif isinstance(required, list):
-                normalized.pop("required", None)
-
-        return normalized
-
-    return _normalize(copy.deepcopy(schema))
+    return value
 
 
 class MCPClient:
@@ -511,6 +509,21 @@ class MCPClient:
 
         """
 
+        tool_schema = next(
+            (tool.inputSchema for tool in self.tools if tool.name == tool_name),
+            None,
+        )
+        sanitized_arguments = _sanitize_mcp_arguments(arguments, tool_schema)
+        if sanitized_arguments is _EMPTY_MCP_ARGUMENT:
+            sanitized_arguments = {}
+        if sanitized_arguments != arguments:
+            logger.debug(
+                "Sanitized MCP tool %s arguments from %s to %s",
+                tool_name,
+                arguments,
+                sanitized_arguments,
+            )
+
         @retry(
             retry=retry_if_exception_type(anyio.ClosedResourceError),
             stop=stop_after_attempt(2),
@@ -525,7 +538,7 @@ class MCPClient:
             try:
                 return await self.session.call_tool(
                     name=tool_name,
-                    arguments=arguments,
+                    arguments=sanitized_arguments,
                     read_timeout_seconds=read_timeout_seconds,
                 )
             except anyio.ClosedResourceError:
