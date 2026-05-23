@@ -13,6 +13,15 @@ jobs:
   build-nightly-image:
     if: github.repository == 'AstrBotDevs/AstrBot' && github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    strategy:
+      matrix: &docker_matrix
+        include:
+          - type: standard
+            file: Dockerfile
+            tag_suffix: ""
+          - type: minimal
+            file: Dockerfile.minimal
+            tag_suffix: "-minimal"
     env:
       DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
       GHCR_OWNER: astrbotdevs
@@ -43,17 +52,6 @@ jobs:
       - name: Exit if no commits
         if: github.event_name == 'schedule' && steps.check-commits.outputs.has_commits == 'false'
         run: exit 0
-
-      - name: Build Dashboard
-        run: |
-          cd dashboard
-          npm install
-          npm run build
-          mkdir -p dist/assets
-          echo $(git rev-parse HEAD) > dist/assets/version
-          cd ..
-          mkdir -p data
-          cp -r dashboard/dist data/
 
       - name: Determine test image tags
         id: test-meta
@@ -86,12 +84,12 @@ jobs:
       - name: Build nightly image tags list
         id: test-tags
         run: |
-          TAGS="${{ env.DOCKER_HUB_USERNAME }}/astrbot:nightly-latest
-          ${{ env.DOCKER_HUB_USERNAME }}/astrbot:nightly-${{ steps.test-meta.outputs.build_date }}-${{ steps.test-meta.outputs.short_sha }}"
+          TAGS="${{ env.DOCKER_HUB_USERNAME }}/astrbot:nightly-latest${{ matrix.tag_suffix }}
+          ${{ env.DOCKER_HUB_USERNAME }}/astrbot:nightly-${{ steps.test-meta.outputs.build_date }}-${{ steps.test-meta.outputs.short_sha }}${{ matrix.tag_suffix }}"
           if [ "${{ env.HAS_GHCR_TOKEN }}" = "true" ]; then
             TAGS="$TAGS
-          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-latest
-          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-${{ steps.test-meta.outputs.build_date }}-${{ steps.test-meta.outputs.short_sha }}"
+          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-latest${{ matrix.tag_suffix }}
+          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-${{ steps.test-meta.outputs.build_date }}-${{ steps.test-meta.outputs.short_sha }}${{ matrix.tag_suffix }}"
           fi
           echo "tags<<EOF" >> $GITHUB_OUTPUT
           echo "$TAGS" >> $GITHUB_OUTPUT
@@ -101,6 +99,7 @@ jobs:
         uses: docker/build-push-action@v7.1.0
         with:
           context: .
+          file: ${{ matrix.file }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.test-tags.outputs.tags }}
@@ -115,6 +114,9 @@ jobs:
       DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
       GHCR_OWNER: astrbotdevs
       HAS_GHCR_TOKEN: ${{ secrets.GHCR_GITHUB_TOKEN != '' }}
+
+    strategy:
+      matrix: *docker_matrix
 
     steps:
       - name: Checkout
@@ -151,17 +153,6 @@ jobs:
           fi
           echo "version=$version" >> $GITHUB_OUTPUT
 
-      - name: Build Dashboard
-        run: |
-          cd dashboard
-          npm install
-          npm run build
-          mkdir -p dist/assets
-          echo $(git rev-parse HEAD) > dist/assets/version
-          cd ..
-          mkdir -p data
-          cp -r dashboard/dist data/
-
       - name: Set QEMU
         uses: docker/setup-qemu-action@v4.0.0
 
@@ -188,11 +179,12 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          file: ${{ matrix.file }}
           tags: |
-            ${{ steps.release-meta.outputs.is_prerelease == 'false' && format('{0}/astrbot:latest', env.DOCKER_HUB_USERNAME) || '' }}
-            ${{ steps.release-meta.outputs.is_prerelease == 'false' && env.HAS_GHCR_TOKEN == 'true' && format('ghcr.io/{0}/astrbot:latest', env.GHCR_OWNER) || '' }}
-            ${{ format('{0}/astrbot:{1}', env.DOCKER_HUB_USERNAME, steps.release-meta.outputs.version) }}
-            ${{ env.HAS_GHCR_TOKEN == 'true' && format('ghcr.io/{0}/astrbot:{1}', env.GHCR_OWNER, steps.release-meta.outputs.version) || '' }}
+            ${{ steps.release-meta.outputs.is_prerelease == 'false' && format('{0}/astrbot:latest{1}', env.DOCKER_HUB_USERNAME, matrix.tag_suffix) || '' }}
+            ${{ steps.release-meta.outputs.is_prerelease == 'false' && env.HAS_GHCR_TOKEN == 'true' && format('ghcr.io/{0}/astrbot:latest{1}', env.GHCR_OWNER, matrix.tag_suffix) || '' }}
+            ${{ format('{0}/astrbot:{1}{2}', env.DOCKER_HUB_USERNAME, steps.release-meta.outputs.version, matrix.tag_suffix) }}
+            ${{ env.HAS_GHCR_TOKEN == 'true' && format('ghcr.io/{0}/astrbot:{1}{2}', env.GHCR_OWNER, steps.release-meta.outputs.version, matrix.tag_suffix) || '' }}
 
       - name: Post build notifications
         run: echo "Release Docker image has been built and pushed successfully"

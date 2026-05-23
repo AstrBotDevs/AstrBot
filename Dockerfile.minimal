@@ -1,0 +1,42 @@
+# Minimal Dockerfile for AstrBot
+# Multi-stage: Build with uv; Run without node.js
+
+# Build stage
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    build-essential \
+    python3-dev \
+    libffi-dev \
+    libssl-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv and create virtual environment
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uv/bin/uv
+COPY requirements.txt .
+RUN /uv/bin/uv venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install dependencies
+RUN /uv/bin/uv pip install --no-cache -r requirements.txt socksio pilk
+
+# Runtime stage
+FROM python:3.12-slim
+
+WORKDIR /AstrBot
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application code
+COPY . /AstrBot/
+
+EXPOSE 6185
+
+CMD [ "python", "main.py" ]
