@@ -1514,30 +1514,19 @@ async def _apply_web_search_tools(
 def _get_compress_provider(
     config: MainAgentBuildConfig,
     plugin_context: Context,
+    event: AstrMessageEvent | None = None,
 ) -> Provider | None:
     if config.context_limit_reached_strategy != "llm_compress":
         return None
-
-    if not config.llm_compress_provider_id:
-        return None
-
-    selected_provider = plugin_context.get_provider_by_id(
-        config.llm_compress_provider_id
-    )
-    if selected_provider is None:
+    if config.llm_compress_provider_id:
+        provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
+        if provider and isinstance(provider, Provider):
+            return provider
         logger.warning(
-            "Configured llm_compress_provider_id not found: %s. Skip compression.",
+            "指定的上下文压缩模型 %s 不可用",
             config.llm_compress_provider_id,
         )
-        return None
-    if not isinstance(selected_provider, Provider):
-        logger.warning(
-            "Configured llm_compress_provider_id is not a Provider: %s. Skip compression.",
-            config.llm_compress_provider_id,
-        )
-        return None
-
-    return selected_provider
+    return None
 
 
 def _get_fallback_chat_providers(
@@ -1913,16 +1902,8 @@ async def build_main_agent(
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent=config.llm_compress_keep_recent,
-        llm_compress_provider=_get_compress_provider(config, plugin_context),
-        token_counter_mode=config.context_token_counter_mode,
-        compact_context_after_tool_call=config.compact_context_after_tool_call,
-        compact_context_soft_ratio=config.compact_context_soft_ratio,
-        compact_context_hard_ratio=config.compact_context_hard_ratio,
-        compact_context_min_delta_tokens=config.compact_context_min_delta_tokens,
-        compact_context_min_delta_turns=config.compact_context_min_delta_turns,
-        compact_context_debounce_seconds=config.compact_context_debounce_seconds,
+        llm_compress_provider=_get_compress_provider(config, plugin_context, event),
         truncate_turns=config.dequeue_context_length,
-        enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=fallback_providers,
         tool_result_overflow_dir=(

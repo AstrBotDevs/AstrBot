@@ -53,6 +53,21 @@ from astrbot.core.provider.modalities import (
 from astrbot.core.provider.provider import Provider
 from astrbot.core.subagent_manager import SubAgentManager
 
+from ..context.compressor import ContextCompressor
+from ..context.config import ContextConfig
+from ..context.guard import RequestContextGuard
+from ..context.token_counter import EstimateTokenCounter, TokenCounter
+from ..hooks import BaseAgentRunHooks
+from ..message import (
+    AssistantMessageSegment,
+    Message,
+    ToolCallMessageSegment,
+    bind_checkpoint_messages,
+)
+from ..response import AgentResponseData, AgentStats
+from ..run_context import ContextWrapper, TContext
+from ..tool_executor import BaseFunctionToolExecutor
+from .base import AgentResponse, AgentState, BaseAgentRunner
 
 def _is_claude_provider(provider: Provider) -> bool:
     """Check whether the provider uses the Anthropic Claude API.
@@ -390,14 +405,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_result_overflow_dir = tool_result_overflow_dir
         self.read_tool = read_tool
         self._tool_result_token_counter = EstimateTokenCounter()
-        # we will do compress when:
-        # 1. before requesting LLM
-        # 2. optionally after tool execution, controlled by config
-        self.context_config = ContextConfig(
-            # <=0 will never do compress
-            max_context_tokens=provider.provider_config.get("max_context_tokens", 4096),
-            # enforce max turns before compression
-            enforce_max_turns=self.enforce_max_turns if self.enforce_max_turns != -1 else 15,
+        self.request_context_guard_config = ContextConfig(
+            # <=0 disables token-based guarding.
+            max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
+            # Enforce max turns before token-based guarding.
+            enforce_max_turns=self.enforce_max_turns,
             truncate_turns=self.truncate_turns,
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
@@ -407,7 +419,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )
-        self.context_manager = ContextManager(self.context_config)
+        self.request_context_guard = RequestContextGuard(
+            self.request_context_guard_config
+        )
 
         self.provider = provider
         self.fallback_providers: list[Provider] = []
@@ -605,9 +619,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         include_model: bool = True,
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
-        contexts = self._sanitize_contexts_for_provider(self.run_context.messages)
-        func_tool = self._func_tool_for_provider()
-        model = self.req.model if include_model else None
+        messages_for_provider = getattr(
+            self, "_provider_messages", self.run_context.messages
+        )
+        payload = {
+            "contexts": self._sanitize_contexts_for_provider(messages_for_provider),
+            "func_tool": self._func_tool_for_provider(),
+            "session_id": self.req.session_id,
+            "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
+            "abort_signal": self._abort_signal,
+        }
+        if include_model:
+            # For primary provider we keep explicit model selection if provided.
+            payload["model"] = self.req.model
         if self.streaming:
             stream = self.provider.text_chat_stream(
                 contexts=contexts,
@@ -929,13 +953,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp_result = None
         got_complete_response = False
 
-        # do truncate and compress
+        # Apply request-time context guard *on a copy* so the runner's canonical
+        # messages are never mutated by the guard. The guard result is only used
+        # for this provider call. Persistent compaction is owned by the
+        # conversation / memory layer.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]")
-        event = getattr(self.run_context.context, "event", None)
-        self.run_context.messages = await self.context_manager.process(
-            self.run_context.messages,
-            trusted_token_usage=token_usage,
+        self._provider_messages = await self.request_context_guard.process(
+            self.run_context.messages, trusted_token_usage=token_usage
         )
         self._refresh_tool_compaction_baseline(trusted_token_usage=token_usage)
         self._simple_print_message_role("[AftCompact]")
@@ -1754,6 +1779,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         executor: T.AsyncGenerator[ToolExecutorResultT, None],
     ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+        async def _next_executor_result() -> ToolExecutorResultT:
+            return await anext(executor)
+
         while True:
             if self._is_stop_requested():
                 await self._close_executor(executor)
@@ -1761,7 +1789,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "Tool execution interrupted before reading the next tool result.",
                 )
 
-            next_result_task = asyncio.create_task(self._anext_coro(executor))
+            next_result_task = asyncio.create_task(_next_executor_result())
             abort_task = asyncio.create_task(self._abort_signal.wait())
             try:
                 done, _ = await asyncio.wait(

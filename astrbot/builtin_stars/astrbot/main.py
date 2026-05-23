@@ -32,6 +32,7 @@ class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
         self.ltm = None
+        self._ltm_was_enabled: dict[str, bool] = {}
         try:
             self.ltm = LongTermMemory(self.context.astrbot_config_mgr, self.context)
         except BaseException as e:
@@ -171,23 +172,28 @@ class Main(star.Star):
                     return
                 try:
                     conv = None
-                    session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
-                        event.unified_msg_origin,
-                    )
 
-                    if not session_curr_cid:
-                        logger.error(
-                            "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /new 创建一个会话。",
+                    if not group_icl_enable:
+                        # 仅在走 Conversation 模式时才需要查询会话
+                        session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
+                            event.unified_msg_origin,
                         )
-                        return
 
-                    conv = await self.context.conversation_manager.get_conversation(
-                        event.unified_msg_origin,
-                        session_curr_cid,
-                    )
-                    
-                    logger.debug(f"主动回复 - 会话 ID: {session_curr_cid}, 对话内容: {conv}")
-                    logger.debug(f"主动回复 - 消息对象: {event.message_obj}")
+                        if not session_curr_cid:
+                            logger.error(
+                                "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。",
+                            )
+                            return
+
+                        conv = await self.context.conversation_manager.get_conversation(
+                            event.unified_msg_origin,
+                            session_curr_cid,
+                        )
+
+                        if not conv:
+                            logger.error("未找到对话，无法主动回复")
+                            return
+
                     prompt = event.message_str
                     image_urls = []
                     for comp in message_components:
@@ -197,11 +203,7 @@ class Main(star.Star):
                             except Exception:
                                 logger.exception("主动回复处理图片失败")
 
-                    if not conv:
-                        logger.error("未找到对话,无法主动回复")
-                        return
-
-                    req = event.request_llm(
+                    yield event.request_llm(
                         prompt=prompt,
                         session_id=event.session_id,
                         conversation=None,  # 主动回复不应写回会话历史，避免 chatroom 内容污染 conv.history
@@ -222,23 +224,26 @@ class Main(star.Star):
     ) -> None:
         """在请求 LLM 前注入人格信息､Identifier､时间､回复内容等 System Prompt"""
         if self.ltm and self.ltm_enabled(event):
-            # If this request matches the active reply req id, mark it as in-progress
-            # so on_llm_response can correctly identify the active reply response
-            active_reply_req_id = event.get_extra(LTM_ACTIVE_REPLY_KEY, None)
-            if active_reply_req_id is not None and id(req) == active_reply_req_id:
-                event.set_extra(LTM_ACTIVE_REPLY_IN_PROGRESS_KEY, True)
+            umo = event.unified_msg_origin
+
+            # 惰性切换检测：false → true 时清理残留旧数据
+            now_enabled = self.ltm_enabled(event)
+            was_enabled = self._ltm_was_enabled.get(umo, False)
+            if now_enabled and not was_enabled:
+                await self.ltm.remove_session(event)
+                logger.info(f"LTM: group_icl_enable 开启，已重置 {umo} 上下文")
+            self._ltm_was_enabled[umo] = now_enabled
+
             try:
                 await self.ltm.on_req_llm(event, req)
             except BaseException as e:
                 logger.error(f"ltm: {e}")
 
-    @filter.on_llm_response()
-    async def record_llm_resp_to_ltm(
-        self,
-        event: AstrMessageEvent,
-        resp: LLMResponse,
+    @filter.on_agent_done()
+    async def record_agent_result_to_ltm(
+        self, event: AstrMessageEvent, run_context, resp: LLMResponse
     ) -> None:
-        """在 LLM 响应后记录对话"""
+        """Agent 完成后记录对话（含工具链）"""
         if self.ltm and self.ltm_enabled(event):
             # Skip recording if this response is from an active reply request
             if event.get_extra(LTM_ACTIVE_REPLY_IN_PROGRESS_KEY, False):
@@ -252,7 +257,7 @@ class Main(star.Star):
             if not cfg["provider_ltm_settings"]["group_icl_enable"]:
                 return
             try:
-                await self.ltm.after_req_llm(event, resp)
+                await self.ltm.on_agent_done(event, run_context, resp)
             except Exception as e:
                 logger.error(f"ltm: {e}")
 
