@@ -106,6 +106,24 @@
     "copy": "Copy",
     "noData": "No data available"
   },
+  "palette": {
+    "clickToSelect": "Click to select color",
+    "placeholder": "#RRGGBB or color name",
+    "paste": "Paste",
+    "pasteSuccess": "Color parsed successfully",
+    "pasteInvalid": "Invalid color format",
+    "pasteFailed": "Failed to read clipboard",
+    "pickScreen": "Pick",
+    "pickSuccess": "Color picked from screen",
+    "invalidFormat": "Invalid color format",
+    "copyFailed": "Failed to copy to clipboard",
+    "formatHex": "HEX",
+    "formatRgb": "RGB",
+    "formatHsv": "HSV",
+    "placeholderHex": "#RRGGBB",
+    "placeholderRgb": "rgb(255, 255, 255)",
+    "placeholderHsv": "hsv(0, 0%, 100%)"
+  },
   "objectEditor": {
     "dialogTitle": "Edit Key-Value Pairs",
     "noItems": "No items",

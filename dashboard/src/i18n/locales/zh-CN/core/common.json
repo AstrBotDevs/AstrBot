@@ -106,6 +106,24 @@
     "copy": "复制",
     "noData": "暂无数据"
   },
+  "palette": {
+    "clickToSelect": "点击选择颜色",
+    "placeholder": "#RRGGBB 或颜色名称",
+    "paste": "粘贴",
+    "pasteSuccess": "颜色解析成功",
+    "pasteInvalid": "无效的颜色格式",
+    "pasteFailed": "无法读取剪贴板",
+    "pickScreen": "取色",
+    "pickSuccess": "已从屏幕取色",
+    "invalidFormat": "颜色格式无效",
+    "copyFailed": "复制到剪贴板失败",
+    "formatHex": "HEX",
+    "formatRgb": "RGB",
+    "formatHsv": "HSV",
+    "placeholderHex": "#RRGGBB",
+    "placeholderRgb": "rgb(255, 255, 255)",
+    "placeholderHsv": "hsv(0, 0%, 100%)"
+  },
   "objectEditor": {
     "dialogTitle": "修改键值对",
     "noItems": "暂无项目",
