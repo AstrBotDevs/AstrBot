@@ -799,8 +799,16 @@ async def _process_quote_message(
                 )
                 if path and _is_generated_compressed_image_path(path, compress_path):
                     event.track_temporary_local_file(compress_path)
+                cfg = (
+                    config.provider_settings if config else None
+                ) or plugin_context.get_config(umo=event.unified_msg_origin).get(
+                    "provider_settings", {}
+                )
+                img_cap_prompt = (
+                    cfg.get("image_caption_prompt") or "Please describe the image."
+                )
                 llm_resp = await prov.text_chat(
-                    prompt="Please describe the image content.",
+                    prompt=img_cap_prompt,
                     image_urls=[compress_path],
                 )
                 if llm_resp.completion_text:
@@ -1272,6 +1280,10 @@ async def build_main_agent(
             quoted_message_settings = _get_quoted_message_parser_settings(
                 config.provider_settings
             )
+            cfg = config.provider_settings or plugin_context.get_config(
+                umo=event.unified_msg_origin
+            ).get("provider_settings", {})
+            img_cap_prov_id = cfg.get("default_image_caption_provider_id") or ""
             fallback_quoted_image_count = 0
             for comp in reply_comps:
                 has_embedded_image = False
@@ -1286,7 +1298,8 @@ async def build_main_agent(
                             )
                             if _is_generated_compressed_image_path(path, image_path):
                                 event.track_temporary_local_file(image_path)
-                            req.image_urls.append(image_path)
+                            if not img_cap_prov_id:
+                                req.image_urls.append(image_path)
                             _append_quoted_image_attachment(req, image_path)
                         elif isinstance(reply_comp, Record):
                             audio_path = await reply_comp.convert_to_file_path()
@@ -1341,7 +1354,8 @@ async def build_main_agent(
                         for image_ref in fallback_images:
                             if image_ref in req.image_urls:
                                 continue
-                            req.image_urls.append(image_ref)
+                            if not img_cap_prov_id:
+                                req.image_urls.append(image_ref)
                             fallback_quoted_image_count += 1
                             _append_quoted_image_attachment(req, image_ref)
                     except Exception as exc:  # noqa: BLE001
