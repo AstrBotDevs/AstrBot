@@ -162,7 +162,40 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
             "type": "object",
             "properties": {
                 "payload": {
-                    "anyOf": [{"type": "object"}, {"type": "array", "items": {}}],
+                    "anyOf": [
+                        {
+                            "type": "object",
+                            "additionalProperties": True,
+                            "properties": {
+                                "skill_markdown": {"type": "string"},
+                                "inputs": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "additionalProperties": True,
+                                    },
+                                },
+                                "outputs": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "additionalProperties": True,
+                                    },
+                                },
+                                "meta": {
+                                    "type": "object",
+                                    "additionalProperties": True,
+                                },
+                            },
+                        },
+                        {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": True,
+                            },
+                        },
+                    ],
                     "description": (
                         "Skill payload JSON. Typical schema: {skill_markdown, inputs, outputs, meta}. "
                         "This only stores content and returns payload_ref; it does not create a candidate or release."

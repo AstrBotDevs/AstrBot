@@ -4,7 +4,9 @@ import asyncio
 from types import SimpleNamespace
 
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
+    CreateSkillPayloadTool,
     PromoteSkillCandidateTool,
 )
 
@@ -86,3 +88,32 @@ def test_promote_stable_sync_failure_auto_rolls_back(monkeypatch):
     assert isinstance(result, str)
     assert "auto rollback succeeded" in result
     assert "sync failed" in result
+
+
+def test_create_skill_payload_tool_schema_allows_non_empty_payload_objects():
+    tool = CreateSkillPayloadTool()
+    payload_schema = tool.parameters["properties"]["payload"]
+    assert "anyOf" in payload_schema
+
+    object_schema = next(
+        s for s in payload_schema["anyOf"] if isinstance(s, dict) and s.get("type") == "object"
+    )
+    assert object_schema.get("additionalProperties") is True
+    assert "skill_markdown" in object_schema.get("properties", {})
+
+    array_schema = next(
+        s for s in payload_schema["anyOf"] if isinstance(s, dict) and s.get("type") == "array"
+    )
+    assert array_schema.get("items", {}).get("type") == "object"
+    assert array_schema.get("items", {}).get("additionalProperties") is True
+
+
+def test_create_skill_payload_tool_google_schema_keeps_object_array_items():
+    tool = CreateSkillPayloadTool()
+    schema = ToolSet([tool]).google_schema()
+    payload_schema = schema["function_declarations"][0]["parameters"]["properties"]["payload"]
+
+    array_schema = next(
+        s for s in payload_schema["anyOf"] if isinstance(s, dict) and s.get("type") == "array"
+    )
+    assert array_schema["items"]["type"] == "object"
