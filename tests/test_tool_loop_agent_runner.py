@@ -2,6 +2,7 @@ import asyncio
 import os
 import sys
 from types import SimpleNamespace
+from typing import Any, Callable, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -257,10 +258,14 @@ class SingleToolThenFinalProvider(MockProvider):
 
 
 class SequentialToolProvider(MockProvider):
-    def __init__(self, tool_sequence: list[str], *, same_args: bool = False):
+    def __init__(
+        self,
+        tool_sequence: list[str],
+        tool_args_factory: Callable[[int], dict[str, Any]] | None = None,
+    ):
         super().__init__()
         self.tool_sequence = tool_sequence
-        self.same_args = same_args
+        self.tool_args_factory = tool_args_factory
 
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
@@ -274,8 +279,8 @@ class SequentialToolProvider(MockProvider):
 
         tool_name = self.tool_sequence[self.call_count - 1]
         tool_args = (
-            {"query": "same"}
-            if self.same_args
+            self.tool_args_factory(self.call_count)
+            if self.tool_args_factory is not None
             else {"query": f"step-{self.call_count}"}
         )
         return LLMResponse(
@@ -741,7 +746,10 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
 ):
     runner_cls = type(runner)
     total_calls = runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD
-    provider = SequentialToolProvider(["test_tool"] * total_calls, same_args=True)
+    provider = SequentialToolProvider(
+        ["test_tool"] * total_calls,
+        tool_args_factory=lambda _: {"query": "same"},
+    )
     tool = FunctionTool(
         name="test_tool",
         description="测试工具",
@@ -805,7 +813,7 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
 
 
 @pytest.mark.asyncio
-async def test_same_tool_streak_resets_when_arguments_change(
+async def test_same_tool_consecutive_calls_with_different_args_do_not_trigger_guidance(
     runner, mock_tool_executor, mock_hooks
 ):
     runner_cls = type(runner)
@@ -813,12 +821,12 @@ async def test_same_tool_streak_resets_when_arguments_change(
     provider = SequentialToolProvider(["test_tool"] * total_calls)
     tool = FunctionTool(
         name="test_tool",
-        description="测试工具",
+        description="娴嬭瘯宸ュ叿",
         parameters={"type": "object", "properties": {"query": {"type": "string"}}},
         handler=AsyncMock(),
     )
     request = ProviderRequest(
-        prompt="请连续执行不同参数的工具",
+        prompt="run tool",
         func_tool=ToolSet(tools=[tool]),
         contexts=[],
     )
@@ -841,21 +849,102 @@ async def test_same_tool_streak_resets_when_arguments_change(
     assert len(tool_messages) == total_calls
 
     tool_contents = [str(message.content) for message in tool_messages]
-    notices = [
-        runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
-            tool_name="test_tool",
-            streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
+    level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
+    )
+    level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
+    )
+    level_3_notice = runner_cls.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD,
+    )
+    for content in tool_contents:
+        assert level_1_notice not in content
+        assert level_2_notice not in content
+        assert level_3_notice not in content
+
+
+@pytest.mark.asyncio
+async def test_same_tool_consecutive_calls_with_equivalent_args_trigger_guidance(
+    runner, mock_tool_executor, mock_hooks
+):
+    runner_cls = type(runner)
+    total_calls = runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD
+    provider = SequentialToolProvider(
+        ["test_tool"] * total_calls,
+        tool_args_factory=lambda i: (
+            {"a": 1, "b": 2} if i % 2 == 0 else {"b": 2, "a": 1}
         ),
-        runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
-            tool_name="test_tool",
-            streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
-        ),
-        runner_cls.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
-            tool_name="test_tool",
-            streak=runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD,
-        ),
+    )
+    tool = FunctionTool(
+        name="test_tool",
+        description="test tool",
+        parameters={
+            "type": "object",
+            "properties": {
+                "a": {"type": "integer"},
+                "b": {"type": "integer"},
+            },
+            "required": ["a", "b"],
+        },
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="run tool",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(total_calls + 1):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
     ]
-    assert all(notice not in content for content in tool_contents for notice in notices)
+    assert len(tool_messages) == total_calls
+
+    tool_contents = [str(message.content) for message in tool_messages]
+    level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
+    )
+    level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
+    )
+    level_3_notice = runner_cls.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD,
+    )
+    for streak, content in enumerate(tool_contents, start=1):
+        if streak < runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
+            assert level_1_notice not in content
+            assert level_2_notice not in content
+            assert level_3_notice not in content
+        elif streak < runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD:
+            assert level_1_notice in content
+            assert level_2_notice not in content
+            assert level_3_notice not in content
+        elif streak < runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD:
+            assert level_1_notice not in content
+            assert level_2_notice in content
+            assert level_3_notice not in content
+        else:
+            assert level_1_notice not in content
+            assert level_2_notice not in content
+            assert level_3_notice in content
 
 
 @pytest.mark.asyncio
@@ -866,7 +955,7 @@ async def test_same_tool_streak_resets_after_switching_tools(
     repeated_after_reset = runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD
     provider = SequentialToolProvider(
         ["test_tool", "other_tool", *(["test_tool"] * repeated_after_reset)],
-        same_args=True,
+        tool_args_factory=lambda _: {"query": "same"},
     )
     tool_a = FunctionTool(
         name="test_tool",

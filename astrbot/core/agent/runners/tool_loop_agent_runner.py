@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import hashlib
 import json
 import sys
 import time
@@ -483,7 +484,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
-        self._last_tool_call_streak_key: tuple[str, str] | None = None
+        self._last_tool_call_key: tuple[str, str] | None = None
         self._same_tool_streak = 0
 
         # These are used for tool schema mode handling
@@ -903,14 +904,25 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return content
         return f"{content}{notice}"
 
-    def _track_tool_call_streak(
-        self, tool_name: str, tool_args: dict[str, T.Any]
-    ) -> int:
-        streak_key = self._tool_call_streak_key(tool_name, tool_args)
-        if streak_key == self._last_tool_call_streak_key:
+    def _fingerprint_tool_args(self, tool_args: T.Any) -> str:
+        try:
+            payload = json.dumps(
+                tool_args,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            )
+        except (TypeError, ValueError):
+            payload = str(tool_args)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def _track_tool_call_streak(self, tool_name: str, tool_args: T.Any) -> int:
+        tool_key = (tool_name, self._fingerprint_tool_args(tool_args))
+        if tool_key == self._last_tool_call_key:
             self._same_tool_streak += 1
         else:
-            self._last_tool_call_streak_key = streak_key
+            self._last_tool_call_key = tool_key
             self._same_tool_streak = 1
         return self._same_tool_streak
 
