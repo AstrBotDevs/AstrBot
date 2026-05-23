@@ -1,3 +1,4 @@
+import copy
 import enum
 import json
 import logging
@@ -139,9 +140,8 @@ class AstrBotConfig(dict):
                 "_dashboard_password_change_required_from_config",
                 True,
             )
-        # 检查配置完整性,并插入
-        has_new = self.check_config_integrity(default_config, conf)
-        dashboard_reset_requested = self._is_dashboard_password_reset_requested()
+        # 检查配置完整性，并插入
+        has_new = self.check_config_integrity(default_config, conf, schema=schema)
         if (
             "dashboard" in conf
             and isinstance(conf["dashboard"], dict)
@@ -207,51 +207,237 @@ class AstrBotConfig(dict):
             for k, v in schema.items():
                 _validate_config_schema_item(k, v)
                 if "default" in v:
-                    default = v["default"]
+                    default = copy.deepcopy(v["default"])
                 else:
-                    default = DEFAULT_VALUE_MAP[v["type"]]
+                    default = copy.deepcopy(DEFAULT_VALUE_MAP[v["type"]])
 
                 if v["type"] == "object":
                     conf[k] = {}
                     _parse_schema(v["items"], conf[k])
                 elif v["type"] == "template_list":
-                    conf[k] = default
+                    fallback = copy.deepcopy(DEFAULT_VALUE_MAP[v["type"]])
+                    conf[k], _ = self._sanitize_value_by_schema(
+                        default,
+                        fallback,
+                        v,
+                        path=k,
+                    )
                 else:
-                    conf[k] = default
+                    fallback = copy.deepcopy(DEFAULT_VALUE_MAP[v["type"]])
+                    conf[k], _ = self._sanitize_value_by_schema(
+                        default,
+                        fallback,
+                        v,
+                        path=k,
+                    )
 
         _parse_schema(schema, conf)
 
         return conf
 
-    def _migrate_legacy_sandbox_runtime(self, conf: dict) -> bool:
-        provider_settings = conf.get("provider_settings")
-        if not isinstance(provider_settings, dict):
-            return False
+    def _value_matches_options(self, value, meta: dict) -> bool:
+        options = meta.get("options")
+        if not isinstance(options, list):
+            return True
+        if value in options:
+            return True
+        type_ = meta.get("type")
+        if "default" not in meta and type_ in DEFAULT_VALUE_MAP:
+            return value == DEFAULT_VALUE_MAP[type_]
+        return False
 
-        runtime = provider_settings.get("computer_use_runtime")
-        if runtime in CORE_COMPUTER_RUNTIME_IDS or not runtime:
-            return False
+    def _sanitize_scalar_by_schema(self, value, default, meta: dict):
+        type_ = meta.get("type")
+        changed = False
 
-        # Older configs stored sandbox provider IDs directly as the runtime.
-        # Preserve that value as the selected sandbox booter without teaching
-        # core about concrete provider names.
-        sandbox_cfg = provider_settings.get("sandbox")
-        if not isinstance(sandbox_cfg, dict):
-            sandbox_cfg = {}
-            provider_settings["sandbox"] = sandbox_cfg
+        if type_ == "int":
+            if type(value) is int:
+                sanitized = value
+            elif isinstance(value, str):
+                try:
+                    sanitized = int(value.strip())
+                    changed = True
+                except ValueError:
+                    return default, True
+            elif isinstance(value, float) and value.is_integer():
+                sanitized = int(value)
+                changed = True
+            else:
+                return default, True
+        elif type_ == "float":
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                sanitized = float(value)
+                changed = type(value) is int
+            elif isinstance(value, str):
+                try:
+                    sanitized = float(value.strip())
+                    changed = True
+                except ValueError:
+                    return default, True
+            else:
+                return default, True
+        elif type_ in ("string", "text"):
+            if not isinstance(value, str):
+                return default, True
+            sanitized = value
+        elif type_ == "bool":
+            if type(value) is not bool:
+                return default, True
+            sanitized = value
+        else:
+            sanitized = value
 
-        if not sandbox_cfg.get("booter"):
-            sandbox_cfg["booter"] = runtime
-            logger.info(
-                "Config key migrated: provider_settings.computer_use_runtime %s -> sandbox",
-                runtime,
+        if not self._value_matches_options(sanitized, meta):
+            return default, True
+
+        return sanitized, changed
+
+    def _sanitize_list_by_schema(self, value, default, meta: dict):
+        if not isinstance(value, list):
+            return default, True
+
+        options = meta.get("options")
+        if not isinstance(options, list):
+            return value, False
+
+        filtered = [item for item in value if item in options]
+        if filtered == value:
+            return value, False
+
+        if filtered:
+            return filtered, True
+        return default, True
+
+    def _sanitize_template_list_by_schema(
+        self,
+        value,
+        default,
+        meta: dict,
+        path="",
+    ):
+        if not isinstance(value, list):
+            return default, True
+
+        templates = meta.get("templates")
+        if not isinstance(templates, dict):
+            templates = {}
+
+        sanitized_entries = []
+        changed = False
+
+        for idx, item in enumerate(value):
+            if not isinstance(item, dict):
+                changed = True
+                logger.warning(
+                    "Dropping non-dict entry from template_list at index %d.",
+                    idx,
+                )
+                continue
+
+            template_key = item.get("__template_key") or item.get("template")
+            template_meta = templates.get(template_key)
+            if not template_key:
+                changed = True
+                logger.warning(
+                    "Dropping template_list entry at index %d: missing template key.",
+                    idx,
+                )
+                continue
+            if not isinstance(template_meta, dict):
+                changed = True
+                logger.warning(
+                    "Dropping template_list entry at index %d: unknown template key.",
+                    idx,
+                )
+                continue
+
+            template_items = template_meta.get("items", {})
+            if not isinstance(template_items, dict):
+                template_items = {}
+
+            entry_default = self._config_schema_to_default_config(template_items)
+            entry_data = {
+                key: item_value
+                for key, item_value in item.items()
+                if key not in {"__template_key", "template"}
+            }
+            entry_changed = self.check_config_integrity(
+                entry_default,
+                entry_data,
+                path=f"{path}[{idx}]" if path else f"[{idx}]",
+                schema=template_items,
             )
 
-        provider_settings["computer_use_runtime"] = "sandbox"
-        return True
+            sanitized_entry = {"__template_key": template_key}
+            sanitized_entry.update(entry_data)
+            sanitized_entries.append(sanitized_entry)
 
-    def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
-        """检查配置完整性,如果有新的配置项或顺序不一致则返回 True"""
+            if item.get("__template_key") != template_key:
+                entry_changed = True
+            if set(item.keys()) - set(sanitized_entry.keys()) - {"template"}:
+                entry_changed = True
+            changed |= entry_changed
+
+        if sanitized_entries != value:
+            changed = True
+        if not sanitized_entries and value:
+            return default, True
+        return sanitized_entries, changed
+
+    def _sanitize_value_by_schema(self, value, default, meta: dict | None, path=""):
+        if not isinstance(meta, dict) or "type" not in meta:
+            return value, False
+
+        type_ = meta["type"]
+        default = copy.deepcopy(default)
+
+        if value is None:
+            return default, True
+
+        if type_ == "object":
+            if not isinstance(value, dict):
+                return default, True
+            items = meta.get("items", {})
+            if not isinstance(items, dict):
+                items = {}
+            nested_value = copy.deepcopy(value)
+            changed = self.check_config_integrity(
+                default,
+                nested_value,
+                path=path,
+                schema=items,
+            )
+            return nested_value, changed
+
+        if type_ == "dict":
+            # dict is an opaque user mapping; object is recursively schema-defined.
+            if not isinstance(value, dict):
+                return default, True
+            return value, False
+
+        if type_ == "template_list":
+            return self._sanitize_template_list_by_schema(value, default, meta, path)
+
+        if type_ == "list":
+            return self._sanitize_list_by_schema(value, default, meta)
+
+        if type_ == "file":
+            if not isinstance(value, list) or not all(
+                isinstance(item, str) for item in value
+            ):
+                return default, True
+            return value, False
+
+        return self._sanitize_scalar_by_schema(value, default, meta)
+
+    def check_config_integrity(
+        self,
+        refer_conf: dict,
+        conf: dict,
+        path="",
+        schema: dict | None = None,
+    ):
+        """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""
         has_new = False
 
         # 创建一个新的有序字典以保持参考配置的顺序
@@ -259,21 +445,34 @@ class AstrBotConfig(dict):
 
         # 先按照参考配置的顺序添加配置项
         for key, value in refer_conf.items():
+            path_ = path + "." + key if path else key
+            item_schema = schema.get(key) if isinstance(schema, dict) else None
             if key not in conf:
                 # 配置项不存在，插入默认值
-                path_ = path + "." + key if path else key
                 logger.info("Config key missing; added default.")
-                new_conf[key] = value
+                new_conf[key] = copy.deepcopy(value)
                 has_new = True
             elif conf[key] is None:
-                # 配置项为 None,使用默认值
-                new_conf[key] = value
+                # 配置项为 None，使用默认值
+                logger.info("Config key is None; added default.")
+                new_conf[key] = copy.deepcopy(value)
                 has_new = True
+            elif isinstance(item_schema, dict):
+                sanitized_value, value_changed = self._sanitize_value_by_schema(
+                    conf[key],
+                    value,
+                    item_schema,
+                    path=path_,
+                )
+                if value_changed:
+                    logger.info("Config key incompatible with schema; sanitized.")
+                new_conf[key] = sanitized_value
+                has_new |= value_changed
             elif isinstance(value, dict):
                 # 递归检查子配置项
                 if not isinstance(conf[key], dict):
-                    # 类型不匹配,使用默认值
-                    new_conf[key] = value
+                    # 类型不匹配，使用默认值
+                    new_conf[key] = copy.deepcopy(value)
                     has_new = True
                 else:
                     # 递归检查并同步顺序
