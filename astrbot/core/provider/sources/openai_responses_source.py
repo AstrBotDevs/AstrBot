@@ -1,736 +1,702 @@
+import asyncio
+import base64
 import inspect
 import json
+import random
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from openai.types.responses.response import Response as OpenAIResponse
-from openai.types.responses.response_usage import ResponseUsage
+import httpx
+from openai import AsyncOpenAI
+from openai._exceptions import NotFoundError
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
-from astrbot.core.agent.message import ImageURLPart, Message, TextPart
+from astrbot.api.provider import Provider
+from astrbot.core.agent.message import ContentPart, ImageURLPart, Message, TextPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse, TokenUsage
-from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
+from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
+from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.network_utils import (
+    create_proxy_client,
+    is_connection_error,
+    log_connection_failure,
+)
+from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..register import register_provider_adapter
-from .openai_source import ProviderOpenAIOfficial
 
 
 @register_provider_adapter(
     "openai_responses",
-    "OpenAI API Responses Provider Adapter",
-    provider_display_name="OpenAI Responses",
+    "OpenAI API Responses 提供商适配器",
 )
-class ProviderOpenAIResponses(ProviderOpenAIOfficial):
-    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+class ProviderOpenAIResponses(Provider):
+    _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
+
+    @classmethod
+    def _truncate_error_text_candidate(cls, text: str) -> str:
+        if len(text) <= cls._ERROR_TEXT_CANDIDATE_MAX_CHARS:
+            return text
+        return text[: cls._ERROR_TEXT_CANDIDATE_MAX_CHARS]
+
+    @staticmethod
+    def _safe_json_dump(value: Any) -> str | None:
+        try:
+            return json.dumps(value, ensure_ascii=False, default=str)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _extract_error_text_candidates(error: Exception) -> list[str]:
+        candidates: list[str] = []
+
+        def _append_candidate(candidate: Any):
+            if candidate is None:
+                return
+            text = str(candidate).strip()
+            if not text:
+                return
+            candidates.append(
+                ProviderOpenAIResponses._truncate_error_text_candidate(text)
+            )
+
+        _append_candidate(str(error))
+
+        body = getattr(error, "body", None)
+        if isinstance(body, dict):
+            err_obj = body.get("error")
+            body_text = ProviderOpenAIResponses._safe_json_dump(
+                {"error": err_obj} if isinstance(err_obj, dict) else body
+            )
+            _append_candidate(body_text)
+            if isinstance(err_obj, dict):
+                for field in ("message", "type", "code", "param"):
+                    value = err_obj.get(field)
+                    if value is not None:
+                        _append_candidate(value)
+        elif isinstance(body, str):
+            _append_candidate(body)
+
+        response = getattr(error, "response", None)
+        if response is not None:
+            response_text = getattr(response, "text", None)
+            if isinstance(response_text, str):
+                _append_candidate(response_text)
+
+        return normalize_and_dedupe_strings(candidates)
+
+    def _get_image_moderation_error_patterns(self) -> list[str]:
+        configured = self.provider_config.get("image_moderation_error_patterns", [])
+        patterns: list[str] = []
+        if isinstance(configured, str):
+            configured = [configured]
+        if isinstance(configured, list):
+            for pattern in configured:
+                if not isinstance(pattern, str):
+                    continue
+                pattern = pattern.strip()
+                if pattern:
+                    patterns.append(pattern)
+        return patterns
+
+    def _is_content_moderated_upload_error(self, error: Exception) -> bool:
+        patterns = [
+            pattern.lower() for pattern in self._get_image_moderation_error_patterns()
+        ]
+        if not patterns:
+            return False
+        candidates = [
+            candidate.lower()
+            for candidate in self._extract_error_text_candidates(error)
+        ]
+        for pattern in patterns:
+            if any(pattern in candidate for candidate in candidates):
+                return True
+        return False
+
+    @staticmethod
+    def _context_contains_image(contexts: list[dict]) -> bool:
+        for context in contexts:
+            content = context.get("content")
+            if not isinstance(content, list):
+                continue
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "image_url":
+                    return True
+        return False
+
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+        proxy = provider_config.get("proxy", "")
+        return create_proxy_client("OpenAI", proxy)
+
+    def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
+        self.chosen_api_key = None
+        self.api_keys: list = super().get_keys()
+        self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
+        self.timeout = provider_config.get("timeout", 120)
+        self.custom_headers = provider_config.get("custom_headers", {})
+        if isinstance(self.timeout, str):
+            self.timeout = int(self.timeout)
+
+        if not isinstance(self.custom_headers, dict) or not self.custom_headers:
+            self.custom_headers = None
+        else:
+            for key in self.custom_headers:
+                self.custom_headers[key] = str(self.custom_headers[key])
+
+        self.client = AsyncOpenAI(
+            api_key=self.chosen_api_key,
+            base_url=provider_config.get("api_base", None),
+            default_headers=self.custom_headers,
+            timeout=self.timeout,
+            http_client=self._create_http_client(provider_config),
+        )
+
         self.default_params = inspect.signature(
             self.client.responses.create,
         ).parameters.keys()
-        self.reasoning_key = "reasoning"
 
-    def supports_native_compact(self) -> bool:
-        return True
+        model = provider_config.get("model", "unknown")
+        self.set_model(model)
 
-    async def compact_context(self, messages: list[Message]) -> list[Message]:
-        if not messages:
-            return messages
-
-        message_dicts = self._ensure_message_to_dicts(messages)
-        request_payload = {
-            "model": self.get_model(),
-            "input": self._messages_to_response_input(message_dicts),
-        }
-
-        request_options: dict[str, Any] = {}
-        extra_headers = self._build_extra_headers()
-        if extra_headers:
-            request_options["extra_headers"] = extra_headers
-
+    async def get_models(self):
         try:
-            compact_response = await self.client.responses.compact(
-                **request_payload,
-                **request_options,
-            )
-        except Exception as e:
-            if is_connection_error(e):
-                proxy = self.provider_config.get("proxy", "")
-                log_connection_failure("OpenAI", e, proxy)
-            raise
+            models_str = []
+            models = await self.client.models.list()
+            models = sorted(models.data, key=lambda x: x.id)
+            for model in models:
+                models_str.append(model.id)
+            return models_str
+        except NotFoundError as e:
+            raise Exception(f"获取模型列表失败：{e}")
 
-        if hasattr(compact_response, "model_dump"):
-            compact_data = compact_response.model_dump(mode="json")
-        elif isinstance(compact_response, dict):
-            compact_data = compact_response
-        else:
-            compact_data = {
-                "output": getattr(compact_response, "output", []),
-            }
-
-        compact_input = self._extract_compact_input(compact_data)
-        compact_messages = self._response_input_to_messages(compact_input)
-        if not compact_messages:
-            raise ValueError("Responses compact returned empty context.")
-        return compact_messages
-
-    def _extract_compact_input(self, compact_data: Any) -> list[dict[str, Any]]:
-        if not isinstance(compact_data, dict):
-            raise ValueError("Invalid compact response payload.")
-
-        candidate_keys = (
-            "input",
-            "items",
-            "input_items",
-            "compacted_items",
-            "compacted_input",
+    async def test(self, timeout: float = 45.0) -> None:
+        """Respect streaming_response when checking provider availability."""
+        use_stream = bool(self.provider_settings.get("streaming_response", False))
+        logger.info(
+            "[openai_responses.test] streaming_response=%s timeout=%s",
+            use_stream,
+            timeout,
         )
-        for key in candidate_keys:
-            value = compact_data.get(key)
-            if isinstance(value, list):
-                return [item for item in value if isinstance(item, dict)]
+        if use_stream:
 
-        response_obj = compact_data.get("response")
-        if isinstance(response_obj, dict):
-            for key in candidate_keys:
-                value = response_obj.get(key)
-                if isinstance(value, list):
-                    return [item for item in value if isinstance(item, dict)]
+            async def _consume() -> None:
+                logger.info("[openai_responses.test] using text_chat_stream")
+                async for _ in self.text_chat_stream(
+                    prompt="REPLY `PONG` ONLY",
+                ):
+                    break
 
-        output = compact_data.get("output")
-        if isinstance(output, list):
-            return self._response_output_to_input_items(output)
+            await asyncio.wait_for(_consume(), timeout=timeout)
+        else:
+            logger.info("[openai_responses.test] using text_chat")
+            await asyncio.wait_for(
+                self.text_chat(prompt="REPLY `PONG` ONLY"),
+                timeout=timeout,
+            )
 
-        raise ValueError("Responses compact payload does not contain compacted items.")
-
-    def _response_output_to_input_items(
-        self, output: list[Any]
-    ) -> list[dict[str, Any]]:
-        converted: list[dict[str, Any]] = []
-        for item in output:
-            if not isinstance(item, dict):
-                continue
-            item_type = item.get("type")
-            if item_type == "message":
-                role = item.get("role", "assistant")
-                if role not in {"system", "developer", "user", "assistant"}:
-                    role = "assistant"
-                content = item.get("content", [])
-                converted_content = self._output_content_to_input_content(content)
-                converted.append(
-                    {
-                        "type": "message",
-                        "role": role,
-                        "content": converted_content,
-                    }
-                )
-            elif item_type == "function_call":
-                converted.append(
-                    {
-                        "type": "function_call",
-                        "call_id": item.get("call_id", item.get("id", "")),
-                        "name": item.get("name", ""),
-                        "arguments": item.get("arguments", "{}"),
-                    }
-                )
-        return converted
-
-    def _output_content_to_input_content(self, content: Any) -> list[dict[str, Any]]:
-        converted: list[dict[str, Any]] = []
-        if not isinstance(content, list):
-            return converted
-        for part in content:
-            if not isinstance(part, dict):
-                continue
-            part_type = part.get("type")
-            if part_type == "output_text":
-                text = part.get("text")
-                if text:
-                    converted.append({"type": "input_text", "text": str(text)})
-            elif part_type == "input_text":
-                text = part.get("text")
-                if text:
-                    converted.append({"type": "input_text", "text": str(text)})
-        return converted
-
-    def _response_input_to_messages(
-        self, input_items: list[dict[str, Any]]
-    ) -> list[Message]:
-        messages: list[Message] = []
-        for item in input_items:
-            item_type = item.get("type")
-            if item_type == "message":
-                role = item.get("role")
-                if role not in {"system", "developer", "user", "assistant"}:
-                    continue
-                content = self._response_content_to_message_content(item.get("content"))
-                if content is None:
-                    content = ""
-                messages.append(Message(role=role, content=content))
-            elif item_type == "function_call":
-                call_id = item.get("call_id") or item.get("id")
-                name = item.get("name")
-                arguments = item.get("arguments", "{}")
-                if not call_id or not name:
-                    continue
-                if not isinstance(arguments, str):
-                    arguments = json.dumps(arguments, ensure_ascii=False)
-                messages.append(
-                    Message(
-                        role="assistant",
-                        content="",
-                        tool_calls=[
-                            {
-                                "type": "function",
-                                "id": str(call_id),
-                                "function": {
-                                    "name": str(name),
-                                    "arguments": arguments,
-                                },
-                            }
-                        ],
-                    )
-                )
-            elif item_type == "function_call_output":
-                call_id = item.get("call_id")
-                output = item.get("output", "")
-                if not call_id:
-                    continue
-                messages.append(
-                    Message(
-                        role="tool",
-                        tool_call_id=str(call_id),
-                        content=str(output),
-                    )
-                )
-
-        return messages
-
-    def _response_content_to_message_content(self, content: Any) -> str | list:
-        if isinstance(content, str):
-            return content
-        if not isinstance(content, list):
+    def _normalize_content(self, raw_content: Any, strip: bool = True) -> str:
+        if isinstance(raw_content, dict):
+            if "text" in raw_content:
+                text_val = raw_content.get("text", "")
+                return str(text_val) if text_val is not None else ""
             return ""
 
-        parts: list[Any] = []
-        plain_text: list[str] = []
-        has_non_text = False
+        if isinstance(raw_content, list):
+            text_parts = []
+            for part in raw_content:
+                if isinstance(part, dict) and "text" in part:
+                    text_val = part.get("text", "")
+                    text_parts.append(str(text_val) if text_val is not None else "")
+            if text_parts:
+                return "".join(text_parts)
+            return str(raw_content)
 
-        for part in content:
-            if not isinstance(part, dict):
-                continue
-            part_type = part.get("type")
-            if part_type in {"input_text", "output_text", "text"}:
-                text = part.get("text")
-                if text is not None:
-                    plain_text.append(str(text))
-                    parts.append(TextPart(text=str(text)))
-            elif part_type in {"input_image", "image_url"}:
-                image_url = None
-                if part_type == "input_image":
-                    image_url = part.get("image_url") or part.get("file_url")
-                else:
-                    image_data = part.get("image_url")
-                    if isinstance(image_data, dict):
-                        image_url = image_data.get("url")
-                    elif isinstance(image_data, str):
-                        image_url = image_data
-                if image_url:
-                    has_non_text = True
-                    parts.append(
-                        ImageURLPart(
-                            image_url=ImageURLPart.ImageURL(url=str(image_url))
-                        )
-                    )
+        if isinstance(raw_content, str):
+            return raw_content.strip() if strip else raw_content
 
-        if has_non_text:
-            return parts
-        return "\n".join(plain_text).strip()
+        return str(raw_content) if raw_content is not None else ""
 
-    def _messages_to_response_input(
-        self,
-        messages: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        response_input: list[dict[str, Any]] = []
-
-        for message in messages:
-            role = message.get("role")
-            content = message.get("content")
-            tool_calls = message.get("tool_calls")
-
-            if role in {"system", "developer", "user", "assistant"}:
-                converted_content = self._message_content_to_response_content(content)
-                message_item: dict[str, Any] = {
-                    "type": "message",
-                    "role": role,
-                }
-                if isinstance(converted_content, str):
-                    message_item["content"] = converted_content
-                else:
-                    message_item["content"] = converted_content
-                response_input.append(message_item)
-
-            if role == "assistant" and isinstance(tool_calls, list):
-                for tool_call in tool_calls:
-                    normalized = self._normalize_tool_call(tool_call)
-                    if not normalized:
-                        continue
-                    response_input.append(
-                        {
-                            "type": "function_call",
-                            "call_id": normalized["id"],
-                            "name": normalized["name"],
-                            "arguments": normalized["arguments"],
-                        }
-                    )
-
-            if role == "tool":
-                call_id = message.get("tool_call_id")
-                if call_id:
-                    response_input.append(
-                        {
-                            "type": "function_call_output",
-                            "call_id": str(call_id),
-                            "output": self._extract_text_from_content(content),
-                        }
-                    )
-
-        return response_input
-
-    def _normalize_tool_call(self, tool_call: Any) -> dict[str, str] | None:
-        if isinstance(tool_call, str):
-            try:
-                tool_call = json.loads(tool_call)
-            except Exception:
-                return None
-        if not isinstance(tool_call, dict):
-            return None
-
-        tool_type = tool_call.get("type")
-        if tool_type != "function":
-            return None
-
-        function_data = tool_call.get("function", {})
-        if not isinstance(function_data, dict):
-            return None
-
-        name = function_data.get("name")
-        call_id = tool_call.get("id")
-        arguments = function_data.get("arguments", "{}")
-        if not name or not call_id:
-            return None
-
-        if not isinstance(arguments, str):
-            arguments = json.dumps(arguments, ensure_ascii=False)
-
-        return {
-            "id": str(call_id),
-            "name": str(name),
-            "arguments": arguments,
-        }
-
-    def _message_content_to_response_content(
-        self, content: Any
-    ) -> str | list[dict[str, Any]]:
-        if isinstance(content, str):
-            return content
-        if not isinstance(content, list):
+    def _content_to_plain_text(self, content: Any) -> str:
+        if content is None:
             return ""
-
-        converted: list[dict[str, Any]] = []
-        for part in content:
-            if not isinstance(part, dict):
-                continue
-
-            part_type = part.get("type")
-            if part_type in {"text", "input_text", "output_text"}:
-                text = part.get("text")
-                if text is not None:
-                    converted.append({"type": "input_text", "text": str(text)})
-            elif part_type in {"image_url", "input_image"}:
-                image_part = self._normalize_image_part(part)
-                if image_part:
-                    converted.append(image_part)
-            elif part_type == "input_file":
-                file_id = part.get("file_id")
-                file_url = part.get("file_url")
-                file_data = part.get("file_data")
-                input_file: dict[str, Any] = {"type": "input_file"}
-                if file_id:
-                    input_file["file_id"] = file_id
-                elif file_url:
-                    input_file["file_url"] = file_url
-                elif file_data:
-                    input_file["file_data"] = file_data
-                filename = part.get("filename")
-                if filename:
-                    input_file["filename"] = filename
-                if len(input_file) > 1:
-                    converted.append(input_file)
-
-        if not converted:
-            return ""
-        if len(converted) == 1 and converted[0].get("type") == "input_text":
-            return str(converted[0].get("text", ""))
-        return converted
-
-    def _normalize_image_part(self, part: dict[str, Any]) -> dict[str, Any] | None:
-        if part.get("type") == "input_image":
-            image_url = part.get("image_url")
-            if image_url:
-                normalized = {"type": "input_image", "image_url": str(image_url)}
-                detail = part.get("detail")
-                if detail:
-                    normalized["detail"] = detail
-                return normalized
-            file_id = part.get("file_id")
-            if file_id:
-                normalized = {"type": "input_image", "file_id": str(file_id)}
-                detail = part.get("detail")
-                if detail:
-                    normalized["detail"] = detail
-                return normalized
-            return None
-
-        image_data = part.get("image_url")
-        image_url = None
-        if isinstance(image_data, dict):
-            image_url = image_data.get("url")
-        elif isinstance(image_data, str):
-            image_url = image_data
-
-        if not image_url:
-            return None
-
-        normalized = {"type": "input_image", "image_url": str(image_url)}
-        detail = part.get("detail")
-        if detail:
-            normalized["detail"] = detail
-        return normalized
-
-    def _extract_text_from_content(self, content: Any) -> str:
         if isinstance(content, str):
             return content
         if isinstance(content, list):
-            texts: list[str] = []
+            text_parts = []
             for part in content:
                 if isinstance(part, dict):
-                    text = part.get("text")
-                    if text is not None:
-                        texts.append(str(text))
-            return "\n".join(texts)
-        return str(content) if content is not None else ""
+                    if part.get("type") == "text":
+                        text_parts.append(str(part.get("text", "")))
+                    elif "text" in part:
+                        text_parts.append(str(part.get("text", "")))
+                elif isinstance(part, str):
+                    text_parts.append(part)
+            return "".join(text_parts)
+        if isinstance(content, dict):
+            if "text" in content:
+                return str(content.get("text", ""))
+        return str(content)
 
-    def _build_responses_input_and_instructions(
-        self,
-        messages: list[dict[str, Any]],
-    ) -> tuple[list[dict[str, Any]], str | None]:
-        response_input = self._messages_to_response_input(messages)
-        filtered_input: list[dict[str, Any]] = []
-        instruction_chunks: list[str] = []
-
-        for item in response_input:
-            if item.get("type") == "message" and item.get("role") in {
-                "system",
-                "developer",
-            }:
-                instruction_text = self._extract_text_from_content(item.get("content"))
-                if instruction_text:
-                    instruction_chunks.append(instruction_text)
-                continue
-            filtered_input.append(item)
-
-        instructions = "\n\n".join(instruction_chunks).strip()
-        return filtered_input, instructions or None
-
-    def _build_extra_headers(self) -> dict[str, str]:
-        headers: dict[str, str] = {}
-        if isinstance(self.custom_headers, dict):
-            for key, value in self.custom_headers.items():
-                if str(key).lower() == "authorization":
+    def _convert_content_to_input(self, content: Any) -> str | list[dict]:
+        if content is None:
+            return " "
+        if isinstance(content, str):
+            return content if content.strip() else " "
+        if isinstance(content, list):
+            items = []
+            for part in content:
+                if not isinstance(part, dict):
                     continue
-                headers[str(key)] = str(value)
-        return headers
+                part_type = part.get("type")
+                if part_type == "text":
+                    text = str(part.get("text", ""))
+                    items.append({"type": "input_text", "text": text})
+                elif part_type == "image_url":
+                    image_url = part.get("image_url")
+                    if isinstance(image_url, dict):
+                        image_url = image_url.get("url")
+                    if image_url:
+                        items.append(
+                            {"type": "input_image", "image_url": str(image_url)}
+                        )
+                elif part_type == "think":
+                    # Skip internal thinking parts.
+                    continue
+            if not items:
+                return " "
+            return items
+        if isinstance(content, dict):
+            if content.get("type") == "text":
+                return str(content.get("text", "")) or " "
+        return self._content_to_plain_text(content) or " "
 
-    def _resolve_tool_strict(
-        self,
-        tool: dict[str, Any],
-        function_body: dict[str, Any] | None,
-    ) -> bool | None:
-        if isinstance(function_body, dict) and isinstance(
-            function_body.get("strict"), bool
-        ):
-            return function_body["strict"]
-        if isinstance(tool.get("strict"), bool):
-            return tool["strict"]
-        default_strict = self.provider_config.get("responses_tool_strict")
-        if isinstance(default_strict, bool):
-            return default_strict
+    def _convert_content_to_output(self, content: Any) -> list[dict] | None:
+        if content is None:
+            return None
+        if isinstance(content, str):
+            text = content
+            if not text.strip():
+                return None
+            return [{"type": "output_text", "text": text}]
+        if isinstance(content, list):
+            items: list[dict] = []
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                part_type = part.get("type")
+                if part_type in {"text", "output_text"}:
+                    text = str(part.get("text", ""))
+                    if text:
+                        items.append({"type": "output_text", "text": text})
+            return items or None
+        if isinstance(content, dict):
+            if content.get("type") in {"text", "output_text"}:
+                text = str(content.get("text", ""))
+                if text:
+                    return [{"type": "output_text", "text": text}]
+        text = self._content_to_plain_text(content)
+        if text.strip():
+            return [{"type": "output_text", "text": text}]
         return None
 
-    def _convert_tools_to_responses(
-        self, tool_list: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
-        response_tools: list[dict[str, Any]] = []
-        for tool in tool_list:
-            if not isinstance(tool, dict):
-                continue
-            if tool.get("type") != "function":
+    def _convert_openai_messages_to_responses_input(
+        self, messages: list[dict]
+    ) -> list[dict]:
+        items: list[dict] = []
+        for message in messages:
+            role = message.get("role")
+            tool_calls = message.get("tool_calls")
+            content = message.get("content")
+
+            if role == "assistant" and tool_calls:
+                converted = self._convert_content_to_output(content)
+                if converted:
+                    items.append({"role": "assistant", "content": converted})
+                for tool_call in tool_calls:
+                    if hasattr(tool_call, "model_dump"):
+                        tool_call = tool_call.model_dump()
+                    if isinstance(tool_call, str):
+                        try:
+                            tool_call = json.loads(tool_call)
+                        except Exception:
+                            tool_call = {}
+                    func = (
+                        tool_call.get("function", {})
+                        if isinstance(tool_call, dict)
+                        else {}
+                    )
+                    items.append(
+                        {
+                            "type": "function_call",
+                            "call_id": tool_call.get("id")
+                            or tool_call.get("call_id")
+                            or "",
+                            "name": func.get("name", ""),
+                            "arguments": func.get("arguments") or "",
+                        }
+                    )
                 continue
 
-            function_body = tool.get("function")
-            if isinstance(function_body, dict):
-                name = function_body.get("name")
-                if not name:
-                    continue
-                response_tool = {
-                    "type": "function",
-                    "name": name,
-                    "description": function_body.get("description", ""),
-                    "parameters": function_body.get("parameters", {}),
-                }
-                strict = self._resolve_tool_strict(tool, function_body)
-                if strict is not None:
-                    response_tool["strict"] = strict
-                response_tools.append(response_tool)
+            if role == "tool":
+                call_id = message.get("tool_call_id") or ""
+                output_text = self._content_to_plain_text(content)
+                items.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": output_text,
+                    }
+                )
                 continue
 
-            name = tool.get("name")
-            if not name:
+            if role == "assistant":
+                converted = self._convert_content_to_output(content)
+                if converted:
+                    items.append({"role": "assistant", "content": converted})
                 continue
-            response_tool = {
-                "type": "function",
-                "name": name,
-                "description": tool.get("description", ""),
-                "parameters": tool.get("parameters", {}),
-            }
-            strict = self._resolve_tool_strict(tool, None)
-            if strict is not None:
-                response_tool["strict"] = strict
-            response_tools.append(response_tool)
 
-        return response_tools
+            items.append(
+                {"role": role, "content": self._convert_content_to_input(content)}
+            )
+        return items
 
-    def _extract_response_usage(self, usage: ResponseUsage | None) -> TokenUsage | None:
-        if usage is None:
-            return None
+    async def _prepare_chat_payload(
+        self,
+        prompt: str | None,
+        image_urls: list[str] | None = None,
+        contexts: list[dict] | list[Message] | None = None,
+        system_prompt: str | None = None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
+        model: str | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
+        **kwargs,
+    ) -> tuple:
+        if contexts is None:
+            contexts = []
+        new_record = None
+        if prompt is not None:
+            new_record = await self.assemble_context(
+                prompt, image_urls, extra_user_content_parts
+            )
+        context_query = self._ensure_message_to_dicts(contexts)
+        if new_record:
+            context_query.append(new_record)
+        if system_prompt:
+            context_query.insert(0, {"role": "system", "content": system_prompt})
+
+        for part in context_query:
+            if "_no_save" in part:
+                del part["_no_save"]
+
+        if tool_calls_result:
+            if isinstance(tool_calls_result, ToolCallsResult):
+                context_query.extend(tool_calls_result.to_openai_messages())
+            else:
+                for tcr in tool_calls_result:
+                    context_query.extend(tcr.to_openai_messages())
+
+        model = model or self.get_model()
+
+        input_items = self._convert_openai_messages_to_responses_input(context_query)
+        payloads = {"input": input_items, "model": model}
+        payloads.update(kwargs)
+        return payloads, context_query
+
+    async def _fallback_to_text_only_and_retry(
+        self,
+        payloads: dict,
+        context_query: list,
+        chosen_key: str,
+        available_api_keys: list[str],
+        func_tool: ToolSet | None,
+        reason: str,
+        *,
+        image_fallback_used: bool = False,
+    ) -> tuple:
+        logger.warning(
+            "检测到图片请求失败（%s），已移除图片并重试（保留文本内容）。",
+            reason,
+        )
+        new_contexts = await self._remove_image_from_context(context_query)
+        payloads["input"] = self._convert_openai_messages_to_responses_input(
+            new_contexts
+        )
+        return (
+            False,
+            chosen_key,
+            available_api_keys,
+            payloads,
+            new_contexts,
+            func_tool,
+            image_fallback_used,
+        )
+
+    def _extract_usage(self, usage: Any) -> TokenUsage:
+        input_tokens = 0
+        output_tokens = 0
         cached = 0
-        if usage.input_tokens_details:
-            cached = usage.input_tokens_details.cached_tokens or 0
-        input_other = max(0, (usage.input_tokens or 0) - cached)
-        output = usage.output_tokens or 0
-        return TokenUsage(input_other=input_other, input_cached=cached, output=output)
+        if isinstance(usage, dict):
+            input_tokens = int(usage.get("input_tokens", 0) or 0)
+            output_tokens = int(usage.get("output_tokens", 0) or 0)
+            details = usage.get("input_tokens_details") or {}
+            cached = int(details.get("cached_tokens", 0) or 0)
+        else:
+            input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+            output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+            details = getattr(usage, "input_tokens_details", None)
+            if details is not None:
+                cached = int(getattr(details, "cached_tokens", 0) or 0)
+        return TokenUsage(
+            input_other=input_tokens - cached,
+            input_cached=cached,
+            output=output_tokens,
+        )
+
+    def _extract_output_text_from_items(self, output_items: list) -> str:
+        texts: list[str] = []
+        for item in output_items:
+            item_type = getattr(item, "type", None)
+            if isinstance(item, dict):
+                item_type = item.get("type")
+            if item_type != "message":
+                continue
+            content = getattr(item, "content", None)
+            if isinstance(item, dict):
+                content = item.get("content")
+            if isinstance(content, str):
+                texts.append(content)
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict):
+                        if part.get("type") in {"output_text", "text", "input_text"}:
+                            texts.append(str(part.get("text", "")))
+        return "".join(texts)
 
     async def _parse_openai_response(
-        self,
-        response: OpenAIResponse,
-        tools: ToolSet | None,
+        self, response: Any, tools: ToolSet | None
     ) -> LLMResponse:
         llm_response = LLMResponse("assistant")
+        output_text = getattr(response, "output_text", None)
+        if isinstance(output_text, list):
+            output_text = "".join(str(x) for x in output_text)
+        if isinstance(output_text, str) and output_text.strip():
+            llm_response.result_chain = MessageChain().message(
+                self._normalize_content(output_text)
+            )
 
-        if response.error:
-            raise Exception(f"Responses API error: {response.error.message}")
+        output_items = getattr(response, "output", None) or []
+        if not llm_response.result_chain:
+            extracted = self._extract_output_text_from_items(output_items)
+            if extracted:
+                llm_response.result_chain = MessageChain().message(
+                    self._normalize_content(extracted)
+                )
 
-        completion_text = response.output_text.strip()
-        if completion_text:
-            llm_response.result_chain = MessageChain().message(completion_text)
+        if output_items:
+            for item in output_items:
+                item_type = getattr(item, "type", None)
+                if isinstance(item, dict):
+                    item_type = item.get("type")
+                if item_type == "function_call":
+                    name = getattr(item, "name", None)
+                    arguments = getattr(item, "arguments", None)
+                    call_id = getattr(item, "call_id", None)
+                    if isinstance(item, dict):
+                        name = item.get("name")
+                        arguments = item.get("arguments")
+                        call_id = item.get("call_id") or item.get("id")
+                    if isinstance(arguments, str):
+                        try:
+                            args = json.loads(arguments)
+                        except Exception:
+                            args = {}
+                    elif isinstance(arguments, dict):
+                        args = arguments
+                    else:
+                        args = {}
+                    if name:
+                        llm_response.tools_call_name.append(name)
+                        llm_response.tools_call_args.append(args)
+                        llm_response.tools_call_ids.append(call_id or "")
 
-        reasoning_segments: list[str] = []
-        for output_item in response.output:
-            output_type = getattr(output_item, "type", "")
-            if output_type == "reasoning":
-                summary = getattr(output_item, "summary", [])
-                for summary_part in summary:
-                    text = getattr(summary_part, "text", "")
-                    if text:
-                        reasoning_segments.append(str(text))
-            if output_type == "function_call" and tools is not None:
-                arguments = getattr(output_item, "arguments", "{}")
-                function_name = getattr(output_item, "name", "")
-                call_id = getattr(output_item, "call_id", "")
-                parsed_arguments: dict[str, Any]
-                try:
-                    parsed_arguments = json.loads(arguments) if arguments else {}
-                except Exception:
-                    parsed_arguments = {}
-                llm_response.tools_call_args.append(parsed_arguments)
-                llm_response.tools_call_name.append(str(function_name))
-                llm_response.tools_call_ids.append(str(call_id))
+        if llm_response.tools_call_name:
+            llm_response.role = "tool"
 
-        if reasoning_segments:
-            llm_response.reasoning_content = "\n".join(reasoning_segments)
-
-        if not llm_response.completion_text and not llm_response.tools_call_args:
-            raise Exception(f"Responses API returned empty output: {response}")
+        if getattr(response, "usage", None):
+            llm_response.usage = self._extract_usage(response.usage)
 
         llm_response.raw_completion = response
-        llm_response.id = response.id
-        llm_response.usage = self._extract_response_usage(response.usage)
+        llm_response.id = getattr(response, "id", None)
+
+        if llm_response.completion_text is None and not llm_response.tools_call_args:
+            logger.error(f"API 返回的 response 无法解析：{response}。")
+            raise Exception(f"API 返回的 response 无法解析：{response}。")
+
         return llm_response
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
-        request_payload = dict(payloads)
-        response_input, instructions = self._build_responses_input_and_instructions(
-            request_payload.pop("messages", [])
-        )
-        request_payload["input"] = response_input
-        if instructions and not request_payload.get("instructions"):
-            request_payload["instructions"] = instructions
-
         if tools:
-            model = request_payload.get("model", "").lower()
-            omit_empty_param_field = "gemini" in model
-            tool_list = tools.get_func_desc_openai_style(
-                omit_empty_parameter_field=omit_empty_param_field,
-            )
-            response_tools = self._convert_tools_to_responses(tool_list)
-            if response_tools:
-                request_payload["tools"] = response_tools
+            tool_list = tools.openai_responses_schema()
+            if tool_list:
+                payloads["tools"] = tool_list
 
-        extra_body: dict[str, Any] = {}
-        for key in list(request_payload.keys()):
-            if key not in self.default_params:
-                extra_body[key] = request_payload.pop(key)
+        extra_body = self._prepare_request_payload(payloads)
 
-        custom_extra_body = self.provider_config.get("custom_extra_body", {})
-        if isinstance(custom_extra_body, dict):
-            extra_body.update(custom_extra_body)
-
-        extra_headers = self._build_extra_headers()
-        completion = await self.client.responses.create(
-            **request_payload,
+        response = await self.client.responses.create(
+            **payloads,
             stream=False,
             extra_body=extra_body,
-            extra_headers=extra_headers,
         )
 
-        if not isinstance(completion, OpenAIResponse):
-            raise TypeError(f"Unexpected response object: {type(completion)}")
-
-        logger.debug(f"response: {completion}")
-        return await self._parse_openai_response(completion, tools)
+        logger.debug(f"response: {response}")
+        llm_response = await self._parse_openai_response(response, tools)
+        return llm_response
 
     async def _query_stream(
         self,
         payloads: dict,
         tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
-        request_payload = dict(payloads)
-        response_input, instructions = self._build_responses_input_and_instructions(
-            request_payload.pop("messages", [])
-        )
-        request_payload["input"] = response_input
-        if instructions and not request_payload.get("instructions"):
-            request_payload["instructions"] = instructions
-
         if tools:
-            model = request_payload.get("model", "").lower()
-            omit_empty_param_field = "gemini" in model
-            tool_list = tools.get_func_desc_openai_style(
-                omit_empty_parameter_field=omit_empty_param_field,
-            )
-            response_tools = self._convert_tools_to_responses(tool_list)
-            if response_tools:
-                request_payload["tools"] = response_tools
+            tool_list = tools.openai_responses_schema()
+            if tool_list:
+                payloads["tools"] = tool_list
 
-        extra_body: dict[str, Any] = {}
-        for key in list(request_payload.keys()):
-            if key not in self.default_params:
-                extra_body[key] = request_payload.pop(key)
+        extra_body = self._prepare_request_payload(payloads)
 
-        custom_extra_body = self.provider_config.get("custom_extra_body", {})
-        if isinstance(custom_extra_body, dict):
-            extra_body.update(custom_extra_body)
+        stream = await self.client.responses.create(
+            **payloads,
+            stream=True,
+            extra_body=extra_body,
+        )
 
-        response_id: str | None = None
-        extra_headers = self._build_extra_headers()
-        try:
-            async with self.client.responses.stream(
-                **request_payload,
-                extra_body=extra_body,
-                extra_headers=extra_headers,
-            ) as stream:
-                async for event in stream:
-                    event_type = getattr(event, "type", "")
-                    if event_type == "response.created":
-                        response_obj = getattr(event, "response", None)
-                        if response_obj:
-                            response_id = getattr(response_obj, "id", None)
-                        continue
+        def _get_event_attr(event: Any, key: str, default: Any = None) -> Any:
+            if hasattr(event, key):
+                return getattr(event, key)
+            if isinstance(event, dict):
+                return event.get(key, default)
+            if hasattr(event, "model_dump"):
+                return event.model_dump().get(key, default)
+            return default
 
-                    if event_type == "response.output_text.delta":
-                        delta = getattr(event, "delta", "")
-                        if delta:
-                            yield LLMResponse(
-                                role="assistant",
-                                result_chain=MessageChain(
-                                    chain=[Comp.Plain(str(delta))]
-                                ),
-                                is_chunk=True,
-                                id=response_id,
-                            )
-                        continue
+        full_text = ""
+        reasoning_text = ""
+        had_text_delta = False
+        tool_call_args: dict[str, str] = {}
+        tool_call_names: dict[str, str] = {}
+        tool_call_order: list[str] = []
+        last_response = None
 
-                    if event_type == "response.reasoning_summary_text.delta":
-                        delta = getattr(event, "delta", "")
-                        if delta:
-                            yield LLMResponse(
-                                role="assistant",
-                                reasoning_content=str(delta),
-                                is_chunk=True,
-                                id=response_id,
-                            )
-                        continue
+        async for event in stream:
+            event_type = _get_event_attr(event, "type")
 
-                    if event_type == "error":
-                        raise Exception(
-                            f"Responses stream error: {getattr(event, 'code', 'unknown')} {getattr(event, 'message', '')}"
-                        )
+            if event_type == "response.output_text.delta":
+                delta = _get_event_attr(event, "delta", "")
+                if delta:
+                    had_text_delta = True
+                    full_text += str(delta)
+                    yield LLMResponse(
+                        "assistant",
+                        is_chunk=True,
+                        result_chain=MessageChain(chain=[Comp.Plain(str(delta))]),
+                    )
+                continue
 
-                    if event_type == "response.failed":
-                        response_obj = getattr(event, "response", None)
-                        error_obj = (
-                            getattr(response_obj, "error", None)
-                            if response_obj
-                            else None
-                        )
-                        if error_obj is not None:
-                            raise Exception(
-                                f"Responses stream failed: {getattr(error_obj, 'code', 'unknown')} {getattr(error_obj, 'message', '')}"
-                            )
-                        raise Exception("Responses stream failed.")
+            if event_type == "response.reasoning_text.delta":
+                delta = _get_event_attr(event, "delta", "")
+                if delta:
+                    reasoning_text += str(delta)
+                    yield LLMResponse(
+                        "assistant",
+                        is_chunk=True,
+                        reasoning_content=str(delta),
+                    )
+                continue
 
-                final_response = await stream.get_final_response()
-        except Exception as e:
-            if self._is_retryable_upstream_error(e) or is_connection_error(e):
-                logger.warning(
-                    "Responses stream failed, fallback to non-stream create: %s",
-                    e,
+            if event_type == "response.content_part.done":
+                part = _get_event_attr(event, "part")
+                if isinstance(part, dict):
+                    if (
+                        part.get("type") in {"output_text", "text"}
+                        and not had_text_delta
+                    ):
+                        text = part.get("text", "")
+                        if text:
+                            full_text += str(text)
+                continue
+
+            if event_type == "response.function_call_arguments.delta":
+                call_id = _get_event_attr(event, "item_id") or _get_event_attr(
+                    event, "call_id", ""
                 )
-                yield await self._query(payloads, tools)
-                return
-            raise
+                delta = _get_event_attr(event, "delta", "")
+                name = _get_event_attr(event, "name", "")
+                if call_id:
+                    if call_id not in tool_call_order:
+                        tool_call_order.append(call_id)
+                    if name:
+                        tool_call_names[call_id] = str(name)
+                    if delta:
+                        tool_call_args[call_id] = tool_call_args.get(call_id, "") + str(
+                            delta
+                        )
+                continue
 
-        yield await self._parse_openai_response(final_response, tools)
+            if event_type == "response.function_call_arguments.done":
+                call_id = _get_event_attr(event, "item_id") or _get_event_attr(
+                    event, "call_id", ""
+                )
+                args = _get_event_attr(event, "arguments", "")
+                name = _get_event_attr(event, "name", "")
+                if call_id:
+                    if call_id not in tool_call_order:
+                        tool_call_order.append(call_id)
+                    if name:
+                        tool_call_names[call_id] = str(name)
+                    if args is not None:
+                        tool_call_args[call_id] = str(args)
+                continue
 
-    def _is_retryable_upstream_error(self, e: Exception) -> bool:
-        status_code = getattr(e, "status_code", None)
-        if status_code in {500, 502, 503, 504}:
-            return True
+            # Some events include a response object
+            response_obj = _get_event_attr(event, "response")
+            if response_obj is not None:
+                last_response = response_obj
 
-        message = str(e).lower()
-        if "upstream request failed" in message:
-            return True
+        if last_response is not None:
+            yield await self._parse_openai_response(last_response, tools)
+            return
 
-        body = getattr(e, "body", None)
-        if isinstance(body, dict):
-            error_obj = body.get("error", {})
-            if isinstance(error_obj, dict):
-                if str(error_obj.get("type", "")).lower() == "upstream_error":
-                    return True
+        llm_response = LLMResponse("assistant")
+        if full_text:
+            llm_response.result_chain = MessageChain().message(full_text)
+        if reasoning_text:
+            llm_response.reasoning_content = reasoning_text
 
-        return False
+        for call_id in tool_call_order:
+            name = tool_call_names.get(call_id, "")
+            args_str = tool_call_args.get(call_id, "")
+            if not name:
+                continue
+            try:
+                args = json.loads(args_str) if args_str else {}
+            except Exception:
+                args = {}
+            llm_response.tools_call_name.append(name)
+            llm_response.tools_call_args.append(args)
+            llm_response.tools_call_ids.append(call_id)
+
+        if llm_response.tools_call_name:
+            llm_response.role = "tool"
+
+        if llm_response.completion_text is None and not llm_response.tools_call_args:
+            logger.error("API 返回的 response 无法解析（stream 模式）。")
+            raise Exception("API 返回的 response 无法解析（stream 模式）。")
+
+        yield llm_response
 
     async def _handle_api_error(
         self,
@@ -742,17 +708,325 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         available_api_keys: list[str],
         retry_cnt: int,
         max_retries: int,
+        image_fallback_used: bool = False,
     ) -> tuple:
+        if "429" in str(e):
+            logger.warning(
+                f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}",
+            )
+            if retry_cnt < max_retries - 1:
+                await asyncio.sleep(1)
+            available_api_keys.remove(chosen_key)
+            if len(available_api_keys) > 0:
+                chosen_key = random.choice(available_api_keys)
+                return (
+                    False,
+                    chosen_key,
+                    available_api_keys,
+                    payloads,
+                    context_query,
+                    func_tool,
+                    image_fallback_used,
+                )
+            raise e
+        if "maximum context length" in str(e):
+            logger.warning(
+                f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}",
+            )
+            await self.pop_record(context_query)
+            payloads["input"] = self._convert_openai_messages_to_responses_input(
+                context_query
+            )
+            return (
+                False,
+                chosen_key,
+                available_api_keys,
+                payloads,
+                context_query,
+                func_tool,
+                image_fallback_used,
+            )
+        if "The model is not a VLM" in str(e):
+            if image_fallback_used or not self._context_contains_image(context_query):
+                raise e
+            return await self._fallback_to_text_only_and_retry(
+                payloads,
+                context_query,
+                chosen_key,
+                available_api_keys,
+                func_tool,
+                "model_not_vlm",
+                image_fallback_used=True,
+            )
+        if self._is_content_moderated_upload_error(e):
+            if image_fallback_used or not self._context_contains_image(context_query):
+                raise e
+            return await self._fallback_to_text_only_and_retry(
+                payloads,
+                context_query,
+                chosen_key,
+                available_api_keys,
+                func_tool,
+                "image_content_moderated",
+                image_fallback_used=True,
+            )
+
+        if (
+            "Function calling is not enabled" in str(e)
+            or ("tool" in str(e).lower() and "support" in str(e).lower())
+            or ("function" in str(e).lower() and "support" in str(e).lower())
+        ):
+            logger.info(
+                f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。",
+            )
+            payloads.pop("tools", None)
+            return (
+                False,
+                chosen_key,
+                available_api_keys,
+                payloads,
+                context_query,
+                None,
+                image_fallback_used,
+            )
+
         if is_connection_error(e):
             proxy = self.provider_config.get("proxy", "")
             log_connection_failure("OpenAI", e, proxy)
-        return await super()._handle_api_error(
-            e,
-            payloads,
-            context_query,
-            func_tool,
-            chosen_key,
-            available_api_keys,
-            retry_cnt,
-            max_retries,
+
+        raise e
+
+    def _prepare_request_payload(self, payloads: dict) -> dict:
+        payloads.pop("abort_signal", None)
+
+        if payloads.get("store") is not False:
+            logger.warning(
+                "OpenAI Responses API requires store=false; overriding request store.",
+            )
+        payloads["store"] = False
+
+        extra_body = {}
+        to_del = []
+        for key in payloads:
+            if key not in self.default_params:
+                extra_body[key] = payloads[key]
+                to_del.append(key)
+        for key in to_del:
+            del payloads[key]
+
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        if isinstance(custom_extra_body, dict):
+            extra_body.update(custom_extra_body)
+        if extra_body.get("store") is not False:
+            if "store" in extra_body:
+                logger.warning(
+                    "OpenAI Responses API requires store=false; overriding extra_body store.",
+                )
+            extra_body.pop("store", None)
+        return extra_body
+
+    async def _retry_request(
+        self,
+        payloads: dict,
+        context_query: list,
+        func_tool: ToolSet | None,
+        *,
+        stream: bool,
+    ) -> AsyncGenerator[LLMResponse, None]:
+        max_retries = 10
+        available_api_keys = self.api_keys.copy()
+        chosen_key = random.choice(available_api_keys)
+        image_fallback_used = False
+
+        last_exception = None
+        retry_cnt = 0
+        for retry_cnt in range(max_retries):
+            try:
+                self.client.api_key = chosen_key
+                if stream:
+                    async for response in self._query_stream(payloads, func_tool):
+                        yield response
+                else:
+                    yield await self._query(payloads, func_tool)
+                break
+            except Exception as e:
+                last_exception = e
+                (
+                    success,
+                    chosen_key,
+                    available_api_keys,
+                    payloads,
+                    context_query,
+                    func_tool,
+                    image_fallback_used,
+                ) = await self._handle_api_error(
+                    e,
+                    payloads,
+                    context_query,
+                    func_tool,
+                    chosen_key,
+                    available_api_keys,
+                    retry_cnt,
+                    max_retries,
+                    image_fallback_used=image_fallback_used,
+                )
+                if success:
+                    break
+
+        if retry_cnt == max_retries - 1:
+            logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
+            if last_exception is None:
+                raise Exception("未知错误")
+            raise last_exception
+
+    async def text_chat(
+        self,
+        prompt=None,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
+        tool_calls_result=None,
+        model=None,
+        extra_user_content_parts=None,
+        **kwargs,
+    ) -> LLMResponse:
+        payloads, context_query = await self._prepare_chat_payload(
+            prompt,
+            image_urls,
+            contexts,
+            system_prompt,
+            tool_calls_result,
+            model=model,
+            extra_user_content_parts=extra_user_content_parts,
+            **kwargs,
         )
+        async for response in self._retry_request(
+            payloads, context_query, func_tool, stream=False
+        ):
+            return response
+        raise Exception("未知错误")
+
+    async def text_chat_stream(
+        self,
+        prompt=None,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
+        tool_calls_result=None,
+        model=None,
+        **kwargs,
+    ) -> AsyncGenerator[LLMResponse, None]:
+        payloads, context_query = await self._prepare_chat_payload(
+            prompt,
+            image_urls,
+            contexts,
+            system_prompt,
+            tool_calls_result,
+            model=model,
+            **kwargs,
+        )
+        async for response in self._retry_request(
+            payloads, context_query, func_tool, stream=True
+        ):
+            yield response
+
+    async def _remove_image_from_context(self, contexts: list):
+        new_contexts = []
+
+        for context in contexts:
+            new_context = dict(context)
+            if "content" in new_context and isinstance(new_context["content"], list):
+                new_content = []
+                for item in new_context["content"]:
+                    if isinstance(item, dict) and "image_url" in item:
+                        continue
+                    new_content.append(item)
+                if not new_content:
+                    new_content = [{"type": "text", "text": "[图片]"}]
+                new_context["content"] = new_content
+            new_contexts.append(new_context)
+        return new_contexts
+
+    def get_current_key(self) -> str:
+        return self.client.api_key
+
+    def get_keys(self) -> list[str]:
+        return self.api_keys
+
+    def set_key(self, key) -> None:
+        self.client.api_key = key
+
+    async def assemble_context(
+        self,
+        text: str,
+        image_urls: list[str] | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
+    ) -> dict:
+        async def resolve_image_part(image_url: str) -> dict | None:
+            if image_url.startswith("http"):
+                image_path = await download_image_by_url(image_url)
+                image_data = await self.encode_image_bs64(image_path)
+            elif image_url.startswith("file:///"):
+                image_path = image_url.replace("file:///", "")
+                image_data = await self.encode_image_bs64(image_path)
+            else:
+                image_data = await self.encode_image_bs64(image_url)
+            if not image_data:
+                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                return None
+            return {
+                "type": "image_url",
+                "image_url": {"url": image_data},
+            }
+
+        content_blocks = []
+
+        if text:
+            content_blocks.append({"type": "text", "text": text})
+        elif image_urls:
+            content_blocks.append({"type": "text", "text": "[图片]"})
+        elif extra_user_content_parts:
+            content_blocks.append({"type": "text", "text": " "})
+
+        if extra_user_content_parts:
+            for part in extra_user_content_parts:
+                if isinstance(part, TextPart):
+                    content_blocks.append({"type": "text", "text": part.text})
+                elif isinstance(part, ImageURLPart):
+                    image_part = await resolve_image_part(part.image_url.url)
+                    if image_part:
+                        content_blocks.append(image_part)
+                else:
+                    raise ValueError(f"不支持的额外内容块类型: {type(part)}")
+
+        if image_urls:
+            for image_url in image_urls:
+                image_part = await resolve_image_part(image_url)
+                if image_part:
+                    content_blocks.append(image_part)
+
+        if (
+            text
+            and not extra_user_content_parts
+            and not image_urls
+            and len(content_blocks) == 1
+            and content_blocks[0]["type"] == "text"
+        ):
+            return {"role": "user", "content": content_blocks[0]["text"]}
+
+        return {"role": "user", "content": content_blocks}
+
+    async def encode_image_bs64(self, image_url: str) -> str:
+        if image_url.startswith("base64://"):
+            return image_url.replace("base64://", "data:image/jpeg;base64,")
+        with open(image_url, "rb") as f:
+            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
+            return "data:image/jpeg;base64," + image_bs64
+
+    async def terminate(self):
+        if self.client:
+            await self.client.close()

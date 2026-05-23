@@ -384,13 +384,9 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
-            case "volcengine_ark_chat_completion":
-                from .sources.volcengine_ark_source import (
-                    ProviderVolcengineArk as ProviderVolcengineArk,
-                )
-            case "doubao_chat_completion":
-                from .sources.doubao_source import (
-                    ProviderDoubao as ProviderDoubao,
+            case "openai_responses":
+                from .sources.openai_responses_source import (
+                    ProviderOpenAIResponses as ProviderOpenAIResponses,
                 )
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
