@@ -383,23 +383,15 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 class MCPClient:
     def __init__(self) -> None:
-        # Initialize session and client objects
         self.session: mcp.ClientSession | None = None
 
-        # _connection_task owns the AsyncExitStack and the sse_client/stdio_client
-        # context manager for the *current* connection.  Cleaning up is done by
-        # cancelling this task: because the task itself entered the anyio
-        # create_task_group cancel scope, anyio's _host_task check passes and the
-        # scope exits cleanly in its own task context, avoiding the
+        # Each connection runs in its own task so that anyio cancel scopes
+        # are always exited from the task that entered them, preventing
         #   RuntimeError: Attempted to exit cancel scope in a different task
-        # that occurred when aclose() was called from a different task (or from the
-        # GC finalizer).  Old connection tasks are kept in _old_connection_tasks
-        # until they finish after being cancelled.
         self._connection_task: asyncio.Task | None = None
         self._old_connection_tasks: list[asyncio.Task] = []
 
-        # Kept for internal use inside _run_connection; external code must not
-        # touch the exit_stack directly.
+        # Internal; managed exclusively by _run_connection.
         self.exit_stack: AsyncExitStack | None = None
 
         self.name: str | None = None
@@ -408,11 +400,10 @@ class MCPClient:
         self.server_errlogs: list[str] = []
         self.running_event = asyncio.Event()
 
-        # Store connection config for reconnection
         self._mcp_server_config: dict | None = None
         self._server_name: str | None = None
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
-        self._reconnecting: bool = False  # For logging and debugging
+        self._reconnecting: bool = False
 
     async def _run_connection(
         self,
@@ -455,7 +446,11 @@ class MCPClient:
                 await stack.aclose()
             except Exception as e:
                 logger.debug(f"Error closing exit stack for {name}: {e}")
-            # Ensure the waiter is not left pending if we exit very early.
+            # Clear the instance reference only if it still points to this task's
+            # stack; a concurrent reconnect may have already replaced it.
+            if self.exit_stack is stack:
+                self.exit_stack = None
+            # Guard against the task exiting before ready was resolved.
             if not ready.done():
                 ready.set_exception(RuntimeError("Connection task exited early"))
 
@@ -481,6 +476,12 @@ class MCPClient:
 
         ready: asyncio.Future = asyncio.get_running_loop().create_future()
 
+        # Defensively cancel any existing connection task that was not cleaned
+        # up before this call (e.g. if connect_to_server is called twice).
+        if self._connection_task and not self._connection_task.done():
+            self._cancel_connection_task(self._connection_task)
+            self._connection_task = None
+
         self._connection_task = asyncio.create_task(
             self._run_connection(mcp_server_config, name, ready),
             name=f"mcp-conn:{name}",
@@ -495,11 +496,22 @@ class MCPClient:
             # that cleanup() can await it later.
             if self._connection_task and not self._connection_task.done():
                 self._cancel_connection_task(self._connection_task)
-                self._connection_task = None
+            self._connection_task = None
+            raise
+        except Exception:
+            # _do_connect raised; the connection task's finally block may still
+            # be running (e.g. awaiting stack.aclose()).  Track it so that
+            # cleanup() can await it, but do NOT cancel it — we want the
+            # finally block to finish cleaning up resources naturally.
+            if self._connection_task and not self._connection_task.done():
+                self._old_connection_tasks.append(self._connection_task)
+            self._connection_task = None
             raise
 
     async def _do_connect(self, mcp_server_config: dict, name: str) -> None:
         """Internal: perform the actual connection inside _run_connection's task."""
+        # exit_stack is always set by _run_connection before _do_connect is called.
+        assert self.exit_stack is not None
         cfg = _prepare_config(mcp_server_config.copy())
 
         def logging_callback(
@@ -621,7 +633,9 @@ class MCPClient:
         """Cancel a connection owner task and track it until it finishes."""
         # Prune already-finished tasks to avoid accumulating references over
         # many reconnections in a long-running process.
-        self._old_connection_tasks = [t for t in self._old_connection_tasks if not t.done()]
+        self._old_connection_tasks = [
+            t for t in self._old_connection_tasks if not t.done()
+        ]
         if task.done():
             return
         task.cancel()
