@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import functools
 import os
 import shlex
-from typing import TYPE_CHECKING, Any
-
-import anyio
+import time
+from typing import Any, cast
 
 from astrbot.api import logger
 
@@ -42,6 +40,30 @@ def _maybe_model_dump(value: Any) -> dict[str, Any]:
         if isinstance(dumped, dict):
             return dumped
     return {}
+
+
+def _format_exception_detail(exc: BaseException) -> str:
+    message = str(exc).strip()
+    return message or exc.__class__.__name__
+
+
+def _format_shell_result_detail(result: dict[str, Any]) -> str:
+    exit_code = result.get("exit_code")
+    stderr = str(result.get("stderr", "") or "").strip()[:300]
+    stdout = str(result.get("stdout", "") or "").strip()[-200:]
+    return f"exit_code={exit_code}, stderr={stderr!r}, stdout_tail={stdout!r}"
+
+
+def _slice_content_by_lines(
+    content: str,
+    *,
+    offset: int | None = None,
+    limit: int | None = None,
+) -> str:
+    lines = content.splitlines(keepends=True)
+    start = 0 if offset is None else offset
+    selected = lines[start:] if limit is None else lines[start : start + limit]
+    return "".join(selected)
 
 
 class NeoPythonComponent(PythonComponent):
@@ -339,6 +361,9 @@ class ShipyardNeoBooter(ComputerBooter):
 
     AUTO_SENTINEL = "__auto__"
     DEFAULT_PROFILE = "python-default"
+    READY_CHECK_TIMEOUT_SECONDS = 90
+    READY_CHECK_INTERVAL_SECONDS = 2
+    READY_CHECK_COMMAND_TIMEOUT_SECONDS = 5
 
     def __init__(
         self,
@@ -433,6 +458,15 @@ class ShipyardNeoBooter(ComputerBooter):
         self._python = NeoPythonComponent(self._sandbox)
         self._shell = NeoShellComponent(self._sandbox)
         caps = self.capabilities or ()
+        if "shell" in caps:
+            await self._wait_until_shell_ready(resolved_profile)
+        else:
+            logger.warning(
+                "[Computer] Shipyard Neo sandbox profile %s has no shell capability; "
+                "skill sync and shell tools may fail.",
+                resolved_profile,
+            )
+
         self._browser = (
             NeoBrowserComponent(self._sandbox) if "browser" in caps else None
         )
@@ -444,77 +478,57 @@ class ShipyardNeoBooter(ComputerBooter):
             bool(self._bay_manager),
         )
 
-    async def _wait_until_ready(self, sandbox: Sandbox) -> None:
-        """Poll sandbox status until READY, or raise on FAILED / timeout.
+    async def _wait_until_shell_ready(self, profile: str) -> None:
+        if self._sandbox is None or self._shell is None:
+            raise RuntimeError("ShipyardNeoBooter is not initialized.")
 
-        Covers both warm-pool hits (near-instant) and cold starts (up to 180s).
-        On FAILED, EXPIRED, or timeout the sandbox is deleted before raising
-        so no orphan resources leak on Bay.
-        """
-        READINESS_TIMEOUT = 180  # seconds
-        POLL_INTERVAL = 2  # seconds
-
-        sandbox_id = sandbox.id
-        deadline = asyncio.get_running_loop().time() + READINESS_TIMEOUT
+        sandbox_id = getattr(self._sandbox, "id", "unknown")
+        deadline = time.monotonic() + self.READY_CHECK_TIMEOUT_SECONDS
+        attempt = 0
+        last_detail = "not checked"
+        logger.info(
+            "[Computer] Waiting for Shipyard Neo sandbox shell readiness: "
+            "id=%s, profile=%s, timeout=%ss",
+            sandbox_id,
+            profile,
+            self.READY_CHECK_TIMEOUT_SECONDS,
+        )
 
         while True:
-            await sandbox.refresh()
-            status = getattr(sandbox.status, "value", str(sandbox.status))
-
-            if status == "ready":
-                logger.info(
-                    "[Computer] Sandbox %s is ready (profile=%s)",
-                    sandbox_id,
-                    sandbox.profile,
+            attempt += 1
+            try:
+                result = await self._shell.exec(
+                    "true",
+                    timeout=self.READY_CHECK_COMMAND_TIMEOUT_SECONDS,
                 )
-                return
-
-            if status in {"failed", "expired"}:
-                logger.error(
-                    "[Computer] Sandbox %s reached terminal state: %s",
-                    sandbox_id,
-                    status,
-                )
-                try:
-                    await sandbox.delete()
-                except Exception as del_err:
-                    logger.warning(
-                        "[Computer] Failed to delete failed sandbox %s: %s",
+                if result.get("success", False):
+                    logger.info(
+                        "[Computer] Shipyard Neo sandbox shell is ready: "
+                        "id=%s, attempts=%d",
                         sandbox_id,
-                        del_err,
+                        attempt,
                     )
-                raise RuntimeError(
-                    f"Sandbox {sandbox_id} is in terminal state: {status}",
-                )
+                    return
+                last_detail = _format_shell_result_detail(result)
+            except Exception as exc:
+                last_detail = _format_exception_detail(exc)
 
-            remaining = deadline - asyncio.get_running_loop().time()
+            remaining = deadline - time.monotonic()
             if remaining <= 0:
-                logger.error(
-                    "[Computer] Sandbox %s did not become ready within %ds "
-                    "(last status: %s)",
-                    sandbox_id,
-                    READINESS_TIMEOUT,
-                    status,
-                )
-                try:
-                    await sandbox.delete()
-                except Exception as del_err:
-                    logger.warning(
-                        "[Computer] Failed to delete timed-out sandbox %s: %s",
-                        sandbox_id,
-                        del_err,
-                    )
                 raise TimeoutError(
-                    f"Sandbox {sandbox_id} did not become ready within "
-                    f"{READINESS_TIMEOUT}s (last status: {status})",
+                    "Shipyard Neo sandbox shell was not ready within "
+                    f"{self.READY_CHECK_TIMEOUT_SECONDS}s "
+                    f"(id={sandbox_id}, profile={profile}, last_error={last_detail})"
                 )
 
             logger.debug(
-                "[Computer] Sandbox %s status=%s, waiting...",
+                "[Computer] Shipyard Neo sandbox shell not ready yet: "
+                "id=%s, attempt=%d, last_error=%s",
                 sandbox_id,
-                status,
+                attempt,
+                last_detail,
             )
-            await asyncio.sleep(POLL_INTERVAL)
+            await asyncio.sleep(min(self.READY_CHECK_INTERVAL_SECONDS, remaining))
 
     async def _resolve_profile(self, client: Any) -> str:
         """Pick the best profile for this session.

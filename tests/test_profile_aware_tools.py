@@ -97,7 +97,8 @@ class TestApplySandboxToolsConditional:
         config: Any = _make_config("shipyard_neo")
         req: Any = _make_req()
 
-        fn(config, req, "session-1")
+        with patch("astrbot.core.computer.computer_client.session_booter", {}):
+            fn(config, req, "session-1")
 
         names = self._tool_names(req)
         assert "astrbot_execute_browser" in names
@@ -146,9 +147,9 @@ class TestApplySandboxToolsConditional:
     def test_without_browser_capability(self):
         """Booted session WITHOUT browser capability ￫ browser tools NOT registered."""
         fn = _import_apply_sandbox_tools()
-        config: Any = _make_config("shipyard_neo")
-        req: Any = _make_req()
-        fake_booter = self._make_neo_booter(caps=["python", "shell", "filesystem"])
+        config = _make_config("shipyard_neo")
+        req = _make_req()
+        fake_booter = SimpleNamespace(capabilities=["python", "shell", "filesystem"])
 
         with (
             patch(
@@ -322,3 +323,104 @@ class TestBaseComputerBooter:
         # ShipyardBooter is not abstract, can be instantiated to test defaults
         booter = ShipyardBooter.__new__(ShipyardBooter)
         assert booter.browser is None
+
+
+# ShipyardNeoBooter shell readiness
+
+
+class TestShipyardNeoBooterReadiness:
+    @pytest.mark.asyncio
+    async def test_boot_retries_until_shell_is_ready(self, monkeypatch):
+        from astrbot.core.computer.booters import shipyard_neo as module
+
+        calls = {"shell": 0, "sleeps": []}
+
+        class _FakeShellApi:
+            async def exec(self, command, timeout=30, cwd=None):
+                _ = timeout, cwd
+                calls["shell"] += 1
+                assert command == "true"
+                if calls["shell"] == 1:
+                    raise TimeoutError()
+                return {"success": True, "output": "", "error": "", "exit_code": 0}
+
+        class _FakeSandbox:
+            id = "sandbox-ready"
+            capabilities = ["shell", "python", "filesystem"]
+
+            def __init__(self):
+                self.shell = _FakeShellApi()
+
+        class _FakeBayClient:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return None
+
+            async def create_sandbox(self, **kwargs):
+                self.create_kwargs = kwargs
+                return _FakeSandbox()
+
+        async def _fake_sleep(delay):
+            calls["sleeps"].append(delay)
+
+        monkeypatch.setattr(module, "BayClient", _FakeBayClient, raising=False)
+        monkeypatch.setattr(module.asyncio, "sleep", _fake_sleep)
+        monkeypatch.setattr(module.ShipyardNeoBooter, "READY_CHECK_TIMEOUT_SECONDS", 5)
+        monkeypatch.setattr(module.ShipyardNeoBooter, "READY_CHECK_INTERVAL_SECONDS", 0)
+
+        booter = module.ShipyardNeoBooter(
+            endpoint_url="http://bay:8114",
+            access_token="sk-bay-test",
+            profile="browser-python",
+        )
+        await booter.boot("session-1")
+
+        assert calls["shell"] == 2
+        assert calls["sleeps"] == [0]
+        assert booter.capabilities == ("shell", "python", "filesystem")
+
+    @pytest.mark.asyncio
+    async def test_boot_timeout_reports_empty_exception_type(self, monkeypatch):
+        from astrbot.core.computer.booters import shipyard_neo as module
+
+        class _FakeShellApi:
+            async def exec(self, command, timeout=30, cwd=None):
+                _ = command, timeout, cwd
+                raise TimeoutError()
+
+        class _FakeSandbox:
+            id = "sandbox-timeout"
+            capabilities = ["shell", "python", "filesystem"]
+
+            def __init__(self):
+                self.shell = _FakeShellApi()
+
+        class _FakeBayClient:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return None
+
+            async def create_sandbox(self, **kwargs):
+                self.create_kwargs = kwargs
+                return _FakeSandbox()
+
+        monkeypatch.setattr(module, "BayClient", _FakeBayClient, raising=False)
+        monkeypatch.setattr(module.ShipyardNeoBooter, "READY_CHECK_TIMEOUT_SECONDS", 0)
+
+        booter = module.ShipyardNeoBooter(
+            endpoint_url="http://bay:8114",
+            access_token="sk-bay-test",
+            profile="browser-python",
+        )
+        with pytest.raises(TimeoutError, match="last_error=TimeoutError"):
+            await booter.boot("session-1")

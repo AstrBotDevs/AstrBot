@@ -15,7 +15,7 @@ from astrbot.core.computer.computer_client import get_booter
 from ..registry import builtin_tool
 from .util import (
     check_admin_permission,
-    init_workspace,
+    format_exception_message,
     is_local_runtime,
     workspace_root,
 )
@@ -150,28 +150,4 @@ class ExecuteShellTool(FunctionTool):
                 )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            detail = str(e) or type(e).__name__
-            return f"Error executing command: {detail}"
-
-
-def _is_self_detached_command(command: str) -> bool:
-    lex = shlex.shlex(command, posix=False)
-    lex.whitespace_split = True
-    lex.commenters = ""
-    try:
-        tokens = list(lex)
-    except ValueError:
-        return False
-    comment_index = next(
-        (index for index, token in enumerate(tokens) if token.startswith("#")),
-        None,
-    )
-    if comment_index is not None:
-        tokens = tokens[:comment_index]
-    if not tokens:
-        return False
-
-    first = tokens[0].lower()
-    if first in {"nohup", "setsid", "disown", "start", "start-process"}:
-        return True
-    return tokens[-1] == "&"
+            return f"Error executing command: {format_exception_message(e)}"
