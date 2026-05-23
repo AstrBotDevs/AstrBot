@@ -48,146 +48,114 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     _MAX_HANDOFF_CALL_COUNT_SANITY_LIMIT = 10_000
 
     @classmethod
-    def _coerce_int(
+    def _build_handoff_error_result(
         cls,
-        value: T.Any,
         *,
-        default: int,
-        minimum: int,
-        maximum: int,
-    ) -> int:
-        try:
-            parsed = int(value)
-        except (TypeError, ValueError):
-            return default
-        return max(minimum, min(maximum, parsed))
+        tool_name: str,
+        error_type: str,
+        fix_hint: str,
+        action_hint: str,
+    ) -> mcp.types.CallToolResult:
+        guidance = (
+            "[handoff CALL FAILED - IMMEDIATE RETRY REQUIRED]\n"
+            f"error_type: {error_type}\n"
+            f"fix: {fix_hint}\n"
+            f"action: {action_hint}\n"
+            "example:\n"
+            "{\n"
+            '  "input": "Summarize the user request, constraints, and expected output.",\n'
+            '  "background_task": false\n'
+            "}"
+        )
+        return mcp.types.CallToolResult(
+            content=[
+                mcp.types.TextContent(
+                    type="text",
+                    text=f"error: {tool_name} rejected invalid handoff request.\n{guidance}",
+                )
+            ]
+        )
 
     @classmethod
-    def _get_event_extra(
+    def _parse_background_task_arg(
         cls,
-        event: T.Any,
-        key: str,
-        default: T.Any = None,
-    ) -> T.Any:
-        if event is None:
-            return default
+        tool_name: str,
+        value: T.Any,
+    ) -> tuple[bool, mcp.types.CallToolResult | None]:
+        if value is None:
+            return False, None
+        if isinstance(value, bool):
+            return value, None
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "on"}:
+                return True, None
+            if normalized in {"false", "0", "no", "off", ""}:
+                return False, None
 
-        get_extra = getattr(event, "get_extra", None)
-        first_type_error: TypeError | None = None
-        if callable(get_extra):
-            call_variants = (
-                lambda: get_extra(key, default),
-                lambda: get_extra(key),
-                lambda: get_extra(key=key, default=default),
-                lambda: get_extra(key=key),
-            )
-            for call in call_variants:
-                try:
-                    result = call()
-                    return default if result is None else result
-                except TypeError as exc:
-                    if first_type_error is None:
-                        first_type_error = exc
-                    continue
-
-        extras = getattr(event, "extras", None)
-        if isinstance(extras, dict):
-            result = extras.get(key, default)
-            return default if result is None else result
-
-        if first_type_error is not None:
-            raise first_type_error
-        return default
-
-    @classmethod
-    def _set_event_extra(cls, event: T.Any, key: str, value: T.Any) -> bool:
-        if event is None:
-            return False
-
-        set_extra = getattr(event, "set_extra", None)
-        if set_extra is None or not callable(set_extra):
-            return False
-        try:
-            set_extra(key, value)
-            return True
-        except Exception:
-            return False
-
-    @classmethod
-    def _resolve_handoff_call_limit(
-        cls,
-        run_context: ContextWrapper[AstrAgentContext],
-    ) -> int:
-        ctx = run_context.context.context
-        event = run_context.context.event
-        cfg = ctx.get_config(umo=event.unified_msg_origin)
-        subagent_cfg = cfg.get("subagent_orchestrator", {})
-        if not isinstance(subagent_cfg, dict):
-            return cls._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
-        return cls._coerce_int(
-            subagent_cfg.get(
-                "max_handoff_calls_per_run",
-                cls._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN,
+        return False, cls._build_handoff_error_result(
+            tool_name=tool_name,
+            error_type="invalid_background_task",
+            fix_hint=(
+                "`background_task` must be a boolean (`true` or `false`) or a string "
+                'equivalent such as `"1"`/`"0"`, `"yes"`/`"no"`, or '
+                '`"on"`/`"off"`.'
             ),
-            default=cls._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN,
-            minimum=1,
-            maximum=128,
+            action_hint=(
+                "Retry the same handoff with `background_task` set to a boolean or one "
+                'of the supported string equivalents (`"true"`, `"false"`, '
+                '`"1"`, `"0"`, `"yes"`, `"no"`, `"on"`, `"off"`).'
+            ),
         )
 
     @classmethod
-    def _check_and_increment_handoff_calls(
+    def _normalize_handoff_input(
         cls,
-        run_context: ContextWrapper[AstrAgentContext],
-    ) -> tuple[bool, int]:
-        event = run_context.context.event
-        max_handoff_calls = cls._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
-        try:
-            max_handoff_calls = cls._resolve_handoff_call_limit(run_context)
-        except Exception as e:
-            logger.warning(
-                "Failed to resolve handoff call limit: %s; reject delegation to fail closed.",
-                e,
+        tool_name: str,
+        input_value: T.Any,
+    ) -> tuple[str | None, mcp.types.CallToolResult | None]:
+        if not isinstance(input_value, str) or not input_value.strip():
+            return None, cls._build_handoff_error_result(
+                tool_name=tool_name,
+                error_type="missing_or_empty_input",
+                fix_hint=(
+                    "Provide a non-empty `input` string that clearly describes the delegated task."
+                ),
+                action_hint=("Retry now with a concise task statement in `input`."),
             )
-            return False, max_handoff_calls
-
-        try:
-            raw_handoff_count = cls._get_event_extra(
-                event,
-                cls._HANDOFF_CALL_COUNT_EXTRA_KEY,
-                0,
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to read handoff call counter `%s`: %s; reject delegation to fail closed.",
-                cls._HANDOFF_CALL_COUNT_EXTRA_KEY,
-                e,
-            )
-            return False, max_handoff_calls
-
-        current_handoff_count = cls._coerce_int(
-            raw_handoff_count,
-            default=0,
-            minimum=0,
-            maximum=cls._MAX_HANDOFF_CALL_COUNT_SANITY_LIMIT,
-        )
-        if current_handoff_count >= max_handoff_calls:
-            return False, max_handoff_calls
-
-        persisted = cls._set_event_extra(
-            event,
-            cls._HANDOFF_CALL_COUNT_EXTRA_KEY,
-            current_handoff_count + 1,
-        )
-        if not persisted:
-            logger.warning(
-                "Failed to persist handoff call counter `%s`; reject delegation to fail closed.",
-                cls._HANDOFF_CALL_COUNT_EXTRA_KEY,
-            )
-            return False, max_handoff_calls
-        return True, max_handoff_calls
+        return input_value.strip(), None
 
     @classmethod
-    def _collect_image_urls_from_args(cls, image_urls_raw: Any) -> list[str]:
+    async def _resolve_handoff_provider_id(
+        cls,
+        tool: HandoffTool,
+        *,
+        ctx: T.Any,
+        umo: str,
+    ) -> str:
+        configured_provider_id = str(getattr(tool, "provider_id", "") or "").strip()
+        if not configured_provider_id:
+            return await ctx.get_current_chat_provider_id(umo)
+
+        provider_mgr = getattr(ctx, "provider_manager", None)
+        if provider_mgr is None or not hasattr(provider_mgr, "get_provider_by_id"):
+            return configured_provider_id
+
+        provider_inst = await provider_mgr.get_provider_by_id(configured_provider_id)
+        if provider_inst is not None:
+            return configured_provider_id
+
+        fallback_provider_id = await ctx.get_current_chat_provider_id(umo)
+        logger.warning(
+            "Subagent %s configured provider `%s` not found, fallback to `%s`.",
+            tool.name,
+            configured_provider_id,
+            fallback_provider_id,
+        )
+        return fallback_provider_id
+
+    @classmethod
+    def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
             return []
         if isinstance(image_urls_raw, str):
@@ -271,7 +239,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         """
         if isinstance(tool, HandoffTool):
-            is_bg = tool_args.pop("background_task", False)
+            is_bg, bg_error = cls._parse_background_task_arg(
+                tool.name,
+                tool_args.pop("background_task", None),
+            )
+            if bg_error is not None:
+                yield bg_error
+                return
             if is_bg:
                 async for r in cls._execute_handoff_background(
                     tool,
@@ -457,24 +431,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         **tool_args: Any,
     ):
         tool_args = dict(tool_args)
-        input_ = tool_args.get("input")
-        ctx = run_context.context.context
-        allowed, max_handoff_calls = cls._check_and_increment_handoff_calls(run_context)
-        if not allowed:
-            yield mcp.types.CallToolResult(
-                content=[
-                    mcp.types.TextContent(
-                        type="text",
-                        text=(
-                            "error: handoff_call_limit_reached. "
-                            f"max_handoff_calls_per_run={max_handoff_calls}. "
-                            "Stop delegating and continue with current context."
-                        ),
-                    )
-                ]
-            )
+        input_, input_error = cls._normalize_handoff_input(
+            tool.name,
+            tool_args.get("input"),
+        )
+        if input_error is not None:
+            yield input_error
             return
-        event = run_context.context.event
+        tool_args["input"] = input_
         if image_urls_prepared:
             prepared_image_urls = tool_args.get("image_urls")
             if isinstance(prepared_image_urls, list):
@@ -494,11 +458,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
 
         umo = event.unified_msg_origin
-        prov_id = getattr(
+
+        # Use per-subagent provider override if configured; otherwise fall back
+        # to the current/default provider resolution.
+        prov_id = await cls._resolve_handoff_provider_id(
             tool,
-            "provider_id",
-            None,
-        ) or await ctx.get_current_chat_provider_id(umo)
+            ctx=ctx,
+            umo=umo,
+        )
+
+        # prepare begin dialogs
         contexts = None
         dialogs = tool.agent.begin_dialogs
         if dialogs:
