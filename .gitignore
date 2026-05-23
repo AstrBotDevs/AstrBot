@@ -60,4 +60,9 @@ GenieData/
 .codex/
 .opencode/
 .kilocode/
-.serena
+.worktrees/
+CLAUDE.md
+.claude/
+
+
+dashboard/bun.lock
