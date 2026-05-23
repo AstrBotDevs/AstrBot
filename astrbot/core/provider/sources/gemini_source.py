@@ -9,8 +9,7 @@ from pathlib import PurePath
 from typing import ClassVar, Literal
 from urllib.parse import urlparse
 
-import aiofiles
-import anyio
+import httpx
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -73,33 +72,21 @@ class ProviderGoogleGenAI(Provider):
     def _init_client(self) -> None:
         """初始化Gemini客户端"""
         proxy = self.provider_config.get("proxy", "")
+        client_kwargs = {
+            "timeout": self.timeout,
+            "trust_env": True,
+        }
+        if proxy:
+            client_kwargs["proxy"] = proxy
         http_options = types.HttpOptions(
             base_url=self.api_base,
             timeout=self.timeout * 1000,
         )
-
-        # 强制使用 httpx 作为异步 HTTP 后端，避免 aiohttp 响应类型兼容问题 (#7564)
-        # httpx.AsyncClient 的 timeout 单位为秒（与 HttpOptions 的毫秒不同）
-        async_client_kwargs: dict = {
-            "base_url": self.api_base,
-            "timeout": self.timeout,
-        }
+        # issue #7564: Force google-genai to use httpx; its aiohttp error path can mask API errors.
+        self._httpx_async_client = httpx.AsyncClient(**client_kwargs)
+        http_options.httpx_async_client = self._httpx_async_client
         if proxy:
-            async_client_kwargs["proxy"] = proxy
-            async_client_kwargs["trust_env"] = False
             logger.info("[Gemini] 使用代理")
-        else:
-            async_client_kwargs["trust_env"] = True
-
-        # Track the previous client so it can be closed in terminate() instead
-        # of leaking when _init_client is called again (e.g. via set_key).
-        # Only the most recent stale client is kept to avoid unbounded growth.
-        if self._http_client is not None:
-            self._stale_http_clients = [self._http_client]
-
-        self._http_client = httpx.AsyncClient(**async_client_kwargs)
-        http_options.httpx_async_client = self._http_client
-
         self.client = genai.Client(
             api_key=self.chosen_api_key,
             http_options=http_options,
@@ -127,11 +114,13 @@ class ProviderGoogleGenAI(Provider):
             if len(keys) > 0:
                 self.set_key(random.choice(keys))
                 logger.info(
-                    f"检测到 Key 异常({e.message}),正在尝试更换 API Key 重试...",
+                    f"检测到 Key 异常({e.message})，正在尝试更换 API Key 重试...",
                 )
                 await asyncio.sleep(1)
                 return True
-            logger.error(f"检测到 Key 异常({e.message}),且已没有可用的 Key｡")
+            logger.error(
+                f"检测到 Key 异常({e.message})，且已没有可用的 Key。",
+            )
             raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
         if is_connection_error(e):
             proxy = self.provider_config.get("proxy", "")
@@ -980,18 +969,7 @@ class ProviderGoogleGenAI(Provider):
             logger.debug(f"[Gemini] Ignored error while closing httpx client: {e}")
 
     async def terminate(self) -> None:
-        # Close the active Gemini client (external httpx client is managed
-        # separately so genai.Client.aclose skips it).
-        if self.client is not None:
-            try:
-                await self.client.aclose()
-            except Exception:
-                pass
-            self.client = None
-
-        # Close all tracked httpx clients (stale + current).
-        for client in self._stale_http_clients:
-            await self._close_httpx_client(client)
-        self._stale_http_clients.clear()
-        await self._close_httpx_client(self._http_client)
-        self._http_client = None
+        if self.client:
+            await self.client.aclose()
+        if self._httpx_async_client:
+            await self._httpx_async_client.aclose()
