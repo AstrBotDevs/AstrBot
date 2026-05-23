@@ -37,26 +37,42 @@ class SubAgentRoute(Route):
                 data = {
                     "main_enable": False,
                     "remove_main_duplicate_tools": False,
-                    "max_handoff_calls_per_run": DEFAULT_MAX_HANDOFF_CALLS_PER_RUN,
+                    "router_system_prompt": "",
                     "agents": [],
+                    "dynamic_agents": {
+                        "enabled": False,
+                        "max_dynamic_subagent_count": 3,
+                        "auto_cleanup_per_turn": True,
+                        "tools_blacklist": [],
+                        "tools_inherent": [],
+                    },
+                    "history_enabled": True,
+                    "shared_context_enabled": False,
+                    "shared_context_maxlen": 200,
+                    "subagent_history_maxlen": 500,
+                    "execution_timeout": 600,
                 }
-
-            # Backward compatibility: older config used `enable`.
-            if (
-                isinstance(data, dict)
-                and "main_enable" not in data
-                and "enable" in data
-            ):
-                data["main_enable"] = bool(data.get("enable", False))
 
             # Ensure required keys exist.
             data.setdefault("main_enable", False)
             data.setdefault("remove_main_duplicate_tools", False)
-            data.setdefault(
-                "max_handoff_calls_per_run",
-                DEFAULT_MAX_HANDOFF_CALLS_PER_RUN,
-            )
+            data.setdefault("router_system_prompt", "")
             data.setdefault("agents", [])
+            data.setdefault("dynamic_agents", {})
+            data.setdefault("history_enabled", True)
+            data.setdefault("shared_context_enabled", False)
+            data.setdefault("shared_context_maxlen", 200)
+            data.setdefault("subagent_history_maxlen", 500)
+            data.setdefault("execution_timeout", 600)
+
+            # Ensure dynamic_agents sub-keys exist.
+            dyn = data["dynamic_agents"]
+            if isinstance(dyn, dict):
+                dyn.setdefault("enabled", False)
+                dyn.setdefault("max_dynamic_subagent_count", 3)
+                dyn.setdefault("auto_cleanup_per_turn", True)
+                dyn.setdefault("tools_blacklist", [])
+                dyn.setdefault("tools_inherent", [])
 
             # Backward/forward compatibility: ensure each agent contains provider_id.
             # None means follow global/default provider settings.

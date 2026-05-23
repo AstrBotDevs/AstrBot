@@ -239,6 +239,7 @@ class Context:
             func_tool=tools,
             contexts=context_,
             system_prompt=system_prompt or "",
+            extra_user_content_parts=kwargs.get("extra_user_content_parts", []),
         )
         if agent_context is None:
             agent_context = AstrAgentContext(
@@ -414,6 +415,10 @@ class Context:
         llm_resp = agent_runner.get_final_llm_resp()
         if not llm_resp:
             raise Exception("Agent did not produce a final LLM response")
+        if kwargs.get("runner_messages", None) is not None:
+            runner_messages = kwargs.get("runner_messages")
+            for msg in agent_runner.run_context.messages:
+                runner_messages.append(msg.model_dump())
         return llm_resp
 
     async def get_current_chat_provider_id(self, umo: str) -> str:

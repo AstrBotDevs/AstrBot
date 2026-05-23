@@ -503,6 +503,21 @@ class InternalAgentSubStage(Stage):
                         ),
                     )
                 finally:
+                    # clean all subagents if enabled
+                    if build_cfg.subagent_orchestrator.get("main_enable"):
+                        try:
+                            from astrbot.core.subagent_manager import (
+                                SubAgentManager,
+                            )
+
+                            session_id = event.unified_msg_origin
+                            if SubAgentManager.is_auto_cleanup_per_turn():
+                                SubAgentManager.cleanup_session_turn_end(session_id)
+                        except Exception as e:
+                            logger.warning(
+                                f"[SubAgent] Cleanup on agent done failed: {e}"
+                            )
+
                     if runner_registered and agent_runner is not None:
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
                     # Ensure llm_agent_span is always finished
