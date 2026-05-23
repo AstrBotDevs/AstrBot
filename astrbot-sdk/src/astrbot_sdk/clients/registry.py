@@ -1,0 +1,167 @@
+"""只读 handler 注册表客户端。"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+from ._errors import wrap_client_exception
+from ._proxy import CapabilityProxy
+
+
+def _coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+@dataclass(slots=True)
+class HandlerMetadata:
+    plugin_name: str
+    handler_full_name: str
+    trigger_type: str
+    description: str | None = None
+    event_types: list[str] = field(default_factory=list)
+    enabled: bool = True
+    group_path: list[str] = field(default_factory=list)
+    priority: int = 0
+    kind: str = "handler"
+    require_admin: bool = False
+    required_role: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> HandlerMetadata:
+        return cls(
+            plugin_name=str(data.get("plugin_name", "")),
+            handler_full_name=str(data.get("handler_full_name", "")),
+            trigger_type=str(data.get("trigger_type", "")),
+            description=(
+                None
+                if data.get("description") is None
+                else str(data.get("description", "")).strip() or None
+            ),
+            event_types=[
+                str(item)
+                for item in data.get("event_types", [])
+                if isinstance(item, str)
+            ],
+            enabled=bool(data.get("enabled", True)),
+            group_path=[
+                str(item)
+                for item in data.get("group_path", [])
+                if isinstance(item, str)
+            ],
+            priority=_coerce_int(data.get("priority", 0), 0),
+            kind=str(data.get("kind", "handler") or "handler"),
+            require_admin=bool(data.get("require_admin", False)),
+            required_role=(
+                None
+                if data.get("required_role") is None
+                else str(data.get("required_role", "")).strip() or None
+            ),
+        )
+
+
+class RegistryClient:
+    """只读 handler 注册表客户端。"""
+
+    def __init__(self, proxy: CapabilityProxy) -> None:
+        self._proxy = proxy
+
+    async def get_handlers_by_event_type(
+        self,
+        event_type: str,
+    ) -> list[HandlerMetadata]:
+        try:
+            output = await self._proxy.call(
+                "registry.get_handlers_by_event_type",
+                {"event_type": event_type},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="RegistryClient",
+                method_name="get_handlers_by_event_type",
+                details=f"event_type={event_type!r}",
+                exc=exc,
+            ) from exc
+        return [
+            HandlerMetadata.from_dict(item)
+            for item in output.get("handlers", [])
+            if isinstance(item, dict)
+        ]
+
+    async def get_handler_by_full_name(
+        self,
+        full_name: str,
+    ) -> HandlerMetadata | None:
+        try:
+            output = await self._proxy.call(
+                "registry.get_handler_by_full_name",
+                {"full_name": full_name},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="RegistryClient",
+                method_name="get_handler_by_full_name",
+                details=f"full_name={full_name!r}",
+                exc=exc,
+            ) from exc
+        handler = output.get("handler")
+        if not isinstance(handler, dict):
+            return None
+        return HandlerMetadata.from_dict(handler)
+
+    async def set_handler_whitelist(
+        self,
+        plugin_names: list[str] | set[str] | None,
+    ) -> list[str] | None:
+        names = None
+        if plugin_names is not None:
+            names = sorted({str(item) for item in plugin_names if str(item).strip()})
+        try:
+            output = await self._proxy.call(
+                "system.event.handler_whitelist.set",
+                {"plugin_names": names},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="RegistryClient",
+                method_name="set_handler_whitelist",
+                details=f"plugin_names={names!r}",
+                exc=exc,
+            ) from exc
+        result = output.get("plugin_names")
+        if not isinstance(result, list):
+            return None
+        return [str(item) for item in result]
+
+    async def get_handler_whitelist(self) -> list[str] | None:
+        try:
+            output = await self._proxy.call("system.event.handler_whitelist.get", {})
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="RegistryClient",
+                method_name="get_handler_whitelist",
+                exc=exc,
+            ) from exc
+        result = output.get("plugin_names")
+        if not isinstance(result, list):
+            return None
+        return [str(item) for item in result]
+
+    async def clear_handler_whitelist(self) -> None:
+        try:
+            await self._proxy.call(
+                "system.event.handler_whitelist.set",
+                {"plugin_names": None},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="RegistryClient",
+                method_name="clear_handler_whitelist",
+                exc=exc,
+            ) from exc
+
+
+__all__ = ["HandlerMetadata", "RegistryClient"]

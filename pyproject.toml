@@ -31,6 +31,7 @@ dependencies = [
   "lark-oapi>=1.4.15",
   "lxml-html-clean>=0.4.2",
   "mcp>=1.8.0",
+  "msgpack>=1.1.1",
   "openai>=1.78.0",
   "ormsgpack>=1.9.1",
   "pillow>=11.2.1",
