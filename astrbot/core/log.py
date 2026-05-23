@@ -59,6 +59,21 @@ def _extract_platform_id(pathname: str | None) -> str | None:
     return _extract_path_segment(pathname, "astrbot/core/platform/sources/")
 
 
+def _get_plugin_tag(pathname: str | None) -> str:
+    if not pathname:
+        return "[Core]"
+    norm_path = os.path.normpath(pathname)
+    for prefix in (
+        "data" + os.sep + "plugins" + os.sep,
+        "astrbot" + os.sep + "builtin_stars" + os.sep,
+    ):
+        if prefix in norm_path:
+            idx = norm_path.index(prefix) + len(prefix)
+            plugin_name = norm_path[idx:].split(os.sep)[0]
+            return f"[{plugin_name}]"
+    return "[Core]"
+
+
 def _get_short_level_name(level_name: str) -> str:
     level_map = {
         "DEBUG": "DBUG",
@@ -246,16 +261,13 @@ def _ensure_record_metadata(record: logging.LogRecord) -> dict[str, Any]:
 
 def _patch_record(record: "Record") -> None:
     extra = record["extra"]
-    metadata = _build_record_metadata(
-        pathname=record["file"].path,
-        logger_name=record["name"],
-        level_name=record["level"].name,
-        level_no=record["level"].no,
-        source_line=record["line"],
-        is_trace=bool(extra.get("is_trace", False)),
-        overrides=extra,
-    )
-    extra.update(metadata)
+    extra.setdefault("plugin_tag", _get_plugin_tag(record["file"].path))
+    extra.setdefault("short_levelname", _get_short_level_name(record["level"].name))
+    level_no = record["level"].no
+    extra.setdefault("astrbot_version_tag", f" [v{VERSION}]" if level_no >= 30 else "")
+    extra.setdefault("source_file", _build_source_file(record["file"].path))
+    extra.setdefault("source_line", record["line"])
+    extra.setdefault("is_trace", False)
 
 
 _loguru = _raw_loguru_logger.patch(_patch_record)
@@ -716,8 +728,21 @@ class LogManager:
             trace_logger.setLevel(logging.INFO)
             trace_logger.propagate = False
 
-            cls._replace_trace_sink(
-                enable=enable,
-                path=path,
-                max_mb=max_mb,
-            )
+        cls._remove_sink(cls._trace_sink_id)
+        cls._trace_sink_id = None
+
+        if not enable:
+            return
+
+        cls._trace_sink_id = cls._add_file_sink(
+            file_path=cls._resolve_log_path(path or "logs/astrbot.trace.log"),
+            level=logging.INFO,
+            max_mb=max_mb,
+            backup_count=3,
+            trace=True,
+        )
+
+
+def get_loguru_logger():
+    """Returns the patched loguru logger for plugin use."""
+    return _loguru
