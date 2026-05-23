@@ -1276,12 +1276,10 @@ async def build_main_agent(
             reply_comps = [
                 comp for comp in event.message_obj.message if isinstance(comp, Reply)
             ]
-            quoted_message_settings = _get_quoted_message_parser_settings(
-                config.provider_settings
-            )
             cfg = config.provider_settings or plugin_context.get_config(
                 umo=event.unified_msg_origin
             ).get("provider_settings", {})
+            quoted_message_settings = _get_quoted_message_parser_settings(cfg)
             img_cap_prov_id = cfg.get("default_image_caption_provider_id") or ""
             fallback_quoted_image_count = 0
             for comp in reply_comps:
