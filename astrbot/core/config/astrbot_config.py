@@ -63,8 +63,15 @@ class AstrBotConfig(dict):
         with open(config_path, encoding="utf-8-sig") as f:
             conf_str = f.read()
             # Handle UTF-8 BOM if present
-            conf_str = conf_str.removeprefix("\ufeff")
-            conf = json.loads(conf_str) if conf_str.strip() else {}
+            if conf_str.startswith("\ufeff"):
+                conf_str = conf_str[1:]
+            if not conf_str:
+                raise EnvironmentError(f'文件 {config_path} 为空, 请手动处理...')
+            try:
+                conf = json.loads(conf_str)
+            except Exception as e:
+                logger.error(f'读取文件失败 {config_path}: {e}')
+                raise e
         dashboard_conf = conf.get("dashboard")
         legacy_dashboard_password_change_required = bool(
             isinstance(dashboard_conf, dict)
