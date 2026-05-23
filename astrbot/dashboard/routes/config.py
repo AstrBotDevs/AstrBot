@@ -10,8 +10,7 @@ from typing import Any
 import anyio
 from quart import request
 
-from astrbot.core import astrbot_config, file_token_service, logger
-from astrbot.core.computer import computer_client
+from astrbot.core import LogManager, astrbot_config, file_token_service, logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -38,6 +37,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
+from .restart_control import mark_runtime_log_config_saved
 from .route import Response, Route, RouteContext
 from .util import (
     config_key_to_folder,
@@ -52,6 +52,120 @@ OPENAI_OAUTH_FLOW_TTL_SECONDS = 10 * 60
 
 def _resolve_path(path: Path) -> Path:
     return path.resolve(strict=False)
+
+_RUNTIME_LOG_KEYS = (
+    "log_level",
+    "log_file_enable",
+    "log_file_path",
+    "log_file_max_mb",
+)
+
+_RUNTIME_TRACE_LOG_KEYS = (
+    "trace_log_enable",
+    "trace_log_path",
+    "trace_log_max_mb",
+)
+
+
+def _runtime_log_config(conf: dict) -> dict:
+    legacy = conf.get("log_file") or {}
+    return {
+        **{key: copy.deepcopy(conf.get(key)) for key in _RUNTIME_LOG_KEYS},
+        "legacy_log_file": {
+            "enable": copy.deepcopy(legacy.get("enable")),
+            "path": copy.deepcopy(legacy.get("path")),
+            "max_mb": copy.deepcopy(legacy.get("max_mb")),
+        },
+    }
+
+
+def _runtime_trace_log_config(conf: dict) -> dict:
+    legacy = conf.get("log_file") or {}
+    return {
+        **{key: copy.deepcopy(conf.get(key)) for key in _RUNTIME_TRACE_LOG_KEYS},
+        "legacy_log_file": {
+            "trace_enable": copy.deepcopy(legacy.get("trace_enable")),
+            "trace_path": copy.deepcopy(legacy.get("trace_path")),
+            "trace_max_mb": copy.deepcopy(legacy.get("trace_max_mb")),
+        },
+    }
+
+
+def _config_without_runtime_log_config(conf: dict) -> dict:
+    conf = copy.deepcopy(conf)
+    for key in (*_RUNTIME_LOG_KEYS, *_RUNTIME_TRACE_LOG_KEYS):
+        conf.pop(key, None)
+
+    legacy = conf.get("log_file")
+    if isinstance(legacy, dict):
+        for key in (
+            "enable",
+            "path",
+            "max_mb",
+            "trace_enable",
+            "trace_path",
+            "trace_max_mb",
+        ):
+            legacy.pop(key, None)
+        if not legacy:
+            conf.pop("log_file", None)
+
+    return conf
+
+
+def _runtime_log_config_changed(old_config: dict, new_config: dict) -> bool:
+    return _runtime_log_config(old_config) != _runtime_log_config(
+        new_config
+    ) or _runtime_trace_log_config(old_config) != _runtime_trace_log_config(new_config)
+
+
+def _system_config_save_requires_restart(old_config: dict, new_config: dict) -> bool:
+    if old_config == new_config:
+        return False
+
+    return _config_without_runtime_log_config(
+        old_config
+    ) != _config_without_runtime_log_config(new_config)
+
+
+def _apply_runtime_log_config_if_changed(
+    old_config: dict,
+    new_config: dict,
+) -> bool:
+    old_log_config = _runtime_log_config(old_config)
+    new_log_config = _runtime_log_config(new_config)
+    old_trace_config = _runtime_trace_log_config(old_config)
+    new_trace_config = _runtime_trace_log_config(new_config)
+
+    if old_log_config == new_log_config and old_trace_config == new_trace_config:
+        return False
+
+    updated = False
+
+    if old_log_config != new_log_config:
+        try:
+            LogManager.configure_logger(logger, new_config)
+            updated = True
+        except Exception:
+            logger.error(
+                "Failed to update runtime logger:\n%s",
+                traceback.format_exc(),
+            )
+
+    if old_trace_config != new_trace_config:
+        try:
+            LogManager.configure_trace_logger(new_config)
+            updated = True
+        except Exception:
+            logger.error(
+                "Failed to update runtime trace logger:\n%s",
+                traceback.format_exc(),
+            )
+
+    if updated:
+        logger.info("Runtime log configuration updated.")
+
+    return updated
 
 
 def try_cast(value: Any, type_: str):
@@ -240,10 +354,12 @@ def save_config(
     post_config: dict,
     config: AstrBotConfig,
     is_core: bool = False,
-) -> None:
+    old_config_snapshot: dict | None = None,
+) -> bool:
     """验证并保存配置"""
     errors = None
-    logger.info(f"Saving config, is_core={is_core}")
+    if is_core and old_config_snapshot is None:
+        old_config_snapshot = copy.deepcopy(dict(config))
 
     # Snapshot old Computer config for change detection
     if is_core:
@@ -268,6 +384,11 @@ def save_config(
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
     config.save_config(post_config)
+
+    if is_core and old_config_snapshot is not None:
+        return _apply_runtime_log_config_if_changed(old_config_snapshot, dict(config))
+
+    return False
 
 
 def _merge_registered_providers_into(config_template: dict) -> None:
@@ -1271,11 +1392,17 @@ class ConfigRoute(Route):
                     return Response().error("Config manager not available").to_json()
                 no_update_keys = ["provider_sources", "provider", "platform"]
                 for key in no_update_keys:
-                    config[key] = acm.default_conf[key]
-            await self._save_astrbot_configs(config, conf_id)
+                    config[key] = self.acm.default_conf[key]
+
+            save_result = await self._save_astrbot_configs(config, conf_id)
             await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
 
-            return Response().ok(None, "保存成功~").__dict__
+            # Non-blocking Bay connectivity check
+            warning = await _validate_neo_connectivity(config)
+            response_data = {"requires_restart": save_result["requires_restart"]}
+            if warning:
+                return Response().ok(response_data, f"保存成功。{warning}").__dict__
+            return Response().ok(response_data, "保存成功~").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).to_json()
@@ -1771,19 +1898,34 @@ class ConfigRoute(Route):
         return ret
 
     async def _save_astrbot_configs(
-        self,
-        post_configs: dict,
-        conf_id: str | None = None,
-    ) -> None:
+        self, post_configs: dict, conf_id: str | None = None
+    ) -> dict:
         try:
             if not self.acm or conf_id not in self.acm.confs:
                 raise ValueError(f"配置文件 {conf_id} 不存在")
             astrbot_config = self.acm.confs[conf_id]
+            old_config_snapshot = copy.deepcopy(dict(astrbot_config))
+
+            # 保留服务端的 t2i_active_template 值
             if "t2i_active_template" in astrbot_config:
                 post_configs["t2i_active_template"] = astrbot_config[
                     "t2i_active_template"
                 ]
-            save_config(post_configs, astrbot_config, is_core=True)
+
+            runtime_log_config_updated = save_config(
+                post_configs,
+                astrbot_config,
+                is_core=True,
+                old_config_snapshot=old_config_snapshot,
+            )
+            requires_restart = _system_config_save_requires_restart(
+                old_config_snapshot,
+                dict(astrbot_config),
+            )
+            if runtime_log_config_updated and not requires_restart:
+                mark_runtime_log_config_saved()
+
+            return {"requires_restart": requires_restart}
         except Exception as e:
             raise e
 

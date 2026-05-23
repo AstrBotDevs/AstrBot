@@ -35,6 +35,7 @@ from astrbot.dashboard.password_state import (
     is_password_storage_upgraded,
 )
 
+from .restart_control import should_skip_restart_after_runtime_log_config_save
 from .route import Response, Route, RouteContext
 
 
@@ -71,6 +72,12 @@ class StatRoute(Route):
                 .error("You are not permitted to do this operation in demo mode")
                 .__dict__
             )
+
+        if should_skip_restart_after_runtime_log_config_save():
+            logger.info(
+                "Skipped restart request after runtime log configuration update.",
+            )
+            return Response().ok(message="日志配置已实时生效，无需重启。").__dict__
 
         await self.core_lifecycle.restart()
         return Response().ok().__dict__

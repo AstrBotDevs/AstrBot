@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import sys
+import threading
 import time
 from asyncio import Queue
 from collections import deque
@@ -397,7 +398,7 @@ class LogManager:
     _console_sink_id: int | None = None
     _file_sink_id: int | None = None
     _trace_sink_id: int | None = None
-    _queue_broker: LogBroker | None = None
+    _reconfigure_lock = threading.RLock()
     _NOISY_LOGGER_LEVELS: dict[str, int] = {
         "aiosqlite": logging.WARNING,
         "filelock": logging.WARNING,
@@ -597,40 +598,22 @@ class LogManager:
         )
 
     @classmethod
-    def configure_logger(
+    def _replace_file_sink(
         cls,
+        *,
         logger: logging.Logger,
-        config: dict | None,
-        override_level: str | None = None,
+        enable_file: bool,
+        file_path: str | None,
+        max_mb: int | None,
     ) -> None:
-        if not config:
-            return
-
-        level = override_level or config.get("log_level")
-        if level:
-            try:
-                logger.setLevel(level)
-            except Exception:
-                logger.setLevel(logging.INFO)
-
-        if "log_file" in config:
-            file_conf = config.get("log_file") or {}
-            enable_file = bool(file_conf.get("enable", False))
-            file_path = file_conf.get("path")
-            max_mb = file_conf.get("max_mb")
-        else:
-            enable_file = bool(config.get("log_file_enable", False))
-            file_path = config.get("log_file_path")
-            max_mb = config.get("log_file_max_mb")
-
-        cls._remove_sink(cls._file_sink_id)
-        cls._file_sink_id = None
-
         if not enable_file:
+            old_sink_id = cls._file_sink_id
+            cls._file_sink_id = None
+            cls._remove_sink(old_sink_id)
             return
 
         try:
-            cls._file_sink_id = cls._add_file_sink(
+            new_sink_id = cls._add_file_sink(
                 file_path=cls._resolve_log_path(file_path),
                 level=logger.level,
                 max_mb=max_mb,
@@ -639,41 +622,102 @@ class LogManager:
             )
         except Exception as e:
             logger.error(f"Failed to add file sink: {e}")
+            return
+
+        old_sink_id = cls._file_sink_id
+        cls._file_sink_id = new_sink_id
+        cls._remove_sink(old_sink_id)
+
+    @classmethod
+    def _replace_trace_sink(
+        cls,
+        *,
+        enable: bool,
+        path: str | None,
+        max_mb: int | None,
+    ) -> None:
+        if not enable:
+            old_sink_id = cls._trace_sink_id
+            cls._trace_sink_id = None
+            cls._remove_sink(old_sink_id)
+            return
+
+        try:
+            new_sink_id = cls._add_file_sink(
+                file_path=cls._resolve_log_path(path or "logs/astrbot.trace.log"),
+                level=logging.INFO,
+                max_mb=max_mb,
+                backup_count=3,
+                trace=True,
+            )
+        except Exception as e:
+            logging.getLogger("astrbot").error(f"Failed to add trace sink: {e}")
+            return
+
+        old_sink_id = cls._trace_sink_id
+        cls._trace_sink_id = new_sink_id
+        cls._remove_sink(old_sink_id)
+
+    @classmethod
+    def configure_logger(
+        cls,
+        logger: logging.Logger,
+        config: dict | None,
+        override_level: str | None = None,
+    ) -> None:
+        with cls._reconfigure_lock:
+            if not config:
+                return
+
+            level = override_level or config.get("log_level")
+            if level:
+                try:
+                    logger.setLevel(level)
+                except Exception:
+                    logger.setLevel(logging.INFO)
+
+            if "log_file" in config:
+                file_conf = config.get("log_file") or {}
+                enable_file = bool(file_conf.get("enable", False))
+                file_path = file_conf.get("path")
+                max_mb = file_conf.get("max_mb")
+            else:
+                enable_file = bool(config.get("log_file_enable", False))
+                file_path = config.get("log_file_path")
+                max_mb = config.get("log_file_max_mb")
+
+            cls._replace_file_sink(
+                logger=logger,
+                enable_file=enable_file,
+                file_path=file_path,
+                max_mb=max_mb,
+            )
 
     @classmethod
     def configure_trace_logger(cls, config: dict | None) -> None:
-        if not config:
-            return
+        with cls._reconfigure_lock:
+            if not config:
+                return
 
-        # Enable file logging when either the explicit file flag or the master
-        # trace switch is turned on (trace_enable=True implies we want persistence).
-        enable = bool(
-            config.get("trace_log_enable")
-            or (config.get("log_file", {}) or {}).get("trace_enable", False),
-        )
-        path = config.get("trace_log_path")
-        max_mb = config.get("trace_log_max_mb")
-        if "log_file" in config:
-            legacy = config.get("log_file") or {}
-            path = path or legacy.get("trace_path")
-            max_mb = max_mb or legacy.get("trace_max_mb")
+            enable = bool(
+                config.get("trace_log_enable")
+                or (config.get("log_file", {}) or {}).get("trace_enable", False)
+            )
+            path = config.get("trace_log_path")
+            max_mb = config.get("trace_log_max_mb")
+            if "log_file" in config:
+                legacy = config.get("log_file") or {}
+                path = path or legacy.get("trace_path")
+                max_mb = max_mb or legacy.get("trace_max_mb")
 
-        trace_logger = logging.getLogger("astrbot.trace")
-        cls._ensure_logger_enricher_filter(trace_logger)
-        cls._ensure_logger_intercept_handler(trace_logger)
-        trace_logger.setLevel(logging.INFO)
-        trace_logger.propagate = False
+            trace_logger = logging.getLogger("astrbot.trace")
+            cls._ensure_logger_enricher_filter(trace_logger)
+            cls._ensure_logger_intercept_handler(trace_logger)
+            trace_logger.setLevel(logging.INFO)
+            trace_logger.propagate = False
 
-        cls._remove_sink(cls._trace_sink_id)
-        cls._trace_sink_id = None
-
-        if not enable:
-            return
-
-        cls._trace_sink_id = cls._add_file_sink(
-            file_path=cls._resolve_log_path(path or "logs/astrbot.trace.log"),
-            level=logging.INFO,
-            max_mb=max_mb,
-            backup_count=3,
-            trace=True,
-        )
+            cls._replace_trace_sink(
+                enable=enable,
+                path=path,
+                max_mb=max_mb,
+            )

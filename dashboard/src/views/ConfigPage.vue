@@ -360,6 +360,25 @@ interface UnsavedChangesOptions {
   closeHint?: string;
 }
 
+const RUNTIME_LOG_CONFIG_KEYS = [
+  'log_level',
+  'log_file_enable',
+  'log_file_path',
+  'log_file_max_mb',
+  'trace_log_enable',
+  'trace_log_path',
+  'trace_log_max_mb'
+];
+
+const LEGACY_RUNTIME_LOG_FILE_KEYS = [
+  'enable',
+  'path',
+  'max_mb',
+  'trace_enable',
+  'trace_path',
+  'trace_max_mb'
+];
+
 export default {
   name: "ConfigPage",
   components: {
@@ -445,31 +464,43 @@ export default {
       lastSavedConfigSnapshot: "",
       refreshingConfig: false,
 
-      // 配置类型切换
-      configType: "normal", // 'normal' 或 'system'
-      configSearchKeyword: "",
-
-      // 系统配置开关
-      isSystemConfig: false,
-
-      // 多配置文件管理
-      selectedConfigID: null as string | null, // 用于存储当前选中的配置项信息
-      currentConfigId: null as string | null, // 跟踪当前正在编辑的配置id
-      configInfoList: [] as ConfigInfoItem[],
-      configFormData: {
-        name: "",
-      } as { name: string },
-      editingConfigId: null as string | null,
-
-      // 测试聊天
-      testChatDrawer: false,
-      testConfigId: null as string | null,
-
-      // 未保存的更改状态
-      // 存储原始配置
-      originalConfigData: null,
-      hasUnsavedChanges: false,
-    };
+// 检查未保存的更改
+  async beforeRouteLeave(to, from, next) {
+    if (this.hasUnsavedChanges) {
+      const confirmed = await this.$refs.unsavedChangesDialog?.open({
+        title: this.tm('unsavedChangesWarning.dialogTitle'),
+        message: this.tm('unsavedChangesWarning.leavePage'),
+        confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
+        cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
+        closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`
+      });
+      // 关闭弹窗不跳转
+      if (confirmed === 'close') {
+        next(false);
+      } else if (confirmed) {
+        const result = await this.updateConfig();
+        if (this.isSystemConfig) {
+          if (result?.success && !result?.restarted) {
+            await new Promise(resolve => setTimeout(resolve, 800));
+            next();
+          } else {
+            next(false);
+          }
+        } else {
+          if (result?.success) {
+            await new Promise(resolve => setTimeout(resolve, 800));
+            next();
+          } else {
+            next(false);
+          }
+        }
+      } else {
+        this.hasUnsavedChanges = false;
+        next();
+      }
+    } else {
+      next();
+    }
   },
 
   computed: {
@@ -719,31 +750,32 @@ export default {
         postData.conf_id = this.selectedConfigID;
       }
 
-      return axios
-        .post("/api/config/astrbot/update", postData)
-        .then((res) => {
-          if (res.data.status === "ok") {
-            this.lastSavedConfigSnapshot = this.getConfigSnapshot(
-              this.config_data,
-            );
-            this.save_message = res.data.message || this.messages.saveSuccess;
-            this.save_message_snack = true;
-            this.save_message_success = "success";
-            this.onConfigSaved();
+      const previousConfig = this.parseConfigSnapshot(this.lastSavedConfigSnapshot);
+      const localShouldRestart = this.isSystemConfig && this.shouldRestartAfterSystemConfigSave(
+        previousConfig,
+        postData.config
+      );
 
-            if (this.isSystemConfig) {
-              restartAstrBotRuntime(this.$refs.wfr as WfrRef | null | undefined).catch(() => undefined);
-            }
-            return { success: true };
-          } else {
-            this.save_message = res.data.message || this.messages.saveError;
-            this.save_message_snack = true;
-            this.save_message_success = "error";
-            return { success: false };
+      return axios.post('/api/config/astrbot/update', postData).then((res) => {
+        if (res.data.status === "ok") {
+          const responseData = res.data.data || {};
+          const shouldRestart = this.isSystemConfig && (
+            typeof responseData.requires_restart === 'boolean'
+              ? responseData.requires_restart
+              : localShouldRestart
+          );
+          this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
+          this.save_message = res.data.message || this.messages.saveSuccess;
+          this.save_message_snack = true;
+          this.save_message_success = "success";
+          this.onConfigSaved();
+
+          if (shouldRestart) {
+            restartAstrBotRuntime(this.$refs.wfr).catch(() => {})
           }
-        })
-        .catch((err) => {
-          this.save_message = this.messages.saveError;
+          return { success: true, restarted: shouldRestart };
+        } else {
+          this.save_message = res.data.message || this.messages.saveError;
           this.save_message_snack = true;
           this.save_message_success = "error";
           return { success: false };
@@ -1016,6 +1048,37 @@ export default {
     getConfigSnapshot(config: Record<string, unknown>) {
       return JSON.stringify(config ?? {});
     },
+    parseConfigSnapshot(snapshot) {
+      if (!snapshot) {
+        return {};
+      }
+      try {
+        return JSON.parse(snapshot);
+      } catch (_error) {
+        return {};
+      }
+    },
+    getConfigWithoutRuntimeLogConfig(config) {
+      const cloned = JSON.parse(JSON.stringify(config ?? {}));
+      for (const key of RUNTIME_LOG_CONFIG_KEYS) {
+        delete cloned[key];
+      }
+      if (cloned.log_file && typeof cloned.log_file === 'object') {
+        for (const key of LEGACY_RUNTIME_LOG_FILE_KEYS) {
+          delete cloned.log_file[key];
+        }
+        if (Object.keys(cloned.log_file).length === 0) {
+          delete cloned.log_file;
+        }
+      }
+      return cloned;
+    },
+    shouldRestartAfterSystemConfigSave(previousConfig, nextConfig) {
+      const previousWithoutLog = this.getConfigWithoutRuntimeLogConfig(previousConfig);
+      const nextWithoutLog = this.getConfigWithoutRuntimeLogConfig(nextConfig);
+
+      return this.getConfigSnapshot(previousWithoutLog) !== this.getConfigSnapshot(nextWithoutLog);
+    }
   },
 };
 </script>
