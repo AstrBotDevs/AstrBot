@@ -25,8 +25,9 @@ class CronMessageEvent(AstrMessageEvent):
         extras: dict[str, Any] | None = None,
         message_type: MessageType = MessageType.FRIEND_MESSAGE,
     ) -> None:
+        # 使用会话的平台名称而非固定的 "cron"，确保插件能够正确识别平台类型
         platform_meta = PlatformMetadata(
-            name="cron",
+            name=session.platform_name,
             description="CronJob",
             id=session.platform_id,
         )
