@@ -51,6 +51,10 @@
         },
         "image_caption_prompt": {
           "description": "图片转述提示词"
+        },
+        "image_caption_wait_for_context_order": {
+          "description": "图片转述时等待上下文顺序",
+          "hint": "开启后，同一会话中图片转述完成前，后续消息将等待，以保证上下文顺序正确；关闭后，后续消息立即响应，但上下文中图片描述可能在后续消息之后。"
         }
       },
       "provider_stt_settings": {
