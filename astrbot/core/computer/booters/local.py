@@ -143,13 +143,18 @@ class LocalSandboxPolicy:
             )
         return abs_path
 
-    def normalize_working_dir(self, cwd: str | None) -> Path:
-        target = self.resolve_path(cwd) if cwd else self.default_cwd
-        if not target.exists():
-            raise FileNotFoundError(f"Working directory does not exist: {target}")
-        if not target.is_dir():
-            raise NotADirectoryError(f"Working directory is not a directory: {target}")
-        return target
+    return output.decode("utf-8", errors="replace")
+
+
+def _decode_process_output(
+    output: bytes | None,
+    *,
+    normalize_newlines: bool = False,
+) -> str:
+    decoded = _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
+    if normalize_newlines:
+        decoded = decoded.replace("\r\n", "\n")
+    return decoded
 
     def wrap_command(self, command: list[str], working_dir: Path) -> list[str]:
         if not self.sandboxed:
@@ -172,15 +177,40 @@ class LocalShellComponent(ShellComponent):
         if not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
 
-        key = session_id or "default"
-        session = PersistentShellSession.get_or_create(key)
-        return await session.exec(
-            command,
-            cwd=cwd,
-            env=env,
-            timeout=timeout,
-            background=background,
-        )
+        def _run() -> dict[str, Any]:
+            run_env = os.environ.copy()
+            if env:
+                run_env.update({str(k): str(v) for k, v in env.items()})
+            working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
+            if background:
+                # `command` is intentionally executed through the current shell so
+                # local computer-use behavior matches existing tool semantics.
+                # Safety relies on `_is_safe_command()` and the allowed-root checks.
+                proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+                    command,
+                    shell=shell,
+                    cwd=working_dir,
+                    env=run_env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
+            # `command` is intentionally executed through the current shell so
+            # local computer-use behavior matches existing tool semantics.
+            # Safety relies on `_is_safe_command()` and the allowed-root checks.
+            result = subprocess.run(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+                command,
+                shell=shell,
+                cwd=working_dir,
+                env=run_env,
+                timeout=timeout or 300,
+                capture_output=True,
+            )
+            return {
+                "stdout": _decode_process_output(result.stdout),
+                "stderr": _decode_process_output(result.stderr),
+                "exit_code": result.returncode,
+            }
 
     @staticmethod
     async def shutdown_all() -> None:
@@ -210,14 +240,19 @@ class LocalPythonComponent(PythonComponent):
                     check=False,
                     timeout=timeout,
                     capture_output=True,
-                    text=True,
-                    shell=False,
+                    text=False,
                 )
-                stdout = "" if silent else _decode_shell_output(result.stdout)
-                stderr = (
-                    _decode_shell_output(result.stderr)
-                    if result.returncode != 0
-                    else ""
+                stdout = (
+                    ""
+                    if silent
+                    else _decode_process_output(
+                        result.stdout,
+                        normalize_newlines=True,
+                    )
+                )
+                stderr = _decode_process_output(
+                    result.stderr,
+                    normalize_newlines=True,
                 )
                 return {
                     "data": {
