@@ -1,0 +1,18 @@
+{
+  "dialog": {
+    "title": "資料遷移助手",
+    "warning": "👋 歡迎升級到 v4.0.0。我們在新版本對資料格式進行了最佳化，偵測到需要進行資料庫遷移。",
+    "loading": "正在載入平台列表...",
+    "loadError": "載入平台列表失敗，請重試",
+    "noPlatforms": "未找到可用的平台設定",
+    "retry": "重試",
+    "startMigration": "開始遷移",
+    "migrating": "正在遷移中...",
+    "migratingSubtitle": "請耐心等待，遷移過程中請勿關閉此視窗",
+    "migrationError": "遷移失敗",
+    "success": "遷移成功完成！",
+    "completed": "遷移已完成",
+    "restartRecommended": "建議重新啟動應用程式以使所有變更生效。",
+    "restartNow": "立即重新啟動"
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "title": "聊天吧！",
+  "subtitle": "與 AI 助手進行對話",
+  "input": {
+    "placeholder": "開始輸入...",
+    "send": "發送",
+    "clear": "清空",
+    "upload": "上傳檔案",
+    "voice": "語音輸入",
+    "recordingPrompt": "錄音中，請說話...",
+    "chatPrompt": "聊天吧！",
+    "dropToUpload": "鬆開滑鼠上傳檔案",
+    "stopGenerating": "停止生成"
+  },
+  "message": {
+    "user": "使用者",
+    "assistant": "助手",
+    "system": "系統",
+    "error": "錯誤訊息",
+    "loading": "思考中..."
+  },
+  "voice": {
+    "start": "開始錄音",
+    "stop": "停止錄音",
+    "recording": "新錄音",
+    "processing": "處理中...",
+    "error": "錄音失敗",
+    "listening": "等待語音...",
+    "speaking": "正在說話",
+    "startRecording": "開始語音輸入",
+    "liveMode": "即時對話"
+  },
+  "welcome": {
+    "title": "歡迎使用 AstrBot",
+    "subtitle": "您的智能對話助手",
+    "quickActions": "快速操作",
+    "examples": "範例問題"
+  },
+  "actions": {
+    "copy": "複製",
+    "regenerate": "重新生成",
+    "like": "按讚",
+    "dislike": "倒讚",
+    "share": "分享",
+    "newChat": "建立對話",
+    "deleteChat": "刪除此對話",
+    "editTitle": "編輯標題",
+    "fullscreen": "全螢幕模式",
+    "exitFullscreen": "退出全螢幕",
+    "reply": "引用回覆",
+    "providerConfig": "AI 設定",
+    "toolsUsed": "已使用工具",
+    "toolCallUsed": "已使用 {name} 工具",
+    "pythonCodeAnalysis": "已使用 Python 程式碼分析"
+  },
+  "ipython": {
+    "output": "輸出"
+  },
+  "conversation": {
+    "newConversation": "新的聊天",
+    "noHistory": "暫無對話歷史",
+    "systemStatus": "系統狀態",
+    "llmService": "LLM 服務",
+    "speechToText": "語音轉文字",
+    "editDisplayName": "編輯會話名稱",
+    "displayName": "會話名稱",
+    "displayNameUpdated": "會話名稱已更新",
+    "displayNameUpdateFailed": "更新會話名稱失敗",
+    "confirmDelete": "確定要刪除「{name}」嗎？此操作無法復原。"
+  },
+  "modes": {
+    "darkMode": "切換到深色模式",
+    "lightMode": "切換到淺色模式"
+  },
+  "shortcuts": {
+    "help": "取得幫助",
+    "voiceRecord": "錄製語音",
+    "pasteImage": "貼上圖片",
+    "sendKey": {
+      "title": "發送快捷鍵",
+      "enterToSend": "Enter 發送",
+      "shiftEnterToSend": "Shift+Enter 發送"
+    }
+  },
+  "streaming": {
+    "enabled": "流式回應已開啟",
+    "disabled": "流式回應已關閉",
+    "on": "流式",
+    "off": "一般"
+  },
+  "transport": {
+    "title": "通訊傳輸模式",
+    "sse": "SSE",
+    "websocket": "WebSocket"
+  },
+  "config": {
+    "title": "設定檔"
+  },
+  "reasoning": {
+    "thinking": "思考過程"
+  },
+  "reply": {
+    "replyTo": "引用",
+    "notFound": "無法定位訊息"
+  },
+  "project": {
+    "title": "專案",
+    "create": "建立專案",
+    "edit": "編輯專案",
+    "name": "專案名稱",
+    "emoji": "圖示 (Emoji)",
+    "description": "專案描述（選填）",
+    "noSessions": "該專案暫無對話",
+    "confirmDelete": "確定要刪除專案 \"{title}\" 嗎？專案中的對話不會被刪除。"
+  },
+  "time": {
+    "today": "今天",
+    "yesterday": "昨天"
+  },
+  "stats": {
+    "tokens": "Token",
+    "inputTokens": "輸入 Token",
+    "outputTokens": "輸出 Token",
+    "cachedTokens": "快取 Token",
+    "duration": "耗時",
+    "ttft": "首字時間"
+  },
+  "refs": {
+    "title": "引用",
+    "sources": "來源"
+  },
+  "connection": {
+    "title": "連線狀態提醒",
+    "message": "系統偵測到聊天連線需要重新建立。",
+    "reasons": "這可能是因為：",
+    "reasonWindowResize": "切換了聊天視窗大小（正常現象）",
+    "reasonMultipleTabs": "在其他標籤頁中打開了聊天頁面",
+    "reasonNetworkIssue": "網路連線臨時中斷",
+    "notice": "注意：為了確保訊息正確接收，系統只允許同時保持一個聊天連線。如果您在多個標籤頁中使用聊天功能，建議只保留一個頁面。",
+    "understand": "我知道了",
+    "status": {
+      "reconnecting": "正在重新連線...",
+      "reconnected": "聊天連線已重新建立",
+      "failed": "連線失敗，請重新整理頁面重試"
+    }
+  },
+  "errors": {
+    "sendMessageFailed": "發送訊息失敗，請重試",
+    "createSessionFailed": "建立會話失敗，請重新整理頁面重試"
+  },
+  "batch": {
+    "selected": "已選擇 {count} 個",
+    "confirmDelete": "確定要刪除 {count} 個對話嗎？此操作無法復原。",
+    "selectAll": "全選",
+    "deselectAll": "取消全選",
+    "delete": "刪除",
+    "exit": "退出",
+    "partialFailure": "{total} 個對話中有 {failed} 個刪除失敗",
+    "requestFailed": "刪除對話失敗，請重試。"
+  }
+} 
