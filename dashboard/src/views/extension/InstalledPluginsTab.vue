@@ -2,17 +2,15 @@
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import PinnedPluginItem from "@/components/extension/PinnedPluginItem.vue";
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import PluginImportDialog from "@/components/extension/PluginImportDialog.vue";
 import { normalizeTextInput } from "@/utils/inputValue";
-import { ref, computed, watch } from "vue";
-
-const handlePluginLogoError = (event) => {
-  const target = event?.target;
-  if (!target || target.dataset.fallbackApplied === "1") return;
-  target.dataset.fallbackApplied = "1";
-  target.src = defaultPluginIcon;
-};
+import LZString from 'lz-string';
+import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import {
+  readPinnedExtensions,
+  writePinnedExtensions,
+} from "./extensionPreferenceStorage.mjs";
+import { computed, ref, watch } from "vue";
 
 const props = defineProps({
   state: {
@@ -93,96 +91,97 @@ const togglePin = (extension: { name: string }) => {
   else pinnedNames.value.splice(idx, 1);
 };
 
-const handlePinnedImgError = (e: Event) => {
-  const img = e.target as HTMLImageElement;
-  img.src = defaultPluginIcon;
-};
 
-// 从 repo URL 提取作者主页链接
-const getAuthorHomepageUrl = (repoUrl) => {
-  if (!repoUrl) return null;
+const showExportCode = ref(false);
+const exportCode = ref("");
 
-  try {
-    // 解析 GitHub URL，提取 owner
-    const url = new URL(repoUrl);
-    if (url.hostname.toLowerCase() !== 'github.com') return null;
+const EXPORT_BLACKLIST = new Set(["astrbot", "builtin_commands"]);
+const exportablePlugins = computed(() =>
+  filteredPlugins.value.filter(
+    (p) => p?.name && !EXPORT_BLACKLIST.has(p.name),
+  ),
+);
 
-    const pathParts = url.pathname.split('/').filter(p => p);
-    if (pathParts.length < 1) return null;
-
-    const owner = pathParts[0];
-    return `https://github.com/${owner}`;
-  } catch {
-    return null;
-  }
-};
-
-// --- 拖拽功能实现 ---
-const draggedIndex = ref(-1);
-let lastSwapTime = 0;
-
-const onDragStart = (index: number) => {
-  draggedIndex.value = index;
-};
-
-const onDragOver = (e: DragEvent) => {
-  e.preventDefault(); // 必须调用，否则不会触发 drop
-};
-
-const onDragEnter = (e: DragEvent, index: number) => {
-  e.preventDefault();
-
-  const now = Date.now();
-  if (now - lastSwapTime < 100) return; // 100ms 冷却，防止快速抖动
-
-  if (draggedIndex.value === -1 || draggedIndex.value === index) {
+const exportPlugin = (pluginList) => {
+  if (!pluginList || pluginList.length === 0) {
+    toast(tm("exportImport.errors.nothingToExport"), "warning");
     return;
   }
+  showExportCode.value = true;
+  const jsonStr = JSON.stringify(
+    pluginList.map((plugin) => ({
+      name: plugin.name,
+      version: plugin.version,
+      repo: plugin.repo,
+      logo: plugin.logo,
+    })),
+  );
+  exportCode.value = LZString.compressToEncodedURIComponent(jsonStr);
+}
 
-  const newList = [...pinnedNames.value];
-  const item = newList.splice(draggedIndex.value, 1)[0];
-  newList.splice(index, 0, item);
+const exportFiltered = () => {
+  exportPlugin(exportablePlugins.value);
+}
 
-  pinnedNames.value = newList;
-  draggedIndex.value = index;
-  lastSwapTime = now;
-};
+const exportPinned = () => {
+  const pinnedNames = pinnedExtensionNames.value;
+  const pinned = exportablePlugins.value.filter((p) => pinnedNames.includes(p?.name));
+  exportPlugin(pinned);
+}
 
-const onDrop = (e: DragEvent) => {
-  draggedIndex.value = -1;
-};
+const showExportSelectDialog = ref(false);
+const exportSelected = ref([]);
 
-const onDragEnd = (e: DragEvent) => {
-  draggedIndex.value = -1;
-};
-// ----------------
+const openExportSelectDialog = () => {
+  exportSelected.value = exportablePlugins.value.map(() => false);
+  showExportSelectDialog.value = true;
+}
 
-// 映射 name -> plugin 对象（优先从 sortedPlugins 找）
-const pinnedPlugins = computed(() => {
-  if (!Array.isArray(pinnedNames.value)) return [];
+const selectedExportCount = computed(() =>
+  exportSelected.value.filter(Boolean).length,
+);
 
-  const installedAll = Array.isArray(extension_data?.data)
-    ? extension_data.data
-    : [];
-  const all = Array.isArray(sortedPlugins?.value) ? sortedPlugins.value : [];
-  const filtered = Array.isArray(filteredPlugins?.value)
-    ? filteredPlugins.value
-    : [];
-  const market = Array.isArray(pluginMarketData?.value)
-    ? pluginMarketData.value
-    : [];
+const allExportSelected = computed(
+  () =>
+    exportablePlugins.value.length > 0 &&
+    selectedExportCount.value === exportablePlugins.value.length,
+);
 
-  const findByName = (name) => {
-    return (
-      installedAll.find((p) => p.name === name) ||
-      all.find((p) => p.name === name) ||
-      filtered.find((p) => p.name === name) ||
-      market.find((p) => p.name === name)
-    );
-  };
+const someExportSelected = computed(
+  () => selectedExportCount.value > 0 && !allExportSelected.value,
+);
 
-  return pinnedNames.value.map((name) => findByName(name)).filter(Boolean);
-});
+const toggleExportSelectAll = () => {
+  const next = !allExportSelected.value;
+  exportSelected.value = exportablePlugins.value.map(() => next);
+}
+
+const confirmExportSelected = () => {
+  const picked = exportablePlugins.value.filter((_, i) => exportSelected.value[i]);
+  if (picked.length === 0) {
+    toast(tm("exportImport.errors.needOneSelection"), "warning");
+    return;
+  }
+  showExportSelectDialog.value = false;
+  exportPlugin(picked);
+}
+
+const copyExportCode = async () => {
+  try {
+    await navigator.clipboard.writeText(exportCode.value);
+    toast(tm("exportImport.errors.copySuccess"), "success");
+  } catch (err) {
+    console.error("Copy failed", err);
+    toast(tm("exportImport.errors.copyFailed"), "error");
+  }
+}
+
+const showImportDialog = ref(false);
+
+const openImportDialog = () => {
+  showImportDialog.value = true;
+}
+
 </script>
 
 <template>
@@ -190,47 +189,248 @@ const pinnedPlugins = computed(() => {
     <div class="d-flex align-center flex-wrap" style="gap: 12px">
       <h2 class="text-h2 mb-0">{{ tm("titles.installedAstrBotPlugins") }}</h2>
 
-      <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
-        <v-text-field
-          :model-value="pluginSearch"
-          density="compact"
-          :label="tm('search.placeholder')"
-          prepend-inner-icon="mdi-magnify"
-          clearable
-          variant="solo-filled"
-          flat
-          hide-details
-          single-line
-          style="min-width: 220px; max-width: 340px"
-          @update:model-value="pluginSearch = normalizeTextInput($event)"
-        />
+        <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
 
-        <v-btn-toggle
-          v-model="isListView"
-          mandatory
-          density="compact"
-          color="primary"
-          class="view-mode-toggle"
-        >
-          <v-btn :value="false" icon="mdi-view-grid" />
-          <v-btn :value="true" icon="mdi-view-list" />
-        </v-btn-toggle>
+          <v-menu>
+            <template #activator="{ props: menuProps }">
+              <v-btn
+                v-bind="menuProps"
+                color="primary"
+                variant="tonal"
+                prepend-icon="mdi-export-variant"
+                append-icon="mdi-menu-down"
+              >
+                {{ tm("exportImport.exportPlugin") }}
+              </v-btn>
+            </template>
+            <v-list density="compact">
+              <v-list-item prepend-icon="mdi-filter-variant" @click="exportFiltered">
+                <v-list-item-title>{{ tm("exportImport.exportFiltered") }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item prepend-icon="mdi-pin" @click="exportPinned">
+                <v-list-item-title>{{ tm("exportImport.exportPinned") }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item prepend-icon="mdi-cursor-default-click-outline" @click="openExportSelectDialog">
+                <v-list-item-title>{{ tm("exportImport.exportSelected") }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+
+          <v-btn
+            color="primary"
+            variant="tonal"
+            prepend-icon="mdi-import"
+            @click="openImportDialog"
+          >
+            {{ tm("exportImport.importPlugin") }}
+          </v-btn>
+          <v-text-field
+            :model-value="pluginSearch"
+            @update:model-value="pluginSearch = normalizeTextInput($event)"
+            density="compact"
+            :label="tm('search.placeholder')"
+            prepend-inner-icon="mdi-magnify"
+            clearable
+            variant="solo-filled"
+            flat
+            hide-details
+            single-line
+            style="min-width: 220px; max-width: 340px"
+          >
+          </v-text-field>
+        </div>
       </div>
+
+      <v-expand-transition>
+        <v-card v-if="showExportCode" class="mt-3 rounded-lg" variant="outlined">
+          <v-card-title class="d-flex align-center pa-3">
+            <v-icon class="mr-2" size="small">mdi-code-braces</v-icon>
+            <span class="text-body-1">{{ tm("exportImport.pluginCode") }}</span>
+            <v-spacer />
+            <v-btn icon="mdi-content-copy" variant="text" size="small" @click="copyExportCode" />
+            <v-btn icon="mdi-close" variant="text" size="small" @click="showExportCode = false" />
+          </v-card-title>
+          <v-card-text class="pt-0">
+            <v-textarea
+              :model-value="exportCode"
+              readonly
+              variant="outlined"
+              density="compact"
+              auto-grow
+              rows="3"
+              max-rows="8"
+              hide-details
+              class="export-code-textarea"
+            />
+          </v-card-text>
+        </v-card>
+      </v-expand-transition>
     </div>
   </div>
 
-  <v-row class="mb-4">
-    <v-col cols="12">
-      <div class="installed-toolbar">
-        <div class="installed-toolbar__actions">
-          <v-btn variant="tonal" @click="toggleShowReserved">
-            <v-icon>{{ showReserved ? "mdi-eye-off" : "mdi-eye" }}</v-icon>
-            {{
-              showReserved
-                ? tm("buttons.hideSystemPlugins")
-                : tm("buttons.showSystemPlugins")
-            }}
+    <PluginImportDialog v-model="showImportDialog" :proxy="getSelectedGitHubProxy()" @done="getExtensions" />
+
+    <v-dialog v-model="showExportSelectDialog" max-width="640">
+      <v-card class="rounded-lg">
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon class="mr-2">mdi-cursor-default-click-outline</v-icon>
+          <span>{{ tm("exportImport.exportSelected") }}</span>
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="showExportSelectDialog = false" />
+        </v-card-title>
+        <v-card-text>
+          <div class="d-flex align-center mb-2">
+            <v-checkbox
+              :model-value="allExportSelected"
+              :indeterminate="someExportSelected"
+              density="compact"
+              hide-details
+              color="primary"
+              @update:model-value="toggleExportSelectAll"
+            />
+            <span class="text-body-2 ml-1">
+              {{ tm("exportImport.exportSummary", { total: exportablePlugins.length, selected: selectedExportCount }) }}
+            </span>
+          </div>
+          <v-list density="compact" style="max-height: 400px; overflow-y: auto;">
+            <v-list-item
+              v-for="(plugin, idx) in exportablePlugins"
+              :key="plugin.name || idx"
+              class="rounded-lg mb-1"
+              border
+            >
+              <template #prepend>
+                <v-checkbox
+                  :model-value="!!exportSelected[idx]"
+                  density="compact"
+                  hide-details
+                  color="primary"
+                  @update:model-value="exportSelected[idx] = !exportSelected[idx]"
+                />
+
+                <v-avatar size="32" class="mr-2" rounded="lg">
+                  <v-img
+                    :src="plugin.logo || defaultPluginIcon"
+                    :alt="plugin.name"
+                    cover
+                  >
+                    <template #error>
+                      <v-img :src="defaultPluginIcon" cover />
+                    </template>
+                  </v-img>
+                </v-avatar>
+              </template>
+              <v-list-item-title class="text-body-2 font-weight-medium">
+                {{ plugin.name || tm("exportImport.unnamed") }}
+                <span class="text-caption text-medium-emphasis ml-2">
+                  v{{ plugin.version || "?" }}
+                </span>
+              </v-list-item-title>
+              <v-list-item-subtitle v-if="plugin.repo" class="text-caption">
+                <a
+                  :href="plugin.repo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="repo-link"
+                  @click.stop
+                >
+                  {{ plugin.repo }}
+                </a>
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <v-btn variant="text" size="small" @click="showExportSelectDialog = false">
+            {{ tm("exportImport.cancel") }}
           </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            size="small"
+            :disabled="selectedExportCount === 0"
+            @click="confirmExportSelected"
+          >
+            {{ tm("exportImport.export") }} ({{ selectedExportCount }})
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-card
+      v-if="failedPluginItems.length > 0"
+      class="mb-4 rounded-lg"
+      variant="tonal"
+      color="warning"
+    >
+      <v-card-title class="d-flex align-center">
+        <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
+        {{ tm("failedPlugins.title", { count: failedPluginItems.length }) }}
+      </v-card-title>
+      <v-card-text class="pt-0">
+        <div class="text-body-2 mb-3">
+          {{ tm("failedPlugins.hint") }}
+        </div>
+        <v-table density="compact">
+          <thead>
+            <tr>
+              <th>{{ tm("failedPlugins.columns.plugin") }}</th>
+              <th>{{ tm("failedPlugins.columns.error") }}</th>
+              <th class="text-right">{{ tm("buttons.actions") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="plugin in failedPluginItems" :key="plugin.dir_name">
+              <td>
+                <div class="font-weight-medium">
+                  {{ plugin.display_name }}
+                </div>
+                <div class="text-caption text-medium-emphasis">
+                  {{ plugin.dir_name }}
+                </div>
+              </td>
+              <td style="max-width: 520px">
+                <div
+                  class="text-caption text-medium-emphasis"
+                  style="
+                    display: -webkit-box;
+                    -webkit-line-clamp: 2;
+                    line-clamp: 2;
+                    -webkit-box-orient: vertical;
+                    overflow: hidden;
+                  "
+                >
+                  {{ plugin.error || tm("status.unknown") }}
+                </div>
+              </td>
+              <td class="text-right">
+                <v-btn
+                  size="small"
+                  variant="tonal"
+                  color="primary"
+                  class="mr-2"
+                  prepend-icon="mdi-refresh"
+                  @click="reloadFailedPlugin(plugin.dir_name)"
+                >
+                  {{ tm("buttons.reload") }}
+                </v-btn>
+                <v-btn
+                  size="small"
+                  variant="tonal"
+                  color="error"
+                  prepend-icon="mdi-delete"
+                  :disabled="plugin.reserved"
+                  @click="requestUninstallFailedPlugin(plugin.dir_name)"
+                >
+                  {{ tm("buttons.uninstall") }}
+                </v-btn>
+              </td>
+            </tr>
+          </tbody>
+        </v-table>
+      </v-card-text>
+    </v-card>
 
           <v-btn
             color="warning"
@@ -1209,68 +1409,14 @@ const pinnedPlugins = computed(() => {
 </template>
 
 <style scoped>
-.installed-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+.repo-link {
+  color: rgb(var(--v-theme-primary));
+  text-decoration: none;
+  word-break: break-all;
 }
 
-.installed-toolbar__actions,
-.installed-toolbar__controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.installed-toolbar__controls {
-  margin-left: auto;
-  justify-content: flex-end;
-}
-
-.installed-status-toggle ::v-deep(.v-btn) {
-  min-height: 34px;
-  text-transform: none;
-}
-
-.view-mode-toggle ::v-deep(.v-btn) {
-  min-width: 30px;
-  height: 28px;
-  padding: 0 8px;
-}
-
-.table-action-btn {
-  min-height: 32px;
-  font-size: 0.86rem;
-  font-weight: 600;
-}
-
-.table-action-row {
-  overflow-x: auto;
-  overflow-y: hidden;
-  white-space: nowrap;
-  -webkit-overflow-scrolling: touch;
-}
-
-.plugin-list-table ::v-deep(td) {
-  vertical-align: top;
-}
-
-@media (max-width: 1400px) {
-  .table-action-btn {
-    min-width: 0;
-    padding: 0 8px;
-  }
-}
-
-@media (max-width: 960px) {
-  .installed-toolbar__controls {
-    margin-left: 0;
-    width: 100%;
-    justify-content: flex-start;
-  }
+.repo-link:hover {
+  text-decoration: underline;
 }
 
 .fab-button {

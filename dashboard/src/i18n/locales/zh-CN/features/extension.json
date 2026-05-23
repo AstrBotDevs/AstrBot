@@ -415,56 +415,36 @@
   "pluginChangelog": {
     "menuTitle": "查看更新日志"
   },
-  "modManager": {
-    "viewToggle": {
-      "switchToLegacy": "切换到经典视图",
-      "switchToModManager": "切换到管理器布局"
-    },
-    "panelTabs": {
-      "info": "概况",
-      "config": "配置",
-      "overview": "文档",
-      "changelog": "更新日志",
-      "reserved": "扩展区"
-    },
-    "welcome": {
-      "title": "欢迎使用 AstrBot 插件管理器",
-      "subtitle": "管理、配置和监控你的插件",
-      "links": {
-        "docs": "文档"
-      },
-      "actions": {
-        "viewOnGithub": "在 GitHub 上查看",
-        "retry": "重试"
-      },
-      "readme": {
-        "loading": "正在加载 README...",
-        "errors": {
-          "rateLimited": "GitHub API 请求频率受限，请稍后再试",
-          "fetchFailed": "获取 README 失败"
-        },
-        "empty": {
-          "title": "暂无 README",
-          "subtitle": "该项目尚未提供 README 文件"
-        }
-      },
-      "tip": {
-        "market": "提示：你可以在「插件市场」标签页中发现和安装更多插件。"
-      }
-    },
-    "changelogPanel": {
-      "loading": "正在加载更新日志...",
-      "errors": {
-        "fetchFailed": "获取更新日志失败",
-        "fetchError": "获取更新日志时发生错误"
-      },
-      "actions": {
-        "retry": "重试"
-      },
-      "empty": {
-        "title": "暂无更新日志",
-        "subtitle": "该插件尚未提供更新日志"
-      }
+  "exportImport": {
+    "exportPlugin": "导出插件",
+    "exportFiltered": "导出全部筛选出的插件",
+    "exportPinned": "导出置顶的插件",
+    "exportSelected": "挑选插件导出",
+    "importPlugin": "导入插件",
+    "pluginCode": "插件码",
+    "pasteCode": "粘贴插件码",
+    "securityHint": "导入下载的插件均来自 GitHub 仓库，请自行检查插件的安全性",
+    "parse": "解析",
+    "cancel": "取消",
+    "export": "导出",
+    "unnamed": "(未命名)",
+    "importSelected": "导入选中",
+    "importAll": "全部导入",
+    "importing": "导入中",
+    "completed": "完成",
+    "exportSummary": "共 {total} 个插件，已选 {selected} 个",
+    "importSummary": "共解析到 {total} 个插件，已选 {selected} 个",
+    "errors": {
+      "nothingToExport": "没有可导出的插件",
+      "needOneSelection": "请至少选择一个插件",
+      "copySuccess": "已复制到剪贴板",
+      "copyFailed": "复制失败",
+      "needCode": "请先粘贴插件码",
+      "parseFailedFormat": "插件码解析失败，请检查格式",
+      "parseFailedContent": "插件码内容格式错误",
+      "parseFailed": "插件码解析失败：{msg}",
+      "missingRepo": "缺少仓库地址",
+      "unknownError": "未知错误"
     }
   }
 }
