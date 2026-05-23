@@ -175,13 +175,25 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         """
         if isinstance(tool, HandoffTool):
-            is_bg, bg_error = cls._parse_background_task_arg(
-                tool.name,
-                tool_args.pop("background_task", None),
+            raw_mode = tool_args.get("mode")
+            mode = cls._resolve_handoff_mode(tool, raw_mode)
+            is_silent = mode == "silent"
+            mode_source = "explicit" if raw_mode is not None else "default"
+            background_requested = bool(tool_args.get("background_task", False))
+            is_bg = tool_args.pop("background_task", False) and not is_silent
+            background_state = (
+                "ignored_for_silent"
+                if background_requested and is_silent
+                else "enabled"
+                if is_bg
+                else "disabled"
             )
-            if bg_error is not None:
-                yield bg_error
-                return
+            logger.info(
+                f"SubAgent handoff mode={mode} "
+                f"(子代理静默调用={'开启' if is_silent else '未开启'}; source={mode_source}; "
+                f"background_task={background_state}) "
+                f"tool={tool.name}, agent={getattr(tool.agent, 'name', 'unknown')}"
+            )
             if is_bg:
                 async for r in cls._execute_handoff_background(
                     tool,
@@ -419,6 +431,47 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         return None if toolset.empty() else toolset
 
+    @staticmethod
+    def _resolve_handoff_mode(tool: HandoffTool, mode: T.Any) -> str:
+        if mode is not None:
+            resolved = str(mode).strip().lower()
+        else:
+            resolved = str(getattr(tool, "default_handoff_mode", "normal")).strip()
+        return resolved if resolved in {"normal", "silent"} else "normal"
+
+    @classmethod
+    def _is_silent_handoff_mode(cls, tool: HandoffTool, mode: T.Any) -> bool:
+        return cls._resolve_handoff_mode(tool, mode) == "silent"
+
+    @classmethod
+    def _remove_user_visible_tools_for_silent_handoff(
+        cls,
+        toolset: ToolSet | None,
+    ) -> ToolSet | None:
+        if toolset is None:
+            return None
+        toolset.remove_tool(SendMessageToUserTool.name)
+        return None if toolset.empty() else toolset
+
+    @classmethod
+    async def _format_handoff_response_text(
+        cls,
+        llm_resp,
+        *,
+        include_structured_chain: bool = False,
+    ) -> str:
+        result_chain = getattr(llm_resp, "result_chain", None)
+        if not include_structured_chain or not result_chain:
+            return llm_resp.completion_text
+
+        payload = {
+            "text": result_chain.get_plain_text(),
+            "components": [
+                await component.to_dict() for component in result_chain.chain
+            ],
+        }
+        return json.dumps(payload, ensure_ascii=False)
+
     @classmethod
     def _build_handoff_system_prompt(
         cls,
@@ -462,14 +515,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         **tool_args: Any,
     ):
         tool_args = dict(tool_args)
-        input_, input_error = cls._normalize_handoff_input(
-            tool.name,
-            tool_args.get("input"),
-        )
-        if input_error is not None:
-            yield input_error
-            return
-        tool_args["input"] = input_
+        input_ = tool_args.get("input")
+        is_silent = cls._is_silent_handoff_mode(tool, tool_args.get("mode"))
         if image_urls_prepared:
             prepared_image_urls = tool_args.get("image_urls")
             if isinstance(prepared_image_urls, list):
@@ -489,6 +536,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         # Build handoff toolset from registered tools plus runtime computer tools.
         toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
+        if is_silent:
+            toolset = cls._remove_user_visible_tools_for_silent_handoff(toolset)
+
         ctx = run_context.context.context
         event = run_context.context.event
         umo = event.unified_msg_origin
@@ -540,63 +590,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         subagent_system_prompt = cls._build_subagent_system_prompt(
             umo, tool, prov_settings
         )
-
-        # 构建子代理的追加内容
-        extra_content_parts = SubAgentManager.build_subagent_extra_content_parts(
-            umo, agent_name
+        response_text = await cls._format_handoff_response_text(
+            llm_resp,
+            include_structured_chain=is_silent,
         )
-
-        # 获取子代理的超时时间
-        execution_timeout = cls._get_subagent_execution_timeout()
-
-        # 用于存储本轮的完整历史上下文
-        runner_messages = []
-
-        # 构建 tool_loop_agent 协程
-        async def _run_subagent():
-            return await ctx.tool_loop_agent(
-                event=event,
-                chat_provider_id=prov_id,
-                prompt=input_,
-                image_urls=image_urls,
-                system_prompt=subagent_system_prompt,
-                tools=toolset,
-                contexts=contexts,
-                max_steps=agent_max_step,
-                tool_call_timeout=run_context.tool_call_timeout,
-                stream=stream,
-                runner_messages=runner_messages,
-                extra_user_content_parts=extra_content_parts,
-            )
-
-        # 添加执行超时控制
-        if execution_timeout > 0:
-            try:
-                llm_resp = await asyncio.wait_for(
-                    _run_subagent(), timeout=execution_timeout
-                )
-            except asyncio.TimeoutError:
-                # 若超时，保存已产生的部分历史
-                cls._save_subagent_history(umo, runner_messages, agent_name)
-                error_msg = f"SubAgent '{agent_name}' execution timeout after {execution_timeout:.1f} seconds."
-                logger.warning(f"[SubAgent:Timeout] {error_msg}")
-
-                cls._handle_subagent_timeout(umo=umo, agent_name=agent_name)
-
-                yield mcp.types.CallToolResult(
-                    content=[
-                        mcp.types.TextContent(type="text", text=f"error: {error_msg}")
-                    ]
-                )
-                return
-        else:
-            # 不设置超时
-            llm_resp = await _run_subagent()
-        # 保存历史上下文
-        cls._save_subagent_history(umo, runner_messages, agent_name)
-
         yield mcp.types.CallToolResult(
-            content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)],
+            content=[mcp.types.TextContent(type="text", text=response_text)]
         )
 
     @classmethod

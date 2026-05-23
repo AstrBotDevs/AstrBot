@@ -66,6 +66,11 @@ class SubAgentOrchestrator:
             provider_id = item.get("provider_id")
             if provider_id is not None:
                 provider_id = str(provider_id).strip() or None
+            default_handoff_mode = str(
+                item.get("default_handoff_mode", "normal")
+            ).strip()
+            if default_handoff_mode not in {"normal", "silent"}:
+                default_handoff_mode = "normal"
             tools = item.get("tools", [])
             skills = item.get("skills", [])
             begin_dialogs = None
@@ -116,6 +121,7 @@ class SubAgentOrchestrator:
 
             # Optional per-subagent chat provider override.
             handoff.provider_id = provider_id
+            handoff.set_default_handoff_mode(default_handoff_mode)
 
             handoffs.append(handoff)
             handoff_skills.append(skills)

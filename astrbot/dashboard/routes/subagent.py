@@ -82,7 +82,9 @@ class SubAgentRoute(Route):
                     if isinstance(a, dict):
                         a.setdefault("provider_id", None)
                         a.setdefault("persona_id", None)
-            return jsonify(Response().ok(data=data).to_json())
+                        if a.get("default_handoff_mode") not in ("normal", "silent"):
+                            a["default_handoff_mode"] = "normal"
+            return jsonify(Response().ok(data=data).__dict__)
         except Exception as e:
             logger.error(traceback.format_exc())
             return jsonify(Response().error(f"获取 subagent 配置失败: {e!s}").to_json())

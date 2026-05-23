@@ -115,27 +115,31 @@ async def test_reload_from_config_tool_normalization(raw_tools, expected_tools):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("raw_skills", "expected_skills"),
-    [
-        (None, None),
-        ([" web-search-skill ", "", "weather"], ["web-search-skill", "weather"]),
-        ("not-a-list", []),
-    ],
-)
-async def test_reload_from_config_skill_normalization(raw_skills, expected_skills):
+async def test_reload_from_config_sets_default_handoff_mode():
     tool_mgr = MagicMock()
     persona_mgr = MagicMock()
-    persona_mgr.get_persona_v3_by_id.return_value = {
-        "name": "custom",
-        "prompt": "persona prompt",
-        "tools": [],
-        "skills": raw_skills,
-        "_begin_dialogs_processed": [],
-    }
+    persona_mgr.get_persona_v3_by_id.return_value = None
     orchestrator = SubAgentOrchestrator(tool_mgr=tool_mgr, persona_mgr=persona_mgr)
 
-    await orchestrator.reload_from_config(_build_cfg({"persona_id": "custom"}))
+    await orchestrator.reload_from_config(
+        _build_cfg({"default_handoff_mode": "silent"})
+    )
 
     handoff = orchestrator.handoffs[0]
-    assert handoff.agent.skills == expected_skills
+    assert handoff.default_handoff_mode == "silent"
+    assert (
+        "Defaults to silent." in handoff.parameters["properties"]["mode"]["description"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_reload_from_config_normalizes_invalid_default_handoff_mode():
+    tool_mgr = MagicMock()
+    persona_mgr = MagicMock()
+    persona_mgr.get_persona_v3_by_id.return_value = None
+    orchestrator = SubAgentOrchestrator(tool_mgr=tool_mgr, persona_mgr=persona_mgr)
+
+    await orchestrator.reload_from_config(_build_cfg({"default_handoff_mode": "loud"}))
+
+    handoff = orchestrator.handoffs[0]
+    assert handoff.default_handoff_mode == "normal"

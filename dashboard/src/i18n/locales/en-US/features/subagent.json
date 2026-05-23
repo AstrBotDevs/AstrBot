@@ -62,12 +62,13 @@
     "nameLabel": "Agent Name (used for transfer_to_{name})",
     "nameHint": "Use lowercase letters and underscores, globally unique",
     "providerLabel": "Chat Provider (optional)",
-    "providerHint": "Leave empty to use global default provider.",
-    "personaLabel": "Select Persona",
-    "personaHint": "The subagent will directly inherit the selected Persona's system settings and tools. Manage and create personas on the Persona settings page.",
-    "personaPreview": "Persona Preview",
-    "descriptionLabel": "Description for Main LLM (used to decide handoff)",
-    "descriptionHint": "This will be used as the description for transfer_to_* tools shown to the main LLM. Keep it concise and clear."
+    "providerHint": "Leave empty to follow the global default provider.",
+    "personaLabel": "Choose Persona",
+    "personaHint": "The SubAgent inherits the selected Persona's system settings and tools.",
+    "silentHandoffLabel": "Silent SubAgent handoff",
+    "silentHandoffHint": "Let this SubAgent complete delegated tasks in the background while the main agent still reads the result and replies to users. Users will not see the SubAgent tool call or raw result unless the main LLM explicitly uses normal mode.",
+    "descriptionLabel": "Description for the main LLM (used to decide handoff)",
+    "descriptionHint": "Shown to the main LLM as the transfer_to_* tool description—keep it short and clear."
   },
   "messages": {
     "loadConfigFailed": "Failed to load configuration",

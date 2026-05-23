@@ -511,6 +511,25 @@
                       {{ tm('actions.resetDefault') }}
                     </v-btn>
                   </div>
+
+                  <div class="setting-card setting-card--compact silent-handoff-card">
+                    <div class="silent-handoff-title">
+                      {{ tm('form.silentHandoffLabel') }}
+                    </div>
+                    <v-switch
+                      class="silent-handoff-switch"
+                      :model-value="agent.default_handoff_mode === 'silent'"
+                      color="primary"
+                      hide-details
+                      inset
+                      density="comfortable"
+                      @update:model-value="agent.default_handoff_mode = $event ? 'silent' : 'normal'"
+                    />
+                    <div class="setting-subtitle silent-handoff-hint">
+                      {{ tm('form.silentHandoffHint') }}
+                    </div>
+                  </div>
+
                   <v-textarea
                     v-model="dynamicCfg.rule_prompt"
                     variant="outlined"
@@ -707,6 +726,7 @@ type SubAgentItem = {
   persona_id: string
   public_description: string
   enabled: boolean
+  default_handoff_mode: 'normal' | 'silent'
   provider_id?: string
 }
 
@@ -872,6 +892,7 @@ function normalizeConfig(raw: any): SubAgentConfig {
     persona_id: (a?.persona_id ?? '').toString(),
     public_description: (a?.public_description ?? '').toString(),
     enabled: a?.enabled !== false,
+    default_handoff_mode: a?.default_handoff_mode === 'silent' ? 'silent' : 'normal',
     provider_id: (a?.provider_id ?? undefined) as string | undefined
   }))
 
@@ -914,6 +935,7 @@ function serializeFullConfig(config: SubAgentConfig, dynamic: DynamicAgentsConfi
       persona_id: agent.persona_id,
       public_description: agent.public_description,
       enabled: agent.enabled,
+      default_handoff_mode: agent.default_handoff_mode,
       provider_id: agent.provider_id ?? null
     })),
     dynamic_agents: {
@@ -980,6 +1002,7 @@ function addAgent() {
     persona_id: '',
     public_description: '',
     enabled: true,
+    default_handoff_mode: 'normal',
     provider_id: undefined
   })
   expandedAgents.value[key] = false
@@ -1117,6 +1140,7 @@ async function save() {
         persona_id: agent.persona_id,
         public_description: agent.public_description,
         enabled: agent.enabled,
+        default_handoff_mode: agent.default_handoff_mode,
         provider_id: agent.provider_id
       })),
       dynamic_agents: {
@@ -1308,6 +1332,36 @@ onBeforeRouteLeave(async () => {
   border-radius: 14px;
   padding: 18px;
   background: rgba(var(--v-theme-primary), 0.02);
+}
+
+.setting-card--compact {
+  padding: 16px;
+}
+
+.silent-handoff-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.silent-handoff-title {
+  min-width: 0;
+  color: var(--dashboard-text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.silent-handoff-switch {
+  justify-self: end;
+  align-self: center;
+}
+
+.silent-handoff-hint {
+  grid-column: 1 / -1;
+  max-width: 680px;
+  margin-top: 0;
 }
 
 .setting-card-head {
