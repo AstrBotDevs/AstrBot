@@ -55,8 +55,7 @@
     "selectFile": "Select File",
     "refresh": "Refresh",
     "updateAll": "Update All",
-    "pin": "Pin",
-    "unpin": "Unpin",
+    "checkUpdates": "Check Updates",
     "deleteSource": "Delete Source",
     "reshuffle": "Shuffle Again"
   },
@@ -273,10 +272,8 @@
     "fillSourceNameAndUrl": "Please fill in the complete source name and URL",
     "invalidUrl": "Please enter a valid URL",
     "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
-    "pluginNotFound": "Plugin not found",
-    "pluginDisabled": "This plugin is disabled. Enable it before opening its page.",
-    "pluginPageNotFound": "Plugin page not found",
-    "pluginPageLoadFailed": "Failed to load the plugin page"
+    "checkUpdatesSuccess": "Update check complete, {count} plugin(s) have updates available",
+    "checkUpdatesFailed": "Failed to check for plugin updates:"
   },
   "upload": {
     "fromFile": "Install from File",

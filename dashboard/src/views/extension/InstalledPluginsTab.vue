@@ -149,6 +149,8 @@ const {
   selectedInstallPlugin,
   checkInstallCompatibility,
   refreshPluginMarket,
+  isCheckingUpdates,
+  checkPluginUpdates,
   handleLocaleChange,
   searchDebounceTimer,
 } = props.state;
@@ -374,8 +376,94 @@ const togglePin = togglePinnedExtension;
                 <div class="font-weight-medium">
                   {{ plugin.display_name }}
                 </div>
-                <div class="text-caption text-medium-emphasis">
-                  {{ plugin.dir_name }}
+              </div>
+            </div>
+
+            <v-row class="mb-4">
+              <v-col cols="12">
+                <div class="installed-toolbar">
+                  <div class="installed-toolbar__actions">
+                    <v-btn variant="tonal" @click="toggleShowReserved">
+                      <v-icon>{{
+                        showReserved ? "mdi-eye-off" : "mdi-eye"
+                      }}</v-icon>
+                      {{
+                        showReserved
+                          ? tm("buttons.hideSystemPlugins")
+                          : tm("buttons.showSystemPlugins")
+                      }}
+                    </v-btn>
+
+                    <v-btn
+                      color="warning"
+                      variant="tonal"
+                      :disabled="updatableExtensions.length === 0"
+                      :loading="updatingAll"
+                      @click="showUpdateAllConfirm"
+                    >
+                      <v-icon>mdi-update</v-icon>
+                      {{ tm("buttons.updateAll") }}
+                    </v-btn>
+
+                    <v-btn
+                      color="info"
+                      variant="tonal"
+                      :loading="isCheckingUpdates"
+                      @click="checkPluginUpdates"
+                    >
+                      <v-icon>mdi-cloud-sync</v-icon>
+                      {{ tm("buttons.checkUpdates") }}
+                    </v-btn>
+                  </div>
+
+                  <div class="installed-toolbar__controls">
+                    <v-btn-toggle
+                      v-model="installedStatusFilter"
+                      mandatory
+                      divided
+                      density="compact"
+                      color="primary"
+                      class="installed-status-toggle"
+                    >
+                      <v-btn value="all" prepend-icon="mdi-filter-variant">
+                        {{ tm("filters.all") }}
+                      </v-btn>
+                      <v-btn value="enabled" prepend-icon="mdi-play-circle-outline">
+                        {{ tm("status.enabled") }}
+                      </v-btn>
+                      <v-btn value="disabled" prepend-icon="mdi-pause-circle-outline">
+                        {{ tm("status.disabled") }}
+                      </v-btn>
+                    </v-btn-toggle>
+
+                    <PluginSortControl
+                      v-model="installedSortBy"
+                      :items="installedSortItems"
+                      :label="tm('sort.by')"
+                      :order="installedSortOrder"
+                      :ascending-label="tm('sort.ascending')"
+                      :descending-label="tm('sort.descending')"
+                      :show-order="installedSortUsesOrder"
+                      @update:order="installedSortOrder = $event"
+                    />
+                  </div>
+                </div>
+              </v-col>
+            </v-row>
+
+            <v-card
+              v-if="failedPluginItems.length > 0"
+              class="mb-4 rounded-lg"
+              variant="tonal"
+              color="warning"
+            >
+              <v-card-title class="d-flex align-center">
+                <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
+                {{ tm("failedPlugins.title", { count: failedPluginItems.length }) }}
+              </v-card-title>
+              <v-card-text class="pt-0">
+                <div class="text-body-2 mb-3">
+                  {{ tm("failedPlugins.hint") }}
                 </div>
                 <v-table density="compact">
                   <thead>

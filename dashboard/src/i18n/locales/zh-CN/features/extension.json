@@ -55,8 +55,7 @@
     "selectFile": "选择文件",
     "refresh": "刷新",
     "updateAll": "更新全部插件",
-    "pin": "置顶",
-    "unpin": "取消置顶",
+    "checkUpdates": "检查插件更新",
     "deleteSource": "删除源",
     "reshuffle": "随机一发"
   },
@@ -273,10 +272,8 @@
     "fillSourceNameAndUrl": "请填写完整的插件源名称和地址",
     "invalidUrl": "请输入有效的URL地址",
     "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址",
-    "pluginNotFound": "未找到该插件",
-    "pluginDisabled": "该插件当前已禁用，请先启用后再访问页面",
-    "pluginPageNotFound": "未找到该插件页面",
-    "pluginPageLoadFailed": "加载插件页面失败"
+    "checkUpdatesSuccess": "插件更新检查完成，{count} 个插件有更新",
+    "checkUpdatesFailed": "检查插件更新失败:"
   },
   "upload": {
     "fromFile": "从文件安装",
