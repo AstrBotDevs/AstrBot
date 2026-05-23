@@ -346,29 +346,11 @@ class QQOfficialPlatformAdapter(Platform):
             )
             return
 
-        if keyboard_payload and not plain_text:
-            plain_text = QQOfficialMessageEvent.EMPTY_MARKDOWN_PLACEHOLDER
-
-        has_media = bool(
-            image_base64 or record_file_path or video_file_source or file_source
-        )
-        # media 路径走 msg_type=7（纯媒体），其余走 content 或 markdown+keyboard
-        if has_media:
-            payload: dict[str, Any] = {"content": plain_text, "msg_id": msg_id}
-        elif use_md is False or not plain_text:
-            payload = {"content": plain_text, "msg_id": msg_id}
-        else:
-            from botpy.types.message import MarkdownPayload as _MD  # noqa: PLC0415
-
-            payload = {
-                "markdown": _MD(content=plain_text),
-                "msg_type": 2,
-                "msg_id": msg_id,
-            }
-            if keyboard_payload:
-                payload["keyboard"] = keyboard_payload
-        # 媒体 + keyboard 时，稍后需要补发一条 markdown+keyboard
-        need_keyboard_followup = has_media and keyboard_payload is not None
+        payload: dict[str, Any] = {
+            "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
+            "msg_type": 2,
+            "msg_id": msg_id,
+        }
         ret: Any = None
         send_helper = SimpleNamespace(bot=self.client)
 
@@ -398,6 +380,8 @@ class QQOfficialPlatformAdapter(Platform):
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
+                    payload.pop("markdown", None)
+                    payload["content"] = plain_text or None
                 if record_file_path:
                     media = await helper_event.upload_group_and_c2c_media(
                         record_file_path,
@@ -407,6 +391,8 @@ class QQOfficialPlatformAdapter(Platform):
                     if media:
                         payload["media"] = media
                         payload["msg_type"] = 7
+                        payload.pop("markdown", None)
+                        payload["content"] = plain_text or None
                 if video_file_source:
                     media = await helper_event.upload_group_and_c2c_media(
                         video_file_source,
@@ -416,6 +402,8 @@ class QQOfficialPlatformAdapter(Platform):
                     if media:
                         payload["media"] = media
                         payload["msg_type"] = 7
+                        payload.pop("markdown", None)
+                        payload["content"] = plain_text or None
                         payload.pop("msg_id", None)
                 if file_source:
                     media = await helper_event.upload_group_and_c2c_media(
@@ -427,6 +415,8 @@ class QQOfficialPlatformAdapter(Platform):
                     if media:
                         payload["media"] = media
                         payload["msg_type"] = 7
+                        payload.pop("markdown", None)
+                        payload["content"] = plain_text or None
                         payload.pop("msg_id", None)
                 if payload.get("msg_type") == 7:
                     self._normalize_media_payload(payload, plain_text)
@@ -455,6 +445,8 @@ class QQOfficialPlatformAdapter(Platform):
                 )
                 payload["media"] = media
                 payload["msg_type"] = 7
+                payload.pop("markdown", None)
+                payload["content"] = plain_text or None
             if record_file_path:
                 media = await helper_event.upload_group_and_c2c_media(
                     record_file_path,
@@ -464,6 +456,8 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
+                    payload.pop("markdown", None)
+                    payload["content"] = plain_text or None
             if video_file_source:
                 media = await helper_event.upload_group_and_c2c_media(
                     video_file_source,
@@ -473,6 +467,8 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
+                    payload.pop("markdown", None)
+                    payload["content"] = plain_text or None
             if file_source:
                 media = await helper_event.upload_group_and_c2c_media(
                     file_source,
@@ -483,6 +479,8 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
+                    payload.pop("markdown", None)
+                    payload["content"] = plain_text or None
 
             if payload.get("msg_type") == 7:
                 self._normalize_media_payload(payload, plain_text)
