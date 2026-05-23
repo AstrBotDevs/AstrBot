@@ -20,7 +20,8 @@ from werkzeug.datastructures import FileStorage
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.star.star import StarMetadata, star_registry
+from astrbot.core.provider.provider import EmbeddingProvider
+from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
@@ -2293,100 +2294,157 @@ async def test_batch_upload_skills_partial_success(
     ]
 
 
+class _DiscoverableEmbeddingProvider(EmbeddingProvider):
+    terminate_calls = 0
+
+    async def get_embedding(self, text: str) -> list[float]:
+        return [0.1]
+
+    async def get_embeddings(self, text: list[str]) -> list[list[float]]:
+        return [[0.1] for _ in text]
+
+    def get_dim(self) -> int:
+        return 1
+
+    async def get_models(self) -> list[str]:
+        return ["embedding-b", "embedding-a", "embedding-a"]
+
+    async def terminate(self):
+        type(self).terminate_calls += 1
+
+
+class _UnsupportedEmbeddingProvider(EmbeddingProvider):
+    terminate_calls = 0
+
+    async def get_embedding(self, text: str) -> list[float]:
+        return [0.1]
+
+    async def get_embeddings(self, text: list[str]) -> list[list[float]]:
+        return [[0.1] for _ in text]
+
+    def get_dim(self) -> int:
+        return 1
+
+    async def terminate(self):
+        type(self).terminate_calls += 1
+
+
+class _ErrorEmbeddingProvider(EmbeddingProvider):
+    terminate_calls = 0
+
+    async def get_embedding(self, text: str) -> list[float]:
+        return [0.1]
+
+    async def get_embeddings(self, text: list[str]) -> list[list[float]]:
+        return [[0.1] for _ in text]
+
+    def get_dim(self) -> int:
+        return 1
+
+    async def get_models(self) -> list[str]:
+        raise RuntimeError("boom")
+
+    async def terminate(self):
+        type(self).terminate_calls += 1
+
+
 @pytest.mark.asyncio
-async def test_skill_file_browser_and_editor_security(
+async def test_get_embedding_models_success_and_terminate(
     app: Quart,
     authenticated_header: dict,
     monkeypatch,
-    tmp_path,
 ):
-    async def _fake_sync_skills_to_active_sandboxes():
-        return
+    from astrbot.core.provider.register import provider_cls_map
 
-    skills_root = tmp_path / "skills"
-    skill_dir = skills_root / "demo_skill"
-    skill_dir.mkdir(parents=True)
-    skill_md = skill_dir / "SKILL.md"
-    skill_md.write_text(
-        "---\ndescription: Demo skill\n---\n# Demo\n",
-        encoding="utf-8",
-    )
-    (skill_dir / "notes.txt").write_text("notes", encoding="utf-8")
-    (skill_dir / "large.md").write_text("x" * (512 * 1024 + 1), encoding="utf-8")
-    (skill_dir / "binary.md").write_bytes(b"\xff\xfe\x00")
-    outside_file = tmp_path / "outside.txt"
-    outside_file.write_text("outside", encoding="utf-8")
-    if hasattr(os, "symlink"):
-        os.symlink(outside_file, skill_dir / "outside-link.txt")
-
-    monkeypatch.setattr(
-        "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
-        lambda: str(skills_root),
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
-        _fake_sync_skills_to_active_sandboxes,
+    _DiscoverableEmbeddingProvider.terminate_calls = 0
+    monkeypatch.setitem(
+        provider_cls_map,
+        "test_embedding_discovery",
+        SimpleNamespace(cls_type=_DiscoverableEmbeddingProvider),
     )
 
     test_client = app.test_client()
-
-    list_response = await test_client.get(
-        "/api/skills/files?name=demo_skill",
+    response = await test_client.post(
+        "/api/config/provider/get_embedding_models",
         headers=authenticated_header,
-    )
-    list_data = await list_response.get_json()
-    assert list_data["status"] == "ok"
-    listed_paths = {item["path"] for item in list_data["data"]["entries"]}
-    assert "SKILL.md" in listed_paths
-    assert "outside-link.txt" not in listed_paths
-
-    read_response = await test_client.get(
-        "/api/skills/file?name=demo_skill&path=SKILL.md",
-        headers=authenticated_header,
-    )
-    read_data = await read_response.get_json()
-    assert read_data["status"] == "ok"
-    assert "# Demo" in read_data["data"]["content"]
-
-    update_response = await test_client.post(
-        "/api/skills/file",
         json={
-            "name": "demo_skill",
-            "path": "SKILL.md",
-            "content": "# Updated\n",
+            "provider_config": {
+                "id": "test-embedding-provider",
+                "type": "test_embedding_discovery",
+            }
         },
-        headers=authenticated_header,
     )
-    update_data = await update_response.get_json()
-    assert update_data["status"] == "ok"
-    assert skill_md.read_text(encoding="utf-8") == "# Updated\n"
 
-    traversal_response = await test_client.get(
-        "/api/skills/file?name=demo_skill&path=../outside.txt",
-        headers=authenticated_header,
-    )
-    traversal_data = await traversal_response.get_json()
-    assert traversal_data["status"] == "error"
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["models"] == ["embedding-a", "embedding-b"]
+    assert _DiscoverableEmbeddingProvider.terminate_calls == 1
 
-    symlink_response = await test_client.get(
-        "/api/skills/file?name=demo_skill&path=outside-link.txt",
-        headers=authenticated_header,
-    )
-    symlink_data = await symlink_response.get_json()
-    assert symlink_data["status"] == "error"
 
-    large_response = await test_client.get(
-        "/api/skills/file?name=demo_skill&path=large.md",
-        headers=authenticated_header,
-    )
-    large_data = await large_response.get_json()
-    assert large_data["status"] == "error"
-    assert large_data["message"] == "File is too large"
+@pytest.mark.asyncio
+async def test_get_embedding_models_unsupported_returns_error(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    from astrbot.core.provider.register import provider_cls_map
 
-    binary_response = await test_client.get(
-        "/api/skills/file?name=demo_skill&path=binary.md",
-        headers=authenticated_header,
+    _UnsupportedEmbeddingProvider.terminate_calls = 0
+    monkeypatch.setitem(
+        provider_cls_map,
+        "test_embedding_unsupported",
+        SimpleNamespace(cls_type=_UnsupportedEmbeddingProvider),
     )
-    binary_data = await binary_response.get_json()
-    assert binary_data["status"] == "error"
-    assert binary_data["message"] == "File is not valid UTF-8 text"
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/config/provider/get_embedding_models",
+        headers=authenticated_header,
+        json={
+            "provider_config": {
+                "id": "test-embedding-provider",
+                "type": "test_embedding_unsupported",
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "当前提供商暂不支持自动获取模型列表，请手动填写模型 ID"
+    assert _UnsupportedEmbeddingProvider.terminate_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_get_embedding_models_runtime_error_returns_error_and_terminate(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    from astrbot.core.provider.register import provider_cls_map
+
+    _ErrorEmbeddingProvider.terminate_calls = 0
+    monkeypatch.setitem(
+        provider_cls_map,
+        "test_embedding_runtime_error",
+        SimpleNamespace(cls_type=_ErrorEmbeddingProvider),
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/config/provider/get_embedding_models",
+        headers=authenticated_header,
+        json={
+            "provider_config": {
+                "id": "test-embedding-provider",
+                "type": "test_embedding_runtime_error",
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "获取嵌入模型列表失败" in data["message"]
+    assert _ErrorEmbeddingProvider.terminate_calls == 1

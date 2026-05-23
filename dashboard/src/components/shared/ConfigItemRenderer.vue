@@ -101,6 +101,30 @@
         </v-btn>
       </div>
     </template>
+    <template v-else-if="itemMeta?._special === 'get_embedding_models'">
+      <div class="d-flex align-center gap-2">
+        <v-combobox
+          :model-value="modelValue"
+          @update:model-value="emitUpdate"
+          :items="availableModels"
+          density="compact"
+          variant="outlined"
+          class="config-field"
+          hide-details
+          clearable
+        ></v-combobox>
+        <v-btn
+          color="primary"
+          variant="tonal"
+          size="small"
+          @click="$emit('get-embedding-models')"
+          :loading="loadingModels"
+          class="ml-2"
+        >
+          {{ t('core.common.autoDetect') }}
+        </v-btn>
+      </div>
+    </template>
 
     <div
       v-else-if="
@@ -372,6 +396,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  loadingModels: {
+    type: Boolean,
+    default: false
+  },
+  availableModels: {
+    type: Array,
+    default: () => []
+  },
   showFullscreenBtn: {
     type: Boolean,
     default: false,
@@ -379,13 +411,13 @@ const props = defineProps({
 });
 
 const emit = defineEmits([
-  "update:modelValue",
-  "get-embedding-dim",
-  "open-fullscreen",
-]);
-const { t } = useI18n();
-const { getRaw } = useModuleI18n("features/config-metadata");
-const { configText } = usePluginI18n();
+  'update:modelValue',
+  'get-embedding-dim',
+  'get-embedding-models',
+  'open-fullscreen'
+])
+const { t } = useI18n()
+const { getRaw } = useModuleI18n('features/config-metadata')
 
 function emitUpdate(val: unknown) {
   emit("update:modelValue", val);

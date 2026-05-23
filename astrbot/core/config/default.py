@@ -2318,6 +2318,7 @@ CONFIG_METADATA_2: Any = {
                         "description": "嵌入模型",
                         "type": "string",
                         "hint": "嵌入模型名称。",
+                        "_special": "get_embedding_models",
                     },
                     "embedding_send_dimensions": {
                         "description": "发送嵌入维度参数",
