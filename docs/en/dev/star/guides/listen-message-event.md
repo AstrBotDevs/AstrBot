@@ -39,6 +39,10 @@ class AstrBotMessage:
 
 Here, `raw_message` is the **raw message object** from the messaging platform adapter.
 
+> [!WARNING]
+> When users enable **isolated sessions**, the `session_id` of group messages will change format from a plain group ID to `user ID_group ID`, and `unified_msg_origin` will change accordingly (e.g. `default:GroupMessage:123456789_987654321`).
+> If your plugin needs to store per-unit data or query data by group, use `event.get_group_id()` to retrieve the group ID instead of relying on `session_id` or `unified_msg_origin` directly — otherwise, enabling isolated sessions may cause lookups to fail.
+
 ### Message Chain
 
 ![message-chain](https://files.astrbot.app/docs/en/dev/star/guides/message-chain.svg)
