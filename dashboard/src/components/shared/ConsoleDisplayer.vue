@@ -77,21 +77,63 @@
 </template>
 
 <script>
-import axios from 'axios';
-import { EventSourcePolyfill } from 'event-source-polyfill';
+import { useCustomizerStore } from '@/stores/customizer';
 
-import { useModuleI18n } from '@/i18n/composables';
-import { useCommonStore } from '@/stores/common';
+const lightColorAnsiMap = {
+  '\u001b[1;34m': 'color: #39C5BB; font-weight: bold;',
+  '\u001b[1;36m': 'color: #00FFFF; font-weight: bold;',
+  '\u001b[1;33m': 'color: #FFFF00; font-weight: bold;',
+  '\u001b[31m': 'color: #FF0000;',
+  '\u001b[1;31m': 'color: #FF0000; font-weight: bold;',
+  '\u001b[0m': 'color: inherit; font-weight: normal;',
+  '\u001b[32m': 'color: #00FF00;',
+  'default': 'color: #FFFFFF;'
+};
 
-const ANSI_PATTERN = /\u001b\[[0-9;]*m/g;
-const LEADING_ANSI_PATTERN = /^(\u001b\[[0-9;]*m)/;
-
-function stripAnsi(value) {
-  return String(value || '').replace(ANSI_PATTERN, '');
-}
+const darkColorAnsiMap = {
+  '\u001b[1;34m': 'color: #6cb6d9; font-weight: bold;',
+  '\u001b[1;36m': 'color: #72c4cc; font-weight: bold;',
+  '\u001b[1;33m': 'color: #d4b95e; font-weight: bold;',
+  '\u001b[31m': 'color: #d46a6a;',
+  '\u001b[1;31m': 'color: #e06060; font-weight: bold;',
+  '\u001b[0m': 'color: inherit; font-weight: normal;',
+  '\u001b[32m': 'color: #6cc070;',
+  'default': 'color: #c8c8c8;'
+};
 
 export default {
   name: 'ConsoleDisplayer',
+  data() {
+    return {
+      autoScroll: true,
+      isFullscreen: false,
+      logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+      selectedLevels: [0, 1, 2, 3, 4],
+      levelColors: {
+        'DEBUG': 'grey',
+        'INFO': 'blue-lighten-3',
+        'WARNING': 'amber',
+        'ERROR': 'red',
+        'CRITICAL': 'purple'
+      },
+      localLogCache: [],
+      eventSource: null,
+      retryTimer: null,
+      retryAttempts: 0,
+      maxRetryAttempts: 10,
+      baseRetryDelay: 1000,
+      lastEventId: null,
+    }
+  },
+  computed: {
+    commonStore() {
+      return useCommonStore();
+    },
+    logColorAnsiMap() {
+      const customizerStore = useCustomizerStore();
+      return customizerStore.uiTheme === 'PurpleThemeDark' ? darkColorAnsiMap : lightColorAnsiMap;
+    },
+  },
   props: {
     historyNum: {
       type: String,
@@ -186,29 +228,14 @@ export default {
     }
   },
   watch: {
-    autoScroll() {
-      this.scheduleAutoScroll();
+    selectedLevels: {
+      handler() {
+        this.refreshDisplay();
+      },
+      deep: true
     },
-    selectedLevels() {
-      if (this.suspendFilterSync) {
-        return;
-      }
-      this.persistState();
-      this.scheduleFilterSync();
-    },
-    selectedTags() {
-      if (this.suspendFilterSync) {
-        return;
-      }
-      this.persistState();
-      this.scheduleFilterSync();
-    },
-    keyword() {
-      if (this.suspendFilterSync) {
-        return;
-      }
-      this.persistState();
-      this.scheduleFilterSync();
+    logColorAnsiMap() {
+      this.refreshDisplay();
     }
   },
   async mounted() {
@@ -332,11 +359,9 @@ export default {
         this.eventSource = null;
       }
 
-      if (this.retryTimer) {
-        clearTimeout(this.retryTimer);
-        this.retryTimer = null;
-      }
-    },
+      console.log(`正在连接日志流... (尝试次数: ${this.retryAttempts})`);
+
+      const token = localStorage.getItem('token');
 
     connectSSE() {
       this.teardownEventSource();
@@ -348,13 +373,7 @@ export default {
         },
         heartbeatTimeout: 300000,
         withCredentials: true
-      };
-
-      if (this.lastEventId) {
-        options.lastEventId = this.lastEventId;
-      }
-
-      this.eventSource = new EventSourcePolyfill(this.buildLogStreamUrl(), options);
+      });
 
       this.eventSource.onopen = () => {
         this.retryAttempts = 0;
@@ -386,14 +405,16 @@ export default {
         }
 
         if (this.retryAttempts >= this.maxRetryAttempts) {
-          console.error('Log stream reached max retry attempts.');
-          return;
+            console.error('❌ 已达到最大重试次数，停止重连。请刷新页面重试。');
+            return;
         }
 
         const delay = Math.min(
           this.baseRetryDelay * Math.pow(2, this.retryAttempts),
           30000
         );
+
+        console.log(`⏳ ${delay}ms 后尝试第 ${this.retryAttempts + 1} 次重连...`);
 
         if (this.retryTimer) {
           clearTimeout(this.retryTimer);
@@ -402,17 +423,10 @@ export default {
 
         const sequence = this.reloadSequence;
         this.retryTimer = setTimeout(async () => {
-          if (sequence !== this.reloadSequence) {
-            return;
-          }
+          this.retryAttempts++;
 
-          this.retryAttempts += 1;
           if (!this.lastEventId) {
-            await this.fetchLogHistory(sequence);
-          }
-
-          if (sequence !== this.reloadSequence) {
-            return;
+             await this.fetchLogHistory();
           }
 
           this.connectSSE();
@@ -455,41 +469,28 @@ export default {
       };
     },
 
-    rebuildKnownLogIds() {
-      this.knownLogIds = new Set(this.localLogCache.map((entry) => entry.uuid));
-    },
+        const exists = this.localLogCache.some(existing =>
+          existing.time === log.time &&
+          existing.data === log.data &&
+          existing.level === log.level
+        );
 
-    updateAvailableTags(logs) {
-      const nextTags = new Set([...this.availableTags, ...this.selectedTags]);
+        if (!exists) {
+            this.localLogCache.push(log);
+            hasUpdate = true;
 
-      (logs || []).forEach((log) => {
-        const tag = typeof log?.tag === 'string' ? log.tag.trim() : '';
-        if (tag) {
-          nextTags.add(tag);
+            if (this.isLevelSelected(log.level)) {
+              this.printLog(log.data);
+            }
         }
       });
 
-      this.availableTags = [...nextTags].sort();
-    },
+      if (hasUpdate) {
+        this.localLogCache.sort((a, b) => a.time - b.time);
 
-    setLastEventIdFromLogs(logs) {
-      if (!logs || logs.length === 0) {
-        this.lastEventId = null;
-        return;
-      }
-
-      const lastLog = logs[logs.length - 1];
-      this.lastEventId = lastLog?.time ? String(lastLog.time) : null;
-    },
-
-    replaceLogHistory(logs) {
-      const normalizedLogs = [];
-      const knownLogIds = new Set();
-
-      (logs || []).forEach((log) => {
-        const entry = this.normalizeLogEntry(log);
-        if (!entry || knownLogIds.has(entry.uuid)) {
-          return;
+        const maxSize = this.commonStore.log_cache_max_len || 200;
+        if (this.localLogCache.length > maxSize) {
+           this.localLogCache.splice(0, this.localLogCache.length - maxSize);
         }
 
         knownLogIds.add(entry.uuid);
@@ -598,40 +599,6 @@ export default {
       }
     },
 
-    async reloadLogSource() {
-      const sequence = ++this.reloadSequence;
-      this.lastEventId = null;
-      this.teardownEventSource();
-      await Promise.all([
-        this.fetchLogHistory(sequence),
-        this.fetchTagOptions(sequence)
-      ]);
-
-      if (sequence !== this.reloadSequence) {
-        return;
-      }
-
-      this.connectSSE();
-    },
-
-    scheduleFilterSync() {
-      if (this.filterSyncTimer) {
-        clearTimeout(this.filterSyncTimer);
-        this.filterSyncTimer = null;
-      }
-
-      this.filterSyncTimer = setTimeout(() => {
-        this.reloadLogSource();
-      }, 250);
-    },
-
-    clearFilters() {
-      this.selectedLevels = [...this.logLevels];
-      this.selectedTags = [];
-      this.tagSearch = '';
-      this.keyword = '';
-    },
-
     getLevelColor(level) {
       return this.levelColors[level] || 'grey';
     },
@@ -642,19 +609,18 @@ export default {
         return this.logColorAnsiMap[leadingAnsi];
       }
 
-      switch (entry.level) {
-        case 'DEBUG':
-          return this.logColorAnsiMap['\u001b[1;34m'];
-        case 'INFO':
-          return this.logColorAnsiMap['\u001b[1;36m'];
-        case 'WARNING':
-          return this.logColorAnsiMap['\u001b[1;33m'];
-        case 'ERROR':
-          return this.logColorAnsiMap['\u001b[31m'];
-        case 'CRITICAL':
-          return this.logColorAnsiMap['\u001b[1;31m'];
-        default:
-          return this.logColorAnsiMap.default;
+    refreshDisplay() {
+      const termElement = document.getElementById('term');
+      if (termElement) {
+        termElement.innerHTML = '';
+
+        if (this.localLogCache && this.localLogCache.length > 0) {
+          this.localLogCache.forEach(logItem => {
+            if (this.isLevelSelected(logItem.level)) {
+              this.printLog(logItem.data);
+            }
+          });
+        }
       }
     },
 
@@ -684,10 +650,42 @@ export default {
         return;
       }
 
-      this.$nextTick(() => {
-        const element = this.$refs.term;
-        if (!element) {
-          return;
+      const levelStart = levelMatch.index;
+      const levelEnd = levelStart + levelMatch[0].length;
+      const prefix = log.slice(0, levelStart).trimEnd();
+      const message = log.slice(levelEnd).trimStart();
+
+      const prefixSpan = document.createElement('span');
+      prefixSpan.className = 'console-log-prefix';
+      prefixSpan.innerText = prefix;
+
+      const levelSpan = document.createElement('span');
+      levelSpan.className = 'console-log-level';
+      levelSpan.innerText = levelMatch[0];
+
+      const messageSpan = document.createElement('span');
+      messageSpan.className = 'console-log-message';
+      messageSpan.innerText = message;
+
+      element.classList.add('console-log-line--structured');
+      element.appendChild(prefixSpan);
+      element.appendChild(levelSpan);
+      element.appendChild(messageSpan);
+    },
+
+    printLog(log) {
+      let ele = document.getElementById('term')
+      if (!ele) {
+        return;
+      }
+
+      let span = document.createElement('pre')
+      let style = this.logColorAnsiMap['default']
+      for (let key in this.logColorAnsiMap) {
+        if (log.startsWith(key)) {
+          style = this.logColorAnsiMap[key]
+          log = log.replace(key, '').replace('\u001b[0m', '')
+          break
         }
         element.scrollTop = element.scrollHeight;
       });
@@ -770,9 +768,10 @@ export default {
   overflow-x: auto;
   overflow-y: auto;
   padding: 16px;
-  border-radius: 8px;
-  overflow-y: auto;
-  height: 100%;
+}
+
+.fullscreen-btn {
+    color: rgba(255, 255, 255, 0.7) !important;
 }
 
 :deep(.console-log-line) {
