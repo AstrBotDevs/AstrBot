@@ -21,6 +21,61 @@ logger = logging.getLogger("astrbot")
 CORE_COMPUTER_RUNTIME_IDS = {"local", "sandbox", "none"}
 
 
+def _is_config_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+_SCHEMA_TYPE_VALIDATORS = {
+    "int": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "float": _is_config_number,
+    "bool": lambda v: isinstance(v, bool),
+    "string": lambda v: isinstance(v, str),
+    "text": lambda v: isinstance(v, str),
+    "list": lambda v: isinstance(v, list),
+    "file": lambda v: isinstance(v, list),
+    "object": lambda v: isinstance(v, dict),
+    "dict": lambda v: isinstance(v, dict),
+    "template_list": lambda v: isinstance(v, list),
+}
+
+
+def _validate_schema_default(field: str, typ: str, default) -> None:
+    if not _SCHEMA_TYPE_VALIDATORS[typ](default):
+        raise TypeError(f"配置项 {field} 的 default 与类型 {typ} 不匹配")
+
+
+def _validate_schema_slider(field: str, typ: str, slider: dict) -> None:
+    if typ not in ("int", "float"):
+        raise TypeError(f"配置项 {field} 只有 int/float 类型支持 slider")
+    if not isinstance(slider, dict) or not all(
+        _is_config_number(slider.get(key)) for key in ("min", "max", "step")
+    ):
+        raise TypeError(
+            f"配置项 {field} 的 slider 必须包含数字 min/max/step",
+        )
+
+
+def _validate_config_schema_item(field: str, item: dict) -> None:
+    typ = item["type"]
+    if typ not in DEFAULT_VALUE_MAP:
+        raise TypeError(
+            f"不受支持的配置类型 {typ}。支持的类型有：{DEFAULT_VALUE_MAP.keys()}",
+        )
+    if "options" in item and not isinstance(item["options"], list):
+        raise TypeError(f"配置项 {field} 的 options 必须是列表")
+    if "obvious_hint" in item and not isinstance(item["obvious_hint"], bool):
+        raise TypeError(f"配置项 {field} 的 obvious_hint 必须是布尔值")
+    if "slider" in item:
+        _validate_schema_slider(field, typ, item["slider"])
+    if typ == "object" and not isinstance(item.get("items"), dict):
+        raise TypeError(f"配置项 {field} 的 items 必须是对象")
+    default = item["default"] if "default" in item else DEFAULT_VALUE_MAP[typ]
+    _validate_schema_default(field, typ, default)
+    if typ == "object":
+        for child_key, child_item in item["items"].items():
+            _validate_config_schema_item(f"{field}.{child_key}", child_item)
+
+
 class RateLimitStrategy(enum.Enum):
     STALL = "stall"
     DISCARD = "discard"
@@ -138,10 +193,7 @@ class AstrBotConfig(dict):
 
         def _parse_schema(schema: dict, conf: dict) -> None:
             for k, v in schema.items():
-                if v["type"] not in DEFAULT_VALUE_MAP:
-                    raise TypeError(
-                        f"不受支持的配置类型 {v['type']}｡支持的类型有:{DEFAULT_VALUE_MAP.keys()}",
-                    )
+                _validate_config_schema_item(k, v)
                 if "default" in v:
                     default = v["default"]
                 else:
