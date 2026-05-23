@@ -22,9 +22,13 @@ from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
+    KNOWLEDGE_BASE_QUERY_TOOL,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
+    LOCAL_EXECUTE_SHELL_TOOL,
+    LOCAL_PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
+    SEND_MESSAGE_TO_USER_TOOL,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
@@ -1019,94 +1023,42 @@ def _apply_sandbox_tools(
         req.func_tool = ToolSet()
     if req.system_prompt is None:
         req.system_prompt = ""
-    booter = config.sandbox_cfg.get("booter", "shipyard_neo")
-    if booter == "shipyard":
-        ep = config.sandbox_cfg.get("shipyard_endpoint", "")
-        at = config.sandbox_cfg.get("shipyard_access_token", "")
-        if not ep or not at:
-            logger.error("Shipyard sandbox configuration is incomplete.")
-            return
-        os.environ["SHIPYARD_ENDPOINT"] = ep
-        os.environ["SHIPYARD_ACCESS_TOKEN"] = at
 
-    tool_mgr = llm_tools
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(PythonTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileUploadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileDownloadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    if booter == "shipyard_neo":
-        # Neo-specific path rule: filesystem tools operate relative to sandbox
-        # workspace root. Do not prepend "/workspace".
-        req.system_prompt += (
-            "\n[Shipyard Neo File Path Rule]\n"
-            "When using sandbox filesystem tools (upload/download/read/write/list/delete), "
-            "always pass paths relative to the sandbox workspace root. "
-            "Example: use `baidu_homepage.png` instead of `/workspace/baidu_homepage.png`.\n"
-        )
+    from astrbot.core.computer.computer_client import (
+        get_default_sandbox_tools,
+        get_sandbox_capabilities,
+        get_sandbox_prompt_parts,
+        get_sandbox_tools,
+    )
 
-        req.system_prompt += (
-            "\n[Neo Skill Lifecycle Workflow]\n"
-            "When user asks to create/update a reusable skill in Neo mode, use lifecycle tools instead of directly writing local skill folders.\n"
-            "Preferred sequence:\n"
-            "1) Use `astrbot_create_skill_payload` to store canonical payload content and get `payload_ref`.\n"
-            "2) Use `astrbot_create_skill_candidate` with `skill_key` + `source_execution_ids` (and optional `payload_ref`) to create a candidate.\n"
-            "3) Use `astrbot_promote_skill_candidate` to release: `stage=canary` for trial; `stage=stable` for production.\n"
-            "For stable release, set `sync_to_local=true` to sync `payload.skill_markdown` into local `SKILL.md`.\n"
-            "Do not treat ad-hoc generated files as reusable Neo skills unless they are captured via payload/candidate/release.\n"
-            "To update an existing skill, create a new payload/candidate and promote a new release version; avoid patching old local folders directly.\n"
-        )
+    # Tools: booter self-declaration (unified source for main agent + subagent)
+    booted_tools = get_sandbox_tools(session_id)
+    if booted_tools:
+        tools = booted_tools
+        source = "booted"
+    else:
+        tools = get_default_sandbox_tools(config.sandbox_cfg)
+        source = "default"
+    for tool in tools:
+        req.func_tool.add_tool(tool)
 
-        # Determine sandbox capabilities from an already-booted session.
-        # If no session exists yet (first request), capabilities is None
-        # and we register all tools conservatively.
-        from astrbot.core.computer.computer_client import session_booter
+    booter_type = config.sandbox_cfg.get("booter", "shipyard_neo")
+    capabilities = get_sandbox_capabilities(session_id) if source == "booted" else None
+    capability_value = list(capabilities) if capabilities is not None else "unknown"
+    logger.info(
+        "[Computer] sandbox_tool_binding target=main booter=%s source=%s tools=%d session=%s capabilities=%s",
+        booter_type,
+        source,
+        len(tools),
+        session_id,
+        capability_value,
+    )
 
-        sandbox_capabilities: list[str] | None = None
-        existing_booter = session_booter.get(session_id)
-        if existing_booter is not None:
-            sandbox_capabilities = getattr(existing_booter, "capabilities", None)
-
-        # Browser tools: only register if profile supports browser
-        # (or if capabilities are unknown because sandbox hasn't booted yet)
-        if sandbox_capabilities is None or "browser" in sandbox_capabilities:
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserExecTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserBatchExecTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(RunBrowserSkillTool))
-
-        # Neo-specific tools (always available for shipyard_neo)
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetExecutionHistoryTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnnotateExecutionTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillPayloadTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetSkillPayloadTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillCandidatesTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(EvaluateSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(PromoteSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillReleasesTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
-
-    if booter == "cua":
-        req.system_prompt += (
-            "\n[CUA Desktop Control]\n"
-            "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
-            'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
-            "After each visible step, call `astrbot_cua_screenshot` with "
-            "`send_to_user=true` and `return_image_to_llm=true` so the user can "
-            "monitor progress. When typing, inspect the screenshot first and confirm "
-            "the target field is focused and empty or safe to append to. Use "
-            "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
-            "for text input; use text=`\\n` for Enter.\n"
-        )
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
-
+    # Prompts: shared sandbox prompt + booter-specific parts
+    prompt_parts = get_sandbox_prompt_parts(config.sandbox_cfg)
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
+    for part in prompt_parts:
+        req.system_prompt += part
 
 
 def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> None:

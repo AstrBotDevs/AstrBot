@@ -2,7 +2,10 @@
 
 import os
 
-from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
+from astrbot.core.computer.booters.constants import (
+    BOOTER_SHIPYARD,
+    BOOTER_SHIPYARD_NEO,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 VERSION = "4.19.1"
@@ -184,7 +187,7 @@ DEFAULT_CONFIG = {
         "computer_use_runtime": "none",
         "computer_use_require_admin": True,
         "sandbox": {
-            "booter": "shipyard_neo",
+            "booter": BOOTER_SHIPYARD_NEO,
             "shipyard_endpoint": "",
             "shipyard_access_token": "",
             "shipyard_ttl": 3600,
@@ -3398,8 +3401,8 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
                         "type": "string",
-                        "options": ["shipyard_neo", "shipyard", "cua"],
-                        "labels": ["Shipyard Neo", "Shipyard", "CUA"],
+                        "options": [BOOTER_SHIPYARD_NEO, BOOTER_SHIPYARD],
+                        "labels": ["Shipyard Neo", "Shipyard"],
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                         },
@@ -3410,7 +3413,7 @@ CONFIG_METADATA_3 = {
                         "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard_neo",
+                            "provider_settings.sandbox.booter": BOOTER_SHIPYARD_NEO,
                         },
                     },
                     "provider_settings.sandbox.shipyard_neo_access_token": {
@@ -3419,7 +3422,7 @@ CONFIG_METADATA_3 = {
                         "hint": "Bay 的 API Key（sk-bay-...）。留空时自动从 credentials.json 发现。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard_neo",
+                            "provider_settings.sandbox.booter": BOOTER_SHIPYARD_NEO,
                         },
                     },
                     "provider_settings.sandbox.shipyard_neo_profile": {
@@ -3428,7 +3431,7 @@ CONFIG_METADATA_3 = {
                         "hint": "Shipyard Neo 沙箱 profile，如 python-default。留空时自动选择能力更完整的 profile。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard_neo",
+                            "provider_settings.sandbox.booter": BOOTER_SHIPYARD_NEO,
                         },
                     },
                     "provider_settings.sandbox.shipyard_neo_ttl": {
@@ -3437,7 +3440,7 @@ CONFIG_METADATA_3 = {
                         "hint": "Shipyard Neo 沙箱生存时间（秒）。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard_neo",
+                            "provider_settings.sandbox.booter": BOOTER_SHIPYARD_NEO,
                         },
                     },
                     "provider_settings.sandbox.cua_image": {
@@ -3504,7 +3507,7 @@ CONFIG_METADATA_3 = {
                         "hint": "Shipyard 服务的 API 访问地址。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
+                            "provider_settings.sandbox.booter": BOOTER_SHIPYARD,
                         },
                         "_special": "check_shipyard_connection",
                     },
@@ -3514,7 +3517,7 @@ CONFIG_METADATA_3 = {
                         "hint": "用于访问 Shipyard 服务的访问令牌。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
+                            "provider_settings.sandbox.booter": BOOTER_SHIPYARD,
                         },
                     },
                     "provider_settings.sandbox.shipyard_ttl": {
@@ -3523,7 +3526,7 @@ CONFIG_METADATA_3 = {
                         "hint": "Shipyard 会话的生存时间（秒）。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
+                            "provider_settings.sandbox.booter": BOOTER_SHIPYARD,
                         },
                     },
                     "provider_settings.sandbox.shipyard_max_sessions": {
@@ -3532,7 +3535,7 @@ CONFIG_METADATA_3 = {
                         "hint": "Shipyard 最大会话数量。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
+                            "provider_settings.sandbox.booter": BOOTER_SHIPYARD,
                         },
                     },
                 },

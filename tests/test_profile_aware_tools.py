@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ═══════════════════════════════════════════════════════════════
 # ShipyardNeoBooter.capabilities
 # ═══════════════════════════════════════════════════════════════
@@ -93,8 +92,19 @@ class TestApplySandboxToolsConditional:
         config = _make_config("shipyard_neo")
         req = _make_req()
 
-        with patch(
-            "astrbot.core.computer.computer_client.session_booter", {}
+        with (
+            patch(
+                "astrbot.core.computer.computer_client.get_sandbox_tools",
+                return_value=[],
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.get_default_sandbox_tools",
+                return_value=self._make_neo_booter().get_default_tools(),
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.get_sandbox_prompt_parts",
+                return_value=[],
+            ),
         ):
             fn(config, req, "session-1")
 
@@ -103,18 +113,39 @@ class TestApplySandboxToolsConditional:
         assert "astrbot_execute_browser_batch" in names
         assert "astrbot_run_browser_skill" in names
 
+    def _make_neo_booter(self, caps=None):
+        from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
+
+        booter = ShipyardNeoBooter(
+            endpoint_url="http://localhost:8114",
+            access_token="sk-bay-test",
+        )
+        if caps is not None:
+            booter._sandbox = SimpleNamespace(capabilities=caps)
+        return booter
+
     def test_with_browser_capability(self):
         """Booted session with browser capability → browser tools registered."""
         fn = _import_apply_sandbox_tools()
         config = _make_config("shipyard_neo")
         req = _make_req()
-        fake_booter = SimpleNamespace(
-            capabilities=["python", "shell", "filesystem", "browser"]
+        fake_booter = self._make_neo_booter(
+            caps=["python", "shell", "filesystem", "browser"]
         )
 
-        with patch(
-            "astrbot.core.computer.computer_client.session_booter",
-            {"session-1": fake_booter},
+        with (
+            patch(
+                "astrbot.core.computer.computer_client.get_sandbox_tools",
+                return_value=fake_booter.get_tools(),
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.get_default_sandbox_tools",
+                return_value=[],
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.get_sandbox_prompt_parts",
+                return_value=[],
+            ),
         ):
             fn(config, req, "session-1")
 
@@ -126,13 +157,21 @@ class TestApplySandboxToolsConditional:
         fn = _import_apply_sandbox_tools()
         config = _make_config("shipyard_neo")
         req = _make_req()
-        fake_booter = SimpleNamespace(
-            capabilities=["python", "shell", "filesystem"]
-        )
+        fake_booter = self._make_neo_booter(caps=["python", "shell", "filesystem"])
 
-        with patch(
-            "astrbot.core.computer.computer_client.session_booter",
-            {"session-1": fake_booter},
+        with (
+            patch(
+                "astrbot.core.computer.computer_client.get_sandbox_tools",
+                return_value=fake_booter.get_tools(),
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.get_default_sandbox_tools",
+                return_value=[],
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.get_sandbox_prompt_parts",
+                return_value=[],
+            ),
         ):
             fn(config, req, "session-1")
 
@@ -148,11 +187,21 @@ class TestApplySandboxToolsConditional:
         fn = _import_apply_sandbox_tools()
         config = _make_config("shipyard_neo")
         req = _make_req()
-        fake_booter = SimpleNamespace(capabilities=["python"])
+        fake_booter = self._make_neo_booter(caps=["python"])
 
-        with patch(
-            "astrbot.core.computer.computer_client.session_booter",
-            {"session-1": fake_booter},
+        with (
+            patch(
+                "astrbot.core.computer.computer_client.get_sandbox_tools",
+                return_value=fake_booter.get_tools(),
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.get_default_sandbox_tools",
+                return_value=[],
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.get_sandbox_prompt_parts",
+                return_value=[],
+            ),
         ):
             fn(config, req, "session-1")
 

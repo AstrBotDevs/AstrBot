@@ -19,6 +19,9 @@ from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
+    LOCAL_EXECUTE_SHELL_TOOL,
+    LOCAL_PYTHON_TOOL,
+    SEND_MESSAGE_TO_USER_TOOL,
 )
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
@@ -188,30 +191,39 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     def _get_runtime_computer_tools(
         cls,
         runtime: str,
-        tool_mgr,
-        booter: str | None = None,
+        session_id: str | None = None,
+        sandbox_cfg: dict | None = None,
     ) -> dict[str, FunctionTool]:
-        booter = "" if booter is None else str(booter).lower()
         if runtime == "sandbox":
-            shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
-            python_tool = tool_mgr.get_builtin_tool(PythonTool)
-            upload_tool = tool_mgr.get_builtin_tool(FileUploadTool)
-            download_tool = tool_mgr.get_builtin_tool(FileDownloadTool)
-            read_tool = tool_mgr.get_builtin_tool(FileReadTool)
-            write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
-            edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
-            grep_tool = tool_mgr.get_builtin_tool(GrepTool)
-            tools = {
-                shell_tool.name: shell_tool,
-                python_tool.name: python_tool,
-                upload_tool.name: upload_tool,
-                download_tool.name: download_tool,
-                read_tool.name: read_tool,
-                write_tool.name: write_tool,
-                edit_tool.name: edit_tool,
-                grep_tool.name: grep_tool,
-            }
-        if runtime in {"local", "local_sandboxed"}:
+            from astrbot.core.computer.computer_client import (
+                get_default_sandbox_tools,
+                get_sandbox_capabilities,
+                get_sandbox_tools,
+            )
+
+            booted = get_sandbox_tools(session_id) if session_id else []
+            if booted:
+                tools = booted
+                source = "booted"
+            else:
+                tools = get_default_sandbox_tools(sandbox_cfg or {})
+                source = "default"
+            result = {t.name: t for t in tools} if tools else {}
+            capabilities = (
+                get_sandbox_capabilities(session_id)
+                if source == "booted" and session_id
+                else None
+            )
+            logger.info(
+                "[Computer] sandbox_tool_binding target=subagent runtime=%s source=%s tools=%d session=%s capabilities=%s",
+                runtime,
+                source,
+                len(result),
+                session_id,
+                list(capabilities) if capabilities is not None else "unknown",
+            )
+            return result
+        if runtime == "local":
             return {
                 shell_tool.name: shell_tool,
                 python_tool.name: python_tool,
@@ -233,15 +245,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
-        tool_mgr = (
-            ctx.get_llm_tool_manager()
-            if hasattr(ctx, "get_llm_tool_manager")
-            else llm_tools
-        )
+        sandbox_cfg = provider_settings.get("sandbox", {})
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
-            tool_mgr,
-            provider_settings.get("sandbox", {}).get("booter"),
+            session_id=event.unified_msg_origin,
+            sandbox_cfg=sandbox_cfg,
         )
 
         # Keep persona semantics aligned with the main agent: tools=None means
