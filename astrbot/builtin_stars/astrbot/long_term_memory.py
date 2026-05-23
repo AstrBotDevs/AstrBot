@@ -206,14 +206,15 @@ class LongTermMemory:
         chats_str = "\n---\n".join(filtered_texts)
 
         cfg = self.cfg(event)
-        if cfg["enable_active_reply"]:
+        is_active_reply = getattr(req, "_ltm_active_reply_trigger", False)
+        if cfg["enable_active_reply"] and is_active_reply:
             prompt = req.prompt
             req.prompt = (
                 f"{cfg['context_prompt']}{chats_str}"
                 f"\nNow, a new message is coming: `{prompt}`. "
                 f"{cfg['active_reply_suffix_prompt']}"
             )
-            req.contexts = []  # 清空上下文,当使用了主动回复,所有聊天记录都在一个prompt中｡
+            req.contexts = []  # Only clear contexts for proactive replies; chat history is embedded in the prompt.
         else:
             req.system_prompt += cfg["context_prompt"]
             req.system_prompt += chats_str
