@@ -23,11 +23,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN python -m pip install uv \
-    && echo "3.12" > .python-version \
-    && uv lock \
-    && uv export --format requirements.txt --output-file requirements.txt --frozen \
-    && uv pip install -r requirements.txt --no-cache-dir --system \
-    && uv pip install socksio uv pilk --no-cache-dir --system
+    && echo "3.11" > .python-version
+RUN uv pip install -r requirements.txt --no-cache-dir --system
+RUN uv pip install edge_tts socksio uv pilk --no-cache-dir --system
 
 EXPOSE 6185
 
