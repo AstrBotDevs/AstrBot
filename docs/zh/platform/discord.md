@@ -53,7 +53,9 @@
 ![Generated URL位置](https://files.astrbot.app/docs/source/images/discord/image-5.png)
 
 6. 进入 Discord 服务器，你的机器人应该已经提示在线了
+
 ![机器人在线](https://files.astrbot.app/docs/source/images/discord/image-7.png)
+
 @ 刚刚创建的机器人（也可以不 @），输入 `/help`，如果成功返回，则测试成功。
 
 ## 预回应表情
