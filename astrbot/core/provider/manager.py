@@ -384,15 +384,13 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
-            case "longcat_chat_completion":
-                from .sources.longcat_source import ProviderLongCat as ProviderLongCat
-            case "openai_oauth_chat_completion":
-                from .sources.openai_oauth_source import (
-                    ProviderOpenAIOAuth as ProviderOpenAIOAuth,
+            case "volcengine_ark_chat_completion":
+                from .sources.volcengine_ark_source import (
+                    ProviderVolcengineArk as ProviderVolcengineArk,
                 )
-            case "minimax_token_plan":
-                from .sources.minimax_token_plan_source import (
-                    ProviderMiniMaxTokenPlan as ProviderMiniMaxTokenPlan,
+            case "doubao_chat_completion":
+                from .sources.doubao_source import (
+                    ProviderDoubao as ProviderDoubao,
                 )
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu

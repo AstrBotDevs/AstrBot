@@ -391,28 +391,27 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     const oldVersionProviderTypeMapping: Record<string, string> = {
-      openai_chat_completion: "chat_completion",
-      anthropic_chat_completion: "chat_completion",
-      googlegenai_chat_completion: "chat_completion",
-      zhipu_chat_completion: "chat_completion",
-      dify: "agent_runner",
-      coze: "agent_runner",
-      dashscope: "chat_completion",
-      openai_whisper_api: "speech_to_text",
-      mimo_stt_api: "speech_to_text",
-      openai_whisper_selfhost: "speech_to_text",
-      sensevoice_stt_selfhost: "speech_to_text",
-      openai_tts_api: "text_to_speech",
-      mimo_tts_api: "text_to_speech",
-      edge_tts: "text_to_speech",
-      gsvi_tts_api: "text_to_speech",
-      fishaudio_tts_api: "text_to_speech",
-      dashscope_tts: "text_to_speech",
-      azure_tts: "text_to_speech",
-      minimax_tts_api: "text_to_speech",
-      volcengine_tts: "text_to_speech",
-    };
-    return oldVersionProviderTypeMapping[provider.type];
+      openai_chat_completion: 'chat_completion',
+      volcengine_ark_chat_completion: 'chat_completion',
+      anthropic_chat_completion: 'chat_completion',
+      googlegenai_chat_completion: 'chat_completion',
+      zhipu_chat_completion: 'chat_completion',
+      dify: 'agent_runner',
+      coze: 'agent_runner',
+      dashscope: 'chat_completion',
+      openai_whisper_api: 'speech_to_text',
+      openai_whisper_selfhost: 'speech_to_text',
+      sensevoice_stt_selfhost: 'speech_to_text',
+      openai_tts_api: 'text_to_speech',
+      edge_tts: 'text_to_speech',
+      gsvi_tts_api: 'text_to_speech',
+      fishaudio_tts_api: 'text_to_speech',
+      dashscope_tts: 'text_to_speech',
+      azure_tts: 'text_to_speech',
+      minimax_tts_api: 'text_to_speech',
+      volcengine_tts: 'text_to_speech'
+    }
+    return oldVersionProviderTypeMapping[provider.type]
   }
 
   function selectProviderSource(source: any) {

@@ -144,10 +144,10 @@ class ProviderOpenAIOfficial(Provider):
             if not isinstance(content, list):
                 continue
             for item in content:
-                if isinstance(item, dict) and item.get("type") in {
+                if isinstance(item, dict) and item.get("type") in (
                     "image_url",
-                    "audio_url",
-                }:
+                    "input_image",
+                ):
                     return True
         return False
 
@@ -496,6 +496,17 @@ class ProviderOpenAIOfficial(Provider):
         self.set_model(model)
 
         self.reasoning_key = "reasoning_content"
+        # 检测是否使用豆包格式（可通过配置或 api_base 自动判断）
+        self.use_doubao_format = bool(provider_config.get("use_doubao_format", False))
+        api_base = provider_config.get("api_base", "")
+        if not self.use_doubao_format and isinstance(api_base, str):
+            # 自动检测豆包 API
+            self.use_doubao_format = (
+                "volces.com" in api_base or "bytedance" in api_base.lower()
+            )
+
+        if self.use_doubao_format:
+            logger.info(f"检测到豆包 API，将使用豆包图片格式（input_image + 直接 URL）")
 
     def _ollama_disable_thinking_enabled(self) -> bool:
         value = self.provider_config.get("ollama_disable_thinking", False)
@@ -597,6 +608,9 @@ class ProviderOpenAIOfficial(Provider):
         self._apply_provider_specific_extra_body_overrides(extra_body)
 
         model = payloads.get("model", "").lower()
+        logger.debug(
+            f"Querying OpenAI API with model: {model}, payloads: {payloads}, extra_body: {extra_body}, tools: {tools.func_list if tools else None}"
+        )
 
         self._sanitize_assistant_messages(payloads)
 
@@ -1030,7 +1044,16 @@ class ProviderOpenAIOfficial(Provider):
         extra_user_content_parts: list[ContentPart] | None = None,
         **kwargs,
     ) -> tuple:
+        import traceback
+
+        def target_function():
+            print("=== CALL STACK ===")
+            traceback.print_stack()
+        target_function()
         """准备聊天所需的有效载荷和上下文"""
+        logger.debug(
+            f"Preparing chat payload with prompt: {prompt}, image_urls: {image_urls}, contexts: {contexts}, system_prompt: {system_prompt}, tool_calls_result: {tool_calls_result}, model: {model}, extra_user_content_parts: {extra_user_content_parts}"
+        )
         if contexts is None:
             contexts = []
         new_record = None
@@ -1041,7 +1064,16 @@ class ProviderOpenAIOfficial(Provider):
                 audio_urls,
                 extra_user_content_parts,
             )
-        context_query = copy.deepcopy(self._ensure_message_to_dicts(contexts))
+        context_query = self._ensure_message_to_dicts(contexts)
+        # Some upstream paths pass image_urls separately while contexts may only contain
+        # a textual placeholder. Recover multimodal image parts from image_urls here.
+        if (
+            prompt is None
+            and image_urls
+            and not self._context_contains_image(context_query)
+        ):
+            fallback_record = await self.assemble_context("", image_urls)
+            context_query.append(fallback_record)
         if new_record:
             context_query.append(new_record)
         if system_prompt:
@@ -1059,8 +1091,8 @@ class ProviderOpenAIOfficial(Provider):
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
 
-        if self._context_contains_image(context_query):
-            context_query = await self._materialize_context_image_parts(context_query)
+        model = model or self.get_model()
+        logger.debug(f"Prepared context query for OpenAI API: {context_query}")
 
         model = model or self.get_model()
         payloads = {**kwargs, "messages": context_query, "model": model}
@@ -1263,8 +1295,13 @@ class ProviderOpenAIOfficial(Provider):
             extra_user_content_parts=extra_user_content_parts,
             **kwargs,
         )
-        if func_tool and not func_tool.empty():
-            payloads["tool_choice"] = tool_choice
+        import traceback
+
+        def target_function():
+            print("=== CALL STACK ===")
+            traceback.print_stack()
+        target_function()
+        logger.debug(f"Prepared payloads for OpenAI API: {payloads}")
 
         llm_response = None
         max_retries = 10
@@ -1383,7 +1420,7 @@ class ProviderOpenAIOfficial(Provider):
             raise last_exception
 
     async def _remove_image_from_context(self, contexts: list):
-        """从上下文中删除所有带有 image 的记录"""
+        """从上下文中删除所有带有 image 的记录（支持 OpenAI 和豆包格式）"""
         new_contexts = []
 
         for context in contexts:
@@ -1391,7 +1428,11 @@ class ProviderOpenAIOfficial(Provider):
                 # continue
                 new_content = []
                 for item in context["content"]:
-                    if isinstance(item, dict) and "image_url" in item:
+                    # 移除 OpenAI 格式 (type: image_url) 和豆包格式 (type: input_image)
+                    if isinstance(item, dict) and item.get("type") in (
+                        "image_url",
+                        "input_image",
+                    ):
                         continue
                     new_content.append(item)
                 if not new_content:
@@ -1418,6 +1459,40 @@ class ProviderOpenAIOfficial(Provider):
         extra_user_content_parts: list[ContentPart] | None = None,
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
+        logger.debug(f"Assembling context with text: {text}, image_urls: {image_urls}")
+
+        async def resolve_image_part(image_url: str) -> dict | None:
+            # 豆包格式：直接使用 HTTP URL，不进行 Base64 编码
+            if self.use_doubao_format:
+                if image_url.startswith("http"):
+                    # 豆包需要直接的 HTTP URL
+                    return {
+                        "type": "input_image",
+                        "image_url": image_url,
+                    }
+                else:
+                    logger.warning(
+                        f"豆包格式仅支持 HTTP/HTTPS URL，本地图片 {image_url} 将被忽略。"
+                    )
+                    return None
+
+            # OpenAI 格式：使用 Base64 编码
+            if image_url.startswith("http"):
+                image_path = await download_image_by_url(image_url)
+                image_data = await self.encode_image_bs64(image_path)
+            elif image_url.startswith("file:///"):
+                image_path = image_url.replace("file:///", "")
+                image_data = await self.encode_image_bs64(image_path)
+            else:
+                image_data = await self.encode_image_bs64(image_url)
+            if not image_data:
+                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                return None
+            return {
+                "type": "image_url",
+                "image_url": {"url": image_data},
+            }
+
         # 构建内容块列表
         content_blocks = []
 

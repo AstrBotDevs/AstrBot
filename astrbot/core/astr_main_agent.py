@@ -665,43 +665,20 @@ def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> No
     )
 
 
-def _append_audio_attachment(req: ProviderRequest, audio_path: str) -> None:
-    req.extra_user_content_parts.append(
-        TextPart(text=f"[Audio Attachment: path {audio_path}]"),
-    )
+async def _resolve_image_component_ref(comp: Image) -> str:
+    image_ref = (getattr(comp, "url", "") or "").strip()
+    if image_ref:
+        return image_ref
 
+    image_ref = (getattr(comp, "file", "") or "").strip()
+    if image_ref:
+        return image_ref
 
-def _append_quoted_audio_attachment(req: ProviderRequest, audio_path: str) -> None:
-    req.extra_user_content_parts.append(
-        TextPart(text=f"[Audio Attachment in quoted message: path {audio_path}]"),
-    )
+    image_ref = (getattr(comp, "path", "") or "").strip()
+    if image_ref:
+        return image_ref
 
-
-async def _append_video_attachment(
-    req: ProviderRequest,
-    video: Video,
-    *,
-    quoted: bool = False,
-) -> None:
-    try:
-        video_path = await video.convert_to_file_path()
-    except Exception as exc:  # noqa: BLE001
-        if quoted:
-            logger.error("Error processing quoted video attachment: %s", exc)
-        else:
-            logger.error("Error processing video attachment: %s", exc)
-        return
-
-    video_name = os.path.basename(video_path)
-    if quoted:
-        text = (
-            f"[Video Attachment in quoted message: "
-            f"name {video_name}, path {video_path}]"
-        )
-    else:
-        text = f"[Video Attachment: name {video_name}, path {video_path}]"
-
-    req.extra_user_content_parts.append(TextPart(text=text))
+    return await comp.convert_to_file_path()
 
 
 def _get_quoted_message_parser_settings(
@@ -935,7 +912,121 @@ async def _decorate_llm_request(
     if tz is None:
         tz = plugin_context.get_config().get("timezone")
     _append_system_reminders(event, req, cfg, tz)
-    _apply_workspace_extra_prompt(event, req)
+
+
+def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
+    modalities = provider.provider_config.get("modalities")
+    modalities_unknown = not isinstance(modalities, list) or len(modalities) == 0
+
+    if req.image_urls:
+        if not modalities_unknown and "image" not in modalities:
+            provider_id = provider.provider_config.get("id", "<unknown>")
+            provider_model = provider.get_model()
+            image_count = len(req.image_urls)
+            image_preview = req.image_urls[:3]
+            logger.debug(
+                "Downgrading image input to text placeholder. "
+                "provider_id=%s, model=%s, modalities=%s, image_count=%d, image_preview=%s",
+                provider_id,
+                provider_model,
+                modalities,
+                image_count,
+                image_preview,
+            )
+            logger.debug(
+                "Provider %s does not support image, using placeholder.", provider
+            )
+            image_count = len(req.image_urls)
+            placeholder = " ".join(["[图片]"] * image_count)
+            if req.prompt:
+                req.prompt = f"{placeholder} {req.prompt}"
+            else:
+                req.prompt = placeholder
+            req.image_urls = []
+    if req.func_tool:
+        if not modalities_unknown and "tool_use" not in modalities:
+            logger.debug(
+                "Provider %s does not support tool_use, clearing tools.", provider
+            )
+            req.func_tool = None
+
+
+def _sanitize_context_by_modalities(
+    config: MainAgentBuildConfig,
+    provider: Provider,
+    req: ProviderRequest,
+) -> None:
+    if not config.sanitize_context_by_modalities:
+        return
+    if not isinstance(req.contexts, list) or not req.contexts:
+        return
+    modalities = provider.provider_config.get("modalities", None)
+    if not modalities or not isinstance(modalities, list):
+        return
+    supports_image = bool("image" in modalities)
+    supports_tool_use = bool("tool_use" in modalities)
+    if supports_image and supports_tool_use:
+        return
+
+    sanitized_contexts: list[dict] = []
+    removed_image_blocks = 0
+    removed_tool_messages = 0
+    removed_tool_calls = 0
+
+    for msg in req.contexts:
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role")
+        if not role:
+            continue
+
+        new_msg = msg
+        if not supports_tool_use:
+            if role == "tool":
+                removed_tool_messages += 1
+                continue
+            if role == "assistant" and "tool_calls" in new_msg:
+                if "tool_calls" in new_msg:
+                    removed_tool_calls += 1
+                new_msg.pop("tool_calls", None)
+                new_msg.pop("tool_call_id", None)
+
+        if not supports_image:
+            content = new_msg.get("content")
+            if isinstance(content, list):
+                filtered_parts: list = []
+                removed_any_image = False
+                for part in content:
+                    if isinstance(part, dict):
+                        part_type = str(part.get("type", "")).lower()
+                        if part_type in {"image_url", "image"}:
+                            removed_any_image = True
+                            removed_image_blocks += 1
+                            continue
+                    filtered_parts.append(part)
+                if removed_any_image:
+                    new_msg["content"] = filtered_parts
+
+        if role == "assistant":
+            content = new_msg.get("content")
+            has_tool_calls = bool(new_msg.get("tool_calls"))
+            if not has_tool_calls:
+                if not content:
+                    continue
+                if isinstance(content, str) and not content.strip():
+                    continue
+
+        sanitized_contexts.append(new_msg)
+
+    if removed_image_blocks or removed_tool_messages or removed_tool_calls:
+        logger.debug(
+            "sanitize_context_by_modalities applied: "
+            "removed_image_blocks=%s, removed_tool_messages=%s, removed_tool_calls=%s",
+            removed_image_blocks,
+            removed_tool_messages,
+            removed_tool_calls,
+        )
+    req.contexts = sanitized_contexts
 
 
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
@@ -1199,6 +1290,7 @@ async def build_main_agent(
 
     If apply_reset is False, will not call reset on the agent runner.
     """
+    logger.debug(f"req received in build_main_agent: {req}")
     provider = provider or _select_provider(event, plugin_context)
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
@@ -1211,12 +1303,24 @@ async def build_main_agent(
 
     if req is None:
         if event.get_extra("provider_request"):
+            logger.debug("Using existing provider_request from event extras.")
             req = event.get_extra("provider_request")
             assert isinstance(req, ProviderRequest), (
                 "provider_request 必须是 ProviderRequest 类型。"
             )
             if req.conversation:
                 req.contexts = json.loads(req.conversation.history)
+            for comp in event.message_obj.message:
+                if isinstance(comp, Image):
+                    req.image_urls.append(await _resolve_image_component_ref(comp))
+                elif isinstance(comp, File):
+                    file_path = await comp.get_file()
+                    file_name = comp.name or os.path.basename(file_path)
+                    req.extra_user_content_parts.append(
+                        TextPart(
+                            text=f"[File Attachment: name {file_name}, path {file_path}]"
+                        )
+                    )
         else:
             req = ProviderRequest()
             req.prompt = ""
@@ -1234,16 +1338,10 @@ async def build_main_agent(
             # media files attachments
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
-                    path = await comp.convert_to_file_path()
-                    image_path = await _compress_image_for_provider(
-                        path,
-                        config.provider_settings,
-                    )
-                    if _is_generated_compressed_image_path(path, image_path):
-                        event.track_temporary_local_file(image_path)
-                    req.image_urls.append(image_path)
+                    image_ref = await _resolve_image_component_ref(comp)
+                    req.image_urls.append(image_ref)
                     req.extra_user_content_parts.append(
-                        TextPart(text=f"[Image Attachment: path {image_path}]"),
+                        TextPart(text=f"[Image Attachment: url {image_ref}]")
                     )
                 elif isinstance(comp, Record):
                     audio_path = await comp.convert_to_file_path()
@@ -1351,7 +1449,8 @@ async def build_main_agent(
             req.conversation = conversation
             req.contexts = json.loads(conversation.history)
             event.set_extra("provider_request", req)
-
+    logger.debug(f"image_urls extracted for build_main_agent: {req.image_urls}")
+    logger.debug(f"Constructed provider request: {req}")
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
     thread_selected_text = event.get_extra("thread_selected_text")

@@ -64,13 +64,10 @@ dependencies = [
   "shipyard-neo-sdk @ git+https://github.com/AstrBotDevs/shipyard-neo.git#subdirectory=shipyard-neo-sdk",
   "python-socks>=2.8.0",
   "packaging>=24.2",
-  "quart-cors>=0.8.0",
-  "anyio>=4.12.1",
-  "argon2-cffi>=23.1.0",
-  "plumbum>=1.10.0",
-  "openai-agents>=0.12.5",
-  "fastapi>=0.135.1",
-  "pytest-asyncio>=0.25.0",
+  "edge-tts>=7.2.7",
+  "crypto>=1.4.1",
+  "whisper>=1.1.10",
+  "volcengine-python-sdk[ark]>=5.0.17",
 ]
 [project.urls]
 Homepage = "https://astrbot.app"
