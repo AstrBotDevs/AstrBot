@@ -855,12 +855,18 @@ class ChatRoute(Route):
 
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
-                        result, should_break = await _poll_webchat_stream_result(
-                            back_queue, username
-                        )
-                        if should_break:
+                        result = None
+                        try:
+                            result = await asyncio.wait_for(back_queue.get(), timeout=1)
+                        except asyncio.TimeoutError:
+                            continue
+                        except asyncio.CancelledError:
+                            logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
                             client_disconnected = True
-                            break
+                        except Exception as e:
+                            logger.error(f"WebChat stream error: {e}")
+                            continue
+
                         if not result:
                             # Send an SSE comment as keep-alive so the client
                             # doesn't time out during slow backend ops like
@@ -880,6 +886,15 @@ class ChatRoute(Route):
                         msg_type = result.get("type")
                         streaming = result.get("streaming", False)
                         chain_type = result.get("chain_type")
+
+                        if (
+                            enable_streaming
+                            and msg_type == "plain"
+                            and chain_type in {"tool_call", "tool_call_result"}
+                            and not streaming
+                        ):
+                            result["streaming"] = True
+                            streaming = True
 
                         if chain_type == "agent_stats":
                             stats_info = {

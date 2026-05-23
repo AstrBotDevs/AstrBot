@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from anthropic.types import Message as AnthropicMessage
 from google.genai.types import GenerateContentResponse
 from openai.types.chat.chat_completion import ChatCompletion
+from openai.types.responses.response import Response as OpenAIResponse
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -359,7 +360,11 @@ class LLMResponse:
     """The signature of the reasoning content, if any."""
 
     raw_completion: (
-        ChatCompletion | GenerateContentResponse | AnthropicMessage | None
+        ChatCompletion
+        | GenerateContentResponse
+        | AnthropicMessage
+        | OpenAIResponse
+        | None
     ) = None
     """The raw completion response from the LLM provider."""
 
@@ -388,6 +393,7 @@ class LLMResponse:
         raw_completion: ChatCompletion
         | GenerateContentResponse
         | AnthropicMessage
+        | OpenAIResponse
         | None = None,
         is_chunk: bool = False,
         id: str | None = None,
