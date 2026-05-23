@@ -9,13 +9,14 @@ import os
 import sys
 from asyncio import Queue
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
 
-# 将项目根目录添加到 sys.path(必须在导入前设置)
+# 使用 tests/fixtures/helpers.py 中的共享工具函数，避免重复定义
+
+# 将项目根目录添加到 sys.path
 PROJECT_ROOT = Path(__file__).parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -312,6 +313,7 @@ async def mock_context(
     platform_manager = MagicMock()
     conversation_manager = MagicMock()
     message_history_manager = MagicMock()
+    group_message_flow_manager = MagicMock()
     persona_manager = MagicMock()
     persona_manager.personas_v3 = []
     astrbot_config_mgr = MagicMock()
@@ -332,6 +334,7 @@ async def mock_context(
         knowledge_base_manager,
         cron_manager,
         subagent_orchestrator,
+        group_message_flow_manager,
     )
 
     return context

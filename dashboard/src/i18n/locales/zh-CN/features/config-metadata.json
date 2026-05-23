@@ -1067,6 +1067,34 @@
         "group_icl_enable": {
           "description": "启用群聊上下文感知"
         },
+        "group_context_mode": {
+          "description": "群聊上下文模式",
+          "hint": "sliding_window 保持旧的滑动窗口行为；flow 使用持久化群聊消息流和对话游标。",
+          "labels": [
+            "滑动窗口",
+            "消息流"
+          ]
+        },
+        "group_message_max_cnt": {
+          "description": "最大消息数量",
+          "hint": "仅用于 sliding_window 模式。"
+        },
+        "group_flow_max_records": {
+          "description": "群聊消息流保留数量",
+          "hint": "仅用于 flow 模式。每个群聊消息流最多保留的历史消息数，0 表示不清理。"
+        },
+        "group_flow_max_delta_messages": {
+          "description": "单次注入消息数量上限",
+          "hint": "仅用于 flow 模式。每次只注入游标之后、当前触发消息之前的最近 N 条群聊消息；0 表示不限制。"
+        },
+        "group_flow_max_message_chars": {
+          "description": "单条消息字符上限",
+          "hint": "仅用于 flow 模式。每条注入的群聊消息最多保留前 N 个字符；0 表示不限制。"
+        },
+        "group_flow_record_bot_messages": {
+          "description": "记录普通机器人消息",
+          "hint": "仅用于 flow 模式。LLM 本次回复始终不会写入群聊消息流；此项只影响命令或插件产生的普通机器人消息。"
+        },
         "image_caption": {
           "description": "自动理解图片",
           "hint": "需要设置群聊图片转述模型。"

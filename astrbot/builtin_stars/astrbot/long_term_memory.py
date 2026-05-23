@@ -1,6 +1,6 @@
 import asyncio
 import datetime
-import json
+import inspect
 import random
 import uuid
 from collections import defaultdict, deque
@@ -14,6 +14,7 @@ from astrbot.api.platform import MessageType
 from astrbot.api.provider import LLMResponse, Provider, ProviderRequest
 from astrbot.core.agent.message import TextPart
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.message.message_event_result import ResultContentType
 
 from .constants import LTM_ACTIVE_REPLY_KEY
 
@@ -88,42 +89,49 @@ class LongTermMemory:
     def cfg(self, event: AstrMessageEvent):
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         ltm_cfg = cfg["provider_ltm_settings"]
+        try:
+            max_cnt = int(ltm_cfg["group_message_max_cnt"])
+        except BaseException as e:
+            logger.error(e)
+            max_cnt = 300
+        try:
+            flow_max_records = int(ltm_cfg.get("group_flow_max_records", 5000))
+        except BaseException as e:
+            logger.error(e)
+            flow_max_records = 5000
+        try:
+            flow_max_delta_messages = int(
+                ltm_cfg.get("group_flow_max_delta_messages", 200)
+            )
+        except BaseException as e:
+            logger.error(e)
+            flow_max_delta_messages = 200
+        try:
+            flow_max_message_chars = int(
+                ltm_cfg.get("group_flow_max_message_chars", 1000)
+            )
+        except BaseException as e:
+            logger.error(e)
+            flow_max_message_chars = 1000
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
         image_caption_provider_id = ltm_cfg.get("image_caption_provider_id")
         image_caption = ltm_cfg["image_caption"] and bool(image_caption_provider_id)
-        history_tool_result_truncate = ltm_cfg.get("history_tool_result_truncate", True)
-        history_tool_result_max_chars = int(
-            ltm_cfg.get(
-                "history_tool_result_max_chars",
-                DEFAULT_HISTORY_TOOL_RESULT_MAX_CHARS,
-            )
-            or DEFAULT_HISTORY_TOOL_RESULT_MAX_CHARS
-        )
         active_reply = ltm_cfg["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
         ar_method = active_reply["method"]
         ar_possibility = active_reply["possibility_reply"]
         ar_prompt = active_reply.get("prompt", "")
         ar_whitelist = active_reply.get("whitelist", [])
-        # LTM compaction
-        ltm_compaction_strategy = ltm_cfg.get("ltm_compaction_strategy", "truncate")
-        ltm_max_rounds = ltm_cfg.get("ltm_max_rounds", 80)
-        ltm_truncate_drop_rounds = ltm_cfg.get("ltm_truncate_drop_rounds", 50)
-        ltm_summary_trigger_rounds = ltm_cfg.get("ltm_summary_trigger_rounds", 80)
-        ltm_summary_keep_recent_rounds = ltm_cfg.get(
-            "ltm_summary_keep_recent_rounds", 30
-        )
-        ltm_summary_provider_id = ltm_cfg.get("ltm_summary_provider_id", "")
-        ltm_summary_prompt = ltm_cfg.get("ltm_summary_prompt", "")
-        ltm_max_msgs_per_user_segment = int(
-            ltm_cfg.get("ltm_max_msgs_per_user_segment", MAX_MSGS_PER_USER_SEGMENT)
-            or MAX_MSGS_PER_USER_SEGMENT
-        )
-        ltm_max_chars_per_user_segment = int(
-            ltm_cfg.get("ltm_max_chars_per_user_segment", MAX_CHARS_PER_USER_SEGMENT)
-            or MAX_CHARS_PER_USER_SEGMENT
-        )
-        return {
+        ret = {
+            "group_icl_enable": ltm_cfg.get("group_icl_enable", False),
+            "group_context_mode": ltm_cfg.get("group_context_mode", "sliding_window"),
+            "max_cnt": max_cnt,
+            "flow_max_records": flow_max_records,
+            "flow_max_delta_messages": flow_max_delta_messages,
+            "flow_max_message_chars": flow_max_message_chars,
+            "flow_record_bot_messages": ltm_cfg.get(
+                "group_flow_record_bot_messages", False
+            ),
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
             "image_caption_provider_id": image_caption_provider_id,
@@ -148,9 +156,56 @@ class LongTermMemory:
             "ltm_max_chars_per_user_segment": max(1, ltm_max_chars_per_user_segment),
         }
 
-    # =========================================================================
-    # 图片描述
-    # =========================================================================
+    def _is_flow_mode(self, event: AstrMessageEvent, cfg: dict | None = None) -> bool:
+        cfg = cfg or self.cfg(event)
+        return (
+            bool(cfg.get("group_icl_enable"))
+            and cfg.get("group_context_mode") == "flow"
+            and event.get_message_type() == MessageType.GROUP_MESSAGE
+        )
+
+    def _flow_session_id(self, event: AstrMessageEvent) -> str:
+        group_id = event.get_group_id()
+        if group_id:
+            return f"{event.get_platform_id()}:{MessageType.GROUP_MESSAGE.value}:{group_id}"
+        return event.unified_msg_origin
+
+    def _append_sliding_message(
+        self,
+        event: AstrMessageEvent,
+        message: str,
+        max_cnt: int,
+    ) -> None:
+        logger.debug(f"ltm | {event.unified_msg_origin} | {message}")
+        self.session_chats[event.unified_msg_origin].append(message)
+        if len(self.session_chats[event.unified_msg_origin]) > max_cnt:
+            self.session_chats[event.unified_msg_origin].pop(0)
+
+    async def remove_session(self, event: AstrMessageEvent) -> int:
+        cnt = 0
+        if event.unified_msg_origin in self.session_chats:
+            cnt = len(self.session_chats[event.unified_msg_origin])
+            del self.session_chats[event.unified_msg_origin]
+        if self._is_flow_mode(event):
+            await self.reset_flow_cursor(event)
+        return cnt
+
+    async def reset_flow_cursor(self, event: AstrMessageEvent) -> None:
+        curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
+            event.unified_msg_origin
+        )
+        if not curr_cid:
+            return
+        flow_session_id = self._flow_session_id(event)
+        latest_id = await self.context.group_message_flow_manager.get_latest_record_id(
+            flow_session_id
+        )
+        await self.context.group_message_flow_manager.set_cursor(
+            platform_id=event.get_platform_id(),
+            flow_session_id=flow_session_id,
+            conversation_id=curr_cid,
+            last_record_id=latest_id,
+        )
 
     async def get_image_caption(
         self,
@@ -203,609 +258,275 @@ class LongTermMemory:
                 return trig
         return False
 
-    # =========================================================================
-    # 会话清理
-    # =========================================================================
-
-    async def remove_session(self, event: AstrMessageEvent) -> int:
-        """清理指定群的全部 LTM 状态。返回被清理的 raw_records 条数。"""
-        umo = event.unified_msg_origin
-        async with self._get_lock(umo):
-            cnt = len(self.raw_records.get(umo, deque()))
-            self.raw_records.pop(umo, None)
-            self.contexts.pop(umo, None)
-            self._raw_cursor.pop(umo, None)
-            self._persisted_tool_call_ids.pop(umo, None)
-            self._persisted_tool_result_ids.pop(umo, None)
-            self._summary_next_retry.pop(umo, None)
-            self.summaries.pop(umo, None)
-            self._locks.pop(umo, None)
-            self._summary_in_progress.discard(umo)
-            return cnt
-
-    # =========================================================================
-    # 消息记录 (on_message 调用)
-    # =========================================================================
-
-    async def handle_message(self, event: AstrMessageEvent) -> None:
-        """仅记录原始消息到 raw_records，不构建 contexts。"""
-        if event.get_message_type() != MessageType.GROUP_MESSAGE:
-            return
-
-        umo = event.unified_msg_origin
-        async with self._get_lock(umo):
-            # 记录写入前索引 → on_req_llm 精确排除
-            raw_idx = len(self.raw_records[umo])
-            event.set_extra("_ltm_raw_idx", raw_idx)
-
-            datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
-            parts = [f"[{event.message_obj.sender.nickname}/{datetime_str}]: "]
-            cfg = self.cfg(event)
-
-            for comp in event.get_messages():
-                if isinstance(comp, Plain):
-                    parts.append(f" {comp.text}")
-                elif isinstance(comp, Image):
-                    if cfg["image_caption"]:
-                        logger.warning(
-                            "Group ICL image caption is enabled. Each group image may trigger an extra multimodal request. umo=%s, provider=%s",
-                            event.unified_msg_origin,
-                            cfg["image_caption_provider_id"],
-                        )
-                        try:
-                            url = comp.url or comp.file
-                            if not url:
-                                raise Exception("图片 URL 为空")
-                            caption = await self.get_image_caption(
-                                url,
-                                cfg["image_caption_provider_id"],
-                                cfg["image_caption_prompt"],
-                            )
-                            parts.append(f" [Image: {caption}]")
-                        except Exception as e:
-                            logger.error(f"获取图片描述失败: {e}")
-                    else:
-                        parts.append(" [Image]")
-                elif isinstance(comp, At):
-                    parts.append(f" [At: {comp.name}]")
-
-            final_message = "".join(parts)
-            logger.debug(f"ltm | {umo} | {final_message}")
-            self.raw_records[umo].append(final_message)
-            self._trim_raw_records(
-                umo, max_bytes=cfg.get("ltm_raw_records_max_bytes", MAX_RAW_BYTES)
-            )
-
-    # =========================================================================
-    # LLM 请求前（on_llm_request 钩子 → decorate_llm_req 调用）
-    # =========================================================================
-
-    async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
-        """增量构建 contexts 并注入到 req。ContextManager 由 agent runner 自动调用。"""
-        umo = event.unified_msg_origin
-        prompt_idx = event.get_extra("_ltm_raw_idx", -1)
-        if prompt_idx < 0:
-            return
-
-        async with self._get_lock(umo):
-            if umo not in self.raw_records:
-                return
-
-            cfg = self.cfg(event)
-
-            raw_list = list(self.raw_records[umo])
-            cursor = self._raw_cursor[umo]
-            new_raw = raw_list[cursor:prompt_idx] if prompt_idx > cursor else []
-
-            if new_raw:
-                new_segs = _build_segments(
-                    new_raw,
-                    max_msgs=cfg["ltm_max_msgs_per_user_segment"],
-                    max_chars=cfg["ltm_max_chars_per_user_segment"],
-                )
-                self.contexts[umo].extend(new_segs)
-                self._raw_cursor[umo] = prompt_idx
-
-            # 前置保留 Persona 已注入的 begin_dialogs
-            existing_contexts = req.contexts or []
-            ctxs: list[dict] = list(existing_contexts)
-
-            # Inject LTM summary if available (LLM summary compaction strategy).
-            summary = self.summaries.get(umo, "")
-            if summary:
-                ctxs.append(
-                    {
-                        "role": "system",
-                        "content": (
-                            "[System note: The following is a compressed summary of "
-                            "older messages in this group chat, generated to help you "
-                            "maintain context. Prioritise facts from recent verbatim "
-                            "messages over this summary if they conflict.]\n"
-                            "--- BEGIN GROUP CHAT MEMORY SUMMARY ---\n"
-                            + summary
-                            + "\n--- END GROUP CHAT MEMORY SUMMARY ---"
-                        ),
-                    }
-                )
-
-            ctxs.extend(self.contexts[umo])
-            req.contexts = ctxs
-            req.conversation = None
-            if CHATROOM_SYSTEM_NOTE not in req.system_prompt:
-                req.system_prompt += CHATROOM_SYSTEM_NOTE
-
-    # =========================================================================
-    # Agent 完成后（on_agent_done 钩子 → main.py 调用）
-    # =========================================================================
-
-    async def on_agent_done(
+    async def _render_group_message(
         self,
         event: AstrMessageEvent,
-        run_context,  # ContextWrapper
-        resp: LLMResponse,
-    ) -> None:
-        """记录工具链 + bot 回复到 raw_records，闭合段，裁剪。
+        cfg: dict,
+        sender_name: str | None = None,
+    ) -> str:
+        """Render one group message in the legacy LTM style."""
+        datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
+        display_name = sender_name or event.get_sender_name() or event.get_sender_id()
+        parts = [f"[{display_name}/{datetime_str}]: "]
 
-        LLM summary 的 LLM 调用在锁外进行，避免持锁期间阻塞
-        handle_message / on_req_llm。
-        """
-        umo = event.unified_msg_origin
-        cfg = self.cfg(event)
-        compact_ctx: dict | None = None
-
-        # === Phase 1: record data + detect compaction (LOCK) ===
-        async with self._get_lock(umo):
-            if umo not in self.raw_records:
-                return
-
-            time_str = datetime.datetime.now().strftime("%H:%M:%S")
-
-            # Record tool calls
-            for msg in run_context.messages:
-                if msg.role == "assistant" and msg.tool_calls:
-                    for tc in msg.tool_calls:
-                        tc_dict = tc if isinstance(tc, dict) else tc.model_dump()
-                        tc_id = tc_dict["id"]
-                        if tc_id in self._persisted_tool_call_ids[umo]:
-                            continue
-                        self._persisted_tool_call_ids[umo].add(tc_id)
-                        args = tc_dict["function"]["arguments"]
-                        if isinstance(args, str):
-                            try:
-                                args = json.loads(args)
-                            except (json.JSONDecodeError, TypeError):
-                                pass  # keep raw string if JSON is malformed
-                        call_entry = {
-                            "id": tc_id,
-                            "name": tc_dict["function"]["name"],
-                            "args": args,
-                        }
-                        self.raw_records[umo].append(
-                            f"<T:CALL>{json.dumps(call_entry, ensure_ascii=False)}</T:CALL>"
+        for comp in event.get_messages():
+            if isinstance(comp, Plain):
+                parts.append(f" {comp.text}")
+            elif isinstance(comp, Image):
+                if cfg["image_caption"]:
+                    try:
+                        url = comp.url if comp.url else comp.file
+                        if not url:
+                            raise Exception("图片 URL 为空")
+                        caption = await self.get_image_caption(
+                            url,
+                            cfg["image_caption_provider_id"],
+                            cfg["image_caption_prompt"],
                         )
-                elif msg.role == "tool":
-                    if msg.tool_call_id in self._persisted_tool_result_ids[umo]:
-                        continue
-                    self._persisted_tool_result_ids[umo].add(msg.tool_call_id)
-                    content = (
-                        msg.content
-                        if isinstance(msg.content, str)
-                        else str(msg.content)
-                    )
-                    if cfg["history_tool_result_truncate"]:
-                        content = _truncate_tool_result_for_history(
-                            content, cfg["history_tool_result_max_chars"]
-                        )
-                    self.raw_records[umo].append(
-                        f"<T:RES id={msg.tool_call_id}>{content}</T:RES>"
-                    )
-
-            # Record bot response
-            if resp and resp.completion_text:
-                self.raw_records[umo].append(
-                    f"<BOT/{time_str}>: {resp.completion_text}"
-                )
-
-            # Build segments from remaining raw lines
-            raw_list = list(self.raw_records[umo])
-            cursor = self._raw_cursor[umo]
-            remaining = raw_list[cursor:]
-            if remaining:
-                new_segs = _build_segments(
-                    remaining,
-                    max_msgs=cfg["ltm_max_msgs_per_user_segment"],
-                    max_chars=cfg["ltm_max_chars_per_user_segment"],
-                )
-                self.contexts[umo].extend(new_segs)
-                self._raw_cursor[umo] = len(raw_list)
-
-            # Detect compaction need
-            strategy = cfg.get("ltm_compaction_strategy", "truncate")
-            rounds = _split_into_rounds(self.contexts[umo])
-
-            if strategy == "llm_summary":
-                trigger = cfg.get("ltm_summary_trigger_rounds", 80)
-                if len(rounds) > trigger and umo not in self._summary_in_progress:
-                    provider_id = cfg.get("ltm_summary_provider_id", "")
-                    if provider_id:
-                        provider = self.context.get_provider_by_id(provider_id)
-                    else:
-                        provider = self.context.get_using_provider(umo)
-                    if provider is None or not isinstance(provider, Provider):
-                        logger.warning(
-                            "LTM summary 没有可用的 provider (umo=%s, configured=%s)",
-                            umo,
-                            provider_id or "(auto)",
-                        )
-                    else:
-                        next_retry = self._summary_next_retry.get(umo, 0)
-                        if len(rounds) < next_retry:
-                            logger.debug(
-                                "LTM summary 冷却中 (umo=%s, rounds=%d, 允许=%d)",
-                                umo,
-                                len(rounds),
-                                next_retry,
-                            )
-                        else:
-                            keep_recent = cfg.get("ltm_summary_keep_recent_rounds", 30)
-                            old_rounds = rounds[:-keep_recent]
-                            recent_rounds = rounds[-keep_recent:]
-                            if old_rounds:
-                                self._summary_in_progress.add(umo)
-                                compact_ctx = {
-                                    "provider": provider,
-                                    "prompt": cfg.get("ltm_summary_prompt", ""),
-                                    "old_rounds": old_rounds,
-                                    "recent_rounds": recent_rounds,
-                                    "existing_summary": self.summaries.get(umo, ""),
-                                    "snapshot_round_count": len(rounds),
-                                }
+                        parts.append(f" [Image: {caption}]")
+                    except Exception as e:
+                        logger.error(f"获取图片描述失败: {e}")
+                        parts.append(" [Image]")
+                else:
+                    parts.append(" [Image]")
+            elif isinstance(comp, At):
+                parts.append(f" [At: {comp.name or comp.qq}]")
             else:
-                max_rounds = cfg.get("ltm_max_rounds", 80)
-                drop_rounds = cfg.get("ltm_truncate_drop_rounds", 50)
-                if len(rounds) > max_rounds:
-                    safe_drop = min(drop_rounds, len(rounds) - 1)
-                    kept = rounds[safe_drop:]
-                    self.contexts[umo] = [seg for rnd in kept for seg in rnd]
+                comp_type = getattr(comp, "type", comp.__class__.__name__)
+                parts.append(f" [{comp_type}]")
 
-            if not compact_ctx:
-                self._trim_raw_records(
-                    umo,
-                    max_bytes=cfg.get("ltm_raw_records_max_bytes", MAX_RAW_BYTES),
-                )
+        return "".join(parts)
 
-        # === Phase 2: LLM summary (NO LOCK) ===
-        if compact_ctx:
-            logger.info(
-                "LTM summary: starting compaction (umo=%s, rounds=%d, old=%d)",
-                umo,
-                compact_ctx["snapshot_round_count"],
-                len(compact_ctx["old_rounds"]),
-            )
-            compact_ctx["summary_text"] = await self._generate_llm_summary(
-                umo, compact_ctx
-            )
-
-        # === Phase 3: apply summary + trim (LOCK) ===
-        if compact_ctx:
-            async with self._get_lock(umo):
-                self._apply_llm_summary(umo, compact_ctx)
-                self._trim_raw_records(
-                    umo,
-                    max_bytes=cfg.get("ltm_raw_records_max_bytes", MAX_RAW_BYTES),
-                )
-                self._summary_in_progress.discard(umo)
-
-    # =========================================================================
-    # LTM compaction
-    # =========================================================================
-
-    async def _generate_llm_summary(self, umo: str, ctx: dict) -> str | None:
-        """Generate summary via LLM. Does NOT mutate any LTM state.
-
-        Must be called WITHOUT the per-session lock held, as it may
-        block for seconds waiting on the summary provider.
-        """
-        if not ctx.get("old_rounds"):
-            return None
-
-        old_text = _rounds_to_text(ctx["old_rounds"])
-        existing_summary = ctx["existing_summary"]
-
-        instruction = ctx["prompt"] or (
-            "Merge the older conversation rounds below into the existing "
-            "group-chat memory summary. "
-            "Preserve: user identities (names, nicknames, roles), recurring topics, "
-            "decisions made, preferences expressed, and unresolved tasks or questions. "
-            "Drop: transient greetings, small talk, and redundant confirmations. "
-            "Keep the summary concise and factual. "
-            "Output only the updated summary text, with no preamble or meta-commentary."
-        )
-
-        summary_prompt = (
-            f"{instruction}\n\n"
-            f"Existing memory summary:\n{existing_summary or '(none)'}\n\n"
-            "--- BEGIN OLDER CONVERSATION ROUNDS ---\n"
-            f"{old_text}\n"
-            "--- END OLDER CONVERSATION ROUNDS ---"
-        )
-
-        try:
-            resp = await ctx["provider"].text_chat(
-                prompt=summary_prompt,
-                session_id=uuid.uuid4().hex,
-                persist=False,
-            )
-            summary_text = resp.completion_text.strip()
-            if not summary_text:
-                logger.warning(
-                    "LTM LLM summary 返回空文本，跳过本次压缩 (umo=%s, provider=%s)",
-                    umo,
-                    ctx["provider"],
-                )
-                return None
-            logger.info(
-                "LTM summary: compaction completed (umo=%s, summary_len=%d)",
-                umo,
-                len(summary_text),
-            )
-            return summary_text
-        except Exception:
-            logger.warning("LTM LLM summary 失败，保留原始 contexts", exc_info=True)
-            return None
-
-    def _apply_llm_summary(self, umo: str, ctx: dict) -> None:
-        """Apply a completed LLM summary to LTM state.
-
-        Must be called WITH the per-session lock held.
-        Merges recent rounds from the snapshot with any rounds that
-        accumulated during summary generation.
-        """
-        summary_text = ctx.get("summary_text")
-        if not summary_text:
-            current_rounds = _split_into_rounds(self.contexts[umo])
-            self._summary_next_retry[umo] = len(current_rounds) + SUMMARY_RETRY_COOLDOWN
-            return
-
-        self.summaries[umo] = summary_text
-        # Merge: snapshot recent rounds + rounds added during summary generation
-        current_rounds = _split_into_rounds(self.contexts[umo])
-        snapshot_count = ctx["snapshot_round_count"]
-        new_rounds = current_rounds[snapshot_count:]
-        self.contexts[umo] = [seg for rnd in ctx["recent_rounds"] for seg in rnd] + [
-            seg for rnd in new_rounds for seg in rnd
-        ]
-        self._summary_next_retry.pop(umo, None)
-
-    # =========================================================================
-    # 裁剪
-    # =========================================================================
-
-    def _trim_raw_records(self, umo: str, max_bytes: int = MAX_RAW_BYTES) -> None:
-        """仅淘汰 cursor 之前的条目。cursor 之后的绝不碰。"""
-        dq = self.raw_records[umo]
-        cursor = self._raw_cursor[umo]
-
-        # 1. 无条件清除 cursor 之前的条目（已消费）
-        while dq and cursor > 0:
-            dq.popleft()
-            cursor -= 1
-        self._raw_cursor[umo] = cursor
-
-        # 2. 按大小继续从前面淘汰（限制极端情况的总内存）
-        total = sum(len(s) for s in dq)
-        while total > max_bytes and dq:
-            removed = dq.popleft()
-            total -= len(removed)
-            if cursor > 0:
-                cursor -= 1
-        self._raw_cursor[umo] = max(0, cursor)
-
-
-# =============================================================================
-# _build_segments — 从 raw lines 构建 OpenAI 格式 contexts 段
-# =============================================================================
-
-
-def _build_segments(
-    raw_lines: list[str],
-    max_msgs: int = MAX_MSGS_PER_USER_SEGMENT,
-    max_chars: int = MAX_CHARS_PER_USER_SEGMENT,
-) -> list[dict]:
-    """从 raw strings 构建 OpenAI 格式 contexts 段。
-
-    规则：
-    1. <T:CALL>json</T:CALL> → 连续多条合并为一个 assistant(tool_calls)
-    2. <T:RES id=xxx>content</T:RES> → tool 消息，tool_call_id 配对
-    3. <BOT/时间>: content → assistant（纯文本）
-    4. 其它行 → user（合并为段，段内裁剪 max_msgs/max_chars）
-    """
-    if not raw_lines:
-        return []
-
-    segments: list[dict] = []
-    user_buf: list[str] = []
-    tool_calls_buf: list[dict] = []
-
-    def flush_user():
-        if not user_buf:
-            return
-        truncated = _truncate_user_segment(user_buf, max_msgs, max_chars)
-        segments.append({"role": "user", "content": "\n".join(truncated)})
-        user_buf.clear()
-
-    def flush_tool_calls():
-        if not tool_calls_buf:
-            return
-        segments.append(
-            {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": tool_calls_buf.copy(),
-            }
-        )
-        tool_calls_buf.clear()
-
-    for line in raw_lines:
-        if line.startswith(TOOL_CALL_PREFIX):
-            flush_user()
-            tc_data = _parse_tool_call(line)
-            if tc_data:
-                tool_calls_buf.append(tc_data)
-            else:
-                user_buf.append(line)  # defensive: treat as user message
-        elif line.startswith(TOOL_RES_PREFIX):
-            flush_user()
-            flush_tool_calls()
-            tool_msg = _parse_tool_result(line)
-            if tool_msg:
-                segments.append(tool_msg)
-            else:
-                user_buf.append(line)  # defensive: treat as user message
-        elif line.startswith(BOT_MARKER):
-            flush_user()
-            flush_tool_calls()
-            content = _extract_bot_content(line)
-            if content:
-                segments.append({"role": "assistant", "content": content})
-            else:
-                user_buf.append(line)  # defensive: treat as user message
-        else:
-            user_buf.append(line)
-
-    flush_user()
-    flush_tool_calls()
-    return segments
-
-
-# =============================================================================
-# 解析 helper
-# =============================================================================
-
-
-def _parse_tool_call(line: str) -> dict | None:
-    """<T:CALL>{"id":"x","name":"f","args":{...}}</T:CALL> → tool_call dict"""
-    inner = _extract_tag_content(line, TOOL_CALL_PREFIX, "</T:CALL>")
-    if not inner:
-        return None
-    try:
-        tc = json.loads(inner)
-        tc_id = tc["id"]
-        tc_name = tc["name"]
-        tc_args = tc["args"]
-    except (json.JSONDecodeError, TypeError, KeyError):
-        return None
-    return {
-        "id": tc_id,
-        "type": "function",
-        "function": {
-            "name": tc_name,
-            "arguments": json.dumps(tc_args, ensure_ascii=False),
-        },
-    }
-
-
-def _parse_tool_result(line: str) -> dict | None:
-    """<T:RES id=xxx>content</T:RES> → {"role":"tool", ...}"""
-    rest = line[len(TOOL_RES_PREFIX) :].strip()
-    gt = rest.find(">")
-    if gt == -1:
-        return None
-    id_part = rest[:gt]
-    content = rest[gt + 1 :]
-    if content.endswith("</T:RES>"):
-        content = content[: -len("</T:RES>")]
-    if not id_part.startswith("id="):
-        return None
-    tc_id = id_part[3:]
-    return {"role": "tool", "tool_call_id": tc_id, "content": content}
-
-
-def _truncate_tool_result_for_history(content: str, max_chars: int) -> str:
-    """Truncate a single tool result before persisting into LTM history."""
-    if max_chars <= 0 or len(content) <= max_chars:
+    async def _components_to_dict(self, components) -> list[dict]:
+        content = []
+        for comp in components:
+            try:
+                content.append(await self._component_to_json_safe_dict(comp))
+            except Exception as e:
+                logger.warning(f"Failed to serialize group flow message component: {e}")
         return content
 
-    omitted = len(content) - max_chars
-    marker = f"\n...[TRUNCATED {omitted} chars]..."
-    if len(marker) >= max_chars:
-        return content[:max_chars]
+    async def _component_to_json_safe_dict(self, comp) -> dict:
+        if hasattr(comp, "to_dict"):
+            data = comp.to_dict()
+            if inspect.isawaitable(data):
+                data = await data
+        elif hasattr(comp, "toDict"):
+            data = comp.toDict()
+        else:
+            data = {"type": comp.__class__.__name__, "data": {}}
+        return await self._json_safe(data)
 
-    head_len = max_chars - len(marker)
-    return content[:head_len] + marker
+    async def _json_safe(self, value):
+        if hasattr(value, "to_dict"):
+            return await self._component_to_json_safe_dict(value)
+        if hasattr(value, "toDict"):
+            return await self._json_safe(value.toDict())
+        if isinstance(value, dict):
+            return {k: await self._json_safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [await self._json_safe(item) for item in value]
+        return value
 
+    async def _message_content_to_dict(self, event: AstrMessageEvent) -> list[dict]:
+        return await self._components_to_dict(event.get_messages())
 
-def _extract_bot_content(line: str) -> str | None:
-    """<BOT/HH:MM:SS>: content → content"""
-    idx = line.find(">: ")
-    if idx == -1:
-        return None
-    return line[idx + 3 :].strip()
+    def _truncate_flow_message_text(self, message: str, max_chars: int) -> str:
+        if max_chars <= 0:
+            return message
+        return message[:max_chars]
 
+    async def _record_flow_message(
+        self,
+        event: AstrMessageEvent,
+        rendered_text: str,
+        role: str = "user",
+        content: list[dict] | None = None,
+    ) -> int | None:
+        cfg = self.cfg(event)
+        if not self._is_flow_mode(event, cfg):
+            return None
+        flow_session_id = self._flow_session_id(event)
+        record = await self.context.group_message_flow_manager.insert_record(
+            platform_id=event.get_platform_id(),
+            flow_session_id=flow_session_id,
+            group_id=event.get_group_id() or None,
+            sender_id=event.get_sender_id() if role == "user" else event.get_self_id(),
+            sender_name=event.get_sender_name() if role == "user" else "You",
+            role=role,
+            content=content
+            if content is not None
+            else await self._message_content_to_dict(event),
+            rendered_text=rendered_text,
+        )
+        await self.context.group_message_flow_manager.prune_records(
+            flow_session_id,
+            cfg["flow_max_records"],
+        )
+        return record.id
 
-def _extract_tag_content(line: str, start_tag: str, end_tag: str) -> str | None:
-    """<TAG>content</TAG> → content"""
-    if not line.endswith(end_tag):
-        return None
-    return line[len(start_tag) : -len(end_tag)].strip()
+    async def handle_message(self, event: AstrMessageEvent) -> None:
+        """仅支持群聊"""
+        if event.get_message_type() == MessageType.GROUP_MESSAGE:
+            cfg = self.cfg(event)
+            final_message = await self._render_group_message(event, cfg)
 
+            if cfg["enable_active_reply"] or not self._is_flow_mode(event, cfg):
+                self._append_sliding_message(event, final_message, cfg["max_cnt"])
 
-def _truncate_user_segment(
-    lines: list[str],
-    max_msgs: int = MAX_MSGS_PER_USER_SEGMENT,
-    max_chars: int = MAX_CHARS_PER_USER_SEGMENT,
-) -> list[str]:
-    """段内裁剪：保留最近 N 条，不超字符上限。从段内最早的消息开始丢弃。
+            if self._is_flow_mode(event, cfg):
+                record_id = await self._record_flow_message(event, final_message)
+                if record_id:
+                    event.set_extra("_group_message_flow_record_id", record_id)
 
-    Both limits are active simultaneously — whichever cap is hit first
-    (by count or by chars) stops accumulation. At least one message is
-    always retained even if it alone exceeds max_chars.
-    """
-    result: list[str] = []
-    total = 0
-    for line in reversed(lines):
-        if len(result) >= max_msgs:
-            break
-        if total + len(line) > max_chars and result:
-            break
-        result.append(line)
-        total += len(line) + 1  # +1 for \n
-    result.reverse()
-    return result
+    async def _inject_flow_delta(
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+        cfg: dict,
+    ) -> None:
+        if not req.conversation:
+            return
+        flow_session_id = self._flow_session_id(event)
+        cursor = await self.context.group_message_flow_manager.get_cursor(
+            flow_session_id,
+            req.conversation.cid,
+        )
+        after_id = cursor.last_record_id if cursor else 0
+        current_record_id = event.get_extra("_group_message_flow_record_id")
+        if isinstance(current_record_id, int) and current_record_id > 0:
+            before_id = current_record_id
+            next_cursor_id = current_record_id
+        else:
+            before_id = None
+            next_cursor_id = (
+                await self.context.group_message_flow_manager.get_latest_record_id(
+                    flow_session_id
+                )
+            )
 
+        records = await self.context.group_message_flow_manager.get_records_after(
+            flow_session_id=flow_session_id,
+            after_id=after_id,
+            before_id=before_id,
+            limit=cfg["flow_max_delta_messages"],
+        )
+        if records:
+            chats_str = "\n---\n".join(
+                self._truncate_flow_message_text(
+                    record.rendered_text,
+                    cfg["flow_max_message_chars"],
+                )
+                for record in records
+            )
+            req.system_prompt += (
+                "\n<group_messages_delta>\n"
+                "You are now in a chatroom. New group messages since the last turn:\n"
+                f"{chats_str}\n"
+                "</group_messages_delta>"
+            )
 
-# =============================================================================
-# _split_into_rounds — LTM compaction helper
-# =============================================================================
+        event.set_extra(
+            "_group_message_flow_pending_cursor",
+            {
+                "platform_id": event.get_platform_id(),
+                "flow_session_id": flow_session_id,
+                "conversation_id": req.conversation.cid,
+                "last_record_id": next_cursor_id,
+            },
+        )
 
+    async def _commit_pending_flow_cursor(
+        self,
+        event: AstrMessageEvent,
+        llm_resp: LLMResponse,
+    ) -> None:
+        if not llm_resp or llm_resp.role == "err":
+            return
 
-def _split_into_rounds(contexts: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
-    """Split a flat contexts list into logical rounds.
+        pending = event.get_extra("_group_message_flow_pending_cursor")
+        if not isinstance(pending, dict):
+            return
 
-    A round begins at a ``user`` segment and includes all subsequent
-    ``assistant`` / ``tool`` segments until the next ``user`` segment.
-    """
-    rounds: list[list[dict[str, Any]]] = []
-    current: list[dict[str, Any]] = []
-    for seg in contexts:
-        if seg.get("role") == "user" and current:
-            rounds.append(current)
-            current = []
-        current.append(seg)
-    if current:
-        rounds.append(current)
-    return rounds
+        platform_id = str(pending.get("platform_id") or "")
+        flow_session_id = str(pending.get("flow_session_id") or "")
+        conversation_id = str(pending.get("conversation_id") or "")
+        last_record_id = int(pending.get("last_record_id") or 0)
+        if not platform_id or not flow_session_id or not conversation_id:
+            return
 
+        await self.context.group_message_flow_manager.set_cursor(
+            platform_id=platform_id,
+            flow_session_id=flow_session_id,
+            conversation_id=conversation_id,
+            last_record_id=last_record_id,
+        )
 
-def _rounds_to_text(rounds: list[list[dict[str, Any]]]) -> str:
-    """Render rounds into a plain-text string for LLM summarisation."""
-    lines: list[str] = []
-    for i, rnd in enumerate(rounds, 1):
-        lines.append(f"--- Round {i} ---")
-        for seg in rnd:
-            role = seg.get("role", "?")
-            content = seg.get("content") or seg.get("tool_calls") or ""
-            if isinstance(content, list):
-                content = json.dumps(content, ensure_ascii=False)
-            lines.append(f"[{role}] {content}")
-    return "\n".join(lines)
+    async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
+        """当触发 LLM 请求前，调用此方法修改 req"""
+        cfg = self.cfg(event)
+        if cfg["enable_active_reply"]:
+            if event.unified_msg_origin not in self.session_chats:
+                return
+            chats_str = "\n---\n".join(self.session_chats[event.unified_msg_origin])
+            prompt = req.prompt
+            req.prompt = (
+                f"You are now in a chatroom. The chat history is as follows:\n{chats_str}"
+                f"\nNow, a new message is coming: `{prompt}`. "
+                "Please react to it. Only output your response and do not output any other information. "
+                "You MUST use the SAME language as the chatroom is using."
+            )
+            req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
+        elif self._is_flow_mode(event, cfg):
+            await self._inject_flow_delta(event, req, cfg)
+        else:
+            if event.unified_msg_origin not in self.session_chats:
+                return
+            chats_str = "\n---\n".join(self.session_chats[event.unified_msg_origin])
+            req.system_prompt += (
+                "You are now in a chatroom. The chat history is as follows: \n"
+            )
+            req.system_prompt += chats_str
+
+    async def after_req_llm(
+        self, event: AstrMessageEvent, llm_resp: LLMResponse
+    ) -> None:
+        cfg = self.cfg(event)
+        if self._is_flow_mode(event, cfg) and not cfg["enable_active_reply"]:
+            await self._commit_pending_flow_cursor(event, llm_resp)
+            return
+        if event.unified_msg_origin not in self.session_chats:
+            return
+
+        if llm_resp.completion_text:
+            final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {llm_resp.completion_text}"
+            logger.debug(
+                f"Recorded AI response: {event.unified_msg_origin} | {final_message}"
+            )
+            self._append_sliding_message(event, final_message, cfg["max_cnt"])
+
+    async def record_bot_message(self, event: AstrMessageEvent) -> None:
+        cfg = self.cfg(event)
+        if not self._is_flow_mode(event, cfg):
+            return
+        if not cfg["flow_record_bot_messages"]:
+            return
+
+        result = event.get_result()
+        if not result or not result.chain:
+            return
+        if result.result_content_type in {
+            ResultContentType.LLM_RESULT,
+            ResultContentType.STREAMING_RESULT,
+            ResultContentType.STREAMING_FINISH,
+        }:
+            return
+
+        datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
+        rendered_text = f"[You/{datetime_str}]: {result.get_plain_text(True)}"
+        await self._record_flow_message(
+            event,
+            rendered_text,
+            role="bot",
+            content=await self._components_to_dict(result.chain),
+        )

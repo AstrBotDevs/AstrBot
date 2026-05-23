@@ -28,6 +28,7 @@ from astrbot.core.context_compaction_scheduler import (
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.group_message_flow_mgr import GroupMessageFlowManager
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.memory.memory_manager import MemoryManager
 from astrbot.core.persona_mgr import PersonaManager
@@ -492,6 +493,9 @@ class AstrBotCoreLifecycle:
         # 初始化平台消息历史管理器
         self.platform_message_history_manager = PlatformMessageHistoryManager(self.db)
 
+        # 初始化群聊消息流管理器
+        self.group_message_flow_manager = GroupMessageFlowManager(self.db)
+
         # 初始化知识库管理器
         self.kb_manager = KnowledgeBaseManager(self.provider_manager)
         # 初始化记忆管理器
@@ -515,10 +519,9 @@ class AstrBotCoreLifecycle:
             self.persona_mgr,
             self.astrbot_config_mgr,
             self.kb_manager,
-            self.memory_manager,
-        )
-        self.star_context.context_compaction_scheduler = (
-            self.context_compaction_scheduler
+            self.cron_manager,
+            subagent_orchestrator=self.subagent_orchestrator,
+            group_message_flow_manager=self.group_message_flow_manager,
         )
 
         # 初始化插件管理器
