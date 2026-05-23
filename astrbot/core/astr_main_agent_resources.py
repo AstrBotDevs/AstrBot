@@ -351,11 +351,18 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             MessageChain(chain=components),
         )
 
-        if file_from_sandbox:
-            try:
-                os.remove(local_path)
-            except Exception as e:
-                logger.error(f"Error removing temp file {local_path}: {e}")
+        if str(target_session) == context.context.event.unified_msg_origin:
+            context.context.event._has_send_oper = True
+            context.context.event.set_extra(
+                "_send_message_to_user_current_session",
+                True,
+            )
+
+        # if file_from_sandbox:
+        #     try:
+        #         os.remove(local_path)
+        #     except Exception as e:
+        #         logger.error(f"Error removing temp file {local_path}: {e}")
 
         return f"Message sent to session {target_session}"
 
