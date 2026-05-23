@@ -38,6 +38,7 @@ async def test_reload_from_config_default_persona_is_resolved():
     handoff = orchestrator.handoffs[0]
     assert handoff.agent.instructions == default_persona["prompt"]
     assert handoff.agent.tools is None
+    assert handoff.agent.skills == []
     assert handoff.agent.begin_dialogs == default_persona["_begin_dialogs_processed"]
 
 
@@ -55,6 +56,7 @@ async def test_reload_from_config_missing_persona_falls_back_to_inline_and_warns
     handoff = orchestrator.handoffs[0]
     assert handoff.agent.instructions == "inline prompt"
     assert handoff.agent.tools == ["tool_a", "tool_b"]
+    assert handoff.agent.skills == []
     assert handoff.agent.begin_dialogs is None
     mock_logger.warning.assert_called_once_with(
         "SubAgent persona %s not found, fallback to inline prompt.",
@@ -71,6 +73,7 @@ async def test_reload_from_config_uses_processed_begin_dialogs_and_deepcopy():
         "name": "custom",
         "prompt": "persona prompt",
         "tools": ["tool_from_persona"],
+        "skills": ["web-search-skill"],
         "_begin_dialogs_processed": processed_dialogs,
     }
     orchestrator = SubAgentOrchestrator(tool_mgr=tool_mgr, persona_mgr=persona_mgr)
@@ -81,9 +84,8 @@ async def test_reload_from_config_uses_processed_begin_dialogs_and_deepcopy():
     handoff = orchestrator.handoffs[0]
     assert handoff.agent.instructions == "persona prompt"
     assert handoff.agent.tools == ["tool_from_persona"]
-    begin_dialogs = handoff.agent.begin_dialogs
-    assert begin_dialogs is not None
-    assert begin_dialogs[0]["content"] == "hello"
+    assert handoff.agent.skills == ["web-search-skill"]
+    assert handoff.agent.begin_dialogs[0]["content"] == "hello"
 
 
 @pytest.mark.asyncio
@@ -110,3 +112,30 @@ async def test_reload_from_config_tool_normalization(raw_tools, expected_tools):
 
     handoff = orchestrator.handoffs[0]
     assert handoff.agent.tools == expected_tools
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("raw_skills", "expected_skills"),
+    [
+        (None, None),
+        ([" web-search-skill ", "", "weather"], ["web-search-skill", "weather"]),
+        ("not-a-list", []),
+    ],
+)
+async def test_reload_from_config_skill_normalization(raw_skills, expected_skills):
+    tool_mgr = MagicMock()
+    persona_mgr = MagicMock()
+    persona_mgr.get_persona_v3_by_id.return_value = {
+        "name": "custom",
+        "prompt": "persona prompt",
+        "tools": [],
+        "skills": raw_skills,
+        "_begin_dialogs_processed": [],
+    }
+    orchestrator = SubAgentOrchestrator(tool_mgr=tool_mgr, persona_mgr=persona_mgr)
+
+    await orchestrator.reload_from_config(_build_cfg({"persona_id": "custom"}))
+
+    handoff = orchestrator.handoffs[0]
+    assert handoff.agent.skills == expected_skills

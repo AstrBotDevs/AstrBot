@@ -63,7 +63,8 @@ class SubAgentOrchestrator:
             provider_id = item.get("provider_id")
             if provider_id is not None:
                 provider_id = str(provider_id).strip() or None
-            tools: list[str | FunctionTool] | None = item.get("tools")
+            tools = item.get("tools", [])
+            skills = item.get("skills", [])
             begin_dialogs = None
 
             if persona_data:
@@ -73,15 +74,8 @@ class SubAgentOrchestrator:
                 begin_dialogs = copy.deepcopy(
                     persona_data.get("_begin_dialogs_processed"),
                 )
-                persona_tools = persona_data.get("tools")
-                if isinstance(persona_tools, list):
-                    tools = [str(t).strip() for t in persona_tools if str(t).strip()]
-                elif persona_tools is None:
-                    # persona exists but explicitly has tools=None -> use None
-                    # This preserves the case where persona has no tools
-                    tools = None
-                else:
-                    tools = None
+                tools = persona_data.get("tools")
+                skills = persona_data.get("skills", [])
                 if public_description == "" and prompt:
                     public_description = prompt[:120]
             if tools is None:
@@ -89,20 +83,19 @@ class SubAgentOrchestrator:
             elif not isinstance(tools, list):
                 tools = []
             else:
-                tools = [
-                    t if isinstance(t, FunctionTool) else str(t).strip()
-                    for t in tools
-                    if (
-                        isinstance(t, FunctionTool)
-                        or (isinstance(t, str) and t.strip())
-                        or (not isinstance(t, FunctionTool) and str(t).strip())
-                    )
-                ]
+                tools = [str(t).strip() for t in tools if str(t).strip()]
+            if skills is None:
+                skills = None
+            elif not isinstance(skills, list):
+                skills = []
+            else:
+                skills = [str(s).strip() for s in skills if str(s).strip()]
 
             agent = Agent[AstrAgentContext](
                 name=name,
                 instructions=instructions,
-                tools=tools,
+                tools=tools,  # type: ignore
+                skills=skills,
             )
             agent.begin_dialogs = begin_dialogs
             # The tool description should be a short description for the main LLM,
