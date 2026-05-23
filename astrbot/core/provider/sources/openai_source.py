@@ -678,26 +678,22 @@ class ProviderOpenAIOfficial(Provider):
         state = ChatCompletionStreamState()
 
         async for chunk in stream:
-            choice = chunk.choices[0] if chunk.choices else None
-            delta = choice.delta if choice else None
-
-            if delta and (dtcs := delta.tool_calls):
-                for idx, tc in enumerate(dtcs):
-                    # siliconflow workaround
-                    if tc.function and tc.function.arguments:
-                        tc.type = "function"
-                    # Fix for #6661: Add missing 'index' field to tool_call deltas
-                    # Gemini and some OpenAI-compatible proxies omit this field
-                    if not hasattr(tc, "index") or tc.index is None:
-                        tc.index = idx
-            # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
-            # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
-            # refs: AstrBot#6689 / openai-python#5069 / #5047
-            if delta is not None:
-                try:
-                    state.handle_chunk(chunk)
-                except Exception as e:
-                    logger.error("Saving chunk state error: " + str(e))
+            try:
+                # Fix for #6661: Add missing 'index' field to tool_call deltas
+                # Gemini and some OpenAI-compatible proxies omit this field
+                if chunk.choices:
+                    for choice in chunk.choices:
+                        if choice.delta and choice.delta.tool_calls:
+                            for idx, tc in enumerate(choice.delta.tool_calls):
+                                if not hasattr(tc, "index") or tc.index is None:
+                                    tc.index = idx
+                state.handle_chunk(chunk)
+            except Exception as e:
+                logger.warning("Saving chunk state error: " + str(e))
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            delta = choice.delta
             # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)

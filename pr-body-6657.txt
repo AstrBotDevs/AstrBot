@@ -1,0 +1,37 @@
+## Summary
+
+Fix #6657 - Telegram 暱稱與用戶 ID 問題
+
+## Problem
+
+Previously, Telegram adapter used the `username` as the user's nickname for plugins. This caused:
+1. Plugins matching users by username instead of numeric ID
+2. Users being addressed by their username instead of their actual display name
+
+## Solution
+
+Changed the nickname priority order to use the actual display name:
+```
+full_name > first_name > username > Unknown
+```
+
+## Changes
+
+Modified `tg_adapter.py`:
+```python
+# Before:
+message.sender = MessageMember(
+    str(_from_user.id),
+    _from_user.username or "Unknown",
+)
+
+# After:
+message.sender = MessageMember(
+    str(_from_user.id),
+    _from_user.full_name or _from_user.first_name or _from_user.username or "Unknown",
+)
+```
+
+## Testing
+
+The fix maintains backward compatibility by falling back to username if full_name is not available.
