@@ -129,16 +129,13 @@ class ContextManager:
             return messages
 
     async def _run_compression(
-        self,
-        messages: list[Message],
-        prev_tokens: int,
+        self, messages: list[Message], token_count_before: int
     ) -> list[Message]:
         """Compress/truncate the messages.
 
         Args:
             messages: The original message list.
-            prev_tokens: The token count before compression.
-            event: Optional event for triggering hooks.
+            token_count_before: The token count before compression.
 
         Returns:
             The compressed/truncated message list.
@@ -159,7 +156,7 @@ class ContextManager:
         ) * 100
         logger.info(
             f"Compress #{self._compression_count} completed."
-            f" {prev_tokens} -> {tokens_after_compression} tokens,"
+            f" {token_count_before} -> {tokens_after_compression} tokens,"
             f" compression rate: {compress_rate:.2f}%.",
         )
 
