@@ -959,6 +959,14 @@
             "auto_remove": {
               "description": "[Lark] Auto-remove emoji after processing"
             }
+          },
+          "footer": {
+            "status": {
+              "description": "[Lark] Show Generation Status in Streaming Cards"
+            },
+            "elapsed": {
+              "description": "[Lark] Show Elapsed Time in Streaming Cards"
+            }
           }
         },
         "telegram": {

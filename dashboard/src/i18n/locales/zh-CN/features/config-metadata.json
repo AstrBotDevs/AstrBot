@@ -968,6 +968,14 @@
             "auto_remove": {
               "description": "[飞书] 处理完毕后自动撤回表情"
             }
+          },
+          "footer": {
+            "status": {
+              "description": "[飞书] 流式卡片显示生成状态"
+            },
+            "elapsed": {
+              "description": "[飞书] 流式卡片显示生成耗时"
+            }
           }
         },
         "telegram": {

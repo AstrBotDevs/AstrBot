@@ -288,7 +288,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "platform_specific": {
         # 平台特异配置：按平台分类，平台下按功能分组
         "lark": {
-            "pre_ack_emoji": {"enable": False, "emojis": ["Typing"], "auto_remove": True},
+            "pre_ack_emoji": {"enable": False, "emojis": ["Typing"]},
+            "footer": {"status": False, "elapsed": False},
         },
         "telegram": {
             "pre_ack_emoji": {"enable": False, "emojis": ["✍️"], "auto_remove": True},
@@ -4574,12 +4575,13 @@ CONFIG_METADATA_3 = {
                             "platform_specific.lark.pre_ack_emoji.enable": True,
                         },
                     },
-                    "platform_specific.lark.pre_ack_emoji.auto_remove": {
-                        "description": "[飞书] 处理完毕后自动撤回表情",
+                    "platform_specific.lark.footer.status": {
+                        "description": "[飞书] 流式卡片底部显示生成状态",
                         "type": "bool",
-                        "condition": {
-                            "platform_specific.lark.pre_ack_emoji.enable": True,
-                        },
+                    },
+                    "platform_specific.lark.footer.elapsed": {
+                        "description": "[飞书] 流式卡片底部显示生成耗时",
+                        "type": "bool",
                     },
                     "platform_specific.telegram.pre_ack_emoji.enable": {
                         "description": "[Telegram] 启用预回应表情",

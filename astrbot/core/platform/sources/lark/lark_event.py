@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import os
+import time
 import uuid
 from io import BytesIO
 
@@ -42,6 +43,9 @@ from astrbot.core.utils.metrics import Metric
 
 
 class LarkMessageEvent(AstrMessageEvent):
+    STREAMING_TEXT_ELEMENT_ID = "markdown_1"
+    STREAMING_FOOTER_ELEMENT_ID = "footer_markdown"
+
     def __init__(
         self,
         message_str,
@@ -844,20 +848,63 @@ class LarkMessageEvent(AstrMessageEvent):
         response = await self.bot.im.v1.message_reaction.acreate(request)
         if not response.success():
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
+            return
+
+    @staticmethod
+    def _build_streaming_footer_text(
+        *,
+        status_enabled: bool,
+        elapsed_enabled: bool,
+        completed: bool,
+        elapsed_seconds: float | None = None,
+    ) -> str:
+        parts = []
+        if status_enabled:
+            parts.append("已完成" if completed else "生成中...")
+        if elapsed_enabled and completed and elapsed_seconds is not None:
+            parts.append(f"耗时 {elapsed_seconds:.1f}s")
+        return " · ".join(parts)
+
+    async def _create_streaming_card(
+        self, footer_text: str | None = None
+    ) -> str | None:
+        """创建一个开启流式更新模式的卡片实体，返回 card_id。"""
+        if self.bot.cardkit is None:
+            logger.error("[Lark] API Client cardkit 模块未初始化")
             return None
 
-        # 返回 reaction_id 供调用方保存（如 PreAckEmojiManager 用于后续撤回）
-        if response.data and response.data.reaction_id:
-            return response.data.reaction_id
-        return None
+        elements = [
+            {
+                "tag": "markdown",
+                "content": "",
+                "element_id": self.STREAMING_TEXT_ELEMENT_ID,
+            }
+        ]
+        if footer_text is not None:
+            elements.append(
+                {
+                    "tag": "markdown",
+                    "content": footer_text,
+                    "element_id": self.STREAMING_FOOTER_ELEMENT_ID,
+                }
+            )
 
-    async def remove_react(self, emoji: str, reaction_id: str | None = None) -> None:
-        if not reaction_id:
-            return
-
-        if self.bot.im is None:
-            logger.warning("[Lark] API Client im 模块未初始化，无法撤回表情")
-            return
+        card_json = {
+            "schema": "2.0",
+            "header": {
+                "title": {"content": "", "tag": "plain_text"},
+            },
+            "config": {
+                "streaming_mode": True,
+                "summary": {"content": ""},
+                "streaming_config": {
+                    "print_frequency_ms": {"default": 50},
+                    "print_step": {"default": 2},
+                    "print_strategy": "fast",
+                },
+            },
+            "body": {"elements": elements},
+        }
 
         request = (
             DeleteMessageReactionRequest.builder()
@@ -870,7 +917,154 @@ class LarkMessageEvent(AstrMessageEvent):
         if not response.success():
             logger.warning(f"撤回飞书表情回应失败({response.code}): {response.msg}")
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+        if response.data is None or not response.data.card_id:
+            logger.error("[Lark] 创建流式卡片实体成功但未返回 card_id")
+            return None
+
+        card_id = response.data.card_id
+        logger.debug(f"[Lark] 创建流式卡片实体成功: {card_id}")
+        return card_id
+
+    async def _send_card_message(
+        self,
+        card_id: str,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+    ) -> bool:
+        """将卡片实体作为 interactive 消息发送。"""
+        content = json.dumps(
+            {"type": "card", "data": {"card_id": card_id}},
+            ensure_ascii=False,
+        )
+        return await self._send_im_message(
+            self.bot,
+            content=content,
+            msg_type="interactive",
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        )
+
+    async def _update_streaming_text(
+        self,
+        card_id: str,
+        content: str,
+        sequence: int,
+    ) -> bool:
+        """调用 CardKit 流式更新文本接口，向 markdown_1 组件推送全量文本。"""
+        if self.bot.cardkit is None:
+            logger.error("[Lark] API Client cardkit 模块未初始化")
+            return False
+
+        request = (
+            ContentCardElementRequest.builder()
+            .card_id(card_id)
+            .element_id(self.STREAMING_TEXT_ELEMENT_ID)
+            .request_body(
+                ContentCardElementRequestBody.builder()
+                .content(content)
+                .sequence(sequence)
+                .uuid(str(uuid.uuid4()))
+                .build()
+            )
+            .build()
+        )
+
+        try:
+            response = await self.bot.cardkit.v1.card_element.acontent(request)
+        except Exception as e:
+            logger.debug(f"[Lark] 流式更新文本失败 (ignored): {e}")
+            return False
+
+        if not response.success():
+            logger.debug(f"[Lark] 流式更新文本失败({response.code}): {response.msg}")
+            return False
+
+        return True
+
+    async def _update_streaming_footer(
+        self,
+        card_id: str,
+        content: str,
+        sequence: int,
+    ) -> bool:
+        """更新 CardKit 流式卡片底部状态文本。"""
+        if not content:
+            return True
+        if self.bot.cardkit is None:
+            logger.error("[Lark] API Client cardkit 模块未初始化")
+            return False
+
+        request = (
+            ContentCardElementRequest.builder()
+            .card_id(card_id)
+            .element_id(self.STREAMING_FOOTER_ELEMENT_ID)
+            .request_body(
+                ContentCardElementRequestBody.builder()
+                .content(content)
+                .sequence(sequence)
+                .uuid(str(uuid.uuid4()))
+                .build()
+            )
+            .build()
+        )
+
+        try:
+            response = await self.bot.cardkit.v1.card_element.acontent(request)
+        except Exception as e:
+            logger.debug(f"[Lark] 流式更新 footer 失败 (ignored): {e}")
+            return False
+
+        if not response.success():
+            logger.debug(
+                f"[Lark] 流式更新 footer 失败({response.code}): {response.msg}"
+            )
+            return False
+
+        return True
+
+    async def _close_streaming_mode(
+        self,
+        card_id: str,
+        sequence: int,
+    ) -> None:
+        """关闭卡片的流式更新模式，使其可正常转发、摘要恢复。"""
+        if self.bot.cardkit is None:
+            logger.error("[Lark] API Client cardkit 模块未初始化")
+            return
+
+        settings_json = json.dumps(
+            {"config": {"streaming_mode": False}},
+            ensure_ascii=False,
+        )
+
+        request = (
+            SettingsCardRequest.builder()
+            .card_id(card_id)
+            .request_body(
+                SettingsCardRequestBody.builder()
+                .settings(settings_json)
+                .sequence(sequence)
+                .uuid(str(uuid.uuid4()))
+                .build()
+            )
+            .build()
+        )
+
+        try:
+            response = await self.bot.cardkit.v1.card.asettings(request)
+        except Exception as e:
+            logger.error(f"[Lark] 关闭流式模式失败: {e}")
+            return
+
+        if not response.success():
+            logger.error(f"[Lark] 关闭流式模式失败({response.code}): {response.msg}")
+        else:
+            logger.debug(f"[Lark] 流式模式已关闭: {card_id}")
+
+    async def _fallback_send_streaming(self, generator, use_fallback: bool = False):
+        """回退到非流式发送：缓冲全部文本后一次性发送，并保留父类副作用。"""
         buffer = None
         async for chain in generator:
             if not buffer:
@@ -908,6 +1102,18 @@ class LarkMessageEvent(AstrMessageEvent):
         text_changed = asyncio.Event()
         sender_task = None
         fallback_used = False  # 回退路径已处理 Metric，避免重复上报
+        footer_cfg = self.get_extra("lark_streaming_footer", {}) or {}
+        footer_status_enabled = bool(footer_cfg.get("status", False))
+        footer_elapsed_enabled = bool(footer_cfg.get("elapsed", False))
+        footer_enabled = footer_status_enabled or footer_elapsed_enabled
+        started_at = time.monotonic()
+        initial_footer_text = None
+        if footer_enabled:
+            initial_footer_text = self._build_streaming_footer_text(
+                status_enabled=footer_status_enabled,
+                elapsed_enabled=footer_elapsed_enabled,
+                completed=False,
+            )
 
         async def _sender_loop() -> None:
             """信号驱动的文本发送循环，有新内容就发，RTT 自然限流。"""
@@ -952,6 +1158,16 @@ class LarkMessageEvent(AstrMessageEvent):
             if delta and delta != last_sent:
                 sequence += 1
                 await self._update_streaming_text(card_id, delta, sequence)
+            if footer_enabled:
+                footer_text = self._build_streaming_footer_text(
+                    status_enabled=footer_status_enabled,
+                    elapsed_enabled=footer_elapsed_enabled,
+                    completed=True,
+                    elapsed_seconds=time.monotonic() - started_at,
+                )
+                if footer_text:
+                    sequence += 1
+                    await self._update_streaming_footer(card_id, footer_text, sequence)
             sequence += 1
             await self._close_streaming_mode(card_id, sequence)
 
@@ -984,7 +1200,9 @@ class LarkMessageEvent(AstrMessageEvent):
 
                         # Lazy card creation on first text token
                         if card_id is None:
-                            card_id = await self._create_streaming_card()
+                            card_id = await self._create_streaming_card(
+                                initial_footer_text if footer_enabled else None
+                            )
                             if not card_id:
                                 logger.warning(
                                     "[Lark] 无法创建流式卡片，回退到非流式发送",
