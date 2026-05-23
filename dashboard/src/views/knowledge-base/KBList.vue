@@ -1,6 +1,20 @@
 <template>
   <div class="kb-list-page">
 
+    <!-- 操作按钮栏 -->
+    <div class="action-bar mb-6">
+      <v-btn prepend-icon="mdi-plus" color="primary" variant="elevated" @click="showCreateDialog = true">
+        {{ t('list.create') }}
+      </v-btn>
+      <v-btn prepend-icon="mdi-folder-import" variant="tonal" @click="showPackageImportDialog = true">
+        {{ t('list.importPackage') }}
+      </v-btn>
+      <v-btn prepend-icon="mdi-refresh" variant="tonal" @click="loadKnowledgeBases" :loading="loading">
+        {{ t('list.refresh') }}
+      </v-btn>
+    </div>
+
+    <!-- 知识库网格 -->
     <div v-if="loading && kbList.length === 0" class="loading-container">
       <v-progress-circular indeterminate color="primary" size="64" />
       <p class="mt-4 text-medium-emphasis">{{ t("list.loading") }}</p>
@@ -317,22 +331,25 @@
       {{ snackbar.text }}
     </v-snackbar>
 
-    <div class="position-absolute" style="bottom: 0px; right: 16px">
-      <small @click="router.push('/alkaid/knowledge-base')"
-        ><a style="text-decoration: underline; cursor: pointer"
-          >切换到旧版知识库</a
-        ></small
-      >
+    <KBPackageImportDialog
+      v-model="showPackageImportDialog"
+      :embedding-providers="embeddingProviders"
+      :rerank-providers="rerankProviders"
+      @imported="handlePackageImported"
+    />
+
+    <div class="position-absolute" style="bottom: 0px; right: 16px;">
+      <small @click="router.push('/alkaid/knowledge-base')"><a style="text-decoration: underline; cursor: pointer;">切换到旧版知识库</a></small>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
-import { useRouter } from "vue-router";
-import axios from "@/utils/request";
-import { useModuleI18n } from "@/i18n/composables";
-import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import axios from 'axios'
+import { useModuleI18n } from '@/i18n/composables'
+import KBPackageImportDialog from './components/KBPackageImportDialog.vue'
 
 interface KnowledgeBaseItem {
   kb_id: string;
@@ -375,9 +392,10 @@ const showEmbeddingWarning = ref(false);
 const pendingEmbeddingProvider = ref<string | null>(null);
 
 // 对话框
-const showCreateDialog = ref(false);
-const showEmojiPicker = ref(false);
-const showDeleteDialog = ref(false);
+const showCreateDialog = ref(false)
+const showEmojiPicker = ref(false)
+const showDeleteDialog = ref(false)
+const showPackageImportDialog = ref(false)
 
 // Snackbar 通知
 const snackbar = ref({
@@ -662,6 +680,11 @@ const closeCreateDialog = () => {
   };
   formRef.value?.reset?.();
 };
+
+const handlePackageImported = async () => {
+  showSnackbar(t('messages.importPackageSuccess'))
+  await loadKnowledgeBases()
+}
 
 // 选择 emoji
 const selectEmoji = (emoji: string) => {
