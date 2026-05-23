@@ -672,7 +672,9 @@ class ProviderOpenAIOfficial(Provider):
             # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
             # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
             # refs: AstrBot#6689 / openai-python#5069 / #5047
-            if delta is not None:
+            # 例外：流末尾的 usage chunk（choices=[]，delta=None 但有 usage 数据）
+            # 需要传给 state，否则最终 completion 会丢失 usage 信息
+            if delta is not None or chunk.usage:
                 try:
                     state.handle_chunk(chunk)
                 except Exception as e:
