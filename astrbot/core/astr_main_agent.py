@@ -1514,6 +1514,38 @@ def _get_fallback_chat_providers(
         logger.warning(f"Failed to parse original UMO for global context: {e}")
 
 
+def _provider_supports_modality(provider: Provider, modality: str) -> bool:
+    modalities = provider.provider_config.get("modalities", None)
+    return isinstance(modalities, list) and modality in modalities
+
+
+def _select_image_chat_provider(
+    provider: Provider,
+    req: ProviderRequest,
+    fallback_providers: list[Provider],
+) -> Provider:
+    if not req.image_urls or _provider_supports_modality(provider, "image"):
+        return provider
+
+    provider_id = provider.provider_config.get("id", "<unknown>")
+    for fallback_provider in fallback_providers:
+        if not _provider_supports_modality(fallback_provider, "image"):
+            continue
+        fallback_id = fallback_provider.provider_config.get("id", "<unknown>")
+        logger.warning(
+            "Chat provider %s does not support image input, switching this request to fallback provider %s.",
+            provider_id,
+            fallback_id,
+        )
+        return fallback_provider
+
+    logger.warning(
+        "Chat provider %s does not support image input and no image-capable fallback provider is available.",
+        provider_id,
+    )
+    return provider
+
+
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
@@ -1759,6 +1791,16 @@ async def build_main_agent(
             ),
         )
 
+    fallback_providers = _get_fallback_chat_providers(
+        provider, plugin_context, config.provider_settings
+    )
+    selected_provider = _select_image_chat_provider(provider, req, fallback_providers)
+    if selected_provider is not provider:
+        provider = selected_provider
+        if req.model:
+            req.model = None
+        fallback_providers = [p for p in fallback_providers if p is not provider]
+
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()
         if model_info := LLM_METADATAS.get(model):
@@ -1820,11 +1862,7 @@ async def build_main_agent(
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
-        fallback_providers=_get_fallback_chat_providers(
-            provider,
-            plugin_context,
-            config.provider_settings,
-        ),
+        fallback_providers=fallback_providers,
         tool_result_overflow_dir=(
             get_astrbot_system_tmp_path()
             if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")
