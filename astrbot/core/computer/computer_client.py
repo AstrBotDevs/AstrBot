@@ -547,7 +547,6 @@ async def get_booter(
                     session_id,
                     shutdown_err,
                 )
-            _clear_cua_idle_state(session_id)
             session_booter.pop(session_id, None)
         elif _get_booter_skills_revision(booter) != current_skills_revision:
             logger.info(
@@ -634,13 +633,20 @@ async def get_booter(
                 session_id,
             )
             await _sync_skills_to_sandbox(client)
-        except Exception:
-            logger.exception(
-                "[Computer] booter_init_failed booter=%s session=%s",
-                booter_type,
-                session_id,
-            )
-            raise
+        except Exception as e:
+            logger.error(f"Error booting sandbox for session {session_id}: {e}")
+            try:
+                if booter_type == "shipyard_neo":
+                    await client.shutdown(delete_sandbox=True)
+                else:
+                    await client.shutdown()
+            except Exception as shutdown_error:
+                logger.warning(
+                    "Failed to shutdown sandbox after boot error for session %s: %s",
+                    session_id,
+                    shutdown_error,
+                )
+            raise e
 
         session_booter[session_id] = client
     if booter_type == "cua":

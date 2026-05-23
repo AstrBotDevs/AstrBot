@@ -37,8 +37,8 @@ class FakeClient():
             })
             
     async def send_text(self, to: str, message: str):
-        print('Message sent:', to, message)
-        
+        print('发了消息:', to, message)
+
     async def send_image(self, to: str, image_path: str):
         print('Image sent:', to, image_path)
 ```
@@ -56,9 +56,9 @@ from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import FakeClient
 from .fake_platform_event import FakePlatformEvent
-            
-# Register the platform adapter. First param: platform name, second: description, third: default config.
-@register_platform_adapter("fake", "fake adapter", default_config_tmpl={
+
+# 注册平台适配器。第一个参数为平台名，第二个为描述。第三个为默认配置。
+@register_platform_adapter("fake", "fake 适配器", default_config_tmpl={
     "token": "your_token",
     "username": "bot_username"
 })
@@ -66,9 +66,9 @@ class FakePlatformAdapter(Platform):
 
     def __init__(self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue) -> None:
         super().__init__(event_queue)
-        self.config = platform_config # The default config above; filled in by the user and passed here
-        self.settings = platform_settings # platform_settings: platform settings
-    
+        self.config = platform_config # 上面的默认配置，用户填写后会传到这里
+        self.settings = platform_settings # platform_settings 平台设置。
+
     async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
         # Must be implemented
         await super().send_by_session(session, message_chain)
@@ -85,15 +85,11 @@ class FakePlatformAdapter(Platform):
 
         # FakeClient is defined by us — this is just an example. This is its callback function.
         async def on_received(data):
-            logger.info(
-                "Received platform message: %s",
-                data,
-                extra={"tag": "platform:fake", "platform_id": "fake"},
-            )
+            logger.info(data)
             abm = await self.convert_message(data=data) # 转换成 AstrBotMessage
-            await self.handle_msg(abm) 
-        
-        # Initialize FakeClient
+            await self.handle_msg(abm)
+
+        # 初始化 FakeClient
         self.client = FakeClient(self.config['token'], self.config['username'])
         self.client.on_message_received = on_received
         await self.client.start_polling() # Continuously listens for messages; this is a blocking call.
@@ -110,9 +106,9 @@ class FakePlatformAdapter(Platform):
         abm.message = [Plain(text=data['content'])] # Message chain. Append other message types as needed. Important!
         abm.raw_message = data # Raw message.
         abm.self_id = data['bot_id']
-        abm.session_id = data['userid'] # Session ID. Important!
-        abm.message_id = data['message_id'] # Message ID.
-        
+        abm.session_id = data['userid'] # 会话 ID。重要！
+        abm.message_id = data['message_id'] # 消息 ID。
+
         return abm
     
     async def handle_msg(self, message: AstrBotMessage):
@@ -150,7 +146,7 @@ class FakePlatformEvent(AstrMessageEvent):
         for i in message.chain: # Iterate over the message chain
             if isinstance(i, Plain): # If it's a text message
                 await self.client.send_text(to=self.get_sender_id(), message=i.text)
-            elif isinstance(i, Image): # If it's an image
+            elif isinstance(i, Image): # 如果是图片类型的
                 img_url = i.file
                 img_path = ""
                 # The three conditions below can be used as a reference.
@@ -161,8 +157,8 @@ class FakePlatformEvent(AstrMessageEvent):
                 else:
                     img_path = img_url
 
-                # Make good use of debugging!
-                    
+                # 请善于 Debug！
+
                 await self.client.send_image(to=self.get_sender_id(), image_path=img_path)
 
         await super().send(message) # Must be called at the end to invoke the parent class's send method.

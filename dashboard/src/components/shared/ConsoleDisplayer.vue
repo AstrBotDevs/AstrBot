@@ -760,9 +760,27 @@ export default {
   white-space: pre-wrap;
 }
 
-.console-empty {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
+:deep(.console-log-line--structured) {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
+  white-space: normal;
+}
+
+:deep(.console-log-prefix),
+:deep(.console-log-level),
+:deep(.console-log-message) {
+  min-width: 0;
+  white-space: pre-wrap;
+}
+
+:deep(.console-log-level) {
+  font-variant-numeric: tabular-nums;
+}
+
+:deep(.console-log-message) {
+  overflow-wrap: anywhere;
 }
 
 :deep(.fade-in) {

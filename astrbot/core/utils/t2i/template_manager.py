@@ -124,8 +124,7 @@ class TemplateManager:
         raise FileNotFoundError("模板不存在｡")
 
     def create_template(self, name: str, content: str) -> None:
-        """在用户目录中创建一个新的模板文件。"""
-        validate_template_content(content, strict=True)
+        """在用户目录中创建一个新的模板文件｡"""
         path = self._get_user_template_path(name)
         if os.path.exists(path):
             raise FileExistsError("同名模板已存在｡")

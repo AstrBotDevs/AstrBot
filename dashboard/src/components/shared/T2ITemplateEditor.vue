@@ -281,7 +281,6 @@ import axios from "@/utils/request";
 
 const { t } = useI18n();
 const { tm } = useModuleI18n("core.shared");
-const toast = useToast();
 
 // --- 响应式数据 ---
 const dialog = ref(false);
@@ -428,9 +427,8 @@ const saveTemplate = async () => {
       });
     }
   } catch (error) {
-    const msg = (error as any)?.response?.data?.message || (error as any)?.message || String(error);
-    console.error("保存模板失败:", msg);
-    toast.error(msg);
+    console.error("保存模板失败:", error);
+    // 可以在此添加错误提示
   } finally {
     saveLoading.value = false;
   }
@@ -442,9 +440,7 @@ const setActiveTemplate = async (name) => {
     await axios.post("/api/t2i/templates/set_active", { name });
     activeTemplate.value = name;
   } catch (error) {
-    const msg = (error as any)?.response?.data?.message || (error as any)?.message || String(error);
-    console.error(`应用模板 '${name}' 失败:`, msg);
-    toast.error(msg);
+    console.error(`应用模板 '${name}' 失败:`, error);
   } finally {
     applyLoading.value = false;
   }
@@ -465,9 +461,7 @@ const confirmDelete = async () => {
     await loadInitialData();
     selectedTemplate.value = "base";
   } catch (error) {
-    const msg = (error as any)?.response?.data?.message || (error as any)?.message || String(error);
-    console.error(`删除模板失败:`, msg);
-    toast.error(msg);
+    console.error(`删除模板 '${selectedTemplate.value}' 失败:`, error);
   } finally {
     saveLoading.value = false;
   }
@@ -485,9 +479,7 @@ const confirmReset = async () => {
       await setActiveTemplate("base");
     }
   } catch (error) {
-    const msg = (error as any)?.response?.data?.message || (error as any)?.message || String(error);
-    console.error("重置模板失败:", msg);
-    toast.error(msg);
+    console.error("重置模板失败:", error);
   } finally {
     resetLoading.value = false;
   }

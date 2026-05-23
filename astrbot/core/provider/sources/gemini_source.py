@@ -11,7 +11,6 @@ from urllib.parse import urlparse
 
 import aiofiles
 import anyio
-import httpx
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -67,9 +66,6 @@ class ProviderGoogleGenAI(Provider):
         self.api_base: str | None = provider_config.get("api_base", None)
         if self.api_base and self.api_base.endswith("/"):
             self.api_base = self.api_base[:-1]
-
-        self._http_client: httpx.AsyncClient | None = None
-        self._stale_http_clients: list[httpx.AsyncClient] = []
         self._init_client()
         self.set_model(provider_config.get("model", "unknown"))
         self._init_safety_settings()
