@@ -381,11 +381,15 @@ class TelegramPlatformAdapter(Platform):
             reply_update = Update(update_id=1, message=update.message.reply_to_message)
             reply_abm = await self.convert_message(reply_update, context, False)
             if reply_abm:
+                reply_sender_id = reply_abm.sender.user_id
+                if reply_sender_id == str(context.bot.id):
+                    reply_sender_id = message.self_id
+
                 message.message.append(
                     Comp.Reply(
                         id=reply_abm.message_id,
                         chain=reply_abm.message,
-                        sender_id=reply_abm.sender.user_id,
+                        sender_id=reply_sender_id,
                         sender_nickname=reply_abm.sender.nickname,
                         time=reply_abm.timestamp,
                         message_str=reply_abm.message_str,
