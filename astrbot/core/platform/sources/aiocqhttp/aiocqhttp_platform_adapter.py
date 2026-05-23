@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import itertools
+import json
 import logging
 import time
 import uuid
@@ -148,47 +149,117 @@ class AiocqhttpAdapter(Platform):
 
         return abm
 
-    async def _get_group_name(self, group_id: int) -> str:
-        """通过 API 获取群名称并缓存，修复编码问题。
+    def _extract_forward_text_from_nodes(
+        self,
+        nodes: list[Any],
+        depth: int = 0,
+        max_depth: int = 5,
+    ) -> str:
+        if depth > max_depth or not isinstance(nodes, list):
+            return ""
 
-        修复 GitHub issue #4721：OneBot V11 消息事件中不包含 group_name 字段，
-        部分实现（如 napcat）扩展了此字段但存在编码问题，导致中文群名显示乱码。
-        通过调用 get_group_info API 获取正确编码的群名称。
+        lines: list[str] = []
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
 
-        Args:
-            group_id: 群号
-
-        Returns:
-            群名称，获取失败时返回 "N/A"
-        """
-        group_id_str = str(group_id)
-        now = time.time()
-
-        # 检查缓存是否存在且未过期
-        if group_id_str in _group_name_cache:
-            group_name, cached_time, is_failed = _group_name_cache[group_id_str]
-            ttl = _CACHE_TTL_FAILURE if is_failed else _CACHE_TTL_SUCCESS
-            if now - cached_time < ttl:
-                return group_name
-            # 缓存已过期，删除旧条目
-            del _group_name_cache[group_id_str]
-
-        try:
-            # 调用 OneBot API 获取群信息
-            info: dict = await self.bot.call_action(
-                "get_group_info",
-                group_id=group_id,
+            sender = node.get("sender", {}) if isinstance(node.get("sender"), dict) else {}
+            sender_name = (
+                sender.get("nickname")
+                or sender.get("card")
+                or sender.get("user_id")
+                or "未知用户"
             )
-            group_name = info.get("group_name", "N/A")
-            # 缓存成功结果
-            _group_name_cache[group_id_str] = (group_name, now, False)
-            return group_name
-        except Exception as e:
-            # 只捕获 API 调用和网络相关的异常
-            logger.warning(f"获取群 {group_id} 信息失败: {e}")
-            # 缓存失败结果，使用较短的过期时间以便临时故障恢复后重试
-            _group_name_cache[group_id_str] = ("N/A", now, True)
-            return "N/A"
+
+            raw_content = node.get("message")
+            if raw_content is None:
+                raw_content = node.get("content", [])
+
+            content_chain: list[Any] = []
+            if isinstance(raw_content, list):
+                content_chain = raw_content
+            elif isinstance(raw_content, str) and raw_content.strip():
+                try:
+                    parsed = json.loads(raw_content)
+                    if isinstance(parsed, list):
+                        content_chain = parsed
+                    else:
+                        content_chain = [{"type": "text", "data": {"text": raw_content}}]
+                except Exception:
+                    content_chain = [{"type": "text", "data": {"text": raw_content}}]
+
+            text_parts: list[str] = []
+            for seg in content_chain:
+                if not isinstance(seg, dict):
+                    continue
+                seg_type = seg.get("type")
+                seg_data = seg.get("data", {}) if isinstance(seg.get("data"), dict) else {}
+
+                if seg_type in ("text", "plain"):
+                    text = seg_data.get("text", "")
+                    if isinstance(text, str) and text:
+                        text_parts.append(text)
+                elif seg_type == "at":
+                    qq = seg_data.get("qq")
+                    if qq:
+                        text_parts.append(f"@{qq}")
+                elif seg_type == "image":
+                    text_parts.append("[图片]")
+                elif seg_type == "face":
+                    face_id = seg_data.get("id")
+                    text_parts.append(f"[表情:{face_id}]" if face_id is not None else "[表情]")
+                elif seg_type in ("forward", "forward_msg", "nodes"):
+                    nested = seg_data.get("content")
+                    if isinstance(nested, list):
+                        nested_text = self._extract_forward_text_from_nodes(
+                            nested,
+                            depth=depth + 1,
+                            max_depth=max_depth,
+                        )
+                        if nested_text:
+                            text_parts.append(nested_text)
+                    else:
+                        text_parts.append("[转发消息]")
+
+            node_text = "".join(text_parts).strip()
+            if node_text:
+                lines.append(f"{sender_name}: {node_text}")
+
+        return "\n".join(lines).strip()
+
+    async def _fetch_forward_text(self, forward_id: str) -> str:
+        if not forward_id:
+            return ""
+
+        candidates: list[dict[str, Any]] = [{"id": forward_id}]
+        if str(forward_id).isdigit():
+            candidates.insert(0, {"id": int(forward_id)})
+        candidates.extend([{"message_id": forward_id}, {"forward_id": forward_id}])
+
+        payload: dict[str, Any] | None = None
+        for params in candidates:
+            try:
+                payload = await self.bot.call_action("get_forward_msg", **params)
+                if isinstance(payload, dict):
+                    break
+            except Exception:
+                continue
+
+        if not isinstance(payload, dict):
+            return ""
+
+        data = payload.get("data", payload)
+        if not isinstance(data, dict):
+            return ""
+
+        nodes = (
+            data.get("messages")
+            or data.get("message")
+            or data.get("nodes")
+            or data.get("nodeList")
+        )
+        text = self._extract_forward_text_from_nodes(nodes if isinstance(nodes, list) else [])
+        return text.strip()
 
     async def _convert_handle_request_event(self, event: Event) -> AstrBotMessage:
         """OneBot V11 请求类事件"""
@@ -445,6 +516,33 @@ class AiocqhttpAdapter(Platform):
                     text = m["data"].get("markdown") or m["data"].get("content", "")
                     abm.message.append(Plain(text=text))
                     message_str += text
+            elif t in ("forward", "forward_msg"):
+                for m in m_group:
+                    data = m.get("data", {}) if isinstance(m.get("data"), dict) else {}
+                    if t in ComponentTypes:
+                        try:
+                            abm.message.append(ComponentTypes[t](**data))
+                        except Exception:
+                            pass
+
+                    fid = data.get("id") or data.get("message_id") or data.get("forward_id")
+                    if not fid:
+                        continue
+
+                    forward_text = await self._fetch_forward_text(str(fid))
+                    if not forward_text:
+                        # 至少保留占位，避免纯转发被识别为空输入
+                        if not message_str.strip():
+                            message_str = "[转发消息]"
+                        else:
+                            message_str += "\n[转发消息]"
+                        continue
+
+                    if message_str.strip():
+                        message_str += "\n"
+                    # 限制长度，避免超长转发导致上下文爆炸
+                    clipped = forward_text[:4000]
+                    message_str += f"[转发消息]\n{clipped}"
             else:
                 for m in m_group:
                     try:
