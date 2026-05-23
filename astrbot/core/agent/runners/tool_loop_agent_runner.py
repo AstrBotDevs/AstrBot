@@ -1071,51 +1071,33 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             return
 
-        if not llm_resp.tools_call_name:
-            raw_completion = getattr(llm_resp, "raw_completion", None)
-            if raw_completion:
-                choices = getattr(raw_completion, "choices", None)
-                if choices and len(choices) > 0:
-                    choice = choices[0]
-                    finish_reason = getattr(choice, "finish_reason", None)
-                    if finish_reason == "tool_calls":
-                        message = getattr(choice, "message", None)
-                        raw_tool_calls = (
-                            getattr(message, "tool_calls", None) if message else None
-                        )
-                        logger.warning(
-                            "LLM finish_reason is 'tool_calls' but no tools were parsed. "
-                            "Returning tool failure results."
-                        )
-                        if raw_tool_calls:
-                            tool_calls_result = self._build_failed_tool_results(
-                                raw_tool_calls
-                            )
-                        else:
-                            tool_calls_result = (
-                                self._build_empty_tool_call_failure_result()
-                            )
-                        self.run_context.messages.extend(
-                            tool_calls_result.to_openai_messages_model()
-                        )
-                        self.req.append_tool_calls_result(tool_calls_result)
-                        return
-
+        has_tool_calls = bool(llm_resp.tools_call_name)
+        if not has_tool_calls:
             await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
-        if llm_resp.result_chain:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(chain=llm_resp.result_chain),
-            )
-        elif llm_resp.completion_text:
+        if llm_resp.reasoning_content:
             yield AgentResponse(
                 type="llm_result",
                 data=AgentResponseData(
-                    chain=MessageChain().message(llm_resp.completion_text),
+                    chain=MessageChain(type="reasoning").message(
+                        llm_resp.reasoning_content,
+                    ),
                 ),
             )
+        if not has_tool_calls:
+            if llm_resp.result_chain:
+                yield AgentResponse(
+                    type="llm_result",
+                    data=AgentResponseData(chain=llm_resp.result_chain),
+                )
+            elif llm_resp.completion_text:
+                yield AgentResponse(
+                    type="llm_result",
+                    data=AgentResponseData(
+                        chain=MessageChain().message(llm_resp.completion_text),
+                    ),
+                )
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:

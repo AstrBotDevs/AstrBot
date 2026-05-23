@@ -257,6 +257,35 @@ class SingleToolThenFinalProvider(MockProvider):
         )
 
 
+class PreToolTextThenFinalProvider(MockProvider):
+    def __init__(
+        self, pre_tool_text: str, reasoning_content: str | None = None
+    ):
+        super().__init__()
+        self.pre_tool_text = pre_tool_text
+        self.reasoning_content = reasoning_content
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="final answer",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+        return LLMResponse(
+            role="assistant",
+            completion_text=self.pre_tool_text,
+            reasoning_content=self.reasoning_content,
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"query": "test"}],
+            tools_call_ids=["call_pre_tool"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
 class SequentialToolProvider(MockProvider):
     def __init__(
         self,
@@ -508,6 +537,97 @@ async def test_normal_completion_without_max_step(
 
     # 验证工具仍然可用(没有被禁用)
     assert runner.req.func_tool is not None, "正常完成时工具不应该被禁用"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "pre_tool_text",
+    ["*No response*", "I will check this first."],
+)
+async def test_tool_call_turn_does_not_emit_pre_tool_llm_result(pre_tool_text: str):
+    tool = FunctionTool(
+        name="test_tool",
+        description="test tool",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    provider = PreToolTextThenFinalProvider(pre_tool_text)
+    request = ProviderRequest(
+        prompt="run tool",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=cast(Any, MockToolExecutor()),
+        agent_hooks=MockHooks(),
+        streaming=False,
+    )
+
+    responses = []
+    async for response in runner.step_until_done(3):
+        responses.append(response)
+
+    llm_result_texts = [
+        resp.data["chain"].get_plain_text(with_other_comps_mark=True)
+        for resp in responses
+        if resp.type == "llm_result"
+    ]
+
+    assert pre_tool_text not in llm_result_texts
+    assert any(resp.type == "tool_call" for resp in responses)
+    assert "final answer" in llm_result_texts
+
+
+@pytest.mark.asyncio
+async def test_tool_call_turn_still_emits_reasoning_content():
+    tool = FunctionTool(
+        name="test_tool",
+        description="test tool",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    provider = PreToolTextThenFinalProvider(
+        pre_tool_text="*No response*",
+        reasoning_content="thinking...",
+    )
+    request = ProviderRequest(
+        prompt="run tool",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=cast(Any, MockToolExecutor()),
+        agent_hooks=MockHooks(),
+        streaming=False,
+    )
+
+    responses = []
+    async for response in runner.step_until_done(3):
+        responses.append(response)
+
+    reasoning_texts = [
+        resp.data["chain"].get_plain_text(with_other_comps_mark=True)
+        for resp in responses
+        if resp.type == "llm_result" and resp.data["chain"].type == "reasoning"
+    ]
+    llm_result_texts = [
+        resp.data["chain"].get_plain_text(with_other_comps_mark=True)
+        for resp in responses
+        if resp.type == "llm_result"
+    ]
+
+    assert "thinking..." in reasoning_texts
+    assert "*No response*" not in llm_result_texts
 
 
 @pytest.mark.asyncio
