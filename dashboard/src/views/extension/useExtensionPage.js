@@ -183,6 +183,24 @@ export const useExtensionPage = () => {
   const marketSearch = ref("");
   const debouncedMarketSearch = ref("");
   const refreshingMarket = ref(false);
+  const getInitialMarketListViewMode = () => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      return localStorage.getItem("pluginMarketListViewMode") === "true";
+    }
+    return false;
+  };
+  const marketIsListView = ref(getInitialMarketListViewMode());
+  const getInitialMarketItemsPerPage = () => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const rawValue = Number(localStorage.getItem("pluginMarketItemsPerPage"));
+      if ([9, 25, 50, 100].includes(rawValue)) {
+        return rawValue;
+      }
+    }
+    return 9;
+  };
+  const marketItemsPerPageOptions = [9, 25, 50, 100];
+  const marketItemsPerPage = ref(getInitialMarketItemsPerPage());
   const sortBy = ref("default"); // default, stars, author, updated
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
@@ -282,6 +300,102 @@ export const useExtensionPage = () => {
     return items;
   });
 
+  const installedSortItems = computed(() => [
+    { title: tm("sort.default"), value: "default" },
+    { title: tm("sort.installTime"), value: "install_time" },
+    { title: tm("sort.name"), value: "name" },
+    { title: tm("sort.author"), value: "author" },
+    { title: tm("sort.updateStatus"), value: "update_status" },
+  ]);
+
+  const installedSortUsesOrder = computed(
+    () => installedSortBy.value !== "default",
+  );
+  
+  // 插件表格的表头定义
+  const showAuthorColumn = computed(() => width.value >= 1280);
+  const pluginHeaders = computed(() => {
+    const headers = [
+      {
+        title: tm("table.headers.name"),
+        key: "name",
+        sortable: false,
+        width: showAuthorColumn.value ? "24%" : "26%",
+      },
+      {
+        title: tm("table.headers.description"),
+        key: "desc",
+        sortable: false,
+        width: showAuthorColumn.value ? "32%" : "36%",
+      },
+      {
+        title: tm("table.headers.version"),
+        key: "version",
+        sortable: false,
+        width: showAuthorColumn.value ? "12%" : "14%",
+      },
+    ];
+
+    if (showAuthorColumn.value) {
+      headers.push({
+        title: tm("table.headers.author"),
+        key: "author",
+        sortable: false,
+        width: "10%",
+      });
+    }
+
+    headers.push({
+      title: tm("table.headers.actions"),
+      key: "actions",
+      sortable: false,
+      width: showAuthorColumn.value ? "22%" : "24%",
+    });
+
+    return headers;
+  });
+
+  const marketPluginHeaders = computed(() => {
+    const headers = [
+      {
+        title: tm("table.headers.name"),
+        key: "name",
+        sortable: false,
+        width: showAuthorColumn.value ? "24%" : "30%",
+      },
+      {
+        title: tm("table.headers.description"),
+        key: "desc",
+        sortable: false,
+        width: "40%",
+      },
+      {
+        title: tm("table.headers.version"),
+        key: "version",
+        sortable: false,
+        width: "12%",
+      },
+    ];
+
+    if (showAuthorColumn.value) {
+      headers.push({
+        title: tm("table.headers.author"),
+        key: "author",
+        sortable: false,
+        width: "10%",
+      });
+    }
+
+    headers.push({
+      title: tm("table.headers.actions"),
+      key: "actions",
+      sortable: false,
+      width: showAuthorColumn.value ? "14%" : "18%",
+    });
+
+    return headers;
+  });
+  
   // 过滤要显示的插件
   const filteredExtensions = computed(() => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
@@ -431,15 +545,15 @@ export const useExtensionPage = () => {
   };
 
   // 分页计算属性
-  const displayItemsPerPage = 9; // 固定每页显示9个卡片（3行）
-
+  const displayItemsPerPage = computed(() => marketItemsPerPage.value);
+  
   const totalPages = computed(() => {
-    return Math.ceil(sortedPlugins.value.length / displayItemsPerPage);
+    return Math.ceil(sortedPlugins.value.length / displayItemsPerPage.value);
   });
 
   const paginatedPlugins = computed(() => {
-    const start = (currentPage.value - 1) * displayItemsPerPage;
-    const end = start + displayItemsPerPage;
+    const start = (currentPage.value - 1) * displayItemsPerPage.value;
+    const end = start + displayItemsPerPage.value;
     return sortedPlugins.value.slice(start, end);
   });
 
@@ -1735,6 +1849,24 @@ export const useExtensionPage = () => {
       currentPage.value = 1;
     }, 300); // 300ms 防抖延迟
   });
+  
+  // 监听显示模式变化并保存到 localStorage
+  watch(isListView, (newVal) => {
+    writeBooleanPreference(PLUGIN_LIST_VIEW_MODE_STORAGE_KEY, newVal);
+  });
+  
+  watch(marketIsListView, (newVal) => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      localStorage.setItem("pluginMarketListViewMode", String(newVal));
+    }
+  });
+
+  watch(marketItemsPerPage, (newVal) => {
+    currentPage.value = 1;
+    if (typeof window !== "undefined" && window.localStorage) {
+      localStorage.setItem("pluginMarketItemsPerPage", String(newVal));
+    }
+  });
 
   watch(
     [() => dialog.value, () => extension_url.value, () => uploadTab.value],
@@ -1847,6 +1979,7 @@ export const useExtensionPage = () => {
     uploadTab,
     showPluginFullName,
     marketSearch,
+    marketIsListView,
     debouncedMarketSearch,
     refreshingMarket,
     sortBy,
@@ -1855,6 +1988,11 @@ export const useExtensionPage = () => {
     normalizeStr,
     toPinyinText,
     toInitials,
+    plugin_handler_info_headers,
+    marketPluginHeaders,
+    installedSortItems,
+    installedSortUsesOrder,
+    pluginHeaders,
     filteredExtensions,
     filteredPlugins,
     filteredMarketPlugins,
@@ -1863,6 +2001,10 @@ export const useExtensionPage = () => {
     randomPlugins,
     shufflePlugins,
     refreshRandomPlugins,
+    toggleRandomPluginsVisibility,
+    collapseRandomPlugins,
+    marketItemsPerPage,
+    marketItemsPerPageOptions,
     displayItemsPerPage,
     totalPages,
     paginatedPlugins,
