@@ -963,9 +963,10 @@ class TestEnsurePersonaAndSkills:
         tmgr = mock_context.get_llm_tool_manager.return_value
         tmgr.func_list = [tool_a, tool_b]
         tmgr.get_full_tool_set.return_value = ToolSet([tool_a, tool_b])
-        tmgr.get_func.side_effect = lambda name: {"tool_a": tool_a, "tool_b": tool_b}.get(
-            name
-        )
+        tmgr.get_func.side_effect = lambda name: {
+            "tool_a": tool_a,
+            "tool_b": tool_b,
+        }.get(name)
 
         handoff = MagicMock()
         handoff.name = "transfer_to_planner"
@@ -2150,6 +2151,107 @@ class TestBuildMainAgent:
         assert result is not None
         assert mock_runner.reset.call_args.kwargs["streaming"] is True
 
+    @pytest.mark.asyncio
+    async def test_build_main_agent_with_quoted_image_no_caption_provider(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test building main agent with quoted image when no image caption provider is set."""
+        module = ama
+        mock_image = Image(file="file:///path/to/quoted.jpg")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[mock_image],
+            sender_nickname="",
+            message_str="quoted message",
+        )
+        mock_event.message_obj.message = [Plain(text="Hello"), mock_reply]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {
+            "provider_settings": {"default_image_caption_provider_id": ""}
+        }
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch.object(
+                Image,
+                "convert_to_file_path",
+                AsyncMock(return_value="/path/to/quoted.jpg"),
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    provider_settings={"default_image_caption_provider_id": ""},
+                ),
+            )
+
+        assert result is not None
+        assert len(result.provider_request.image_urls) > 0
+        assert result.provider_request.image_urls[0] == "/path/to/quoted.jpg"
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_with_quoted_image_with_caption_provider(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test building main agent with quoted image when image caption provider is set."""
+        module = ama
+        mock_image = Image(file="file:///path/to/quoted.jpg")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[mock_image],
+            sender_nickname="",
+            message_str="quoted message",
+        )
+        mock_event.message_obj.message = [Plain(text="Hello"), mock_reply]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {
+            "provider_settings": {"default_image_caption_provider_id": "some_captioner"}
+        }
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch.object(
+                Image,
+                "convert_to_file_path",
+                AsyncMock(return_value="/path/to/quoted.jpg"),
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    provider_settings={
+                        "default_image_caption_provider_id": "some_captioner"
+                    },
+                ),
+            )
+
+        assert result is not None
+        assert len(result.provider_request.image_urls) == 0
+
 
 class TestHandleWebchat:
     """Tests for _handle_webchat function."""
@@ -2638,9 +2740,7 @@ class TestApplySandboxTools:
         provider_tool.sandbox_provider_id = "provider_a"
         toolset.add_tool(provider_tool)
 
-        filtered = module._filter_tools_for_current_config(
-            toolset, cfg, "session-a"
-        )
+        filtered = module._filter_tools_for_current_config(toolset, cfg, "session-a")
 
         assert "provider_a_screenshot" in filtered.names()
 

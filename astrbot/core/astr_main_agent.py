@@ -1064,7 +1064,7 @@ async def _process_quote_message(
     plugin_context: Context,
     provider_settings: dict[str, object] | None = None,
     quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
-    config: MainAgentBuildConfig | None = None,
+    cfg: dict | None = None,
 ) -> None:
     quote = None
     for comp in event.message_obj.message:
@@ -1110,15 +1110,14 @@ async def _process_quote_message(
                 path = await image_seg.convert_to_file_path()
                 compress_path = await _compress_image_for_provider(
                     path,
-                    config.provider_settings if config else None,
+                    cfg,
                 )
                 if path and _is_generated_compressed_image_path(path, compress_path):
                     event.track_temporary_local_file(compress_path)
-                cfg = (
-                    config.provider_settings if config else None
-                ) or plugin_context.get_config(umo=event.unified_msg_origin).get(
-                    "provider_settings", {}
-                )
+                if cfg is None:
+                    cfg = plugin_context.get_config(umo=event.unified_msg_origin).get(
+                        "provider_settings", {}
+                    )
                 img_cap_prompt = (
                     cfg.get("image_caption_prompt") or "Please describe the image."
                 )
@@ -1256,7 +1255,7 @@ async def _decorate_llm_request(
         plugin_context,
         cfg,
         quoted_message_settings,
-        config,
+        cfg,
     )
 
     tz = config.timezone
@@ -1844,12 +1843,10 @@ async def build_main_agent(
         reply_comps = [
             comp for comp in event.message_obj.message if isinstance(comp, Reply)
         ]
-        quoted_message_settings = _get_quoted_message_parser_settings(
-            config.provider_settings
-        )
         cfg = config.provider_settings or plugin_context.get_config(
             umo=event.unified_msg_origin
         ).get("provider_settings", {})
+        quoted_message_settings = _get_quoted_message_parser_settings(cfg)
         img_cap_prov_id = cfg.get("default_image_caption_provider_id") or ""
         fallback_quoted_image_count = 0
         for comp in reply_comps:
