@@ -6,6 +6,9 @@ full mock isolation (no filesystem, no network).
 
 from __future__ import annotations
 
+import os
+import sys
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
@@ -113,7 +116,9 @@ class TestPluginManagerInit:
         assert plugin_manager.failed_plugin_dict == {}
         assert plugin_manager.failed_plugin_info == ""
 
-    def test_init_stores_context_and_config(self, plugin_manager, mock_context, mock_config):
+    def test_init_stores_context_and_config(
+        self, plugin_manager, mock_context, mock_config
+    ):
         """Constructor stores the context and config references."""
         assert plugin_manager.context is mock_context
         assert plugin_manager.config is mock_config
@@ -123,6 +128,50 @@ class TestPluginManagerInit:
         import asyncio
 
         assert isinstance(plugin_manager._pm_lock, asyncio.Lock)
+
+    def test_init_adds_astrbot_root_to_import_path(
+        self, mock_context, mock_config, monkeypatch, tmp_path: Path
+    ):
+        """Constructor makes data.plugins importable from a custom root."""
+        astrbot_root = str(tmp_path / "astrbot-root")
+        normalized_root = os.path.normcase(os.path.realpath(astrbot_root))
+        monkeypatch.setattr(
+            sys,
+            "path",
+            [
+                path
+                for path in sys.path
+                if os.path.normcase(os.path.realpath(path)) != normalized_root
+            ],
+        )
+
+        with (
+            patch(
+                "astrbot.core.star.star_manager.get_astrbot_root",
+                return_value=astrbot_root,
+            ),
+            patch(
+                "astrbot.core.star.star_manager.get_astrbot_plugin_path",
+                return_value="/mock/plugins",
+            ),
+            patch(
+                "astrbot.core.star.star_manager.get_astrbot_config_path",
+                return_value="/mock/config",
+            ),
+            patch(
+                "astrbot.core.star.star_manager.get_astrbot_path",
+                return_value="/mock",
+            ),
+            patch(
+                "astrbot.core.star.star_manager.PluginUpdator",
+            ),
+            patch(
+                "astrbot.core.star.star_manager.StarTools",
+            ),
+        ):
+            PluginManager(mock_context, mock_config)
+
+        assert sys.path[0] == astrbot_root
 
     def test_init_starts_watcher_when_reload_env_set(self, mock_context, mock_config):
         """When ASTRBOT_RELOAD=1, the file watcher task is created."""
@@ -246,7 +295,9 @@ class TestLoad:
 
     @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
-    @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
+    @patch(
+        "astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock
+    )
     async def test_load_returns_true_when_no_plugins(
         self, mock_sync, mock_sp_get, plugin_manager
     ):
@@ -259,7 +310,9 @@ class TestLoad:
 
     @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
-    @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
+    @patch(
+        "astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock
+    )
     async def test_load_returns_false_when_modules_is_none(
         self, mock_sync, mock_sp_get, plugin_manager
     ):
@@ -272,7 +325,9 @@ class TestLoad:
 
     @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
-    @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
+    @patch(
+        "astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock
+    )
     async def test_load_handles_import_failure(
         self, mock_sync, mock_sp_get, plugin_manager
     ):
@@ -302,7 +357,9 @@ class TestLoad:
 
     @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
-    @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
+    @patch(
+        "astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock
+    )
     async def test_load_calls_sync_command_configs(
         self, mock_sync, mock_sp_get, plugin_manager
     ):
@@ -323,7 +380,9 @@ class TestInstallPlugin:
 
     @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
-    @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
+    @patch(
+        "astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock
+    )
     @patch("astrbot.core.star.star_manager.Metric.upload", new_callable=AsyncMock)
     async def test_install_plugin_success(
         self, mock_metric_upload, mock_sync, mock_sp_get, plugin_manager, mock_context
@@ -361,7 +420,9 @@ class TestInstallPlugin:
 
     @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
-    @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
+    @patch(
+        "astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock
+    )
     @patch("astrbot.core.star.star_manager.Metric.upload", new_callable=AsyncMock)
     async def test_install_plugin_raises_when_load_fails(
         self, mock_metric_upload, mock_sync, mock_sp_get, plugin_manager
@@ -384,13 +445,13 @@ class TestInstallPlugin:
         )
 
         with pytest.raises(Exception, match="Version incompatible error"):
-            await plugin_manager.install_plugin(
-                "https://github.com/test/test_repo"
-            )
+            await plugin_manager.install_plugin("https://github.com/test/test_repo")
 
     @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
-    @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
+    @patch(
+        "astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock
+    )
     @patch("astrbot.core.star.star_manager.Metric.upload", new_callable=AsyncMock)
     async def test_install_plugin_raises_when_dir_exists(
         self, mock_metric_upload, mock_sync, mock_sp_get, plugin_manager
@@ -406,9 +467,7 @@ class TestInstallPlugin:
             patch("os.path.exists", return_value=True),
         ):
             with pytest.raises(Exception, match="已存在"):
-                await plugin_manager.install_plugin(
-                    "https://github.com/test/test_repo"
-                )
+                await plugin_manager.install_plugin("https://github.com/test/test_repo")
 
 
 # ---------------------------------------------------------------------------

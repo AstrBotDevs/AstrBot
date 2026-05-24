@@ -137,37 +137,7 @@ jobs:
           sync-args: '--group dev'
 
       - name: Startup smoke test
-        shell: bash
-        run: |
-          set -euo pipefail
-          uv run main.py &
-          app_pid=$!
-
-          cleanup() {
-            kill "$app_pid" 2>/dev/null || true
-            wait "$app_pid" 2>/dev/null || true
-          }
-          trap cleanup EXIT
-
-          for _ in {1..60}; do
-            if ! kill -0 "$app_pid" 2>/dev/null; then
-              app_exit=0
-              wait "$app_pid" || app_exit=$?
-              if [[ "$app_exit" -eq 0 ]]; then
-                app_exit=1
-              fi
-              echo "Application exited early with status $app_exit"
-              exit "$app_exit"
-            fi
-
-            if curl -sf http://localhost:6185 >/dev/null 2>&1; then
-              exit 0
-            fi
-            sleep 1
-          done
-
-          echo "Application failed to start within 60 seconds"
-          exit 1
+        run: uv run python scripts/smoke_startup_check.py
 
   dashboard:
     name: Dashboard Build

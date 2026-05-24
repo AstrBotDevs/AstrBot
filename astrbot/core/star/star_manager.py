@@ -39,6 +39,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_path,
     get_astrbot_plugin_path,
+    get_astrbot_root,
     get_astrbot_temp_path,
 )
 from astrbot.core.utils.io import remove_dir
@@ -207,6 +208,7 @@ class PluginManager:
 
         self.config = config
         self.plugin_store_path = get_astrbot_plugin_path()
+        self._ensure_data_plugin_import_root()
         """存储插件的路径。即 data/plugins"""
         self.plugin_config_path = get_astrbot_config_path()
         """存储插件配置的路径。data/config"""
@@ -228,6 +230,16 @@ class PluginManager:
         self.failed_plugin_info = ""
         if os.getenv("ASTRBOT_RELOAD", "0") == "1":
             asyncio.create_task(self._watch_plugins_changes())
+
+    @staticmethod
+    def _ensure_data_plugin_import_root() -> None:
+        astrbot_root = get_astrbot_root()
+        normalized_root = os.path.normcase(os.path.realpath(astrbot_root))
+        normalized_sys_path = {
+            os.path.normcase(os.path.realpath(path)) for path in sys.path
+        }
+        if normalized_root not in normalized_sys_path:
+            sys.path.insert(0, astrbot_root)
 
     def _remove_registered_unified_webhooks(
         self,

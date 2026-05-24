@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 from copy import deepcopy
@@ -433,4 +434,12 @@ class SandboxRegistry:
     async def save_async(self) -> None:
         async with self._save_lock:
             payload = deepcopy(self._payload)
-            await asyncio.to_thread(self._write_payload, payload)
+            write_task = asyncio.create_task(
+                asyncio.to_thread(self._write_payload, payload),
+            )
+            try:
+                await asyncio.shield(write_task)
+            except asyncio.CancelledError:
+                with contextlib.suppress(Exception):
+                    await write_task
+                raise

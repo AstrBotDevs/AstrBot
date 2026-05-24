@@ -52,24 +52,5 @@ jobs:
         timeout-minutes: 15
 
       - name: Run smoke tests
-        run: |
-          uv run main.py &
-          # uv tool install -e . --force
-          # astrbot init -y 
-          # astrbot run --backend-only &
-          APP_PID=$!
-
-          echo "Waiting for application to start..."
-          for i in {1..60}; do
-            if curl -f http://localhost:6185 > /dev/null 2>&1; then
-              echo "Application started successfully!"
-              kill $APP_PID
-              exit 0
-            fi
-            sleep 1
-          done
-
-          echo "Application failed to start within 30 seconds"
-          kill $APP_PID 2>/dev/null || true
-          exit 1
+        run: uv run python scripts/smoke_startup_check.py
         timeout-minutes: 2

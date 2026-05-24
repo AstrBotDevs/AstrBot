@@ -128,6 +128,18 @@ def _decode_process_output(
     return decoded
 
 
+def _is_windows_shell() -> bool:
+    return os.name == "nt"
+
+
+def _merged_env(env: dict[str, str] | None) -> dict[str, str] | None:
+    if not env:
+        return None
+    merged = os.environ.copy()
+    merged.update(env)
+    return merged
+
+
 def _session_workspace_name(session_id: str) -> str:
     safe_prefix = re.sub(r"[^A-Za-z0-9._-]+", "_", session_id).strip("._-")
     if not safe_prefix:
@@ -232,6 +244,15 @@ class LocalShellComponent(ShellComponent):
         if not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
 
+        if _is_windows_shell():
+            return await self._exec_windows_command(
+                command=command,
+                cwd=cwd,
+                env=env,
+                timeout=timeout,
+                background=background,
+            )
+
         key = session_id or "default"
         session = PersistentShellSession.get_or_create(key)
         return await session.exec(
@@ -241,6 +262,89 @@ class LocalShellComponent(ShellComponent):
             timeout=timeout,
             background=background,
         )
+
+    async def _exec_windows_command(
+        self,
+        *,
+        command: str,
+        cwd: str | None,
+        env: dict[str, str] | None,
+        timeout: int | None,
+        background: bool,
+    ) -> dict[str, Any]:
+        def _run() -> dict[str, Any]:
+            working_dir = str(self.policy.normalize_working_dir(cwd)) if cwd else None
+            creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+            if background:
+                job_id = uuid.uuid4().hex[:8]
+                out_file = Path(get_astrbot_temp_path()) / f"astrbot_bg_{job_id}.out"
+                out_file.parent.mkdir(parents=True, exist_ok=True)
+                output = open(out_file, "ab")
+                try:
+                    proc = subprocess.Popen(
+                        command,
+                        cwd=working_dir,
+                        env=_merged_env(env),
+                        shell=True,
+                        stdout=output,
+                        stderr=subprocess.STDOUT,
+                        creationflags=creation_flags,
+                    )
+                finally:
+                    output.close()
+
+                return {
+                    "stdout": (
+                        f"Background task started.\n"
+                        f"  job_id:  {job_id}\n"
+                        f"  pid:     {proc.pid}\n"
+                        f"  command: {command}\n"
+                        f"  output:  {out_file}\n"
+                    ),
+                    "stderr": "",
+                    "exit_code": None,
+                    "background_task": {
+                        "job_id": job_id,
+                        "pid": proc.pid,
+                        "out_file": str(out_file),
+                    },
+                }
+
+            try:
+                result = subprocess.run(
+                    command,
+                    cwd=working_dir,
+                    env=_merged_env(env),
+                    shell=True,
+                    check=False,
+                    timeout=timeout,
+                    capture_output=True,
+                    text=False,
+                    creationflags=creation_flags,
+                )
+                return {
+                    "stdout": _decode_process_output(
+                        result.stdout,
+                        normalize_newlines=True,
+                    ).strip(),
+                    "stderr": _decode_process_output(
+                        result.stderr,
+                        normalize_newlines=True,
+                    ).strip(),
+                    "exit_code": result.returncode,
+                }
+            except subprocess.TimeoutExpired as exc:
+                return {
+                    "stdout": _decode_process_output(
+                        exc.stdout,
+                        normalize_newlines=True,
+                    ).strip(),
+                    "stderr": "Execution timed out.",
+                    "exit_code": -1,
+                }
+
+        return await asyncio.to_thread(_run)
 
     @staticmethod
     async def shutdown_all() -> None:

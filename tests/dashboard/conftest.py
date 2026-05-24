@@ -1,6 +1,7 @@
 """Shared fixtures for dashboard API tests."""
 
 import asyncio
+import copy
 
 import pytest
 import pytest_asyncio
@@ -12,6 +13,19 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.dashboard.server import AstrBotDashboard
 
 TEST_DASHBOARD_PASSWORD = "AstrBotTest123"
+_DASHBOARD_PASSWORD_RUNTIME_ATTRS = (
+    "_generated_dashboard_password",
+    "_generated_dashboard_password_change_required",
+    "_dashboard_password_change_required_from_config",
+)
+
+
+def _restore_config_attrs(config, attrs: dict[str, object]) -> None:
+    for attr in _DASHBOARD_PASSWORD_RUNTIME_ATTRS:
+        if attr in attrs:
+            object.__setattr__(config, attr, attrs[attr])
+        elif hasattr(config, attr):
+            object.__delattr__(config, attr)
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -24,6 +38,13 @@ async def core_lifecycle_td(tmp_path_factory):
         hash_dashboard_password,
         hash_legacy_dashboard_password,
     )
+
+    original_dashboard_config = copy.deepcopy(global_cfg["dashboard"])
+    original_runtime_attrs = {
+        attr: getattr(global_cfg, attr)
+        for attr in _DASHBOARD_PASSWORD_RUNTIME_ATTRS
+        if hasattr(global_cfg, attr)
+    }
 
     global_cfg["dashboard"]["username"] = "astrbot"
     global_cfg["dashboard"]["pbkdf2_password"] = hash_dashboard_password(
@@ -54,6 +75,8 @@ async def core_lifecycle_td(tmp_path_factory):
                 await _stop_res
         except Exception:
             pass
+        global_cfg["dashboard"] = original_dashboard_config
+        _restore_config_attrs(global_cfg, original_runtime_attrs)
 
 
 @pytest.fixture(scope="module")
