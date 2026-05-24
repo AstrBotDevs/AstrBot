@@ -342,6 +342,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         ctx = run_context.context.context
         event = run_context.context.event
         umo = event.unified_msg_origin
+        agent_name = getattr(tool.agent, "name", "unknown")
 
         # Use per-subagent provider override if configured; otherwise fall back
         # to the current/default provider resolution.
@@ -368,10 +369,38 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         agent_max_step = int(prov_settings.get("max_agent_step", 30))
         stream = prov_settings.get("streaming_response", False)
 
+        # Create trace span for subagent execution
+        from astrbot.core.utils.trace import TraceSpan
+
+        parent_trace = getattr(event, "trace", None)
+        subagent_trace = TraceSpan(
+            name=f"SubAgent:{agent_name}",
+            umo=event.unified_msg_origin,
+            sender_name=event.get_sender_name()
+            if hasattr(event, "get_sender_name")
+            else None,
+            message_outline=f"Handoff to {agent_name}: {input_[:100] if input_ else ''}",
+            parent_span_id=parent_trace.span_id if parent_trace else None,
+        )
+        subagent_trace.record(
+            "subagent_execution_begin",
+            agent_name=agent_name,
+            input_preview=input_[:500] if input_ else None,
+            image_count=len(image_urls),
+            tools=[t.name for t in toolset] if toolset else [],
+            max_steps=agent_max_step,
+            stream=stream,
+        )
+
         # 获取子代理的历史上下文
         subagent_history, agent_name = cls._load_subagent_history(umo, tool)
         # 如果有历史上下文，合并到 contexts 中
         if subagent_history:
+            subagent_trace.record(
+                "subagent_history_loaded",
+                agent_name=agent_name,
+                history_messages_count=len(subagent_history),
+            )
             if contexts is None:
                 contexts = subagent_history
             else:
@@ -380,6 +409,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # 构建子代理的 system_prompt
         subagent_system_prompt = cls._build_subagent_system_prompt(
             umo, tool, prov_settings
+        )
+        subagent_trace.record(
+            "subagent_system_prompt",
+            agent_name=agent_name,
+            prompt_length=len(subagent_system_prompt),
+            prompt_preview=subagent_system_prompt[:300]
+            if subagent_system_prompt
+            else None,
         )
 
         # 构建子代理的追加内容
@@ -408,6 +445,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 stream=stream,
                 runner_messages=runner_messages,
                 extra_user_content_parts=extra_content_parts,
+                trace_span=subagent_trace,
             )
 
         # 添加执行超时控制
@@ -419,6 +457,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             except asyncio.TimeoutError:
                 # 若超时，保存已产生的部分历史
                 cls._save_subagent_history(umo, runner_messages, agent_name)
+                subagent_trace.record(
+                    "subagent_execution_timeout",
+                    timeout_seconds=execution_timeout,
+                )
                 error_msg = f"SubAgent '{agent_name}' execution timeout after {execution_timeout:.1f} seconds."
                 logger.warning(f"[SubAgent:Timeout] {error_msg}")
 
@@ -433,8 +475,26 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         else:
             # 不设置超时
             llm_resp = await _run_subagent()
+
+        execution_time = time.time() - subagent_trace.started_at
+        subagent_trace.record(
+            "subagent_execution_complete",
+            agent_name=agent_name,
+            result_preview=llm_resp.completion_text[:500]
+            if hasattr(llm_resp, "completion_text") and llm_resp.completion_text
+            else None,
+            result_length=len(llm_resp.completion_text)
+            if hasattr(llm_resp, "completion_text") and llm_resp.completion_text
+            else 0,
+            execution_time=execution_time,
+        )
+
         # 保存历史上下文
         cls._save_subagent_history(umo, runner_messages, agent_name)
+        subagent_trace.record(
+            "subagent_history_saved",
+            messages_count=len(runner_messages),
+        )
 
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
@@ -466,6 +526,26 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         subagent_task_id = cls._register_subagent_task(umo, agent_name)
 
         original_task_id = uuid.uuid4().hex
+
+        # Create trace span for background task creation
+        from astrbot.core.utils.trace import TraceSpan
+
+        parent_trace = getattr(event, "trace", None)
+        bg_trace = TraceSpan(
+            name=f"SubAgentBackground:{agent_name}",
+            umo=event.unified_msg_origin,
+            sender_name=event.get_sender_name()
+            if hasattr(event, "get_sender_name")
+            else None,
+            message_outline=f"Background handoff to {agent_name}",
+            parent_span_id=parent_trace.span_id if parent_trace else None,
+        )
+        bg_trace.record(
+            "subagent_background_task_created",
+            agent_name=agent_name,
+            subagent_task_id=subagent_task_id,
+            original_task_id=original_task_id,
+        )
 
         async def _run_handoff_in_background() -> None:
             try:
@@ -515,6 +595,25 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         event = run_context.context.event
         umo = event.unified_msg_origin
         agent_name = getattr(tool.agent, "name", None)
+
+        # Create trace span for background subagent execution
+        from astrbot.core.utils.trace import TraceSpan
+
+        parent_trace = getattr(event, "trace", None)
+        bg_trace = TraceSpan(
+            name=f"SubAgentBackground:{agent_name}",
+            umo=event.unified_msg_origin,
+            sender_name=event.get_sender_name()
+            if hasattr(event, "get_sender_name")
+            else None,
+            message_outline=f"Background handoff to {agent_name}",
+            parent_span_id=parent_trace.span_id if parent_trace else None,
+        )
+        bg_trace.record(
+            "subagent_background_execution_start",
+            agent_name=agent_name,
+        )
+
         # 获取SubAgent的超时时间
         execution_timeout = cls._get_subagent_execution_timeout()
 
@@ -550,6 +649,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             )
 
         execution_time = time.time() - start_time
+        bg_trace.record(
+            "subagent_background_execution_end",
+            agent_name=agent_name,
+            success=error_text is None,
+            result_preview=result_text[:500] if result_text else None,
+            execution_time=execution_time,
+        )
+
         # Check if it's enhanced subagent
         is_managed = cls._is_managed_subagent(umo, agent_name)
         if is_managed:

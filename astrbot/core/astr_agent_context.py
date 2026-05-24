@@ -18,6 +18,11 @@ class AstrAgentContext:
     """The message event associated with the agent context."""
     extra: dict[str, Any] = Field(default_factory=dict)
     """Customized extra data."""
+    trace_span: Any = Field(default=None)
+    """Optional custom TraceSpan for subagent tracing. When set, tool calls within
+    the agent loop will be recorded to this trace instead of event.trace.
+    This prevents concurrent subagent and main agent tool calls from mixing up
+    trace records."""
 
 
 AgentContextWrapper = ContextWrapper[AstrAgentContext]
