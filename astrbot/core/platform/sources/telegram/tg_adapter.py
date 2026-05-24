@@ -135,6 +135,16 @@ class TelegramPlatformAdapter(Platform):
             .token(self.config["telegram_token"])
             .base_url(self.base_url)
             .base_file_url(self.file_base_url)
+            # get_updates (long-polling) timeouts:
+            #   read_timeout must exceed Telegram's long-poll timeout (~30s)
+            #   pool_timeout must allow recovery when the single connection stalls
+            .get_updates_read_timeout(60.0)
+            .get_updates_connect_timeout(15.0)
+            .get_updates_pool_timeout(10.0)
+            # General API call timeouts (sendMessage, getFile, etc.)
+            .read_timeout(30.0)
+            .connect_timeout(10.0)
+            .pool_timeout(5.0)
             .build()
         )
         message_handler = TelegramMessageHandler(
@@ -163,8 +173,14 @@ class TelegramPlatformAdapter(Platform):
 
         updater = self.application.updater
         if updater is not None:
-            with suppress(Exception):
-                await updater.stop()
+            try:
+                await asyncio.wait_for(updater.stop(), timeout=10.0)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Telegram updater stop timed out; connection pool may be exhausted."
+                )
+            except Exception:
+                pass
 
         if delete_commands and self.enable_command_register:
             with suppress(Exception):
