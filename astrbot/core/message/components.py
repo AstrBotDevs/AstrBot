@@ -669,6 +669,8 @@ def _sanitize_file_component_name(name: str | None) -> str:
 
     normalized = str(name).replace("\\", "/")
     basename = PurePosixPath(normalized).name.replace("\x00", "").strip()
+    for char in ':*?"<>|':
+        basename = basename.replace(char, "_")
     if basename in {"", ".", ".."}:
         return "file"
     return basename
