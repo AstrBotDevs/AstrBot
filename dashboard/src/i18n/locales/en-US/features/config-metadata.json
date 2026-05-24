@@ -11,13 +11,7 @@
         },
         "agent_runner_type": {
           "description": "Runner",
-          "labels": [
-            "Built-in Agent",
-            "Dify",
-            "Coze",
-            "Alibaba Cloud Bailian Application",
-            "DeerFlow"
-          ]
+          "labels": ["Built-in Agent", "Dify", "Coze", "Alibaba Cloud Bailian Application", "DeerFlow"]
         },
         "coze_agent_runner_provider_id": {
           "description": "Coze Agent Runner Provider ID"
@@ -253,10 +247,7 @@
         },
         "context_limit_reached_strategy": {
           "description": "Handling for History Limits or Context Window Pressure",
-          "labels": [
-            "Truncate by Turns",
-            "Compress by LLM"
-          ],
+          "labels": ["Truncate by Turns", "Compress by LLM"],
           "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
         },
         "llm_compress_instruction": {
@@ -325,11 +316,7 @@
         "quoted_image_caption_mode": {
           "description": "Quoted Image Caption Strategy",
           "hint": "In auto mode, quoted images are only captioned when the active chat model cannot process images directly.",
-          "labels": [
-            "Auto",
-            "Always Caption",
-            "Never Caption"
-          ]
+          "labels": ["Auto", "Always Caption", "Never Caption"]
         },
         "quoted_message_parser": {
           "max_component_chain_depth": {
@@ -358,12 +345,7 @@
         "tool_schema_mode": {
           "description": "Tool Schema Mode",
           "hint": "Full sends the complete schema in one step; Skills-like sends name/description first and re-queries for parameters; Tool Search only sends core tools initially and LLM discovers more via search; Auto selects Full or Tool Search based on tool count. Recommended for 25+ tools; threshold is adjustable.",
-          "labels": [
-            "Skills-like (two-stage)",
-            "Full schema",
-            "Tool Search",
-            "Auto"
-          ]
+          "labels": ["Skills-like (two-stage)", "Full schema", "Tool Search", "Auto"]
         },
         "tool_search": {
           "threshold": {
@@ -389,10 +371,7 @@
         "unsupported_streaming_strategy": {
           "description": "Platforms Without Streaming Support",
           "hint": "Select the handling method for platforms that don't support streaming responses. Real-time segmented reply sends content immediately when the system detects segment points like punctuation during streaming reception",
-          "labels": [
-            "Real-time Segmented Reply",
-            "Disable Streaming Response"
-          ]
+          "labels": ["Real-time Segmented Reply", "Disable Streaming Response"]
         },
         "wake_prefix": {
           "description": "Additional LLM Chat Wake Prefix",
@@ -490,10 +469,7 @@
       },
       "lark_connection_mode": {
         "description": "Subscription Mode",
-        "labels": [
-          "Long Connection Mode",
-          "Webhook Server Mode"
-        ]
+        "labels": ["Long Connection Mode", "Webhook Server Mode"]
       },
       "lark_encrypt_key": {
         "description": "Encrypt Key",
@@ -814,11 +790,7 @@
         },
         "reply_with_quote_scope": {
           "description": "Quote Reply Scope",
-          "labels": [
-            "All", 
-            "Group Only", 
-            "Private Only"
-          ]
+          "labels": ["All", "Group Only", "Private Only"]
         },
         "forward_threshold": {
           "description": "Forward Message Word Count Threshold"
@@ -1032,10 +1004,7 @@
           "split_mode": {
             "description": "Split Mode",
             "hint": "Used to segment a message. By default, it will be separated by punctuation marks like period, question mark, etc. For example, filling `[。？！]` will remove all periods, question marks, and exclamation marks. re.findall(r'<regex>', text)",
-            "labels": [
-              "Regex",
-              "Words List"
-            ]
+            "labels": ["Regex", "Words List"]
           },
           "regex": {
             "description": "Segmentation Regular Expression",
@@ -1061,10 +1030,7 @@
         "group_context_mode": {
           "description": "Group Chat Context Mode",
           "hint": "sliding_window keeps the existing sliding-window behavior; flow uses persisted group message flow and conversation cursors.",
-          "labels": [
-            "Sliding Window",
-            "Message Flow"
-          ]
+          "labels": ["Sliding Window", "Message Flow"]
         },
         "group_message_max_cnt": {
           "description": "Maximum Message Count",
@@ -1168,10 +1134,7 @@
       "language": {
         "description": "System Language",
         "hint": "Language used for AstrBot runtime replies. Currently supports Simplified Chinese and English.",
-        "labels": [
-          "Simplified Chinese",
-          "English"
-        ]
+        "labels": ["Simplified Chinese", "English"]
       },
       "t2i_strategy": {
         "description": "Text-to-Image Strategy",
@@ -1445,12 +1408,7 @@
       "modalities": {
         "description": "Model capabilities",
         "hint": "Modalities supported by the model. If the model does not support images, uncheck image.",
-        "labels": [
-          "Text",
-          "Image",
-          "Audio",
-          "Tool use"
-        ]
+        "labels": ["Text", "Image", "Audio", "Tool use"]
       },
       "custom_headers": {
         "description": "Custom request headers",
@@ -1799,7 +1757,7 @@
         "description": "Timeout",
         "hint": "Timeout in seconds."
       },
-"max_retries": {
+      "max_retries": {
         "description": "Max Retries",
         "type": "int",
         "hint": "Maximum number of retries when API call fails, range 1-50, default is 10."

@@ -42,7 +42,13 @@ class ProviderTypecastTTS(TTSProvider):
             raise ValueError("[Typecast TTS] typecast-voice-id is required")
         self.language: str = provider_config.get("language", "kor")
         VALID_EMOTION_PRESETS = {
-            "normal", "happy", "sad", "angry", "whisper", "toneup", "tonedown",
+            "normal",
+            "happy",
+            "sad",
+            "angry",
+            "whisper",
+            "toneup",
+            "tonedown",
         }
         self.emotion_preset: str = provider_config.get(
             "typecast-emotion-preset", "normal"
@@ -59,15 +65,11 @@ class ProviderTypecastTTS(TTSProvider):
         self.volume: int = _safe_cast(
             provider_config.get("typecast-volume", 100), int, 100
         )
-        self.pitch: int = _safe_cast(
-            provider_config.get("typecast-pitch", 0), int, 0
-        )
+        self.pitch: int = _safe_cast(provider_config.get("typecast-pitch", 0), int, 0)
         self.tempo: float = _safe_cast(
             provider_config.get("typecast-tempo", 1.0), float, 1.0
         )
-        self.timeout: int = _safe_cast(
-            provider_config.get("timeout", 30), int, 30
-        )
+        self.timeout: int = _safe_cast(provider_config.get("timeout", 30), int, 30)
         self.proxy: str = provider_config.get("proxy", "")
 
         if self.proxy:
@@ -112,15 +114,18 @@ class ProviderTypecastTTS(TTSProvider):
         }
         body = self._build_request_body(text)
 
-        async with AsyncClient(
-            timeout=self.timeout,
-            proxy=self.proxy if self.proxy else None,
-        ) as client, client.stream(
-            "POST",
-            self.API_URL,
-            headers=headers,
-            json=body,
-        ) as response:
+        async with (
+            AsyncClient(
+                timeout=self.timeout,
+                proxy=self.proxy if self.proxy else None,
+            ) as client,
+            client.stream(
+                "POST",
+                self.API_URL,
+                headers=headers,
+                json=body,
+            ) as response,
+        ):
             if response.status_code == 200 and response.headers.get(
                 "content-type", ""
             ).lower().startswith("audio/"):

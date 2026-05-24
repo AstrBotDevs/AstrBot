@@ -105,7 +105,7 @@ class ToolCatalog:
 
     def get_tool(self, name: str) -> FunctionTool | None:
         """Look up a tool by name across both partitions."""
-        return self._by_name.get(name)  # type: ignore[attr-defined]
+        return self._by_name.get(name)
 
     @property
     def all_tools(self) -> tuple[FunctionTool, ...]:

@@ -37,6 +37,9 @@ from astrbot.core.utils.media_utils import (
 
 from .dingtalk_event import DingtalkMessageEvent
 
+MAX_RETRIES = 5
+RETRY_INTERVAL = 5
+
 
 class _PatchedStreamClient(dingtalk_stream.DingTalkStreamClient):
     """Override ``start()`` to pass tolerant WebSocket ping settings.

@@ -1,11 +1,11 @@
 <script setup>
+import axios from "axios";
+import { computed, onMounted, ref } from "vue";
+import { useTheme } from "vuetify";
 import SpanDetail from "@/components/shared/SpanDetail.vue";
 import SpanTree from "@/components/shared/SpanTree.vue";
 import TraceDisplayer from "@/components/shared/TraceDisplayer.vue";
 import { useModuleI18n } from "@/i18n/composables";
-import axios from "axios";
-import { computed, onMounted, ref } from "vue";
-import { useTheme } from "vuetify";
 
 defineOptions({ name: "TracePage" });
 
@@ -49,10 +49,7 @@ const startDraggingList = (e) => {
   const startX = e.clientX;
   const startWidth = listPanelWidth.value;
   const onMouseMove = (ee) => {
-    listPanelWidth.value = Math.max(
-      200,
-      Math.min(800, startWidth + (ee.clientX - startX)),
-    );
+    listPanelWidth.value = Math.max(200, Math.min(800, startWidth + (ee.clientX - startX)));
   };
   const onMouseUp = () => {
     window.removeEventListener("mousemove", onMouseMove);
@@ -68,10 +65,7 @@ const startDraggingTree = (e) => {
   const startX = e.clientX;
   const startWidth = treePanelWidth.value;
   const onMouseMove = (ee) => {
-    treePanelWidth.value = Math.max(
-      150,
-      Math.min(600, startWidth + (ee.clientX - startX)),
-    );
+    treePanelWidth.value = Math.max(150, Math.min(600, startWidth + (ee.clientX - startX)));
   };
   const onMouseUp = () => {
     window.removeEventListener("mousemove", onMouseMove);
@@ -179,9 +173,7 @@ const filteredSpans = computed(() => {
 
   const filterRecursive = (span) => {
     // Process children first
-    const newChildren = (span.children || [])
-      .map(filterRecursive)
-      .filter((c) => c !== null);
+    const newChildren = (span.children || []).map(filterRecursive).filter((c) => c !== null);
 
     const isExcluded = excludedTypes.value.includes(span.span_type);
 

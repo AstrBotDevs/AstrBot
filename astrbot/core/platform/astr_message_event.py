@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import abc
 import asyncio
 import hashlib
 import os
@@ -39,7 +38,7 @@ from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
 
 
-class AstrMessageEvent(abc.ABC):
+class AstrMessageEvent:
     def __init__(
         self,
         message_str: str,
@@ -310,19 +309,19 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    @abc.abstractmethod
     async def send_typing(self) -> None:
         """发送输入中状态。
 
         默认实现为空，由具体平台按需重写。
         """
+        return None
 
-    @abc.abstractmethod
     async def stop_typing(self) -> None:
         """停止输入中状态。
 
         默认实现为空，由具体平台按需重写。
         """
+        return None
 
     async def ack_interaction(self, code: int = 0) -> None:
         """对平台交互回调（如按钮点击）进行 ack。
@@ -339,9 +338,9 @@ class AstrMessageEvent(abc.ABC):
         """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
         return None
 
-    @abc.abstractmethod
     async def _post_send(self) -> None:
         """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
+        return None
 
     def set_result(self, result: MessageEventResult | str) -> None:
         """设置消息事件的结果。

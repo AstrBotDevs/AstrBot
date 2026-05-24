@@ -184,18 +184,11 @@
 </template>
 
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  reactive,
-  ref,
-} from "vue";
-import axios from "@/utils/request";
 import { setCustomComponents } from "markstream-vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import axios from "@/utils/request";
 import "markstream-vue/index.css";
-import ChatInput from "@/components/chat/ChatInput.vue";
+import type ChatInput from "@/components/chat/ChatInput.vue";
 import ElicitationCard from "@/components/chat/message_list_comps/ElicitationCard.vue";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
@@ -206,13 +199,13 @@ import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue"
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
-  displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
-  type MessageDisplayBlock,
-  useMessages,
   type ChatRecord,
+  displayParts as displayMessageParts,
+  type MessageDisplayBlock,
   type MessagePart,
   type TransportMode,
+  useMessages,
 } from "@/composables/useMessages";
 import type { Session } from "@/composables/useSessions";
 import { useModuleI18n } from "@/i18n/composables";
@@ -297,9 +290,7 @@ const {
 });
 
 const transportMode = computed<TransportMode>(() =>
-  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
-    ? "websocket"
-    : "sse",
+  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket" ? "websocket" : "sse",
 );
 
 onMounted(async () => {
@@ -475,12 +466,8 @@ function messageRefs(message: ChatRecord) {
 function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
-  if (part.attachment_id)
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
-      part.attachment_id,
-    )}`;
-  if (part.filename)
-    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+  if (part.attachment_id) return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
+  if (part.filename) return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
   return "";
 }
 

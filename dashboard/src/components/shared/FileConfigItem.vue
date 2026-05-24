@@ -111,9 +111,9 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
 import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
-import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps({
   modelValue: {
@@ -275,9 +275,7 @@ const uploadFiles = async (files: File[]): Promise<void> => {
   const oversized = files.filter((file) => file.size > MAX_FILE_BYTES);
   if (oversized.length > 0) {
     oversized.forEach((file) => {
-      toast.warning(
-        tm("fileUpload.fileTooLarge", { name: file.name, max: MAX_FILE_MB }),
-      );
+      toast.warning(tm("fileUpload.fileTooLarge", { name: file.name, max: MAX_FILE_MB }));
     });
   }
   const validFiles = files.filter((file) => file.size <= MAX_FILE_BYTES);
@@ -315,9 +313,7 @@ const uploadFiles = async (files: File[]): Promise<void> => {
         const updatedDirectory = new Set(directoryFiles.value);
         uploaded.forEach((path) => updatedDirectory.add(path));
         directoryFiles.value = Array.from(updatedDirectory);
-        toast.success(
-          tm("fileUpload.uploadSuccess", { count: uploaded.length }),
-        );
+        toast.success(tm("fileUpload.uploadSuccess", { count: uploaded.length }));
       }
 
       if (errors.length > 0) {
@@ -343,18 +339,11 @@ const addToConfig = (filePath: string): void => {
 
 const deleteFile = (filePath: string): void => {
   fileList.value = fileList.value.filter((item) => item !== filePath);
-  directoryFiles.value = directoryFiles.value.filter(
-    (item) => item !== filePath,
-  );
+  directoryFiles.value = directoryFiles.value.filter((item) => item !== filePath);
 
   if (props.pluginName) {
     axios
-      .post(
-        `/api/config/file/delete?scope=plugin&name=${encodeURIComponent(
-          props.pluginName,
-        )}`,
-        { path: filePath },
-      )
+      .post(`/api/config/file/delete?scope=plugin&name=${encodeURIComponent(props.pluginName)}`, { path: filePath })
       .catch((error) => {
         console.warn("Staged file delete failed:", error);
         toast.warning(tm("fileUpload.deleteFailed"));
@@ -365,18 +354,11 @@ const deleteFile = (filePath: string): void => {
 };
 
 const deletePhysicalFile = (filePath: string): void => {
-  directoryFiles.value = directoryFiles.value.filter(
-    (item) => item !== filePath,
-  );
+  directoryFiles.value = directoryFiles.value.filter((item) => item !== filePath);
 
   if (props.pluginName) {
     axios
-      .post(
-        `/api/config/file/delete?scope=plugin&name=${encodeURIComponent(
-          props.pluginName,
-        )}`,
-        { path: filePath },
-      )
+      .post(`/api/config/file/delete?scope=plugin&name=${encodeURIComponent(props.pluginName)}`, { path: filePath })
       .catch((error) => {
         console.warn("File delete failed:", error);
         toast.warning(tm("fileUpload.deleteFailed"));

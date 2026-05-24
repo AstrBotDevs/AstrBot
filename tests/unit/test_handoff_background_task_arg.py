@@ -66,7 +66,12 @@ def test_handoff_default_parameters_align_with_background_task_handling():
     params = HandoffTool(agent=Agent(name="subagent")).parameters
     assert params["required"] == ["input"]
     assert params["additionalProperties"] is False
-    assert set(params["properties"]) == {"input", "image_urls", "background_task"}
+    assert set(params["properties"]) == {
+        "input",
+        "image_urls",
+        "background_task",
+        "mode",
+    }
     assert params["properties"]["background_task"]["type"] == "boolean"
 
 

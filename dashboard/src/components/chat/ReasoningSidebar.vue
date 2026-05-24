@@ -22,9 +22,9 @@
 </template>
 
 <script setup lang="ts">
+import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
 import type { MessagePart } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
-import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
 
 defineProps<{
   modelValue: boolean;

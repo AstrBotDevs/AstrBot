@@ -50,6 +50,14 @@ from . import astrbot_config, html_renderer
 from .event_bus import EventBus
 
 
+async def reconcile_cua_sandboxes_on_startup() -> None:
+    return None
+
+
+async def cleanup_managed_cua_sandboxes() -> None:
+    return None
+
+
 class LifecycleState(Enum):
     CREATED = "created"
     CORE_READY = "core_ready"
@@ -115,6 +123,25 @@ class AstrBotCoreLifecycle:
         self.dashboard_shutdown_event: asyncio.Event | None = None
         self.event_bus = None
         self.pipeline_scheduler_mapping: dict = {}
+        self.context_compaction_scheduler: PeriodicContextCompactionScheduler | None = (
+            None
+        )
+        self.umop_config_router: UmopConfigRouter | None = None
+        self.astrbot_config_mgr: AstrBotConfigManager | None = None
+        self.event_queue: Queue | None = None
+        self.persona_mgr: PersonaManager | None = None
+        self.provider_manager: ProviderManager | None = None
+        self.platform_manager: PlatformManager | None = None
+        self.conversation_manager: ConversationManager | None = None
+        self.platform_message_history_manager: PlatformMessageHistoryManager | None = (
+            None
+        )
+        self.group_message_flow_manager: GroupMessageFlowManager | None = None
+        self.kb_manager: KnowledgeBaseManager | None = None
+        self.memory_manager: MemoryManager | None = None
+        self.star_context: Context | None = None
+        self.plugin_manager: PluginManager | None = None
+        self.astrbot_updator: AstrBotUpdator | None = None
 
     def _set_lifecycle_state(self, state: LifecycleState) -> None:
         """Set lifecycle state and maintain compatibility flags/events.
@@ -406,10 +433,62 @@ class AstrBotCoreLifecycle:
         except Exception as e:
             logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)
 
+    @staticmethod
+    def _provider_config_id(provider) -> str:
+        provider_config = getattr(provider, "provider_config", None)
+        if isinstance(provider_config, dict):
+            return str(provider_config.get("id") or "")
+        return str(getattr(provider, "provider_id", "") or "")
+
+    def _warn_about_unset_default_chat_provider(self) -> None:
+        provider_manager = self.provider_manager
+        if provider_manager is None:
+            return
+        if self._default_chat_provider_warning_emitted:
+            return
+
+        provider_insts = list(getattr(provider_manager, "provider_insts", []) or [])
+        if len(provider_insts) <= 1:
+            return
+
+        provider_settings = getattr(provider_manager, "provider_settings", {}) or {}
+        default_provider_id = str(provider_settings.get("default_provider_id") or "")
+        provider_ids = {
+            self._provider_config_id(provider)
+            for provider in provider_insts
+            if self._provider_config_id(provider)
+        }
+
+        if default_provider_id and default_provider_id in provider_ids:
+            return
+
+        current_provider = getattr(provider_manager, "curr_provider_inst", None)
+        current_provider_id = (
+            self._provider_config_id(current_provider)
+            if current_provider is not None
+            else ""
+        )
+        if not current_provider_id:
+            current_provider_id = self._provider_config_id(provider_insts[0])
+
+        if default_provider_id:
+            logger.warning(
+                "Default chat provider id %s is not available; using %s.",
+                default_provider_id,
+                current_provider_id,
+            )
+        else:
+            logger.warning(
+                "Multiple chat providers are enabled (%d), but no default chat provider is configured; using %s.",
+                len(provider_insts),
+                current_provider_id,
+            )
+        self._default_chat_provider_warning_emitted = True
+
     async def initialize(
         self,
         *,
-        mcp_init_timeout: float | int | str | None = None,
+        mcp_init_timeout: float | str | None = None,
     ) -> None:
         """初始化 AstrBot 核心生命周期管理类.
 
@@ -571,6 +650,9 @@ class AstrBotCoreLifecycle:
         # 初始化关闭控制面板的事件
         self.dashboard_shutdown_event = asyncio.Event()
 
+        self._warn_about_unset_default_chat_provider()
+        self._set_lifecycle_state(LifecycleState.RUNTIME_READY)
+
         asyncio.create_task(update_llm_metadata())
 
     async def _restore_persistent_sandboxes_background(self) -> None:
@@ -640,7 +722,7 @@ class AstrBotCoreLifecycle:
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
         for task in self.star_context._register_tasks:
-            extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
+            extra_tasks.append(asyncio.create_task(task, name=task.__name__))
 
         tasks_ = []
         if event_bus_task:
@@ -703,17 +785,18 @@ class AstrBotCoreLifecycle:
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
 
     async def stop(self) -> None:
-        """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器.
+        """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
 
-        if self.context_compaction_scheduler:
-            await self.context_compaction_scheduler.stop()
-
-        # 请求停止所有正在运行的异步任务
-        for task in self.curr_tasks:
-            task.cancel()
-
-        if self.cron_manager:
-            await self.cron_manager.shutdown()
+        context_compaction_scheduler = getattr(
+            self,
+            "context_compaction_scheduler",
+            None,
+        )
+        if context_compaction_scheduler:
+            try:
+                await context_compaction_scheduler.stop()
+            except Exception:
+                logger.exception("Error stopping context_compaction_scheduler")
 
         persistent_restore_task = getattr(self, "_persistent_restore_task", None)
         if persistent_restore_task is not None:
@@ -724,6 +807,21 @@ class AstrBotCoreLifecycle:
                 pass
             self._persistent_restore_task = None
 
+        runtime_bootstrap_task = getattr(self, "runtime_bootstrap_task", None)
+        if runtime_bootstrap_task is not None and not runtime_bootstrap_task.done():
+            runtime_bootstrap_task.cancel()
+            try:
+                await runtime_bootstrap_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception("Error awaiting runtime bootstrap task")
+        self.runtime_bootstrap_task = None
+        self.runtime_bootstrap_error = None
+        runtime_failed_event = getattr(self, "runtime_failed_event", None)
+        if runtime_failed_event is not None:
+            runtime_failed_event.clear()
+
         try:
             await computer_client.cleanup_managed_sandboxes()
         except Exception as e:
@@ -733,7 +831,16 @@ class AstrBotCoreLifecycle:
                 exc_info=True,
             )
 
-        for plugin in self.plugin_manager.context.get_all_stars():
+        try:
+            await cleanup_managed_cua_sandboxes()
+        except Exception as e:
+            logger.warning(
+                "Legacy CUA sandbox cleanup during shutdown failed: %s",
+                e,
+                exc_info=True,
+            )
+
+        if self.temp_dir_cleaner is not None:
             try:
                 await self.temp_dir_cleaner.stop()
             except Exception:
@@ -747,6 +854,17 @@ class AstrBotCoreLifecycle:
                     task.cancel()
                 except Exception:
                     logger.exception("Error cancelling task")
+
+            for task in list(curr_tasks):
+                if not isinstance(task, asyncio.Task):
+                    continue
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:
+                    name = task.get_name() if hasattr(task, "get_name") else str(task)
+                    logger.error(f"任务 {name} 发生错误: {e}")
 
         # Shutdown cron manager if present
         if self.cron_manager is not None:
@@ -772,14 +890,7 @@ class AstrBotCoreLifecycle:
                     "Error iterating plugin_manager.context.get_all_stars()",
                 )
 
-        await cleanup_managed_cua_sandboxes()
-        await self.provider_manager.terminate()
-        await self.platform_manager.terminate()
-        await self.kb_manager.terminate()
-        self.dashboard_shutdown_event.set()
-
-        # 再次遍历curr_tasks等待每个任务真正结束
-        for task in self.curr_tasks:
+        if self.provider_manager is not None:
             try:
                 await self.provider_manager.terminate()
             except Exception:
@@ -804,16 +915,12 @@ class AstrBotCoreLifecycle:
             except Exception:
                 logger.exception("Error setting dashboard_shutdown_event")
 
-        # Await tasks to finish (if any)
-        if curr_tasks:
-            for task in list(curr_tasks):
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-                except Exception as e:
-                    name = task.get_name() if hasattr(task, "get_name") else str(task)
-                    logger.error(f"任务 {name} 发生错误: {e}")
+        if curr_tasks is not None:
+            curr_tasks.clear()
+        self.event_bus = None
+        self.pipeline_scheduler_mapping = {}
+        self.start_time = 0
+        self._set_lifecycle_state(LifecycleState.CREATED)
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
@@ -832,6 +939,19 @@ class AstrBotCoreLifecycle:
                 pass
             self._persistent_restore_task = None
 
+        runtime_bootstrap_task = getattr(self, "runtime_bootstrap_task", None)
+        if runtime_bootstrap_task is not None and not runtime_bootstrap_task.done():
+            runtime_bootstrap_task.cancel()
+            try:
+                await runtime_bootstrap_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception("Error awaiting runtime bootstrap task")
+        self.runtime_bootstrap_task = None
+        self.runtime_bootstrap_error = None
+        self.runtime_failed_event.clear()
+
         try:
             await computer_client.cleanup_managed_sandboxes()
         except Exception as e:
@@ -840,14 +960,30 @@ class AstrBotCoreLifecycle:
                 e,
                 exc_info=True,
             )
+        try:
+            await cleanup_managed_cua_sandboxes()
+        except Exception as e:
+            logger.warning(
+                "Legacy CUA sandbox cleanup during restart failed: %s",
+                e,
+                exc_info=True,
+            )
 
-        await self.provider_manager.terminate()
-        await self.platform_manager.terminate()
-        await self.kb_manager.terminate()
+        if self.provider_manager is not None:
+            await self.provider_manager.terminate()
+        if self.platform_manager is not None:
+            await self.platform_manager.terminate()
+        if self.kb_manager is not None:
+            await self.kb_manager.terminate()
         if self.dashboard_shutdown_event is not None:
             self.dashboard_shutdown_event.set()
+        self.curr_tasks.clear()
+        self.event_bus = None
+        self.pipeline_scheduler_mapping = {}
+        self.start_time = 0
+        self._set_lifecycle_state(LifecycleState.CREATED)
         threading.Thread(
-            target=self.astrbot_updator._reboot,
+            target=self.astrbot_updator._reboot if self.astrbot_updator else None,
             name="restart",
             daemon=True,
         ).start()

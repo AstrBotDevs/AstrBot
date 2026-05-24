@@ -472,48 +472,33 @@
 </template>
 
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  provide,
-  reactive,
-  ref,
-  watch,
-} from "vue";
+import axios from "axios";
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
-import axios from "axios";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
-import ProjectDialog, {
-  type ProjectFormData,
-} from "@/components/chat/ProjectDialog.vue";
+import type ChatInput from "@/components/chat/ChatInput.vue";
+import ChatMessageList from "@/components/chat/ChatMessageList.vue";
+import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
+import ProjectDialog, { type ProjectFormData } from "@/components/chat/ProjectDialog.vue";
 import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
 import ProjectView from "@/components/chat/ProjectView.vue";
-import ChatInput from "@/components/chat/ChatInput.vue";
-import ChatMessageList from "@/components/chat/ChatMessageList.vue";
+import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import { useSessions, type Session } from "@/composables/useSessions";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
-  useMessages,
   type ChatRecord,
   type ChatThread,
   type MessagePart,
   type TransportMode,
+  useMessages,
 } from "@/composables/useMessages";
-import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useProjects } from "@/composables/useProjects";
-import { useCustomizerStore } from "@/stores/customizer";
-import {
-  useI18n,
-  useLanguageSwitcher,
-  useModuleI18n,
-} from "@/i18n/composables";
+import { type Session, useSessions } from "@/composables/useSessions";
+import { useI18n, useLanguageSwitcher, useModuleI18n } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
+import { useCustomizerStore } from "@/stores/customizer";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import { useToast } from "@/utils/toast";
 
@@ -529,17 +514,10 @@ const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
 const toast = useToast();
-const { languageOptions, currentLanguage, switchLanguage, locale } =
-  useLanguageSwitcher();
-const {
-  sessions,
-  currSessionId,
-  getSessions,
-  newSession,
-  newChat,
-  deleteSession,
-  updateSessionTitle,
-} = useSessions(props.chatboxMode);
+const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
+const { sessions, currSessionId, getSessions, newSession, newChat, deleteSession, updateSessionTitle } = useSessions(
+  props.chatboxMode,
+);
 const {
   projects,
   selectedProjectId,
@@ -614,9 +592,7 @@ const chatSidebarDrawer = computed({
     }
   },
 });
-const isSidebarCollapsed = computed(() =>
-  lgAndUp.value ? sidebarCollapsed.value : !customizer.chatSidebarOpen,
-);
+const isSidebarCollapsed = computed(() => (lgAndUp.value ? sidebarCollapsed.value : !customizer.chatSidebarOpen));
 
 const {
   loadingMessages,
@@ -645,19 +621,14 @@ const {
 });
 
 const transportMode = ref<TransportMode>(
-  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
-    ? "websocket"
-    : "sse",
+  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket" ? "websocket" : "sse",
 );
 const transportOptions: Array<{ value: TransportMode; labelKey: string }> = [
   { value: "sse", labelKey: "transport.sse" },
   { value: "websocket", labelKey: "transport.websocket" },
 ];
 const currentTransportLabel = computed(() =>
-  tm(
-    transportOptions.find((item) => item.value === transportMode.value)
-      ?.labelKey || "transport.sse",
-  ),
+  tm(transportOptions.find((item) => item.value === transportMode.value)?.labelKey || "transport.sse"),
 );
 
 watch(transportMode, (mode) => {
@@ -665,31 +636,17 @@ watch(transportMode, (mode) => {
 });
 
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
-const canSend = computed(
-  () =>
-    Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value,
-);
+const canSend = computed(() => Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value);
 const currentSession = computed(
   () =>
-    sessions.value.find(
-      (session) => session.session_id === currSessionId.value,
-    ) ||
-    projectSessions.value.find(
-      (session) => session.session_id === currSessionId.value,
-    ) ||
+    sessions.value.find((session) => session.session_id === currSessionId.value) ||
+    projectSessions.value.find((session) => session.session_id === currSessionId.value) ||
     null,
 );
-const sessionProject = computed(() =>
-  currSessionId.value ? sessionProjects[currSessionId.value] : null,
-);
-const currentSessionTitle = computed(() =>
-  currentSession.value ? sessionTitle(currentSession.value) : "",
-);
+const sessionProject = computed(() => (currSessionId.value ? sessionProjects[currSessionId.value] : null));
+const currentSessionTitle = computed(() => (currentSession.value ? sessionTitle(currentSession.value) : ""));
 const selectedProject = computed(
-  () =>
-    projects.value.find(
-      (project) => project.project_id === selectedProjectId.value,
-    ) || null,
+  () => projects.value.find((project) => project.project_id === selectedProjectId.value) || null,
 );
 const chatInputReplyTarget = computed(() =>
   replyTarget.value?.id == null
@@ -800,11 +757,7 @@ async function handleDeleteProject(projectId: string) {
   }
 }
 
-function openSessionTitleDialog(
-  sessionId: string,
-  title: string,
-  refreshProjectSessions = false,
-) {
+function openSessionTitleDialog(sessionId: string, title: string, refreshProjectSessions = false) {
   editingSessionTitleId.value = sessionId;
   sessionTitleDraft.value = title;
   refreshProjectSessionsAfterTitleSave.value = refreshProjectSessions;
@@ -823,9 +776,7 @@ async function saveSessionTitleDialog() {
       display_name: displayName,
     });
     updateSessionTitle(sessionId, displayName);
-    const projectSession = projectSessions.value.find(
-      (session) => session.session_id === sessionId,
-    );
+    const projectSession = projectSessions.value.find((session) => session.session_id === sessionId);
     if (projectSession) {
       projectSession.display_name = displayName;
     }
@@ -871,12 +822,7 @@ async function deleteProjectSession(sessionId: string) {
 
 async function saveProject(formData: ProjectFormData, projectId?: string) {
   if (projectId) {
-    await updateProject(
-      projectId,
-      formData.title,
-      formData.emoji,
-      formData.description,
-    );
+    await updateProject(projectId, formData.title, formData.emoji, formData.description);
     return;
   }
 
@@ -988,9 +934,7 @@ function updateTitleFromText(sessionId: string, text: string) {
 
 function replyPreview(messageId?: string | number, fallback?: string) {
   if (fallback) return truncate(fallback, 80);
-  const found = activeMessages.value.find(
-    (message) => String(message.id) === String(messageId),
-  );
+  const found = activeMessages.value.find((message) => String(message.id) === String(messageId));
   const text = found ? plainTextFromMessage(found) : "";
   return text ? truncate(text, 80) : tm("reply.replyTo");
 }
@@ -1008,9 +952,7 @@ function truncate(value: string, max: number) {
 
 function scrollToMessage(messageId?: string | number) {
   if (!messageId) return;
-  const index = activeMessages.value.findIndex(
-    (message) => String(message.id) === String(messageId),
-  );
+  const index = activeMessages.value.findIndex((message) => String(message.id) === String(messageId));
   if (index < 0) return;
   const rows = messagesContainer.value?.querySelectorAll(".message-row");
   rows?.[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1032,11 +974,7 @@ async function saveMessageEdit() {
   savingMessageEdit.value = true;
   try {
     const target = editingMessage.value;
-    const result = await editMessage(
-      currSessionId.value,
-      target,
-      messageEditDraft.value,
-    );
+    const result = await editMessage(currSessionId.value, target, messageEditDraft.value);
     cancelMessageEdit();
 
     if (result.needsRegenerate && result.truncatedAfterMessage) {
@@ -1050,12 +988,8 @@ async function saveMessageEdit() {
       });
       scrollToBottom();
     } else if (result.needsRegenerate) {
-      const index = activeMessages.value.findIndex(
-        (message) => String(message.id) === String(target.id),
-      );
-      const nextBot = activeMessages.value
-        .slice(index + 1)
-        .find((message) => !isUserMessage(message));
+      const index = activeMessages.value.findIndex((message) => String(message.id) === String(target.id));
+      const nextBot = activeMessages.value.slice(index + 1).find((message) => !isUserMessage(message));
       if (nextBot) {
         await handleRegenerateMessage(nextBot);
       }
@@ -1067,18 +1001,10 @@ async function saveMessageEdit() {
   }
 }
 
-async function handleRegenerateMessage(
-  message: ChatRecord,
-  selection?: RegenerateModelSelection,
-) {
+async function handleRegenerateMessage(message: ChatRecord, selection?: RegenerateModelSelection) {
   if (!currSessionId.value || isUserMessage(message)) return;
   message.threads = [];
-  await regenerateMessage(
-    currSessionId.value,
-    message,
-    selection?.providerId || "",
-    selection?.modelName || "",
-  );
+  await regenerateMessage(currSessionId.value, message, selection?.providerId || "", selection?.modelName || "");
 }
 
 function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
@@ -1091,11 +1017,7 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
       threadSelection.visible = false;
       return;
     }
-    if (
-      !container ||
-      !container.contains(selection.anchorNode) ||
-      !container.contains(selection.focusNode)
-    ) {
+    if (!container || !container.contains(selection.anchorNode) || !container.contains(selection.focusNode)) {
       threadSelection.visible = false;
       return;
     }
@@ -1103,10 +1025,7 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
     const rect = range.getBoundingClientRect();
     threadSelection.message = message;
     threadSelection.selectedText = selectedText;
-    threadSelection.left = Math.min(
-      window.innerWidth - 180,
-      Math.max(12, rect.left + rect.width / 2 - 70),
-    );
+    threadSelection.left = Math.min(window.innerWidth - 180, Math.max(12, rect.left + rect.width / 2 - 70));
     threadSelection.top = Math.max(12, rect.top - 42);
     threadSelection.visible = true;
   }, 0);
@@ -1137,11 +1056,7 @@ async function createThreadFromSelection() {
     openThreadPanel(thread);
     window.getSelection()?.removeAllRanges();
   } catch (error) {
-    toast.error(
-      axios.isAxiosError(error)
-        ? error.response?.data?.message || error.message
-        : tm("thread.createFailed"),
-    );
+    toast.error(axios.isAxiosError(error) ? error.response?.data?.message || error.message : tm("thread.createFailed"));
     console.error("Failed to create thread:", error);
   } finally {
     threadSelection.visible = false;
@@ -1154,8 +1069,7 @@ function openThreadPanel(thread: ChatThread) {
 }
 
 function openRefsSidebar(refs: unknown) {
-  selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : undefined;
+  selectedRefs.value = refs && typeof refs === "object" ? (refs as Record<string, unknown>) : undefined;
   refsSidebarOpen.value = true;
 }
 
@@ -1182,9 +1096,7 @@ async function deleteThread(thread: ChatThread) {
 function removeThreadFromMessages(threadId: string) {
   for (const message of activeMessages.value) {
     if (!message.threads?.length) continue;
-    message.threads = message.threads.filter(
-      (thread) => thread.thread_id !== threadId,
-    );
+    message.threads = message.threads.filter((thread) => thread.thread_id !== threadId);
   }
 }
 
@@ -1215,8 +1127,7 @@ function handleMessagesScroll() {
   threadSelection.visible = false;
   const container = messagesContainer.value;
   if (!container) return;
-  const distance =
-    container.scrollHeight - container.scrollTop - container.clientHeight;
+  const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
   shouldStickToBottom.value = distance < 80;
 }
 

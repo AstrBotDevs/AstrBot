@@ -4,21 +4,15 @@ import asyncio
 import locale
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
 from astrbot.api import logger
-from astrbot.core.computer.olayer import (
-    FileSystemComponent,
-    PythonComponent,
-    ShellComponent,
-)
 from astrbot.core.computer.shell_session import PersistentShellSession
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
@@ -35,7 +29,21 @@ from ..olayer import (
 )
 from .base import ComputerBooter
 from .local_interactive_shell import LocalInteractiveShellComponent
-from .shipyard_search_file_util import _truncate_long_lines
+
+SandboxBackend = Literal["none", "bwrap", "seatbelt"]
+_MAX_LINE_LENGTH = 2000
+
+
+def _truncate_long_lines(text: str) -> str:
+    lines = []
+    for line in text.splitlines(keepends=True):
+        newline = "\n" if line.endswith("\n") else ""
+        body = line[:-1] if newline else line
+        if len(body) > _MAX_LINE_LENGTH:
+            body = f"{body[:_MAX_LINE_LENGTH]}...[truncated]"
+        lines.append(body + newline)
+    return "".join(lines)
+
 
 _BLOCKED_COMMAND_PATTERNS = [
     " rm -rf ",
@@ -73,12 +81,51 @@ def _ensure_safe_path(path: str) -> str:
 
 
 def _decode_bytes_with_fallback(
-    output: bytes | None,
+    output: bytes | str | None,
     *,
     preferred_encoding: str | None = None,
 ) -> str:
     if output is None:
         return ""
+    if isinstance(output, str):
+        return output
+
+    preferred = locale.getpreferredencoding(False) or "utf-8"
+    attempted_encodings: list[str] = []
+
+    def _try_decode(encoding: str) -> str | None:
+        normalized = encoding.lower()
+        if normalized in attempted_encodings:
+            return None
+        attempted_encodings.append(normalized)
+        try:
+            return output.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            return None
+
+    for encoding in filter(None, [preferred_encoding, "utf-8", "utf-8-sig"]):
+        if decoded := _try_decode(encoding):
+            return decoded
+
+    if os.name == "nt":
+        for encoding in ("mbcs", "cp936", "gbk", "gb18030", preferred):
+            if decoded := _try_decode(encoding):
+                return decoded
+    elif decoded := _try_decode(preferred):
+        return decoded
+
+    return output.decode("utf-8", errors="replace")
+
+
+def _decode_process_output(
+    output: bytes | None,
+    *,
+    normalize_newlines: bool = False,
+) -> str:
+    decoded = _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
+    if normalize_newlines:
+        decoded = decoded.replace("\r\n", "\n")
+    return decoded
 
 
 def _session_workspace_name(session_id: str) -> str:
@@ -112,9 +159,13 @@ class LocalSandboxPolicy:
     default_cwd: Path
 
     @classmethod
-    def build_default(cls, session_id: str, sandboxed: bool) -> LocalSandboxPolicy:
+    def build_default(
+        cls,
+        session_id: str = "default",
+        sandboxed: bool = False,
+    ) -> LocalSandboxPolicy:
         workspace_root_raw = os.environ.get(
-            "ASTRBOT_LOCAL_WORKSPACE_ROOT"
+            "ASTRBOT_LOCAL_WORKSPACE_ROOT",
         ) or os.environ.get("ASTRBOT_LOCAL_WORKSPACE", "~/.astrbot/workspace")
         workspace_root = Path(workspace_root_raw).expanduser().resolve()
         workspace = workspace_root / _session_workspace_name(session_id)
@@ -132,7 +183,7 @@ class LocalSandboxPolicy:
         except PermissionError as exc:
             raise RuntimeError(
                 "Cannot create local workspace. "
-                "Set ASTRBOT_LOCAL_WORKSPACE_ROOT to a writable path."
+                "Set ASTRBOT_LOCAL_WORKSPACE_ROOT to a writable path.",
             ) from exc
 
     def resolve_path(self, path: str, base: Path | None = None) -> Path:
@@ -144,47 +195,29 @@ class LocalSandboxPolicy:
         abs_path = self.resolve_path(path)
         if self.sandboxed and not abs_path.is_relative_to(self.workspace):
             raise PermissionError(
-                f"Write path is outside workspace: {self.workspace.as_posix()}"
+                f"Write path is outside workspace: {self.workspace.as_posix()}",
             )
         return abs_path
 
-    return output.decode("utf-8", errors="replace")
+    def normalize_working_dir(self, cwd: str | None) -> Path:
+        target = self.resolve_path(cwd) if cwd else self.default_cwd
+        if not target.exists():
+            raise FileNotFoundError(f"Working directory does not exist: {target}")
+        if not target.is_dir():
+            raise NotADirectoryError(f"Working directory is not a directory: {target}")
+        return target
+
+    def wrap_command(self, command: list[str], _working_dir: Path) -> list[str]:
+        return command
 
 
-def _decode_process_output(
-    output: bytes | None,
-    *,
-    normalize_newlines: bool = False,
-) -> str:
-    decoded = _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
-    if normalize_newlines:
-        decoded = decoded.replace("\r\n", "\n")
-    return decoded
-
-    def wrap_command(self, command: list[str], working_dir: Path) -> list[str]:
-        if not self.sandboxed:
-            return command
-
-def _truncate_long_lines(text: str) -> str:
-    output_lines: list[str] = []
-    for line in text.splitlines(keepends=True):
-        line_ending = ""
-        line_body = line
-        if line.endswith("\r\n"):
-            line_body = line[:-2]
-            line_ending = "\r\n"
-        elif line.endswith("\n") or line.endswith("\r"):
-            line_body = line[:-1]
-            line_ending = line[-1]
-        if len(line_body) > _MAX_SEARCH_LINE_COLUMNS:
-            line_body = line_body[:_MAX_SEARCH_LINE_COLUMNS]
-        output_lines.append(f"{line_body}{line_ending}")
-    return "".join(output_lines)
+def _default_policy() -> LocalSandboxPolicy:
+    return LocalSandboxPolicy.build_default()
 
 
 @dataclass
 class LocalShellComponent(ShellComponent):
-    policy: LocalSandboxPolicy
+    policy: LocalSandboxPolicy = field(default_factory=_default_policy)
 
     async def exec(
         self,
@@ -199,40 +232,15 @@ class LocalShellComponent(ShellComponent):
         if not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
 
-        def _run() -> dict[str, Any]:
-            run_env = os.environ.copy()
-            if env:
-                run_env.update({str(k): str(v) for k, v in env.items()})
-            working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
-            if background:
-                # `command` is intentionally executed through the current shell so
-                # local computer-use behavior matches existing tool semantics.
-                # Safety relies on `_is_safe_command()` and the allowed-root checks.
-                proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-                    command,
-                    shell=shell,
-                    cwd=working_dir,
-                    env=run_env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
-            # `command` is intentionally executed through the current shell so
-            # local computer-use behavior matches existing tool semantics.
-            # Safety relies on `_is_safe_command()` and the allowed-root checks.
-            result = subprocess.run(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-                command,
-                shell=shell,
-                cwd=working_dir,
-                env=run_env,
-                timeout=timeout or 300,
-                capture_output=True,
-            )
-            return {
-                "stdout": _decode_process_output(result.stdout),
-                "stderr": _decode_process_output(result.stderr),
-                "exit_code": result.returncode,
-            }
+        key = session_id or "default"
+        session = PersistentShellSession.get_or_create(key)
+        return await session.exec(
+            command,
+            cwd=cwd,
+            env=env,
+            timeout=timeout,
+            background=background,
+        )
 
     @staticmethod
     async def shutdown_all() -> None:
@@ -241,7 +249,7 @@ class LocalShellComponent(ShellComponent):
 
 @dataclass
 class LocalPythonComponent(PythonComponent):
-    policy: LocalSandboxPolicy
+    policy: LocalSandboxPolicy = field(default_factory=_default_policy)
 
     async def exec(
         self,
@@ -251,18 +259,17 @@ class LocalPythonComponent(PythonComponent):
         silent: bool = False,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            python_command = [os.environ.get("PYTHON", sys.executable), "-c", code]
+            python_command = [sys.executable, "-c", code]
             working_dir = self.policy.normalize_working_dir(None)
             wrapped_command = self.policy.wrap_command(python_command, working_dir)
             try:
-                # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-                # Executes the current interpreter with a fixed argv list and shell=False.
                 result = subprocess.run(
-                    [os.environ.get("PYTHON", sys.executable), "-c", code],
+                    wrapped_command,
                     check=False,
                     timeout=timeout,
                     capture_output=True,
                     text=False,
+                    shell=False,
                 )
                 stdout = (
                     ""
@@ -295,7 +302,7 @@ class LocalPythonComponent(PythonComponent):
 
 @dataclass
 class LocalFileSystemComponent(FileSystemComponent):
-    policy: LocalSandboxPolicy
+    policy: LocalSandboxPolicy = field(default_factory=_default_policy)
 
     async def create_file(
         self,
@@ -304,11 +311,10 @@ class LocalFileSystemComponent(FileSystemComponent):
         mode: int = 0o644,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
-            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-            with open(abs_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            abs_path.chmod(mode)
+            abs_path = self.policy.ensure_writable_path(_ensure_safe_path(path))
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+            abs_path.write_text(content, encoding="utf-8")
+            os.chmod(abs_path, mode)
             return {"success": True, "path": str(abs_path)}
 
         return await asyncio.to_thread(_run)
@@ -327,7 +333,7 @@ class LocalFileSystemComponent(FileSystemComponent):
             content = _decode_bytes_with_fallback(
                 raw_content,
                 preferred_encoding=encoding,
-            )
+            ).replace("\r\n", "\n")
             if offset is not None:
                 lines = content.splitlines(keepends=True)
                 start = offset
@@ -351,10 +357,30 @@ class LocalFileSystemComponent(FileSystemComponent):
         after_context: int | None = None,
         before_context: int | None = None,
     ) -> dict[str, Any]:
-        """Search file contents using grep-like pattern matching."""
-
         def _run() -> dict[str, Any]:
             search_path = _ensure_safe_path(path) if path else "."
+            if os.name == "nt":
+                matches: list[str] = []
+                root = Path(search_path)
+                files = [root] if root.is_file() else root.rglob(glob or "*")
+                for candidate in files:
+                    if not candidate.is_file():
+                        continue
+                    try:
+                        text = candidate.read_text(encoding="utf-8")
+                    except UnicodeDecodeError:
+                        text = _decode_bytes_with_fallback(candidate.read_bytes())
+                    except OSError:
+                        continue
+                    for line_number, line in enumerate(text.splitlines(), start=1):
+                        if pattern in line:
+                            matches.append(f"{candidate}:{line_number}:{line}\n")
+                return {
+                    "success": True,
+                    "content": _truncate_long_lines("".join(matches)),
+                    "error": "",
+                }
+
             cmd = ["grep", "-rn", pattern, search_path]
             if after_context is not None:
                 cmd.extend(["-A", str(after_context)])
@@ -372,7 +398,7 @@ class LocalFileSystemComponent(FileSystemComponent):
                 )
                 return {
                     "success": True,
-                    "content": result.stdout,
+                    "content": _truncate_long_lines(result.stdout),
                     "error": result.stderr if result.returncode != 0 else "",
                 }
             except subprocess.TimeoutExpired:
@@ -393,21 +419,27 @@ class LocalFileSystemComponent(FileSystemComponent):
         encoding: str = "utf-8",
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
-            with open(abs_path, encoding=encoding) as f:
-                content = f.read()
-            if replace_all:
-                new_content = content.replace(old_string, new_string)
-            else:
-                new_content = content.replace(old_string, new_string, 1)
-            if new_content == content:
+            abs_path = self.policy.ensure_writable_path(_ensure_safe_path(path))
+            content = abs_path.read_text(encoding=encoding)
+            occurrences = content.count(old_string)
+            if occurrences == 0:
                 return {
                     "success": False,
-                    "error": f"String '{old_string}' not found in file.",
+                    "error": "old string not found in file",
+                    "replacements": 0,
                 }
-            with open(abs_path, "w", encoding=encoding) as f:
-                f.write(new_content)
-            return {"success": True, "path": abs_path}
+            if replace_all:
+                updated = content.replace(old_string, new_string)
+                replacements = occurrences
+            else:
+                updated = content.replace(old_string, new_string, 1)
+                replacements = 1
+            abs_path.write_text(updated, encoding=encoding)
+            return {
+                "success": True,
+                "path": str(abs_path),
+                "replacements": replacements,
+            }
 
         return await asyncio.to_thread(_run)
 
@@ -419,8 +451,8 @@ class LocalFileSystemComponent(FileSystemComponent):
         encoding: str = "utf-8",
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
-            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+            abs_path = self.policy.ensure_writable_path(_ensure_safe_path(path))
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
             with open(abs_path, mode, encoding=encoding) as f:
                 f.write(content)
             return {"success": True, "path": str(abs_path)}
@@ -429,8 +461,8 @@ class LocalFileSystemComponent(FileSystemComponent):
 
     async def delete_file(self, path: str) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
-            if os.path.isdir(abs_path):
+            abs_path = self.policy.ensure_writable_path(_ensure_safe_path(path))
+            if abs_path.is_dir():
                 shutil.rmtree(abs_path)
             else:
                 abs_path.unlink()
@@ -454,17 +486,29 @@ class LocalFileSystemComponent(FileSystemComponent):
 
 
 class LocalBooter(ComputerBooter):
-    def __init__(self) -> None:
-        self._fs = LocalFileSystemComponent()
-        self._python = LocalPythonComponent()
-        self._shell = LocalShellComponent()
+    def __init__(self, session_id: str = "default", sandboxed: bool = False) -> None:
+        self._session_id = session_id
+        self._policy = LocalSandboxPolicy.build_default(
+            session_id=session_id,
+            sandboxed=sandboxed,
+        )
+        if sandboxed:
+            self._policy.ensure_workspace()
+        if sandboxed and self._policy.backend == "none":
+            logger.warning(
+                f"Local runtime sandbox backend is unavailable on {sys.platform}. "
+                "Only filesystem tools are restricted to workspace.",
+            )
+        self._fs = LocalFileSystemComponent(policy=self._policy)
+        self._python = LocalPythonComponent(policy=self._policy)
+        self._shell = LocalShellComponent(policy=self._policy)
         self._interactive_shell = LocalInteractiveShellComponent()
 
     async def boot(self, session_id: str) -> None:
         logger.info(
             f"Local computer booter initialized for session: {session_id} "
             f"(sandboxed={self._policy.sandboxed}, "
-            f"backend={self._policy.backend}, workspace={self._policy.workspace})"
+            f"backend={self._policy.backend}, workspace={self._policy.workspace})",
         )
 
     async def shutdown(self, **kwargs) -> None:

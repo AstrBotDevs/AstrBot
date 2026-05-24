@@ -1,46 +1,45 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { PluginSummary } from './types'
-
-import PluginBehaviorPanel from './PluginBehaviorPanel.vue'
+import { computed } from "vue";
+import PluginBehaviorPanel from "./PluginBehaviorPanel.vue";
+import type { PluginSummary } from "./types";
 
 const props = defineProps<{
-  plugin: PluginSummary
-}>()
+  plugin: PluginSummary;
+}>();
 
 const emit = defineEmits<{
-  (e: 'action-update'): void
-  (e: 'open-repo', url: string): void
-}>()
+  (e: "action-update"): void;
+  (e: "open-repo", url: string): void;
+}>();
 
-const displayTitle = computed(() => props.plugin.display_name || props.plugin.name)
+const displayTitle = computed(() => props.plugin.display_name || props.plugin.name);
 
-const hasLogo = computed(() => Boolean(props.plugin.logo))
+const hasLogo = computed(() => Boolean(props.plugin.logo));
 
 const statusChips = computed(() => {
-  const chips: Array<{ text: string; color: string }> = []
+  const chips: Array<{ text: string; color: string }> = [];
   chips.push({
-    text: props.plugin.activated ? '已启用' : '已停用',
-    color: props.plugin.activated ? 'success' : 'warning'
-  })
+    text: props.plugin.activated ? "已启用" : "已停用",
+    color: props.plugin.activated ? "success" : "warning",
+  });
 
   if (props.plugin.reserved) {
-    chips.push({ text: '系统插件', color: 'primary' })
+    chips.push({ text: "系统插件", color: "primary" });
   }
 
   if (props.plugin.has_update) {
-    chips.push({ text: '有更新', color: 'warning' })
+    chips.push({ text: "有更新", color: "warning" });
   }
 
-  return chips
-})
+  return chips;
+});
 
-const handlers = computed(() => props.plugin.handlers ?? [])
+const handlers = computed(() => props.plugin.handlers ?? []);
 
 const handleOpenRepo = () => {
-  if (!props.plugin.repo) return
-  emit('open-repo', props.plugin.repo)
-}
+  if (!props.plugin.repo) return;
+  emit("open-repo", props.plugin.repo);
+};
 </script>
 
 <template>

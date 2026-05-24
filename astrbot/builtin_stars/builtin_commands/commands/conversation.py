@@ -237,12 +237,38 @@ class ConversationCommands:
                 )
             )
             return
-        message.set_result(MessageEventResult().message("当前会话没有运行中的任务｡"))
-
         message.set_result(
             MessageEventResult().message(
                 t(self.context, "conversation.no_running_tasks"),
             )
+        )
+
+    async def his(self, message: AstrMessageEvent, page: int = 1) -> None:
+        """查看对话记录"""
+        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            message.set_result(
+                MessageEventResult().message(
+                    f"{THIRD_PARTY_AGENT_RUNNER_STR} 对话记录功能暂不支持｡",
+                ),
+            )
+            return
+
+        size_per_page = 6
+        conv_mgr = self.context.conversation_manager
+        umo = message.unified_msg_origin
+        session_curr_cid = await conv_mgr.get_curr_conversation_id(umo)
+        if not session_curr_cid:
+            session_curr_cid = await conv_mgr.new_conversation(
+                umo,
+                message.get_platform_id(),
+            )
+        contexts, total_pages = await conv_mgr.get_human_readable_context(
+            umo,
+            session_curr_cid,
+            page,
+            size_per_page,
         )
         parts = []
         for context in contexts:

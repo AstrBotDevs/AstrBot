@@ -11,9 +11,9 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer import computer_client
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
-from ..registry import builtin_tool
 from .util import check_admin_permission
 
 _SANDBOX_RUNTIME_TOOL_CONFIG = {
@@ -25,18 +25,21 @@ def _dump(data) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
 
 
-def _format_agent_time(value: int | float | None) -> str | None:
+def _format_agent_time(value: float | None) -> str | None:
     if value is None:
         return None
     if isinstance(value, bool):
         return str(value)
     if not isinstance(value, (int, float)):
         return str(value)
-    return (
-        datetime.fromtimestamp(float(value))
-        .astimezone()
-        .strftime("%Y-%m-%d %H:%M:%S %Z")
-    )
+    try:
+        return (
+            datetime.fromtimestamp(float(value))
+            .astimezone()
+            .strftime("%Y-%m-%d %H:%M:%S %Z")
+        )
+    except (OSError, OverflowError, ValueError):
+        return str(value)
 
 
 def _format_sandbox_for_agent(value):
@@ -464,7 +467,7 @@ class KeepAliveSandboxTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        ttl_seconds: int | float | None = None,
+        ttl_seconds: float | None = None,
     ) -> ToolExecResult:
         if permission_error := _check_basic_sandbox_permission(
             context, "Keeping sandbox alive"

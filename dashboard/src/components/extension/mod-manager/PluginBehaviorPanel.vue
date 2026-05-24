@@ -1,29 +1,29 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { PluginHandlerInfo } from './types'
+import { computed } from "vue";
+import type { PluginHandlerInfo } from "./types";
 
 const props = defineProps<{
-  handlers: PluginHandlerInfo[]
+  handlers: PluginHandlerInfo[];
   /**
    * 嵌入模式：用于在其他面板中作为一个分区展示。
    * - 不强制撑满高度
    * - 不使用 fixed-header / height=100%（避免在可滚动容器内布局异常）
    */
-  embedded?: boolean
-}>()
+  embedded?: boolean;
+}>();
 
 const headers = computed(() => [
-  { title: '事件类型', key: 'event_type_h', width: '160px' },
-  { title: '处理器名称', key: 'handler_name', width: '200px' },
-  { title: '描述', key: 'desc', minWidth: '240px' },
-  { title: '类型', key: 'type', width: '140px' },
-  { title: '命令', key: 'cmd', width: '160px' }
-])
+  { title: "事件类型", key: "event_type_h", width: "160px" },
+  { title: "处理器名称", key: "handler_name", width: "200px" },
+  { title: "描述", key: "desc", minWidth: "240px" },
+  { title: "类型", key: "type", width: "140px" },
+  { title: "命令", key: "cmd", width: "160px" },
+]);
 
-const items = computed(() => props.handlers ?? [])
+const items = computed(() => props.handlers ?? []);
 
-const title = computed(() => (props.embedded ? '行为' : '行为面板'))
-const emptyPaddingClass = computed(() => (props.embedded ? 'pa-6' : 'pa-10'))
+const title = computed(() => (props.embedded ? "行为" : "行为面板"));
+const emptyPaddingClass = computed(() => (props.embedded ? "pa-6" : "pa-10"));
 </script>
 
 <template>

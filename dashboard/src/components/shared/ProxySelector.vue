@@ -79,8 +79,8 @@
 </template>
 
 <script lang="ts">
-import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
 export default {
   setup() {
@@ -122,9 +122,7 @@ export default {
       if (String(newVal) === "0") {
         this.selectedGitHubProxy = "";
       } else if (String(this.githubProxyRadioControl) !== "-1") {
-        this.selectedGitHubProxy = this.getProxyByControl(
-          this.githubProxyRadioControl,
-        );
+        this.selectedGitHubProxy = this.getProxyByControl(this.githubProxyRadioControl);
       }
     },
     githubProxyRadioControl: function (newVal) {
@@ -147,9 +145,7 @@ export default {
 
     const savedProxy = localStorage.getItem("selectedGitHubProxy") || "";
     const savedRadio = localStorage.getItem("githubProxyRadioValue") || "0";
-    const savedControl = String(
-      localStorage.getItem("githubProxyRadioControl") || "0",
-    );
+    const savedControl = String(localStorage.getItem("githubProxyRadioControl") || "0");
 
     this.radioValue = savedRadio;
     this.githubProxyRadioControl = savedControl;
@@ -212,9 +208,7 @@ export default {
     async testAllProxies() {
       this.loadingTestingConnection = true;
 
-      const promises = this.githubProxies.map((proxy, idx) =>
-        this.testSingleProxy(idx),
-      );
+      const promises = this.githubProxies.map((proxy, idx) => this.testSingleProxy(idx));
 
       await Promise.all(promises);
       this.loadingTestingConnection = false;

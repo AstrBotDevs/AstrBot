@@ -4,8 +4,8 @@ from pathlib import Path
 
 import click
 
-from ..utils import get_astrbot_root
-from ..utils.openclaw_migrate import run_openclaw_migration
+from astrbot.cli.utils import get_astrbot_root
+from astrbot.cli.utils.openclaw_migrate import run_openclaw_migration
 
 
 @click.group(name="migrate")

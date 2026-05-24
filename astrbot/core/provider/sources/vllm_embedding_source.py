@@ -100,7 +100,9 @@ class VLLMEmbeddingProvider(EmbeddingProvider):
     def _build_http_client(self) -> httpx.AsyncClient | None:
         proxy = str(self.provider_config.get("proxy", "") or "").strip()
         if proxy:
-            logger.info("[vLLM Embedding] %s 使用显式代理: %s", self._provider_id(), proxy)
+            logger.info(
+                "[vLLM Embedding] %s 使用显式代理: %s", self._provider_id(), proxy
+            )
             return httpx.AsyncClient(proxy=proxy, timeout=self.timeout)
         if self._force_direct_transport:
             return httpx.AsyncClient(timeout=self.timeout, trust_env=False)
@@ -128,7 +130,10 @@ class VLLMEmbeddingProvider(EmbeddingProvider):
             try:
                 await old_client.close()
             except Exception:
-                logger.debug("[vLLM Embedding] %s 关闭旧 client 失败，已忽略。", self._provider_id())
+                logger.debug(
+                    "[vLLM Embedding] %s 关闭旧 client 失败，已忽略。",
+                    self._provider_id(),
+                )
 
     async def _resolve_request_model(self) -> str:
         if self._resolved_request_model:

@@ -7,6 +7,7 @@ import io
 import sys
 import time
 import uuid
+from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,7 +18,7 @@ import qrcode as qrcode_lib
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Video
+from astrbot.api.message_components import File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -59,6 +60,34 @@ class TypingSessionState:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
+@dataclass
+class WeixinOCRecentMessage:
+    message_id: str
+    sender_id: str
+    sender_nickname: str
+    timestamp: int
+    timestamp_ms: int
+    components: list[Any]
+    message_str: str
+    message_kind: str
+
+
+@dataclass
+class WeixinOCRecentSessionCache:
+    messages: deque[WeixinOCRecentMessage]
+    updated_at: float
+
+
+@dataclass
+class WeixinOCReplyMeta:
+    is_reply: bool = False
+    ref_msg: dict[str, Any] | None = None
+    reply_kind: str | None = None
+    quoted_item_type: int | None = None
+    quoted_text: str | None = None
+    reply_to: dict[str, Any] = field(default_factory=lambda: {"matched": False})
+
+
 @register_platform_adapter("weixin_oc", "个人微信", support_streaming_message=False)
 class WeixinOCAdapter(Platform):
     SESSION_TIMEOUT_ERRCODE = -14
@@ -69,6 +98,10 @@ class WeixinOCAdapter(Platform):
     IMAGE_UPLOAD_TYPE = 1
     VIDEO_UPLOAD_TYPE = 2
     FILE_UPLOAD_TYPE = 3
+    RECENT_MESSAGE_CACHE_SIZE = 100
+    REPLY_MATCH_WINDOW_MS = 60_000
+    RECENT_SESSION_CACHE_TTL_S = 1_800
+    MAX_RECENT_MESSAGE_SESSIONS = 500
 
     def __init__(
         self,
@@ -756,6 +789,9 @@ class WeixinOCAdapter(Platform):
         self,
         user_id: str,
         item_list: list[dict[str, Any]],
+        *,
+        cache_components: list[Any] | None = None,
+        cache_message_str: str | None = None,
     ) -> bool:
         if not self.token:
             logger.warning("weixin_oc(%s): missing token, skip send", self.meta().id)
@@ -774,7 +810,7 @@ class WeixinOCAdapter(Platform):
                 user_id,
             )
             return False
-        await self.client.request_json(
+        payload = await self.client.request_json(
             "POST",
             "ilink/bot/sendmessage",
             payload={
@@ -791,6 +827,36 @@ class WeixinOCAdapter(Platform):
             },
             token_required=True,
             headers={},
+        )
+        if not self._is_successful_api_payload(payload):
+            logger.warning(
+                "weixin_oc(%s): sendmessage failed for %s: %s",
+                self.meta().id,
+                user_id,
+                self._format_api_error(payload),
+            )
+            return False
+        resolved_cache_components = (
+            list(cache_components)
+            if cache_components is not None
+            else self._build_cache_components_from_items(item_list)
+        )
+        sender_id = str(self.account_id or self.meta().id)
+        sent_at_ms = time.time_ns() // 1_000_000
+        self._cache_recent_message(
+            user_id,
+            message_id=uuid.uuid4().hex,
+            sender_id=sender_id,
+            sender_nickname=sender_id,
+            timestamp=sent_at_ms // 1000,
+            timestamp_ms=sent_at_ms,
+            components=resolved_cache_components,
+            message_str=cache_message_str
+            if cache_message_str is not None
+            else self._message_text_from_item_list(
+                item_list,
+                include_ref_text=False,
+            ),
         )
         return True
 
@@ -891,7 +957,15 @@ class WeixinOCAdapter(Platform):
                 user_id,
                 [self._build_plain_text_item(text)],
             )
-        return await self._send_items_to_session(user_id, [media_item])
+        return await self._send_items_to_session(
+            user_id,
+            [media_item],
+            cache_components=[segment],
+            cache_message_str=self._message_text_from_item_list(
+                [media_item],
+                include_ref_text=False,
+            ),
+        )
 
     async def _start_login_session(self) -> OpenClawLoginSession:
         endpoint = "ilink/bot/get_bot_qrcode"
@@ -1000,6 +1074,8 @@ class WeixinOCAdapter(Platform):
     def _message_text_from_item_list(
         self,
         item_list: list[dict[str, Any]] | None,
+        *,
+        include_ref_text: bool = False,
     ) -> str:
         if not item_list:
             return ""
@@ -1023,14 +1099,297 @@ class WeixinOCAdapter(Platform):
             elif item_type == 5:
                 text_parts.append("[视频]")
             else:
-                ref = item.get("ref_msg")
-                if isinstance(ref, dict):
-                    ref_item = ref.get("message_item")
-                    if isinstance(ref_item, dict):
-                        ref_text = str(self._message_text_from_item_list([ref_item]))
-                        if ref_text:
-                            text_parts.append(f"[引用:{ref_text}]")
+                if include_ref_text:
+                    ref = item.get("ref_msg")
+                    if isinstance(ref, dict):
+                        ref_item = ref.get("message_item")
+                        if isinstance(ref_item, dict):
+                            ref_text = str(
+                                self._message_text_from_item_list(
+                                    [ref_item],
+                                    include_ref_text=True,
+                                )
+                            )
+                            if ref_text:
+                                text_parts.append(f"[引用:{ref_text}]")
         return "\n".join(text_parts).strip()
+
+    def _item_type_to_kind(self, item_type: int | None) -> str:
+        match int(item_type or 0):
+            case 1:
+                return "text"
+            case self.IMAGE_ITEM_TYPE:
+                return "image"
+            case self.VOICE_ITEM_TYPE:
+                return "voice"
+            case self.FILE_ITEM_TYPE:
+                return "file"
+            case self.VIDEO_ITEM_TYPE:
+                return "video"
+            case _:
+                return "unknown"
+
+    def _get_recent_message_cache(
+        self,
+        session_id: str,
+    ) -> deque[WeixinOCRecentMessage]:
+        now = time.monotonic()
+        self._prune_recent_message_caches(now=now)
+
+        cache_entry = self._recent_messages.get(session_id)
+        if cache_entry is None:
+            cache_entry = WeixinOCRecentSessionCache(
+                messages=deque(maxlen=self._recent_message_cache_size),
+                updated_at=now,
+            )
+            self._recent_messages[session_id] = cache_entry
+        else:
+            cache_entry.updated_at = now
+        return cache_entry.messages
+
+    def _prune_recent_message_caches(self, *, now: float | None = None) -> None:
+        if not self._recent_messages:
+            return
+
+        current = now if now is not None else time.monotonic()
+        expired_session_ids = [
+            session_id
+            for session_id, cache_entry in self._recent_messages.items()
+            if current - cache_entry.updated_at > self._recent_session_cache_ttl_s
+        ]
+        for session_id in expired_session_ids:
+            self._recent_messages.pop(session_id, None)
+
+        overflow = len(self._recent_messages) - self._max_recent_message_sessions
+        if overflow <= 0:
+            return
+
+        oldest_session_ids = sorted(
+            self._recent_messages,
+            key=lambda session_id: self._recent_messages[session_id].updated_at,
+        )[:overflow]
+        for session_id in oldest_session_ids:
+            self._recent_messages.pop(session_id, None)
+
+    def _infer_message_kind_from_components(self, components: list[Any]) -> str:
+        if not components:
+            return "unknown"
+        for component in components:
+            if isinstance(component, Plain) and component.text.strip():
+                return "text"
+            if isinstance(component, Image):
+                return "image"
+            if isinstance(component, Record):
+                return "voice"
+            if isinstance(component, File):
+                return "file"
+            if isinstance(component, Video):
+                return "video"
+        return "unknown"
+
+    def _cache_recent_message(
+        self,
+        session_id: str,
+        *,
+        message_id: str,
+        sender_id: str,
+        sender_nickname: str,
+        timestamp: int,
+        timestamp_ms: int | None = None,
+        components: list[Any],
+        message_str: str,
+        message_kind: str | None = None,
+    ) -> None:
+        if not session_id or not message_id:
+            return
+        resolved_timestamp_ms = (
+            timestamp_ms if timestamp_ms is not None else timestamp * 1000
+        )
+        cache = self._get_recent_message_cache(session_id)
+        cache.append(
+            WeixinOCRecentMessage(
+                message_id=message_id,
+                sender_id=sender_id,
+                sender_nickname=sender_nickname,
+                timestamp=timestamp,
+                timestamp_ms=resolved_timestamp_ms,
+                components=list(components),
+                message_str=message_str,
+                message_kind=message_kind
+                or self._infer_message_kind_from_components(components),
+            )
+        )
+
+    def _match_recent_reply(
+        self,
+        session_id: str,
+        *,
+        ref_create_time_ms: int | None,
+    ) -> tuple[WeixinOCRecentMessage | None, dict[str, Any] | None]:
+        if not session_id or ref_create_time_ms is None:
+            return None, None
+
+        best_match: WeixinOCRecentMessage | None = None
+        best_distance: int | None = None
+        self._prune_recent_message_caches()
+        cache_entry = self._recent_messages.get(session_id)
+        if cache_entry is None:
+            return None, None
+
+        for candidate in cache_entry.messages:
+            distance = abs(candidate.timestamp_ms - ref_create_time_ms)
+            if distance > self.REPLY_MATCH_WINDOW_MS:
+                continue
+            if best_distance is None or distance < best_distance:
+                best_match = candidate
+                best_distance = distance
+
+        if best_match is None or best_distance is None:
+            return None, None
+
+        confidence = max(
+            0.0,
+            min(1.0, 1.0 - (best_distance / self.REPLY_MATCH_WINDOW_MS)),
+        )
+        return best_match, {
+            "matched": True,
+            "strategy": "nearest-message-by-timestamp",
+            "ref_create_time_ms": ref_create_time_ms,
+            "matched_message_id": best_match.message_id,
+            "matched_kind": best_match.message_kind,
+            "distance_ms": best_distance,
+            "confidence": round(confidence, 4),
+        }
+
+    async def _build_reply_component_from_ref(
+        self,
+        *,
+        session_id: str,
+        ref_msg: dict[str, Any],
+    ) -> tuple[Reply | None, WeixinOCReplyMeta]:
+        metadata = WeixinOCReplyMeta(ref_msg=ref_msg)
+        message_item = ref_msg.get("message_item")
+        if not isinstance(message_item, dict):
+            return None, metadata
+
+        quoted_item_type_raw = message_item.get("type")
+        try:
+            quoted_item_type = (
+                int(quoted_item_type_raw)
+                if quoted_item_type_raw not in (None, "")
+                else None
+            )
+        except (TypeError, ValueError):
+            quoted_item_type = None
+        metadata.quoted_item_type = quoted_item_type
+        metadata.reply_kind = self._item_type_to_kind(quoted_item_type)
+
+        ref_create_time_ms_raw = message_item.get("create_time_ms")
+        try:
+            ref_create_time_ms = (
+                int(ref_create_time_ms_raw)
+                if ref_create_time_ms_raw not in (None, "")
+                else None
+            )
+        except (TypeError, ValueError):
+            ref_create_time_ms = None
+
+        quoted_components: list[Any] = []
+        quoted_text = ""
+        if quoted_item_type is not None:
+            quoted_components = await self._item_list_to_components([message_item])
+            quoted_text = self._message_text_from_item_list(
+                [message_item],
+                include_ref_text=False,
+            )
+
+        if quoted_text:
+            metadata.quoted_text = quoted_text
+            metadata.reply_to = {
+                "matched": True,
+                "strategy": "direct-ref-msg",
+                "matched_kind": metadata.reply_kind,
+                "matched_text": quoted_text,
+                "confidence": 1.0,
+            }
+
+        matched_message = None
+        matched_reply_to = None
+        if not quoted_text or not quoted_components:
+            matched_message, matched_reply_to = self._match_recent_reply(
+                session_id,
+                ref_create_time_ms=ref_create_time_ms,
+            )
+            if matched_message is not None:
+                quoted_components = list(matched_message.components)
+                quoted_text = matched_message.message_str
+                metadata.quoted_text = quoted_text or None
+                metadata.reply_kind = matched_message.message_kind
+                metadata.reply_to = matched_reply_to or {"matched": True}
+
+        if not quoted_text and not quoted_components:
+            return None, metadata
+
+        metadata.is_reply = True
+
+        reply_message_id = (
+            matched_message.message_id
+            if matched_message is not None
+            else str(
+                message_item.get("message_id")
+                or message_item.get("msg_id")
+                or f"weixin_oc_ref_{ref_create_time_ms or uuid.uuid4().hex}"
+            )
+        )
+        quoted_sender_id_raw = str(message_item.get("from_user_id") or "unknown")
+        reply_sender_id_raw = (
+            matched_message.sender_id
+            if matched_message is not None
+            else quoted_sender_id_raw
+        )
+        normalized_reply_sender_id = self._normalize_reply_sender_id(
+            reply_sender_id_raw
+        )
+        reply_sender_id = (
+            normalized_reply_sender_id
+            if normalized_reply_sender_id
+            else reply_sender_id_raw
+        )
+        reply_sender_nickname = (
+            matched_message.sender_nickname
+            if matched_message is not None
+            else quoted_sender_id_raw
+        )
+        reply_time = (
+            matched_message.timestamp
+            if matched_message is not None
+            else (
+                int(ref_create_time_ms / 1000)
+                if isinstance(ref_create_time_ms, int)
+                else int(time.time())
+            )
+        )
+
+        return (
+            Reply(
+                id=reply_message_id,
+                chain=quoted_components,
+                sender_id=reply_sender_id,
+                sender_nickname=reply_sender_nickname,
+                time=reply_time,
+                message_str=quoted_text,
+                text=quoted_text,
+            ),
+            metadata,
+        )
+
+    def _normalize_reply_sender_id(self, sender_id: str) -> str:
+        normalized_sender_id = sender_id.strip()
+        if not normalized_sender_id:
+            return normalized_sender_id
+        if self.account_id and normalized_sender_id == str(self.account_id):
+            return self.meta().id
+        return normalized_sender_id
 
     async def _item_list_to_components(
         self,
@@ -1066,18 +1425,45 @@ class WeixinOCAdapter(Platform):
             return
         context_token = str(msg.get("context_token", "")).strip()
         if context_token:
-            self._context_tokens[from_user_id] = context_token
+            previous_context_token = self._context_tokens.get(from_user_id)
+            if previous_context_token != context_token:
+                self._context_tokens[from_user_id] = context_token
+                self._context_tokens_dirty = True
         item_list = msg.get("item_list", [])
-        components = await self._item_list_to_components(item_list)
-        text = self._message_text_from_item_list(item_list)
+        if not isinstance(item_list, list):
+            item_list = []
+        reply_component = None
+        reply_metadata = WeixinOCReplyMeta()
+        for item in item_list:
+            if not isinstance(item, dict):
+                continue
+            ref_msg = item.get("ref_msg")
+            if isinstance(ref_msg, dict):
+                (
+                    reply_component,
+                    reply_metadata,
+                ) = await self._build_reply_component_from_ref(
+                    session_id=from_user_id,
+                    ref_msg=ref_msg,
+                )
+                break
+        cached_components = await self._item_list_to_components(item_list)
+        components = list(cached_components)
+        if reply_component is not None:
+            components.insert(0, reply_component)
+        text = self._message_text_from_item_list(item_list, include_ref_text=False)
         message_id = str(msg.get("message_id") or msg.get("msg_id") or uuid.uuid4().hex)
         create_time = msg.get("create_time_ms") or msg.get("create_time")
-        if isinstance(create_time, (int, float)) and create_time > 1000000000000:
+        create_time_ms: int | None = None
+        if isinstance(create_time, (int, float)) and create_time > 1_000_000_000_000:
+            create_time_ms = int(create_time)
             ts = int(float(create_time) / 1000)
         elif isinstance(create_time, (int, float)):
             ts = int(create_time)
+            create_time_ms = ts * 1000
         else:
             ts = int(time.time())
+            create_time_ms = ts * 1000
         abm = AstrBotMessage()
         abm.self_id = self.meta().id
         abm.sender = MessageMember(user_id=from_user_id, nickname=from_user_id)

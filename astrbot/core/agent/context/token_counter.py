@@ -130,16 +130,20 @@ class EstimateTokenCounter:
         total = 0
         for msg in messages:
             message_tokens = 0
+            saw_textual_content = False
 
             content = msg.content
             if isinstance(content, str):
                 message_tokens += self._estimate_tokens(content)
+                saw_textual_content = bool(content)
             elif isinstance(content, list):
                 for part in content:
                     if isinstance(part, TextPart):
                         message_tokens += self._estimate_tokens(part.text)
+                        saw_textual_content = saw_textual_content or bool(part.text)
                     elif isinstance(part, ThinkPart):
                         message_tokens += self._estimate_tokens(part.think)
+                        saw_textual_content = saw_textual_content or bool(part.think)
                     elif isinstance(part, ImageURLPart):
                         message_tokens += IMAGE_TOKEN_ESTIMATE
                     elif isinstance(part, AudioURLPart):
@@ -149,9 +153,11 @@ class EstimateTokenCounter:
                 for tc in msg.tool_calls:
                     tc_str = json.dumps(tc if isinstance(tc, dict) else tc.model_dump())
                     message_tokens += self._estimate_tokens(tc_str)
+                    saw_textual_content = True
 
-            # 添加每条消息的固定开销
-            total += message_tokens + PER_MESSAGE_OVERHEAD
+            if message_tokens and saw_textual_content:
+                message_tokens += PER_MESSAGE_OVERHEAD
+            total += message_tokens
 
         return total
 
@@ -183,11 +189,14 @@ class EstimateTokenCounter:
 
         # 使用更精确的估算比率
         chinese_tokens = int(chinese_count * 0.55)
-        english_tokens = int(english_count * 0.25)
+        english_tokens = int(english_count * 0.3)
         digit_tokens = int(digit_count * 0.4)
         special_tokens = int(special_count * 0.2)
 
         return chinese_tokens + english_tokens + digit_tokens + special_tokens
+
+    def estimate_text_tokens(self, text: str) -> int:
+        return self._estimate_tokens(text)
 
     def get_cache_stats(self) -> dict:
         """Get cache hit/miss statistics.
@@ -209,3 +218,117 @@ class EstimateTokenCounter:
         self._cache.clear()
         self._hit_count = 0
         self._miss_count = 0
+
+
+class TokenizerTokenCounter:
+    """Tokenizer-based token counter.
+
+    Uses `tiktoken` when available and falls back to estimate mode if encoding
+    is unavailable.
+    """
+
+    def __init__(self, model: str | None = None) -> None:
+        self._estimate = EstimateTokenCounter()
+        self._encode: Callable[[str], int] | None = None
+        self._available = False
+        self._init_encoder(model)
+
+    @property
+    def available(self) -> bool:
+        return self._available
+
+    def _init_encoder(self, model: str | None) -> None:
+        try:
+            import tiktoken
+        except Exception:
+            self._available = False
+            self._encode = None
+            return
+
+        try:
+            if model:
+                encoding = tiktoken.encoding_for_model(model)
+            else:
+                encoding = tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            try:
+                encoding = tiktoken.get_encoding("cl100k_base")
+            except Exception:
+                self._available = False
+                self._encode = None
+                return
+
+        self._available = True
+        self._encode = lambda text: len(encoding.encode(text))
+
+    def count_tokens(
+        self,
+        messages: list[Message],
+        trusted_token_usage: int = 0,
+    ) -> int:
+        if trusted_token_usage > 0:
+            return trusted_token_usage
+        if not self._available:
+            return self._estimate.count_tokens(messages)
+
+        total = 0
+        for msg in messages:
+            content = msg.content
+            if isinstance(content, str):
+                total += self._encode_len(content)
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, TextPart):
+                        total += self._encode_len(part.text)
+                    elif isinstance(part, ThinkPart):
+                        total += self._encode_len(part.think)
+                    elif isinstance(part, ImageURLPart):
+                        total += IMAGE_TOKEN_ESTIMATE
+                    elif isinstance(part, AudioURLPart):
+                        total += AUDIO_TOKEN_ESTIMATE
+
+            if msg.tool_calls:
+                for tc in msg.tool_calls:
+                    tc_str = json.dumps(
+                        tc if isinstance(tc, dict) else tc.model_dump(),
+                        ensure_ascii=False,
+                        default=str,
+                    )
+                    total += self._encode_len(tc_str)
+
+        return total
+
+    def _encode_len(self, text: str) -> int:
+        if not self._encode:
+            return self._estimate.estimate_text_tokens(text)
+        try:
+            return self._encode(text)
+        except Exception:
+            return self._estimate.estimate_text_tokens(text)
+
+
+def create_token_counter(
+    mode: str | None = None,
+    *,
+    model: str | None = None,
+) -> TokenCounter:
+    normalized = str(mode or "estimate").strip().lower()
+
+    if normalized == "estimate":
+        return EstimateTokenCounter()
+
+    if normalized in {"tokenizer", "auto"}:
+        tokenizer_counter = TokenizerTokenCounter(model=model)
+        if tokenizer_counter.available:
+            return tokenizer_counter
+        if normalized == "tokenizer":
+            logger.warning(
+                "context_token_counter_mode=tokenizer but `tiktoken` is unavailable; fallback to estimate.",
+            )
+        return EstimateTokenCounter()
+
+    logger.warning(
+        "Unknown context_token_counter_mode=%s, fallback to estimate.",
+        normalized,
+    )
+    return EstimateTokenCounter()

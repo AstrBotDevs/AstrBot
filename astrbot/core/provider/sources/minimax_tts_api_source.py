@@ -121,7 +121,12 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                 # (RFC 7231 §3.1.1.1) and may include parameters like
                 # `application/json; charset=utf-8` — lower-case the value and
                 # strip parameters before comparing.
-                content_type = response.headers.get("Content-Type", "").lower().split(";", 1)[0].strip()
+                content_type = (
+                    response.headers.get("Content-Type", "")
+                    .lower()
+                    .split(";", 1)[0]
+                    .strip()
+                )
                 if content_type != "text/event-stream":
                     body = await response.text()
                     err_msg = body[:200] or "empty response body"

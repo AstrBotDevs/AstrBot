@@ -206,8 +206,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 import ProviderPage from "@/views/ProviderPage.vue";
 
 interface Provider {
@@ -270,9 +270,7 @@ watch(
   () => props.modelValue,
   (newValue) => {
     if (props.multiple) {
-      selectedProviders.value = Array.isArray(newValue)
-        ? [...newValue.filter((v) => typeof v === "string" && v)]
-        : [];
+      selectedProviders.value = Array.isArray(newValue) ? [...newValue.filter((v) => typeof v === "string" && v)] : [];
       return;
     }
     selectedProvider.value = typeof newValue === "string" ? newValue : "";
@@ -292,8 +290,7 @@ async function openDialog() {
       ? [...props.modelValue.filter((v) => typeof v === "string" && v)]
       : [];
   } else {
-    selectedProvider.value =
-      typeof props.modelValue === "string" ? props.modelValue : "";
+    selectedProvider.value = typeof props.modelValue === "string" ? props.modelValue : "";
   }
   dialog.value = true;
   await loadProviders();
@@ -310,9 +307,7 @@ async function loadProviders() {
     if (response.data.status === "ok") {
       const providers = response.data.data || [];
       providerList.value = props.providerSubtype
-        ? providers.filter((provider) =>
-            matchesProviderSubtype(provider, props.providerSubtype),
-          )
+        ? providers.filter((provider) => matchesProviderSubtype(provider, props.providerSubtype))
         : providers;
     }
   } catch (error) {
@@ -366,8 +361,7 @@ function cancelSelection() {
       ? [...props.modelValue.filter((v) => typeof v === "string" && v)]
       : [];
   } else {
-    selectedProvider.value =
-      typeof props.modelValue === "string" ? props.modelValue : "";
+    selectedProvider.value = typeof props.modelValue === "string" ? props.modelValue : "";
   }
   dialog.value = false;
 }

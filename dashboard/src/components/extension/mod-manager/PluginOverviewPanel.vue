@@ -1,79 +1,79 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import axios from 'axios'
-import { useI18n } from '@/i18n/composables'
-import { renderMarkdown } from '@/composables/useMarkdownIt'
+import { computed, ref, watch } from "vue";
+import { renderMarkdown } from "@/composables/useMarkdownIt";
+import { useI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
 const props = defineProps<{
-  pluginName: string
-  repoUrl?: string | null
-  active?: boolean
-}>()
+  pluginName: string;
+  repoUrl?: string | null;
+  active?: boolean;
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const loading = ref(false)
-const error = ref<string | null>(null)
-const content = ref('')
+const loading = ref(false);
+const error = ref<string | null>(null);
+const content = ref("");
 
-const canFetch = computed(() => Boolean(props.active) && Boolean(props.pluginName))
-const hasRepo = computed(() => Boolean(props.repoUrl))
+const canFetch = computed(() => Boolean(props.active) && Boolean(props.pluginName));
+const hasRepo = computed(() => Boolean(props.repoUrl));
 
 async function fetchReadme() {
-  if (!props.pluginName) return
+  if (!props.pluginName) return;
 
-  loading.value = true
-  content.value = ''
-  error.value = null
+  loading.value = true;
+  content.value = "";
+  error.value = null;
 
   try {
-    const res = await axios.get(`/api/plugin/readme?name=${props.pluginName}`)
-    if (res.data?.status === 'ok') {
-      content.value = res.data.data?.content || ''
+    const res = await axios.get(`/api/plugin/readme?name=${props.pluginName}`);
+    if (res.data?.status === "ok") {
+      content.value = res.data.data?.content || "";
     } else {
-      error.value = res.data?.message || t('core.common.readme.errors.fetchFailed')
+      error.value = res.data?.message || t("core.common.readme.errors.fetchFailed");
     }
   } catch (err: any) {
-    error.value = err?.message || t('core.common.readme.errors.fetchError')
+    error.value = err?.message || t("core.common.readme.errors.fetchError");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function openRepoInNewTab() {
   if (props.repoUrl) {
-    window.open(props.repoUrl, '_blank')
+    window.open(props.repoUrl, "_blank");
   }
 }
 
 function refreshReadme() {
-  fetchReadme()
+  fetchReadme();
 }
 
 watch(
   () => props.active,
   (isActive) => {
     if (isActive && props.pluginName) {
-      fetchReadme()
+      fetchReadme();
     }
   },
-  { immediate: true }
-)
+  { immediate: true },
+);
 
 watch(
   () => props.pluginName,
   (name) => {
     if (props.active && name) {
-      fetchReadme()
+      fetchReadme();
     } else {
-      loading.value = false
-      error.value = null
-      content.value = ''
+      loading.value = false;
+      error.value = null;
+      content.value = "";
     }
-  }
-)
+  },
+);
 
-const renderedHtml = computed(() => renderMarkdown(content.value))
+const renderedHtml = computed(() => renderMarkdown(content.value));
 </script>
 
 <template>

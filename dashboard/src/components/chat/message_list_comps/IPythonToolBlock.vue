@@ -25,9 +25,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { type BundledLanguage, type BundledTheme, createHighlighter, type HighlighterGeneric } from "shiki";
+import { computed, onMounted, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { createHighlighter, type HighlighterGeneric, type BundledLanguage, type BundledTheme } from "shiki";
 
 const props = defineProps({
   toolCall: {
@@ -70,12 +70,13 @@ const code = computed(() => {
 
 const result = computed(() => props.toolCall.result);
 
-const escapeHtml = (value) => value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+const escapeHtml = (value) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 const formattedResult = computed(() => {
   if (!result.value) return "";

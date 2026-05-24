@@ -1,4 +1,3 @@
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,6 +17,7 @@ from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import
 @pytest.mark.asyncio
 async def test_qqofficial_send_by_session_channel_uses_markdown_payload():
     adapter = object.__new__(QQOfficialPlatformAdapter)
+    adapter.config = {"id": ""}  # type: ignore[attr-defined]
     adapter._session_last_message_id = {"sess": "msgid"}  # type: ignore[attr-defined]
     adapter._session_scene = {"sess": "channel"}  # type: ignore[attr-defined]
     adapter.client = MagicMock()  # type: ignore[attr-defined]
@@ -52,6 +52,7 @@ async def test_qqofficial_send_by_session_channel_uses_markdown_payload():
 @pytest.mark.asyncio
 async def test_qqofficial_send_by_session_group_media_downgrades_to_content():
     adapter = object.__new__(QQOfficialPlatformAdapter)
+    adapter.config = {"id": ""}  # type: ignore[attr-defined]
     adapter._session_last_message_id = {"group_sess": "msgid"}  # type: ignore[attr-defined]
     adapter._session_scene = {"group_sess": "group"}  # type: ignore[attr-defined]
     adapter.client = MagicMock()  # type: ignore[attr-defined]

@@ -545,7 +545,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
                 "Sampling includeContext is not supported in the initial AstrBot integration."
             )
 
-        if params.tools or params.toolChoice:
+        if getattr(params, "tools", None) or getattr(params, "toolChoice", None):
             raise UnsupportedSamplingRequestError(
                 "Tool-assisted sampling is not supported in the initial AstrBot integration."
             )
@@ -613,8 +613,6 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
         run_context: ContextWrapper[TContext],
         params: mcp.types.ElicitRequestParams,
     ) -> mcp.types.ElicitResult:
-        import mcp
-
         plugin_context, event = self._extract_bound_runtime(run_context)
         if event is None:
             raise UnsupportedElicitationRequestError(
@@ -627,21 +625,17 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
                 "Elicitation requires a stable sender ID."
             )
 
-        if isinstance(params, mcp.types.ElicitRequestFormParams):
-            return await self._execute_form_elicitation(
-                plugin_context,
-                event,
-                sender_id,
-                params,
-            )
-        if isinstance(params, mcp.types.ElicitRequestURLParams):
+        if getattr(params, "url", None):
             return await self._execute_url_elicitation(
                 event,
                 sender_id,
                 params,
             )
-        raise UnsupportedElicitationRequestError(
-            f"Unsupported elicitation params type: {type(params).__name__}"
+        return await self._execute_form_elicitation(
+            plugin_context,
+            event,
+            sender_id,
+            params,
         )
 
     @staticmethod
@@ -664,7 +658,11 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
         import mcp
 
         text_parts: list[str] = []
-        for block in message.content_as_list:
+        content = getattr(message, "content_as_list", None)
+        if content is None:
+            content = getattr(message, "content", None)
+        blocks = content if isinstance(content, list) else [content]
+        for block in blocks:
             if isinstance(block, mcp.types.TextContent):
                 text_parts.append(block.text)
                 continue
@@ -1185,7 +1183,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
         self,
         *,
         field_name: str,
-        raw_value: str | int | float | bool | list | None,
+        raw_value: str | float | bool | list | None,
         schema: dict[str, Any],
     ) -> str | int | float | bool | list[str] | None:
         field_type = self._get_elicitation_field_type(schema)
@@ -1247,7 +1245,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
 
     @staticmethod
     def _coerce_boolean_value(
-        field_name: str, raw_value: str | int | float | bool | None
+        field_name: str, raw_value: str | float | bool | None
     ) -> bool:
         if isinstance(raw_value, bool):
             return raw_value

@@ -11,18 +11,18 @@ from typing import Any
 import mcp
 
 from astrbot import logger
-from astrbot.core import astrbot_config as _astrbot_config
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolSchema, ToolSet
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
     BACKGROUND_TASK_WOKE_USER_PROMPT,
     CONVERSATION_HISTORY_INJECT_PREFIX,
+    SEND_MESSAGE_TO_USER_TOOL,
 )
 from astrbot.core.computer.sandbox_tool_binding import tool_available_in_runtime
 from astrbot.core.cron.events import CronMessageEvent
@@ -35,6 +35,9 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
+from astrbot.core.star.star import star_map
 from astrbot.core.subagent_manager import SubAgentManager
 from astrbot.core.tools.computer_tools import (
     CopyFileBetweenSandboxesTool,
@@ -64,13 +67,83 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
-from astrbot.core.utils.trace import _current_span as _trace_current_span
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     _runtime_computer_tools_cache: dict[
         tuple[int, str, str], dict[str, FunctionTool]
     ] = {}
+
+    @staticmethod
+    def _event_extra(event: Any, key: str, default: Any = None) -> Any:
+        getter = getattr(event, "get_extra", None)
+        if not callable(getter):
+            return default
+        try:
+            return getter(key, default)
+        except Exception:
+            return default
+
+    @classmethod
+    def _tool_enabled_for_session(
+        cls,
+        tool: FunctionTool,
+        session_config: dict | None,
+    ) -> bool:
+        module_path = tool.handler_module_path
+        if not module_path:
+            return True
+
+        plugin = star_map.get(module_path)
+        if not plugin:
+            return True
+
+        return SessionPluginManager.is_plugin_enabled_for_session_config(
+            plugin.name,
+            session_config,
+            reserved=plugin.reserved,
+        )
+
+    class _AwaitableToolSet:
+        _UNSET = object()
+
+        def __init__(
+            self,
+            awaitable_factory: Callable[[], Awaitable[ToolSet | None]],
+            sync_value: ToolSet | None | object = _UNSET,
+        ) -> None:
+            self._awaitable_factory = awaitable_factory
+            self._sync_value = sync_value
+            self._resolved = False
+            self._value: ToolSet | None = None
+
+        async def _resolve_async(self) -> ToolSet | None:
+            if not self._resolved:
+                self._value = await self._awaitable_factory()
+                self._resolved = True
+            return self._value
+
+        def _resolve_sync(self) -> ToolSet | None:
+            if not self._resolved:
+                if self._sync_value is not self._UNSET:
+                    self._value = self._sync_value
+                    self._resolved = True
+                    return self._value
+                self._value = asyncio.run(self._awaitable)
+                self._resolved = True
+            return self._value
+
+        def __await__(self):
+            return self._resolve_async().__await__()
+
+        def __getattr__(self, name: str) -> Any:
+            value = self._resolve_sync()
+            if value is None:
+                raise AttributeError(name)
+            return getattr(value, name)
+
+        def __bool__(self) -> bool:
+            return self._resolve_sync() is not None
 
     @classmethod
     def clear_runtime_computer_tools_cache(cls, provider_id: str | None = None) -> None:
@@ -91,7 +164,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             cls._runtime_computer_tools_cache.pop(key, None)
 
     @classmethod
-    def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
+    def _collect_image_urls_from_args(cls, image_urls_raw: Any) -> list[str]:
         if image_urls_raw is None:
             return []
         if isinstance(image_urls_raw, str):
@@ -179,8 +252,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             mode = cls._resolve_handoff_mode(tool, raw_mode)
             is_silent = mode == "silent"
             mode_source = "explicit" if raw_mode is not None else "default"
-            background_requested = bool(tool_args.get("background_task", False))
-            is_bg = tool_args.pop("background_task", False) and not is_silent
+            background_requested, background_error = cls._parse_background_task_arg(
+                tool.name,
+                tool_args.pop("background_task", False),
+            )
+            if background_error is not None:
+                yield background_error
+                return
+            is_bg = background_requested and not is_silent
             background_state = (
                 "ignored_for_silent"
                 if background_requested and is_silent
@@ -286,7 +365,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         runtime: str,
         tool_mgr: Any = None,
         booter: str | None = None,
+        *,
+        session_id: str | None = None,
+        sandbox_cfg: dict | None = None,
     ) -> dict[str, FunctionTool]:
+        if tool_mgr is None:
+            return cls._get_runtime_computer_tools_without_manager(
+                runtime,
+                session_id=session_id,
+                sandbox_cfg=sandbox_cfg,
+                booter=booter,
+            )
+
         booter = "" if booter is None else str(booter).lower()
         cache_key = (id(tool_mgr), runtime, booter)
         if cache_key in cls._runtime_computer_tools_cache:
@@ -340,6 +430,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 edit_tool.name: edit_tool,
                 grep_tool.name: grep_tool,
             }
+            for registered_tool in getattr(tool_mgr, "func_list", []):
+                provider_id = getattr(registered_tool, "sandbox_provider_id", None)
+                if provider_id and str(provider_id).lower() == booter:
+                    tools[registered_tool.name] = registered_tool
             cls._runtime_computer_tools_cache[cache_key] = tools
             return tools
         if runtime == "local":
@@ -362,32 +456,104 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         return {}
 
     @classmethod
-    def _build_handoff_toolset(
+    def _get_runtime_computer_tools_without_manager(
+        cls,
+        runtime: str,
+        *,
+        session_id: str | None = None,
+        sandbox_cfg: dict | None = None,
+        booter: str | None = None,
+    ) -> dict[str, FunctionTool]:
+        """Compatibility path for callers that do not have an LLM tool manager."""
+        if runtime == "sandbox":
+            from astrbot.core.computer.computer_client import (
+                get_default_sandbox_tools,
+                get_sandbox_tools,
+            )
+
+            if session_id:
+                booted_tools = get_sandbox_tools(session_id)
+                if booted_tools:
+                    return {tool.name: tool for tool in booted_tools}
+
+            cfg = dict(sandbox_cfg or {})
+            if booter and "booter" not in cfg:
+                cfg["booter"] = booter
+            return {tool.name: tool for tool in get_default_sandbox_tools(cfg)}
+
+        if runtime == "local":
+            from astrbot.core.computer.computer_tool_provider import _get_local_tools
+
+            return {tool.name: tool for tool in _get_local_tools()}
+
+        return {}
+
+    @classmethod
+    def _apply_web_search_tools(
+        cls,
+        toolset: ToolSet,
+        tool_mgr: Any,
+        cfg: dict,
+    ) -> None:
+        prov_settings = cfg.get("provider_settings", {})
+        if not prov_settings.get("web_search", False):
+            return
+
+        provider = prov_settings.get("websearch_provider", "tavily")
+        names_by_provider = {
+            "tavily": ["web_search_tavily", "tavily_extract_web_page"],
+            "bocha": ["web_search_bocha"],
+            "brave": ["web_search_brave"],
+            "firecrawl": ["web_search_firecrawl", "firecrawl_extract_web_page"],
+            "baidu_ai_search": ["web_search_baidu"],
+            "metaso": ["web_search_metaso"],
+        }
+        for tool_name in names_by_provider.get(provider, []):
+            try:
+                toolset.add_tool(tool_mgr.get_builtin_tool(tool_name))
+            except Exception:
+                logger.debug("Configured web search tool %s is unavailable", tool_name)
+
+    @classmethod
+    async def _build_handoff_toolset_async(
         cls,
         run_context: ContextWrapper[AstrAgentContext],
         tools: list[str | FunctionTool] | None,
+        session_config: dict | None = None,
     ) -> ToolSet | None:
         ctx = run_context.context.context
         event = run_context.context.event
         cfg = ctx.get_config(umo=event.unified_msg_origin)
-        session_config = await SessionPluginManager.get_session_plugin_config(
-            event.unified_msg_origin
-        )
+        if session_config is None:
+            session_config = await SessionPluginManager.get_session_plugin_config(
+                event.unified_msg_origin
+            )
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
-        tool_mgr = ctx.get_llm_tool_manager()
+        sandbox_cfg = provider_settings.get("sandbox", {})
+        booter = (
+            str(sandbox_cfg.get("booter", "")) if isinstance(sandbox_cfg, dict) else ""
+        )
+        tool_mgr = (
+            ctx.get_llm_tool_manager()
+            if hasattr(ctx, "get_llm_tool_manager")
+            else llm_tools
+        )
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
             tool_mgr,
+            booter,
         )
         if tools is None:
             toolset = ToolSet()
             # 使用 tool_mgr 代替全局 llm_tools，确保多租户环境一致性
-            for registered_tool in tool_mgr.func_list:
+            for registered_tool in getattr(tool_mgr, "func_list", llm_tools.func_list):
                 if isinstance(registered_tool, HandoffTool):
                     continue
-                if registered_tool.active and tool_available_in_runtime(
-                    registered_tool, runtime
+                if (
+                    registered_tool.active
+                    and tool_available_in_runtime(registered_tool, runtime)
+                    and cls._tool_enabled_for_session(registered_tool, session_config)
                 ):
                     toolset.add_tool(registered_tool)
             # 添加计算机工具（根据 computer_use_runtime 配置）
@@ -401,7 +567,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         toolset = ToolSet()
         for tool_name_or_obj in tools:
             if isinstance(tool_name_or_obj, str):
-                registered_tool = llm_tools.get_func(tool_name_or_obj)
+                registered_tool = tool_mgr.get_func(tool_name_or_obj)
                 if (
                     registered_tool
                     and registered_tool.active
@@ -412,7 +578,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
                 if runtime_tool:
                     toolset.add_tool(runtime_tool)
-            elif isinstance(tool_name_or_obj, FunctionTool):
+            elif isinstance(
+                tool_name_or_obj, FunctionTool
+            ) and cls._tool_enabled_for_session(
+                tool_name_or_obj,
+                session_config,
+            ):
                 toolset.add_tool(tool_name_or_obj)
 
         # Always add send_shared_context tool for shared context feature
@@ -431,17 +602,141 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         return None if toolset.empty() else toolset
 
+    @classmethod
+    def _build_handoff_toolset(
+        cls,
+        run_context: ContextWrapper[AstrAgentContext],
+        tools: list[str | FunctionTool] | None,
+    ) -> ToolSet | None | _AwaitableToolSet:
+        sync_value = cls._build_handoff_toolset_sync(run_context, tools)
+        return cls._AwaitableToolSet(
+            lambda: cls._build_handoff_toolset_async(run_context, tools),
+            sync_value=sync_value,
+        )
+
+    @classmethod
+    def _build_handoff_toolset_sync(
+        cls,
+        run_context: ContextWrapper[AstrAgentContext],
+        tools: list[str | FunctionTool] | None,
+    ) -> ToolSet | None:
+        ctx = run_context.context.context
+        event = run_context.context.event
+        cfg = ctx.get_config(umo=event.unified_msg_origin)
+        provider_settings = cfg.get("provider_settings", {})
+        runtime = str(provider_settings.get("computer_use_runtime", "local"))
+        sandbox_cfg = provider_settings.get("sandbox", {})
+        booter = (
+            str(sandbox_cfg.get("booter", "")) if isinstance(sandbox_cfg, dict) else ""
+        )
+        tool_mgr = (
+            ctx.get_llm_tool_manager()
+            if hasattr(ctx, "get_llm_tool_manager")
+            else llm_tools
+        )
+        runtime_computer_tools = cls._get_runtime_computer_tools(
+            runtime,
+            tool_mgr,
+            booter,
+        )
+        session_config: dict | None = None
+        if tools is None:
+            toolset = ToolSet()
+            for registered_tool in getattr(tool_mgr, "func_list", llm_tools.func_list):
+                if isinstance(registered_tool, HandoffTool):
+                    continue
+                if (
+                    registered_tool.active
+                    and tool_available_in_runtime(registered_tool, runtime)
+                    and cls._tool_enabled_for_session(registered_tool, session_config)
+                ):
+                    toolset.add_tool(registered_tool)
+            for runtime_tool in runtime_computer_tools.values():
+                toolset.add_tool(runtime_tool)
+            cls._apply_web_search_tools(toolset, tool_mgr, cfg)
+            return None if toolset.empty() else toolset
+        if not tools:
+            return None
+        toolset = ToolSet()
+        for tool_name_or_obj in tools:
+            if isinstance(tool_name_or_obj, str):
+                registered_tool = tool_mgr.get_func(tool_name_or_obj)
+                if (
+                    registered_tool
+                    and registered_tool.active
+                    and cls._tool_enabled_for_session(registered_tool, session_config)
+                ):
+                    toolset.add_tool(registered_tool)
+                    continue
+                runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
+                if runtime_tool:
+                    toolset.add_tool(runtime_tool)
+            elif isinstance(
+                tool_name_or_obj, FunctionTool
+            ) and cls._tool_enabled_for_session(
+                tool_name_or_obj,
+                session_config,
+            ):
+                toolset.add_tool(tool_name_or_obj)
+        return None if toolset.empty() else toolset
+
     @staticmethod
-    def _resolve_handoff_mode(tool: HandoffTool, mode: T.Any) -> str:
+    def _resolve_handoff_mode(tool: HandoffTool, mode: Any) -> str:
         if mode is not None:
             resolved = str(mode).strip().lower()
         else:
             resolved = str(getattr(tool, "default_handoff_mode", "normal")).strip()
         return resolved if resolved in {"normal", "silent"} else "normal"
 
+    @staticmethod
+    def _parse_background_task_arg(
+        tool_name: str,
+        value: Any,
+    ) -> tuple[bool, mcp.types.CallToolResult | None]:
+        if value is None:
+            return False, None
+        if isinstance(value, bool):
+            return value, None
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"", "false", "0", "no", "off"}:
+                return False, None
+            if normalized in {"true", "1", "yes", "on"}:
+                return True, None
+
+        text = (
+            f"invalid_background_task: {tool_name} background_task must be a boolean "
+            "or one of true/false/1/0/yes/no/on/off."
+        )
+        return False, mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text=text)],
+            isError=True,
+        )
+
     @classmethod
-    def _is_silent_handoff_mode(cls, tool: HandoffTool, mode: T.Any) -> bool:
+    def _is_silent_handoff_mode(cls, tool: HandoffTool, mode: Any) -> bool:
         return cls._resolve_handoff_mode(tool, mode) == "silent"
+
+    @classmethod
+    async def _resolve_handoff_provider_id(
+        cls,
+        tool: HandoffTool,
+        *,
+        ctx,
+        umo: str,
+    ) -> str:
+        provider_id = getattr(tool, "provider_id", None)
+        if provider_id:
+            provider_manager = getattr(ctx, "provider_manager", None)
+            if provider_manager and hasattr(provider_manager, "get_provider_by_id"):
+                try:
+                    provider = await provider_manager.get_provider_by_id(provider_id)
+                except Exception:
+                    provider = None
+                if provider is not None:
+                    return provider_id
+
+        return await ctx.get_current_chat_provider_id(umo)
 
     @classmethod
     def _remove_user_visible_tools_for_silent_handoff(
@@ -516,6 +811,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ):
         tool_args = dict(tool_args)
         input_ = tool_args.get("input")
+        if not isinstance(input_, str) or not input_.strip():
+            yield mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text",
+                        text="error: missing_or_empty_input",
+                    )
+                ]
+            )
+            return
         is_silent = cls._is_silent_handoff_mode(tool, tool_args.get("mode"))
         if image_urls_prepared:
             prepared_image_urls = tool_args.get("image_urls")
@@ -535,7 +840,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool_args["image_urls"] = image_urls
 
         # Build handoff toolset from registered tools plus runtime computer tools.
-        toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
+        toolset = await cls._build_handoff_toolset_async(
+            run_context,
+            tool.agent.tools,
+        )
         if is_silent:
             toolset = cls._remove_user_visible_tools_for_silent_handoff(toolset)
 
@@ -589,6 +897,22 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # 构建子代理的 system_prompt
         subagent_system_prompt = cls._build_subagent_system_prompt(
             umo, tool, prov_settings
+        )
+        if system_prompt:
+            subagent_system_prompt = system_prompt
+
+        llm_resp = await ctx.tool_loop_agent(
+            event=event,
+            chat_provider_id=prov_id,
+            prompt=input_.strip(),
+            image_urls=image_urls,
+            tools=toolset,
+            system_prompt=subagent_system_prompt,
+            contexts=contexts,
+            max_steps=agent_max_step,
+            stream=stream,
+            agent_hooks=tool.agent.run_hooks,
+            tool_call_timeout=run_context.tool_call_timeout,
         )
         response_text = await cls._format_handoff_response_text(
             llm_resp,
@@ -723,16 +1047,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 tool_args=tool_args,
             )
         else:
+            background_note = cls._event_extra(event, "background_note")
             await cls._wake_main_agent_for_background_result(
                 run_context=run_context,
                 task_id=task_id,
                 tool_name=tool.name,
                 result_text=result_text,
                 tool_args=tool_args,
-                note=(
-                    event.get_extra("background_note")
-                    or f"Background task for subagent '{agent_name}' finished."
-                ),
+                note=background_note
+                or f"Background task for subagent '{agent_name}' finished.",
                 summary_name=f"Dedicated to subagent `{agent_name}`",
                 extra_result_fields={"subagent_name": agent_name},
             )
@@ -763,14 +1086,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 f"error: Background task execution failed, internal error: {e!s}"
             )
         event = run_context.context.event
+        background_note = cls._event_extra(event, "background_note")
         await cls._wake_main_agent_for_background_result(
             run_context=run_context,
             task_id=task_id,
             tool_name=tool.name,
             result_text=result_text,
             tool_args=tool_args,
-            note=event.get_extra("background_note")
-            or f"Background task {tool.name} finished.",
+            note=background_note or f"Background task {tool.name} finished.",
             summary_name=tool.name,
         )
 
@@ -1231,10 +1554,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 tool_name=tool.name,
                 result_text=result_text,
                 tool_args=tool_args,
-                note=(
-                    event.get_extra("background_note")
-                    or f"Background task for subagent '{agent_name}' finished."
-                ),
+                note=cls._event_extra(event, "background_note")
+                or f"Background task for subagent '{agent_name}' finished.",
                 summary_name=f"Dedicated to subagent `{agent_name}`",
                 extra_result_fields={"subagent_name": agent_name},
             )

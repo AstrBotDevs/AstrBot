@@ -1,6 +1,6 @@
 """使用此功能应该先 pip install baidu-aip"""
 
-from typing import TypedDict, TypeGuard
+from typing import Any, TypedDict, TypeGuard, cast
 
 from astrbot.core.i18n import t
 

@@ -128,7 +128,7 @@ async def test_resource_bridge_tools_are_registered_and_removed(
     )
 
     tool_names = {tool.name for tool in tool_mgr.func_list}
-    assert "draft_brief" in tool_names
+    assert "mcp_demo-server__draft_brief" in tool_names
     assert "mcp_demo_server_list_resources" in tool_names
     assert "mcp_demo_server_read_resource" in tool_names
     assert "mcp_demo_server_list_resource_templates" in tool_names

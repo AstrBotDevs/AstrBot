@@ -38,9 +38,7 @@ const updateAlias = (index: number, value: string) => {
   emit("update:aliases", newAliases);
 };
 
-const hasAliases = computed(() =>
-  (props.aliases || []).some((a) => (a ?? "").toString().trim()),
-);
+const hasAliases = computed(() => (props.aliases || []).some((a) => (a ?? "").toString().trim()));
 const showAliasEditor = ref(false);
 const aliasEditorEverOpened = ref(false);
 

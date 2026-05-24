@@ -484,11 +484,16 @@ def plan_missing_requirements_install(
     if not can_precheck or requirement_lines is None:
         return None
 
-    analysis = classify_missing_requirements_from_lines(requirement_lines)
-    if analysis is None:
+    missing_result = find_missing_requirements_from_lines(requirement_lines)
+    if missing_result is None:
         return None
-    missing = analysis.missing_names
-    version_mismatch_names = analysis.version_mismatch_names
+    missing = frozenset(missing_result)
+    analysis = classify_missing_requirements_from_lines(requirement_lines)
+    version_mismatch_names = (
+        analysis.version_mismatch_names & missing
+        if analysis is not None
+        else frozenset()
+    )
 
     install_lines = build_missing_requirements_install_lines(
         requirements_path,

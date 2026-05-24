@@ -5,9 +5,7 @@ const getStorageForRead = (storageOverride) => {
     return null;
   }
   if (storageOverride !== undefined) {
-    return typeof storageOverride?.getItem === "function"
-      ? storageOverride
-      : null;
+    return typeof storageOverride?.getItem === "function" ? storageOverride : null;
   }
   if (typeof window === "undefined") {
     return null;
@@ -25,9 +23,7 @@ const getStorageForWrite = (storageOverride) => {
     return null;
   }
   if (storageOverride !== undefined) {
-    return typeof storageOverride?.setItem === "function"
-      ? storageOverride
-      : null;
+    return typeof storageOverride?.setItem === "function" ? storageOverride : null;
   }
   if (typeof window === "undefined") {
     return null;
@@ -79,10 +75,7 @@ export const writePinnedExtensions = (names, storage) => {
   }
 
   try {
-    targetStorage.setItem(
-      PINNED_EXTENSIONS_STORAGE_KEY,
-      JSON.stringify(normalizePinnedExtensions(names)),
-    );
+    targetStorage.setItem(PINNED_EXTENSIONS_STORAGE_KEY, JSON.stringify(normalizePinnedExtensions(names)));
   } catch {
     // Ignore restricted storage environments.
   }

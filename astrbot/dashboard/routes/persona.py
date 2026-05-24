@@ -241,6 +241,8 @@ class PersonaRoute(Route):
             tools = data.get("tools")
             has_skills = "skills" in data
             skills = data.get("skills")
+            has_subagents = "subagents" in data
+            subagents = data.get("subagents")
             has_custom_error_message = "custom_error_message" in data
             custom_error_message = data.get("custom_error_message")
             # 高级人格配置
@@ -284,6 +286,8 @@ class PersonaRoute(Route):
                 update_kwargs["tools"] = tools
             if has_skills:
                 update_kwargs["skills"] = skills
+            if has_subagents:
+                update_kwargs["subagents"] = subagents
             if has_custom_error_message:
                 update_kwargs["custom_error_message"] = custom_error_message
             if has_personality_config:
@@ -381,82 +385,6 @@ class PersonaRoute(Route):
         except Exception as e:
             logger.error(f"创建人格失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"创建人格失败: {e!s}").__dict__
-
-    async def update_persona(self):
-        """更新人格信息"""
-        try:
-            data = await request.get_json()
-            persona_id = data.get("persona_id")
-            system_prompt = data.get("system_prompt")
-            begin_dialogs = data.get("begin_dialogs")
-            has_tools = "tools" in data
-            tools = data.get("tools")
-            has_skills = "skills" in data
-            skills = data.get("skills")
-            has_subagents = "subagents" in data
-            subagents = data.get("subagents")
-            has_custom_error_message = "custom_error_message" in data
-            custom_error_message = data.get("custom_error_message")
-
-            if not persona_id:
-                return Response().error("缺少必要参数: persona_id").__dict__
-
-            if has_custom_error_message:
-                if custom_error_message is not None and not isinstance(
-                    custom_error_message, str
-                ):
-                    return Response().error("自定义报错回复信息必须是字符串").__dict__
-                if isinstance(custom_error_message, str):
-                    custom_error_message = custom_error_message.strip() or None
-
-            # 验证 begin_dialogs 格式
-            if begin_dialogs is not None and len(begin_dialogs) % 2 != 0:
-                return (
-                    Response()
-                    .error("预设对话数量必须为偶数（用户和助手轮流对话）")
-                    .__dict__
-                )
-
-            update_kwargs = {
-                "persona_id": persona_id,
-                "system_prompt": system_prompt,
-                "begin_dialogs": begin_dialogs,
-            }
-            if has_tools:
-                update_kwargs["tools"] = tools
-            if has_skills:
-                update_kwargs["skills"] = skills
-            if has_subagents:
-                update_kwargs["subagents"] = subagents
-            if has_custom_error_message:
-                update_kwargs["custom_error_message"] = custom_error_message
-
-            await self.persona_mgr.update_persona(**update_kwargs)
-
-            return Response().ok({"message": "人格更新成功"}).__dict__
-        except ValueError as e:
-            return Response().error(str(e)).__dict__
-        except Exception as e:
-            logger.error(f"更新人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"更新人格失败: {e!s}").__dict__
-
-    async def delete_persona(self):
-        """删除人格"""
-        try:
-            data = await request.get_json()
-            persona_id = data.get("persona_id")
-
-            if not persona_id:
-                return Response().error("缺少必要参数: persona_id").__dict__
-
-            await self.persona_mgr.delete_persona(persona_id)
-
-            return Response().ok({"message": "人格删除成功"}).__dict__
-        except ValueError as e:
-            return Response().error(str(e)).__dict__
-        except Exception as e:
-            logger.error(f"删除人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"删除人格失败: {e!s}").__dict__
 
     async def move_persona(self):
         """移动人格到指定文件夹"""

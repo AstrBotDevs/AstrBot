@@ -757,7 +757,7 @@ def register_agent(
         )
         handoff_tool = HandoffTool(agent=agent)
         handoff_tool.handler = awaitable
-        llm_tools.func_list.append(handoff_tool)  # type: ignore[arg-type]
+        llm_tools.func_list.append(handoff_tool)
         return RegisteringAgent(agent)
 
     return decorator

@@ -109,6 +109,14 @@ def _is_argon2_hash(stored: str) -> bool:
     return isinstance(stored, str) and stored.startswith("$argon2")
 
 
+def _is_legacy_hex_hash(value: str, length: int) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == length
+        and all(c in "0123456789abcdefABCDEF" for c in value)
+    )
+
+
 def get_dashboard_login_challenge(stored_hash: str) -> dict[str, Any]:
     """Return the public challenge parameters needed for proof-based login."""
     if _is_argon2_hash(stored_hash):
@@ -184,14 +192,15 @@ def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool
 
     if _is_legacy_md5_hash(stored_hash):
         # Keep compatibility with existing md5-based deployments:
-        # new clients send plain password, old clients may send md5 of it.
+        # new clients send plain password, old clients may send md5 of it. Do not
+        # accept the stored digest itself as a reusable plaintext password.
         candidate_md5 = hashlib.md5(candidate_password.encode("utf-8")).hexdigest()
-        return hmac.compare_digest(
-            stored_hash.lower(),
-            candidate_md5.lower(),
-        ) or hmac.compare_digest(
-            stored_hash.lower(),
-            candidate_password.lower(),
+        if hmac.compare_digest(stored_hash.lower(), candidate_md5.lower()):
+            return True
+        return bool(
+            candidate_password.lower() != stored_hash.lower()
+            and _is_legacy_hex_hash(candidate_password, _LEGACY_MD5_LENGTH)
+            and hmac.compare_digest(stored_hash.lower(), candidate_password.lower())
         )
 
     if _is_pbkdf2_hash(stored_hash):
@@ -220,10 +229,13 @@ def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool
         candidate_sha256 = hashlib.sha256(
             candidate_password.encode("utf-8"),
         ).hexdigest()
-        return hmac.compare_digest(
-            stored_hash.lower(),
-            candidate_sha256.lower(),
-        ) or hmac.compare_digest(stored_hash.lower(), candidate_password.lower())
+        if hmac.compare_digest(stored_hash.lower(), candidate_sha256.lower()):
+            return True
+        return bool(
+            candidate_password.lower() != stored_hash.lower()
+            and _is_legacy_hex_hash(candidate_password, 64)
+            and hmac.compare_digest(stored_hash.lower(), candidate_password.lower())
+        )
 
     return False
 

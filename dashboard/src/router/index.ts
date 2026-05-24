@@ -1,19 +1,14 @@
-import { createRouter, createWebHashHistory } from 'vue-router';
-import MainRoutes from './MainRoutes';
-import AuthRoutes from './AuthRoutes';
-import ChatBoxRoutes from './ChatBoxRoutes';
+import { createRouter, createWebHashHistory } from "vue-router";
 import ChatWidgetRoutes from "@/router/ChatWidget";
-import { useAuthStore } from '@/stores/auth';
-import { useRouterLoadingStore } from '@/stores/routerLoading';
+import { useAuthStore } from "@/stores/auth";
+import { useRouterLoadingStore } from "@/stores/routerLoading";
+import AuthRoutes from "./AuthRoutes";
+import ChatBoxRoutes from "./ChatBoxRoutes";
+import MainRoutes from "./MainRoutes";
 
 export const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
-  routes: [
-    MainRoutes,
-    AuthRoutes,
-    ChatBoxRoutes,
-    ChatWidgetRoutes,
-  ]
+  routes: [MainRoutes, AuthRoutes, ChatBoxRoutes, ChatWidgetRoutes],
 });
 
 interface AuthStore {
@@ -24,7 +19,7 @@ interface AuthStore {
     password: string,
     code?: string,
     trustDeviceToken?: boolean,
-  ): Promise<void | 'totp_required'>;
+  ): Promise<undefined | "totp_required">;
   logout(): void;
   has_token(): boolean;
 }
@@ -48,14 +43,12 @@ router.beforeEach(async (to, from) => {
   if (to.matched.some((record) => record.meta.requiresAuth)) {
     if (authRequired && !auth.has_token()) {
       auth.returnUrl = to.fullPath;
-      return next('/auth/login');
+      return "/auth/login";
     }
-    return next();
+    return true;
   } else {
-    next();
+    return true;
   }
-
-  return true;
 });
 
 router.afterEach(() => {

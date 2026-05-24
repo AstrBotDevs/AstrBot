@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import os
 import time
@@ -14,9 +15,6 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 from mcp.client.auth import OAuthClientProvider, TokenStorage
-from mcp.client.auth.extensions.client_credentials import (
-    ClientCredentialsOAuthProvider,
-)
 from mcp.shared.auth import (
     OAuthClientInformationFull,
     OAuthClientMetadata,
@@ -26,6 +24,13 @@ from pydantic import BaseModel, ConfigDict
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+try:
+    from mcp.client.auth.extensions.client_credentials import (
+        ClientCredentialsOAuthProvider,
+    )
+except ModuleNotFoundError:
+    ClientCredentialsOAuthProvider = None
 
 
 class MCPOAuthError(Exception):
@@ -257,7 +262,7 @@ if OAuthClientProvider is not None:
                 )
 
 else:
-    AstrBotOAuthClientProvider = None  # type: ignore[assignment]
+    AstrBotOAuthClientProvider = None
 
 
 if ClientCredentialsOAuthProvider is not None:
@@ -275,7 +280,7 @@ if ClientCredentialsOAuthProvider is not None:
                 self.context.token_expiry_time = expires_at
 
 else:
-    AstrBotClientCredentialsOAuthProvider = None  # type: ignore[assignment]
+    AstrBotClientCredentialsOAuthProvider = None
 
 
 def _build_client_metadata(
@@ -463,18 +468,25 @@ async def create_mcp_http_auth(
     if AstrBotOAuthClientProvider is None:
         raise MCPOAuthError("The installed MCP dependency does not support OAuth 2.0.")
 
-    return AstrBotOAuthClientProvider(
-        server_url=str(prepared["url"]),
-        client_metadata=_build_client_metadata(
+    provider_kwargs: dict[str, Any] = {
+        "server_url": str(prepared["url"]),
+        "client_metadata": _build_client_metadata(
             oauth_config,
             redirect_uri=redirect_uri,
         ),
-        storage=storage,
-        redirect_handler=redirect_handler,
-        callback_handler=callback_handler,
-        timeout=oauth_config.timeout,
-        client_metadata_url=oauth_config.client_metadata_url,
-    )
+        "storage": storage,
+        "redirect_handler": redirect_handler,
+        "callback_handler": callback_handler,
+        "timeout": oauth_config.timeout,
+    }
+    if (
+        oauth_config.client_metadata_url
+        and "client_metadata_url"
+        in inspect.signature(AstrBotOAuthClientProvider).parameters
+    ):
+        provider_kwargs["client_metadata_url"] = oauth_config.client_metadata_url
+
+    return AstrBotOAuthClientProvider(**provider_kwargs)
 
 
 async def get_mcp_oauth_state(config: Mapping[str, Any]) -> dict[str, Any]:

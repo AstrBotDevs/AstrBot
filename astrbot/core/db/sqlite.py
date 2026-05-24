@@ -75,9 +75,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_attachment_columns(conn)
             await conn.commit()
 
-    async def _ensure_column(
-        self, conn, table: str, column: str, ddl: str
-    ) -> None:
+    async def _ensure_column(self, conn, table: str, column: str, ddl: str) -> None:
         """确保指定表有指定列，如果不存在则添加。
 
         这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
@@ -435,6 +433,8 @@ class SQLiteDatabase(BaseDatabase):
         created_at=None,
         updated_at=None,
         is_reset=False,
+        user_name=None,
+        avatar=None,
     ):
         kwargs = {}
         if cid:
@@ -453,6 +453,8 @@ class SQLiteDatabase(BaseDatabase):
                     title=title,
                     persona_id=persona_id,
                     is_reset=is_reset,
+                    user_name=user_name,
+                    avatar=avatar,
                     **kwargs,
                 )
                 session.add(new_conversation)
@@ -466,6 +468,8 @@ class SQLiteDatabase(BaseDatabase):
         clear_persona=False,
         content=None,
         token_usage=None,
+        user_name=None,
+        avatar=None,
     ):
         async with self.get_db() as session:
             session: AsyncSession
@@ -531,7 +535,7 @@ class SQLiteDatabase(BaseDatabase):
                     col(Preference.scope_id).label("session_id"),
                     func.json_extract(Preference.value, "$.val").label(
                         "conversation_id",
-                    ),  # type: ignore
+                    ),
                     col(ConversationV2.persona_id).label("persona_id"),
                     col(ConversationV2.title).label("title"),
                     col(Persona.persona_id).label("persona_name"),

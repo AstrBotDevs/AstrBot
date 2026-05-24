@@ -132,7 +132,7 @@ class ProviderGLMASR(STTProvider):
                 return text
 
         except aiohttp.ClientError as e:
-            raise Exception(f"GLM-ASR API request failed: {e!s}")
+            raise Exception(f"GLM-ASR API request failed: {e!s}") from e
         finally:
             if output_path and os.path.exists(output_path):
                 try:

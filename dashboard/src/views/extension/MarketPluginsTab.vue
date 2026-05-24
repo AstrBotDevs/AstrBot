@@ -1,9 +1,9 @@
 <script setup>
+import { computed } from "vue";
+import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import MarketPluginCard from "@/components/extension/MarketPluginCard.vue";
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
-import { computed } from "vue";
 import { normalizeTextInput } from "@/utils/inputValue";
 
 const props = defineProps({

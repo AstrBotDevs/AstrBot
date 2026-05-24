@@ -63,9 +63,9 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useI18n, useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
 
 // 定义props来控制样式变体
 const props = withDefaults(
@@ -79,8 +79,7 @@ const props = withDefaults(
 
 // 使用新的i18n系统
 const { t } = useI18n();
-const { languageOptions, currentLanguage, switchLanguage, locale } =
-  useLanguageSwitcher();
+const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
 
 const languages = computed(() =>
   languageOptions.value.map((lang) => ({

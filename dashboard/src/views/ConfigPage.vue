@@ -326,21 +326,18 @@
 </template>
 
 <script lang="ts">
-import axios from "@/utils/request";
-import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
-import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
-import StandaloneChat from "@/components/chat/StandaloneChat.vue";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
+import type { RouteLocationNormalized } from "vue-router";
+import StandaloneChat from "@/components/chat/StandaloneChat.vue";
+import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
 import UnsavedChangesConfirmDialog from "@/components/config/UnsavedChangesConfirmDialog.vue";
+import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
 import { normalizeTextInput } from "@/utils/inputValue";
 import { defineReactorMonacoTheme } from "@/utils/monacoTheme";
-import type { RouteLocationNormalized } from "vue-router";
+import axios from "@/utils/request";
+import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
 
 interface ConfigInfoItem {
   id: string;
@@ -361,23 +358,16 @@ interface UnsavedChangesOptions {
 }
 
 const RUNTIME_LOG_CONFIG_KEYS = [
-  'log_level',
-  'log_file_enable',
-  'log_file_path',
-  'log_file_max_mb',
-  'trace_log_enable',
-  'trace_log_path',
-  'trace_log_max_mb'
+  "log_level",
+  "log_file_enable",
+  "log_file_path",
+  "log_file_max_mb",
+  "trace_log_enable",
+  "trace_log_path",
+  "trace_log_max_mb",
 ];
 
-const LEGACY_RUNTIME_LOG_FILE_KEYS = [
-  'enable',
-  'path',
-  'max_mb',
-  'trace_enable',
-  'trace_path',
-  'trace_max_mb'
-];
+const LEGACY_RUNTIME_LOG_FILE_KEYS = ["enable", "path", "max_mb", "trace_enable", "trace_path", "trace_max_mb"];
 
 export default {
   name: "ConfigPage",
@@ -392,12 +382,13 @@ export default {
   },
 
   // 检查未保存的更改
-  async beforeRouteLeave(
-    _to: RouteLocationNormalized,
-    _from: RouteLocationNormalized,
-  ) {
+  async beforeRouteLeave(_to: RouteLocationNormalized, _from: RouteLocationNormalized) {
     if (this.hasUnsavedChanges) {
-      const confirmed = await (this.$refs.unsavedChangesDialog as undefined | { open: (opts: UnsavedChangesOptions) => Promise<boolean | "close"> })?.open({
+      const confirmed = await (
+        this.$refs.unsavedChangesDialog as
+          | undefined
+          | { open: (opts: UnsavedChangesOptions) => Promise<boolean | "close"> }
+      )?.open({
         title: this.tm("unsavedChangesWarning.dialogTitle"),
         message: this.tm("unsavedChangesWarning.leavePage"),
         confirmHint: `${this.tm("unsavedChangesWarning.options.saveAndSwitch")}:${this.tm("unsavedChangesWarning.options.confirm")}`,
@@ -503,19 +494,13 @@ export default {
     // 检查配置是否变化
     configHasChanges() {
       if (!this.originalConfigData || !this.config_data) return false;
-      return (
-        JSON.stringify(this.originalConfigData) !==
-        JSON.stringify(this.config_data)
-      );
+      return JSON.stringify(this.originalConfigData) !== JSON.stringify(this.config_data);
     },
     configInfoNameList() {
       return this.configInfoList.map((info) => info.name);
     },
     selectedConfigInfo(): Partial<ConfigInfoItem> {
-      return (
-        this.configInfoList.find((info) => info.id === this.selectedConfigID) ||
-        {}
-      );
+      return this.configInfoList.find((info) => info.id === this.selectedConfigID) || {};
     },
     configSelectItems() {
       const items = [...this.configInfoList];
@@ -546,9 +531,7 @@ export default {
     defineReactorMonacoTheme();
   },
   mounted() {
-    const hashConfigType = this.extractConfigTypeFromHash(
-      this.$route?.fullPath || "",
-    );
+    const hashConfigType = this.extractConfigTypeFromHash(this.$route?.fullPath || "");
     this.configType = hashConfigType || "normal";
     this.isSystemConfig = this.configType === "system";
 
@@ -574,10 +557,7 @@ export default {
 
   beforeUnmount() {
     // 移除语言切换事件监听器
-    window.removeEventListener(
-      "astrbot-locale-changed",
-      this.handleLocaleChange,
-    );
+    window.removeEventListener("astrbot-locale-changed", this.handleLocaleChange);
   },
   methods: {
     // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
@@ -599,9 +579,7 @@ export default {
         return null;
       }
       const cleanHash = rawHash.slice(lastHashIndex + 1);
-      return cleanHash === "system" || cleanHash === "normal"
-        ? cleanHash
-        : null;
+      return cleanHash === "system" || cleanHash === "normal" ? cleanHash : null;
     },
     async syncConfigTypeFromHash(hash: string): Promise<boolean> {
       const configType = this.extractConfigTypeFromHash(hash);
@@ -665,9 +643,7 @@ export default {
         })
         .then((res) => {
           this.config_data = res.data.data.config;
-          this.lastSavedConfigSnapshot = this.getConfigSnapshot(
-            this.config_data,
-          );
+          this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
           this.config_data_str = "";
           this.config_data_has_changed = false;
           this.fetched = true;
@@ -675,9 +651,7 @@ export default {
           this.configContentKey += 1;
           // 获取配置后更新
           this.$nextTick(() => {
-            this.originalConfigData = JSON.parse(
-              JSON.stringify(this.config_data),
-            );
+            this.originalConfigData = JSON.parse(JSON.stringify(this.config_data));
             if (!this.isSystemConfig) {
               this.currentConfigId = abconf_id || this.selectedConfigID;
             }
@@ -695,7 +669,11 @@ export default {
       if (this.refreshingConfig) return;
 
       if (this.hasUnsavedChanges) {
-        const shouldDiscard = await (this.$refs.unsavedChangesDialog as undefined | { open: (opts: UnsavedChangesOptions) => Promise<boolean | "close"> })?.open({
+        const shouldDiscard = await (
+          this.$refs.unsavedChangesDialog as
+            | undefined
+            | { open: (opts: UnsavedChangesOptions) => Promise<boolean | "close"> }
+        )?.open({
           title: this.tm("unsavedChangesWarning.dialogTitle"),
           message: this.tm("unsavedChangesWarning.reloadConfig"),
           confirmHint: `${this.tm("actions.refresh")}:${this.tm("unsavedChangesWarning.options.confirm")}`,
@@ -709,10 +687,7 @@ export default {
 
       this.refreshingConfig = true;
       try {
-        await this.getConfig(
-          this.isSystemConfig ? undefined : (this.selectedConfigID ?? undefined),
-          true,
-        );
+        await this.getConfig(this.isSystemConfig ? undefined : (this.selectedConfigID ?? undefined), true);
         this.save_message = this.tm("messages.refreshSuccess");
         this.save_message_snack = true;
         this.save_message_success = "success";
@@ -738,19 +713,15 @@ export default {
       }
 
       const previousConfig = this.parseConfigSnapshot(this.lastSavedConfigSnapshot);
-      const localShouldRestart = this.isSystemConfig && this.shouldRestartAfterSystemConfigSave(
-        previousConfig,
-        postData.config
-      );
+      const localShouldRestart =
+        this.isSystemConfig && this.shouldRestartAfterSystemConfigSave(previousConfig, postData.config);
 
-      return axios.post('/api/config/astrbot/update', postData).then((res) => {
+      return axios.post("/api/config/astrbot/update", postData).then((res) => {
         if (res.data.status === "ok") {
           const responseData = res.data.data || {};
-          const shouldRestart = this.isSystemConfig && (
-            typeof responseData.requires_restart === 'boolean'
-              ? responseData.requires_restart
-              : localShouldRestart
-          );
+          const shouldRestart =
+            this.isSystemConfig &&
+            (typeof responseData.requires_restart === "boolean" ? responseData.requires_restart : localShouldRestart);
           this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
           this.save_message = res.data.message || this.messages.saveSuccess;
           this.save_message_snack = true;
@@ -758,7 +729,7 @@ export default {
           this.onConfigSaved();
 
           if (shouldRestart) {
-            restartAstrBotRuntime(this.$refs.wfr).catch(() => {})
+            restartAstrBotRuntime(this.$refs.wfr).catch(() => {});
           }
           return { success: true, restarted: shouldRestart };
         } else {
@@ -853,7 +824,11 @@ export default {
             ? "default"
             : this.currentConfigId || this.selectedConfigID || "default";
           const message = this.tm("unsavedChangesWarning.switchConfig");
-          const saveAndSwitch = await (this.$refs.unsavedChangesDialog as undefined | { open: (opts: UnsavedChangesOptions) => Promise<boolean | "close"> })?.open({
+          const saveAndSwitch = await (
+            this.$refs.unsavedChangesDialog as
+              | undefined
+              | { open: (opts: UnsavedChangesOptions) => Promise<boolean | "close"> }
+          )?.open({
             title: this.tm("unsavedChangesWarning.dialogTitle"),
             message: message,
             confirmHint: `${this.tm("unsavedChangesWarning.options.saveAndSwitch")}:${this.tm("unsavedChangesWarning.options.confirm")}`,
@@ -927,10 +902,7 @@ export default {
       }
     },
     async confirmDeleteConfig(config: ConfigInfoItem) {
-      const message = this.tm("configManagement.confirmDelete").replace(
-        "{name}",
-        config.name,
-      );
+      const message = this.tm("configManagement.confirmDelete").replace("{name}", config.name);
       if (await askForConfirmationDialog(message, this.confirmDialog)) {
         this.deleteConfig(config.id);
       }
@@ -991,7 +963,11 @@ export default {
       // 检查是否有未保存的更改
       if (this.hasUnsavedChanges) {
         const message = this.tm("unsavedChangesWarning.leavePage");
-        const saveAndSwitch = await (this.$refs.unsavedChangesDialog as undefined | { open: (opts: UnsavedChangesOptions) => Promise<boolean | "close"> })?.open({
+        const saveAndSwitch = await (
+          this.$refs.unsavedChangesDialog as
+            | undefined
+            | { open: (opts: UnsavedChangesOptions) => Promise<boolean | "close"> }
+        )?.open({
           title: this.tm("unsavedChangesWarning.dialogTitle"),
           message: message,
           confirmHint: `${this.tm("unsavedChangesWarning.options.saveAndSwitch")}:${this.tm("unsavedChangesWarning.options.confirm")}`,
@@ -1002,7 +978,7 @@ export default {
         if (saveAndSwitch === "close") {
           // 恢复路由
           const originalHash = this.isSystemConfig ? "#system" : "#normal";
-          this.$router.replace("/config" + originalHash);
+          this.$router.replace(`/config${originalHash}`);
           this.configType = this.isSystemConfig ? "system" : "normal";
           return;
         }
@@ -1069,7 +1045,7 @@ export default {
       for (const key of RUNTIME_LOG_CONFIG_KEYS) {
         delete cloned[key];
       }
-      if (cloned.log_file && typeof cloned.log_file === 'object') {
+      if (cloned.log_file && typeof cloned.log_file === "object") {
         for (const key of LEGACY_RUNTIME_LOG_FILE_KEYS) {
           delete cloned.log_file[key];
         }
@@ -1084,7 +1060,7 @@ export default {
       const nextWithoutLog = this.getConfigWithoutRuntimeLogConfig(nextConfig);
 
       return this.getConfigSnapshot(previousWithoutLog) !== this.getConfigSnapshot(nextWithoutLog);
-    }
+    },
   },
 };
 </script>

@@ -5,6 +5,7 @@ import typing as T
 from astrbot import logger
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.raw_platform_event import RawPlatformEvent
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
@@ -86,13 +87,18 @@ async def call_event_hook(
     #
 
     """
-    from astrbot.core.star.session_plugin_manager import SessionPluginManager
 
     handlers = star_handlers_registry.get_handlers_by_event_type(
         hook_type,
         plugins_name=event.plugins_name,
     )
     handlers = await SessionPluginManager.filter_handlers_by_session(event, handlers)
+    unified_msg_origin = event.unified_msg_origin
+    session_config = (
+        await SessionPluginManager.get_session_plugin_config(unified_msg_origin)
+        if isinstance(unified_msg_origin, str) and unified_msg_origin
+        else {}
+    )
     for handler in handlers:
         plugin = star_map.get(handler.handler_module_path)
         if plugin and not SessionPluginManager.is_plugin_enabled_for_session_config(
@@ -119,4 +125,49 @@ async def call_event_hook(
             )
             return True
 
+    return event.is_stopped()
+
+
+def _raw_handler_matches(event: RawPlatformEvent, handler) -> bool:
+    extras = getattr(handler, "extras_configs", {}) or {}
+    raw_platform_name = extras.get("raw_platform_name")
+    if raw_platform_name and raw_platform_name != event.platform_name:
+        return False
+    raw_platform_id = extras.get("raw_platform_id")
+    if raw_platform_id and raw_platform_id != event.platform_id:
+        return False
+    raw_event_type = extras.get("raw_event_type")
+    if raw_event_type and raw_event_type != event.event_type:
+        return False
+    return True
+
+
+async def call_raw_platform_event_hook(event: RawPlatformEvent) -> bool:
+    """Call raw platform event hooks.
+
+    Returns:
+        bool: True if the raw event was stopped by a handler.
+    """
+    handlers = star_handlers_registry.get_handlers_by_event_type(
+        EventType.OnRawPlatformEvent,
+        plugins_name=event.plugins_name,
+    )
+    for handler in handlers:
+        if not _raw_handler_matches(event, handler):
+            continue
+        plugin = star_map.get(handler.handler_module_path)
+        try:
+            assert inspect.iscoroutinefunction(handler.handler)
+            logger.debug(
+                f"hook({EventType.OnRawPlatformEvent.name}) -> {plugin.name if plugin else handler.handler_module_path} - {handler.handler_name}",
+            )
+            await handler.handler(event)
+        except BaseException:
+            logger.error(traceback.format_exc())
+
+        if event.is_stopped():
+            logger.info(
+                f"{plugin.name if plugin else handler.handler_module_path} - {handler.handler_name} stopped raw event propagation.",
+            )
+            return True
     return event.is_stopped()

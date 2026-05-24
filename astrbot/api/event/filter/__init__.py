@@ -1,30 +1,3 @@
-from astrbot.core.star.register import (
-    register_command as command,
-    register_command_group as command_group,
-    register_event_message_type as event_message_type,
-    register_regex as regex,
-    register_platform_adapter_type as platform_adapter_type,
-    register_permission_type as permission_type,
-    register_custom_filter as custom_filter,
-    register_on_astrbot_loaded as on_astrbot_loaded,
-    register_on_llm_request as on_llm_request,
-    register_on_llm_response as on_llm_response,
-    register_llm_tool as llm_tool,
-    register_on_decorating_result as on_decorating_result,
-    register_after_message_sent as after_message_sent,
-    register_on_star_activated as on_star_activated,
-    register_on_star_deactivated as on_star_deactivated,
-)
-
-from astrbot.core.star.filter.event_message_type import (
-    EventMessageTypeFilter,
-    EventMessageType,
-)
-from astrbot.core.star.filter.platform_adapter_type import (
-    PlatformAdapterTypeFilter,
-    PlatformAdapterType,
-)
-from astrbot.core.star.filter.permission import PermissionTypeFilter, PermissionType
 from astrbot.core.star.filter.custom_filter import CustomFilter
 from astrbot.core.star.filter.event_message_type import (
     EventMessageType,
@@ -35,20 +8,38 @@ from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
     PlatformAdapterTypeFilter,
 )
-from astrbot.core.star.register import register_after_message_sent as after_message_sent
-from astrbot.core.star.register import register_command as command
-from astrbot.core.star.register import register_command_group as command_group
-from astrbot.core.star.register import register_custom_filter as custom_filter
-from astrbot.core.star.register import register_event_message_type as event_message_type
-from astrbot.core.star.register import register_llm_tool as llm_tool
+from astrbot.core.star.register import (
+    register_after_message_sent as after_message_sent,
+)
+from astrbot.core.star.register import (
+    register_command as command,
+)
+from astrbot.core.star.register import (
+    register_command_group as command_group,
+)
+from astrbot.core.star.register import (
+    register_custom_filter as custom_filter,
+)
+from astrbot.core.star.register import (
+    register_event_message_type as event_message_type,
+)
+from astrbot.core.star.register import (
+    register_llm_tool as llm_tool,
+)
 from astrbot.core.star.register import register_on_agent_begin as on_agent_begin
 from astrbot.core.star.register import register_on_agent_done as on_agent_done
-from astrbot.core.star.register import register_on_astrbot_loaded as on_astrbot_loaded
+from astrbot.core.star.register import (
+    register_on_astrbot_loaded as on_astrbot_loaded,
+)
 from astrbot.core.star.register import (
     register_on_decorating_result as on_decorating_result,
 )
-from astrbot.core.star.register import register_on_llm_request as on_llm_request
-from astrbot.core.star.register import register_on_llm_response as on_llm_response
+from astrbot.core.star.register import (
+    register_on_llm_request as on_llm_request,
+)
+from astrbot.core.star.register import (
+    register_on_llm_response as on_llm_response,
+)
 from astrbot.core.star.register import (
     register_on_llm_tool_respond as on_llm_tool_respond,
 )
@@ -59,15 +50,25 @@ from astrbot.core.star.register import register_on_plugin_unloaded as on_plugin_
 from astrbot.core.star.register import (
     register_on_raw_platform_event as on_raw_platform_event,
 )
+from astrbot.core.star.register import (
+    register_on_star_activated as on_star_activated,
+)
+from astrbot.core.star.register import (
+    register_on_star_deactivated as on_star_deactivated,
+)
 from astrbot.core.star.register import register_on_using_llm_tool as on_using_llm_tool
 from astrbot.core.star.register import (
     register_on_waiting_llm_request as on_waiting_llm_request,
 )
-from astrbot.core.star.register import register_permission_type as permission_type
+from astrbot.core.star.register import (
+    register_permission_type as permission_type,
+)
 from astrbot.core.star.register import (
     register_platform_adapter_type as platform_adapter_type,
 )
-from astrbot.core.star.register import register_regex as regex
+from astrbot.core.star.register import (
+    register_regex as regex,
+)
 
 __all__ = [
     "CustomFilter",
@@ -94,8 +95,10 @@ __all__ = [
     "on_plugin_error",
     "on_plugin_loaded",
     "on_plugin_unloaded",
-    "on_platform_loaded",
     "on_raw_platform_event",
+    "on_star_activated",
+    "on_star_deactivated",
+    "on_using_llm_tool",
     "on_waiting_llm_request",
     "permission_type",
     "platform_adapter_type",

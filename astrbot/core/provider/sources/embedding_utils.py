@@ -4,7 +4,6 @@ from typing import Any
 
 from astrbot import logger
 
-
 COMMON_MODEL_DIMENSIONS = {
     "bge-m3": 1024,
     "bge-large-en-v1.5": 1024,

@@ -45,7 +45,6 @@ def webchat_message_parts_have_content(message_parts: list[dict]) -> bool:
     )
 
 
-
 def _parse_node_content(
     content_parts: list[dict],
     *,
@@ -201,9 +200,10 @@ async def parse_webchat_message_parts(
 
         if part_type == "node":
             _append_node_to_components(
-                components, part,
+                components,
+                part,
                 strict=strict,
-                verify_media_path_exists=verify_media_path_exists,
+                verify_media_path_exists=False,
             )
             has_content = True
             continue
@@ -331,6 +331,7 @@ def webchat_message_parts_to_message_chain(
     message_parts: list[dict],
     *,
     strict: bool = False,
+    verify_media_path_exists: bool = True,
 ) -> MessageChain:
     components: list[BaseMessageComponent] = []
     has_content = False
@@ -366,7 +367,8 @@ def webchat_message_parts_to_message_chain(
 
         if part_type == "node":
             _append_node_to_components(
-                components, part,
+                components,
+                part,
                 strict=strict,
                 verify_media_path_exists=verify_media_path_exists,
             )

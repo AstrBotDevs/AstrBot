@@ -198,6 +198,34 @@ def _build_sampling_params(*, tools=None, content=None):
     )
 
 
+def _build_form_elicitation_params(message: str, requested_schema: dict):
+    form_params_cls = getattr(mcp.types, "ElicitRequestFormParams", None)
+    if form_params_cls is not None:
+        return form_params_cls(message=message, requestedSchema=requested_schema)
+    return mcp.types.ElicitRequestParams(
+        message=message,
+        requestedSchema=requested_schema,
+    )
+
+
+def _build_url_elicitation_params(
+    *, message: str, url: str, elicitation_id: str
+):
+    url_params_cls = getattr(mcp.types, "ElicitRequestURLParams", None)
+    if url_params_cls is not None:
+        return url_params_cls(
+            message=message,
+            url=url,
+            elicitationId=elicitation_id,
+        )
+    return mcp.types.ElicitRequestParams(
+        message=message,
+        requestedSchema={},
+        url=url,
+        elicitationId=elicitation_id,
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("enabled", "expected_sampling_enabled"),
@@ -870,9 +898,9 @@ async def test_elicitation_form_request_uses_next_matching_reply():
         _DummyPluginContext(completion_text="unused"),
         event=event,
     )
-    params = mcp.types.ElicitRequestFormParams(
+    params = _build_form_elicitation_params(
         message="Please provide the topic.",
-        requestedSchema={
+        requested_schema={
             "type": "object",
             "properties": {
                 "topic": {
@@ -924,9 +952,9 @@ async def test_elicitation_form_request_reprompts_after_invalid_reply():
         _DummyPluginContext(completion_text="unused"),
         event=event,
     )
-    params = mcp.types.ElicitRequestFormParams(
+    params = _build_form_elicitation_params(
         message="How many sections do you need?",
-        requestedSchema={
+        requested_schema={
             "type": "object",
             "properties": {
                 "count": {
@@ -987,9 +1015,9 @@ async def test_elicitation_form_request_accepts_natural_language_key_value_patte
         _DummyPluginContext(completion_text="unused"),
         event=event,
     )
-    params = mcp.types.ElicitRequestFormParams(
+    params = _build_form_elicitation_params(
         message="Collect plan details.",
-        requestedSchema={
+        requested_schema={
             "type": "object",
             "properties": {
                 "topic": {"type": "string"},
@@ -1044,9 +1072,9 @@ async def test_elicitation_form_request_uses_llm_fallback_for_bot_reply():
         plugin_context,
         event=event,
     )
-    params = mcp.types.ElicitRequestFormParams(
+    params = _build_form_elicitation_params(
         message="Collect plan details.",
-        requestedSchema={
+        requested_schema={
             "type": "object",
             "properties": {
                 "topic": {"type": "string"},
@@ -1102,9 +1130,9 @@ async def test_elicitation_form_request_retries_when_llm_fallback_returns_invali
         plugin_context,
         event=event,
     )
-    params = mcp.types.ElicitRequestFormParams(
+    params = _build_form_elicitation_params(
         message="Collect plan details.",
-        requestedSchema={
+        requested_schema={
             "type": "object",
             "properties": {
                 "topic": {"type": "string"},
@@ -1173,9 +1201,9 @@ async def test_webchat_elicitation_message_uses_structured_payload():
         _DummyPluginContext(completion_text="unused"),
         event=event,
     )
-    params = mcp.types.ElicitRequestFormParams(
+    params = _build_form_elicitation_params(
         message="Choose a tone.",
-        requestedSchema={
+        requested_schema={
             "type": "object",
             "properties": {
                 "tone": {
@@ -1226,10 +1254,10 @@ async def test_elicitation_url_request_waits_for_confirmation():
         _DummyPluginContext(completion_text="unused"),
         event=event,
     )
-    params = mcp.types.ElicitRequestURLParams(
+    params = _build_url_elicitation_params(
         message="Authorize the test server.",
         url="https://example.com/auth",
-        elicitationId="elic-1",
+        elicitation_id="elic-1",
     )
 
     async def _resolve_reply():
@@ -1272,9 +1300,9 @@ async def test_elicitation_request_times_out_to_cancel(monkeypatch: pytest.Monke
         _DummyPluginContext(completion_text="unused"),
         event=event,
     )
-    params = mcp.types.ElicitRequestFormParams(
+    params = _build_form_elicitation_params(
         message="Please provide topic.",
-        requestedSchema={
+        requested_schema={
             "type": "object",
             "properties": {
                 "topic": {"type": "string"},

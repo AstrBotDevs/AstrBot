@@ -75,8 +75,8 @@ async def convert_to_pcm_wav(
 
         ff = FFmpeg()
         ff.options(
-            f"-y -i \"{input_path}\" -acodec pcm_s16le -ar {sample_rate} -ac 1 "
-            f"-af apad=pad_dur=2 -fflags +genpts -hide_banner \"{output_path}\""
+            f'-y -i "{input_path}" -acodec pcm_s16le -ar {sample_rate} -ac 1 '
+            f'-af apad=pad_dur=2 -fflags +genpts -hide_banner "{output_path}"'
         )
         ff.run()
     except Exception as e:

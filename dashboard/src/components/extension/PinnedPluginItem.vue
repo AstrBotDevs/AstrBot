@@ -44,11 +44,9 @@ const authorDisplay = computed(() => {
   const p = props.plugin || {};
   if (typeof p.author === "string" && p.author.trim()) return p.author;
   if (Array.isArray(p.authors) && p.authors.length) return p.authors.join(", ");
-  if (typeof p.author_name === "string" && p.author_name.trim())
-    return p.author_name;
+  if (typeof p.author_name === "string" && p.author_name.trim()) return p.author_name;
   if (typeof p.owner === "string" && p.owner.trim()) return p.owner;
-  if (p.author && typeof p.author === "object" && p.author.name)
-    return p.author.name;
+  if (p.author && typeof p.author === "object" && p.author.name) return p.author.name;
   return "";
 });
 </script>

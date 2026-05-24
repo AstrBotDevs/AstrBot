@@ -27,8 +27,8 @@ from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.tools.registry import builtin_tool
 
-from ..registry import builtin_tool
 from .util import check_admin_permission, is_local_runtime
 
 logger = logging.getLogger(__name__)

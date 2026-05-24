@@ -83,9 +83,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
-import { getPlatformIcon } from '@/utils/platformUtils';
+import { computed } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { getPlatformIcon } from "@/utils/platformUtils";
 
 interface RouteItem {
   id: string;
@@ -93,41 +93,44 @@ interface RouteItem {
   umop: string;
 }
 
-const props = withDefaults(defineProps<{
-  modelValue: boolean;
-  configId: string;
-  configName: string;
-  loading: boolean;
-  saving: boolean;
-  items: RouteItem[];
-  platformTypeMap: Record<string, string>;
-}>(), {
-  modelValue: false,
-  configId: '',
-  configName: '',
-  loading: false,
-  saving: false,
-  items: () => [],
-  platformTypeMap: () => ({})
-});
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean;
+    configId: string;
+    configName: string;
+    loading: boolean;
+    saving: boolean;
+    items: RouteItem[];
+    platformTypeMap: Record<string, string>;
+  }>(),
+  {
+    modelValue: false,
+    configId: "",
+    configName: "",
+    loading: false,
+    saving: false,
+    items: () => [],
+    platformTypeMap: () => ({}),
+  },
+);
 
 const emit = defineEmits<{
-  'update:modelValue': [value: boolean];
+  "update:modelValue": [value: boolean];
   removeRoute: [routeId: string];
   save: [];
 }>();
 
-const { tm } = useModuleI18n('features/config');
+const { tm } = useModuleI18n("features/config");
 
 const dialogVisible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit('update:modelValue', value)
+  set: (value: boolean) => emit("update:modelValue", value),
 });
 
 const groupedRoutes = computed(() => {
   const groups: Record<string, RouteItem[]> = {};
   for (const item of props.items) {
-    const platformId = String(item.platformId || '').trim();
+    const platformId = String(item.platformId || "").trim();
     if (!platformId) {
       continue;
     }
@@ -147,7 +150,7 @@ const groupedRoutes = computed(() => {
           return [allSessionsRoute];
         }
         return sortedRoutes;
-      })()
+      })(),
     }))
     .sort((a, b) => a.platformId.localeCompare(b.platformId));
 });
@@ -158,7 +161,7 @@ function getRoutePlatformIcon(platformId: string): string | undefined {
 }
 
 function isAllSessionsRoute(umop: string): boolean {
-  return String(umop || '').endsWith(':*:*');
+  return String(umop || "").endsWith(":*:*");
 }
 </script>
 

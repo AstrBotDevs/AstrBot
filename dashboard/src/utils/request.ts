@@ -65,15 +65,11 @@ function normalizeBaseUrl(baseUrl: string | null | undefined): string {
   return stripTrailingSlashes(baseUrl?.trim() || "");
 }
 
-export function normalizeConfiguredApiBaseUrl(
-  baseUrl: string | null | undefined,
-): string {
+export function normalizeConfiguredApiBaseUrl(baseUrl: string | null | undefined): string {
   return normalizeBaseUrl(baseUrl);
 }
 
-export function getApiBaseUrlValidationError(
-  baseUrl: string | null | undefined,
-): string {
+export function getApiBaseUrlValidationError(baseUrl: string | null | undefined): string {
   const normalizedBaseUrl = normalizeConfiguredApiBaseUrl(baseUrl);
 
   if (!normalizedBaseUrl) {
@@ -102,10 +98,7 @@ export function setApiBaseUrl(baseUrl: string | null | undefined): string {
   return normalizedBaseUrl;
 }
 
-export function resolveApiUrl(
-  path: string,
-  baseUrl: string | null | undefined = getApiBaseUrl(),
-): string {
+export function resolveApiUrl(path: string, baseUrl: string | null | undefined = getApiBaseUrl()): string {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
   const normalizedPath = normalizePathForBase(path, normalizedBaseUrl);
 
@@ -123,16 +116,10 @@ export function resolveApiUrl(
 export function resolvePublicUrl(path: string): string {
   const base = import.meta.env.BASE_URL || "/";
   const cleanBase = base.endsWith("/") ? base : `${base}/`;
-  return new URL(
-    path.replace(/^\/+/, ""),
-    window.location.origin + cleanBase,
-  ).toString();
+  return new URL(path.replace(/^\/+/, ""), window.location.origin + cleanBase).toString();
 }
 
-export function resolveWebSocketUrl(
-  path: string,
-  queryParams?: Record<string, string>,
-): string {
+export function resolveWebSocketUrl(path: string, queryParams?: Record<string, string>): string {
   const resolvedApiUrl = resolveApiUrl(path);
   const url = new URL(resolvedApiUrl, window.location.href);
 
@@ -157,9 +144,7 @@ const service = axios.create({
 });
 
 service.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const normalizedBaseUrl = normalizeBaseUrl(
-    config.baseURL ?? service.defaults.baseURL,
-  );
+  const normalizedBaseUrl = normalizeBaseUrl(config.baseURL ?? service.defaults.baseURL);
 
   if (typeof config.url === "string") {
     config.url = normalizePathForBase(config.url, normalizedBaseUrl);

@@ -25,8 +25,8 @@ from astrbot.core.utils.web_search_utils import build_web_search_refs
 
 from .chat import (
     BotMessageAccumulator,
-    build_bot_history_content,
     collect_plain_text_from_message_parts,
+    extract_reasoning_from_message_parts,
 )
 from .message_events import build_message_saved_event
 from .route import Route, RouteContext
@@ -219,20 +219,16 @@ class LiveChatRoute(Route):
     async def _save_bot_message(
         self,
         webchat_conv_id: str,
-        text: str,
-        media_parts: list,
-        reasoning: str,
+        message_parts: list[dict],
         agent_stats: dict,
         refs: dict,
         llm_checkpoint_id: str | None = None,
     ):
         """保存 bot 消息到历史记录。"""
-        bot_message_parts = []
-        bot_message_parts.extend(media_parts)
-        if text:
-            bot_message_parts.append({"type": "plain", "text": text})
+        bot_message_parts = strip_message_parts_path_fields(message_parts)
+        reasoning = extract_reasoning_from_message_parts(bot_message_parts)
 
-        new_his = {"type": "bot", "message": bot_message_parts}
+        new_his: dict[str, Any] = {"type": "bot", "message": bot_message_parts}
         if reasoning:
             new_his["reasoning"] = reasoning
         if agent_stats:
@@ -471,10 +467,7 @@ class LiveChatRoute(Route):
                 },
             )
 
-            accumulated_parts = []
-            accumulated_text = ""
-            accumulated_reasoning = ""
-            tool_calls = {}
+            message_accumulator = BotMessageAccumulator()
             agent_stats = {}
             refs = {}
 
@@ -512,8 +505,6 @@ class LiveChatRoute(Route):
                 agent_stats = {}
                 refs = {}
                 return saved_record, extracted_refs
-
-            pending_bot_message_flusher = flush_pending_bot_message
 
             async def send_attachment_saved_event(part: dict | None) -> None:
                 if not part or not part.get("attachment_id") or not part.get("type"):
@@ -570,88 +561,42 @@ class LiveChatRoute(Route):
                 await self._send_chat_payload(session, outgoing)
 
                 if msg_type == "plain":
-                    if chain_type == "tool_call":
-                        try:
-                            tool_call = json.loads(result_text)
-                            tool_calls[tool_call.get("id")] = tool_call
-                            if accumulated_text:
-                                accumulated_parts.append(
-                                    {"type": "plain", "text": accumulated_text},
-                                )
-                                accumulated_text = ""
-                        except Exception:
-                            pass
-                    elif chain_type == "tool_call_result":
-                        try:
-                            tcr = json.loads(result_text)
-                            tc_id = tcr.get("id")
-                            if tc_id in tool_calls:
-                                tool_calls[tc_id]["result"] = tcr.get("result")
-                                tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
-                                accumulated_parts.append(
-                                    {
-                                        "type": "tool_call",
-                                        "tool_calls": [tool_calls[tc_id]],
-                                    },
-                                )
-                                tool_calls.pop(tc_id, None)
-                        except Exception:
-                            pass
-                    elif chain_type == "reasoning":
-                        accumulated_reasoning += result_text
-                    elif streaming:
-                        accumulated_text += result_text
-                    else:
-                        accumulated_text = result_text
+                    message_accumulator.add_plain(
+                        str(result_text),
+                        chain_type=chain_type,
+                        streaming=streaming,
+                    )
                 elif msg_type == "image":
                     filename = str(result_text).replace("[IMAGE]", "")
                     part = await self._create_attachment_from_file(filename, "image")
-                    if part:
-                        accumulated_parts.append(part)
+                    message_accumulator.add_attachment(part)
+                    await send_attachment_saved_event(part)
                 elif msg_type == "record":
                     filename = str(result_text).replace("[RECORD]", "")
                     part = await self._create_attachment_from_file(filename, "record")
-                    if part:
-                        accumulated_parts.append(part)
+                    message_accumulator.add_attachment(part)
+                    await send_attachment_saved_event(part)
                 elif msg_type == "file":
                     filename = str(result_text).replace("[FILE]", "").split("|", 1)[0]
                     part = await self._create_attachment_from_file(filename, "file")
-                    if part:
-                        accumulated_parts.append(part)
+                    message_accumulator.add_attachment(part)
+                    await send_attachment_saved_event(part)
                 elif msg_type == "video":
                     filename = str(result_text).replace("[VIDEO]", "").split("|", 1)[0]
                     part = await self._create_attachment_from_file(filename, "video")
-                    if part:
-                        accumulated_parts.append(part)
+                    message_accumulator.add_attachment(part)
+                    await send_attachment_saved_event(part)
                 elif msg_type == "elicitation":
-                    if accumulated_text:
-                        accumulated_parts.append(
-                            {"type": "plain", "text": accumulated_text}
-                        )
-                        accumulated_text = ""
                     if isinstance(result_text, dict):
-                        accumulated_parts.append(
-                            {
-                                "type": "elicitation",
-                                "payload": result_text,
-                            }
-                        )
+                        message_accumulator.add_elicitation(result_text)
 
                 should_save = False
                 if msg_type == "end":
                     should_save = bool(
-                        accumulated_parts
-                        or accumulated_text
-                        or accumulated_reasoning
-                        or refs
-                        or agent_stats,
+                        message_accumulator.has_content() or refs or agent_stats,
                     )
                 elif (streaming and msg_type == "complete") or not streaming:
-                    if chain_type not in (
-                        "tool_call",
-                        "tool_call_result",
-                        "agent_stats",
-                    ):
+                    if chain_type not in ("tool_call", "tool_call_result"):
                         should_save = True
 
                 if should_save:
@@ -668,9 +613,6 @@ class LiveChatRoute(Route):
                             ),
                         )
 
-                    accumulated_parts = []
-                    accumulated_text = ""
-                    accumulated_reasoning = ""
                     agent_stats = {}
                     refs = {}
 

@@ -352,25 +352,19 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import axios, { AxiosError } from "@/utils/request";
-import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
-import ProxySelector from "@/components/shared/ProxySelector.vue";
-import MigrationDialog from "@/components/shared/MigrationDialog.vue";
-import SidebarCustomizer from "@/components/shared/SidebarCustomizer.vue";
-import BackupDialog from "@/components/shared/BackupDialog.vue";
-import StorageCleanupPanel from "@/components/shared/StorageCleanupPanel.vue";
-import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
-import { useModuleI18n } from "@/i18n/composables";
 import { useTheme } from "vuetify";
-import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
-import {
-  LIGHT_THEME_NAME,
-  DARK_THEME_NAME,
-  ThemeMode,
-} from "@/theme/constants";
-import { useToastStore } from "@/stores/toast";
+import BackupDialog from "@/components/shared/BackupDialog.vue";
+import MigrationDialog from "@/components/shared/MigrationDialog.vue";
+import ProxySelector from "@/components/shared/ProxySelector.vue";
+import SidebarCustomizer from "@/components/shared/SidebarCustomizer.vue";
+import StorageCleanupPanel from "@/components/shared/StorageCleanupPanel.vue";
+import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
+import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
-import {
+import { useToastStore } from "@/stores/toast";
+import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
+import { DARK_THEME_NAME, LIGHT_THEME_NAME, type ThemeMode } from "@/theme/constants";
+import type {
   ApiKey,
   ApiKeyActionResponse,
   ApiKeyCreatePayload,
@@ -378,6 +372,8 @@ import {
   ApiKeyExpiresDays,
   ApiKeyListResponse,
 } from "@/types/api";
+import axios, { AxiosError } from "@/utils/request";
+import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
 
 const { tm } = useModuleI18n("features/settings");
 const toastStore = useToastStore();
@@ -404,17 +400,12 @@ const themeMode = computed({
 });
 
 const getStoredColor = (key: string, fallback: string) => {
-  const stored =
-    typeof window !== "undefined" ? localStorage.getItem(key) : null;
+  const stored = typeof window !== "undefined" ? localStorage.getItem(key) : null;
   return stored || fallback;
 };
 
-const primaryColor = ref(
-  getStoredColor("themePrimary", BlueBusinessLightTheme.colors.primary),
-);
-const secondaryColor = ref(
-  getStoredColor("themeSecondary", BlueBusinessLightTheme.colors.secondary),
-);
+const primaryColor = ref(getStoredColor("themePrimary", BlueBusinessLightTheme.colors.primary));
+const secondaryColor = ref(getStoredColor("themeSecondary", BlueBusinessLightTheme.colors.secondary));
 
 // Theme presets based on MD3 color system
 const themePresets = [
@@ -469,9 +460,7 @@ const themePresets = [
 ];
 
 // Get stored preset or default to blue-business name
-const selectedThemePreset = ref(
-  localStorage.getItem("themePreset") || themePresets[0].name,
-);
+const selectedThemePreset = ref(localStorage.getItem("themePreset") || themePresets[0].name);
 
 // Simple array for dropdown display
 const presetOptions = themePresets.map((p) => p.name);
@@ -513,10 +502,8 @@ const applyThemeColors = (primary: string, secondary: string) => {
     if (!themeDef?.colors) return;
     if (primary) themeDef.colors.primary = primary;
     if (secondary) themeDef.colors.secondary = secondary;
-    if (primary && themeDef.colors.darkprimary)
-      themeDef.colors.darkprimary = primary;
-    if (secondary && themeDef.colors.darksecondary)
-      themeDef.colors.darksecondary = secondary;
+    if (primary && themeDef.colors.darkprimary) themeDef.colors.darkprimary = primary;
+    if (secondary && themeDef.colors.darksecondary) themeDef.colors.darksecondary = secondary;
   });
 };
 
@@ -593,10 +580,7 @@ const loadApiKeys = async () => {
     apiKeys.value = res.data.data;
   } catch (e: unknown) {
     if (e instanceof AxiosError) {
-      showToast(
-        e?.response?.data?.message || tm("apiKey.messages.loadFailed"),
-        "error",
-      );
+      showToast(e?.response?.data?.message || tm("apiKey.messages.loadFailed"), "error");
     } else {
       console.error("An unexpected error occurred while loading API keys:", e);
       showToast(tm("apiKey.messages.loadFailed"), "error");
@@ -679,15 +663,9 @@ const createApiKey = async () => {
     if (newApiKeyExpiresInDays.value !== "permanent") {
       payload.expires_in_days = Number(newApiKeyExpiresInDays.value);
     }
-    const res = await axios.post<ApiKeyCreateResponse>(
-      "/api/apikey/create",
-      payload,
-    );
+    const res = await axios.post<ApiKeyCreateResponse>("/api/apikey/create", payload);
     if (res.data.status !== "ok") {
-      showToast(
-        res.data.message || tm("apiKey.messages.createFailed"),
-        "error",
-      );
+      showToast(res.data.message || tm("apiKey.messages.createFailed"), "error");
       return;
     }
     createdApiKeyPlaintext.value = res.data.data?.api_key || "";
@@ -697,10 +675,7 @@ const createApiKey = async () => {
     await loadApiKeys();
   } catch (e: unknown) {
     if (e instanceof AxiosError) {
-      showToast(
-        e?.response?.data?.message || tm("apiKey.messages.createFailed"),
-        "error",
-      );
+      showToast(e?.response?.data?.message || tm("apiKey.messages.createFailed"), "error");
     } else {
       console.error("An unexpected error occurred while creating API key:", e);
       showToast(tm("apiKey.messages.createFailed"), "error");
@@ -716,20 +691,14 @@ const revokeApiKey = async (keyId: string) => {
       key_id: keyId,
     });
     if (res.data.status !== "ok") {
-      showToast(
-        res.data.message || tm("apiKey.messages.revokeFailed"),
-        "error",
-      );
+      showToast(res.data.message || tm("apiKey.messages.revokeFailed"), "error");
       return;
     }
     showToast(tm("apiKey.messages.revokeSuccess"), "success");
     await loadApiKeys();
   } catch (e: unknown) {
     if (e instanceof AxiosError) {
-      showToast(
-        e?.response?.data?.message || tm("apiKey.messages.revokeFailed"),
-        "error",
-      );
+      showToast(e?.response?.data?.message || tm("apiKey.messages.revokeFailed"), "error");
     } else {
       console.error("An unexpected error occurred while revoking API key:", e);
       showToast(tm("apiKey.messages.revokeFailed"), "error");
@@ -743,20 +712,14 @@ const deleteApiKey = async (keyId: string) => {
       key_id: keyId,
     });
     if (res.data.status !== "ok") {
-      showToast(
-        res.data.message || tm("apiKey.messages.deleteFailed"),
-        "error",
-      );
+      showToast(res.data.message || tm("apiKey.messages.deleteFailed"), "error");
       return;
     }
     showToast(tm("apiKey.messages.deleteSuccess"), "success");
     await loadApiKeys();
   } catch (e: unknown) {
     if (e instanceof AxiosError) {
-      showToast(
-        e?.response?.data?.message || tm("apiKey.messages.deleteFailed"),
-        "error",
-      );
+      showToast(e?.response?.data?.message || tm("apiKey.messages.deleteFailed"), "error");
     } else {
       console.error("An unexpected error occurred while deleting API key:", e);
       showToast(tm("apiKey.messages.deleteFailed"), "error");
@@ -769,15 +732,9 @@ const restartAstrBot = async () => {
     await restartAstrBotRuntime(wfr.value);
   } catch (error: unknown) {
     if (error instanceof AxiosError) {
-      showToast(
-        error?.response?.data?.message || tm("apiKey.messages.restartFailed"),
-        "error",
-      );
+      showToast(error?.response?.data?.message || tm("apiKey.messages.restartFailed"), "error");
     } else {
-      console.error(
-        "An unexpected error occurred while restarting AstrBot:",
-        error,
-      );
+      console.error("An unexpected error occurred while restarting AstrBot:", error);
       showToast(tm("apiKey.messages.restartFailed"), "error");
     }
   }

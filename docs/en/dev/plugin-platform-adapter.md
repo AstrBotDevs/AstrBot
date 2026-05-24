@@ -23,7 +23,7 @@ class FakeClient():
         self.token = token
         self.username = username
         # ...
-                
+
     async def start_polling(self):
         while True:
             await asyncio.sleep(5)
@@ -35,7 +35,7 @@ class FakeClient():
                 'message_id': 'asdhoashd',
                 'group_id': 'group123',
             })
-            
+
     async def send_text(self, to: str, message: str):
         print('发了消息:', to, message)
 
@@ -72,7 +72,7 @@ class FakePlatformAdapter(Platform):
     async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
         # Must be implemented
         await super().send_by_session(session, message_chain)
-    
+
     def meta(self) -> PlatformMetadata:
         # Must be implemented. Simply return as shown below.
         return PlatformMetadata(
@@ -110,7 +110,7 @@ class FakePlatformAdapter(Platform):
         abm.message_id = data['message_id'] # 消息 ID。
 
         return abm
-    
+
     async def handle_msg(self, message: AstrBotMessage):
         # Handle the message
         message_event = FakePlatformEvent(
@@ -141,7 +141,7 @@ class FakePlatformEvent(AstrMessageEvent):
     def __init__(self, message_str: str, message_obj: AstrBotMessage, platform_meta: PlatformMetadata, session_id: str, client: FakeClient):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
-        
+
     async def send(self, message: MessageChain):
         for i in message.chain: # Iterate over the message chain
             if isinstance(i, Plain): # If it's a text message

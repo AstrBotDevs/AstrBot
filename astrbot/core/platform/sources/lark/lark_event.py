@@ -22,7 +22,6 @@ from lark_oapi.api.im.v1 import (
     CreateImageRequestBody,
     CreateMessageReactionRequest,
     CreateMessageReactionRequestBody,
-    DeleteMessageReactionRequest,
     Emoji,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
@@ -907,15 +906,22 @@ class LarkMessageEvent(AstrMessageEvent):
         }
 
         request = (
-            DeleteMessageReactionRequest.builder()
-            .message_id(self.message_obj.message_id)
-            .reaction_id(reaction_id)
+            CreateCardRequest.builder()
+            .request_body(
+                CreateCardRequestBody.builder()
+                .type("card_json")
+                .data(json.dumps(card_json, ensure_ascii=False))
+                .build()
+            )
             .build()
         )
 
-        response = await self.bot.im.v1.message_reaction.adelete(request)
+        response = await self.bot.cardkit.v1.card.acreate(request)
         if not response.success():
-            logger.warning(f"撤回飞书表情回应失败({response.code}): {response.msg}")
+            logger.error(
+                f"[Lark] 创建流式卡片实体失败({response.code}): {response.msg}"
+            )
+            return None
 
         if response.data is None or not response.data.card_id:
             logger.error("[Lark] 创建流式卡片实体成功但未返回 card_id")

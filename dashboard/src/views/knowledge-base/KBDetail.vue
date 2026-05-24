@@ -201,10 +201,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 import DocumentsTab from "./components/DocumentsTab.vue";
 import RetrievalTab from "./components/RetrievalTab.vue";
 import SettingsTab from "./components/SettingsTab.vue";
@@ -212,9 +212,7 @@ import SettingsTab from "./components/SettingsTab.vue";
 const { tm: t } = useModuleI18n("features/knowledge-base/detail");
 const route = useRoute();
 
-const emit = defineEmits<{
-  (event: "title-change", title: string): void
-}>()
+const emit = defineEmits<(event: "title-change", title: string) => void>();
 
 const kbId = ref(route.params.kbId as string);
 const loading = ref(true);

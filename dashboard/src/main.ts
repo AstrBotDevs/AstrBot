@@ -1,29 +1,41 @@
-import { createApp } from "vue";
 import { createPinia } from "pinia";
+import { createApp } from "vue";
 import App from "./App.vue";
-import { router } from "./router";
-import vuetify from "./plugins/vuetify";
-import confirmPlugin from "./plugins/confirmPlugin";
 import { setupI18n } from "./i18n/composables";
+import confirmPlugin from "./plugins/confirmPlugin";
+import vuetify from "./plugins/vuetify";
+import { router } from "./router";
 import "@/scss/style.scss";
-import VueApexCharts from "vue3-apexcharts";
-
-import print from "vue3-print-nb";
 import { loader } from "@guolao/vue-monaco-editor";
 import * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import cssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
 import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
+import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
-import axios from "axios";
+import VueApexCharts from "vue3-apexcharts";
+import print from "vue3-print-nb";
+import { default as axios, getApiBaseUrl, resolveApiUrl, resolvePublicUrl, setApiBaseUrl } from "@/utils/request";
 import { waitForRouterReadyInBackground } from "./utils/routerReadiness.mjs";
-import {
-  getApiBaseUrl,
-  resolveApiUrl,
-  resolvePublicUrl,
-  setApiBaseUrl,
-} from "@/utils/request";
+
+interface AppConfig {
+  apiBaseUrl?: string;
+}
+
+async function loadAppConfig(): Promise<AppConfig> {
+  try {
+    const response = await fetch(resolvePublicUrl("config.json"), {
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return {};
+    }
+    const config = await response.json();
+    return typeof config === "object" && config !== null ? config : {};
+  } catch {
+    return {};
+  }
+}
 
 (self as any).MonacoEnvironment = {
   getWorker(_: string, label: string) {
@@ -72,10 +84,8 @@ setupI18n()
           if (!theme?.colors) return;
           if (storedPrimary) theme.colors.primary = storedPrimary;
           if (storedSecondary) theme.colors.secondary = storedSecondary;
-          if (storedPrimary && theme.colors.darkprimary)
-            theme.colors.darkprimary = storedPrimary;
-          if (storedSecondary && theme.colors.darksecondary)
-            theme.colors.darksecondary = storedSecondary;
+          if (storedPrimary && theme.colors.darkprimary) theme.colors.darkprimary = storedPrimary;
+          if (storedSecondary && theme.colors.darksecondary) theme.colors.darksecondary = storedSecondary;
         });
       }
     });
@@ -108,10 +118,8 @@ setupI18n()
           if (!theme?.colors) return;
           if (storedPrimary) theme.colors.primary = storedPrimary;
           if (storedSecondary) theme.colors.secondary = storedSecondary;
-          if (storedPrimary && theme.colors.darkprimary)
-            theme.colors.darkprimary = storedPrimary;
-          if (storedSecondary && theme.colors.darksecondary)
-            theme.colors.darksecondary = storedSecondary;
+          if (storedPrimary && theme.colors.darkprimary) theme.colors.darkprimary = storedPrimary;
+          if (storedSecondary && theme.colors.darksecondary) theme.colors.darksecondary = storedSecondary;
         });
       }
     });
@@ -120,7 +128,7 @@ setupI18n()
 axios.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
-    config.headers["Authorization"] = `Bearer ${token}`;
+    config.headers.Authorization = `Bearer ${token}`;
   }
   const locale = localStorage.getItem("astrbot-locale");
   if (locale) {
@@ -136,21 +144,8 @@ axios.interceptors.response.use(
       return Promise.reject(error.response.data.message);
     }
     return Promise.reject(error);
-  }
+  },
 );
-
-// Keep fetch() calls consistent with axios by automatically attaching the JWT.
-// Some parts of the UI use fetch directly; without this, those requests will 401.
-const _origFetch = window.fetch.bind(window);
-window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-  const token = localStorage.getItem('token');
-  if (!token) return _origFetch(input, init);
-
-  const headers = new Headers(init?.headers || (typeof input !== 'string' && 'headers' in input ? (input as Request).headers : undefined));
-  if (!headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-}
 
 async function initApp() {
   const config = await loadAppConfig();
@@ -158,8 +153,7 @@ async function initApp() {
   const envApiUrl = import.meta.env.VITE_API_BASE || "";
 
   const localApiUrl = localStorage.getItem("apiBaseUrl");
-  const apiBaseUrl =
-    localApiUrl !== null ? localApiUrl : configApiUrl || envApiUrl;
+  const apiBaseUrl = localApiUrl !== null ? localApiUrl : configApiUrl || envApiUrl;
 
   if (apiBaseUrl) {
     console.log(`API Base URL set to: ${apiBaseUrl}`);
@@ -178,10 +172,7 @@ async function initApp() {
 
     const token = localStorage.getItem("token");
     const headers = new Headers(
-      init?.headers ||
-        (typeof input !== "string" && "headers" in input
-          ? (input as Request).headers
-          : undefined),
+      init?.headers || (typeof input !== "string" && "headers" in input ? (input as Request).headers : undefined),
     );
 
     if (token && !headers.has("Authorization")) {

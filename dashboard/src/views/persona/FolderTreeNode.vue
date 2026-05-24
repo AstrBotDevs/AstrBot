@@ -15,11 +15,11 @@
 </template>
 
 <script lang="ts">
+import { mapActions, mapState } from "pinia";
 import { defineComponent, type PropType } from "vue";
-import { usePersonaStore } from "@/stores/personaStore";
-import { mapState, mapActions } from "pinia";
 import BaseFolderTreeNode from "@/components/folder/BaseFolderTreeNode.vue";
 import type { FolderTreeNode as FolderTreeNodeType } from "@/components/folder/types";
+import { usePersonaStore } from "@/stores/personaStore";
 
 export default defineComponent({
   name: "FolderTreeNode",
@@ -49,24 +49,13 @@ export default defineComponent({
     ...mapState(usePersonaStore, ["expandedFolderIds"]),
   },
   methods: {
-    ...mapActions(usePersonaStore, [
-      "toggleFolderExpansion",
-      "setFolderExpansion",
-    ]),
+    ...mapActions(usePersonaStore, ["toggleFolderExpansion", "setFolderExpansion"]),
 
-    handleContextMenu(event: {
-      event: MouseEvent;
-      folder: FolderTreeNodeType;
-    }) {
+    handleContextMenu(event: { event: MouseEvent; folder: FolderTreeNodeType }) {
       this.$emit("folder-context-menu", event);
     },
 
-    handleItemDropped(data: {
-      item_id: string;
-      item_type: string;
-      target_folder_id: string | null;
-      source_data: any;
-    }) {
+    handleItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data: any }) {
       if (data.item_type === "persona") {
         this.$emit("persona-dropped", {
           persona_id: data.item_id,

@@ -1042,13 +1042,10 @@
 </template>
 
 <script lang="ts">
-import axios from "@/utils/request";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
 import { defineComponent } from "vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
+import axios from "@/utils/request";
 
 // ---- Type definitions ----
 
@@ -1427,10 +1424,10 @@ export default defineComponent({
     },
 
     groupSelectOptions() {
-      return this.groups.map(g => ({
+      return this.groups.map((g) => ({
         label: `${g.name} (${g.umo_count} 个会话)`,
         value: g,
-      }))
+      }));
     },
 
     groupOptions() {
@@ -1472,18 +1469,14 @@ export default defineComponent({
     filteredUnselectedUmos(): string[] {
       if (!this.groupMemberSearch) return this.unselectedUmos;
       const search = this.groupMemberSearch.toLowerCase();
-      return this.unselectedUmos.filter((u: string) =>
-        u.toLowerCase().includes(search),
-      );
+      return this.unselectedUmos.filter((u: string) => u.toLowerCase().includes(search));
     },
 
     // 穿梭框：过滤后的已选中列表
     filteredSelectedUmos(): string[] {
       if (!this.groupSelectedSearch) return this.editingGroup.umos || [];
       const search = this.groupSelectedSearch.toLowerCase();
-      return (this.editingGroup.umos || []).filter((u: string) =>
-        u.toLowerCase().includes(search),
-      );
+      return (this.editingGroup.umos || []).filter((u: string) => u.toLowerCase().includes(search));
     },
   },
 
@@ -1535,15 +1528,11 @@ export default defineComponent({
           this.availablePlugins = data.available_plugins || [];
           this.availableKbs = data.available_kbs || [];
         } else {
-          this.showError(
-            resp.message || this.tm("messages.loadError"),
-          );
+          this.showError(resp.message || this.tm("messages.loadError"));
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.loadError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.loadError"));
       }
       this.loading = false;
     },
@@ -1569,15 +1558,11 @@ export default defineComponent({
         if (resp.status === "ok") {
           // 过滤掉已有规则的 umo
           const existingUmos = new Set(this.rulesList.map((r: SessionRuleItem) => r.umo));
-          this.availableUmos = resp.data.umos.filter(
-            (umo: string) => !existingUmos.has(umo),
-          );
+          this.availableUmos = resp.data.umos.filter((umo: string) => !existingUmos.has(umo));
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.loadError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.loadError"));
       }
       this.loadingUmos = false;
     },
@@ -1590,9 +1575,9 @@ export default defineComponent({
     hasProviderConfig(rules: SessionRules | undefined | null): boolean {
       return (
         rules != null &&
-        (rules["provider_perf_chat_completion"] ||
-          rules["provider_perf_speech_to_text"] ||
-          rules["provider_perf_text_to_speech"])
+        (rules.provider_perf_chat_completion ||
+          rules.provider_perf_speech_to_text ||
+          rules.provider_perf_text_to_speech)
       );
     },
 
@@ -1638,15 +1623,9 @@ export default defineComponent({
 
       // 初始化 Provider 配置
       this.providerConfig = {
-        chat_completion:
-          (this.editingRules["provider_perf_chat_completion"] as string) ||
-          FOLLOW_CONFIG_VALUE,
-        speech_to_text:
-          (this.editingRules["provider_perf_speech_to_text"] as string) ||
-          FOLLOW_CONFIG_VALUE,
-        text_to_speech:
-          (this.editingRules["provider_perf_text_to_speech"] as string) ||
-          FOLLOW_CONFIG_VALUE,
+        chat_completion: (this.editingRules.provider_perf_chat_completion as string) || FOLLOW_CONFIG_VALUE,
+        speech_to_text: (this.editingRules.provider_perf_speech_to_text as string) || FOLLOW_CONFIG_VALUE,
+        text_to_speech: (this.editingRules.provider_perf_text_to_speech as string) || FOLLOW_CONFIG_VALUE,
       };
 
       // 初始化插件配置
@@ -1695,9 +1674,7 @@ export default defineComponent({
           this.editingRules.session_service_config = config;
 
           // 更新或添加到列表
-          const item = this.rulesList.find(
-            (u: SessionRuleItem) => u.umo === this.selectedUmo!.umo,
-          );
+          const item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.selectedUmo!.umo);
           if (item) {
             item.rules = { ...item.rules, session_service_config: config as unknown as SessionServiceConfig };
           } else {
@@ -1711,15 +1688,11 @@ export default defineComponent({
             });
           }
         } else {
-          this.showError(
-            resp.message || this.tm("messages.saveError"),
-          );
+          this.showError(resp.message || this.tm("messages.saveError"));
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.saveError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.saveError"));
       }
       this.saving = false;
     },
@@ -1731,11 +1704,7 @@ export default defineComponent({
       try {
         const updateTasks: Promise<unknown>[] = [];
         const deleteTasks: Promise<unknown>[] = [];
-        const providerTypes = [
-          "chat_completion",
-          "speech_to_text",
-          "text_to_speech",
-        ] as const;
+        const providerTypes = ["chat_completion", "speech_to_text", "text_to_speech"] as const;
 
         for (const type of providerTypes) {
           const value = this.providerConfig[type] as string;
@@ -1792,9 +1761,7 @@ export default defineComponent({
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.saveError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.saveError"));
       }
       this.saving = false;
     },
@@ -1811,42 +1778,41 @@ export default defineComponent({
 
         // 分组模式：批量下发给所有成员
         if (this.selectedUmo.isGroup) {
-          const umos = this.selectedUmo.groupUmos
-          let successCount = 0
+          const umos = this.selectedUmo.groupUmos;
+          let successCount = 0;
           for (const umo of umos) {
             try {
               if (config.enabled_plugins.length === 0 && config.disabled_plugins.length === 0) {
-                await axios.post('/api/session/delete-rule', { umo, rule_key: 'session_plugin_config' })
+                await axios.post("/api/session/delete-rule", { umo, rule_key: "session_plugin_config" });
               } else {
-                await axios.post('/api/session/update-rule', { umo, rule_key: 'session_plugin_config', rule_value: config })
+                await axios.post("/api/session/update-rule", {
+                  umo,
+                  rule_key: "session_plugin_config",
+                  rule_value: config,
+                });
               }
-              successCount++
+              successCount++;
             } catch (e) {
-              console.error(`更新 ${umo} 插件配置失败:`, e)
+              console.error(`更新 ${umo} 插件配置失败:`, e);
             }
           }
           if (!this._batchSaving) {
-            this.showSuccess(`已更新 ${successCount}/${umos.length} 个会话的插件配置`)
-            await this.loadData()
-            this.saving = false
+            this.showSuccess(`已更新 ${successCount}/${umos.length} 个会话的插件配置`);
+            await this.loadData();
+            this.saving = false;
           }
-          return
+          return;
         }
 
         // 如果两个列表都为空，删除配置
-        if (
-          config.enabled_plugins.length === 0 &&
-          config.disabled_plugins.length === 0
-        ) {
+        if (config.enabled_plugins.length === 0 && config.disabled_plugins.length === 0) {
           if (this.editingRules.session_plugin_config) {
             await axios.post("/api/session/delete-rule", {
               umo: this.selectedUmo.umo,
               rule_key: "session_plugin_config",
             });
             delete this.editingRules.session_plugin_config;
-            const item = this.rulesList.find(
-              (u: SessionRuleItem) => u.umo === this.selectedUmo.umo,
-            );
+            const item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.selectedUmo.umo);
             if (item) delete item.rules!.session_plugin_config;
           }
           this.showSuccess(this.tm("messages.saveSuccess"));
@@ -1862,9 +1828,7 @@ export default defineComponent({
             this.showSuccess(this.tm("messages.saveSuccess"));
             this.editingRules.session_plugin_config = config;
 
-            const item = this.rulesList.find(
-              (u: SessionRuleItem) => u.umo === this.selectedUmo.umo,
-            );
+            const item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.selectedUmo.umo);
             if (item) {
               item.rules!.session_plugin_config = config;
             } else {
@@ -1877,16 +1841,12 @@ export default defineComponent({
               });
             }
           } else {
-            this.showError(
-              resp.message || this.tm("messages.saveError"),
-            );
+            this.showError(resp.message || this.tm("messages.saveError"));
           }
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.saveError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.saveError"));
       }
       this.saving = false;
     },
@@ -1904,26 +1864,26 @@ export default defineComponent({
 
         // 分组模式：批量下发给所有成员
         if (this.selectedUmo.isGroup) {
-          const umos = this.selectedUmo.groupUmos
-          let successCount = 0
+          const umos = this.selectedUmo.groupUmos;
+          let successCount = 0;
           for (const umo of umos) {
             try {
               if (config.kb_ids.length === 0) {
-                await axios.post('/api/session/delete-rule', { umo, rule_key: 'kb_config' })
+                await axios.post("/api/session/delete-rule", { umo, rule_key: "kb_config" });
               } else {
-                await axios.post('/api/session/update-rule', { umo, rule_key: 'kb_config', rule_value: config })
+                await axios.post("/api/session/update-rule", { umo, rule_key: "kb_config", rule_value: config });
               }
-              successCount++
+              successCount++;
             } catch (e) {
-              console.error(`更新 ${umo} 知识库配置失败:`, e)
+              console.error(`更新 ${umo} 知识库配置失败:`, e);
             }
           }
           if (!this._batchSaving) {
-            this.showSuccess(`已更新 ${successCount}/${umos.length} 个会话的知识库配置`)
-            await this.loadData()
-            this.saving = false
+            this.showSuccess(`已更新 ${successCount}/${umos.length} 个会话的知识库配置`);
+            await this.loadData();
+            this.saving = false;
           }
-          return
+          return;
         }
 
         // 如果 kb_ids 为空，删除配置
@@ -1934,9 +1894,7 @@ export default defineComponent({
               rule_key: "kb_config",
             });
             delete this.editingRules.kb_config;
-            const item = this.rulesList.find(
-              (u: SessionRuleItem) => u.umo === this.selectedUmo.umo,
-            );
+            const item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.selectedUmo.umo);
             if (item) delete item.rules!.kb_config;
           }
           this.showSuccess(this.tm("messages.saveSuccess"));
@@ -1952,9 +1910,7 @@ export default defineComponent({
             this.showSuccess(this.tm("messages.saveSuccess"));
             this.editingRules.kb_config = config;
 
-            const item = this.rulesList.find(
-              (u: SessionRuleItem) => u.umo === this.selectedUmo.umo,
-            );
+            const item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.selectedUmo.umo);
             if (item) {
               item.rules!.kb_config = config;
             } else {
@@ -1967,16 +1923,12 @@ export default defineComponent({
               });
             }
           } else {
-            this.showError(
-              resp.message || this.tm("messages.saveError"),
-            );
+            this.showError(resp.message || this.tm("messages.saveError"));
           }
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.saveError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.saveError"));
       }
       this.saving = false;
     },
@@ -1999,9 +1951,7 @@ export default defineComponent({
         if (resp.status === "ok") {
           this.showSuccess(this.tm("messages.deleteSuccess"));
           // 从列表中移除
-          const index = this.rulesList.findIndex(
-            (u: SessionRuleItem) => u.umo === this.deleteTarget!.umo,
-          );
+          const index = this.rulesList.findIndex((u: SessionRuleItem) => u.umo === this.deleteTarget!.umo);
           if (index > -1) {
             this.rulesList.splice(index, 1);
           }
@@ -2010,15 +1960,11 @@ export default defineComponent({
           // 重新加载数据以更新 totalItems
           await this.loadData();
         } else {
-          this.showError(
-            resp.message || this.tm("messages.deleteError"),
-          );
+          this.showError(resp.message || this.tm("messages.deleteError"));
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.deleteError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.deleteError"));
       }
       this.deleting = false;
     },
@@ -2041,23 +1987,17 @@ export default defineComponent({
         const resp = response.data as ApiResponse<BatchDeleteData>;
         if (resp.status === "ok") {
           const data = resp.data;
-          this.showSuccess(
-            data.message || this.tm("messages.batchDeleteSuccess"),
-          );
+          this.showSuccess(data.message || this.tm("messages.batchDeleteSuccess"));
           this.batchDeleteDialog = false;
           this.selectedItems = [];
           // 重新加载数据
           await this.loadData();
         } else {
-          this.showError(
-            resp.message || this.tm("messages.batchDeleteError"),
-          );
+          this.showError(resp.message || this.tm("messages.batchDeleteError"));
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.batchDeleteError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.batchDeleteError"));
       }
       this.deleting = false;
     },
@@ -2088,8 +2028,7 @@ export default defineComponent({
 
     openQuickEditName(item: SessionRuleItem): void {
       this.quickEditNameTarget = item;
-      this.quickEditNameValue =
-        item.rules?.session_service_config?.custom_name || "";
+      this.quickEditNameValue = item.rules?.session_service_config?.custom_name || "";
       this.quickEditNameDialog = true;
     },
 
@@ -2099,8 +2038,7 @@ export default defineComponent({
       this.saving = true;
       try {
         // 获取现有的 session_service_config 或创建新的
-        const existingConfig =
-          this.quickEditNameTarget.rules?.session_service_config || ({} as SessionServiceConfig);
+        const existingConfig = this.quickEditNameTarget.rules?.session_service_config || ({} as SessionServiceConfig);
         const config: Record<string, unknown> = {
           session_enabled: existingConfig.session_enabled !== false,
           llm_enabled: existingConfig.llm_enabled !== false,
@@ -2126,9 +2064,7 @@ export default defineComponent({
           this.showSuccess(this.tm("messages.saveSuccess"));
 
           // 更新或添加到列表
-          const item = this.rulesList.find(
-            (u: SessionRuleItem) => u.umo === this.quickEditNameTarget!.umo,
-          );
+          const item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.quickEditNameTarget!.umo);
           if (item) {
             if (!item.rules) item.rules = {};
             item.rules.session_service_config = config as unknown as SessionServiceConfig;
@@ -2148,15 +2084,11 @@ export default defineComponent({
           this.quickEditNameTarget = null;
           this.quickEditNameValue = "";
         } else {
-          this.showError(
-            resp.message || this.tm("messages.saveError"),
-          );
+          this.showError(resp.message || this.tm("messages.saveError"));
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.saveError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.saveError"));
       }
       this.saving = false;
     },
@@ -2193,9 +2125,7 @@ export default defineComponent({
           if (this.batchTtsStatus !== null) {
             serviceData.tts_enabled = this.batchTtsStatus;
           }
-          tasks.push(
-            axios.post("/api/session/batch-update-service", serviceData),
-          );
+          tasks.push(axios.post("/api/session/batch-update-service", serviceData));
         }
 
         if (this.batchChatProvider !== null) {
@@ -2265,9 +2195,7 @@ export default defineComponent({
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.batchUpdateError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.batchUpdateError"));
       }
       this.batchUpdating = false;
     },
@@ -2385,16 +2313,13 @@ export default defineComponent({
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.saveGroupError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.saveGroupError"));
       }
     },
 
     async deleteGroup(group: SessionGroup): Promise<void> {
       const message = this.tm("groups.deleteConfirm", { name: group.name });
-      if (!(await askForConfirmationDialog(message, this.confirmDialog)))
-        return;
+      if (!(await askForConfirmationDialog(message, this.confirmDialog))) return;
 
       try {
         const response = await axios.post("/api/session/group/delete", {
@@ -2409,9 +2334,7 @@ export default defineComponent({
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.deleteGroupError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.deleteGroupError"));
       }
     },
 
@@ -2444,9 +2367,7 @@ export default defineComponent({
         }
       } catch (error: unknown) {
         const e = asCatchError(error);
-        this.showError(
-          e.response?.data?.message || this.tm("messages.addToGroupError"),
-        );
+        this.showError(e.response?.data?.message || this.tm("messages.addToGroupError"));
       }
     },
   },

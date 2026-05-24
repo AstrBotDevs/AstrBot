@@ -94,7 +94,6 @@
   },
   "messages": {
     "loadFailed": "Failed to load tasks",
-    "updateSuccess": "Updated successfully",
     "updateFailed": "Failed to update",
     "updateSuccess": "Saved successfully",
     "deleteSuccess": "Deleted",

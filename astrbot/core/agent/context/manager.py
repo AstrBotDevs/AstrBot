@@ -129,7 +129,12 @@ class ContextManager:
             return messages
 
     async def _run_compression(
-        self, messages: list[Message], token_count_before: int
+        self,
+        messages: list[Message],
+        token_count_before: int | None = None,
+        *,
+        prev_tokens: int | None = None,
+        event=None,
     ) -> list[Message]:
         """Compress/truncate the messages.
 
@@ -141,6 +146,13 @@ class ContextManager:
             The compressed/truncated message list.
 
         """
+        if token_count_before is None:
+            token_count_before = (
+                prev_tokens
+                if prev_tokens is not None
+                else self.token_counter.count_tokens(messages)
+            )
+
         logger.debug("Compress triggered, starting compression...")
 
         self._compression_count += 1

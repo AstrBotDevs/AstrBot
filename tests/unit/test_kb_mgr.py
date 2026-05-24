@@ -51,6 +51,7 @@ def mock_kb_db():
     db.get_db = MagicMock()
     db.initialize = AsyncMock()
     db.migrate_to_v1 = AsyncMock()
+    db.migrate_to_v2 = AsyncMock()
     db.list_kbs = AsyncMock(return_value=[])
     db.get_kb_by_id = AsyncMock()
     return db
@@ -156,6 +157,7 @@ async def test_manager_initialize_creates_db_and_loads_kbs(
         mock_db_cls.assert_called_once()
         mock_kb_db.initialize.assert_awaited_once()
         mock_kb_db.migrate_to_v1.assert_awaited_once()
+        mock_kb_db.migrate_to_v2.assert_awaited_once()
         mock_kb_db.list_kbs.assert_awaited_once()
         assert mgr.retrieval_manager is mock_retrieval
 

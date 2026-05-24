@@ -183,6 +183,14 @@ function buildFallbackCss() {
   );
 }
 
+function formatGeneratedCss(css) {
+  return css
+    .replace(/\r\n/g, "\n")
+    .replace(/font: normal normal normal 24px\/1/g, "font: normal normal normal 24px / 1")
+    .replace(/^(\.mdi-[^{,]+), (\.mdi-[^{]+ \{)$/gm, "$1,\n$2")
+    .trimEnd();
+}
+
 // ── Fallback: copy original full MDI font if subsetting fails ───────────────
 function fallbackToFullFont(reason) {
   console.warn(`\n⚠️  Subsetting failed: ${reason}`);
@@ -196,7 +204,7 @@ function fallbackToFullFont(reason) {
     copyFileSync(MDI_WOFF_PATH, join(OUT_DIR, "materialdesignicons-webfont-subset.woff"));
   }
 
-  writeFileSync(join(OUT_DIR, "materialdesignicons-subset.css"), buildFallbackCss());
+  writeFileSync(join(OUT_DIR, "materialdesignicons-subset.css"), `${formatGeneratedCss(buildFallbackCss())}\n`);
 
   const size = existsSync(MDI_WOFF2_PATH) ? statSync(MDI_WOFF2_PATH).size : 0;
   console.warn(`⚠️  Fallback complete: using full font (${(size / 1024).toFixed(1)} KB woff2)`);
@@ -275,8 +283,9 @@ export async function runMdiSubset() {
 
 @font-face {
   font-family: "Material Design Icons";
-  src: url("./materialdesignicons-webfont-subset.woff2") format("woff2"),
-       url("./materialdesignicons-webfont-subset.woff") format("woff");
+  src:
+    url("./materialdesignicons-webfont-subset.woff2") format("woff2"),
+    url("./materialdesignicons-webfont-subset.woff") format("woff");
   font-weight: normal;
   font-style: normal;
 }
@@ -284,7 +293,7 @@ export async function runMdiSubset() {
 .mdi:before,
 .mdi-set {
   display: inline-block;
-  font: normal normal normal 24px/1 "Material Design Icons";
+  font: normal normal normal 24px / 1 "Material Design Icons";
   font-size: inherit;
   text-rendering: auto;
   line-height: inherit;
@@ -307,7 +316,7 @@ export async function runMdiSubset() {
     }
 
     const outCSS = join(OUT_DIR, "materialdesignicons-subset.css");
-    writeFileSync(outCSS, css);
+    writeFileSync(outCSS, `${formatGeneratedCss(css)}\n`);
 
     // Report
     const _origSize = statSync(MDI_TTF_PATH).size;

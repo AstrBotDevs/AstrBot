@@ -240,14 +240,15 @@ def _sanitize_skill_display_name(name: str) -> str:
 def _build_skill_read_command_example(path: str) -> str:
     if path == "<skills_root>/<skill_name>/SKILL.md":
         return f"cat {path}"
-    
+
     # 命令选择基于运行时 shell，而不是路径格式
     # 修复 #6477：在 Linux 容器中，即使路径是 Windows 格式（挂载路径），
     # 也应该使用 cat 命令，但需要转换路径格式（\ → /）
     if os.name == "nt" and _is_windows_prompt_path(path):
         # Windows 系统上的 Windows 路径：使用 type 命令
         command = "type"
-        path_arg = f'"{os.path.normpath(path)}"'
+        normalized_path = path.replace("\\", "/")
+        path_arg = f'"{normalized_path}"'
     else:
         # 非Windows 系统：使用 cat 命令
         # 如果路径是 Windows 格式，转换反斜杠为正斜杠
@@ -257,7 +258,7 @@ def _build_skill_read_command_example(path: str) -> str:
             path_arg = shlex.quote(path.replace("\\", "/"))
         else:
             path_arg = shlex.quote(path)
-    
+
     return f"{command} {path_arg}"
 
 
@@ -356,13 +357,34 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
 
 class SkillManager:
     def __init__(
-        self, skills_root: str | None = None, workspace_skills_root: str | None = None
+        self,
+        skills_root: str | None = None,
+        workspace_skills_root: str | None = None,
+        plugins_root: str | None = None,
+        astrbot_paths: AstrbotPaths | None = None,
     ) -> None:
-        self.skills_root = skills_root or get_astrbot_skills_path()
         self.workspace_skills_root = workspace_skills_root
-        data_path = Path(get_astrbot_data_path())
-        self.config_path = str(data_path / SKILLS_CONFIG_FILENAME)
-        self.sandbox_skills_cache_path = str(data_path / SANDBOX_SKILLS_CACHE_FILENAME)
+        if astrbot_paths is not None:
+            self.skills_root = skills_root or str(astrbot_paths.skills)
+            self.plugins_root = plugins_root or str(
+                getattr(
+                    astrbot_paths,
+                    "plugins",
+                    Path(astrbot_paths.data) / "plugins",
+                ),
+            )
+            self.config_path = str(astrbot_paths.config / SKILLS_CONFIG_FILENAME)
+            self.sandbox_skills_cache_path = str(
+                astrbot_paths.data / SANDBOX_SKILLS_CACHE_FILENAME,
+            )
+        else:
+            self.skills_root = skills_root or get_astrbot_skills_path()
+            self.plugins_root = plugins_root or get_astrbot_plugin_path()
+            data_path = Path(get_astrbot_data_path())
+            self.config_path = str(data_path / SKILLS_CONFIG_FILENAME)
+            self.sandbox_skills_cache_path = str(
+                data_path / SANDBOX_SKILLS_CACHE_FILENAME,
+            )
         os.makedirs(self.skills_root, exist_ok=True)
         if self.workspace_skills_root:
             os.makedirs(self.workspace_skills_root, exist_ok=True)

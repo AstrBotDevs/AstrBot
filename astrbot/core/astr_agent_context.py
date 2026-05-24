@@ -1,11 +1,15 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.star.context import Context
+
+if TYPE_CHECKING:
+    from astrbot.core.star.context import Context
 
 
 @dataclass

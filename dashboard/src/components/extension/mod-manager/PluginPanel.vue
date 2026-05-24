@@ -1,93 +1,90 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { usePluginConfigCache } from '@/composables/usePluginConfigCache'
-import { useModuleI18n } from '@/i18n/composables'
-import type { PluginPanelTab, PluginSummary } from './types'
-
-import PluginInfoPanel from './PluginInfoPanel.vue'
-import PluginConfigPanel from './PluginConfigPanel.vue'
-import PluginOverviewPanel from './PluginOverviewPanel.vue'
-import PluginChangelogPanel from './PluginChangelogPanel.vue'
-import PluginWelcomePanel from './PluginWelcomePanel.vue'
-import GlobalPanel from './GlobalPanel.vue'
+import { computed, ref, watch } from "vue";
+import { usePluginConfigCache } from "@/composables/usePluginConfigCache";
+import { useModuleI18n } from "@/i18n/composables";
+import GlobalPanel from "./GlobalPanel.vue";
+import PluginChangelogPanel from "./PluginChangelogPanel.vue";
+import PluginConfigPanel from "./PluginConfigPanel.vue";
+import PluginInfoPanel from "./PluginInfoPanel.vue";
+import PluginOverviewPanel from "./PluginOverviewPanel.vue";
+import PluginWelcomePanel from "./PluginWelcomePanel.vue";
+import type { PluginPanelTab, PluginSummary } from "./types";
 
 const props = defineProps<{
-  plugin: PluginSummary | null
-  activeTab?: PluginPanelTab
-  excludedTab?: PluginPanelTab | null
-}>()
+  plugin: PluginSummary | null;
+  activeTab?: PluginPanelTab;
+  excludedTab?: PluginPanelTab | null;
+}>();
 
 const emit = defineEmits<{
-  (e: 'update:activeTab', tab: PluginPanelTab): void
-  (e: 'action-update', name: string): void
-  (e: 'config-saved', pluginName: string): void
-  (e: 'detach-tab', tab: PluginPanelTab): void
-}>()
+  (e: "update:activeTab", tab: PluginPanelTab): void;
+  (e: "action-update", name: string): void;
+  (e: "config-saved", pluginName: string): void;
+  (e: "detach-tab", tab: PluginPanelTab): void;
+}>();
 
-const cache = usePluginConfigCache()
-const { tm } = useModuleI18n('features/extension')
+const cache = usePluginConfigCache();
+const { tm } = useModuleI18n("features/extension");
 
 // All tab definitions in display order
 const allTabs: { value: PluginPanelTab; labelKey: string }[] = [
-  { value: 'info', labelKey: 'modManager.panelTabs.info' },
-  { value: 'config', labelKey: 'modManager.panelTabs.config' },
-  { value: 'overview', labelKey: 'modManager.panelTabs.overview' },
-  { value: 'changelog', labelKey: 'modManager.panelTabs.changelog' },
-  { value: 'reserved', labelKey: 'modManager.panelTabs.reserved' },
-]
+  { value: "info", labelKey: "modManager.panelTabs.info" },
+  { value: "config", labelKey: "modManager.panelTabs.config" },
+  { value: "overview", labelKey: "modManager.panelTabs.overview" },
+  { value: "changelog", labelKey: "modManager.panelTabs.changelog" },
+  { value: "reserved", labelKey: "modManager.panelTabs.reserved" },
+];
 
 // Visible tabs (excluding currently detached tab)
-const visibleTabs = computed(() =>
-  allTabs.filter((t) => t.value !== props.excludedTab)
-)
+const visibleTabs = computed(() => allTabs.filter((t) => t.value !== props.excludedTab));
 
 const normalizeTab = (tab: PluginPanelTab | undefined): PluginPanelTab => {
   // Forward-compat: legacy behavior tab merged into info
-  if (tab === 'behavior') return 'info'
-  const resolved = tab ?? 'info'
+  if (tab === "behavior") return "info";
+  const resolved = tab ?? "info";
   // If the resolved tab is excluded, fall back to first visible
   if (resolved === props.excludedTab && visibleTabs.value.length > 0) {
-    return visibleTabs.value[0].value
+    return visibleTabs.value[0].value;
   }
-  return resolved
-}
+  return resolved;
+};
 
-const localActiveTab = ref<PluginPanelTab>(normalizeTab(props.activeTab))
+const localActiveTab = ref<PluginPanelTab>(normalizeTab(props.activeTab));
 
-const hasPlugin = computed(() => Boolean(props.plugin))
-const pluginName = computed(() => props.plugin?.name || '')
-const repoUrl = computed(() => props.plugin?.repo || null)
+const hasPlugin = computed(() => Boolean(props.plugin));
+const pluginName = computed(() => props.plugin?.name || "");
+const repoUrl = computed(() => props.plugin?.repo || null);
 
-const isTabActive = (tab: PluginPanelTab) => localActiveTab.value === tab
+const isTabActive = (tab: PluginPanelTab) => localActiveTab.value === tab;
 
 const setActiveTab = (tab: PluginPanelTab) => {
-  const next = normalizeTab(tab)
-  if (localActiveTab.value === next) return
-  localActiveTab.value = next
-  emit('update:activeTab', next)
-}
+  const next = normalizeTab(tab);
+  if (localActiveTab.value === next) return;
+  localActiveTab.value = next;
+  emit("update:activeTab", next);
+};
 
 const openRepoInNewTab = (url: string) => {
-  if (!url) return
-  window.open(url, '_blank')
-}
+  if (!url) return;
+  window.open(url, "_blank");
+};
 
 // --- Drag-to-detach with floating ghost (Chrome-like) ---
-const tabBarRef = ref<HTMLElement | null>(null)
-const isDraggingTab = ref(false)
+const tabBarRef = ref<HTMLElement | null>(null);
+const isDraggingTab = ref(false);
 
-const DRAG_START_THRESHOLD = 5 // px to enter drag mode
+const DRAG_START_THRESHOLD = 5; // px to enter drag mode
 
 function onTabPointerDown(tab: PluginPanelTab, e: PointerEvent) {
-  if (e.pointerType === 'mouse' && e.button !== 0) return
-  const startX = e.clientX
-  const startY = e.clientY
-  const target = (e.currentTarget as HTMLElement)
-  let dragging = false
-  let ghost: HTMLElement | null = null
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const target = e.currentTarget as HTMLElement;
+  let dragging = false;
+  let ghost: HTMLElement | null = null;
 
   const createGhost = () => {
-    ghost = target.cloneNode(true) as HTMLElement
+    ghost = target.cloneNode(true) as HTMLElement;
     ghost.style.cssText = `
       position: fixed;
       z-index: 9999;
@@ -101,110 +98,110 @@ function onTabPointerDown(tab: PluginPanelTab, e: PointerEvent) {
       white-space: nowrap;
       transition: transform 0.08s ease;
       transform: scale(1.05);
-    `
-    document.body.appendChild(ghost)
-    target.style.opacity = '0.35'
-    isDraggingTab.value = true
-  }
+    `;
+    document.body.appendChild(ghost);
+    target.style.opacity = "0.35";
+    isDraggingTab.value = true;
+  };
 
   const moveGhost = (cx: number, cy: number) => {
-    if (!ghost) return
-    ghost.style.left = `${cx - ghost.offsetWidth / 2}px`
-    ghost.style.top = `${cy - ghost.offsetHeight / 2}px`
-  }
+    if (!ghost) return;
+    ghost.style.left = `${cx - ghost.offsetWidth / 2}px`;
+    ghost.style.top = `${cy - ghost.offsetHeight / 2}px`;
+  };
 
   const removeGhost = () => {
     if (ghost) {
-      ghost.remove()
-      ghost = null
+      ghost.remove();
+      ghost = null;
     }
-    target.style.opacity = ''
-    isDraggingTab.value = false
-  }
+    target.style.opacity = "";
+    isDraggingTab.value = false;
+  };
 
   const onMove = (ev: PointerEvent) => {
-    const dx = ev.clientX - startX
-    const dy = ev.clientY - startY
+    const dx = ev.clientX - startX;
+    const dy = ev.clientY - startY;
     if (!dragging && Math.sqrt(dx * dx + dy * dy) > DRAG_START_THRESHOLD) {
-      dragging = true
-      createGhost()
+      dragging = true;
+      createGhost();
     }
     if (dragging) {
-      moveGhost(ev.clientX, ev.clientY)
+      moveGhost(ev.clientX, ev.clientY);
     }
-  }
+  };
 
   const onUp = (ev: PointerEvent) => {
-    cleanup()
-    if (!dragging) return // Was a normal click, let v-tabs handle it
+    cleanup();
+    if (!dragging) return; // Was a normal click, let v-tabs handle it
 
     // Determine if released below the tab bar
-    const tabBar = tabBarRef.value
+    const tabBar = tabBarRef.value;
     if (tabBar) {
-      const rect = tabBar.getBoundingClientRect()
+      const rect = tabBar.getBoundingClientRect();
       if (ev.clientY > rect.bottom) {
         // Released below tab bar → detach
-        emit('detach-tab', tab)
+        emit("detach-tab", tab);
       }
     }
-    removeGhost()
-  }
+    removeGhost();
+  };
 
   const onCancel = () => {
-    cleanup()
-    removeGhost()
-  }
+    cleanup();
+    removeGhost();
+  };
 
   const cleanup = () => {
-    document.removeEventListener('pointermove', onMove)
-    document.removeEventListener('pointerup', onUp)
-    document.removeEventListener('pointercancel', onCancel)
-  }
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    document.removeEventListener("pointercancel", onCancel);
+  };
 
-  document.addEventListener('pointermove', onMove)
-  document.addEventListener('pointerup', onUp)
-  document.addEventListener('pointercancel', onCancel)
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+  document.addEventListener("pointercancel", onCancel);
 }
 
 function handleDetachClick(tab: PluginPanelTab) {
-  emit('detach-tab', tab)
+  emit("detach-tab", tab);
 }
 
 watch(
   () => props.activeTab,
   (val) => {
-    if (!val) return
-    const next = normalizeTab(val)
+    if (!val) return;
+    const next = normalizeTab(val);
     if (next !== localActiveTab.value) {
-      localActiveTab.value = next
+      localActiveTab.value = next;
     }
-  }
-)
+  },
+);
 
 // When excluded tab changes, ensure current tab is still valid
 watch(
   () => props.excludedTab,
   () => {
     if (localActiveTab.value === props.excludedTab) {
-      const fallback = visibleTabs.value[0]?.value ?? 'info'
-      setActiveTab(fallback)
+      const fallback = visibleTabs.value[0]?.value ?? "info";
+      setActiveTab(fallback);
     }
-  }
-)
+  },
+);
 
 watch(
   () => props.plugin?.name,
   (name, prev) => {
-    if (!name) return
+    if (!name) return;
     if (name !== prev) {
       // Switch to info tab when selecting a new plugin
-      setActiveTab('info')
+      setActiveTab("info");
       // Prefetch config (non-blocking)
-      cache.prefetch(name)
+      cache.prefetch(name);
     }
   },
-  { immediate: true }
-)
+  { immediate: true },
+);
 </script>
 
 <template>

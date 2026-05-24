@@ -761,10 +761,10 @@
 </template>
 
 <script lang="ts">
-import axios from "@/utils/request";
 import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { normalizeTextInput } from "@/utils/inputValue";
+import axios from "@/utils/request";
 
 interface ProviderConfig {
   id: string;
@@ -866,103 +866,23 @@ export default {
         },
         {
           key: "animals",
-          emojis: [
-            "🐶",
-            "🐱",
-            "🐭",
-            "🐹",
-            "🐰",
-            "🦊",
-            "🐻",
-            "🐼",
-            "🐨",
-            "🐯",
-            "🦁",
-            "🐮",
-            "🐷",
-            "🐸",
-            "🐵",
-          ],
+          emojis: ["🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵"],
         },
         {
           key: "food",
-          emojis: [
-            "🍏",
-            "🍎",
-            "🍐",
-            "🍊",
-            "🍋",
-            "🍌",
-            "🍉",
-            "🍇",
-            "🍓",
-            "🍈",
-            "🍒",
-            "🍑",
-            "🥭",
-            "🍍",
-            "🥥",
-          ],
+          emojis: ["🍏", "🍎", "🍐", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🍈", "🍒", "🍑", "🥭", "🍍", "🥥"],
         },
         {
           key: "activities",
-          emojis: [
-            "⚽",
-            "🏀",
-            "🏈",
-            "⚾",
-            "🥎",
-            "🎾",
-            "🏐",
-            "🏉",
-            "🎱",
-            "🏓",
-            "🏸",
-            "🥅",
-            "🏒",
-            "🏑",
-            "🥍",
-          ],
+          emojis: ["⚽", "🏀", "🏈", "⚾", "🥎", "🎾", "🏐", "🏉", "🎱", "🏓", "🏸", "🥅", "🏒", "🏑", "🥍"],
         },
         {
           key: "travel",
-          emojis: [
-            "🚗",
-            "🚕",
-            "🚙",
-            "🚌",
-            "🚎",
-            "🏎️",
-            "🚓",
-            "🚑",
-            "🚒",
-            "🚐",
-            "🚚",
-            "🚛",
-            "🚜",
-            "🛴",
-            "🚲",
-          ],
+          emojis: ["🚗", "🚕", "🚙", "🚌", "🚎", "🏎️", "🚓", "🚑", "🚒", "🚐", "🚚", "🚛", "🚜", "🛴", "🚲"],
         },
         {
           key: "symbols",
-          emojis: [
-            "❤️",
-            "🧡",
-            "💛",
-            "💚",
-            "💙",
-            "💜",
-            "🖤",
-            "🤍",
-            "🤎",
-            "💔",
-            "❣️",
-            "💕",
-            "💞",
-            "💓",
-            "💗",
-          ],
+          emojis: ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗"],
         },
       ],
       showContentDialog: false,
@@ -1097,10 +1017,7 @@ export default {
       axios
         .get("/api/plugin/get?name=astrbot_plugin_knowledge_base")
         .then((response) => {
-          if (
-            response.data.status !== "ok" ||
-            response.data.data.length === 0
-          ) {
+          if (response.data.status !== "ok" || response.data.data.length === 0) {
             this.showSnackbar(this.tm("messages.pluginNotAvailable"), "error");
             this.installed = false;
             return;
@@ -1132,8 +1049,7 @@ export default {
         // 获取在线插件数据
         const onlineResponse = await axios.get("/api/plugin/market_list");
         if (onlineResponse.data.status === "ok") {
-          const knowledgeBasePlugin =
-            onlineResponse.data.data["astrbot_plugin_knowledge_base"];
+          const knowledgeBasePlugin = onlineResponse.data.data.astrbot_plugin_knowledge_base;
           if (knowledgeBasePlugin) {
             this.pluginLatestVersion = knowledgeBasePlugin.version || "未知";
 
@@ -1144,8 +1060,7 @@ export default {
               this.pluginCurrentVersion !== "未知" &&
               this.pluginLatestVersion !== "未知"
             ) {
-              this.pluginHasUpdate =
-                this.pluginCurrentVersion != this.pluginLatestVersion;
+              this.pluginHasUpdate = this.pluginCurrentVersion !== this.pluginLatestVersion;
             }
 
             if (this.pluginHasUpdate) {
@@ -1160,10 +1075,7 @@ export default {
               this.showSnackbar(this.tm("messages.pluginUpToDate"), "success");
             }
           } else {
-            this.showSnackbar(
-              this.tm("messages.pluginNotFoundInMarket"),
-              "warning",
-            );
+            this.showSnackbar(this.tm("messages.pluginNotFoundInMarket"), "warning");
           }
         } else {
           this.showSnackbar(this.tm("messages.checkUpdateFailed"), "error");
@@ -1191,10 +1103,7 @@ export default {
           // 刷新插件信息
           this.checkPlugin();
         } else {
-          this.showSnackbar(
-            response.data.message || this.tm("messages.updateFailed"),
-            "error",
-          );
+          this.showSnackbar(response.data.message || this.tm("messages.updateFailed"), "error");
         }
       } catch (error) {
         console.error("Error updating plugin:", error);
@@ -1215,10 +1124,7 @@ export default {
           if (response.data.status === "ok") {
             this.checkPlugin();
           } else {
-            this.showSnackbar(
-              response.data.message || this.tm("messages.installFailed"),
-              "error",
-            );
+            this.showSnackbar(response.data.message || this.tm("messages.installFailed"), "error");
           }
         })
         .catch((error) => {
@@ -1235,37 +1141,23 @@ export default {
         .get("/api/plug/alkaid/kb/collections")
         .then((response) => {
           if (response.data.status !== "ok") {
-            this.showSnackbar(
-              response.data.message ||
-                this.tm("messages.getKnowledgeBaseListFailed"),
-              "error",
-            );
+            this.showSnackbar(response.data.message || this.tm("messages.getKnowledgeBaseListFailed"), "error");
             return;
           }
           this.kbCollections = response.data.data;
         })
         .catch((error) => {
           console.error("Error fetching knowledge base collections:", error);
-          this.showSnackbar(
-            this.tm("messages.getKnowledgeBaseListFailed"),
-            "error",
-          );
+          this.showSnackbar(this.tm("messages.getKnowledgeBaseListFailed"), "error");
         });
     },
 
     createCollection(name: string, emoji: string, description: string) {
       // 如果 this.newKB.embedding_provider_id 是 Object
-      if (
-        this.newKB.embedding_provider_id &&
-        typeof this.newKB.embedding_provider_id === "object"
-      ) {
-        this.newKB.embedding_provider_id =
-          this.newKB.embedding_provider_id.id || "";
+      if (this.newKB.embedding_provider_id && typeof this.newKB.embedding_provider_id === "object") {
+        this.newKB.embedding_provider_id = this.newKB.embedding_provider_id.id || "";
       }
-      if (
-        this.newKB.rerank_provider_id &&
-        typeof this.newKB.rerank_provider_id === "object"
-      ) {
+      if (this.newKB.rerank_provider_id && typeof this.newKB.rerank_provider_id === "object") {
         this.newKB.rerank_provider_id = this.newKB.rerank_provider_id.id || "";
       }
       axios
@@ -1283,27 +1175,18 @@ export default {
             this.showCreateDialog = false;
             this.resetNewKB();
           } else {
-            this.showSnackbar(
-              response.data.message || this.tm("messages.createFailed"),
-              "error",
-            );
+            this.showSnackbar(response.data.message || this.tm("messages.createFailed"), "error");
           }
         })
         .catch((error) => {
           console.error("Error creating knowledge base collection:", error);
-          this.showSnackbar(
-            this.tm("messages.createKnowledgeBaseFailed"),
-            "error",
-          );
+          this.showSnackbar(this.tm("messages.createKnowledgeBaseFailed"), "error");
         });
     },
 
     submitCreateForm() {
       if (!this.newKB.name) {
-        this.showSnackbar(
-          this.tm("messages.pleaseEnterKnowledgeBaseName"),
-          "warning",
-        );
+        this.showSnackbar(this.tm("messages.pleaseEnterKnowledgeBaseName"), "warning");
         return;
       }
       this.createCollection(
@@ -1430,10 +1313,7 @@ export default {
             // 刷新知识库列表，获取更新的数量
             this.getKBCollections();
           } else {
-            this.showSnackbar(
-              response.data.message || this.tm("messages.uploadFailed"),
-              "error",
-            );
+            this.showSnackbar(response.data.message || this.tm("messages.uploadFailed"), "error");
           }
         })
         .catch((error) => {
@@ -1448,10 +1328,7 @@ export default {
     searchKnowledgeBase() {
       const query = normalizeTextInput(this.searchQuery).trim();
       if (!query) {
-        this.showSnackbar(
-          this.tm("messages.pleaseEnterSearchContent"),
-          "warning",
-        );
+        this.showSnackbar(this.tm("messages.pleaseEnterSearchContent"), "warning");
         return;
       }
 
@@ -1474,19 +1351,13 @@ export default {
               this.showSnackbar(this.tm("messages.noMatchingContent"), "info");
             }
           } else {
-            this.showSnackbar(
-              response.data.message || this.tm("messages.searchFailed"),
-              "error",
-            );
+            this.showSnackbar(response.data.message || this.tm("messages.searchFailed"), "error");
             this.searchResults = [];
           }
         })
         .catch((error) => {
           console.error("Error searching knowledge base:", error);
-          this.showSnackbar(
-            this.tm("messages.searchKnowledgeBaseFailed"),
-            "error",
-          );
+          this.showSnackbar(this.tm("messages.searchKnowledgeBaseFailed"), "error");
           this.searchResults = [];
         })
         .finally(() => {
@@ -1530,18 +1401,12 @@ export default {
             this.getKBCollections(); // 刷新列表
             this.showDeleteDialog = false;
           } else {
-            this.showSnackbar(
-              response.data.message || this.tm("messages.deleteFailed"),
-              "error",
-            );
+            this.showSnackbar(response.data.message || this.tm("messages.deleteFailed"), "error");
           }
         })
         .catch((error) => {
           console.error("Error deleting knowledge base:", error);
-          this.showSnackbar(
-            this.tm("messages.deleteKnowledgeBaseFailed"),
-            "error",
-          );
+          this.showSnackbar(this.tm("messages.deleteKnowledgeBaseFailed"), "error");
         })
         .finally(() => {
           this.deleting = false;
@@ -1560,27 +1425,18 @@ export default {
             this.embeddingProviderConfigs = response.data.data.filter(
               (provider) => provider.provider_type === "embedding",
             );
-            this.rerankProviderConfigs = response.data.data.filter(
-              (provider) => provider.provider_type === "rerank",
-            );
+            this.rerankProviderConfigs = response.data.data.filter((provider) => provider.provider_type === "rerank");
             this.llmProviderConfigs = response.data.data.filter(
               (provider) => provider.provider_type === "chat_completion",
             );
           } else {
-            this.showSnackbar(
-              response.data.message ||
-                this.tm("messages.getEmbeddingModelListFailed"),
-              "error",
-            );
+            this.showSnackbar(response.data.message || this.tm("messages.getEmbeddingModelListFailed"), "error");
             return [];
           }
         })
         .catch((error) => {
           console.error("Error fetching embedding providers:", error);
-          this.showSnackbar(
-            this.tm("messages.getEmbeddingModelListFailed"),
-            "error",
-          );
+          this.showSnackbar(this.tm("messages.getEmbeddingModelListFailed"), "error");
           return [];
         });
     },
@@ -1602,26 +1458,15 @@ export default {
         const payload = {
           url: this.importUrl,
           ...Object.fromEntries(
-            Object.entries(this.importOptions).filter(
-              ([_, v]) => v !== "" && v !== null && v !== undefined,
-            ),
+            Object.entries(this.importOptions).filter(([_, v]) => v !== "" && v !== null && v !== undefined),
           ),
         };
 
-        console.info(
-          "Starting URL import with payload:",
-          JSON.stringify(payload, null, 2),
-        );
-        const addTaskResponse = await axios.post(
-          "/api/plug/url_2_kb/add",
-          payload,
-        );
+        console.info("Starting URL import with payload:", JSON.stringify(payload, null, 2));
+        const addTaskResponse = await axios.post("/api/plug/url_2_kb/add", payload);
 
         if (!addTaskResponse.data.task_id) {
-          throw new Error(
-            addTaskResponse.data.message ||
-              "Failed to start import task: No task_id received.",
-          );
+          throw new Error(addTaskResponse.data.message || "Failed to start import task: No task_id received.");
         }
 
         const taskId = addTaskResponse.data.task_id;
@@ -1629,8 +1474,7 @@ export default {
       } catch (error: unknown) {
         let errorMessage = "An unknown error occurred.";
         if (axios.isAxiosError(error)) {
-          errorMessage =
-            error.response?.data?.message || error.message || errorMessage;
+          errorMessage = error.response?.data?.message || error.message || errorMessage;
         } else if (error instanceof Error) {
           errorMessage = error.message;
         }
@@ -1658,10 +1502,7 @@ export default {
             clearInterval(this.pollingInterval);
             this.pollingInterval = null;
             const failureReason = taskData.result || "Unknown reason.";
-            this.showSnackbar(
-              `${this.tm("importFromUrl.importFailed")}: ${failureReason}`,
-              "error",
-            );
+            this.showSnackbar(`${this.tm("importFromUrl.importFailed")}: ${failureReason}`, "error");
             this.importing = false;
           }
         } catch (error: unknown) {
@@ -1669,8 +1510,7 @@ export default {
           this.pollingInterval = null;
           let errorMessage = "An unknown error occurred during polling.";
           if (axios.isAxiosError(error)) {
-            errorMessage =
-              error.response?.data?.message || error.message || errorMessage;
+            errorMessage = error.response?.data?.message || error.message || errorMessage;
           } else if (error instanceof Error) {
             errorMessage = error.message;
           }
@@ -1707,17 +1547,13 @@ export default {
       // 3. Handle noise points
       if (result.noise_points && result.noise_points.length > 0) {
         result.noise_points.forEach((point, index) => {
-          const content =
-            typeof point === "object" && point.text ? point.text : point;
+          const content = typeof point === "object" && point.text ? point.text : point;
           chunks.push({ content: content, filename: `noise_${index + 1}.txt` });
         });
       }
 
       if (chunks.length === 0) {
-        this.showSnackbar(
-          "URL processed, but no text chunks were extracted.",
-          "info",
-        );
+        this.showSnackbar("URL processed, but no text chunks were extracted.", "info");
         this.importing = false;
         return;
       }
@@ -1736,15 +1572,9 @@ export default {
       }
 
       if (failCount === 0) {
-        this.showSnackbar(
-          this.tm("importFromUrl.allChunksUploaded"),
-          "success",
-        );
+        this.showSnackbar(this.tm("importFromUrl.allChunksUploaded"), "success");
       } else if (successCount > 0) {
-        this.showSnackbar(
-          "Import partially complete. See console for details.",
-          "warning",
-        );
+        this.showSnackbar("Import partially complete. See console for details.", "warning");
       } else {
         this.showSnackbar("Import failed. No chunks were uploaded.", "error");
       }
@@ -1764,22 +1594,15 @@ export default {
       if (this.importOptions.chunk_size && this.importOptions.chunk_size > 0) {
         formData.append("chunk_size", String(this.importOptions.chunk_size));
       }
-      if (
-        this.importOptions.chunk_overlap &&
-        this.importOptions.chunk_overlap >= 0
-      ) {
+      if (this.importOptions.chunk_overlap && this.importOptions.chunk_overlap >= 0) {
         formData.append("chunk_overlap", String(this.importOptions.chunk_overlap));
       }
 
-      const response = await axios.post(
-        "/api/plug/alkaid/kb/collection/add_file",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
+      const response = await axios.post("/api/plug/alkaid/kb/collection/add_file", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
         },
-      );
+      });
 
       if (response.data.status !== "ok") {
         throw new Error(response.data.message || "Chunk upload failed");

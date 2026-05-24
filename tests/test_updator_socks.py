@@ -1,3 +1,5 @@
+import ntpath
+import posixpath
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -122,6 +124,12 @@ class _FakeZipArchive:
     def namelist(self) -> list[str]:
         return self._names
 
+    def infolist(self) -> list[zipfile.ZipInfo]:
+        return [zipfile.ZipInfo(name) for name in self._names]
+
+    def extract(self, member: zipfile.ZipInfo, target_dir: str | Path) -> None:  # noqa: ARG002
+        return None
+
     def extractall(self, target_dir: str) -> None:  # noqa: ARG002
         return None
 
@@ -214,6 +222,33 @@ def _assert_unzip_file_windows_path_normalization(
     assert captured["listdir"] == expected_root
     assert captured["move"] == (expected_file, target_dir)
     assert captured["cleanup"] == expected_root
+
+
+def _assert_plugin_unzip_uses_normalized_staging_root(
+    captured: dict[str, object | None],
+    *,
+    target_dir: str,
+    archive_root: str,
+) -> None:
+    normalized_root = ntpath.normpath(archive_root)
+    portable_root = normalized_root.replace("\\", "/").strip("/")
+    listdir_path = str(captured["listdir"]).replace("\\", "/")
+    move_src, move_dst = captured["move"] or ("", "")
+    move_src_text = str(move_src).replace("\\", "/")
+    cleanup_path = str(captured["cleanup"]).replace("\\", "/")
+
+    assert captured["removed"] == "temp.zip"
+    assert ".demo." in listdir_path
+    assert ".extract" in listdir_path
+    if normalized_root == ".":
+        assert listdir_path.endswith(".extract")
+    else:
+        assert listdir_path.endswith(f".extract/{portable_root}")
+    assert move_src_text.startswith(f"{listdir_path.rstrip('/')}/")
+    assert move_src_text.endswith("/.dockerignore")
+    assert move_dst == target_dir
+    assert ".demo." in cleanup_path
+    assert cleanup_path.endswith(".extract")
 
 
 def _build_fake_httpx_module(state: _FakeAsyncClientState) -> SimpleNamespace:
@@ -722,7 +757,7 @@ def test_plugin_unzip_file_normalizes_windows_extended_length_paths(
         logger_method="info",
     )
 
-    _assert_unzip_file_windows_path_normalization(
+    _assert_plugin_unzip_uses_normalized_staging_root(
         captured, target_dir=target_dir, archive_root=archive_root
     )
 

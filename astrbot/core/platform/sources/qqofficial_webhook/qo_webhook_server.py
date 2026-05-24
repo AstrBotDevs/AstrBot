@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from typing import cast
 
 import quart
 from botpy import BotAPI, BotHttp, BotWebSocket, Client, ConnectionSession, Token
@@ -113,7 +114,7 @@ class QQOfficialWebhook:
             "request_path": getattr(request, "path", ""),
             "request_method": getattr(request, "method", ""),
         }
-        stopped = await self.platform.emit_raw_platform_event(msg, meta=context)
+        await self.platform.emit_raw_platform_event(msg, meta=context)
 
         if opcode == 13:
             # validation

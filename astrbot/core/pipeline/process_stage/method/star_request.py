@@ -4,7 +4,7 @@ import traceback
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from astrbot.core import logger
+from astrbot.core import astrbot_config, logger
 from astrbot.core.i18n import t
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.context import PipelineContext, call_event_hook, call_handler

@@ -97,11 +97,11 @@
 </template>
 
 <script setup lang="ts">
-import { resolveWebSocketUrl } from "@/utils/request";
-import { ref, computed, onBeforeUnmount, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useVADRecording } from "@/composables/useVADRecording";
-import SiriOrb from "./LiveOrb.vue";
 import { useCustomizerStore } from "@/stores/customizer";
+import { resolveWebSocketUrl } from "@/utils/request";
+import SiriOrb from "./LiveOrb.vue";
 
 const emit = defineEmits<{
   close: [];
@@ -183,8 +183,7 @@ const getIconColor = computed(() => {
 
 const orbEnergy = computed(() => {
   if (isPlaying.value) return botEnergy.value;
-  if (isSpeaking.value || isListening.value)
-    return vadRecording.audioEnergy.value;
+  if (isSpeaking.value || isListening.value) return vadRecording.audioEnergy.value;
   return 0;
 });
 
@@ -259,10 +258,7 @@ async function startLiveMode() {
           let base64 = "";
           const chunkSize = 0x8000; // 32KB chunks
           for (let i = 0; i < uint8.length; i += chunkSize) {
-            const chunk = uint8.subarray(
-              i,
-              Math.min(i + chunkSize, uint8.length),
-            );
+            const chunk = uint8.subarray(i, Math.min(i + chunkSize, uint8.length));
             base64 += String.fromCharCode.apply(null, Array.from(chunk));
           }
           base64 = btoa(base64);
@@ -410,7 +406,7 @@ function handleWebSocketMessage(event: MessageEvent) {
 
       case "error":
         console.error("[Live Mode] 错误:", message.data);
-        alert("处理出错: " + message.data);
+        alert(`处理出错: ${message.data}`);
         isProcessing.value = false;
         isListening.value = true;
         break;
@@ -457,9 +453,7 @@ async function processRawAudioQueue() {
 
       try {
         // 解码
-        const audioBuffer = await audioContext.decodeAudioData(
-          bytes.buffer as ArrayBuffer,
-        );
+        const audioBuffer = await audioContext.decodeAudioData(bytes.buffer as ArrayBuffer);
         audioBufferQueue.push(audioBuffer);
 
         // 如果当前没有播放，立即开始播放

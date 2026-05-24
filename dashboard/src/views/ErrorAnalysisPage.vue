@@ -211,352 +211,350 @@
 </template>
 
 <script setup>
-import axios from 'axios'
-import { EventSourcePolyfill } from 'event-source-polyfill'
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { EventSourcePolyfill } from "event-source-polyfill";
+import { onMounted, onUnmounted, ref, watch } from "vue";
+import axios, { resolveApiUrl } from "@/utils/request";
 
-const loadingRecords = ref(false)
-const savingSettings = ref(false)
-const manualRunningId = ref('')
-const records = ref([])
-const providerOptions = ref([])
-const pluginOptions = ref([])
-const statusFilter = ref('')
-const detailDialog = ref(false)
-const askDialog = ref(false)
-const activeRecord = ref(null)
-const question = ref('')
-const streamingAnswer = ref('')
-const asking = ref(false)
-const qaMessages = ref([])
-const snackbar = ref({ show: false, message: '', color: 'success' })
-let eventSource = null
-let eventRetryTimer = null
+const loadingRecords = ref(false);
+const savingSettings = ref(false);
+const manualRunningId = ref("");
+const records = ref([]);
+const providerOptions = ref([]);
+const pluginOptions = ref([]);
+const statusFilter = ref("");
+const detailDialog = ref(false);
+const askDialog = ref(false);
+const activeRecord = ref(null);
+const question = ref("");
+const streamingAnswer = ref("");
+const asking = ref(false);
+const qaMessages = ref([]);
+const snackbar = ref({ show: false, message: "", color: "success" });
+let eventSource = null;
+let eventRetryTimer = null;
 
 const settings = ref({
   auto_analyze: false,
   passive_record: true,
-  provider_id: '',
-  scope: 'all',
+  provider_id: "",
+  scope: "all",
   selected_plugins: [],
-  levels: ['ERROR', 'CRITICAL'],
+  levels: ["ERROR", "CRITICAL"],
   include_source_context: true,
-  dedupe_window_sec: 600
-})
+  dedupe_window_sec: 600,
+});
 
 const scopeOptions = [
-  { title: '全部', value: 'all' },
-  { title: '仅核心', value: 'core' },
-  { title: '全部插件', value: 'all_plugins' },
-  { title: '指定插件', value: 'selected_plugins' }
-]
+  { title: "全部", value: "all" },
+  { title: "仅核心", value: "core" },
+  { title: "全部插件", value: "all_plugins" },
+  { title: "指定插件", value: "selected_plugins" },
+];
 
 const statusOptions = [
-  { title: '分析中', value: 'analyzing' },
-  { title: '待分析', value: 'pending' },
-  { title: '已完成', value: 'done' },
-  { title: '失败', value: 'failed' },
-  { title: '已忽略', value: 'ignored' }
-]
+  { title: "分析中", value: "analyzing" },
+  { title: "待分析", value: "pending" },
+  { title: "已完成", value: "done" },
+  { title: "失败", value: "failed" },
+  { title: "已忽略", value: "ignored" },
+];
 
-function showMessage(message, color = 'success') {
-  snackbar.value = { show: true, message, color }
+function showMessage(message, color = "success") {
+  snackbar.value = { show: true, message, color };
 }
 
 function statusColor(status) {
   const map = {
-    pending: 'grey',
-    analyzing: 'blue',
-    done: 'success',
-    failed: 'error',
-    ignored: 'grey-darken-1'
-  }
-  return map[status] || 'grey'
+    pending: "grey",
+    analyzing: "blue",
+    done: "success",
+    failed: "error",
+    ignored: "grey-darken-1",
+  };
+  return map[status] || "grey";
 }
 
 function severityColor(severity) {
   const map = {
-    low: 'green',
-    medium: 'amber',
-    high: 'red',
-    critical: 'purple',
-    unknown: 'grey'
-  }
-  return map[severity] || 'grey'
+    low: "green",
+    medium: "amber",
+    high: "red",
+    critical: "purple",
+    unknown: "grey",
+  };
+  return map[severity] || "grey";
 }
 
 function statusLabel(status) {
   const map = {
-    pending: '待分析',
-    analyzing: '分析中',
-    done: '已完成',
-    failed: '失败',
-    ignored: '已忽略'
-  }
-  return map[status] || '未知'
+    pending: "待分析",
+    analyzing: "分析中",
+    done: "已完成",
+    failed: "失败",
+    ignored: "已忽略",
+  };
+  return map[status] || "未知";
 }
 
 function severityLabel(severity) {
   const map = {
-    low: '低',
-    medium: '中',
-    high: '高',
-    critical: '严重',
-    unknown: '未知'
-  }
-  return map[severity] || '未知'
+    low: "低",
+    medium: "中",
+    high: "高",
+    critical: "严重",
+    unknown: "未知",
+  };
+  return map[severity] || "未知";
 }
 
 function formatTime(ts) {
-  if (!ts) return '-'
-  return new Date(ts * 1000).toLocaleString()
+  if (!ts) return "-";
+  return new Date(ts * 1000).toLocaleString();
 }
 
 function formatAnalysis(analysis) {
-  if (!analysis) return ''
+  if (!analysis) return "";
   try {
-    return JSON.stringify(analysis, null, 2)
+    return JSON.stringify(analysis, null, 2);
   } catch {
-    return String(analysis || '')
+    return String(analysis || "");
   }
 }
 
 function upsertRecord(record) {
-  const index = records.value.findIndex(item => item.id === record.id)
+  const index = records.value.findIndex((item) => item.id === record.id);
   if (index === -1) {
-    records.value.unshift(record)
-    return
+    records.value.unshift(record);
+    return;
   }
-  records.value[index] = record
+  records.value[index] = record;
 }
 
 async function loadSettings() {
-  const res = await axios.get('/api/error-analysis/settings')
-  if (res.data.status === 'ok') {
-    settings.value = { ...settings.value, ...res.data.data }
+  const res = await axios.get("/api/error-analysis/settings");
+  if (res.data.status === "ok") {
+    settings.value = { ...settings.value, ...res.data.data };
   }
 }
 
 async function saveSettings() {
-  savingSettings.value = true
+  savingSettings.value = true;
   try {
-    const res = await axios.post('/api/error-analysis/settings', settings.value)
-    if (res.data.status === 'ok') {
-      settings.value = { ...settings.value, ...res.data.data }
-      showMessage('设置已保存')
+    const res = await axios.post("/api/error-analysis/settings", settings.value);
+    if (res.data.status === "ok") {
+      settings.value = { ...settings.value, ...res.data.data };
+      showMessage("设置已保存");
     } else {
-      showMessage(res.data.message || '保存设置失败', 'error')
+      showMessage(res.data.message || "保存设置失败", "error");
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || '保存设置失败', 'error')
+    showMessage(err.response?.data?.message || err.message || "保存设置失败", "error");
   } finally {
-    savingSettings.value = false
+    savingSettings.value = false;
   }
 }
 
 async function loadProviders() {
-  const res = await axios.get('/api/config/provider/list?provider_type=chat_completion')
-  if (res.data.status === 'ok' && Array.isArray(res.data.data)) {
-    providerOptions.value = res.data.data.map(item => ({
+  const res = await axios.get("/api/config/provider/list?provider_type=chat_completion");
+  if (res.data.status === "ok" && Array.isArray(res.data.data)) {
+    providerOptions.value = res.data.data.map((item) => ({
       title: item.id,
-      value: item.id
-    }))
+      value: item.id,
+    }));
   }
 }
 
 async function loadPlugins() {
-  const res = await axios.get('/api/plugin/get')
-  if (res.data.status === 'ok' && Array.isArray(res.data.data)) {
-    pluginOptions.value = res.data.data.map(item => ({
+  const res = await axios.get("/api/plugin/get");
+  if (res.data.status === "ok" && Array.isArray(res.data.data)) {
+    pluginOptions.value = res.data.data.map((item) => ({
       title: item.name,
-      value: item.name
-    }))
+      value: item.name,
+    }));
   }
 }
 
 async function loadRecords() {
-  loadingRecords.value = true
+  loadingRecords.value = true;
   try {
-    const params = {}
+    const params = {};
     if (statusFilter.value) {
-      params.status = statusFilter.value
+      params.status = statusFilter.value;
     }
-    const res = await axios.get('/api/error-analysis/records', { params })
-    if (res.data.status === 'ok') {
-      records.value = res.data.data.items || []
+    const res = await axios.get("/api/error-analysis/records", { params });
+    if (res.data.status === "ok") {
+      records.value = res.data.data.items || [];
     }
   } finally {
-    loadingRecords.value = false
+    loadingRecords.value = false;
   }
 }
 
 async function reanalyze(record) {
-  manualRunningId.value = record.id
+  manualRunningId.value = record.id;
   try {
-    const res = await axios.post('/api/error-analysis/analyze', {
+    const res = await axios.post("/api/error-analysis/analyze", {
       record_id: record.id,
-      provider_id: settings.value.provider_id || undefined
-    })
-    if (res.data.status === 'ok') {
-      upsertRecord(res.data.data)
-      showMessage('已重新分析')
+      provider_id: settings.value.provider_id || undefined,
+    });
+    if (res.data.status === "ok") {
+      upsertRecord(res.data.data);
+      showMessage("已重新分析");
     } else {
-      showMessage(res.data.message || '分析失败', 'error')
+      showMessage(res.data.message || "分析失败", "error");
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || '分析失败', 'error')
+    showMessage(err.response?.data?.message || err.message || "分析失败", "error");
   } finally {
-    manualRunningId.value = ''
+    manualRunningId.value = "";
   }
 }
 
 async function ignoreRecord(record) {
   try {
-    const res = await axios.post('/api/error-analysis/ignore', { record_id: record.id })
-    if (res.data.status === 'ok') {
-      upsertRecord(res.data.data)
-      showMessage('已忽略')
+    const res = await axios.post("/api/error-analysis/ignore", { record_id: record.id });
+    if (res.data.status === "ok") {
+      upsertRecord(res.data.data);
+      showMessage("已忽略");
     } else {
-      showMessage(res.data.message || '操作失败', 'error')
+      showMessage(res.data.message || "操作失败", "error");
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || '操作失败', 'error')
+    showMessage(err.response?.data?.message || err.message || "操作失败", "error");
   }
 }
 
 function openDetail(record) {
-  activeRecord.value = record
-  detailDialog.value = true
+  activeRecord.value = record;
+  detailDialog.value = true;
 }
 
 function openAsk(record) {
-  activeRecord.value = record
-  qaMessages.value = Array.isArray(record.qa_messages) ? [...record.qa_messages] : []
-  question.value = ''
-  streamingAnswer.value = ''
-  askDialog.value = true
+  activeRecord.value = record;
+  qaMessages.value = Array.isArray(record.qa_messages) ? [...record.qa_messages] : [];
+  question.value = "";
+  streamingAnswer.value = "";
+  askDialog.value = true;
 }
 
 async function askAI() {
   if (!activeRecord.value || !question.value.trim()) {
-    return
+    return;
   }
-  asking.value = true
-  streamingAnswer.value = ''
-  let hadError = false
+  asking.value = true;
+  streamingAnswer.value = "";
+  let hadError = false;
   try {
-    const token = localStorage.getItem('token')
-    const response = await fetch('/api/error-analysis/ask/stream', {
-      method: 'POST',
+    const token = localStorage.getItem("token");
+    const response = await fetch(resolveApiUrl("/api/error-analysis/ask/stream"), {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        Authorization: token ? `Bearer ${token}` : ''
+        "Content-Type": "application/json",
+        Authorization: token ? `Bearer ${token}` : "",
       },
       body: JSON.stringify({
         record_id: activeRecord.value.id,
         question: question.value,
-        provider_id: settings.value.provider_id || undefined
-      })
-    })
+        provider_id: settings.value.provider_id || undefined,
+      }),
+    });
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
+      throw new Error(`HTTP ${response.status}`);
     }
-    const reader = response.body?.getReader()
+    const reader = response.body?.getReader();
     if (!reader) {
-      throw new Error('No stream body')
+      throw new Error("No stream body");
     }
-    const decoder = new TextDecoder('utf-8')
-    let buffer = ''
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
     while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const chunks = buffer.split('\n\n')
-      buffer = chunks.pop() || ''
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split("\n\n");
+      buffer = chunks.pop() || "";
       for (const chunk of chunks) {
-        const line = chunk
-          .split('\n')
-          .find(content => content.startsWith('data:'))
-        if (!line) continue
-        const payload = JSON.parse(line.slice(5).trim())
-        if (payload.type === 'delta') {
-          streamingAnswer.value += payload.data || ''
-        } else if (payload.type === 'done') {
+        const line = chunk.split("\n").find((content) => content.startsWith("data:"));
+        if (!line) continue;
+        const payload = JSON.parse(line.slice(5).trim());
+        if (payload.type === "delta") {
+          streamingAnswer.value += payload.data || "";
+        } else if (payload.type === "done") {
           if (hadError || !streamingAnswer.value.trim()) {
-            continue
+            continue;
           }
-          qaMessages.value.push({ role: 'user', content: question.value })
-          qaMessages.value.push({ role: 'assistant', content: streamingAnswer.value })
-          question.value = ''
-          await loadRecords()
-        } else if (payload.type === 'error') {
-          hadError = true
-          showMessage(payload.message || '追问失败', 'error')
+          qaMessages.value.push({ role: "user", content: question.value });
+          qaMessages.value.push({ role: "assistant", content: streamingAnswer.value });
+          question.value = "";
+          await loadRecords();
+        } else if (payload.type === "error") {
+          hadError = true;
+          showMessage(payload.message || "追问失败", "error");
         }
       }
     }
   } catch (err) {
-    showMessage(err.message || '追问失败', 'error')
+    showMessage(err.message || "追问失败", "error");
   } finally {
-    asking.value = false
+    asking.value = false;
   }
 }
 
 function connectEvents() {
   if (eventRetryTimer) {
-    clearTimeout(eventRetryTimer)
-    eventRetryTimer = null
+    clearTimeout(eventRetryTimer);
+    eventRetryTimer = null;
   }
   if (eventSource) {
-    eventSource.close()
-    eventSource = null
+    eventSource.close();
+    eventSource = null;
   }
-  const token = localStorage.getItem('token')
-  eventSource = new EventSourcePolyfill('/api/error-analysis/events', {
+  const token = localStorage.getItem("token");
+  eventSource = new EventSourcePolyfill("/api/error-analysis/events", {
     headers: {
-      Authorization: token ? `Bearer ${token}` : ''
+      Authorization: token ? `Bearer ${token}` : "",
     },
     heartbeatTimeout: 300000,
-    withCredentials: true
-  })
+    withCredentials: true,
+  });
   eventSource.onmessage = (event) => {
     try {
-      const payload = JSON.parse(event.data)
-      if (payload.type === 'record_created' || payload.type === 'record_updated') {
-        upsertRecord(payload.record)
+      const payload = JSON.parse(event.data);
+      if (payload.type === "record_created" || payload.type === "record_updated") {
+        upsertRecord(payload.record);
       }
     } catch {
       // noop
     }
-  }
+  };
   eventSource.onerror = () => {
     if (eventSource) {
-      eventSource.close()
-      eventSource = null
+      eventSource.close();
+      eventSource = null;
     }
-    eventRetryTimer = setTimeout(connectEvents, 2000)
-  }
+    eventRetryTimer = setTimeout(connectEvents, 2000);
+  };
 }
 
 watch(statusFilter, () => {
-  loadRecords()
-})
+  loadRecords();
+});
 
 onMounted(async () => {
-  await Promise.all([loadSettings(), loadProviders(), loadPlugins(), loadRecords()])
-  connectEvents()
-})
+  await Promise.all([loadSettings(), loadProviders(), loadPlugins(), loadRecords()]);
+  connectEvents();
+});
 
 onUnmounted(() => {
   if (eventRetryTimer) {
-    clearTimeout(eventRetryTimer)
-    eventRetryTimer = null
+    clearTimeout(eventRetryTimer);
+    eventRetryTimer = null;
   }
   if (eventSource) {
-    eventSource.close()
-    eventSource = null
+    eventSource.close();
+    eventSource = null;
   }
-})
+});
 </script>
 
 <style scoped>

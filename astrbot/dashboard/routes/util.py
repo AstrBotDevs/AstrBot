@@ -8,6 +8,25 @@
 """
 
 import os
+from typing import Any
+
+
+class QuartLocalProxyShim:
+    """Patch-friendly wrapper around Quart LocalProxy objects."""
+
+    def __init__(self, proxy: Any) -> None:
+        object.__setattr__(self, "_proxy", proxy)
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(self._proxy, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "_proxy":
+            object.__setattr__(self, name, value)
+            return
+        setattr(self._proxy, name, value)
 
 
 def get_schema_item(schema: dict | None, key_path: str) -> dict | None:

@@ -2,7 +2,9 @@ import os
 import re
 import shutil
 import traceback
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
+from typing import Any
 
 import anyio
 from quart import request, send_file
@@ -43,6 +45,34 @@ def _next_available_temp_path(temp_dir: str, filename: str) -> str:
         candidate = f"{stem}_{index}{suffix}"
         index += 1
     return os.path.join(temp_dir, candidate)
+
+
+def _to_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return bool(value)
+
+
+def _to_jsonable(value: Any) -> Any:
+    if is_dataclass(value) and not isinstance(value, type):
+        return asdict(value)
+    if isinstance(value, dict):
+        return {key: _to_jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, Path):
+        return str(value)
+    if hasattr(value, "model_dump"):
+        return _to_jsonable(value.model_dump())
+    return value
 
 
 class SkillsRoute(Route):
@@ -161,7 +191,7 @@ class SkillsRoute(Route):
                 Response()
                 .ok(
                     {
-                        "skills": [asdict(skill) for skill in skills],
+                        "skills": [_to_jsonable(skill) for skill in skills],
                         "runtime": runtime,
                         "sandbox_cache": skill_mgr.get_sandbox_skills_cache_status(),
                     },

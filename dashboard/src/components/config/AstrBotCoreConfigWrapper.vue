@@ -99,16 +99,13 @@ export default {
     const { tm: tmMetadata } = useModuleI18n("features/config-metadata");
 
     const tm = (key) => {
-      if (!key) return '';
+      if (!key) return "";
       const metadataResult = tmMetadata(key);
-      if (
-        !metadataResult.startsWith("[MISSING:") &&
-        !metadataResult.startsWith("[INVALID:")
-      ) {
+      if (!metadataResult.startsWith("[MISSING:") && !metadataResult.startsWith("[INVALID:")) {
         return metadataResult;
       }
       const configResult = tmConfig(key);
-      if (!configResult.startsWith('[MISSING:') && !configResult.startsWith('[INVALID:')) {
+      if (!configResult.startsWith("[MISSING:") && !configResult.startsWith("[INVALID:")) {
         return configResult;
       }
       // Fallback: return the key itself so that dynamically injected
@@ -142,9 +139,7 @@ export default {
       if (!this.normalizedSearchKeyword) {
         return allSections;
       }
-      return allSections.filter((section) =>
-        this.sectionHasSearchMatch(section.value),
-      );
+      return allSections.filter((section) => this.sectionHasSearchMatch(section.value));
     },
   },
   watch: {
@@ -166,9 +161,7 @@ export default {
         return true;
       }
       const sectionMetadata = section?.metadata || {};
-      return Object.values(sectionMetadata).some((metaItem) =>
-        this.metaObjectHasSearchMatch(metaItem, keyword),
-      );
+      return Object.values(sectionMetadata).some((metaItem) => this.metaObjectHasSearchMatch(metaItem, keyword));
     },
     metaObjectHasSearchMatch(metaObject, keyword) {
       if (!metaObject || typeof metaObject !== "object") {
@@ -177,13 +170,11 @@ export default {
       const target = [
         this.tm(metaObject.description || ""),
         this.tm(metaObject.hint || ""),
-        ...Object.entries(metaObject.items || {}).flatMap(
-          ([itemKey, itemMeta]) => [
-            itemKey,
-            this.tm(itemMeta?.description || ""),
-            this.tm(itemMeta?.hint || ""),
-          ],
-        ),
+        ...Object.entries(metaObject.items || {}).flatMap(([itemKey, itemMeta]) => [
+          itemKey,
+          this.tm(itemMeta?.description || ""),
+          this.tm(itemMeta?.hint || ""),
+        ]),
       ]
         .join(" ")
         .toLowerCase();

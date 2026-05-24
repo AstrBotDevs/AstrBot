@@ -15,7 +15,7 @@ const props = defineProps<{
 }>();
 
 const slots = useSlots();
-const threadMap = inject("chatThreadMap", () => ({} as Record<string, ChatThread>));
+const threadMap = inject("chatThreadMap", () => ({}) as Record<string, ChatThread>);
 const openThread = inject("openChatThread", (_thread: ChatThread) => {});
 
 const threadId = computed(() => {

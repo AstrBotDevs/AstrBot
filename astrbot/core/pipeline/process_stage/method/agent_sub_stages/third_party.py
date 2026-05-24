@@ -8,6 +8,7 @@ from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
     DEERFLOW_PROVIDER_TYPE,
 )
+from astrbot.core.agent.runners.registry import agent_runner_registry
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (

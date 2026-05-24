@@ -11,13 +11,7 @@
         },
         "agent_runner_type": {
           "description": "执行器",
-          "labels": [
-            "内置 Agent",
-            "Dify",
-            "Coze",
-            "阿里云百炼应用",
-            "DeerFlow"
-          ]
+          "labels": ["内置 Agent", "Dify", "Coze", "阿里云百炼应用", "DeerFlow"]
         },
         "coze_agent_runner_provider_id": {
           "description": "Coze Agent 执行器提供商 ID"
@@ -263,10 +257,7 @@
         },
         "context_limit_reached_strategy": {
           "description": "历史超限或上下文接近上限时的处理方式",
-          "labels": [
-            "按对话轮数截断",
-            "由 LLM 压缩上下文"
-          ],
+          "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
           "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
         },
         "llm_compress_instruction": {
@@ -335,11 +326,7 @@
         "quoted_image_caption_mode": {
           "description": "引用图片转述策略",
           "hint": "自动模式下，仅当当前对话模型不支持图片时才补充引用图片的文字转述。",
-          "labels": [
-            "自动",
-            "总是转述",
-            "从不转述"
-          ]
+          "labels": ["自动", "总是转述", "从不转述"]
         },
         "quoted_message_parser": {
           "max_component_chain_depth": {
@@ -368,12 +355,7 @@
         "tool_schema_mode": {
           "description": "工具调用模式",
           "hint": "full 一次性下发完整参数；skills-like 先下发名称与描述，再下发参数；tool_search 仅下发核心工具，LLM 按需搜索发现更多工具；auto 根据工具数量自动选择 full 或 tool_search。25 个工具以上建议开启 tool_search 或 auto 模式，阈值可调。",
-          "labels": [
-            "Skills-like（两阶段）",
-            "Full（完整参数）",
-            "Tool Search（工具搜索）",
-            "Auto（自动选择）"
-          ]
+          "labels": ["Skills-like（两阶段）", "Full（完整参数）", "Tool Search（工具搜索）", "Auto（自动选择）"]
         },
         "tool_search": {
           "threshold": {
@@ -399,10 +381,7 @@
         "unsupported_streaming_strategy": {
           "description": "不支持流式回复的平台",
           "hint": "选择在不支持流式回复的平台上的处理方式。实时分段回复会在系统接收流式响应检测到诸如标点符号等分段点时,立即发送当前已接收的内容",
-          "labels": [
-            "实时分段回复",
-            "关闭流式回复"
-          ]
+          "labels": ["实时分段回复", "关闭流式回复"]
         },
         "wake_prefix": {
           "description": "LLM 聊天额外唤醒前缀",
@@ -500,10 +479,7 @@
       },
       "lark_connection_mode": {
         "description": "订阅方式",
-        "labels": [
-          "长连接模式",
-          "推送至服务器模式"
-        ]
+        "labels": ["长连接模式", "推送至服务器模式"]
       },
       "lark_encrypt_key": {
         "description": "Encrypt Key",
@@ -824,10 +800,7 @@
         },
         "reply_with_quote_scope": {
           "description": "引用回复范围",
-          "labels": [
-            "全部开启", 
-            "仅群聊", 
-            "仅私聊"]
+          "labels": ["全部开启", "仅群聊", "仅私聊"]
         },
         "forward_threshold": {
           "description": "转发消息的字数阈值"
@@ -1041,10 +1014,7 @@
           "split_mode": {
             "description": "分段模式",
             "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。re.findall(r'<regex>', text)",
-            "labels": [
-              "正则表达式",
-              "分段词列表"
-            ]
+            "labels": ["正则表达式", "分段词列表"]
           },
           "regex": {
             "description": "分段正则表达式",
@@ -1070,10 +1040,7 @@
         "group_context_mode": {
           "description": "群聊上下文模式",
           "hint": "sliding_window 保持旧的滑动窗口行为；flow 使用持久化群聊消息流和对话游标。",
-          "labels": [
-            "滑动窗口",
-            "消息流"
-          ]
+          "labels": ["滑动窗口", "消息流"]
         },
         "group_message_max_cnt": {
           "description": "最大消息数量",
@@ -1177,10 +1144,7 @@
       "language": {
         "description": "系统语言",
         "hint": "用于 AstrBot 运行时回复的语言。目前支持简体中文和英文。",
-        "labels": [
-          "简体中文",
-          "English"
-        ]
+        "labels": ["简体中文", "English"]
       },
       "t2i_strategy": {
         "description": "文本转图像策略",
@@ -1454,12 +1418,7 @@
       "modalities": {
         "description": "模型能力",
         "hint": "模型支持的模态及能力。",
-        "labels": [
-          "文本",
-          "图像",
-          "音频",
-          "工具使用"
-        ]
+        "labels": ["文本", "图像", "音频", "工具使用"]
       },
       "custom_headers": {
         "description": "自定义请求头",
@@ -1809,7 +1768,7 @@
         "description": "超时时间",
         "hint": "超时时间，单位为秒。"
       },
-"max_retries": {
+      "max_retries": {
         "description": "最大重试次数",
         "type": "int",
         "hint": "API 调用失败时的最大重试次数，范围 1-50，默认为 10。"

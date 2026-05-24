@@ -30,9 +30,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from "vue";
 
-type Direction = 'vertical' | 'horizontal';
+type Direction = "vertical" | "horizontal";
 
 const props = withDefaults(
   defineProps<{
@@ -44,23 +44,23 @@ const props = withDefaults(
   {
     minRatio: 0.2,
     maxRatio: 0.8,
-    direction: 'vertical',
+    direction: "vertical",
   },
 );
 
 const emit = defineEmits<{
-  'update:modelValue': [ratio: number];
+  "update:modelValue": [ratio: number];
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
 const isDragging = ref(false);
 
-const isHorizontal = computed(() => props.direction === 'horizontal');
+const isHorizontal = computed(() => props.direction === "horizontal");
 
 function clampRatio(ratio: number): number {
   const min = Math.min(props.minRatio, props.maxRatio);
   const max = Math.max(props.minRatio, props.maxRatio);
-  if (ratio !== ratio) return min;
+  if (Number.isNaN(ratio)) return min;
   return Math.min(max, Math.max(min, ratio));
 }
 
@@ -72,32 +72,32 @@ const HALF_DIVIDER_PX = DIVIDER_SIZE_PX / 2;
 const firstPaneStyle = computed<Record<string, string>>(() => {
   const ratio = clampedRatio.value;
   if (isHorizontal.value) {
-    return { width: `calc(${ratio * 100}% - ${HALF_DIVIDER_PX}px)`, height: '100%' };
+    return { width: `calc(${ratio * 100}% - ${HALF_DIVIDER_PX}px)`, height: "100%" };
   }
-  return { height: `calc(${ratio * 100}% - ${HALF_DIVIDER_PX}px)`, width: '100%' };
+  return { height: `calc(${ratio * 100}% - ${HALF_DIVIDER_PX}px)`, width: "100%" };
 });
 
 const secondPaneStyle = computed<Record<string, string>>(() => {
   const ratio = clampedRatio.value;
   if (isHorizontal.value) {
-    return { width: `calc(${(1 - ratio) * 100}% - ${HALF_DIVIDER_PX}px)`, height: '100%' };
+    return { width: `calc(${(1 - ratio) * 100}% - ${HALF_DIVIDER_PX}px)`, height: "100%" };
   }
-  return { height: `calc(${(1 - ratio) * 100}% - ${HALF_DIVIDER_PX}px)`, width: '100%' };
+  return { height: `calc(${(1 - ratio) * 100}% - ${HALF_DIVIDER_PX}px)`, width: "100%" };
 });
 
 const dividerStyle = computed<Record<string, string>>(() => {
   if (isHorizontal.value) {
     return {
-      cursor: 'col-resize',
+      cursor: "col-resize",
       width: `${DIVIDER_SIZE_PX}px`,
-      height: '100%'
+      height: "100%",
     };
   }
 
   return {
-    cursor: 'row-resize',
-    width: '100%',
-    height: `${DIVIDER_SIZE_PX}px`
+    cursor: "row-resize",
+    width: "100%",
+    height: `${DIVIDER_SIZE_PX}px`,
   };
 });
 
@@ -122,7 +122,7 @@ function scheduleRatioUpdate(): void {
       ? (pendingClientX - rect.left) / rect.width
       : (pendingClientY - rect.top) / rect.height;
 
-    emit('update:modelValue', clampRatio(ratio));
+    emit("update:modelValue", clampRatio(ratio));
   });
 }
 
@@ -139,14 +139,14 @@ function addDocumentListeners(): void {
     onDragEnd();
   };
 
-  document.addEventListener('pointermove', onPointerMove);
-  document.addEventListener('pointerup', onPointerUpOrCancel);
-  document.addEventListener('pointercancel', onPointerUpOrCancel);
+  document.addEventListener("pointermove", onPointerMove);
+  document.addEventListener("pointerup", onPointerUpOrCancel);
+  document.addEventListener("pointercancel", onPointerUpOrCancel);
 
   cleanupDocumentListeners = () => {
-    document.removeEventListener('pointermove', onPointerMove);
-    document.removeEventListener('pointerup', onPointerUpOrCancel);
-    document.removeEventListener('pointercancel', onPointerUpOrCancel);
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUpOrCancel);
+    document.removeEventListener("pointercancel", onPointerUpOrCancel);
     cleanupDocumentListeners = null;
   };
 }
@@ -157,8 +157,8 @@ function applyDraggingBodyStyle(): void {
   const prevUserSelect = body.style.userSelect;
   const prevCursor = body.style.cursor;
 
-  body.style.userSelect = 'none';
-  body.style.cursor = isHorizontal.value ? 'col-resize' : 'row-resize';
+  body.style.userSelect = "none";
+  body.style.cursor = isHorizontal.value ? "col-resize" : "row-resize";
 
   restoreBodyStyles = () => {
     body.style.userSelect = prevUserSelect;
@@ -169,7 +169,7 @@ function applyDraggingBodyStyle(): void {
 
 function onDragStart(event: PointerEvent): void {
   // 仅在鼠标左键时开始；触摸/触控笔不检查 button
-  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
   if (!containerRef.value) return;
 
   dragPointerId = event.pointerId;

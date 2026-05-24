@@ -94,7 +94,6 @@
   },
   "messages": {
     "loadFailed": "获取任务失败",
-    "updateSuccess": "更新成功",
     "updateFailed": "更新失败",
     "updateSuccess": "保存成功",
     "deleteSuccess": "已删除",

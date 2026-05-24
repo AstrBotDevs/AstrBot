@@ -128,9 +128,7 @@ class MarkdownChunker(BaseChunker):
                 # 章节过长，内部递归分割
                 # 扣除前缀长度，确保添加前缀后不超过 chunk_size
                 prefix_len = self._estimate_prefix_length(heading_path)
-                effective_chunk_size = max(
-                    chunk_size // 4, chunk_size - prefix_len
-                )
+                effective_chunk_size = max(chunk_size // 4, chunk_size - prefix_len)
 
                 sub_chunks = await self._fallback_chunker.chunk(
                     section_text,
@@ -279,9 +277,7 @@ class MarkdownChunker(BaseChunker):
             # 更新标题栈
             while heading_stack and heading_stack[-1]["level"] >= heading["level"]:
                 heading_stack.pop()
-            heading_stack.append(
-                {"level": heading["level"], "title": heading["title"]}
-            )
+            heading_stack.append({"level": heading["level"], "title": heading["title"]})
 
             # 获取当前章节的内容范围
             content_start = heading["end"]

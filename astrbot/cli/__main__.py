@@ -1,15 +1,14 @@
 """AstrBot CLI entry point"""
 
-import os
 import platform
 import sys
 from pathlib import Path
 
 import click
-from click.shell_completion import get_completion_class
 
 from . import __version__
-from .commands import conf, init, migrate, plug, run
+from .commands import conf, init, migrate, plug, run, service
+from .i18n import t
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
@@ -143,6 +142,7 @@ cli.add_command(help)
 cli.add_command(plug)
 cli.add_command(conf)
 cli.add_command(migrate)
+cli.add_command(service)
 
 if __name__ == "__main__":
     cli()

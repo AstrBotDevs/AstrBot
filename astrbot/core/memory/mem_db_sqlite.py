@@ -171,4 +171,4 @@ class MemoryDatabase:
                 )
                 result = await session.execute(stmt)
                 await session.commit()
-                return result.rowcount > 0 if result.rowcount else False  # type: ignore
+                return result.rowcount > 0 if result.rowcount else False

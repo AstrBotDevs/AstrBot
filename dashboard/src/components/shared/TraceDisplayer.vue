@@ -1,6 +1,6 @@
 <script setup>
-import { shallowRef, onMounted, onBeforeUnmount } from "vue";
 import { EventSourcePolyfill } from "event-source-polyfill";
+import { onBeforeUnmount, onMounted, shallowRef } from "vue";
 import axios, { resolveApiUrl } from "@/utils/request";
 
 let isMounted = false;
@@ -82,7 +82,7 @@ function connectSSE() {
       console.error("Trace stream reached max retry attempts.");
       return;
     }
-    const delay = Math.min(baseRetryDelay * Math.pow(2, retryAttempts), 30000);
+    const delay = Math.min(baseRetryDelay * 2 ** retryAttempts, 30000);
     if (retryTimer) {
       clearTimeout(retryTimer);
       retryTimer = null;
@@ -130,14 +130,10 @@ function processNewTraces(newTraces) {
       key: recordKey,
     });
     if (trace.action === "astr_agent_prepare") evt.hasAgentPrepare = true;
-    if (!evt.first_time || trace.time < evt.first_time)
-      evt.first_time = trace.time;
-    if (!evt.last_time || trace.time > evt.last_time)
-      evt.last_time = trace.time;
-    if (!evt.sender_name && trace.sender_name)
-      evt.sender_name = trace.sender_name;
-    if (!evt.message_outline && trace.message_outline)
-      evt.message_outline = trace.message_outline;
+    if (!evt.first_time || trace.time < evt.first_time) evt.first_time = trace.time;
+    if (!evt.last_time || trace.time > evt.last_time) evt.last_time = trace.time;
+    if (!evt.sender_name && trace.sender_name) evt.sender_name = trace.sender_name;
+    if (!evt.message_outline && trace.message_outline) evt.message_outline = trace.message_outline;
     touched.push(trace.span_id);
   });
   if (touched.length > 0) {

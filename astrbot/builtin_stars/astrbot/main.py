@@ -1,4 +1,5 @@
 import copy
+import inspect
 import traceback
 from collections.abc import Iterable
 from sys import maxsize
@@ -26,6 +27,12 @@ def _iter_message_components(event: AstrMessageEvent):
     if not isinstance(messages, Iterable) or isinstance(messages, (str, bytes)):
         return ()
     return tuple(messages)
+
+
+async def _maybe_await(value):
+    if inspect.isawaitable(value):
+        return await value
+    return value
 
 
 class Main(star.Star):
@@ -203,7 +210,7 @@ class Main(star.Star):
                             except Exception:
                                 logger.exception("主动回复处理图片失败")
 
-                    yield event.request_llm(
+                    req = event.request_llm(
                         prompt=prompt,
                         session_id=event.session_id,
                         conversation=None,  # 主动回复不应写回会话历史，避免 chatroom 内容污染 conv.history
@@ -230,7 +237,7 @@ class Main(star.Star):
             now_enabled = self.ltm_enabled(event)
             was_enabled = self._ltm_was_enabled.get(umo, False)
             if now_enabled and not was_enabled:
-                await self.ltm.remove_session(event)
+                await _maybe_await(self.ltm.remove_session(event))
                 logger.info(f"LTM: group_icl_enable 开启，已重置 {umo} 上下文")
             self._ltm_was_enabled[umo] = now_enabled
 
@@ -261,6 +268,17 @@ class Main(star.Star):
             except Exception as e:
                 logger.error(f"ltm: {e}")
 
+    @filter.on_llm_response()
+    async def record_llm_resp_to_ltm(
+        self, event: AstrMessageEvent, resp: LLMResponse
+    ) -> None:
+        """Compatibility hook for non-agent LLM responses."""
+        if self.ltm and self.ltm_enabled(event):
+            try:
+                await _maybe_await(self.ltm.after_req_llm(event, resp))
+            except Exception as e:
+                logger.error(f"ltm: {e}")
+
     @filter.after_message_sent()
     async def after_message_sent(self, event: AstrMessageEvent) -> None:
         """消息发送后处理"""
@@ -268,9 +286,9 @@ class Main(star.Star):
             try:
                 clean_session = event.get_extra("_clean_ltm_session", False)
                 if clean_session:
-                    await self.ltm.remove_session(event)
+                    await _maybe_await(self.ltm.remove_session(event))
                 else:
-                    await self.ltm.record_bot_message(event)
+                    await _maybe_await(self.ltm.record_bot_message(event))
             except Exception as e:
                 logger.error(f"ltm: {e}")
         # 清除主动回复标记，避免 event 被复用时意外影响后续流程

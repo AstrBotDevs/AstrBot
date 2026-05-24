@@ -1,86 +1,78 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import type { PluginSummary } from './types'
-import ResizableSplitPane from './ResizableSplitPane.vue'
-import PluginListTable from './PluginListTable.vue'
+import { computed, ref, watch } from "vue";
+import PluginListTable from "./PluginListTable.vue";
+import ResizableSplitPane from "./ResizableSplitPane.vue";
+import type { PluginSummary } from "./types";
 
-const LIST_SPLIT_RATIO_KEY = 'pluginManager.dualListRatio'
+const LIST_SPLIT_RATIO_KEY = "pluginManager.dualListRatio";
 
 function parseStoredRatio(raw: string | null): number | null {
-  if (!raw) return null
-  const num = Number(raw)
-  if (!Number.isFinite(num)) return null
-  if (num <= 0 || num >= 1) return null
-  return num
+  if (!raw) return null;
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return null;
+  if (num <= 0 || num >= 1) return null;
+  return num;
 }
 
 const props = defineProps<{
-  plugins: PluginSummary[]
-  selectedPluginName: string | null
-  pinnedNames?: string[]
+  plugins: PluginSummary[];
+  selectedPluginName: string | null;
+  pinnedNames?: string[];
 
-  loading?: boolean
-}>()
+  loading?: boolean;
+}>();
 
 const emit = defineEmits<{
-  (e: 'select-plugin', name: string): void
-  (e: 'update:selectedInactive', names: string[]): void
-  (e: 'update:selectedActive', names: string[]): void
-  (e: 'action-enable', plugin: PluginSummary): void
-  (e: 'action-disable', plugin: PluginSummary): void
-  (e: 'action-configure', plugin: PluginSummary): void
-  (e: 'action-open-readme', plugin: PluginSummary): void
-  (e: 'action-reload', name: string): void
-  (e: 'action-update', name: string): void
-  (e: 'action-uninstall', name: string): void
-  (e: 'action-open-repo', url: string): void
-  (e: 'batch-enable', plugins: PluginSummary[]): void
-  (e: 'batch-disable', plugins: PluginSummary[]): void
-  (e: 'batch-update', names: string[]): void
-  (e: 'batch-uninstall', names: string[]): void
-  (e: 'toggle-pin', plugin: PluginSummary): void
-}>()
+  (e: "select-plugin", name: string): void;
+  (e: "update:selectedInactive", names: string[]): void;
+  (e: "update:selectedActive", names: string[]): void;
+  (e: "action-enable", plugin: PluginSummary): void;
+  (e: "action-disable", plugin: PluginSummary): void;
+  (e: "action-configure", plugin: PluginSummary): void;
+  (e: "action-open-readme", plugin: PluginSummary): void;
+  (e: "action-reload", name: string): void;
+  (e: "action-update", name: string): void;
+  (e: "action-uninstall", name: string): void;
+  (e: "action-open-repo", url: string): void;
+  (e: "batch-enable", plugins: PluginSummary[]): void;
+  (e: "batch-disable", plugins: PluginSummary[]): void;
+  (e: "batch-update", names: string[]): void;
+  (e: "batch-uninstall", names: string[]): void;
+  (e: "toggle-pin", plugin: PluginSummary): void;
+}>();
 
-const selectedInactiveNames = ref<string[]>([])
-const selectedActiveNames = ref<string[]>([])
+const selectedInactiveNames = ref<string[]>([]);
+const selectedActiveNames = ref<string[]>([]);
 
-const splitRatio = ref(parseStoredRatio(localStorage.getItem(LIST_SPLIT_RATIO_KEY)) ?? 0.5)
+const splitRatio = ref(parseStoredRatio(localStorage.getItem(LIST_SPLIT_RATIO_KEY)) ?? 0.5);
 
 watch(
   splitRatio,
   (val) => {
-    if (!Number.isFinite(val)) return
-    localStorage.setItem(LIST_SPLIT_RATIO_KEY, String(val))
+    if (!Number.isFinite(val)) return;
+    localStorage.setItem(LIST_SPLIT_RATIO_KEY, String(val));
   },
-  { flush: 'post' }
-)
+  { flush: "post" },
+);
 
-watch(
-  selectedInactiveNames,
-  (val) => emit('update:selectedInactive', val ?? []),
-  { deep: true }
-)
-watch(
-  selectedActiveNames,
-  (val) => emit('update:selectedActive', val ?? []),
-  { deep: true }
-)
+watch(selectedInactiveNames, (val) => emit("update:selectedInactive", val ?? []), { deep: true });
+watch(selectedActiveNames, (val) => emit("update:selectedActive", val ?? []), { deep: true });
 
 // Sort plugins: pinned first, then unpinned
 const sortByPinned = (plugins: PluginSummary[]) => {
-  if (!props.pinnedNames || props.pinnedNames.length === 0) return plugins
-  const pinned = plugins.filter(p => props.pinnedNames!.includes(p.name))
-  const unpinned = plugins.filter(p => !props.pinnedNames!.includes(p.name))
-  return [...pinned, ...unpinned]
-}
+  if (!props.pinnedNames || props.pinnedNames.length === 0) return plugins;
+  const pinned = plugins.filter((p) => props.pinnedNames!.includes(p.name));
+  const unpinned = plugins.filter((p) => !props.pinnedNames!.includes(p.name));
+  return [...pinned, ...unpinned];
+};
 
-const inactivePlugins = computed(() => sortByPinned((props.plugins ?? []).filter((p) => !p.activated)))
-const activePlugins = computed(() => sortByPinned((props.plugins ?? []).filter((p) => p.activated)))
+const inactivePlugins = computed(() => sortByPinned((props.plugins ?? []).filter((p) => !p.activated)));
+const activePlugins = computed(() => sortByPinned((props.plugins ?? []).filter((p) => p.activated)));
 
-const handleRowClick = (name: string) => emit('select-plugin', name)
+const handleRowClick = (name: string) => emit("select-plugin", name);
 
-const handlePrimaryInactive = (plugin: PluginSummary) => emit('action-enable', plugin)
-const handlePrimaryActive = (plugin: PluginSummary) => emit('action-disable', plugin)
+const handlePrimaryInactive = (plugin: PluginSummary) => emit("action-enable", plugin);
+const handlePrimaryActive = (plugin: PluginSummary) => emit("action-disable", plugin);
 </script>
 
 <template>

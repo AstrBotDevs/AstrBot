@@ -2,8 +2,9 @@ import asyncio
 import copy
 import os
 import sys
+from collections.abc import AsyncGenerator, Callable
 from types import SimpleNamespace
-from typing import Any, Callable, cast
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -270,6 +271,33 @@ class SingleToolThenFinalProvider(MockProvider):
             tools_call_name=[self.tool_name],
             tools_call_args=[self.tool_args],
             tools_call_ids=["call_large_result"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class PreToolTextThenFinalProvider(MockProvider):
+    def __init__(self, pre_tool_text: str, reasoning_content: str | None = None):
+        super().__init__()
+        self.pre_tool_text = pre_tool_text
+        self.reasoning_content = reasoning_content
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="final answer",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+        return LLMResponse(
+            role="assistant",
+            completion_text=self.pre_tool_text,
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"query": "test"}],
+            tools_call_ids=["call_pre_tool_text"],
+            reasoning_content=self.reasoning_content,
             usage=TokenUsage(input_other=10, output=5),
         )
 
@@ -819,7 +847,7 @@ async def test_hooks_called_with_max_step(
     max_steps = 2
 
     # 执行步骤
-    async for response in runner.step_until_done(max_steps):
+    async for _response in runner.step_until_done(max_steps):
         pass
 
     # 验证钩子函数被调用

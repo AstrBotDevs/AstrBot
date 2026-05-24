@@ -3,6 +3,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def has_quote_style(content: str, snippet: str) -> bool:
+    return snippet in content or snippet.replace("'", '"') in content
+
+
 def test_sandbox_management_page_exists():
     assert (ROOT / "dashboard/src/views/SandboxManagementPage.vue").is_file()
 
@@ -10,8 +14,8 @@ def test_sandbox_management_page_exists():
 def test_main_routes_include_sandboxes_page():
     content = (ROOT / "dashboard/src/router/MainRoutes.ts").read_text(encoding="utf-8")
 
-    assert "name: 'Sandboxes'" in content
-    assert "path: '/sandboxes'" in content
+    assert has_quote_style(content, "name: 'Sandboxes'")
+    assert has_quote_style(content, "path: '/sandboxes'")
     assert "SandboxManagementPage.vue" in content
 
 
@@ -21,7 +25,7 @@ def test_sidebar_includes_sandboxes_navigation():
     ).read_text(encoding="utf-8")
 
     assert "core.navigation.sandboxes" in content
-    assert "to: '/sandboxes'" in content
+    assert has_quote_style(content, "to: '/sandboxes'")
 
 
 def test_sandbox_management_page_uses_current_sandbox_api_prefix():
@@ -46,8 +50,10 @@ def test_sandbox_management_page_disables_destroy_for_occupied_sandboxes():
         encoding="utf-8"
     )
 
-    assert "case 'destroy':" in content
-    assert "return status !== 'stopping' && !item.controller_session_id" in content
+    assert has_quote_style(content, "case 'destroy':")
+    assert has_quote_style(
+        content, "return status !== 'stopping' && !item.controller_session_id"
+    )
 
 
 def test_sandbox_management_page_replaces_console_history_after_command_updates():
@@ -66,9 +72,11 @@ def test_sandbox_management_page_release_is_not_limited_to_dashboard_controller(
         encoding="utf-8"
     )
 
-    assert "item.controller_session_id === 'dashboard'" not in content
-    assert "case 'release':" in content
-    assert "return status !== 'stopping' && !!item.controller_session_id" in content
+    assert not has_quote_style(content, "item.controller_session_id === 'dashboard'")
+    assert has_quote_style(content, "case 'release':")
+    assert has_quote_style(
+        content, "return status !== 'stopping' && !!item.controller_session_id"
+    )
 
 
 def test_sandbox_management_page_uses_backend_create_record_without_local_status_guess():
@@ -113,7 +121,7 @@ def test_sandbox_management_page_loads_provider_options_from_api():
     )
 
     assert "const providerOptions = [" not in content
-    assert "axios.get('/api/sandbox/providers'" in content
+    assert has_quote_style(content, "axios.get('/api/sandbox/providers'")
     assert "providerOptions.value = providers.map(" in content
     assert "defaultProviderId" in content
     assert (
@@ -127,7 +135,7 @@ def test_sandbox_management_page_does_not_show_legacy_provider_hint():
         encoding="utf-8"
     )
 
-    assert "tm('create.providerHint')" not in content
+    assert not has_quote_style(content, "tm('create.providerHint')")
 
 
 def test_sandbox_management_page_does_not_allow_configure_while_creating_or_restoring():
@@ -135,10 +143,10 @@ def test_sandbox_management_page_does_not_allow_configure_while_creating_or_rest
         encoding="utf-8"
     )
 
-    assert "case 'configure':" in content
-    assert (
-        "return status !== 'creating' && status !== 'restoring' && status !== 'stopping'"
-        in content
+    assert has_quote_style(content, "case 'configure':")
+    assert has_quote_style(
+        content,
+        "return status !== 'creating' && status !== 'restoring' && status !== 'stopping'",
     )
 
 
@@ -147,7 +155,7 @@ def test_sandbox_management_page_does_not_toast_running_after_create():
         encoding="utf-8"
     )
 
-    assert "toast(tm('messages.createReady'))" not in content
+    assert not has_quote_style(content, "toast(tm('messages.createReady'))")
 
 
 def test_sandbox_management_page_destroy_closes_dialog_before_backend_cleanup():
@@ -159,7 +167,7 @@ def test_sandbox_management_page_destroy_closes_dialog_before_backend_cleanup():
     assert "destroyDialog.value = false" in content
     assert "startDestroyPolling(targetId)" in content
     assert "const res = await axios.delete(sandboxApiPath(targetId)" in content
-    assert "status: 'stopping'" not in content
+    assert not has_quote_style(content, "status: 'stopping'")
     assert "upsertSandboxRecord(stoppingRecord)" not in content
     assert "destroying" not in content
     assert (
@@ -192,7 +200,7 @@ def test_sandbox_management_page_splits_running_into_busy_and_available_labels()
         encoding="utf-8"
     )
 
-    assert "return hasController(item) ? 'busy' : 'available'" in content
+    assert has_quote_style(content, "return hasController(item) ? 'busy' : 'available'")
 
 
 def test_sandbox_management_page_shows_controller_session_in_status_tooltip():
@@ -211,7 +219,7 @@ def test_sandbox_management_page_confirms_dangerous_console_commands():
     )
 
     assert "function isDangerousConsoleCommand" in content
-    assert "window.confirm(tm('console.dangerConfirm'" in content
+    assert has_quote_style(content, "window.confirm(tm('console.dangerConfirm'")
     assert "rm\\s+(?:-" in content
     assert "(?:--\\s+)?" in content
 
@@ -221,13 +229,13 @@ def test_sandbox_management_page_displays_console_cwd_relative_to_sandbox_home()
         encoding="utf-8"
     )
 
-    assert "if (cwd === '/workspace') return '~'" in content
-    assert (
-        "if (cwd.startsWith('/workspace/')) return `~${cwd.slice('/workspace'.length)}`"
-        in content
+    assert has_quote_style(content, "if (cwd === '/workspace') return '~'")
+    assert has_quote_style(
+        content,
+        "if (cwd.startsWith('/workspace/')) return `~${cwd.slice('/workspace'.length)}`",
     )
     assert "cwd.match(/^\\/home\\/[^/]+(.*)$/)" in content
-    assert "return suffix ? `~${suffix}` : '~'" in content
+    assert has_quote_style(content, "return suffix ? `~${suffix}` : '~'")
 
 
 def test_sandbox_management_page_strips_console_cwd_markers_from_output():
@@ -238,7 +246,7 @@ def test_sandbox_management_page_strips_console_cwd_markers_from_output():
     assert "function stripConsoleCwdMarkers" in content
     assert "stripConsoleCwdMarkers(stdout)" in content
     assert "stripConsoleCwdMarkers(visibleStdout)" in content
-    assert "!line.includes('__ASTRBOT_CWD__')" in content
+    assert has_quote_style(content, "!line.includes('__ASTRBOT_CWD__')")
 
 
 def test_sandbox_management_page_console_cwd_prefix_does_not_hide_failed_cd():
@@ -255,7 +263,7 @@ def test_sandbox_management_page_surfaces_unknown_status_key():
         encoding="utf-8"
     )
 
-    assert "tm('labels.unknownStatus', { status: key })" in content
+    assert has_quote_style(content, "tm('labels.unknownStatus', { status: key })")
 
 
 def test_sandbox_management_page_localizes_max_sandbox_limit_errors():
@@ -295,9 +303,9 @@ def test_sandbox_management_page_has_dedicated_capabilities_column():
         encoding="utf-8"
     )
 
-    assert "key: 'capabilities'" in content
+    assert has_quote_style(content, "key: 'capabilities'")
     assert 'v-for="capability in item.capabilities || []"' in content
-    assert "tm('headers.capabilities')" in content
+    assert has_quote_style(content, "tm('headers.capabilities')")
 
 
 def test_sandbox_i18n_uses_status_and_idle_labels():

@@ -4,7 +4,7 @@ from typing import Any
 from quart import request
 
 from astrbot.core import logger
-from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.mcp_oauth import MCPOAuthAuthorizationRequiredError
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
@@ -541,6 +541,7 @@ class ToolsRoute(Route):
                     else:
                         origin = "unknown"
                         origin_name = "unknown"
+                display_name = getattr(tool, "display_name", None) or tool.name
                 tool_info = {
                     "name": tool.name,  # Keep namespaced name for internal use
                     "display_name": display_name,  # Friendly name for display

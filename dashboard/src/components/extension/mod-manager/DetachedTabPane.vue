@@ -1,54 +1,53 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useModuleI18n } from '@/i18n/composables'
-import type { PluginPanelTab, PluginSummary } from './types'
-
-import PluginInfoPanel from './PluginInfoPanel.vue'
-import PluginConfigPanel from './PluginConfigPanel.vue'
-import PluginOverviewPanel from './PluginOverviewPanel.vue'
-import PluginChangelogPanel from './PluginChangelogPanel.vue'
-import GlobalPanel from './GlobalPanel.vue'
+import { computed } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import GlobalPanel from "./GlobalPanel.vue";
+import PluginChangelogPanel from "./PluginChangelogPanel.vue";
+import PluginConfigPanel from "./PluginConfigPanel.vue";
+import PluginInfoPanel from "./PluginInfoPanel.vue";
+import PluginOverviewPanel from "./PluginOverviewPanel.vue";
+import type { PluginPanelTab, PluginSummary } from "./types";
 
 const props = defineProps<{
-  tab: PluginPanelTab
-  plugin: PluginSummary | null
-}>()
+  tab: PluginPanelTab;
+  plugin: PluginSummary | null;
+}>();
 
 const emit = defineEmits<{
-  (e: 'dock'): void
-  (e: 'action-update', name: string): void
-  (e: 'config-saved', pluginName: string): void
-}>()
+  (e: "dock"): void;
+  (e: "action-update", name: string): void;
+  (e: "config-saved", pluginName: string): void;
+}>();
 
-const { tm } = useModuleI18n('features/extension')
+const { tm } = useModuleI18n("features/extension");
 
 const tabLabel = computed(() => {
-  const key = `modManager.panelTabs.${props.tab}`
-  return tm(key) || props.tab
-})
+  const key = `modManager.panelTabs.${props.tab}`;
+  return tm(key) || props.tab;
+});
 
-const pluginName = computed(() => props.plugin?.name || '')
-const repoUrl = computed(() => props.plugin?.repo || null)
+const pluginName = computed(() => props.plugin?.name || "");
+const repoUrl = computed(() => props.plugin?.repo || null);
 
 const openRepoInNewTab = (url: string) => {
-  if (!url) return
-  window.open(url, '_blank')
-}
+  if (!url) return;
+  window.open(url, "_blank");
+};
 
 // --- Drag-to-dock with floating ghost (Chrome-like) ---
-const DRAG_START_THRESHOLD = 5
+const DRAG_START_THRESHOLD = 5;
 
 function onHeaderPointerDown(e: PointerEvent) {
-  if (e.pointerType === 'mouse' && e.button !== 0) return
-  const startX = e.clientX
-  const startY = e.clientY
-  const header = e.currentTarget as HTMLElement
-  let dragging = false
-  let ghost: HTMLElement | null = null
-  let targetTabBar: HTMLElement | null = null
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const header = e.currentTarget as HTMLElement;
+  let dragging = false;
+  let ghost: HTMLElement | null = null;
+  let targetTabBar: HTMLElement | null = null;
 
   const createGhost = () => {
-    ghost = header.cloneNode(true) as HTMLElement
+    ghost = header.cloneNode(true) as HTMLElement;
     ghost.style.cssText = `
       position: fixed;
       z-index: 9999;
@@ -63,82 +62,79 @@ function onHeaderPointerDown(e: PointerEvent) {
       transform: scale(1.02);
       max-width: 200px;
       overflow: hidden;
-    `
-    document.body.appendChild(ghost)
+    `;
+    document.body.appendChild(ghost);
     // Find the tab bar for hit detection
-    targetTabBar = document.querySelector('.plugin-panel__tab-bar')
-  }
+    targetTabBar = document.querySelector(".plugin-panel__tab-bar");
+  };
 
   const moveGhost = (cx: number, cy: number) => {
-    if (!ghost) return
-    ghost.style.left = `${cx - ghost.offsetWidth / 2}px`
-    ghost.style.top = `${cy - ghost.offsetHeight / 2}px`
+    if (!ghost) return;
+    ghost.style.left = `${cx - ghost.offsetWidth / 2}px`;
+    ghost.style.top = `${cy - ghost.offsetHeight / 2}px`;
 
     // Highlight tab bar when hovering over it (visual drop zone cue)
     if (targetTabBar) {
-      const rect = targetTabBar.getBoundingClientRect()
-      const isOver = cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom + 20
-      targetTabBar.classList.toggle('plugin-panel__tab-bar--drop-target', isOver)
+      const rect = targetTabBar.getBoundingClientRect();
+      const isOver = cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom + 20;
+      targetTabBar.classList.toggle("plugin-panel__tab-bar--drop-target", isOver);
     }
-  }
+  };
 
   const removeGhost = () => {
     if (ghost) {
-      ghost.remove()
-      ghost = null
+      ghost.remove();
+      ghost = null;
     }
     if (targetTabBar) {
-      targetTabBar.classList.remove('plugin-panel__tab-bar--drop-target')
-      targetTabBar = null
+      targetTabBar.classList.remove("plugin-panel__tab-bar--drop-target");
+      targetTabBar = null;
     }
-  }
+  };
 
   const onMove = (ev: PointerEvent) => {
-    const dx = ev.clientX - startX
-    const dy = ev.clientY - startY
+    const dx = ev.clientX - startX;
+    const dy = ev.clientY - startY;
     if (!dragging && Math.sqrt(dx * dx + dy * dy) > DRAG_START_THRESHOLD) {
-      dragging = true
-      createGhost()
+      dragging = true;
+      createGhost();
     }
     if (dragging) {
-      moveGhost(ev.clientX, ev.clientY)
+      moveGhost(ev.clientX, ev.clientY);
     }
-  }
+  };
 
   const onUp = (ev: PointerEvent) => {
-    cleanup()
-    if (!dragging) return
+    cleanup();
+    if (!dragging) return;
 
     // Determine if released over the tab bar area
     if (targetTabBar) {
-      const rect = targetTabBar.getBoundingClientRect()
+      const rect = targetTabBar.getBoundingClientRect();
       // Generous hit zone: tab bar rect + 20px below
       const isOver =
-        ev.clientX >= rect.left &&
-        ev.clientX <= rect.right &&
-        ev.clientY >= rect.top &&
-        ev.clientY <= rect.bottom + 20
+        ev.clientX >= rect.left && ev.clientX <= rect.right && ev.clientY >= rect.top && ev.clientY <= rect.bottom + 20;
       if (isOver) {
-        emit('dock')
+        emit("dock");
       }
     }
-    removeGhost()
-  }
+    removeGhost();
+  };
 
   const onCancel = () => {
-    cleanup()
-    removeGhost()
-  }
+    cleanup();
+    removeGhost();
+  };
 
   const cleanup = () => {
-    document.removeEventListener('pointermove', onMove)
-    document.removeEventListener('pointerup', onUp)
-    document.removeEventListener('pointercancel', onCancel)
-  }
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    document.removeEventListener("pointercancel", onCancel);
+  };
 
-  document.addEventListener('pointermove', onMove)
-  document.addEventListener('pointerup', onUp)
-  document.addEventListener('pointercancel', onCancel)
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+  document.addEventListener("pointercancel", onCancel);
 }
 </script>
 

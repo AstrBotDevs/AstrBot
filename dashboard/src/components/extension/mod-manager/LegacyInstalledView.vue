@@ -1,77 +1,77 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useModuleI18n } from '@/i18n/composables'
-import ExtensionCard from '@/components/shared/ExtensionCard.vue'
-import type { PluginSummary } from './types'
+import { computed } from "vue";
+import ExtensionCard from "@/components/shared/ExtensionCard.vue";
+import { useModuleI18n } from "@/i18n/composables";
+import type { PluginSummary } from "./types";
 
 const props = defineProps<{
-  plugins: PluginSummary[]
-  loading?: boolean
-  showReserved: boolean
-  isListView: boolean
-}>()
+  plugins: PluginSummary[];
+  loading?: boolean;
+  showReserved: boolean;
+  isListView: boolean;
+}>();
 
-type UninstallOptions = { deleteConfig?: boolean; deleteData?: boolean }
+type UninstallOptions = { deleteConfig?: boolean; deleteData?: boolean };
 
 const emit = defineEmits<{
-  (e: 'update:isListView', value: boolean): void
-  (e: 'action-enable', plugin: PluginSummary): void
-  (e: 'action-disable', plugin: PluginSummary): void
-  (e: 'action-reload', name: string): void
-  (e: 'action-update', name: string): void
-  (e: 'action-uninstall', name: string, options?: UninstallOptions): void
-  (e: 'action-configure', plugin: PluginSummary): void
-  (e: 'action-view-handlers', plugin: PluginSummary): void
-  (e: 'action-view-readme', plugin: PluginSummary): void
-  (e: 'view-changelog', plugin: PluginSummary): void
-  (e: 'action-open-repo', url: string): void
-}>()
+  (e: "update:isListView", value: boolean): void;
+  (e: "action-enable", plugin: PluginSummary): void;
+  (e: "action-disable", plugin: PluginSummary): void;
+  (e: "action-reload", name: string): void;
+  (e: "action-update", name: string): void;
+  (e: "action-uninstall", name: string, options?: UninstallOptions): void;
+  (e: "action-configure", plugin: PluginSummary): void;
+  (e: "action-view-handlers", plugin: PluginSummary): void;
+  (e: "action-view-readme", plugin: PluginSummary): void;
+  (e: "view-changelog", plugin: PluginSummary): void;
+  (e: "action-open-repo", url: string): void;
+}>();
 
-const { tm } = useModuleI18n('features/extension')
+const { tm } = useModuleI18n("features/extension");
 
 const viewMode = computed<boolean>({
   get: () => props.isListView,
-  set: (val) => emit('update:isListView', Boolean(val))
-})
+  set: (val) => emit("update:isListView", Boolean(val)),
+});
 
-const safePlugins = computed<PluginSummary[]>(() => (Array.isArray(props.plugins) ? props.plugins : []))
+const safePlugins = computed<PluginSummary[]>(() => (Array.isArray(props.plugins) ? props.plugins : []));
 
 const pluginHeaders = computed(() => [
-  { title: tm('table.headers.name'), key: 'name', width: '200px' },
-  { title: tm('table.headers.description'), key: 'desc', maxWidth: '250px' },
-  { title: tm('table.headers.version'), key: 'version', width: '100px' },
-  { title: tm('table.headers.author'), key: 'author', width: '100px' },
-  { title: tm('table.headers.status'), key: 'activated', width: '100px' },
-  { title: '', key: 'repo', sortable: false, width: '56px' },
-  { title: tm('table.headers.actions'), key: 'actions', sortable: false, width: '260px' }
-])
+  { title: tm("table.headers.name"), key: "name", width: "200px" },
+  { title: tm("table.headers.description"), key: "desc", maxWidth: "250px" },
+  { title: tm("table.headers.version"), key: "version", width: "100px" },
+  { title: tm("table.headers.author"), key: "author", width: "100px" },
+  { title: tm("table.headers.status"), key: "activated", width: "100px" },
+  { title: "", key: "repo", sortable: false, width: "56px" },
+  { title: tm("table.headers.actions"), key: "actions", sortable: false, width: "260px" },
+]);
 
 const handleToggleView = (isList: boolean) => {
-  if (viewMode.value === isList) return
-  viewMode.value = isList
-}
+  if (viewMode.value === isList) return;
+  viewMode.value = isList;
+};
 
 const handleToggleActivation = (plugin: PluginSummary) => {
   if (plugin.activated) {
-    emit('action-disable', plugin)
+    emit("action-disable", plugin);
   } else {
-    emit('action-enable', plugin)
+    emit("action-enable", plugin);
   }
-}
+};
 
 const handleUninstallFromCard = (plugin: PluginSummary, options?: UninstallOptions) => {
-  emit('action-uninstall', plugin.name, options)
-}
+  emit("action-uninstall", plugin.name, options);
+};
 
 const handleOpenRepo = (url: string | null | undefined) => {
-  if (!url) return
-  emit('action-open-repo', url)
-}
+  if (!url) return;
+  emit("action-open-repo", url);
+};
 
 function toPlugin(item: unknown): PluginSummary {
-  const maybeWrapped = item as any
-  const raw = maybeWrapped?.raw
-  return (raw ?? item) as PluginSummary
+  const maybeWrapped = item as any;
+  const raw = maybeWrapped?.raw;
+  return (raw ?? item) as PluginSummary;
 }
 </script>
 

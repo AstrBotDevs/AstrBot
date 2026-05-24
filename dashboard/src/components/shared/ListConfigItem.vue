@@ -198,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "@/i18n/composables";
 
 const { t } = useI18n();
@@ -240,9 +240,7 @@ const editIndex = ref(-1);
 const editItem = ref("");
 const showBatchImport = ref(false);
 const batchImportText = ref("");
-const isSingleItemMode = computed(
-  () => (props.modelValue?.length ?? 0) <= 1 && props.preferSingleItem,
-);
+const isSingleItemMode = computed(() => (props.modelValue?.length ?? 0) <= 1 && props.preferSingleItem);
 const singleItemValue = computed({
   get: (): string => (props.modelValue?.[0] as string | undefined) ?? "",
   set: (value: string) => {
@@ -285,9 +283,7 @@ watch(
 
     // 自动清理只包含空字符串的数组
     if (newValue && newValue.length > 0) {
-      const filtered = newValue.filter((item) =>
-        typeof item === "string" ? item.trim() !== "" : true,
-      );
+      const filtered = newValue.filter((item) => (typeof item === "string" ? item.trim() !== "" : true));
       if (filtered.length !== newValue.length) {
         // 使用 nextTick 确保父组件已准备好接收更新
         nextTick(() => {
@@ -338,9 +334,7 @@ function cancelEdit() {
 
 function confirmDialog() {
   // 过滤空字符串，同时处理非字符串类型
-  const filteredItems = localItems.value.filter((item) =>
-    typeof item === "string" ? item.trim() !== "" : true,
-  );
+  const filteredItems = localItems.value.filter((item) => (typeof item === "string" ? item.trim() !== "" : true));
   emit("update:modelValue", filteredItems);
   dialog.value = false;
 }

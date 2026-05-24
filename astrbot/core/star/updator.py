@@ -7,7 +7,7 @@ from pathlib import Path, PurePosixPath
 from astrbot.core import logger
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
-from astrbot.core.utils.io import ensure_dir, remove_dir
+from astrbot.core.utils.io import ensure_dir, on_error, remove_dir
 from astrbot.core.zip_updator import RepoZipUpdator
 
 ARCHIVE_METADATA_ROOT_DIRS = {"__MACOSX"}
@@ -155,28 +155,45 @@ class PluginUpdator(RepoZipUpdator):
 
     @staticmethod
     def _get_archive_root_dir(members: list[zipfile.ZipInfo]) -> str | None:
-        root_dir = None
+        root_candidates: list[tuple[str, ...]] = []
         has_file = False
         has_root_file = False
-        has_multiple_roots = False
-        for member in members:
-            parts = PluginUpdator._get_safe_member_parts(member.filename)
+        member_entries = [
+            (PluginUpdator._get_safe_member_parts(member.filename), member.is_dir())
+            for member in members
+        ]
+        for parts, is_dir in member_entries:
             if not parts:
                 continue
-            if not member.is_dir():
+            has_child = any(
+                other_parts != parts
+                and len(other_parts) > len(parts)
+                and other_parts[: len(parts)] == parts
+                for other_parts, _other_is_dir in member_entries
+            )
+            if not is_dir and not has_child:
                 has_file = True
-            if len(parts) == 1 and not member.is_dir():
+            if len(parts) == 1 and not is_dir and not has_child:
                 has_root_file = True
                 continue
-            if root_dir is None:
-                root_dir = parts[0]
-            elif root_dir != parts[0]:
-                has_multiple_roots = True
+            if is_dir or has_child:
+                root_candidates.append(parts)
+            else:
+                root_candidates.append(parts[:-1])
         if not has_file:
             raise ValueError("Empty plugin archive")
-        if has_root_file or has_multiple_roots:
+        if has_root_file or not root_candidates:
             return None
-        return root_dir
+
+        common_parts = list(root_candidates[0])
+        for candidate in root_candidates[1:]:
+            while common_parts and tuple(candidate[: len(common_parts)]) != tuple(
+                common_parts
+            ):
+                common_parts.pop()
+            if not common_parts:
+                return None
+        return "/".join(common_parts) if common_parts else None
 
     @staticmethod
     def _is_archive_metadata_member(member_name: str) -> bool:

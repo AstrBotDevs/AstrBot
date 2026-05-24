@@ -1,5 +1,4 @@
 from collections.abc import AsyncGenerator
-from typing import Any
 
 from astrbot.core import astrbot_config, logger
 from astrbot.core.platform import AstrMessageEvent
@@ -8,11 +7,11 @@ from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
     WecomAIBotMessageEvent,
 )
 from astrbot.core.utils.active_event_registry import active_event_registry
-from astrbot.core.utils.trace import _current_span
+from astrbot.core.utils.trace import TraceSpan, _current_span
 
 from .bootstrap import ensure_builtin_stages_registered
-from .pre_ack_emoji import PreAckEmojiManager
 from .context import PipelineContext
+from .pre_ack_emoji import PreAckEmojiManager
 from .stage import registered_stages
 from .stage_order import STAGES_ORDER
 
@@ -48,50 +47,61 @@ class PipelineScheduler:
 
         for i in range(from_stage, len(self.stages)):
             stage = self.stages[i]
+            coroutine = stage.process(event)
+            stage_span: TraceSpan | None = None
+            stage_token = None
 
-            if isinstance(coroutine, AsyncGenerator):
-                # 如果返回的是异步生成器, 实现洋葱模型的核心
-                did_yield = False
-                async for _ in coroutine:
-                    did_yield = True
-                    # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
-                    if event.is_stopped():
-                        logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播｡",
-                        )
+            if trace_enabled:
+                parent_span = _current_span.get()
+                if parent_span is not None:
+                    stage_span = parent_span.child(
+                        stage.__class__.__name__,
+                        span_type="pipeline_stage",
+                    )
+                    stage_token = _current_span.set(stage_span)
+
+            try:
+                if stage_span is not None:
+                    stage_span.set_input(message=(event.message_str or "")[:300])
+
+                if isinstance(coroutine, AsyncGenerator):
+                    # 如果返回的是异步生成器, 实现洋葱模型的核心
+                    did_yield = False
+                    async for _ in coroutine:
+                        did_yield = True
+                        # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
+                        if event.is_stopped():
+                            logger.debug(
+                                f"阶段 {stage.__class__.__name__} 已终止事件传播｡",
+                            )
+                            break
+
+                        # 递归调用, 处理所有后续阶段
+                        await self._process_stages(event, i + 1)
+
+                        # 此处是后续所有阶段处理完毕后返回的点, 执行后置处理
+                        if event.is_stopped():
+                            logger.debug(
+                                f"阶段 {stage.__class__.__name__} 已终止事件传播｡",
+                            )
+                            break
+
+                    # 洋葱阶段已通过递归处理了后续所有阶段，跳出外层循环避免重复执行
+                    if did_yield:
                         break
+                else:
+                    # 如果返回的是普通协程(不含yield的async函数), 则不进入下一层(基线条件)
+                    # 简单地等待它执行完成, 然后继续执行下一个阶段
+                    await coroutine
 
-            if stage_span is not None:
-                stage_span.set_input(message=(event.message_str or "")[:300])
-
-                    # 此处是后续所有阶段处理完毕后返回的点, 执行后置处理
                     if event.is_stopped():
-                        logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播｡",
-                        )
                         break
-
-                # 洋葱阶段已通过递归处理了后续所有阶段，跳出外层循环避免重复执行
-                if did_yield:
-                    break
-            else:
-                # 如果返回的是普通协程(不含yield的async函数), 则不进入下一层(基线条件)
-                # 简单地等待它执行完成, 然后继续执行下一个阶段
-                await coroutine
-
-                if event.is_stopped():
-                    break
-            else:
+            finally:
                 if stage_span is not None and stage_span.finished_at is None:
                     stage_span.set_output(stopped=event.is_stopped())
                     stage_span.finish()
-            finally:
                 if stage_token is not None:
                     _current_span.reset(stage_token)
-
-                if event.is_stopped():
-                    logger.debug(f"阶段 {stage.__class__.__name__} 已终止事件传播｡")
-                    break
 
     async def execute(self, event: AstrMessageEvent) -> None:
         """执行 pipeline

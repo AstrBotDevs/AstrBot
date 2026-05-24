@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import inspect
 import json
 import random
@@ -22,7 +21,6 @@ from astrbot.core.agent.message import ContentPart, ImageURLPart, Message, TextP
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
-from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
     is_connection_error,
@@ -220,7 +218,7 @@ class ProviderDoubao(Provider):
                 models_str.append(model.id)
             return models_str
         except NotFoundError as e:
-            raise Exception(f"获取模型列表失败：{e}")
+            raise Exception(f"获取模型列表失败：{e}") from e
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:

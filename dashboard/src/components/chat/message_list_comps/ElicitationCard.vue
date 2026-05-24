@@ -146,27 +146,25 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
-
-import { useModuleI18n } from '@/i18n/composables';
-import { useToast } from '@/utils/toast';
-
-import type { ElicitationField, ElicitationPayload } from '@/composables/useMessages';
+import { onMounted, reactive, ref } from "vue";
+import type { ElicitationField, ElicitationPayload } from "@/composables/useMessages";
+import { useModuleI18n } from "@/i18n/composables";
+import { useToast } from "@/utils/toast";
 
 interface Props {
-    payload: ElicitationPayload;
-    isDark?: boolean;
-    interactive?: boolean;
-    submitElicitation?: (replyText: string, displayText: string) => Promise<void>;
+  payload: ElicitationPayload;
+  isDark?: boolean;
+  interactive?: boolean;
+  submitElicitation?: (replyText: string, displayText: string) => Promise<void>;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    isDark: false,
-    interactive: false,
-    submitElicitation: undefined
+  isDark: false,
+  interactive: false,
+  submitElicitation: undefined,
 });
 
-const { tm } = useModuleI18n('features/chat');
+const { tm } = useModuleI18n("features/chat");
 const { error: showError, success: showSuccess } = useToast();
 
 const customInput = reactive<Record<string, string>>({});
@@ -174,135 +172,135 @@ const selectedOption = reactive<Record<string, string>>({});
 const booleanInput = reactive<Record<string, boolean>>({});
 const submitting = ref(false);
 const submitted = ref(false);
-const statusText = ref('');
+const statusText = ref("");
 
 onMounted(() => {
-    for (const field of props.payload.fields || []) {
-        if (field.default !== undefined && field.default !== null) {
-            if (field.type === 'boolean' && !(field.enum && field.enum.length)) {
-                booleanInput[field.name] = Boolean(field.default);
-            } else if (field.enum && field.enum.length && field.enum.includes(String(field.default))) {
-                selectedOption[field.name] = String(field.default);
-            } else {
-                customInput[field.name] = String(field.default);
-            }
-        }
+  for (const field of props.payload.fields || []) {
+    if (field.default !== undefined && field.default !== null) {
+      if (field.type === "boolean" && !(field.enum && field.enum.length)) {
+        booleanInput[field.name] = Boolean(field.default);
+      } else if (field.enum && field.enum.length && field.enum.includes(String(field.default))) {
+        selectedOption[field.name] = String(field.default);
+      } else {
+        customInput[field.name] = String(field.default);
+      }
     }
+  }
 });
 
 function getEnumLabel(field: ElicitationField, idx: number): string {
-    if (field.enumNames && field.enumNames.length > idx) {
-        return field.enumNames[idx];
-    }
-    return field.enum?.[idx] ?? '';
+  if (field.enumNames && field.enumNames.length > idx) {
+    return field.enumNames[idx];
+  }
+  return field.enum?.[idx] ?? "";
 }
 
 function getConstraintHint(field: ElicitationField): string {
-    const parts: string[] = [];
-    if (field.format) {
-        parts.push(`Format: ${field.format}`);
-    }
-    if (field.minimum !== undefined && field.maximum !== undefined) {
-        parts.push(`Range: ${field.minimum} – ${field.maximum}`);
-    } else if (field.minimum !== undefined) {
-        parts.push(`Min: ${field.minimum}`);
-    } else if (field.maximum !== undefined) {
-        parts.push(`Max: ${field.maximum}`);
-    }
-    return parts.join(' · ');
+  const parts: string[] = [];
+  if (field.format) {
+    parts.push(`Format: ${field.format}`);
+  }
+  if (field.minimum !== undefined && field.maximum !== undefined) {
+    parts.push(`Range: ${field.minimum} – ${field.maximum}`);
+  } else if (field.minimum !== undefined) {
+    parts.push(`Min: ${field.minimum}`);
+  } else if (field.maximum !== undefined) {
+    parts.push(`Max: ${field.maximum}`);
+  }
+  return parts.join(" · ");
 }
 
 function selectOption(fieldName: string, option: string) {
-    selectedOption[fieldName] = option;
-    customInput[fieldName] = '';
+  selectedOption[fieldName] = option;
+  customInput[fieldName] = "";
 }
 
 function getFieldValue(field: ElicitationField): string | boolean | undefined {
-    if (field.type === 'boolean' && !(field.enum && field.enum.length)) {
-        return booleanInput[field.name];
-    }
+  if (field.type === "boolean" && !(field.enum && field.enum.length)) {
+    return booleanInput[field.name];
+  }
 
-    const customValue = (customInput[field.name] || '').trim();
-    if (customValue) {
-        return customValue;
-    }
+  const customValue = (customInput[field.name] || "").trim();
+  if (customValue) {
+    return customValue;
+  }
 
-    const optionValue = (selectedOption[field.name] || '').trim();
-    if (optionValue) {
-        return optionValue;
-    }
+  const optionValue = (selectedOption[field.name] || "").trim();
+  if (optionValue) {
+    return optionValue;
+  }
 
-    return undefined;
+  return undefined;
 }
 
 function buildFormReply(): { replyText: string; displayText: string } {
-    const fields = props.payload.fields || [];
-    if (!fields.length) {
-        return {
-            replyText: 'accept',
-            displayText: tm('elicitation.accepted')
-        };
-    }
-
-    const formPayload: Record<string, string | boolean> = {};
-    for (const field of fields) {
-        const value = getFieldValue(field);
-        if (value === undefined || value === '') {
-            if (field.required) {
-                throw new Error(tm('elicitation.requiredField', { field: field.label || field.name }));
-            }
-            continue;
-        }
-        formPayload[field.name] = value;
-    }
-
-    if (!Object.keys(formPayload).length) {
-        throw new Error(tm('elicitation.emptyReply'));
-    }
-
-    if (Object.keys(formPayload).length === 1) {
-        const [fieldName, value] = Object.entries(formPayload)[0];
-        return {
-            replyText: String(value),
-            displayText: `${fieldName}: ${String(value)}`
-        };
-    }
-
+  const fields = props.payload.fields || [];
+  if (!fields.length) {
     return {
-        replyText: JSON.stringify(formPayload),
-        displayText: Object.entries(formPayload)
-            .map(([fieldName, value]) => `${fieldName}: ${String(value)}`)
-            .join('\n')
+      replyText: "accept",
+      displayText: tm("elicitation.accepted"),
     };
+  }
+
+  const formPayload: Record<string, string | boolean> = {};
+  for (const field of fields) {
+    const value = getFieldValue(field);
+    if (value === undefined || value === "") {
+      if (field.required) {
+        throw new Error(tm("elicitation.requiredField", { field: field.label || field.name }));
+      }
+      continue;
+    }
+    formPayload[field.name] = value;
+  }
+
+  if (!Object.keys(formPayload).length) {
+    throw new Error(tm("elicitation.emptyReply"));
+  }
+
+  if (Object.keys(formPayload).length === 1) {
+    const [fieldName, value] = Object.entries(formPayload)[0];
+    return {
+      replyText: String(value),
+      displayText: `${fieldName}: ${String(value)}`,
+    };
+  }
+
+  return {
+    replyText: JSON.stringify(formPayload),
+    displayText: Object.entries(formPayload)
+      .map(([fieldName, value]) => `${fieldName}: ${String(value)}`)
+      .join("\n"),
+  };
 }
 
 async function submitSimpleReply(replyText: string, displayText: string) {
-    if (!props.submitElicitation || !props.interactive || submitting.value || submitted.value) {
-        return;
-    }
+  if (!props.submitElicitation || !props.interactive || submitting.value || submitted.value) {
+    return;
+  }
 
-    submitting.value = true;
-    try {
-        await props.submitElicitation(replyText, displayText);
-        submitted.value = true;
-        statusText.value = tm('elicitation.submitted');
-        showSuccess(tm('elicitation.submitted'));
-    } catch (err) {
-        console.error('Failed to submit elicitation reply:', err);
-        showError(tm('elicitation.submitFailed'));
-    } finally {
-        submitting.value = false;
-    }
+  submitting.value = true;
+  try {
+    await props.submitElicitation(replyText, displayText);
+    submitted.value = true;
+    statusText.value = tm("elicitation.submitted");
+    showSuccess(tm("elicitation.submitted"));
+  } catch (err) {
+    console.error("Failed to submit elicitation reply:", err);
+    showError(tm("elicitation.submitFailed"));
+  } finally {
+    submitting.value = false;
+  }
 }
 
 async function submitFormReply() {
-    try {
-        const { replyText, displayText } = buildFormReply();
-        await submitSimpleReply(replyText, displayText);
-    } catch (err) {
-        const message = err instanceof Error ? err.message : tm('elicitation.submitFailed');
-        showError(message);
-    }
+  try {
+    const { replyText, displayText } = buildFormReply();
+    await submitSimpleReply(replyText, displayText);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : tm("elicitation.submitFailed");
+    showError(message);
+  }
 }
 </script>
 

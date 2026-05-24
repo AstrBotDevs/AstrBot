@@ -1,43 +1,43 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useAuthStore } from '@/stores/auth';
-import { useModuleI18n } from '@/i18n/composables';
-import AuthStageAccount from './stages/AuthStageAccount.vue';
-import AuthStageTotp from './stages/AuthStageTotp.vue';
-import AuthStageRecovery from './stages/AuthStageRecovery.vue';
+import { ref } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { useAuthStore } from "@/stores/auth";
+import AuthStageAccount from "./stages/AuthStageAccount.vue";
+import AuthStageRecovery from "./stages/AuthStageRecovery.vue";
+import AuthStageTotp from "./stages/AuthStageTotp.vue";
 
-const { tm: t } = useModuleI18n('features/auth');
+const { tm: t } = useModuleI18n("features/auth");
 const authStore = useAuthStore();
 
-const username = ref('');
-const password = ref('');
-const totpCode = ref('');
+const username = ref("");
+const password = ref("");
+const totpCode = ref("");
 const trustTotpDevice = ref(false);
-const recoveryCode = ref('');
+const recoveryCode = ref("");
 const loading = ref(false);
-const apiError = ref('');
-const stage = ref<'account' | 'totp' | 'recovery'>('account');
+const apiError = ref("");
+const stage = ref<"account" | "totp" | "recovery">("account");
 
 function resetTotpStage() {
-  totpCode.value = '';
+  totpCode.value = "";
   trustTotpDevice.value = false;
 }
 
 function goToAccountStage() {
-  stage.value = 'account';
-  apiError.value = '';
+  stage.value = "account";
+  apiError.value = "";
   resetTotpStage();
 }
 
 function goToTotpStage() {
-  stage.value = 'totp';
-  apiError.value = '';
+  stage.value = "totp";
+  apiError.value = "";
 }
 
 function goToRecoveryStage() {
-  stage.value = 'recovery';
-  apiError.value = '';
-  recoveryCode.value = '';
+  stage.value = "recovery";
+  apiError.value = "";
+  recoveryCode.value = "";
 }
 
 async function submitAccountStage() {
@@ -45,16 +45,16 @@ async function submitAccountStage() {
     return;
   }
   loading.value = true;
-  apiError.value = '';
+  apiError.value = "";
   try {
-    // @ts-ignore
-    authStore.returnUrl = new URLSearchParams(window.location.search).get('redirect');
+    // @ts-expect-error
+    authStore.returnUrl = new URLSearchParams(window.location.search).get("redirect");
     const res = await authStore.login(username.value, password.value);
-    if (res === 'totp_required') {
+    if (res === "totp_required") {
       goToTotpStage();
     }
   } catch (err) {
-    apiError.value = String(err || '') || 'Login failed';
+    apiError.value = String(err || "") || "Login failed";
   } finally {
     loading.value = false;
   }
@@ -65,16 +65,11 @@ async function submitTotpStage() {
     return;
   }
   loading.value = true;
-  apiError.value = '';
+  apiError.value = "";
   try {
-    await authStore.login(
-      username.value,
-      password.value,
-      totpCode.value,
-      trustTotpDevice.value,
-    );
+    await authStore.login(username.value, password.value, totpCode.value, trustTotpDevice.value);
   } catch (err) {
-    apiError.value = String(err || '') || 'Verification failed';
+    apiError.value = String(err || "") || "Verification failed";
   } finally {
     loading.value = false;
   }
@@ -85,11 +80,11 @@ async function submitRecoveryStage() {
     return;
   }
   loading.value = true;
-  apiError.value = '';
+  apiError.value = "";
   try {
     await authStore.login(username.value, password.value, recoveryCode.value);
   } catch (err) {
-    apiError.value = String(err || '') || 'Recovery login failed';
+    apiError.value = String(err || "") || "Recovery login failed";
   } finally {
     loading.value = false;
   }

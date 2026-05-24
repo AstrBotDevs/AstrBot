@@ -1,11 +1,11 @@
 <script setup>
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import { ref, computed, watch } from 'vue'
-import ConfigItemRenderer from './ConfigItemRenderer.vue'
-import TemplateListEditor from './TemplateListEditor.vue'
-import { useI18n, useModuleI18n } from '@/i18n/composables'
-import axios from 'axios'
-import { useToast } from '@/utils/toast'
+import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
+import { computed, ref, watch } from "vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
+import { useToast } from "@/utils/toast";
+import ConfigItemRenderer from "./ConfigItemRenderer.vue";
+import TemplateListEditor from "./TemplateListEditor.vue";
 
 const props = defineProps({
   metadata: {
@@ -26,7 +26,7 @@ const props = defineProps({
   },
   pluginI18n: {
     type: Object,
-    default: () => ({})
+    default: () => ({}),
   },
   pathPrefix: {
     type: String,
@@ -54,10 +54,16 @@ const providerHint = computed(() => {
   if (typeof hint !== "string" || !hint) return "";
 
   // Embedding 类型的提示在 embedding_api_base 字段旁边显示，不在卡片标题处重复显示
-  if (hint.startsWith('provider_group.provider.') && hint.endsWith('.hint')) {
-    const providerKey = hint.slice('provider_group.provider.'.length, -'.hint'.length)
-    const embeddingTypes = ['openai_embedding', 'gemini_embedding', 'zhipu_embedding', 'volcengine_embedding', 'ollama_embedding']
-    if (embeddingTypes.includes(providerKey)) return ''
+  if (hint.startsWith("provider_group.provider.") && hint.endsWith(".hint")) {
+    const providerKey = hint.slice("provider_group.provider.".length, -".hint".length);
+    const embeddingTypes = [
+      "openai_embedding",
+      "gemini_embedding",
+      "zhipu_embedding",
+      "volcengine_embedding",
+      "ollama_embedding",
+    ];
+    if (embeddingTypes.includes(providerKey)) return "";
   }
 
   return hint;
@@ -69,11 +75,11 @@ const getItemHint = (itemKey, itemMeta) => {
   if (itemKey !== "embedding_api_base") return "";
 
   // 所有 openai_embedding 类型的预设（包括智谱、火山、Ollama）共享 openai_embedding 的提示
-  const providerType = props.iterable?.type
-  if (providerType === 'openai_embedding') {
-    return getRaw('provider_group.provider.openai_embedding.hint')
-      ? 'provider_group.provider.openai_embedding.hint'
-      : ''
+  const providerType = props.iterable?.type;
+  if (providerType === "openai_embedding") {
+    return getRaw("provider_group.provider.openai_embedding.hint")
+      ? "provider_group.provider.openai_embedding.hint"
+      : "";
   }
   if (providerType === "gemini_embedding") {
     return getRaw("provider_group.provider.gemini_embedding.hint")
@@ -84,14 +90,14 @@ const getItemHint = (itemKey, itemMeta) => {
   return "";
 };
 
-const dialog = ref(false)
-const currentEditingKey = ref('')
-const currentEditingLanguage = ref('json')
-const currentEditingTheme = ref('vs-light')
-let currentEditingKeyIterable = null
-const loadingEmbeddingDim = ref(false)
-const loadingEmbeddingModels = ref(false)
-const availableEmbeddingModels = ref([])
+const dialog = ref(false);
+const currentEditingKey = ref("");
+const currentEditingLanguage = ref("json");
+const currentEditingTheme = ref("vs-light");
+let currentEditingKeyIterable = null;
+const loadingEmbeddingDim = ref(false);
+const loadingEmbeddingModels = ref(false);
+const availableEmbeddingModels = ref([]);
 
 function openEditorDialog(key, value, theme, language) {
   currentEditingKey.value = key;
@@ -106,41 +112,32 @@ function saveEditedContent() {
 }
 
 function getNumericEmbeddingDimension(value) {
-  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
-    return value
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
+    return value;
   }
 
-  if (typeof value === 'string') {
-    const trimmedValue = value.trim()
+  if (typeof value === "string") {
+    const trimmedValue = value.trim();
     if (/^\d+$/.test(trimmedValue)) {
-      return Number(trimmedValue)
+      return Number(trimmedValue);
     }
   }
 
-  return null
+  return null;
 }
 
 async function getEmbeddingDimensions(providerConfig) {
-  if (loadingEmbeddingDim.value) return
-  loadingEmbeddingDim.value = true
+  if (loadingEmbeddingDim.value) return;
+  loadingEmbeddingDim.value = true;
   try {
-    const response = await axios.post(
-      "/api/config/provider/get_embedding_dim",
-      {
-        provider_config: providerConfig,
-      },
-    );
+    const response = await axios.post("/api/config/provider/get_embedding_dim", {
+      provider_config: providerConfig,
+    });
 
-    if (
-      response.data.status != "error" &&
-      response.data.data?.embedding_dimensions
-    ) {
+    if (response.data.status !== "error" && response.data.data?.embedding_dimensions) {
       console.info(response.data.data.embedding_dimensions);
-      providerConfig.embedding_dimensions =
-        response.data.data.embedding_dimensions;
-      useToast().success(
-        "获取成功: " + response.data.data.embedding_dimensions,
-      );
+      providerConfig.embedding_dimensions = response.data.data.embedding_dimensions;
+      useToast().success(`获取成功: ${response.data.data.embedding_dimensions}`);
     } else {
       useToast().error(response.data.message);
     }
@@ -152,45 +149,41 @@ async function getEmbeddingDimensions(providerConfig) {
 }
 
 async function getEmbeddingModels(providerConfig) {
-  if (loadingEmbeddingModels.value) return
+  if (loadingEmbeddingModels.value) return;
 
-  loadingEmbeddingModels.value = true
+  loadingEmbeddingModels.value = true;
   try {
-    const response = await axios.post('/api/config/provider/get_embedding_models', {
-      provider_config: providerConfig
-    })
-    if (response.data.status != "error" && response.data.data?.embedding_dimensions) {
-      const detectedDimension = response.data.data.embedding_dimensions
-      const numericDimension = getNumericEmbeddingDimension(detectedDimension)
+    const response = await axios.post("/api/config/provider/get_embedding_models", {
+      provider_config: providerConfig,
+    });
+    if (response.data.status !== "error" && response.data.data?.embedding_dimensions) {
+      const detectedDimension = response.data.data.embedding_dimensions;
+      const numericDimension = getNumericEmbeddingDimension(detectedDimension);
 
-      console.log(detectedDimension)
+      console.log(detectedDimension);
 
       if (numericDimension !== null) {
-        providerConfig.embedding_dimensions = numericDimension
-        useToast().success("获取成功: " + numericDimension)
+        providerConfig.embedding_dimensions = numericDimension;
+        useToast().success(`获取成功: ${numericDimension}`);
       } else {
-        useToast().info(`检测到维度: ${detectedDimension}。如需保存，请手动填入后点保存。`)
+        useToast().info(`检测到维度: ${detectedDimension}。如需保存，请手动填入后点保存。`);
       }
     } else {
-      useToast().error(response.data.message)
+      useToast().error(response.data.message);
     }
   } catch (error) {
-    console.error('Error getting embedding models:', error)
+    console.error("Error getting embedding models:", error);
   } finally {
-    loadingEmbeddingModels.value = false
+    loadingEmbeddingModels.value = false;
   }
 }
 
 watch(
-  () => [
-    props.iterable?.type,
-    props.iterable?.embedding_api_key,
-    props.iterable?.embedding_api_base
-  ],
+  () => [props.iterable?.type, props.iterable?.embedding_api_key, props.iterable?.embedding_api_base],
   () => {
-    availableEmbeddingModels.value = []
-  }
-)
+    availableEmbeddingModels.value = [];
+  },
+);
 
 function getValueBySelector(obj, selector) {
   const keys = selector.split(".");
@@ -209,9 +202,7 @@ function shouldShowItem(itemMeta, itemKey) {
   if (!itemMeta?.condition) {
     return true;
   }
-  for (const [conditionKey, expectedValue] of Object.entries(
-    itemMeta.condition,
-  )) {
+  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
     const actualValue = getValueBySelector(props.iterable, conditionKey);
     if (actualValue !== expectedValue) {
       return false;

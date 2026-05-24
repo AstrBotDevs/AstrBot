@@ -3,7 +3,7 @@
  * Shares mouse position across all components so the canvas
  * background can react to UI element proximity.
  */
-import { ref, readonly } from "vue";
+import { readonly, ref } from "vue";
 
 const mouseX = ref(-9999);
 const mouseY = ref(-9999);

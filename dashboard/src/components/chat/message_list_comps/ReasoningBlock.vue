@@ -27,9 +27,9 @@
 </template>
 
 <script setup lang="ts">
+import { MarkdownRender } from "markstream-vue";
 import { ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { MarkdownRender } from "markstream-vue";
 
 const props = defineProps({
   reasoning: {

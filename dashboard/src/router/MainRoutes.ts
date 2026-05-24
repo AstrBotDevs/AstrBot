@@ -1,7 +1,4 @@
-import {
-  EXTENSION_DETAILS_ROUTE_NAME,
-  EXTENSION_ROUTE_NAME,
-} from "./routeConstants.mjs";
+import { EXTENSION_DETAILS_ROUTE_NAME, EXTENSION_ROUTE_NAME } from "./routeConstants.mjs";
 
 const MainRoutes = {
   path: "/main",
@@ -75,30 +72,15 @@ const MainRoutes = {
       component: () => import("@/views/ConversationPage.vue"),
     },
     {
-      name: 'AdvancedPersona',
-      path: '/persona/advanced',
-      component: () => import('@/components/shared/AdvancedPersonaPage.vue')
+      name: "AdvancedPersona",
+      path: "/persona/advanced",
+      component: () => import("@/components/shared/AdvancedPersonaPage.vue"),
     },
     {
-      name: 'AdvancedPersonaEdit',
-      path: '/persona/advanced/:personaId',
-      component: () => import('@/components/shared/AdvancedPersonaPage.vue'),
-      props: true
-    },
-    {
-      name: 'SubAgent',
-      path: '/subagent',
-      component: () => import('@/views/SubAgentPage.vue')
-    },
-    {
-      name: 'Sandboxes',
-      path: '/sandboxes',
-      component: () => import('@/views/SandboxManagementPage.vue')
-    },
-    {
-      name: 'CronJobs',
-      path: '/cron',
-      component: () => import('@/views/CronJobPage.vue')
+      name: "AdvancedPersonaEdit",
+      path: "/persona/advanced/:personaId",
+      component: () => import("@/components/shared/AdvancedPersonaPage.vue"),
+      props: true,
     },
     {
       name: "SubAgent",
@@ -106,19 +88,24 @@ const MainRoutes = {
       component: () => import("@/views/SubAgentPage.vue"),
     },
     {
+      name: "Sandboxes",
+      path: "/sandboxes",
+      component: () => import("@/views/SandboxManagementPage.vue"),
+    },
+    {
       name: "CronJobs",
       path: "/cron",
       component: () => import("@/views/CronJobPage.vue"),
     },
     {
-      name: 'ErrorAnalysis',
-      path: '/error-analysis',
-      component: () => import('@/views/ErrorAnalysisPage.vue')
+      name: "ErrorAnalysis",
+      path: "/error-analysis",
+      component: () => import("@/views/ErrorAnalysisPage.vue"),
     },
     {
-      name: 'NativeKnowledgeBase',
-      path: '/knowledge-base',
-      component: () => import('@/views/knowledge-base/index.vue'),
+      name: "NativeKnowledgeBase",
+      path: "/knowledge-base",
+      component: () => import("@/views/knowledge-base/index.vue"),
       children: [
         {
           path: "",
@@ -140,9 +127,9 @@ const MainRoutes = {
       ],
     },
     {
-      name: 'Memory',
-      path: '/memory',
-      component: () => import('@/views/MemoryPage.vue')
+      name: "Memory",
+      path: "/memory",
+      component: () => import("@/views/MemoryPage.vue"),
     },
 
     // 旧版本的知识库路由

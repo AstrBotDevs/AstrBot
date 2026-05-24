@@ -1,10 +1,7 @@
-import { ref, computed } from "vue";
-import axios from "@/utils/request";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
-import {
-  buildWebchatUmoDetails,
-  getStoredSelectedChatConfigId,
-} from "@/utils/chatConfigBinding";
+import { buildWebchatUmoDetails, getStoredSelectedChatConfigId } from "@/utils/chatConfigBinding";
+import axios from "@/utils/request";
 
 export interface Session {
   session_id: string;
@@ -40,18 +37,14 @@ export function useSessions(chatboxMode = false) {
 
       // 处理待加载的会话
       if (pendingSessionId.value) {
-        const session = sessions.value.find(
-          (s) => s.session_id === pendingSessionId.value,
-        );
+        const session = sessions.value.find((s) => s.session_id === pendingSessionId.value);
         if (session) {
           selectedSessions.value = [pendingSessionId.value];
           pendingSessionId.value = null;
         }
       } else if (currSessionId.value) {
         // 如果当前有选中的会话，确保它在列表中并被选中
-        const session = sessions.value.find(
-          (s) => s.session_id === currSessionId.value,
-        );
+        const session = sessions.value.find((s) => s.session_id === currSessionId.value);
         if (session) {
           selectedSessions.value = [currSessionId.value];
         }
@@ -77,11 +70,7 @@ export function useSessions(chatboxMode = false) {
 
       currSessionId.value = sessionId;
 
-      if (
-        selectedConfigId &&
-        selectedConfigId !== "default" &&
-        platformId === "webchat"
-      ) {
+      if (selectedConfigId && selectedConfigId !== "default" && platformId === "webchat") {
         try {
           const umoDetails = buildWebchatUmoDetails(sessionId, false);
           await axios.post("/api/config/umo_abconf_route/update", {
@@ -111,7 +100,7 @@ export function useSessions(chatboxMode = false) {
 
   async function deleteSession(sessionId: string) {
     try {
-      await axios.get("/api/chat/delete_session?session_id=" + sessionId);
+      await axios.get(`/api/chat/delete_session?session_id=${sessionId}`);
       await getSessions();
       currSessionId.value = "";
       selectedSessions.value = [];
@@ -148,18 +137,14 @@ export function useSessions(chatboxMode = false) {
     );
   }
 
-  async function batchDeleteSessions(
-    sessionIds: string[],
-  ): Promise<BatchDeleteResult> {
+  async function batchDeleteSessions(sessionIds: string[]): Promise<BatchDeleteResult> {
     try {
       const currentSessionId = currSessionId.value;
       const response = await axios.post("/api/chat/batch_delete_sessions", {
         session_ids: sessionIds,
       });
       if (response.data?.status !== "ok") {
-        throw new Error(
-          response.data?.message || "Failed to batch delete sessions",
-        );
+        throw new Error(response.data?.message || "Failed to batch delete sessions");
       }
 
       const data = response.data?.data;
@@ -168,13 +153,9 @@ export function useSessions(chatboxMode = false) {
       }
 
       const failedItems = data.failed_items;
-      const failedSessionIds = new Set(
-        failedItems.map((item) => item.session_id),
-      );
+      const failedSessionIds = new Set(failedItems.map((item) => item.session_id));
       const currentSessionDeleted = Boolean(
-        currentSessionId &&
-        sessionIds.includes(currentSessionId) &&
-        !failedSessionIds.has(currentSessionId),
+        currentSessionId && sessionIds.includes(currentSessionId) && !failedSessionIds.has(currentSessionId),
       );
 
       if (currentSessionDeleted) {
@@ -212,9 +193,7 @@ export function useSessions(chatboxMode = false) {
       });
 
       // 更新本地会话标题
-      const session = sessions.value.find(
-        (s) => s.session_id === editingSessionId.value,
-      );
+      const session = sessions.value.find((s) => s.session_id === editingSessionId.value);
       if (session) {
         session.display_name = trimmedTitle;
       }

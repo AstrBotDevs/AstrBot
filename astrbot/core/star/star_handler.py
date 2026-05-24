@@ -248,12 +248,12 @@ class EventType(enum.Enum):
     OnPluginLoadedEvent = enum.auto()  # 插件加载完成
     OnPluginUnloadedEvent = enum.auto()  # 插件卸载完成
     OnRawPlatformEvent = enum.auto()  # 收到平台原始事件
+    OnStarActivatedEvent = enum.auto()  # 插件启用
+    OnStarDeactivatedEvent = enum.auto()  # 插件禁用
 
 
 H = TypeVar("H", bound=Callable[..., Any])
 
-    OnStarActivatedEvent = enum.auto()  # 插件启用
-    OnStarDeactivatedEvent = enum.auto()  # 插件禁用
 
 @dataclass
 class StarHandlerMetadata(Generic[H]):

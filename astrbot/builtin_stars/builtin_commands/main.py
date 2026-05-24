@@ -5,8 +5,6 @@ from astrbot.core.star.filter.command import GreedyStr
 from .commands import (
     AdminCommands,
     AlterCmdCommands,
-    ContextCompactionCommands,
-    ContextMemoryCommands,
     ConversationCommands,
     HelpCommand,
     LLMCommands,

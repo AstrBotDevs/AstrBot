@@ -119,7 +119,7 @@ async def test_prompt_bridge_tools_are_registered_and_removed(
     )
 
     tool_names = {tool.name for tool in tool_mgr.func_list}
-    assert "draft_brief" in tool_names
+    assert "mcp_demo-server__draft_brief" in tool_names
     assert "mcp_demo_server_list_prompts" in tool_names
     assert "mcp_demo_server_get_prompt" in tool_names
 

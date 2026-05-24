@@ -288,10 +288,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, type PropType } from "vue";
+import { computed, type PropType, ref, watch } from "vue";
+import { useConfigTextResolver } from "@/composables/useConfigTextResolver";
 import { useI18n } from "@/i18n/composables";
 import { useToast } from "@/utils/toast";
-import { useConfigTextResolver } from "@/composables/useConfigTextResolver";
 
 interface SliderConfig {
   min: number;
@@ -340,15 +340,15 @@ const props = defineProps({
   },
   pluginName: {
     type: String,
-    default: ''
+    default: "",
   },
   pluginI18n: {
     type: Object,
-    default: () => ({})
+    default: () => ({}),
   },
   configKey: {
     type: String,
-    default: ''
+    default: "",
   },
   buttonText: {
     type: String,
@@ -368,12 +368,8 @@ const { translateIfKey, resolveConfigText } = useConfigTextResolver(props);
 
 const emit = defineEmits(["update:modelValue"]);
 
-const resolveButtonText = computed(
-  () => props.buttonText || t("core.common.list.modifyButton"),
-);
-const resolveDialogTitle = computed(
-  () => props.dialogTitle || t("core.common.objectEditor.dialogTitle"),
-);
+const resolveButtonText = computed(() => props.buttonText || t("core.common.list.modifyButton"));
+const resolveDialogTitle = computed(() => props.dialogTitle || t("core.common.objectEditor.dialogTitle"));
 
 const dialog = ref(false);
 const localKeyValuePairs = ref<KeyValuePair[]>([]);
@@ -384,10 +380,7 @@ const nextPairId = ref(0);
 
 // Template schema support
 const templateSchema = computed(() => {
-  return (props.itemMeta?.template_schema || {}) as Record<
-    string,
-    TemplateField
-  >;
+  return (props.itemMeta?.template_schema || {}) as Record<string, TemplateField>;
 });
 
 const hasTemplateSchema = computed(() => {
@@ -401,9 +394,7 @@ const displayKeys = computed(() => {
 
 // 分离模板字段和普通字段
 const nonTemplatePairs = computed(() => {
-  return localKeyValuePairs.value.filter(
-    (pair) => !templateSchema.value[pair.key],
-  );
+  return localKeyValuePairs.value.filter((pair) => !templateSchema.value[pair.key]);
 });
 
 // 监听 modelValue 变化，主要用于初始化
@@ -488,9 +479,7 @@ function openDialog() {
 function addKeyValuePair() {
   const key = newKey.value.trim();
   if (key !== "") {
-    const isKeyExists = localKeyValuePairs.value.some(
-      (pair) => pair.key === key,
-    );
+    const isKeyExists = localKeyValuePairs.value.some((pair) => pair.key === key);
     if (isKeyExists) {
       toastWarning(t("core.common.objectEditor.keyExists"));
       return;
@@ -544,9 +533,7 @@ function onKeyBlur(pair: KeyValuePair) {
   const newKey = pair.key;
   if (originalKey === undefined || originalKey === newKey) return;
 
-  const isKeyExists = localKeyValuePairs.value.some(
-    (p) => p !== pair && p.key === newKey,
-  );
+  const isKeyExists = localKeyValuePairs.value.some((p) => p !== pair && p.key === newKey);
   if (isKeyExists) {
     toastWarning(t("core.common.objectEditor.keyExists"));
     pair.key = originalKey;
@@ -557,8 +544,7 @@ function onKeyBlur(pair: KeyValuePair) {
   if (template) {
     pair.type = template.type || pair.type;
     if (pair.value === undefined || pair.value === null || pair.value === "") {
-      pair.value =
-        template.default !== undefined ? template.default : pair.value;
+      pair.value = template.default !== undefined ? template.default : pair.value;
     }
     pair.slider = template.slider;
     pair.template = template;
@@ -573,22 +559,16 @@ function isTemplateKeyAdded(templateKey: string): boolean {
 }
 
 function getTemplateValue(templateKey: string): unknown {
-  const pair = localKeyValuePairs.value.find(
-    (pair) => pair.key === templateKey,
-  );
+  const pair = localKeyValuePairs.value.find((pair) => pair.key === templateKey);
   if (pair) {
     return pair.value;
   }
   const template = templateSchema.value[templateKey];
-  return template?.default !== undefined
-    ? template.default
-    : getDefaultValueForType(template?.type || "string");
+  return template?.default !== undefined ? template.default : getDefaultValueForType(template?.type || "string");
 }
 
 function updateTemplateValue(templateKey: string, newValue: unknown) {
-  const existingIndex = localKeyValuePairs.value.findIndex(
-    (pair) => pair.key === templateKey,
-  );
+  const existingIndex = localKeyValuePairs.value.findIndex((pair) => pair.key === templateKey);
   const template = templateSchema.value[templateKey];
 
   if (existingIndex >= 0) {
@@ -610,9 +590,7 @@ function updateTemplateValue(templateKey: string, newValue: unknown) {
 }
 
 function removeTemplateKey(templateKey: string) {
-  const index = localKeyValuePairs.value.findIndex(
-    (pair) => pair.key === templateKey,
-  );
+  const index = localKeyValuePairs.value.findIndex((pair) => pair.key === templateKey);
   if (index >= 0) {
     localKeyValuePairs.value.splice(index, 1);
   }
@@ -629,7 +607,6 @@ function getDefaultValueForType(type: string): unknown {
       return false;
     case "json":
       return "{}";
-    case "string":
     default:
       return "";
   }
@@ -643,7 +620,7 @@ function confirmDialog() {
     // 根据声明的类型进行转换
     switch (pair.type) {
       case "int":
-        convertedValue = parseInt(String(pair.value)) || 0;
+        convertedValue = parseInt(String(pair.value), 10) || 0;
         break;
       case "float":
       case "number":
@@ -657,7 +634,6 @@ function confirmDialog() {
       case "json":
         convertedValue = JSON.parse(String(pair.value));
         break;
-      case "string":
       default:
         // 默认转换为字符串
         convertedValue = String(pair.value);
@@ -677,16 +653,13 @@ function cancelDialog() {
   dialog.value = false;
 }
 
-function getTemplateTitle(
-  template: TemplateField | undefined,
-  templateKey: string,
-): unknown {
-  return resolveTemplateText(templateKey, 'name', template?.name || template?.description || templateKey);
+function getTemplateTitle(template: TemplateField | undefined, templateKey: string): unknown {
+  return resolveTemplateText(templateKey, "name", template?.name || template?.description || templateKey);
 }
 
 function resolveTemplateText(templateKey: string, attr: string, fallback: unknown) {
   if (!props.configKey) {
-    return translateIfKey(fallback) || '';
+    return translateIfKey(fallback) || "";
   }
   return resolveConfigText(`${props.configKey}.template_schema.${templateKey}`, attr, fallback);
 }

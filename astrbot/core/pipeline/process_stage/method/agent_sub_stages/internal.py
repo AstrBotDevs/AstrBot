@@ -403,7 +403,7 @@ class InternalAgentSubStage(Stage):
                     # Expose span both on the event (legacy) and via ContextVar so
                     # astr_agent_run_util and any downstream code can resolve the
                     # parent without an explicit event reference.
-                    event._llm_agent_span = llm_agent_span  # type: ignore[attr-defined]
+                    event._llm_agent_span = llm_agent_span
                     _llm_span_token = _current_span.set(llm_agent_span)  # noqa: F841
 
                     # 检测 Live Mode

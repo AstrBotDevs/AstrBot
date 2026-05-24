@@ -185,17 +185,11 @@ class ComputerToolProvider:
         """
         from astrbot.core.computer.computer_client import get_default_sandbox_tools
 
-        booter_type = ctx.sandbox_cfg.get("booter", "shipyard_neo")
+        booter_type = str(ctx.sandbox_cfg.get("booter", "") or "").strip()
+        if not booter_type:
+            logger.debug("[ComputerToolProvider] no sandbox provider configured")
+            return []
 
-        # Validate shipyard (non-neo) config
-        if booter_type == "shipyard":
-            ep = ctx.sandbox_cfg.get("shipyard_endpoint", "")
-            at = ctx.sandbox_cfg.get("shipyard_access_token", "")
-            if not ep or not at:
-                logger.error("Shipyard sandbox configuration is incomplete.")
-                return []
-
-        # Always return the full tool set for schema stability
         return get_default_sandbox_tools(ctx.sandbox_cfg)
 
     def _sandbox_prompt_addon(self, ctx: ToolProviderContext) -> str:

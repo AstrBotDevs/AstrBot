@@ -23,6 +23,16 @@ from .astrbot_path import get_astrbot_data_path, get_astrbot_path, get_astrbot_t
 from .version_comparator import VersionComparator
 
 logger = logging.getLogger("astrbot")
+_DOWNLOAD_READ_CHUNK_SIZE = 8192
+_DOWNLOAD_FLUSH_THRESHOLD = 256 * 1024
+
+
+class AwaitableStr(str):
+    def __await__(self):
+        async def _resolve() -> str:
+            return str(self)
+
+        return _resolve().__await__()
 
 
 def _get_aiohttp():
@@ -168,6 +178,50 @@ async def _emit_download_progress(progress_callback, payload: dict) -> None:
         await result
 
 
+async def _stream_to_file(
+    stream,
+    file_obj,
+    *,
+    total_size: int = 0,
+    start_time: float | None = None,
+    show_progress: bool = False,
+    progress_callback=None,
+    url: str = "",
+) -> int:
+    downloaded_size = 0
+    pending = bytearray()
+    start = start_time if start_time is not None else time.time()
+
+    while True:
+        chunk = await stream.read(_DOWNLOAD_READ_CHUNK_SIZE)
+        if not chunk:
+            break
+        pending.extend(chunk)
+        downloaded_size += len(chunk)
+        if len(pending) >= _DOWNLOAD_FLUSH_THRESHOLD:
+            file_obj.write(bytes(pending))
+            pending.clear()
+        elapsed_time = time.time() - start if time.time() - start > 0 else 1
+        speed = downloaded_size / 1024 / elapsed_time
+        percent = downloaded_size / total_size if total_size > 0 else 0
+        await _emit_download_progress(
+            progress_callback,
+            {
+                "url": url,
+                "downloaded": downloaded_size,
+                "total": total_size,
+                "percent": percent,
+                "speed": speed,
+            },
+        )
+        if show_progress:
+            pass
+
+    if pending:
+        file_obj.write(bytes(pending))
+    return downloaded_size
+
+
 async def download_file(
     url: str,
     path: str,
@@ -197,42 +251,17 @@ async def download_file(
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    print(f"Downloading: {url} | Size: {total_size / 1024:.2f} KB")
+                    pass
                 with open(path, "wb") as f:
-                    while True:
-                        chunk = await resp.content.read(8192)
-                        if not chunk:
-                            break
-                        await f.write(chunk)
-                        downloaded_size += len(chunk)
-                        elapsed_time = (
-                            time.time() - start_time
-                            if time.time() - start_time > 0
-                            else 1
-                        )
-                        speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                        percent = downloaded_size / total_size if total_size > 0 else 0
-                        await _emit_download_progress(
-                            progress_callback,
-                            {
-                                "url": url,
-                                "downloaded": downloaded_size,
-                                "total": total_size,
-                                "percent": percent,
-                                "speed": speed,
-                            },
-                        )
-                        if show_progress:
-                            elapsed_time = (
-                                time.time() - start_time
-                                if time.time() - start_time > 0
-                                else 1
-                            )
-                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(
-                                f"\rProgress: {downloaded_size / total_size:.2%} Speed: {speed:.2f} KB/s",
-                                end="",
-                            )
+                    downloaded_size = await _stream_to_file(
+                        resp.content,
+                        f,
+                        total_size=total_size,
+                        start_time=start_time,
+                        show_progress=show_progress,
+                        progress_callback=progress_callback,
+                        url=url,
+                    )
                 await _emit_download_progress(
                     progress_callback,
                     {
@@ -264,30 +293,26 @@ async def download_file(
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    print(f"Size: {total_size / 1024:.2f} KB | URL: {url}")
+                    pass
                 with open(path, "wb") as f:
-                    while True:
-                        chunk = await resp.content.read(8192)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
-                        if show_progress:
-                            elapsed_time = time.time() - start_time
-                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(
-                                f"\rProgress: {downloaded_size / total_size:.2%} Speed: {speed:.2f} KB/s",
-                                end="",
-                            )
+                    await _stream_to_file(
+                        resp.content,
+                        f,
+                        total_size=total_size,
+                        start_time=start_time,
+                        show_progress=show_progress,
+                        progress_callback=progress_callback,
+                        url=url,
+                    )
     if show_progress:
         logger.info("下载完成")
 
 
-def file_to_base64(file_path: str) -> str:
+def file_to_base64(file_path: str) -> AwaitableStr:
     with open(file_path, "rb") as f:
         data_bytes = f.read()
         base64_str = base64.b64encode(data_bytes).decode()
-    return "base64://" + base64_str
+    return AwaitableStr("base64://" + base64_str)
 
 
 def get_local_ip_addresses() -> list[IPv4Address | IPv6Address]:

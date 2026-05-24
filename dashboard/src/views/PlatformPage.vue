@@ -355,25 +355,17 @@
 </template>
 
 <script lang="ts">
-import axios from "@/utils/request";
-import { resolveApiUrl } from "@/utils/request";
+import AddNewPlatform from "@/components/platform/AddNewPlatform.vue";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
-import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
 import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import ItemCard from "@/components/shared/ItemCard.vue";
-import AddNewPlatform from "@/components/platform/AddNewPlatform.vue";
 import QrCodeViewer from "@/components/shared/QrCodeViewer.vue";
+import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
+import { mergeDynamicTranslations, useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCommonStore } from "@/stores/common";
-import {
-  useI18n,
-  useModuleI18n,
-  mergeDynamicTranslations,
-} from "@/i18n/composables";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
 import { getPlatformIcon } from "@/utils/platformUtils";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
+import axios, { resolveApiUrl } from "@/utils/request";
 
 export default {
   name: "PlatformPage",
@@ -481,10 +473,7 @@ export default {
       clearInterval(this.statsRefreshInterval);
     }
     // 移除语言切换事件监听器
-    window.removeEventListener(
-      "astrbot-locale-changed",
-      this.handleLocaleChange,
-    );
+    window.removeEventListener("astrbot-locale-changed", this.handleLocaleChange);
   },
 
   methods: {
@@ -496,10 +485,7 @@ export default {
     // 从工具函数导入
     getPlatformIcon(platform_id) {
       // 首先检查是否有来自插件的 logo_token
-      const template =
-        this.metadata["platform_group"]?.metadata?.platform?.config_template?.[
-          platform_id
-        ];
+      const template = this.metadata.platform_group?.metadata?.platform?.config_template?.[platform_id];
       if (template && template.logo_token) {
         // 通过文件服务访问插件提供的 logo
         return resolveApiUrl(`/api/file/${template.logo_token}`);
@@ -560,11 +546,7 @@ export default {
       }
       if (stat && typeof stat === "object") {
         for (const value of Object.values(stat)) {
-          if (
-            value &&
-            typeof value === "object" &&
-            ("qrcode_img_content" in value || "qrcode" in value)
-          ) {
+          if (value && typeof value === "object" && ("qrcode_img_content" in value || "qrcode" in value)) {
             return value;
           }
         }
@@ -616,9 +598,7 @@ export default {
     },
 
     findPlatformTemplate(platform) {
-      const templates =
-        this.metadata?.platform_group?.metadata?.platform?.config_template ||
-        {};
+      const templates = this.metadata?.platform_group?.metadata?.platform?.config_template || {};
 
       if (platform?.type && templates[platform.type]) {
         return templates[platform.type];
@@ -638,16 +618,8 @@ export default {
     mergeConfigWithTemplate(sourceConfig, templateConfig) {
       const merge = (source, reference) => {
         const target = {};
-        const sourceObj =
-          source && typeof source === "object" && !Array.isArray(source)
-            ? source
-            : {};
-        const referenceObj =
-          reference &&
-          typeof reference === "object" &&
-          !Array.isArray(reference)
-            ? reference
-            : null;
+        const sourceObj = source && typeof source === "object" && !Array.isArray(source) ? source : {};
+        const referenceObj = reference && typeof reference === "object" && !Array.isArray(reference) ? reference : null;
 
         if (!referenceObj) {
           for (const [key, value] of Object.entries(sourceObj)) {
@@ -664,22 +636,12 @@ export default {
 
         // 1) 先按模板顺序写入，保证字段相对顺序与 template 一致
         for (const [key, refValue] of Object.entries(referenceObj)) {
-          const hasSourceKey = Object.prototype.hasOwnProperty.call(
-            sourceObj,
-            key,
-          );
+          const hasSourceKey = Object.hasOwn(sourceObj, key);
           const sourceValue = sourceObj[key];
 
-          if (
-            refValue &&
-            typeof refValue === "object" &&
-            !Array.isArray(refValue)
-          ) {
+          if (refValue && typeof refValue === "object" && !Array.isArray(refValue)) {
             target[key] = merge(
-              hasSourceKey &&
-                sourceValue &&
-                typeof sourceValue === "object" &&
-                !Array.isArray(sourceValue)
+              hasSourceKey && sourceValue && typeof sourceValue === "object" && !Array.isArray(sourceValue)
                 ? sourceValue
                 : {},
               refValue,
@@ -704,7 +666,7 @@ export default {
 
         // 2) 再补充 source 中模板没有的额外字段，保持旧配置兼容性
         for (const [key, value] of Object.entries(sourceObj)) {
-          if (Object.prototype.hasOwnProperty.call(referenceObj, key)) {
+          if (Object.hasOwn(referenceObj, key)) {
             continue;
           }
           if (Array.isArray(value)) {
@@ -725,9 +687,7 @@ export default {
     editPlatform(platform) {
       const platformCopy = JSON.parse(JSON.stringify(platform));
       const template = this.findPlatformTemplate(platformCopy);
-      this.updatingPlatformConfig = template
-        ? this.mergeConfigWithTemplate(platformCopy, template)
-        : platformCopy;
+      this.updatingPlatformConfig = template ? this.mergeConfigWithTemplate(platformCopy, template) : platformCopy;
       this.updatingMode = true;
       this.showAddPlatformDialog = true;
       this.$nextTick(() => {
@@ -762,9 +722,7 @@ export default {
         })
         .then((res) => {
           this.getConfig();
-          this.showSuccess(
-            res.data.message || this.messages.statusUpdateSuccess,
-          );
+          this.showSuccess(res.data.message || this.messages.statusUpdateSuccess);
         })
         .catch((err) => {
           platform.enable = !platform.enable; // 发生错误时回滚状态

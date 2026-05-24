@@ -11,12 +11,14 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import os
 import random
 import time
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import botpy
@@ -42,7 +44,6 @@ from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 
-from ...register import register_platform_adapter
 from .components import QQCButton, QQCKeyboard
 from .qqofficial_message_event import QQOfficialMessageEvent
 
@@ -300,6 +301,25 @@ class QQOfficialPlatformAdapter(Platform):
         payload.pop("markdown", None)
         payload["content"] = plain_text or None
 
+    @staticmethod
+    async def _parse_message_chain(
+        message_chain: MessageChain,
+        *,
+        convert_image_to_markdown: bool,
+    ) -> tuple:
+        parse = QQOfficialMessageEvent._parse_to_qqofficial
+        signature = inspect.signature(parse)
+        if "convert_image_to_markdown" in signature.parameters:
+            result = await parse(
+                message_chain,
+                convert_image_to_markdown=convert_image_to_markdown,
+            )
+        else:
+            result = await parse(message_chain)
+        if len(result) == 7:
+            return (*result, None)
+        return result
+
     async def _send_by_session_common(
         self,
         session: MessageSesion,
@@ -322,7 +342,7 @@ class QQOfficialPlatformAdapter(Platform):
             file_source,
             file_name,
             keyboard_payload,
-        ) = await QQOfficialMessageEvent._parse_to_qqofficial(
+        ) = await self._parse_message_chain(
             message_chain,
             convert_image_to_markdown=convert_img,
         )
@@ -351,6 +371,9 @@ class QQOfficialPlatformAdapter(Platform):
             "msg_type": 2,
             "msg_id": msg_id,
         }
+        need_keyboard_followup = keyboard_payload is not None and any(
+            (image_base64, image_path, record_file_path, video_file_source, file_source)
+        )
         ret: Any = None
         send_helper = SimpleNamespace(bot=self.client)
 
@@ -359,6 +382,7 @@ class QQOfficialPlatformAdapter(Platform):
         # only used by helper methods that need access to bot/client or metadata.
         helper_message_obj = AstrBotMessage()
         helper_message_obj.message_id = msg_id
+        helper_message_obj.type = session.message_type
         helper_event = QQOfficialMessageEvent(
             message_str=plain_text or "",
             message_obj=helper_message_obj,
@@ -483,7 +507,7 @@ class QQOfficialPlatformAdapter(Platform):
                     payload["content"] = plain_text or None
 
             ret = await QQOfficialMessageEvent.post_c2c_message(
-                send_helper,  # type: ignore
+                send_helper,
                 openid=session.session_id,
                 **payload,
             )
@@ -520,7 +544,7 @@ class QQOfficialPlatformAdapter(Platform):
                 elif session.message_type == MessageType.FRIEND_MESSAGE:
                     followup.pop("msg_id", None)
                     await QQOfficialMessageEvent.post_c2c_message(
-                        send_helper,  # type: ignore
+                        send_helper,
                         openid=session.session_id,
                         **followup,
                     )

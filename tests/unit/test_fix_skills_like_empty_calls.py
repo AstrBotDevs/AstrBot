@@ -12,6 +12,12 @@ from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUs
 from astrbot.core.provider.provider import Provider
 
 
+class _FakeToolExecutor:
+    @classmethod
+    async def execute(cls, tool, run_context, **tool_args):
+        yield None
+
+
 def test_llm_response_tool_calls_none_and_empty_list_behaviour():
     """
     When tools_call_args is None or an empty list, both conversion helpers
@@ -172,7 +178,7 @@ async def test_skills_like_empty_requery_fix(fail_with_none):
         provider=provider,
         request=request,
         run_context=run_context,
-        tool_executor=MagicMock(),
+        tool_executor=_FakeToolExecutor,
         agent_hooks=hooks,
         tool_schema_mode="skills_like",
     )
@@ -212,7 +218,3 @@ async def test_skills_like_empty_requery_fix(fail_with_none):
     else:
         assert tc.function.name == "test_tool"
         assert tc.id == "call_1"
-
-    print(
-        f"TEST PASSED (fail_with_none={fail_with_none}): Verified that no empty tool_calls list was generated and the first tool call was retained."
-    )

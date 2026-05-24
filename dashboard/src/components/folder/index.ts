@@ -29,24 +29,23 @@
  * ```
  */
 
-// 类型导出
-export * from "./types";
-
-// Composable 导出
-export {
-  useFolderManager,
-  collectFolderAndChildrenIds,
-} from "./useFolderManager";
-export type {
-  UseFolderManagerOptions,
-  UseFolderManagerReturn,
-} from "./useFolderManager";
+export { default as BaseCreateFolderDialog } from "./BaseCreateFolderDialog.vue";
+export { default as BaseFolderBreadcrumb } from "./BaseFolderBreadcrumb.vue";
+export { default as BaseFolderCard } from "./BaseFolderCard.vue";
 
 // 组件导出
 export { default as BaseFolderTree } from "./BaseFolderTree.vue";
 export { default as BaseFolderTreeNode } from "./BaseFolderTreeNode.vue";
-export { default as BaseFolderCard } from "./BaseFolderCard.vue";
-export { default as BaseFolderBreadcrumb } from "./BaseFolderBreadcrumb.vue";
-export { default as BaseCreateFolderDialog } from "./BaseCreateFolderDialog.vue";
-export { default as BaseMoveToFolderDialog } from "./BaseMoveToFolderDialog.vue";
 export { default as BaseMoveTargetNode } from "./BaseMoveTargetNode.vue";
+export { default as BaseMoveToFolderDialog } from "./BaseMoveToFolderDialog.vue";
+// 类型导出
+export * from "./types";
+export type {
+  UseFolderManagerOptions,
+  UseFolderManagerReturn,
+} from "./useFolderManager";
+// Composable 导出
+export {
+  collectFolderAndChildrenIds,
+  useFolderManager,
+} from "./useFolderManager";

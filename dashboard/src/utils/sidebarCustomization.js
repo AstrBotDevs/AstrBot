@@ -85,12 +85,8 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
   });
 
   const hasCustomization = Boolean(customization);
-  let mainKeys = hasCustomization
-    ? normalizeKeys(customization.mainItems || [])
-    : [...defaultMain];
-  let moreKeys = hasCustomization
-    ? normalizeKeys(customization.moreItems || [])
-    : [...defaultMore];
+  let mainKeys = hasCustomization ? normalizeKeys(customization.mainItems || []) : [...defaultMain];
+  let moreKeys = hasCustomization ? normalizeKeys(customization.moreItems || []) : [...defaultMore];
 
   if (hasCustomization) {
     mainKeys = mainKeys.filter((title) => all.has(title));
@@ -103,9 +99,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     moreKeys = moreKeys.filter((title) => !mainSet.has(title));
   }
 
-  const used = hasCustomization
-    ? new Set([...mainKeys, ...moreKeys])
-    : new Set(defaultMain.concat(defaultMore));
+  const used = hasCustomization ? new Set([...mainKeys, ...moreKeys]) : new Set(defaultMain.concat(defaultMore));
 
   const mainItems = mainKeys.map((title) => all.get(title)).filter(Boolean);
 
@@ -133,9 +127,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
 
   let merged;
   if (assembleMoreGroup) {
-    const children = cloneItems
-      ? moreItems.map((item) => ({ ...item }))
-      : [...moreItems];
+    const children = cloneItems ? moreItems.map((item) => ({ ...item })) : [...moreItems];
     if (children.length > 0) {
       merged = [
         ...mainItems,
@@ -166,19 +158,14 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
  */
 export function applySidebarCustomization(defaultItems) {
   const customization = getSidebarCustomization();
-  const { merged, normalizedMainKeys, normalizedMoreKeys } =
-    resolveSidebarItems(defaultItems, customization, {
-      cloneItems: true,
-      assembleMoreGroup: true,
-    });
+  const { merged, normalizedMainKeys, normalizedMoreKeys } = resolveSidebarItems(defaultItems, customization, {
+    cloneItems: true,
+    assembleMoreGroup: true,
+  });
 
   if (customization) {
-    const rawMainKeys = Array.isArray(customization.mainItems)
-      ? customization.mainItems
-      : [];
-    const rawMoreKeys = Array.isArray(customization.moreItems)
-      ? customization.moreItems
-      : [];
+    const rawMainKeys = Array.isArray(customization.mainItems) ? customization.mainItems : [];
+    const rawMoreKeys = Array.isArray(customization.moreItems) ? customization.moreItems : [];
     const hasChanged =
       JSON.stringify(rawMainKeys) !== JSON.stringify(normalizedMainKeys) ||
       JSON.stringify(rawMoreKeys) !== JSON.stringify(normalizedMoreKeys);

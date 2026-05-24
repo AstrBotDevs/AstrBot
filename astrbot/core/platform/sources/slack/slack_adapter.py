@@ -19,7 +19,7 @@ from astrbot.api.platform import (
     Platform,
     PlatformMetadata,
 )
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
@@ -74,6 +74,9 @@ class SlackAdapter(Platform):
         self.socket_client = None
         self.webhook_client = None
         self.bot_self_id = ""
+        self.text_fallbacks = build_slack_text_fallbacks(
+            platform_config.get("text_fallbacks")
+        )
 
     async def send_by_session(
         self,
@@ -93,26 +96,6 @@ class SlackAdapter(Platform):
             build_text_fallback=SlackMessageEvent._build_text_fallback_from_chain,
             session_id=session.session_id,
         )
-        try:
-            if session.message_type == MessageType.GROUP_MESSAGE:
-                channel_id = (
-                    session.session_id.split("_")[-1]
-                    if "_" in session.session_id
-                    else session.session_id
-                )
-                await self.web_client.chat_postMessage(
-                    channel=channel_id,
-                    text=text,
-                    blocks=blocks or None,
-                )
-            else:
-                await self.web_client.chat_postMessage(
-                    channel=session.session_id,
-                    text=text,
-                    blocks=blocks or None,
-                )
-        except Exception as e:
-            logger.error(f"Slack 发送消息失败: {e}")
         await super().send_by_session(session, message_chain)
 
     @staticmethod
@@ -153,10 +136,16 @@ class SlackAdapter(Platform):
         except Exception:
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = channel_id
+        thread_ts = event.get("thread_ts")
         if abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = abm.group_id
+            base_session_id = abm.group_id
         else:
-            abm.session_id = user_id
+            base_session_id = channel_id or user_id
+        abm.session_id = (
+            encode_thread_session_id(base_session_id, str(thread_ts))
+            if thread_ts
+            else base_session_id
+        )
         abm.message_id = event.get("client_msg_id", uuid.uuid4().hex)
         abm.timestamp = int(float(event.get("ts", time.time())))
         message_text = event.get("text", "")

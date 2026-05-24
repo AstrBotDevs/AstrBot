@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import MarkdownIt from "markdown-it";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
-import { ref, computed } from "vue";
-import ConfigItemRenderer from "./ConfigItemRenderer.vue";
-import TemplateListEditor from "./TemplateListEditor.vue";
-import PersonaQuickPreview from "./PersonaQuickPreview.vue";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
+import MarkdownIt from "markdown-it";
+import { computed, ref } from "vue";
 import { useConfigTextResolver } from "@/composables/useConfigTextResolver";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import ConfigItemRenderer from "./ConfigItemRenderer.vue";
+import PersonaQuickPreview from "./PersonaQuickPreview.vue";
+import TemplateListEditor from "./TemplateListEditor.vue";
 
 interface ConfigMetaSection {
   description?: string;
@@ -48,44 +48,40 @@ const props = defineProps({
   },
   searchKeyword: {
     type: String,
-    default: ''
+    default: "",
   },
   pluginName: {
     type: String,
-    default: ''
+    default: "",
   },
   pluginI18n: {
     type: Object,
-    default: () => ({})
+    default: () => ({}),
   },
   pathPrefix: {
     type: String,
-    default: ''
-  }
-})
+    default: "",
+  },
+});
 
-const { t } = useI18n()
-const { getRaw } = useModuleI18n('features/config-metadata')
-const { tm: tmConfig } = useModuleI18n('features/config')
-const { translateIfKey, resolveConfigText } = useConfigTextResolver(props)
+const { t } = useI18n();
+const { getRaw } = useModuleI18n("features/config-metadata");
+const { tm: tmConfig } = useModuleI18n("features/config");
+const { translateIfKey, resolveConfigText } = useConfigTextResolver(props);
 
 const hintMarkdown = new MarkdownIt({
   linkify: true,
   breaks: true,
 });
 
-const renderHint = (
-  value: string | undefined | null,
-): string => {
+const renderHint = (value: string | undefined | null): string => {
   const text = translateIfKey(value);
   if (!text) return "";
   return hintMarkdown.renderInline(text);
 };
 
 // 处理labels翻译 - labels可以是数组或国际化键
-const getTranslatedLabels = (
-  itemMeta: ConfigMetaItem | null | undefined,
-): string[] | null => {
+const getTranslatedLabels = (itemMeta: ConfigMetaItem | null | undefined): string[] | null => {
   if (!itemMeta?.labels) return null;
 
   // 如果labels是字符串（国际化键）
@@ -159,23 +155,23 @@ function createSelectorModel(selector: string) {
 }
 
 function getItemPath(key) {
-  return props.pathPrefix ? `${props.pathPrefix}.${key}` : key
+  return props.pathPrefix ? `${props.pathPrefix}.${key}` : key;
 }
 
 function getItemDescription(itemKey, itemMeta) {
-  return resolveConfigText(getItemPath(itemKey), 'description', itemMeta?.description) || itemKey
+  return resolveConfigText(getItemPath(itemKey), "description", itemMeta?.description) || itemKey;
 }
 
 function getItemHint(itemKey, itemMeta) {
-  return resolveConfigText(getItemPath(itemKey), 'hint', itemMeta?.hint)
+  return resolveConfigText(getItemPath(itemKey), "hint", itemMeta?.hint);
 }
 
 function openEditorDialog(key, value, theme, language) {
-  currentEditingKey.value = key
-  currentEditingLanguage.value = language || 'json'
-  currentEditingTheme.value = theme || 'vs-light'
-  currentEditingKeyIterable = value
-  dialog.value = true
+  currentEditingKey.value = key;
+  currentEditingLanguage.value = language || "json";
+  currentEditingTheme.value = theme || "vs-light";
+  currentEditingKeyIterable = value;
+  dialog.value = true;
 }
 
 function saveEditedContent() {
@@ -184,9 +180,7 @@ function saveEditedContent() {
 
 function shouldShowItem(itemMeta: object | null | undefined, itemKey: string): boolean {
   if (itemMeta?.condition) {
-    for (const [conditionKey, expectedValue] of Object.entries(
-      itemMeta.condition,
-    )) {
+    for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
       const actualValue = getValueBySelector(props.iterable, conditionKey);
       if (actualValue !== expectedValue) {
         return false;
@@ -201,11 +195,9 @@ function shouldShowItem(itemMeta: object | null | undefined, itemKey: string): b
     return true;
   }
 
-  const searchableText = [
-    itemKey,
-    getItemDescription(itemKey, itemMeta),
-    getItemHint(itemKey, itemMeta)
-  ].join(' ').toLowerCase()
+  const searchableText = [itemKey, getItemDescription(itemKey, itemMeta), getItemHint(itemKey, itemMeta)]
+    .join(" ")
+    .toLowerCase();
 
   return searchableText.includes(keyword);
 }
@@ -213,7 +205,9 @@ function shouldShowItem(itemMeta: object | null | undefined, itemKey: string): b
 function getVisibleItemEntries(collapsed = false): [string, ConfigMetaItem][] {
   const sectionItems = props.metadata?.[props.metadataKey]?.items || {};
   return Object.entries(sectionItems).filter(([itemKey, itemMeta]) => {
-    const isCollapsed = Boolean((itemMeta as ConfigMetaItem | null)?._special === "collapsed" || (itemMeta as ConfigMetaItem | null)?.collapsed);
+    const isCollapsed = Boolean(
+      (itemMeta as ConfigMetaItem | null)?._special === "collapsed" || (itemMeta as ConfigMetaItem | null)?.collapsed,
+    );
     return isCollapsed === collapsed && shouldShowItem(itemMeta, itemKey);
   }) as [string, ConfigMetaItem][];
 }
@@ -246,9 +240,7 @@ function shouldShowSection(): boolean {
   if (!sectionMeta?.condition) {
     return true;
   }
-  for (const [conditionKey, expectedValue] of Object.entries(
-    sectionMeta.condition,
-  )) {
+  for (const [conditionKey, expectedValue] of Object.entries(sectionMeta.condition)) {
     const actualValue = getValueBySelector(props.iterable, conditionKey);
     if (actualValue !== expectedValue) {
       return false;
@@ -256,9 +248,7 @@ function shouldShowSection(): boolean {
   }
 
   const sectionItems = props.metadata?.[props.metadataKey]?.items || {};
-  const hasVisibleItems = Object.entries(sectionItems).some(
-    ([itemKey, itemMeta]) => shouldShowItem(itemMeta, itemKey),
-  );
+  const hasVisibleItems = Object.entries(sectionItems).some(([itemKey, itemMeta]) => shouldShowItem(itemMeta, itemKey));
   return hasVisibleItems;
 }
 

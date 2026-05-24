@@ -14,8 +14,8 @@ class FileTokenService:
         self.lock = asyncio.Lock()
         self.staged_files: dict[
             str,
-            tuple[str, float],
-        ] = {}  # token: (file_path, expire_time)
+            tuple[str, float, bool],
+        ] = {}  # token: (file_path, expire_time, single_use)
         self.default_timeout = default_timeout
 
     async def _cleanup_expired_tokens(self) -> None:
@@ -36,12 +36,16 @@ class FileTokenService:
         self,
         file_path: str,
         expire_seconds: float | None = None,
+        *,
+        single_use: bool = True,
+        **kwargs: object,
     ) -> str:
         """向令牌服务注册一个文件｡
 
         Args:
             file_path(str): 文件路径
             expire_seconds(float): 超时时间,单位秒(可选)
+            single_use(bool): 是否使用后立即失效
 
         Returns:
             str: 一个单次令牌
@@ -72,9 +76,9 @@ class FileTokenService:
                     f"文件不存在: {local_path} (原始输入: {file_path})",
                 )
 
-            legacy_timeout = kwargs.pop("timeout", None)
+            legacy_timeout = kwargs.get("timeout")
             if legacy_timeout is not None:
-                timeout_seconds = float(legacy_timeout)
+                expire_seconds = float(legacy_timeout)
 
             file_token = str(uuid.uuid4())
             expire_time = time.time() + (
@@ -104,7 +108,9 @@ class FileTokenService:
             if file_token not in self.staged_files:
                 raise KeyError(f"无效或过期的文件 token: {file_token}")
 
-            file_path, _ = self.staged_files.pop(file_token)
+            file_path, _, single_use = self.staged_files[file_token]
+            if single_use:
+                self.staged_files.pop(file_token, None)
             if not await anyio.Path(file_path).exists():
                 raise FileNotFoundError(f"文件不存在: {file_path}")
             return file_path

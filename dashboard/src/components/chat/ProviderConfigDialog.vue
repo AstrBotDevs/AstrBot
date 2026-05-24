@@ -232,12 +232,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onBeforeUnmount } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
-import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ProviderModelsPanel from "@/components/provider/ProviderModelsPanel.vue";
 import ProviderSourcesPanel from "@/components/provider/ProviderSourcesPanel.vue";
+import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import { useProviderSources } from "@/composables/useProviderSources";
+import { useModuleI18n } from "@/i18n/composables";
 import axios from "@/utils/request";
 
 const props = defineProps({
@@ -381,16 +381,9 @@ async function saveEditedProvider() {
     showProviderEditDialog.value = false;
     await loadConfig();
   } catch (err) {
-    showMessage(
-      err.response?.data?.message ||
-        err.message ||
-        tm("providerSources.saveError"),
-      "error",
-    );
+    showMessage(err.response?.data?.message || err.message || tm("providerSources.saveError"), "error");
   } finally {
-    savingProviders.value = savingProviders.value.filter(
-      (id) => id !== providerEditData.value?.id,
-    );
+    savingProviders.value = savingProviders.value.filter((id) => id !== providerEditData.value?.id);
   }
 }
 
@@ -408,12 +401,7 @@ async function toggleProviderEnable(provider: ProviderData, value: boolean) {
     }
     showMessage(res.data.message || tm("messages.success.statusUpdate"));
   } catch (error) {
-    showMessage(
-      error.response?.data?.message ||
-        error.message ||
-        tm("providerSources.saveError"),
-      "error",
-    );
+    showMessage(error.response?.data?.message || error.message || tm("providerSources.saveError"), "error");
   } finally {
     await loadConfig();
   }

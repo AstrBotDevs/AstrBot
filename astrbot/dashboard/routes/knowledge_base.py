@@ -9,11 +9,13 @@ from pathlib import Path
 from typing import Any
 
 import aiofiles
+import anyio
 import jwt
 from quart import request, send_file
 
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.knowledge_base.package_io import (
     KnowledgeBasePackageExporter,
     KnowledgeBasePackageImporter,
@@ -141,6 +143,14 @@ class KnowledgeBaseRoute(Route):
         }
         if task_id in self.upload_progress:
             self.upload_progress[task_id]["status"] = status
+
+    @staticmethod
+    def _format_failed_doc_error(file_name: str, exc: Exception) -> str:
+        if isinstance(exc, KnowledgeBaseUploadError):
+            message = exc.user_message
+        else:
+            message = str(exc) or type(exc).__name__
+        return f"{file_name}: {message}"
 
     def _update_progress(
         self,

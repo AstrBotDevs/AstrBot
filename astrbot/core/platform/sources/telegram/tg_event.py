@@ -17,6 +17,10 @@ from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
 from astrbot.core.utils.metrics import Metric
 
 
+def _is_gif(path: str) -> bool:
+    return os.path.splitext(path)[1].lower() == ".gif"
+
+
 class TelegramPlatformEvent(AstrMessageEvent):
     MAX_MESSAGE_LENGTH = 4096
     SPLIT_PATTERNS: ClassVar[dict[str, re.Pattern[str]]] = {
@@ -378,10 +382,18 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 on_text(i.text)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
+                if _is_gif(image_path):
+                    media_kwarg = {"animation": image_path}
+                    action = ChatAction.UPLOAD_VIDEO
+                    send_media = self.client.send_animation
+                else:
+                    media_kwarg = {"photo": image_path}
+                    action = ChatAction.UPLOAD_PHOTO
+                    send_media = self.client.send_photo
                 await self._send_media_with_action(
                     self.client,
-                    ChatAction.UPLOAD_PHOTO,
-                    self.client.send_photo,
+                    action,
+                    send_media,
                     user_name=user_name,
                     **media_kwarg,
                     **payload,
@@ -424,16 +436,21 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     async def _send_final_segment(self, delta: str, payload: dict[str, Any]) -> None:
         """将累积文本作为 MarkdownV2 真实消息发送,失败时回退到纯文本｡"""
+        chunks = self._split_message(delta)
         try:
-            markdown_text = telegramify_markdown.markdownify(delta)
-            await self.client.send_message(
-                text=markdown_text,
-                parse_mode="MarkdownV2",
-                **payload,
-            )
+            markdown_chunks = [
+                telegramify_markdown.markdownify(chunk) for chunk in chunks
+            ]
+            for markdown_text in markdown_chunks:
+                await self.client.send_message(
+                    text=markdown_text,
+                    parse_mode="MarkdownV2",
+                    **payload,
+                )
         except Exception as e:
             logger.warning(f"Markdown转换失败,使用普通文本: {e!s}")
-            await self.client.send_message(text=delta, **payload)
+            for chunk in chunks:
+                await self.client.send_message(text=chunk, **payload)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         message_thread_id = None

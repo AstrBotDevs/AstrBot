@@ -2,10 +2,8 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
-from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.scheduler import PipelineScheduler
 
 
 class TestPipelineScheduler:
@@ -26,6 +24,7 @@ class TestPipelineScheduler:
     def test_init_requires_context(self):
         """Verify PipelineScheduler init requires PipelineContext."""
         ctx = MagicMock(spec=PipelineContext)
+        ctx.astrbot_config = {}
         scheduler = PipelineScheduler(ctx)
         assert scheduler.ctx is ctx
         assert scheduler.stages == []

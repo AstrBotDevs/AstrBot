@@ -227,14 +227,14 @@ class Action(ABC):
         Args:
             params: 启动参数（来自 START 决策的 JSON 参数）
         """
-        pass
+        return None
 
     async def on_stop(self) -> None:
         """停止钩子 - 在动作被强制停止时调用
 
         子类可以重写此方法来清理资源。
         """
-        pass
+        return None
 
     def get_completion_output(self) -> ActionOutput | None:
         """获取完成后要发送的事件

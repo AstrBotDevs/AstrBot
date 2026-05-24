@@ -180,6 +180,7 @@ class AiocqhttpAdapter(Platform):
 
         # 支持 NapCat HTTP API（用于 call_action 如 send_private_forward_msg）
         api_root = platform_config.get("api_root", "")
+        platform_id = platform_config.get("id")
 
         self.metadata = PlatformMetadata(
             name="aiocqhttp",
@@ -188,12 +189,12 @@ class AiocqhttpAdapter(Platform):
             support_streaming_message=False,
         )
 
-        bot_kwargs = dict(
-            use_ws_reverse=True,
-            import_name="aiocqhttp",
-            api_timeout_sec=180,
-            access_token=platform_config.get("ws_reverse_token"),
-        )
+        bot_kwargs = {
+            "use_ws_reverse": True,
+            "import_name": "aiocqhttp",
+            "api_timeout_sec": 180,
+            "access_token": platform_config.get("ws_reverse_token"),
+        }
         if api_root:
             bot_kwargs["api_root"] = api_root
 
@@ -296,7 +297,9 @@ class AiocqhttpAdapter(Platform):
             if not isinstance(node, dict):
                 continue
 
-            sender = node.get("sender", {}) if isinstance(node.get("sender"), dict) else {}
+            sender = (
+                node.get("sender", {}) if isinstance(node.get("sender"), dict) else {}
+            )
             sender_name = (
                 sender.get("nickname")
                 or sender.get("card")
@@ -317,7 +320,9 @@ class AiocqhttpAdapter(Platform):
                     if isinstance(parsed, list):
                         content_chain = parsed
                     else:
-                        content_chain = [{"type": "text", "data": {"text": raw_content}}]
+                        content_chain = [
+                            {"type": "text", "data": {"text": raw_content}}
+                        ]
                 except Exception:
                     content_chain = [{"type": "text", "data": {"text": raw_content}}]
 
@@ -326,7 +331,9 @@ class AiocqhttpAdapter(Platform):
                 if not isinstance(seg, dict):
                     continue
                 seg_type = seg.get("type")
-                seg_data = seg.get("data", {}) if isinstance(seg.get("data"), dict) else {}
+                seg_data = (
+                    seg.get("data", {}) if isinstance(seg.get("data"), dict) else {}
+                )
 
                 if seg_type in ("text", "plain"):
                     text = seg_data.get("text", "")
@@ -340,7 +347,9 @@ class AiocqhttpAdapter(Platform):
                     text_parts.append("[图片]")
                 elif seg_type == "face":
                     face_id = seg_data.get("id")
-                    text_parts.append(f"[表情:{face_id}]" if face_id is not None else "[表情]")
+                    text_parts.append(
+                        f"[表情:{face_id}]" if face_id is not None else "[表情]"
+                    )
                 elif seg_type in ("forward", "forward_msg", "nodes"):
                     nested = seg_data.get("content")
                     if isinstance(nested, list):
@@ -391,7 +400,9 @@ class AiocqhttpAdapter(Platform):
             or data.get("nodes")
             or data.get("nodeList")
         )
-        text = self._extract_forward_text_from_nodes(nodes if isinstance(nodes, list) else [])
+        text = self._extract_forward_text_from_nodes(
+            nodes if isinstance(nodes, list) else []
+        )
         return text.strip()
 
     async def _convert_handle_request_event(self, event: Event) -> AstrBotMessage:
@@ -464,7 +475,7 @@ class AiocqhttpAdapter(Platform):
             raise ValueError("aiocqhttp: sender payload is missing or invalid")
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
-        sender_role = normalize_message_member_role(event.sender.get("role"))
+        normalize_message_member_role(event.sender.get("role"))
         abm.sender = MessageMember(
             str(sender["user_id"]),
             sender.get("card") or sender.get("nickname") or "N/A",
@@ -678,7 +689,11 @@ class AiocqhttpAdapter(Platform):
                         except Exception:
                             pass
 
-                    fid = data.get("id") or data.get("message_id") or data.get("forward_id")
+                    fid = (
+                        data.get("id")
+                        or data.get("message_id")
+                        or data.get("forward_id")
+                    )
                     if not fid:
                         continue
 

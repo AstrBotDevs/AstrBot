@@ -32,7 +32,7 @@ def register_mcp_sync_provider(provider: str):
     def decorator(cls: type[McpServerSyncProvider]) -> type[McpServerSyncProvider]:
         if provider in _provider_registry:
             raise ValueError(f"MCP sync provider already registered: {provider}")
-        cls.provider = provider  # type: ignore[attr-defined]
+        cls.provider = provider
         _provider_registry[provider] = cls
         return cls
 

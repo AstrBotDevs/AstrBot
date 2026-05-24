@@ -9,6 +9,8 @@ from pathlib import PurePath
 from typing import ClassVar, Literal
 from urllib.parse import urlparse
 
+import aiofiles
+import anyio
 import httpx
 from google import genai
 from google.genai import types
@@ -260,7 +262,7 @@ class ProviderGoogleGenAI(Provider):
             logprobs=payloads.get("logprobs"),
             seed=payloads.get("seed"),
             response_modalities=modalities,
-            tools=tool_list,  # type: ignore[arg-type]
+            tools=tool_list,
             tool_config=tool_config,
             safety_settings=self.safety_settings or None,
             thinking_config=thinking_config,
@@ -549,7 +551,7 @@ class ProviderGoogleGenAI(Provider):
                 )
                 result = await self.client.models.generate_content(
                     model=model,
-                    contents=conversation,  # type: ignore[arg-type]
+                    contents=conversation,
                     config=config,
                 )
                 logger.debug(f"genai result: {result}")
@@ -622,7 +624,7 @@ class ProviderGoogleGenAI(Provider):
                 )
                 result = await self.client.models.generate_content_stream(
                     model=model,
-                    contents=conversation,  # type: ignore[arg-type]
+                    contents=conversation,
                     config=config,
                 )
                 break

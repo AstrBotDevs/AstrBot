@@ -22,7 +22,7 @@ def _pick_existing_column(columns: set[str], candidates: tuple[str, ...]) -> str
     return None
 
 
-def _timestamp_from_epoch(raw: float | int | str) -> str | None:
+def _timestamp_from_epoch(raw: float | str) -> str | None:
     try:
         ts = float(raw)
         if ts > 1e12:
@@ -223,7 +223,7 @@ def _parse_markdown_file(
                 content=body,
                 category=default_category,
                 timestamp=mtime,
-                source=f"markdown:{path}",
+                source=f"markdown:{path.as_posix()}",
                 order=order_offset + len(entries),
             )
         )

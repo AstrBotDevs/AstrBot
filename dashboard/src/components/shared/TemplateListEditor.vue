@@ -210,9 +210,9 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import ConfigItemRenderer from "./ConfigItemRenderer.vue";
-import { useI18n } from "@/i18n/composables";
 import { useConfigTextResolver } from "@/composables/useConfigTextResolver";
+import { useI18n } from "@/i18n/composables";
+import ConfigItemRenderer from "./ConfigItemRenderer.vue";
 
 interface TemplateMetaItem {
   type?: string;
@@ -233,14 +233,7 @@ interface TemplateMeta {
   [key: string]: unknown;
 }
 
-type EntryValue =
-  | string
-  | number
-  | boolean
-  | Record<string, unknown>
-  | unknown[]
-  | null
-  | undefined;
+type EntryValue = string | number | boolean | Record<string, unknown> | unknown[] | null | undefined;
 
 type ConfigEntry = Record<string, EntryValue>;
 
@@ -258,28 +251,18 @@ const props = withDefaults(
     pluginName: "",
     pluginI18n: () => ({}),
     configPath: "",
-  }
+  },
 );
 
-const emit = defineEmits<{
-  (e: "update:modelValue", value: ConfigEntry[]): void;
-}>();
+const emit = defineEmits<(e: "update:modelValue", value: ConfigEntry[]) => void>();
 const { t } = useI18n();
 const { resolveConfigText } = useConfigTextResolver(props);
 
 const expandedEntries = ref<Record<number, boolean>>({});
 
-const safeText = (val: unknown, fallback: string): string =>
-  val && typeof val === "string" ? val : fallback;
-const addButtonText = computed(() =>
-  safeText(t("core.common.templateList.addEntry"), "添加条目"),
-);
-const emptyHintText = computed(() =>
-  safeText(
-    t("core.common.templateList.empty"),
-    "暂无条目，请先选择模板并添加。",
-  ),
-);
+const safeText = (val: unknown, fallback: string): string => (val && typeof val === "string" ? val : fallback);
+const addButtonText = computed(() => safeText(t("core.common.templateList.addEntry"), "添加条目"));
+const emptyHintText = computed(() => safeText(t("core.common.templateList.empty"), "暂无条目，请先选择模板并添加。"));
 const defaultValueMap = {
   int: 0,
   float: 0.0,
@@ -294,15 +277,15 @@ const defaultValueMap = {
 
 const templateOptions = computed(() => {
   return Object.entries(props.templates || {}).map(([value, meta]) => ({
-    label: templateText(value, 'name', meta?.name || value),
+    label: templateText(value, "name", meta?.name || value),
     value,
-    hint: templateText(value, 'hint', meta?.hint || meta?.description || '')
+    hint: templateText(value, "hint", meta?.hint || meta?.description || ""),
   }));
 });
 
 function templateLabel(key: string | null | undefined): string {
   if (!key) return t("core.common.templateList.unknownTemplate") || "未指定模板";
-  return templateText(key, 'name', props.templates?.[key]?.name || key);
+  return templateText(key, "name", props.templates?.[key]?.name || key);
 }
 
 function templatePath(templateKey: string): string {
@@ -314,18 +297,18 @@ function templateItemPath(templateKey: string, itemPath: string): string {
 }
 
 function templateText(templateKey: string, attr: string, fallback: unknown): string {
-  return String(resolveConfigText(templatePath(templateKey), attr, fallback) || '');
+  return String(resolveConfigText(templatePath(templateKey), attr, fallback) || "");
 }
 
 function templateItemText(templateKey: string, itemPath: string, attr: string, fallback: unknown): string {
-  return String(resolveConfigText(templateItemPath(templateKey, itemPath), attr, fallback) || '');
+  return String(resolveConfigText(templateItemPath(templateKey, itemPath), attr, fallback) || "");
 }
 
 function buildDefaults(itemsMeta: Record<string, TemplateMetaItem> = {}): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [k, meta] of Object.entries(itemsMeta)) {
     if (!meta || !meta.type) continue;
-    const fallback = Object.prototype.hasOwnProperty.call(meta, "default")
+    const fallback = Object.hasOwn(meta, "default")
       ? meta.default
       : defaultValueMap[meta.type as keyof typeof defaultValueMap];
 
@@ -338,14 +321,11 @@ function buildDefaults(itemsMeta: Record<string, TemplateMetaItem> = {}): Record
   return result;
 }
 
-function applyDefaults(
-  target: Record<string, unknown>,
-  itemsMeta: Record<string, TemplateMetaItem> = {},
-): boolean {
+function applyDefaults(target: Record<string, unknown>, itemsMeta: Record<string, TemplateMetaItem> = {}): boolean {
   let changed = false;
   for (const [k, meta] of Object.entries(itemsMeta)) {
     if (!meta || !meta.type) continue;
-    const hasDefault = Object.prototype.hasOwnProperty.call(meta, "default");
+    const hasDefault = Object.hasOwn(meta, "default");
     const fallback = hasDefault ? meta.default : defaultValueMap[meta.type as keyof typeof defaultValueMap];
 
     if (meta.type === "object") {
@@ -377,7 +357,7 @@ function ensureEntryDefaults() {
     const newEntry = JSON.parse(JSON.stringify(entry)) as ConfigEntry;
     let entryChanged = applyDefaults(newEntry, template.items);
 
-    if (!Object.prototype.hasOwnProperty.call(newEntry, "__template_key")) {
+    if (!Object.hasOwn(newEntry, "__template_key")) {
       newEntry.__template_key = "";
       entryChanged = true;
     }
@@ -439,58 +419,53 @@ function getTemplate(entry: Record<string, unknown> | null | undefined): Templat
 }
 
 function templateHintText(entry) {
-  const template = getTemplate(entry)
-  if (!template || template.hide_hint_in_list) return ''
-  return templateText(entry.__template_key, 'hint', template.hint || template.description || '')
+  const template = getTemplate(entry);
+  if (!template || template.hide_hint_in_list) return "";
+  return templateText(entry.__template_key, "hint", template.hint || template.description || "");
 }
 
-function getItemMetaBySelector(itemsMeta = {}, selector = '') {
-  const keys = selector.split('.').filter(Boolean)
-  let currentItems = itemsMeta
-  let currentMeta = null
+function getItemMetaBySelector(itemsMeta = {}, selector = "") {
+  const keys = selector.split(".").filter(Boolean);
+  let currentItems = itemsMeta;
+  let currentMeta = null;
 
   for (let i = 0; i < keys.length; i++) {
-    currentMeta = currentItems?.[keys[i]]
-    if (!currentMeta) return null
+    currentMeta = currentItems?.[keys[i]];
+    if (!currentMeta) return null;
     if (i < keys.length - 1) {
-      if (currentMeta.type !== 'object') return null
-      currentItems = currentMeta.items || {}
+      if (currentMeta.type !== "object") return null;
+      currentItems = currentMeta.items || {};
     }
   }
 
-  return currentMeta
+  return currentMeta;
 }
 
 function templateDisplayText(entry) {
-  const template = getTemplate(entry)
-  const displayItem = template?.display_item
-  if (!template || typeof displayItem !== 'string' || !displayItem) return ''
+  const template = getTemplate(entry);
+  const displayItem = template?.display_item;
+  if (!template || typeof displayItem !== "string" || !displayItem) return "";
 
-  const displayMeta = getItemMetaBySelector(template.items || {}, displayItem)
-  if (displayMeta?.type !== 'string') return ''
+  const displayMeta = getItemMetaBySelector(template.items || {}, displayItem);
+  if (displayMeta?.type !== "string") return "";
 
-  const value = getValueBySelector(entry, displayItem)
-  if (typeof value !== 'string' || !value.trim()) return ''
+  const value = getValueBySelector(entry, displayItem);
+  if (typeof value !== "string" || !value.trim()) return "";
 
   const label = templateItemText(
     entry.__template_key,
     displayItem,
-    'description',
+    "description",
     displayMeta.description || displayItem,
-  )
-  return `${label}: ${value.trim()}`
+  );
+  return `${label}: ${value.trim()}`;
 }
 
 function getValueBySelector(obj, selector) {
-  const keys = selector.split('.')
-  let current = obj
+  const keys = selector.split(".");
+  let current = obj;
   for (const key of keys) {
-    if (
-      current &&
-      typeof current === "object" &&
-      key in current &&
-      current !== null
-    ) {
+    if (current && typeof current === "object" && key in current && current !== null) {
       current = (current as Record<string, unknown>)[key];
     } else {
       return undefined;
@@ -499,16 +474,11 @@ function getValueBySelector(obj, selector) {
   return current;
 }
 
-function shouldShowItem(
-  itemMeta: TemplateMetaItem | null | undefined,
-  entry: Record<string, unknown>,
-): boolean {
+function shouldShowItem(itemMeta: TemplateMetaItem | null | undefined, entry: Record<string, unknown>): boolean {
   if (!itemMeta?.condition) {
     return true;
   }
-  for (const [conditionKey, expectedValue] of Object.entries(
-    itemMeta.condition,
-  )) {
+  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
     const actualValue = getValueBySelector(entry, conditionKey);
     if (actualValue !== expectedValue) {
       return false;

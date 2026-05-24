@@ -54,7 +54,7 @@ class AstrBotConfigManager:
                 scope="global",
                 scope_id="global",
             )
-        return self.abconf_data  # type: ignore[return-value]
+        return self.abconf_data
 
     def _load_all_configs(self) -> None:
         """Load all configurations from the shared preferences."""

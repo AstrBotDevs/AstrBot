@@ -1,80 +1,80 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
-import { usePluginConfigCache } from '@/composables/usePluginConfigCache'
+import { computed, ref, watch } from "vue";
+import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
+import { usePluginConfigCache } from "@/composables/usePluginConfigCache";
 
 const props = defineProps<{
-  pluginName: string
-  active?: boolean
-}>()
+  pluginName: string;
+  active?: boolean;
+}>();
 
 const emit = defineEmits<{
-  (e: 'saved', pluginName: string): void
-  (e: 'error', message: string): void
-}>()
+  (e: "saved", pluginName: string): void;
+  (e: "error", message: string): void;
+}>();
 
-const cache = usePluginConfigCache()
+const cache = usePluginConfigCache();
 
-const loading = ref(false)
-const error = ref<string | null>(null)
+const loading = ref(false);
+const error = ref<string | null>(null);
 
-const draftMetadata = ref<Record<string, any> | null>(null)
-const draftConfig = ref<Record<string, any> | null>(null)
-const originalConfig = ref<Record<string, any> | null>(null)
+const draftMetadata = ref<Record<string, any> | null>(null);
+const draftConfig = ref<Record<string, any> | null>(null);
+const originalConfig = ref<Record<string, any> | null>(null);
 
 const isDirty = computed(() => {
-  if (!draftConfig.value || !originalConfig.value) return false
-  return JSON.stringify(draftConfig.value) !== JSON.stringify(originalConfig.value)
-})
+  if (!draftConfig.value || !originalConfig.value) return false;
+  return JSON.stringify(draftConfig.value) !== JSON.stringify(originalConfig.value);
+});
 
 function deepClone<T>(value: T): T {
-  if (typeof structuredClone === 'function') {
-    return structuredClone(value)
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
   }
-  return JSON.parse(JSON.stringify(value)) as T
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
-const canLoad = computed(() => Boolean(props.pluginName) && Boolean(props.active))
+const canLoad = computed(() => Boolean(props.pluginName) && Boolean(props.active));
 
 async function loadFromCache() {
-  if (!props.pluginName) return
-  loading.value = true
-  error.value = null
+  if (!props.pluginName) return;
+  loading.value = true;
+  error.value = null;
   try {
-    const entry = await cache.getOrFetch(props.pluginName)
-    const configClone = deepClone(entry.config || {})
-    const metadataClone = deepClone(entry.metadata || {})
-    draftConfig.value = configClone
-    originalConfig.value = deepClone(configClone)
-    draftMetadata.value = metadataClone
+    const entry = await cache.getOrFetch(props.pluginName);
+    const configClone = deepClone(entry.config || {});
+    const metadataClone = deepClone(entry.metadata || {});
+    draftConfig.value = configClone;
+    originalConfig.value = deepClone(configClone);
+    draftMetadata.value = metadataClone;
   } catch (err: any) {
-    const message = err?.message || String(err)
-    error.value = message
-    emit('error', message)
+    const message = err?.message || String(err);
+    error.value = message;
+    emit("error", message);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function resetDraft() {
-  if (!originalConfig.value) return
-  draftConfig.value = deepClone(originalConfig.value)
+  if (!originalConfig.value) return;
+  draftConfig.value = deepClone(originalConfig.value);
 }
 
 async function saveDraft() {
-  if (!props.pluginName || !draftConfig.value) return
-  loading.value = true
-  error.value = null
+  if (!props.pluginName || !draftConfig.value) return;
+  loading.value = true;
+  error.value = null;
   try {
-    await cache.updateConfig(props.pluginName, draftConfig.value)
-    originalConfig.value = deepClone(draftConfig.value)
-    emit('saved', props.pluginName)
+    await cache.updateConfig(props.pluginName, draftConfig.value);
+    originalConfig.value = deepClone(draftConfig.value);
+    emit("saved", props.pluginName);
   } catch (err: any) {
-    const message = err?.message || String(err)
-    error.value = message
-    emit('error', message)
+    const message = err?.message || String(err);
+    error.value = message;
+    emit("error", message);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
@@ -82,26 +82,26 @@ watch(
   () => props.active,
   (isActive) => {
     if (isActive && props.pluginName) {
-      loadFromCache()
+      loadFromCache();
     }
   },
-  { immediate: true }
-)
+  { immediate: true },
+);
 
 watch(
   () => props.pluginName,
   (name) => {
     if (props.active && name) {
-      loadFromCache()
+      loadFromCache();
     } else {
-      draftMetadata.value = null
-      draftConfig.value = null
-      originalConfig.value = null
-      error.value = null
-      loading.value = false
+      draftMetadata.value = null;
+      draftConfig.value = null;
+      originalConfig.value = null;
+      error.value = null;
+      loading.value = false;
     }
-  }
-)
+  },
+);
 </script>
 
 <template>

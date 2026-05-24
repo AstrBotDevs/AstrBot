@@ -206,13 +206,13 @@
 </template>
 
 <script setup lang="ts">
-import type { PropType } from "vue";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { MarkdownRender } from "markstream-vue";
+import type { PropType } from "vue";
+import type { MessagePart } from "@/composables/useMessages";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import ElicitationCard from "./ElicitationCard.vue";
 import IPythonToolBlock from "./IPythonToolBlock.vue";
 import ToolCallItem from "./ToolCallItem.vue";
-import type { MessagePart } from "@/composables/useMessages";
 
 const props = defineProps({
   parts: {
@@ -253,17 +253,13 @@ const emitDownloadFile = (file: unknown): void => {
   emit("download-file", file);
 };
 
-const isMarkdownCodeFence = (text: string): boolean =>
-  /^(```|~~~)/.test(text.trim());
+const isMarkdownCodeFence = (text: string): boolean => /^(```|~~~)/.test(text.trim());
 
 const looksLikeStandaloneHtml = (text: string): boolean => {
   const normalized = text.trim();
   if (!normalized) return false;
-  if (!/(<!doctype\s+html|<html\b|<head\b|<body\b)/i.test(normalized))
-    return false;
-  return /(<\/html>|<\/body>|<\/head>|<form\b|<input\b|<button\b)/i.test(
-    normalized,
-  );
+  if (!/(<!doctype\s+html|<html\b|<head\b|<body\b)/i.test(normalized)) return false;
+  return /(<\/html>|<\/body>|<\/head>|<form\b|<input\b|<button\b)/i.test(normalized);
 };
 
 const normalizeMarkdownContent = (text: string): string => {
@@ -316,10 +312,7 @@ const formatToolArgs = (args: unknown): string => {
 };
 
 const isIPythonTool = (toolCall: { name?: string }): boolean => {
-  return (
-    toolCall.name === "astrbot_execute_ipython" ||
-    toolCall.name === "astrbot_execute_python"
-  );
+  return toolCall.name === "astrbot_execute_ipython" || toolCall.name === "astrbot_execute_python";
 };
 
 interface PendingToolCall {
@@ -375,11 +368,7 @@ const getRenderParts = (
   };
 
   messageParts.forEach((part, idx) => {
-    if (
-      part?.type === "tool_call" &&
-      Array.isArray(part.tool_calls) &&
-      part.tool_calls.length
-    ) {
+    if (part?.type === "tool_call" && Array.isArray(part.tool_calls) && part.tool_calls.length) {
       part.tool_calls.forEach((toolCall, tcIndex) => {
         if (isIPythonTool(toolCall)) {
           flushPending(idx - 1);

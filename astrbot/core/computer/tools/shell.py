@@ -53,8 +53,10 @@ class ExecuteShellTool(FunctionTool):
         command: str,
         cwd: str | None = None,
         background: bool = False,
-        env: dict = {},
+        env: dict = None,
     ) -> ToolExecResult:
+        if env is None:
+            env = {}
         if permission_error := check_admin_permission(context, "Shell execution"):
             return permission_error
 

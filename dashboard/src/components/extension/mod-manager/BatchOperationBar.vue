@@ -149,68 +149,70 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import type { PluginSummary } from './types'
+import { computed, ref } from "vue";
+import type { PluginSummary } from "./types";
 
 const props = defineProps<{
-  selectedInactive: PluginSummary[]
-  selectedActive: PluginSummary[]
-  busy?: boolean
-}>()
+  selectedInactive: PluginSummary[];
+  selectedActive: PluginSummary[];
+  busy?: boolean;
+}>();
 
 const emit = defineEmits<{
-  (e: 'batch-enable', plugins: PluginSummary[]): void
-  (e: 'batch-disable', plugins: PluginSummary[]): void
-  (e: 'batch-update', names: string[]): void
-  (e: 'batch-uninstall', names: string[]): void
-  (e: 'clear-selection'): void
-}>()
+  (e: "batch-enable", plugins: PluginSummary[]): void;
+  (e: "batch-disable", plugins: PluginSummary[]): void;
+  (e: "batch-update", names: string[]): void;
+  (e: "batch-uninstall", names: string[]): void;
+  (e: "clear-selection"): void;
+}>();
 
-const isBusy = computed(() => props.busy ?? false)
+const isBusy = computed(() => props.busy ?? false);
 
 // 总选中数量
-const totalSelected = computed(
-  () => (props.selectedInactive?.length ?? 0) + (props.selectedActive?.length ?? 0)
-)
+const totalSelected = computed(() => (props.selectedInactive?.length ?? 0) + (props.selectedActive?.length ?? 0));
 
 // 是否显示（有选中项时显示）
-const visible = computed(() => totalSelected.value > 0)
+const visible = computed(() => totalSelected.value > 0);
 
 const allSelected = computed<PluginSummary[]>(() => [
   ...(props.selectedInactive ?? []),
   ...(props.selectedActive ?? []),
-])
+]);
 
 // 可更新的插件（选中的且has_update为true）
 const updatablePlugins = computed(() => {
-  const all = allSelected.value
-  return all.filter((p) => Boolean(p.has_update))
-})
+  const all = allSelected.value;
+  return all.filter((p) => Boolean(p.has_update));
+});
 
 // 可卸载的插件（选中的且非系统插件）
 const uninstallablePlugins = computed(() => {
-  const all = allSelected.value
-  return all.filter((p) => !p.reserved)
-})
+  const all = allSelected.value;
+  return all.filter((p) => !p.reserved);
+});
 
-const handleBatchEnable = () => emit('batch-enable', props.selectedInactive ?? [])
-const handleBatchDisable = () => emit('batch-disable', props.selectedActive ?? [])
-const handleBatchUpdate = () => emit('batch-update', updatablePlugins.value.map((p) => p.name))
+const handleBatchEnable = () => emit("batch-enable", props.selectedInactive ?? []);
+const handleBatchDisable = () => emit("batch-disable", props.selectedActive ?? []);
+const handleBatchUpdate = () =>
+  emit(
+    "batch-update",
+    updatablePlugins.value.map((p) => p.name),
+  );
 
-const showUninstallDialog = ref(false)
-const pendingUninstallNames = ref<string[]>([])
+const showUninstallDialog = ref(false);
+const pendingUninstallNames = ref<string[]>([]);
 
 const openUninstallConfirm = () => {
-  pendingUninstallNames.value = uninstallablePlugins.value.map((p) => p.name)
-  showUninstallDialog.value = true
-}
+  pendingUninstallNames.value = uninstallablePlugins.value.map((p) => p.name);
+  showUninstallDialog.value = true;
+};
 
 const confirmBatchUninstall = () => {
-  const names = pendingUninstallNames.value
-  showUninstallDialog.value = false
-  if (names.length === 0) return
-  emit('batch-uninstall', names)
-}
+  const names = pendingUninstallNames.value;
+  showUninstallDialog.value = false;
+  if (names.length === 0) return;
+  emit("batch-uninstall", names);
+};
 </script>
 
 <style scoped>

@@ -4,6 +4,7 @@ AstrBot 测试配置
 提供共享的 pytest fixtures 和测试工具｡
 """
 
+import asyncio
 import json
 import os
 import sys
@@ -27,6 +28,18 @@ from tests.fixtures.helpers import create_mock_llm_response, create_mock_message
 # 设置测试环境变量
 os.environ.setdefault("TESTING", "true")
 os.environ.setdefault("ASTRBOT_TEST_MODE", "true")
+
+
+class _LegacyGetEventLoopPolicy(type(asyncio.get_event_loop_policy())):
+    def get_event_loop(self):
+        try:
+            return super().get_event_loop()
+        except RuntimeError as exc:
+            if "There is no current event loop" not in str(exc):
+                raise
+            loop = self.new_event_loop()
+            self.set_event_loop(loop)
+            return loop
 
 
 # ============================================================
@@ -92,6 +105,7 @@ def pytest_addoption(parser):
 
 def pytest_configure(config):
     """注册自定义标记｡"""
+    asyncio.set_event_loop_policy(_LegacyGetEventLoopPolicy())
     config.addinivalue_line("markers", "unit: 单元测试")
     config.addinivalue_line("markers", "integration: 集成测试")
     config.addinivalue_line("markers", "slow: 慢速测试")

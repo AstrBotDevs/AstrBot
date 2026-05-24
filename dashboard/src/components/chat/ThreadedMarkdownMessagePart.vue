@@ -10,8 +10,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, provide } from "vue";
 import { MarkdownRender } from "markstream-vue";
+import { computed, provide } from "vue";
 import type { ChatThread } from "@/composables/useMessages";
 
 const props = defineProps<{
@@ -42,9 +42,7 @@ const threadMap = computed(() =>
     return acc;
   }, {}),
 );
-const threadedCustomHtmlTags = computed(() =>
-  Array.from(new Set([...props.customHtmlTags, "thread"])),
-);
+const threadedCustomHtmlTags = computed(() => Array.from(new Set([...props.customHtmlTags, "thread"])));
 
 const threadedContent = computed(() => {
   const source = props.text || "";
@@ -81,9 +79,6 @@ provide("chatThreadMap", () => threadMap.value);
 provide("openChatThread", (thread: ChatThread) => emit("openThread", thread));
 
 function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 </script>

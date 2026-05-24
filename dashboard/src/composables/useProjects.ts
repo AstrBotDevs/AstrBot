@@ -1,6 +1,6 @@
 import { ref } from "vue";
-import axios from "@/utils/request";
 import type { Project } from "@/components/chat/ProjectList.vue";
+import axios from "@/utils/request";
 
 export function useProjects() {
   const projects = ref<Project[]>([]);
@@ -17,11 +17,7 @@ export function useProjects() {
     }
   }
 
-  async function createProject(
-    title: string,
-    emoji?: string,
-    description?: string,
-  ) {
+  async function createProject(title: string, emoji?: string, description?: string) {
     try {
       const res = await axios.post("/api/chatui_project/create", {
         title,
@@ -37,12 +33,7 @@ export function useProjects() {
     }
   }
 
-  async function updateProject(
-    projectId: string,
-    title?: string,
-    emoji?: string,
-    description?: string,
-  ) {
+  async function updateProject(projectId: string, title?: string, emoji?: string, description?: string) {
     try {
       const res = await axios.post("/api/chatui_project/update", {
         project_id: projectId,

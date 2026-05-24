@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { getApiBaseUrl, setApiBaseUrl, normalizeConfiguredApiBaseUrl } from "@/utils/request";
+import { getApiBaseUrl, normalizeConfiguredApiBaseUrl, setApiBaseUrl } from "@/utils/request";
 
 export type ApiPreset = {
   name: string;
@@ -11,15 +11,10 @@ export const useApiStore = defineStore("api", {
     // 优先从 localStorage 读取用户手动设置的地址
     apiBaseUrl: localStorage.getItem("apiBaseUrl") || getApiBaseUrl() || "",
     configPresets: [] as ApiPreset[],
-    customPresets: JSON.parse(
-      localStorage.getItem("customPresets") || "[]",
-    ) as ApiPreset[],
+    customPresets: JSON.parse(localStorage.getItem("customPresets") || "[]") as ApiPreset[],
   }),
   getters: {
-    presets: (state): ApiPreset[] => [
-      ...state.configPresets,
-      ...state.customPresets,
-    ],
+    presets: (state): ApiPreset[] => [...state.configPresets, ...state.customPresets],
   },
   actions: {
     setPresets(presets: ApiPreset[]) {

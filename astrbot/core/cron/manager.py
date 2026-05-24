@@ -1,4 +1,5 @@
 import asyncio
+import json
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
@@ -12,11 +13,14 @@ from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from astrbot import logger
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.utils.history_saver import persist_agent_history
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
@@ -292,18 +296,63 @@ class CronJobManager:
                 "run_at": (
                     job.payload.get("run_at") if isinstance(job.payload, dict) else None
                 ),
-                "session": session_str,
+                "session": target_sessions[0],
             },
             "cron_payload": payload,
         }
 
-        # 将定时任务消息放入事件队列，使其经过完整的 PipelineScheduler 流程
-        # 这样插件的 on_llm_response 等处理器可以正常拦截和处理消息
+        for index, session_str in enumerate(target_sessions):
+            extras = {
+                **base_extras,
+                "cron_job": {
+                    **base_extras["cron_job"],
+                    "session": session_str,
+                    "target_session": session_str,
+                    "target_index": index,
+                    "target_count": len(target_sessions),
+                },
+            }
+            await self._woke_main_agent(
+                message=note,
+                session_str=session_str,
+                extras=extras,
+            )
+
+    async def _woke_main_agent(
+        self,
+        *,
+        message: str,
+        session_str: str,
+        extras: dict,
+    ) -> None:
         await self._dispatch_to_pipeline(
-            message=note,
+            message=message,
             session_str=session_str,
             extras=extras,
         )
+
+    @staticmethod
+    def _resolve_target_sessions(payload: dict[str, Any]) -> list[str]:
+        target_sessions = payload.get("target_sessions")
+        sessions: list[str] = []
+
+        if isinstance(target_sessions, list):
+            for item in target_sessions:
+                session = str(item).strip()
+                if session and session not in sessions:
+                    sessions.append(session)
+        elif isinstance(target_sessions, str):
+            session = target_sessions.strip()
+            if session:
+                sessions.append(session)
+
+        primary_session = payload.get("session")
+        if primary_session:
+            session = str(primary_session).strip()
+            if session and session not in sessions:
+                sessions.insert(0, session)
+
+        return sessions
 
     async def _dispatch_to_pipeline(
         self,
@@ -348,11 +397,9 @@ class CronJobManager:
         if cron_payload.get("origin", "tool") == "api":
             cron_event.role = "admin"
 
-        # 将事件放入事件队列，由 PipelineScheduler 处理
-        # 不再直接调用 build_main_agent，避免双重消息
-        await self._event_queue.put(cron_event)
-        logger.debug(
-            f"Cron job {extras.get('cron_job', {}).get('id')} dispatched to pipeline (hooks triggered)."
+        tool_call_timeout = cfg.get("provider_settings", {}).get(
+            "tool_call_timeout",
+            120,
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,

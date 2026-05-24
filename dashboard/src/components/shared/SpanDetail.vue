@@ -1,15 +1,15 @@
 <script setup>
-defineOptions({ name: 'SpanDetail' });
+defineOptions({ name: "SpanDetail" });
 
-import { ref } from 'vue';
-import VueJsonPretty from 'vue-json-pretty';
-import 'vue-json-pretty/lib/styles.css';
+import { ref } from "vue";
+import VueJsonPretty from "vue-json-pretty";
+import "vue-json-pretty/lib/styles.css";
 
 defineProps({
   span: {
     type: Object,
-    default: null
-  }
+    default: null,
+  },
 });
 
 function formatJson(obj) {
@@ -30,27 +30,29 @@ function formatTime(ts) {
 
 async function copyText(text) {
   if (!text) return;
-  try { await navigator.clipboard.writeText(text); } catch {}
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {}
 }
 
 function statusColor(status) {
-  if (status === 'ok')       return 'success';
-  if (status === 'error')    return 'error';
-  if (status === 'filtered') return 'warning';
-  return 'default';
+  if (status === "ok") return "success";
+  if (status === "error") return "error";
+  if (status === "filtered") return "warning";
+  return "default";
 }
 
 const SPAN_TYPE_META = {
-  root:           { icon: 'mdi-ray-start-arrow', color: '#5c6bc0' },
-  pipeline_stage: { icon: 'mdi-filter-outline',  color: '#78909c' },
-  llm_agent:      { icon: 'mdi-robot-outline',   color: '#7c4dff' },
-  llm_call:       { icon: 'mdi-brain',           color: '#ab47bc' },
-  tool_call:      { icon: 'mdi-tools',           color: '#ef6c00' },
-  plugin_handler: { icon: 'mdi-puzzle-outline',  color: '#00897b' }
+  root: { icon: "mdi-ray-start-arrow", color: "#5c6bc0" },
+  pipeline_stage: { icon: "mdi-filter-outline", color: "#78909c" },
+  llm_agent: { icon: "mdi-robot-outline", color: "#7c4dff" },
+  llm_call: { icon: "mdi-brain", color: "#ab47bc" },
+  tool_call: { icon: "mdi-tools", color: "#ef6c00" },
+  plugin_handler: { icon: "mdi-puzzle-outline", color: "#00897b" },
 };
 
 function spanMeta(type) {
-  return SPAN_TYPE_META[type] || { icon: 'mdi-circle-small', color: '#9e9e9e' };
+  return SPAN_TYPE_META[type] || { icon: "mdi-circle-small", color: "#9e9e9e" };
 }
 </script>
 

@@ -120,151 +120,151 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, computed, ref } from 'vue';
-import type { PropType } from 'vue';
+import type { PropType } from "vue";
+import { computed, defineComponent, ref } from "vue";
 
 interface ModelConfig {
-    provider_id: string;
-    model: string;
-    temperature: number;
-    max_tokens: number;
-    thinking_enabled: boolean;
-    thinking_budget?: number;
+  provider_id: string;
+  model: string;
+  temperature: number;
+  max_tokens: number;
+  thinking_enabled: boolean;
+  thinking_budget?: number;
 }
 
 interface Provider {
-    id: string;
-    name?: string;
-    type?: string;
-    models?: string[];
+  id: string;
+  name?: string;
+  type?: string;
+  models?: string[];
 }
 
 export default defineComponent({
-    name: 'ModelSelector',
-    props: {
-        modelValue: {
-            type: Object as PropType<ModelConfig>,
-            default: () => ({
-                provider_id: '',
-                model: '',
-                temperature: 0.7,
-                max_tokens: 2048,
-                thinking_enabled: false,
-                thinking_budget: undefined
-            })
-        },
-        label: {
-            type: String,
-            default: ''
-        },
-        providers: {
-            type: Array as PropType<Provider[]>,
-            default: () => []
-        },
-        loading: {
-            type: Boolean,
-            default: false
-        }
+  name: "ModelSelector",
+  props: {
+    modelValue: {
+      type: Object as PropType<ModelConfig>,
+      default: () => ({
+        provider_id: "",
+        model: "",
+        temperature: 0.7,
+        max_tokens: 2048,
+        thinking_enabled: false,
+        thinking_budget: undefined,
+      }),
     },
-    emits: ['update:modelValue', 'refresh'],
-    setup(props, { emit }) {
-        const validationError = ref<string>('');
+    label: {
+      type: String,
+      default: "",
+    },
+    providers: {
+      type: Array as PropType<Provider[]>,
+      default: () => [],
+    },
+    loading: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  emits: ["update:modelValue", "refresh"],
+  setup(props, { emit }) {
+    const validationError = ref<string>("");
 
-        // 构建模型下拉选项（Provider + Model 组合）
-        const modelItems = computed(() => {
-            const items: Array<{ text: string; value: string; provider_id: string; model: string }> = [];
+    // 构建模型下拉选项（Provider + Model 组合）
+    const modelItems = computed(() => {
+      const items: Array<{ text: string; value: string; provider_id: string; model: string }> = [];
 
-            props.providers.forEach(provider => {
-                const providerName = provider.name || provider.id;
-                const models = provider.models || [];
+      props.providers.forEach((provider) => {
+        const providerName = provider.name || provider.id;
+        const models = provider.models || [];
 
-                models.forEach(model => {
-                    items.push({
-                        text: `${providerName} - ${model}`,
-                        value: `${provider.id}::${model}`,
-                        provider_id: provider.id,
-                        model: model
-                    });
-                });
-            });
-
-            return items;
+        models.forEach((model) => {
+          items.push({
+            text: `${providerName} - ${model}`,
+            value: `${provider.id}::${model}`,
+            provider_id: provider.id,
+            model: model,
+          });
         });
+      });
 
-        // 当前选中的模型 ID
-        const selectedModelId = computed(() => {
-            if (!props.modelValue.provider_id || !props.modelValue.model) {
-                return '';
-            }
-            return `${props.modelValue.provider_id}::${props.modelValue.model}`;
-        });
+      return items;
+    });
 
-        // 各个参数的 computed
-        const temperature = computed(() => props.modelValue.temperature);
-        const maxTokens = computed(() => props.modelValue.max_tokens);
-        const thinkingEnabled = computed(() => props.modelValue.thinking_enabled);
-        const thinkingBudget = computed(() => props.modelValue.thinking_budget);
+    // 当前选中的模型 ID
+    const selectedModelId = computed(() => {
+      if (!props.modelValue.provider_id || !props.modelValue.model) {
+        return "";
+      }
+      return `${props.modelValue.provider_id}::${props.modelValue.model}`;
+    });
 
-        // 模型选择处理
-        const onModelSelect = (value: string) => {
-            if (!value) return;
+    // 各个参数的 computed
+    const temperature = computed(() => props.modelValue.temperature);
+    const maxTokens = computed(() => props.modelValue.max_tokens);
+    const thinkingEnabled = computed(() => props.modelValue.thinking_enabled);
+    const thinkingBudget = computed(() => props.modelValue.thinking_budget);
 
-            const [provider_id, model] = value.split('::');
+    // 模型选择处理
+    const onModelSelect = (value: string) => {
+      if (!value) return;
 
-            emit('update:modelValue', {
-                ...props.modelValue,
-                provider_id,
-                model
-            });
+      const [provider_id, model] = value.split("::");
 
-            validationError.value = '';
-        };
+      emit("update:modelValue", {
+        ...props.modelValue,
+        provider_id,
+        model,
+      });
 
-        // 更新各个参数
-        const updateTemperature = (value: any) => {
-            emit('update:modelValue', {
-                ...props.modelValue,
-                temperature: Number(value)
-            });
-        };
+      validationError.value = "";
+    };
 
-        const updateMaxTokens = (value: any) => {
-            emit('update:modelValue', {
-                ...props.modelValue,
-                max_tokens: Number(value)
-            });
-        };
+    // 更新各个参数
+    const updateTemperature = (value: any) => {
+      emit("update:modelValue", {
+        ...props.modelValue,
+        temperature: Number(value),
+      });
+    };
 
-        const updateThinkingEnabled = (value: boolean | null) => {
-            emit('update:modelValue', {
-                ...props.modelValue,
-                thinking_enabled: value
-            });
-        };
+    const updateMaxTokens = (value: any) => {
+      emit("update:modelValue", {
+        ...props.modelValue,
+        max_tokens: Number(value),
+      });
+    };
 
-        const updateThinkingBudget = (value: any) => {
-            const numValue = value ? Number(value) : undefined;
-            emit('update:modelValue', {
-                ...props.modelValue,
-                thinking_budget: numValue
-            });
-        };
+    const updateThinkingEnabled = (value: boolean | null) => {
+      emit("update:modelValue", {
+        ...props.modelValue,
+        thinking_enabled: value,
+      });
+    };
 
-        return {
-            modelItems,
-            selectedModelId,
-            temperature,
-            maxTokens,
-            thinkingEnabled,
-            thinkingBudget,
-            validationError,
-            onModelSelect,
-            updateTemperature,
-            updateMaxTokens,
-            updateThinkingEnabled,
-            updateThinkingBudget
-        };
-    }
+    const updateThinkingBudget = (value: any) => {
+      const numValue = value ? Number(value) : undefined;
+      emit("update:modelValue", {
+        ...props.modelValue,
+        thinking_budget: numValue,
+      });
+    };
+
+    return {
+      modelItems,
+      selectedModelId,
+      temperature,
+      maxTokens,
+      thinkingEnabled,
+      thinkingBudget,
+      validationError,
+      onModelSelect,
+      updateTemperature,
+      updateMaxTokens,
+      updateThinkingEnabled,
+      updateThinkingBudget,
+    };
+  },
 });
 </script>
 

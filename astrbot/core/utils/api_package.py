@@ -12,7 +12,9 @@ class InvalidSignatureError(Exception):
     pass
 
 
-def de_package(apikey: str, data: str, noise: str, expiry_date: str, signature: str) -> dict:
+def de_package(
+    apikey: str, data: str, noise: str, expiry_date: str, signature: str
+) -> dict:
     """验证签名，解包请求参数"""
     if not data:
         raise InvalidSignatureError("data is empty")
@@ -30,7 +32,9 @@ def de_package(apikey: str, data: str, noise: str, expiry_date: str, signature: 
         raise InvalidSignatureError("expiry_date is expired")
 
     payload = f"{data}{noise}{expiry_date}{apikey}"
-    computed = hmac.new(apikey.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    computed = hmac.new(
+        apikey.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
 
     if not hmac.compare_digest(computed, signature):
         raise InvalidSignatureError("signature error")
@@ -40,7 +44,7 @@ def de_package(apikey: str, data: str, noise: str, expiry_date: str, signature: 
         decoded_str = decoded_bytes.decode("utf-8")
         result = json.loads(decoded_str)
     except Exception as e:
-        raise InvalidSignatureError(f"failed to decode data: {e}")
+        raise InvalidSignatureError(f"failed to decode data: {e}") from e
 
     return result
 
@@ -61,9 +65,15 @@ def en_package(appid: str, apikey: str, data: dict) -> dict:
         json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     ).decode("utf-8")
     noise = secrets.token_urlsafe(32)
-    expiry_date = (datetime.now().astimezone() + timedelta(days=1)).replace(microsecond=0).isoformat()
+    expiry_date = (
+        (datetime.now().astimezone() + timedelta(days=1))
+        .replace(microsecond=0)
+        .isoformat()
+    )
     payload = f"{encode_data}{noise}{expiry_date}{apikey}"
-    signature = hmac.new(apikey.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    signature = hmac.new(
+        apikey.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
 
     return {
         "appid": appid,
@@ -72,7 +82,6 @@ def en_package(appid: str, apikey: str, data: dict) -> dict:
         "expiry_date": expiry_date,
         "signature": signature,
     }
-
 
 
 async def request_input(name: list) -> dict:

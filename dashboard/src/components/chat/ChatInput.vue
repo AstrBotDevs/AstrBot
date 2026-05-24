@@ -301,26 +301,19 @@
 </template>
 
 <script setup lang="ts">
-import {
-  ref,
-  computed,
-  watch,
-  nextTick,
-  onMounted,
-  onBeforeUnmount,
-} from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useDisplay } from "vuetify";
+import type { CommandItem } from "@/components/extension/componentPanel/types";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import type { Session } from "@/composables/useSessions";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { isComposingEnter } from "@/utils/imeInput.mjs";
-import axios from "axios";
-import type { CommandItem } from "@/components/extension/componentPanel/types";
-import ConfigSelector from "./ConfigSelector.vue";
-import ProviderModelMenu from "./ProviderModelMenu.vue";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import CommandSuggestion from "./CommandSuggestion.vue";
-import type { Session } from "@/composables/useSessions";
+import axios from "@/utils/request";
 import type { SuggestionCommand } from "./CommandSuggestion.vue";
+import CommandSuggestion from "./CommandSuggestion.vue";
+import ConfigSelector from "./ConfigSelector.vue";
+import type ProviderModelMenu from "./ProviderModelMenu.vue";
 
 interface StagedFileInfo {
   attachment_id: string;
@@ -385,15 +378,11 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
-const isDark = computed(
-  () => useCustomizerStore().uiTheme === "PurpleThemeDark",
-);
+const isDark = computed(() => useCustomizerStore().uiTheme === "PurpleThemeDark");
 
 const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
-const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
-  null,
-);
+const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(null);
 const showProviderSelector = ref(true);
 const isReplyClosing = ref(false);
 const isComposing = ref(false);
@@ -424,9 +413,7 @@ const enabledCommands = computed(() => {
       return;
     }
     // 统一添加 / 前缀（子命令的 effective_command 如 "music play" 需要变成 "/music play"）
-    const displayCmd = cmd.effective_command.startsWith("/")
-      ? cmd.effective_command
-      : `/${cmd.effective_command}`;
+    const displayCmd = cmd.effective_command.startsWith("/") ? cmd.effective_command : `/${cmd.effective_command}`;
     if (!seen.has(displayCmd)) {
       seen.add(displayCmd);
       result.push({
@@ -440,12 +427,8 @@ const enabledCommands = computed(() => {
     }
     // 同时加入别名（别名也需要加上 / 前缀）
     cmd.aliases?.forEach((alias) => {
-      const aliasBase = cmd.parent_signature
-        ? `${cmd.parent_signature} ${alias}`
-        : alias;
-      const aliasKey = aliasBase.startsWith("/")
-        ? aliasBase
-        : `/${aliasBase}`;
+      const aliasBase = cmd.parent_signature ? `${cmd.parent_signature} ${alias}` : alias;
+      const aliasKey = aliasBase.startsWith("/") ? aliasBase : `/${aliasBase}`;
       if (!seen.has(aliasKey)) {
         seen.add(aliasKey);
         result.push({
@@ -484,8 +467,7 @@ const filteredCommands = computed(() => {
     const pluginText = normalizeCommandSearchText(cmd.plugin_display_name || "");
     const descriptionText = normalizeCommandSearchText(cmd.description || "");
     const matchesCommand = commandText.includes(query);
-    const matchesMetadata =
-      pluginText.includes(query) || descriptionText.includes(query);
+    const matchesMetadata = pluginText.includes(query) || descriptionText.includes(query);
 
     if (commandText.startsWith(query)) {
       startsWithMatches.push(cmd);
@@ -494,10 +476,7 @@ const filteredCommands = computed(() => {
     }
   }
 
-  return [
-    ...sortSystemPluginCommandsFirst(startsWithMatches),
-    ...sortSystemPluginCommandsFirst(containsMatches),
-  ];
+  return [...sortSystemPluginCommandsFirst(startsWithMatches), ...sortSystemPluginCommandsFirst(containsMatches)];
 });
 
 const localPrompt = computed({
@@ -505,9 +484,7 @@ const localPrompt = computed({
   set: (value) => emit("update:prompt", value),
 });
 
-const sessionPlatformId = computed(
-  () => props.currentSession?.platform_id || "webchat",
-);
+const sessionPlatformId = computed(() => props.currentSession?.platform_id || "webchat");
 const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
 const canSend = computed(() => {
@@ -519,10 +496,7 @@ const canSend = computed(() => {
   );
 });
 
-const fileTypeStyles: Record<
-  string,
-  { color: string; icon: string; label: string }
-> = {
+const fileTypeStyles: Record<string, { color: string; icon: string; label: string }> = {
   pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
   txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
   md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
@@ -580,7 +554,7 @@ function autoResize() {
   const el = inputField.value;
   if (!el) return;
   el.style.height = "auto";
-  el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
 }
 
 watch(localPrompt, () => {
@@ -592,15 +566,13 @@ function handleKeyDown(e: KeyboardEvent) {
   if (showCommandSuggestion.value && filteredCommands.value.length > 0) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      selectedCommandIndex.value =
-        (selectedCommandIndex.value + 1) % filteredCommands.value.length;
+      selectedCommandIndex.value = (selectedCommandIndex.value + 1) % filteredCommands.value.length;
       return;
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
       selectedCommandIndex.value =
-        (selectedCommandIndex.value - 1 + filteredCommands.value.length) %
-        filteredCommands.value.length;
+        (selectedCommandIndex.value - 1 + filteredCommands.value.length) % filteredCommands.value.length;
       return;
     }
     if (e.key === "Enter") {
@@ -639,10 +611,7 @@ function handleKeyDown(e: KeyboardEvent) {
     return;
   }
 
-  const isSendHotkey =
-    e.ctrlKey ||
-    e.metaKey ||
-    (props.sendShortcut === "enter" ? !e.shiftKey : e.shiftKey);
+  const isSendHotkey = e.ctrlKey || e.metaKey || (props.sendShortcut === "enter" ? !e.shiftKey : e.shiftKey);
 
   if (isSendHotkey) {
     e.preventDefault();
@@ -680,7 +649,7 @@ function handleBlur() {
 
 /** 选择命令，填入输入框 */
 function handleCommandSelect(cmd: SuggestionCommand) {
-  localPrompt.value = cmd.effective_command + " ";
+  localPrompt.value = `${cmd.effective_command} `;
   showCommandSuggestion.value = false;
   nextTick(() => {
     inputField.value?.focus();
@@ -791,10 +760,7 @@ function handleRecordClick() {
   }
 }
 
-function handleConfigChange(payload: {
-  configId: string;
-  agentRunnerType: string;
-}) {
+function handleConfigChange(payload: { configId: string; agentRunnerType: string }) {
   const runnerType = (payload.agentRunnerType || "").toLowerCase();
   const isInternal = runnerType === "internal" || runnerType === "local";
   showProviderSelector.value = isInternal;

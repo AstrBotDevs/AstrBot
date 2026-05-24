@@ -568,8 +568,8 @@ class SandboxManager:
                     self.clear_runtime_state(target_sandbox_id)
                     await self.save_registry_async()
                     raise
-                setattr(client, "sandbox_id", target_sandbox_id)
-                setattr(client, "provider_id", provider_id)
+                client.sandbox_id = target_sandbox_id
+                client.provider_id = provider_id
                 self.session_booter[target_sandbox_id] = client
                 break
         else:
@@ -606,7 +606,8 @@ class SandboxManager:
                 self.registry.update_sandbox_config(
                     sandbox_id, connect_info=connect_info
                 )
-        self.registry.touch_sandbox(sandbox_id)
+        if session_id is not None:
+            self.registry.touch_sandbox(sandbox_id)
         self.registry.update_sandbox_status(sandbox_id, SandboxStatus.RUNNING)
         if session_id is not None:
             self.registry.set_current_sandbox_id(session_id, sandbox_id)
@@ -738,8 +739,8 @@ class SandboxManager:
                 self.clear_runtime_state(sandbox_id)
                 await self.save_registry_async()
                 raise
-            setattr(client, "sandbox_id", sandbox_id)
-            setattr(client, "provider_id", provider_id)
+            client.sandbox_id = sandbox_id
+            client.provider_id = provider_id
             self.session_booter[sandbox_id] = client
             await self._finalize_created_booter(
                 provider, sandbox_id, session_id=None, idle_timeout=idle_timeout
@@ -838,8 +839,8 @@ class SandboxManager:
                         )
                     return
 
-                setattr(client, "sandbox_id", sandbox_id)
-                setattr(client, "provider_id", provider.provider_id)
+                client.sandbox_id = sandbox_id
+                client.provider_id = provider.provider_id
                 self.session_booter[sandbox_id] = client
                 await self._finalize_created_booter(
                     provider, sandbox_id, session_id=None, idle_timeout=idle_timeout
@@ -918,8 +919,8 @@ class SandboxManager:
         sandbox_id: str,
         *,
         sandbox_name: str | None = None,
-        idle_timeout: int | float | None,
-        expires_at: int | float | None,
+        idle_timeout: float | None,
+        expires_at: float | None,
         retention_policy: str,
     ) -> dict:
         record = self.registry.get_sandbox(sandbox_id)
@@ -1051,15 +1052,24 @@ class SandboxManager:
             ):
                 previous_status = current.get("status") or SandboxStatus.UNKNOWN
                 self.registry.update_sandbox_status(sandbox_id, SandboxStatus.RESTORING)
-                await self.save_registry_async()
-                try:
-                    client = await provider.create_booter(
+                boot_task = asyncio.create_task(
+                    provider.create_booter(
                         context,
                         create_session_id,
                         sandbox_id,
                         create_config,
                     )
+                )
+                await asyncio.sleep(0)
+                try:
+                    await self.save_registry_async()
+                    client = await boot_task
+                except asyncio.CancelledError:
+                    boot_task.cancel()
+                    raise
                 except Exception:
+                    if not boot_task.done():
+                        boot_task.cancel()
                     latest = self.registry.get_sandbox(sandbox_id)
                     if (
                         latest is not None
@@ -1068,8 +1078,8 @@ class SandboxManager:
                         self.registry.update_sandbox_status(sandbox_id, previous_status)
                         await self.save_registry_async()
                     raise
-                setattr(client, "sandbox_id", sandbox_id)
-                setattr(client, "provider_id", provider.provider_id)
+                client.sandbox_id = sandbox_id
+                client.provider_id = provider.provider_id
                 self.session_booter[sandbox_id] = client
                 await self._finalize_created_booter(
                     provider,
@@ -1153,6 +1163,12 @@ class SandboxManager:
         released = self.registry.release_lease(target_sandbox_id) or record
         if self.registry.get_current_sandbox_id(session_id) == target_sandbox_id:
             self.registry.set_current_sandbox_id(session_id, None)
+        idle_timeout = released.get("idle_timeout") or 0
+        self.schedule_lifecycle_cleanup(
+            target_sandbox_id,
+            float(idle_timeout),
+            released.get("expires_at"),
+        )
         self.save_registry()
         return released
 
@@ -1174,7 +1190,7 @@ class SandboxManager:
     async def renew_current_sandbox_lease(
         self,
         session_id: str,
-        ttl_seconds: int | float | None = None,
+        ttl_seconds: float | None = None,
         context: Context | None = None,
     ) -> dict:
         sandbox_id = self.registry.get_current_sandbox_id(session_id)
@@ -1552,6 +1568,12 @@ class SandboxManager:
         return restored, deleted
 
     async def cleanup_managed_sandboxes(self) -> None:
+        if (
+            not self.pending_boot_tasks
+            and not self.pending_destroy_tasks
+            and not self.list_sandboxes()
+        ):
+            return
         for sandbox_id in list(self.pending_boot_tasks):
             await self.cancel_pending_boot_task(sandbox_id)
         for sandbox_id in list(self.pending_destroy_tasks):
@@ -1707,7 +1729,12 @@ class SandboxManager:
                 if remaining > 0:
                     await asyncio.sleep(remaining)
                 state = self.idle_state.get(sandbox_id)
-                if state is None or state.expires_at != current_expires_at:
+                current_task = asyncio.current_task()
+                if (
+                    state is None
+                    or state.task is not current_task
+                    or state.expires_at != current_expires_at
+                ):
                     return
                 record = self.registry.get_sandbox(sandbox_id)
                 if record is None:
@@ -1776,7 +1803,12 @@ class SandboxManager:
             raise
         finally:
             state = self.idle_state.get(sandbox_id)
-            if state is not None and state.expires_at == current_expires_at:
+            current_task = asyncio.current_task()
+            if (
+                state is not None
+                and state.task is current_task
+                and state.expires_at == current_expires_at
+            ):
                 self.idle_state.pop(sandbox_id, None)
 
     @staticmethod

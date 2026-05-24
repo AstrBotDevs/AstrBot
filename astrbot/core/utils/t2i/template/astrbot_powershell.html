@@ -177,11 +177,10 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
-  <textarea id="markdown-source" hidden>{{ text | safe }}</textarea>
   <script>
-    document.getElementById('content').innerHTML = marked.parse({{ text | tojson }});
-  </script>
-
+    (function () {
+      const contentElement = document.getElementById("content");
+      const source = {{ text | tojson }};
       contentElement.innerHTML = marked.parse(source);
 
       if (window.AstrBotT2IShiki) {

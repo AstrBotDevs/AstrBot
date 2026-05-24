@@ -1,4 +1,4 @@
-import { ref, onBeforeUnmount } from "vue";
+import { onBeforeUnmount, ref } from "vue";
 import axios from "@/utils/request";
 
 interface VADOptions {
@@ -6,10 +6,7 @@ interface VADOptions {
   onSpeechRealStart?: () => void;
   onSpeechEnd: (audio: Float32Array) => void;
   onVADMisfire?: () => void;
-  onFrameProcessed?: (
-    probabilities: { isSpeech: number; notSpeech: number },
-    frame: Float32Array,
-  ) => void;
+  onFrameProcessed?: (probabilities: { isSpeech: number; notSpeech: number }, frame: Float32Array) => void;
   positiveSpeechThreshold?: number;
   negativeSpeechThreshold?: number;
   redemptionMs?: number;
@@ -56,9 +53,7 @@ export function useVADRecording() {
   // 初始化 VAD
   async function initVAD() {
     if (!window.vad) {
-      console.error(
-        "VAD library not loaded. Please ensure the scripts are included in index.html",
-      );
+      console.error("VAD library not loaded. Please ensure the scripts are included in index.html");
       return;
     }
 
@@ -87,10 +82,7 @@ export function useVADRecording() {
           console.info("[VAD] VAD misfire - speech segment too short");
           isSpeaking.value = false;
         },
-        onFrameProcessed: (
-          probabilities: { isSpeech: number; notSpeech: number },
-          frame: Float32Array,
-        ) => {
+        onFrameProcessed: (probabilities: { isSpeech: number; notSpeech: number }, frame: Float32Array) => {
           // 计算 RMS (Root Mean Square) 作为能量
           let sum = 0;
           for (let i = 0; i < frame.length; i++) {
@@ -110,10 +102,8 @@ export function useVADRecording() {
         minSpeechMs: 400,
         submitUserSpeechOnPause: false,
         model: "v5",
-        baseAssetPath:
-          "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.29/dist/",
-        onnxWASMBasePath:
-          "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/",
+        baseAssetPath: "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.29/dist/",
+        onnxWASMBasePath: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/",
       });
 
       isInitialized.value = true;
@@ -125,10 +115,7 @@ export function useVADRecording() {
   }
 
   // 开始录音（启动 VAD）
-  async function startRecording(
-    onSpeechStart: () => void,
-    onSpeechEnd: (audio: Float32Array) => void,
-  ) {
+  async function startRecording(onSpeechStart: () => void, onSpeechEnd: (audio: Float32Array) => void) {
     // 存储回调函数
     onSpeechStartCallback.value = onSpeechStart;
     onSpeechEndCallback.value = onSpeechEnd;

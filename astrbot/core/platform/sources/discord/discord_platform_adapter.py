@@ -1,8 +1,7 @@
 import asyncio
 import re
-import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, override
 
 import discord
 from discord.abc import GuildChannel, Messageable, PrivateChannel
@@ -11,7 +10,7 @@ from discord.errors import HTTPException
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record
+from astrbot.api.message_components import At, File, Image, Plain, Record
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -32,10 +31,17 @@ from astrbot.core.star.star_handler import (
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
 
-
 DISCORD_AUDIO_ATTACHMENT_EXTENSIONS = frozenset(
     {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}
 )
+
+
+def _is_daily_command_quota_error(exc: Exception) -> bool:
+    if isinstance(exc, HTTPException) and getattr(exc, "code", None) == 30034:
+        return True
+    if getattr(exc, "code", None) == 30034:
+        return True
+    return "daily application command creates" in str(exc).lower()
 
 
 # 注册平台适配器
@@ -455,10 +461,10 @@ class DiscordPlatformAdapter(Platform):
         try:
             await self.client.sync_commands()
             logger.info("[Discord] 指令同步完成｡")
-        except HTTPException as exc:
-            if getattr(exc, "code", None) == 30034:
+        except Exception as exc:
+            if _is_daily_command_quota_error(exc):
                 logger.warning(
-                    "[Discord] 跳过指令同步:已达到 Discord 每日 application command create 限额｡",
+                    "[Discord] 跳过指令同步:已达到 Discord 每日 application command create 限额(code=30034)｡",
                 )
                 return
             raise

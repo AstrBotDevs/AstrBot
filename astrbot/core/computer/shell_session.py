@@ -54,6 +54,10 @@ class PersistentShellSession:
                 stdin.write(b"exit\n")
                 await stdin.drain()
                 await asyncio.wait_for(proc.wait(), timeout=5)
+            except (AttributeError, BrokenPipeError, ConnectionError, RuntimeError):
+                if proc.returncode is None:
+                    proc.kill()
+                    await proc.wait()
             except TimeoutError:
                 proc.kill()
                 await proc.wait()

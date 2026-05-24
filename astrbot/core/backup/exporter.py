@@ -66,6 +66,12 @@ class AstrBotExporter:
         self.config_path = config_path
         self._checksums: dict[str, str] = {}
 
+    def _read_text_if_exists(self, file_path: str) -> str | None:
+        path = Path(file_path)
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8")
+
     async def export_all(
         self,
         output_dir: str | None = None,
@@ -395,9 +401,11 @@ class AstrBotExporter:
         for attachment in attachments:
             try:
                 file_path = attachment.get("path", "")
+                attachment_id = attachment.get("attachment_id", "")
+                if not attachment_id:
+                    continue
                 if file_path and await anyio.Path(file_path).exists():
                     # 使用 attachment_id 作为文件名
-                    attachment_id = attachment.get("attachment_id", "")
                     ext = os.path.splitext(file_path)[1]
                     archive_path = f"files/attachments/{attachment_id}{ext}"
                     zf.write(file_path, archive_path)

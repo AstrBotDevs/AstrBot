@@ -71,8 +71,8 @@
 </template>
 
 <script setup lang="ts">
-import { useModuleI18n } from "@/i18n/composables";
 import type { Project } from "@/components/chat/ProjectList.vue";
+import { useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 
 interface Session {
@@ -103,8 +103,7 @@ function formatDate(dateString: string): string {
 }
 
 async function handleDeleteSession(session: Session) {
-  const sessionTitle =
-    session.display_name || tm("conversation.newConversation");
+  const sessionTitle = session.display_name || tm("conversation.newConversation");
   const message = tm("conversation.confirmDelete", { name: sessionTitle });
   if (await askForConfirmation(message, confirmDialog)) {
     emit("deleteSession", session.session_id);

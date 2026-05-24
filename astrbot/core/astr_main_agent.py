@@ -3,13 +3,15 @@ from __future__ import annotations
 import asyncio
 import copy
 import datetime
+import inspect
 import json
 import os
 import platform
 import zoneinfo
-from collections.abc import Coroutine
+from collections.abc import Awaitable, Coroutine
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from astrbot.core import logger
 
@@ -26,18 +28,19 @@ from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
-    KNOWLEDGE_BASE_QUERY_TOOL,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
-    LOCAL_EXECUTE_SHELL_TOOL,
-    LOCAL_PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
-    SEND_MESSAGE_TO_USER_TOOL,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.computer import computer_client
 from astrbot.core.computer.sandbox_tool_binding import tool_available_in_runtime
+from astrbot.core.config.default import GLOBAL_UNIFIED_CONTEXT_UMO, ORIGINAL_UMO_KEY
+from astrbot.core.context_memory import (
+    build_pinned_memory_system_block,
+    load_context_memory_config,
+)
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
@@ -100,11 +103,6 @@ from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
     BraveWebSearchTool,
-    ExaExtractWebPageTool,
-    ExaFindSimilarTool,
-    ExaWebSearchTool,
-    FirecrawlExtractWebPageTool,
-    FirecrawlWebSearchTool,
     MetasoWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
@@ -134,6 +132,36 @@ from astrbot.core.utils.quoted_message_parser import (
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
+_TITLE_GEN_SYSTEM_PROMPT = (
+    "You are a title generator. Return a concise chat title in the user's language. "
+    "If no useful title can be generated, return <None>."
+)
+
+
+class _AwaitableNoop:
+    def __await__(self):
+        if False:
+            yield None
+        return None
+
+
+class _AwaitableFactory:
+    def __init__(self, factory):
+        self._factory = factory
+
+    def __await__(self):
+        return self._factory().__await__()
+
+
+async def _maybe_await(value: Awaitable[Any] | Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+_TITLE_GEN_USER_PROMPT_TEMPLATE = (
+    "Generate a short title for this user message:\n{user_prompt}"
+)
 
 
 @dataclass(slots=True)
@@ -174,6 +202,22 @@ class MainAgentBuildConfig:
     """The number of most recent turns to keep during llm_compress strategy."""
     llm_compress_provider_id: str = ""
     """The provider ID for the LLM used in context compression."""
+    llm_compress_use_compact_api: bool = True
+    """Whether to prefer provider native context compact API when available."""
+    context_token_counter_mode: str = "estimate"
+    """Token counting mode used by context compaction."""
+    compact_context_after_tool_call: bool = False
+    """Whether to run context compaction immediately after tool execution."""
+    compact_context_soft_ratio: float = 0.3
+    """Soft token budget ratio that can trigger post-tool compaction."""
+    compact_context_hard_ratio: float = 0.7
+    """Hard token budget ratio that always triggers post-tool compaction."""
+    compact_context_min_delta_tokens: int = 0
+    """Minimum token increase required before soft-zone post-tool compaction."""
+    compact_context_min_delta_turns: int = 0
+    """Minimum message increase required before soft-zone post-tool compaction."""
+    compact_context_debounce_seconds: int = 0
+    """Minimum interval between post-tool compaction checks."""
     max_context_length: int = 30
     """The maximum number of turns to keep in context. -1 means no limit.
     This enforce max turns before compression"""
@@ -255,21 +299,21 @@ async def _get_session_conv(
     avatar = event.get_sender_avatar()
     cid = await conv_mgr.get_curr_conversation_id(umo)
     if not cid:
-        cid = await conv_mgr.new_conversation(umo, event.get_platform_id(), user_name=user_name, avatar=avatar)
+        cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
     conversation = await conv_mgr.get_conversation(umo, cid)
     if not conversation:
-        cid = await conv_mgr.new_conversation(umo, event.get_platform_id(), user_name=user_name, avatar=avatar)
+        cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
         conversation = await conv_mgr.get_conversation(umo, cid)
     if not conversation:
         raise RuntimeError("无法创建新的对话。")
     # 如果已有对话但 user_name 或 avatar 为空，更新它们
     updates: dict[str, Any] = {}
-    if conversation.user_name is None and user_name:
+    if getattr(conversation, "user_name", None) is None and user_name:
         updates["user_name"] = user_name
-    if conversation.avatar is None and avatar:
+    if getattr(conversation, "avatar", None) is None and avatar:
         updates["avatar"] = avatar
     if updates:
-        await conv_mgr.db.update_conversation(cid, **updates)
+        await _maybe_await(conv_mgr.db.update_conversation(cid, **updates))
         for field, value in updates.items():
             setattr(conversation, field, value)
     return conversation
@@ -499,6 +543,13 @@ def _filter_tools_for_current_config(
     return filtered
 
 
+def _filter_provider_runtime_tools(req: ProviderRequest, cfg: dict | None) -> None:
+    if req.func_tool is None or cfg is None:
+        return
+    session_id = req.session_id or ""
+    req.func_tool = _filter_tools_for_current_config(req.func_tool, cfg, session_id)
+
+
 async def _ensure_persona_and_skills(
     req: ProviderRequest,
     cfg: dict,
@@ -518,9 +569,7 @@ async def _ensure_persona_and_skills(
         key="session_plugin_config",
         default={},
     )
-    session_disabled = set(
-        session_plugin_config.get(session_id, {}).get("disabled_plugins", [])
-    )
+    set(session_plugin_config.get(session_id, {}).get("disabled_plugins", []))
 
     (
         persona_id,
@@ -840,6 +889,18 @@ def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> No
     )
 
 
+def _append_audio_attachment(req: ProviderRequest, audio_path: str) -> None:
+    req.extra_user_content_parts.append(
+        TextPart(text=f"[Audio Attachment: path {audio_path}]"),
+    )
+
+
+def _append_quoted_audio_attachment(req: ProviderRequest, audio_path: str) -> None:
+    req.extra_user_content_parts.append(
+        TextPart(text=f"[Audio Attachment in quoted message: path {audio_path}]"),
+    )
+
+
 async def _resolve_image_component_ref(comp: Image) -> str:
     image_ref = (getattr(comp, "url", "") or "").strip()
     if image_ref:
@@ -856,6 +917,32 @@ async def _resolve_image_component_ref(comp: Image) -> str:
     return await comp.convert_to_file_path()
 
 
+async def _append_video_attachment(
+    req: ProviderRequest,
+    comp: Video,
+    *,
+    quoted: bool = False,
+) -> None:
+    try:
+        video_path = await comp.convert_to_file_path()
+    except Exception as exc:  # noqa: BLE001
+        if quoted:
+            logger.error("Error processing quoted video attachment: %s", exc)
+        else:
+            logger.error("Error processing video attachment: %s", exc)
+        return
+
+    video_name = os.path.basename(video_path) or "video"
+    if quoted:
+        text = (
+            "[Video Attachment in quoted message: "
+            f"name {video_name}, path {video_path}]"
+        )
+    else:
+        text = f"[Video Attachment: name {video_name}, path {video_path}]"
+    req.extra_user_content_parts.append(TextPart(text=text))
+
+
 def _get_quoted_message_parser_settings(
     provider_settings: dict[str, object] | None,
 ) -> QuotedMessageParserSettings:
@@ -864,7 +951,7 @@ def _get_quoted_message_parser_settings(
     overrides = provider_settings.get("quoted_message_parser")
     if not isinstance(overrides, dict):
         return DEFAULT_QUOTED_MESSAGE_SETTINGS
-    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)  # type: ignore[arg-type]
+    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
 
 
 def _get_image_compress_args(
@@ -1179,64 +1266,61 @@ async def _decorate_llm_request(
     _inject_context_memory(event, req, cfg)
 
 
-async def _plugin_tool_fix(
+def _plugin_tool_fix(
     event: AstrMessageEvent, req: ProviderRequest, cfg: dict | None = None
-) -> None:
+) -> _AwaitableNoop | Awaitable[None]:
     """根据事件中的插件设置，过滤请求中的工具列表。
 
     注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
     因为它们不属于任何插件，不应被插件过滤逻辑影响。
     """
     if not req.func_tool:
-        return
-
-    from astrbot.core import sp
-
-    session_id = event.unified_msg_origin
-    session_plugin_config = await sp.get_async(
-        scope="umo",
-        scope_id=session_id,
-        key="session_plugin_config",
-        default={},
-    )
-    session_disabled = set(
-        session_plugin_config.get(session_id, {}).get("disabled_plugins", [])
-    )
-
-    global_whitelist = event.plugins_name  # None 表示全部允许
-
-    new_tool_set = ToolSet()
-    for tool in req.func_tool.tools:
-        if isinstance(tool, MCPTool):
-            # 保留 MCP 工具
-            new_tool_set.add_tool(tool)
-            continue
-        mp = tool.handler_module_path
-        if not mp:
-            # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
-            # 不应受到会话插件过滤影响。
-            new_tool_set.add_tool(tool)
-            continue
-        plugin = star_map.get(mp)
-        if not plugin:
-            # 无法解析插件归属时，保守保留工具，避免误过滤。
-            new_tool_set.add_tool(tool)
-            continue
-        if plugin.reserved:
-            new_tool_set.add_tool(tool)
-            continue
-        # 全局白名单过滤
-        if global_whitelist is not None and plugin.name not in global_whitelist:
-            continue
-        # 会话级禁用过滤
-        if plugin.name in session_disabled:
-            continue
-        new_tool_set.add_tool(tool)
-    req.func_tool = new_tool_set
-
-    if req.func_tool is not None and cfg is not None:
+        return _AwaitableNoop()
+    if cfg is not None:
         session_id = req.session_id or event.unified_msg_origin
         req.func_tool = _filter_tools_for_current_config(req.func_tool, cfg, session_id)
+
+    async def _apply_plugin_filters() -> None:
+        if not req.func_tool:
+            return
+        session_id = event.unified_msg_origin
+        session_plugin_config = await SessionPluginManager.get_session_plugin_config(
+            session_id
+        )
+        session_disabled = set(session_plugin_config.get("disabled_plugins", []))
+
+        global_whitelist = event.plugins_name  # None 表示全部允许
+
+        new_tool_set = ToolSet()
+        for tool in req.func_tool.tools:
+            if isinstance(tool, MCPTool):
+                # 保留 MCP 工具
+                new_tool_set.add_tool(tool)
+                continue
+            mp = tool.handler_module_path
+            if not mp:
+                # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
+                # 不应受到会话插件过滤影响。
+                new_tool_set.add_tool(tool)
+                continue
+            plugin = star_map.get(mp)
+            if not plugin:
+                # 无法解析插件归属时，保守保留工具，避免误过滤。
+                new_tool_set.add_tool(tool)
+                continue
+            if plugin.reserved:
+                new_tool_set.add_tool(tool)
+                continue
+            # 全局白名单过滤
+            if global_whitelist is not None and plugin.name not in global_whitelist:
+                continue
+            # 会话级禁用过滤
+            if plugin.name in session_disabled:
+                continue
+            new_tool_set.add_tool(tool)
+        req.func_tool = new_tool_set
+
+    return _AwaitableFactory(_apply_plugin_filters)
 
 
 async def _handle_webchat(
@@ -1258,24 +1342,22 @@ async def _handle_webchat(
             system_prompt=_TITLE_GEN_SYSTEM_PROMPT,
             prompt=_TITLE_GEN_USER_PROMPT_TEMPLATE.format(user_prompt=user_prompt),
         )
+        if llm_resp and llm_resp.completion_text:
+            title = llm_resp.completion_text.strip()
+            # 精确匹配 <None>，避免误过滤合法标题
+            if not title or title.lower() in ("<none>", "none"):
+                return
+            logger.info(
+                "Generated chatui title for session %s: %s",
+                chatui_session_id,
+                title,
+            )
+            await db_helper.update_platform_session(
+                session_id=chatui_session_id,
+                display_name=title,
+            )
     except Exception as e:
-        logger.warning("Failed to generate chatui title: %s", e)
-        return
-
-    if llm_resp and llm_resp.completion_text:
-        title = llm_resp.completion_text.strip()
-        # 精确匹配 <None>，避免误过滤合法标题
-        if not title or title.lower() in ("<none>", "none"):
-            return
-        logger.info(
-            "Generated chatui title for session %s: %s",
-            chatui_session_id,
-            title,
-        )
-        await db_helper.update_platform_session(
-            session_id=chatui_session_id,
-            display_name=title,
-        )
+        logger.exception("Failed to generate chatui title: %s", e)
 
 
 async def _handle_conversation_title(
@@ -1293,12 +1375,12 @@ async def _handle_conversation_title(
         umo = event.unified_msg_origin
 
         # 获取当前会话 ID
-        cid = await conv_mgr.get_curr_conversation_id(umo)
+        cid = await _maybe_await(conv_mgr.get_curr_conversation_id(umo))
         if not cid or not user_prompt:
             return
 
         # 获取会话对象，检查是否已有标题
-        conversation = await conv_mgr.get_conversation(umo, cid)
+        conversation = await _maybe_await(conv_mgr.get_conversation(umo, cid))
         if not conversation:
             return
 
@@ -1326,7 +1408,7 @@ async def _handle_conversation_title(
                 return
 
             # 防止竞态条件：更新前再次检查标题是否已存在
-            conversation = await conv_mgr.get_conversation(umo, cid)
+            conversation = await _maybe_await(conv_mgr.get_conversation(umo, cid))
             if conversation and conversation.title:
                 logger.debug(
                     "Conversation title already set for %s, skipping update", umo
@@ -1334,10 +1416,12 @@ async def _handle_conversation_title(
                 return
 
             logger.info("Generated conversation title for %s: %s", umo, title)
-            await conv_mgr.update_conversation(
-                unified_msg_origin=umo,
-                conversation_id=cid,
-                title=title,
+            await _maybe_await(
+                conv_mgr.update_conversation(
+                    unified_msg_origin=umo,
+                    conversation_id=cid,
+                    title=title,
+                )
             )
     except Exception as e:
         # 捕获所有未预期的异常，防止后台任务静默失败
@@ -1477,8 +1561,6 @@ def _apply_sandbox_tools(
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
-    for part in prompt_parts:
-        req.system_prompt += part
 
 
 def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> None:
@@ -1548,34 +1630,95 @@ def _get_fallback_chat_providers(
         )
         return []
 
+    fallback_providers: list[Provider] = []
+    for provider_id in fallback_ids:
+        try:
+            fallback_provider = plugin_context.get_provider_by_id(str(provider_id))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to resolve fallback provider %s: %s", provider_id, exc
+            )
+            continue
+        if fallback_provider and isinstance(fallback_provider, Provider):
+            fallback_providers.append(fallback_provider)
+    return fallback_providers
+
+
+def _apply_global_context_info(event: AstrMessageEvent, req: ProviderRequest) -> None:
     if event.unified_msg_origin != GLOBAL_UNIFIED_CONTEXT_UMO:
         return
 
-    # Get original UMO from extras
     original_umo = event.get_extra(ORIGINAL_UMO_KEY)
     if not original_umo:
         return
 
-    # Parse the original UMO to extract platform, message type, and session info
     try:
-        parts = original_umo.split(":", 2)
+        parts = str(original_umo).split(":", 2)
         if len(parts) != 3:
             logger.warning(
-                f"Original UMO format is invalid (expected 3 parts): {original_umo}"
+                "Original UMO format is invalid (expected 3 parts): %s",
+                original_umo,
             )
             return
 
         platform_id, message_type, session_id = parts
-        context_info = f"[Context: Platform={platform_id}, Type={message_type}, Session={session_id}]"
-        # Prepend context info to the user prompt
-        req.prompt = f"{context_info} {req.prompt or ''}"
+        context_info = (
+            f"[Context: Platform={platform_id}, Type={message_type}, "
+            f"Session={session_id}]"
+        )
+        req.prompt = f"{context_info} {req.prompt or ''}".strip()
     except Exception as e:
-        logger.warning(f"Failed to parse original UMO for global context: {e}")
+        logger.warning("Failed to parse original UMO for global context: %s", e)
 
 
 def _provider_supports_modality(provider: Provider, modality: str) -> bool:
     modalities = provider.provider_config.get("modalities", None)
     return isinstance(modalities, list) and modality in modalities
+
+
+def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
+    modalities = provider.provider_config.get("modalities", None)
+    if not isinstance(modalities, list) or not modalities:
+        return
+    if req.image_urls and "image" not in modalities:
+        req.image_urls = []
+        req.prompt = f"{req.prompt or ''}\n[图片]".strip()
+    if req.func_tool and "tool_use" not in modalities:
+        req.func_tool = None
+
+
+def _sanitize_context_by_modalities(
+    config: MainAgentBuildConfig,
+    provider: Provider,
+    req: ProviderRequest,
+) -> None:
+    if not config.sanitize_context_by_modalities:
+        return
+    modalities = provider.provider_config.get("modalities", None)
+    if not isinstance(modalities, list) or not modalities:
+        return
+
+    supports_tool = "tool_use" in modalities
+    supports_image = "image" in modalities
+    sanitized_contexts = []
+    for item in req.contexts or []:
+        if not isinstance(item, dict):
+            sanitized_contexts.append(item)
+            continue
+        if not supports_tool and item.get("role") == "tool":
+            continue
+        copied = copy.deepcopy(item)
+        if not supports_tool:
+            copied.pop("tool_calls", None)
+        content = copied.get("content")
+        if not supports_image and isinstance(content, list):
+            copied["content"] = [
+                part
+                for part in content
+                if not (isinstance(part, dict) and part.get("type") == "image_url")
+            ]
+        sanitized_contexts.append(copied)
+    req.contexts = sanitized_contexts
 
 
 def _select_image_chat_provider(
@@ -1678,9 +1821,10 @@ async def build_main_agent(
                 )
                 if _is_generated_compressed_image_path(path, image_path):
                     event.track_temporary_local_file(image_path)
-                req.image_urls.append(image_path)
+                image_ref = await _resolve_image_component_ref(comp)
+                req.image_urls.append(image_ref if image_path == path else image_path)
                 req.extra_user_content_parts.append(
-                    TextPart(text=f"[Image Attachment: path {image_path}]")
+                    TextPart(text=f"[Image Attachment: path {image_ref}]")
                 )
             elif isinstance(comp, Record):
                 audio_path = await comp.convert_to_file_path()
@@ -1877,6 +2021,8 @@ async def build_main_agent(
                 config.fallback_max_context_tokens
             )
 
+    _sanitize_context_by_modalities(config, provider, req)
+
     if event.get_platform_name() == "webchat":
         asyncio.create_task(_handle_webchat(event, req, provider))
     else:
@@ -1916,7 +2062,16 @@ async def build_main_agent(
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent=config.llm_compress_keep_recent,
         llm_compress_provider=_get_compress_provider(config, plugin_context, event),
+        llm_compress_use_compact_api=config.llm_compress_use_compact_api,
         truncate_turns=config.dequeue_context_length,
+        token_counter_mode=config.context_token_counter_mode,
+        token_counter_model=provider.get_model() if provider else None,
+        compact_context_after_tool_call=config.compact_context_after_tool_call,
+        compact_context_soft_ratio=config.compact_context_soft_ratio,
+        compact_context_hard_ratio=config.compact_context_hard_ratio,
+        compact_context_min_delta_tokens=config.compact_context_min_delta_tokens,
+        compact_context_min_delta_turns=config.compact_context_min_delta_turns,
+        compact_context_debounce_seconds=config.compact_context_debounce_seconds,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=fallback_providers,
         tool_result_overflow_dir=(

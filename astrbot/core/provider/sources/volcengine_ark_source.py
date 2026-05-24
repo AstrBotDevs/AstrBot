@@ -78,7 +78,7 @@ class ProviderVolcengineArk(Provider):
             return self._ark_cls
         try:
             module = importlib.import_module("volcenginesdkarkruntime")
-            self._ark_cls = getattr(module, "AsyncArk")
+            self._ark_cls = module.AsyncArk
         except (ImportError, AttributeError) as exc:
             raise self._sdk_import_error() from exc
         return self._ark_cls
@@ -189,7 +189,9 @@ class ProviderVolcengineArk(Provider):
         return stripped, reasoning
 
     @staticmethod
-    def _summarize_input_items(input_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _summarize_input_items(
+        input_items: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         summary: list[dict[str, Any]] = []
         for item in input_items:
             role = str(item.get("role", ""))
@@ -350,7 +352,9 @@ class ProviderVolcengineArk(Provider):
                 if self._obj_get(content, "type") != "input_image":
                     continue
                 image_url = self._obj_get(content, "image_url", "")
-                if not isinstance(image_url, str) or not image_url.startswith("file://"):
+                if not isinstance(image_url, str) or not image_url.startswith(
+                    "file://"
+                ):
                     continue
                 local_path = unquote(image_url.removeprefix("file://"))
                 local_path = local_path.replace("\\", os.sep)
@@ -768,17 +772,21 @@ class ProviderVolcengineArk(Provider):
         for _ in range(10):
             try:
                 self.set_key(chosen_key)
-                response = await self._sdk_client.responses.create(**payload, stream=False)
+                response = await self._sdk_client.responses.create(
+                    **payload, stream=False
+                )
                 return self._parse_response(response, func_tool)
             except Exception as exc:
                 last_exception = exc
-                if self._is_invalid_scheme_error(exc) and self._input_contains_file_images(
-                    payload.get("input", [])
-                ):
+                if self._is_invalid_scheme_error(
+                    exc
+                ) and self._input_contains_file_images(payload.get("input", [])):
                     logger.warning(
                         "Volcengine Ark rejected file:// image input, retrying with data URLs."
                     )
-                    payload = await self._convert_payload_file_images_to_data_urls(payload)
+                    payload = await self._convert_payload_file_images_to_data_urls(
+                        payload
+                    )
                     continue
                 if "429" in str(exc) and len(available_api_keys) > 1:
                     logger.warning(
@@ -840,13 +848,15 @@ class ProviderVolcengineArk(Provider):
                 return
             except Exception as exc:
                 last_exception = exc
-                if self._is_invalid_scheme_error(exc) and self._input_contains_file_images(
-                    payload.get("input", [])
-                ):
+                if self._is_invalid_scheme_error(
+                    exc
+                ) and self._input_contains_file_images(payload.get("input", [])):
                     logger.warning(
                         "Volcengine Ark rejected file:// image input during streaming, retrying with data URLs."
                     )
-                    payload = await self._convert_payload_file_images_to_data_urls(payload)
+                    payload = await self._convert_payload_file_images_to_data_urls(
+                        payload
+                    )
                     continue
                 if "429" in str(exc) and len(available_api_keys) > 1:
                     logger.warning(

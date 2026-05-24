@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from deprecated import deprecated
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, StaticPool
 
 from astrbot.core.db.po import (
     ApiKey,
@@ -40,6 +40,7 @@ class BaseDatabase(abc.ABC):
     DATABASE_URL = ""
 
     def __init__(self) -> None:
+        self.inited = False
         # SQLite only supports a single writer at a time.  Without a busy
         # timeout the driver raises "database is locked" instantly when a
         # second write is attempted.  Setting timeout=30 tells SQLite to
@@ -57,7 +58,9 @@ class BaseDatabase(abc.ABC):
             # Keep SQLite async engines off SQLAlchemy's default async queue
             # pool so packaged runtimes don't depend on dialect-specific pool
             # event support.
-            engine_kwargs["poolclass"] = NullPool
+            engine_kwargs["poolclass"] = (
+                StaticPool if db_url.database == ":memory:" else NullPool
+            )
         self.engine = create_async_engine(
             self.DATABASE_URL,
             **engine_kwargs,
@@ -68,9 +71,9 @@ class BaseDatabase(abc.ABC):
             expire_on_commit=False,
         )
 
-    @abc.abstractmethod
     async def initialize(self) -> None:
         """初始化数据库连接"""
+        return None
 
     @asynccontextmanager
     async def get_db(self) -> T.AsyncGenerator[AsyncSession, None]:
@@ -187,6 +190,8 @@ class BaseDatabase(abc.ABC):
         created_at: datetime.datetime | None = None,
         updated_at: datetime.datetime | None = None,
         is_reset: bool = False,
+        user_name: str | None = None,
+        avatar: str | None = None,
     ) -> ConversationV2:
         """Create a new conversation."""
         ...

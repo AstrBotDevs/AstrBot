@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
+
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import (
     SparseResult,
     SparseRetriever,
@@ -17,7 +19,5 @@ class TestSparseRetrieverImports:
 
     def test_import_sparse_result(self):
         assert SparseResult is not None
-        assert hasattr(SparseResult, "chunk_id")
-        assert hasattr(SparseResult, "doc_id")
-        assert hasattr(SparseResult, "content")
-        assert hasattr(SparseResult, "score")
+        result_fields = {field.name for field in fields(SparseResult)}
+        assert {"chunk_id", "doc_id", "content", "score"}.issubset(result_fields)

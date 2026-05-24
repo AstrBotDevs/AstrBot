@@ -356,7 +356,9 @@ def _format_resource_template_metadata(
     return lines
 
 
-def _sanitize_tool_name_fragment(name: str, server_config_hash: str | None = None) -> str:
+def _sanitize_tool_name_fragment(
+    name: str, server_config_hash: str | None = None
+) -> str:
     """Sanitize server name to be used in tool names.
 
     Args:

@@ -409,11 +409,11 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from "vue";
-import axios from "@/utils/request";
 import * as d3 from "d3";
+import { defineComponent } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { normalizeTextInput } from "@/utils/inputValue";
+import axios from "@/utils/request";
 
 // Toast plugin type for $toast used across the component
 interface ToastPlugin {
@@ -610,9 +610,7 @@ export default defineComponent({
       };
 
       // 如果有选择用户ID，也加入查询参数
-      const normalizedUserId = normalizeTextInput(
-        this.searchMemoryUserId,
-      ).trim();
+      const normalizedUserId = normalizeTextInput(this.searchMemoryUserId).trim();
       if (normalizedUserId) {
         params.user_id = normalizedUserId;
       }
@@ -642,18 +640,12 @@ export default defineComponent({
               );
             }
           } else {
-            this.$toast.error(
-              this.tm("messages.searchError") + ": " + response.data.message,
-            );
+            this.$toast.error(`${this.tm("messages.searchError")}: ${response.data.message}`);
           }
         })
         .catch((error) => {
           console.error("搜索记忆数据失败:", error);
-          this.$toast.error(
-            this.tm("messages.searchError") +
-              ": " +
-              (error.response?.data?.message || error.message),
-          );
+          this.$toast.error(`${this.tm("messages.searchError")}: ${error.response?.data?.message || error.message}`);
         })
         .finally(() => {
           this.isSearching = false;
@@ -690,11 +682,7 @@ export default defineComponent({
         })
         .catch((error) => {
           console.error("添加记忆数据失败:", error);
-          this.$toast.error(
-            this.tm("messages.addError") +
-              ": " +
-              (error.response?.data?.message || error.message),
-          );
+          this.$toast.error(`${this.tm("messages.addError")}: ${error.response?.data?.message || error.message}`);
         })
         .finally(() => {
           this.isSubmitting = false;
@@ -720,8 +708,7 @@ export default defineComponent({
             const nodeId = node[0];
             const nodeData = node[1];
             const nodeType = nodeData._label || "default";
-            const color =
-              this.nodeColors[nodeType] || this.nodeColors["default"];
+            const color = this.nodeColors[nodeType] || this.nodeColors.default;
 
             return {
               id: nodeId,
@@ -736,8 +723,7 @@ export default defineComponent({
             const targetId = edge[1];
             const edgeData = edge[2];
             const relationType = edgeData.relation_type || "default";
-            const color =
-              this.edgeColors[relationType] || this.edgeColors["default"];
+            const color = this.edgeColors[relationType] || this.edgeColors.default;
 
             return {
               source: sourceId,
@@ -750,13 +736,7 @@ export default defineComponent({
 
           this.updateD3Graph();
           this.updateGraphStats();
-          console.info(
-            "Graph initialized with",
-            this.nodes.length,
-            "nodes and",
-            this.links.length,
-            "links",
-          );
+          console.info("Graph initialized with", this.nodes.length, "nodes and", this.links.length, "links");
         })
         .catch((error) => {
           console.error("Error fetching graph data:", error);
@@ -828,24 +808,16 @@ export default defineComponent({
           if (response.data.status === "ok") {
             this.selectedEdgeFactData = response.data.data;
             // 解析元数据
-            this.parsedMetadata = this.parseMetadata(
-              this.selectedEdgeFactData.metadata,
-            );
+            this.parsedMetadata = this.parseMetadata(this.selectedEdgeFactData.metadata);
             this.showFactDialog = true;
           } else {
-            this.$toast.error(
-              this.tm("messages.factDetailsError") +
-                ": " +
-                response.data.message,
-            );
+            this.$toast.error(`${this.tm("messages.factDetailsError")}: ${response.data.message}`);
           }
         })
         .catch((error) => {
           console.error("获取记忆详情失败:", error);
           this.$toast.error(
-            this.tm("messages.factDetailsError") +
-              ": " +
-              (error.response?.data?.message || error.message),
+            `${this.tm("messages.factDetailsError")}: ${error.response?.data?.message || error.message}`,
           );
         })
         .finally(() => {
@@ -881,8 +853,7 @@ export default defineComponent({
 
     // 格式化元数据值
     formatMetadataValue(value: unknown): string {
-      if (value === null || value === undefined)
-        return this.tm("factDialog.noValue");
+      if (value === null || value === undefined) return this.tm("factDialog.noValue");
 
       if (typeof value === "object") {
         return JSON.stringify(value);
@@ -1078,22 +1049,15 @@ export default defineComponent({
     },
 
     // 识别并标记平行边（连接相同两个节点的多条边）
-    identifyParallelLinks(
-      links: GraphLink[],
-    ): Map<string, Array<{ link: GraphLink; isForward: boolean }>> {
+    identifyParallelLinks(links: GraphLink[]): Map<string, Array<{ link: GraphLink; isForward: boolean }>> {
       // 创建一个映射来存储连接相同节点对的边
-      const linkMap = new Map<
-        string,
-        Array<{ link: GraphLink; isForward: boolean }>
-      >();
+      const linkMap = new Map<string, Array<{ link: GraphLink; isForward: boolean }>>();
 
       // 遍历所有边，按照起点和终点进行分组
       links.forEach((link: GraphLink) => {
         // 创建边的键，确保无论边的方向如何，同一对节点生成的键都相同
-        const sourceId =
-          typeof link.source === "object" ? link.source.id : link.source;
-        const targetId =
-          typeof link.target === "object" ? link.target.id : link.target;
+        const sourceId = typeof link.source === "object" ? link.source.id : link.source;
+        const targetId = typeof link.target === "object" ? link.target.id : link.target;
 
         const forwardKey = `${sourceId}-${targetId}`;
         const reverseKey = `${targetId}-${sourceId}`;
@@ -1162,14 +1126,8 @@ export default defineComponent({
     // 根据曲率生成边的路径
     generateLinkPath(d: GraphLink): string {
       // 确保source和target是对象
-      const source =
-        typeof d.source === "object"
-          ? d.source
-          : this.nodes.find((n: GraphNode) => n.id === d.source);
-      const target =
-        typeof d.target === "object"
-          ? d.target
-          : this.nodes.find((n: GraphNode) => n.id === d.target);
+      const source = typeof d.source === "object" ? d.source : this.nodes.find((n: GraphNode) => n.id === d.source);
+      const target = typeof d.target === "object" ? d.target : this.nodes.find((n: GraphNode) => n.id === d.target);
 
       if (!source || !target) return "";
 
@@ -1204,14 +1162,8 @@ export default defineComponent({
 
     // 新增方法：计算边标签的X坐标
     getLinkLabelX(d: GraphLink): number {
-      const source =
-        typeof d.source === "object"
-          ? d.source
-          : this.nodes.find((n: GraphNode) => n.id === d.source);
-      const target =
-        typeof d.target === "object"
-          ? d.target
-          : this.nodes.find((n: GraphNode) => n.id === d.target);
+      const source = typeof d.source === "object" ? d.source : this.nodes.find((n: GraphNode) => n.id === d.source);
+      const target = typeof d.target === "object" ? d.target : this.nodes.find((n: GraphNode) => n.id === d.target);
 
       if (!source || !target) return 0;
 
@@ -1237,14 +1189,8 @@ export default defineComponent({
 
     // 新增方法：计算边标签的Y坐标
     getLinkLabelY(d: GraphLink): number {
-      const source =
-        typeof d.source === "object"
-          ? d.source
-          : this.nodes.find((n: GraphNode) => n.id === d.source);
-      const target =
-        typeof d.target === "object"
-          ? d.target
-          : this.nodes.find((n: GraphNode) => n.id === d.target);
+      const source = typeof d.source === "object" ? d.source : this.nodes.find((n: GraphNode) => n.id === d.source);
+      const target = typeof d.target === "object" ? d.target : this.nodes.find((n: GraphNode) => n.id === d.target);
 
       if (!source || !target) return 0;
 

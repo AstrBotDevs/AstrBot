@@ -1,7 +1,8 @@
 // 导出核心组件
-export { I18nValidator } from "../validator";
+
 export { I18nLoader } from "../loader";
 export type * from "../types";
+export { I18nValidator } from "../validator";
 
 // 实用工具函数
 export function generateMissingKeys(

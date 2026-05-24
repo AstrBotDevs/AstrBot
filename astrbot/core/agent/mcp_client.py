@@ -427,7 +427,9 @@ def _sanitize_mcp_arguments(
         cleaned_items = []
         for item in value:
             cleaned_item = _sanitize_mcp_arguments(item, item_schema)
-            cleaned_items.append(item if cleaned_item is _EMPTY_MCP_ARGUMENT else cleaned_item)
+            cleaned_items.append(
+                item if cleaned_item is _EMPTY_MCP_ARGUMENT else cleaned_item
+            )
         return cleaned_items
 
     if isinstance(value, dict):
@@ -522,6 +524,7 @@ class MCPClient(Generic[TContext]):
             return int(pid) if pid is not None else None
         except (TypeError, ValueError):
             return None
+
     async def _run_connection(
         self,
         mcp_server_config: dict,
@@ -687,7 +690,7 @@ class MCPClient(Generic[TContext]):
                     mcp.ClientSession(
                         *streams,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore[arg-type]
+                        logging_callback=logging_callback,
                         sampling_callback=(
                             self.subcapability_bridge.handle_sampling
                             if self.subcapability_bridge.sampling_enabled
@@ -729,7 +732,7 @@ class MCPClient(Generic[TContext]):
                         read_stream=read_s,
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore[arg-type]
+                        logging_callback=logging_callback,
                         sampling_callback=(
                             self.subcapability_bridge.handle_sampling
                             if self.subcapability_bridge.sampling_enabled

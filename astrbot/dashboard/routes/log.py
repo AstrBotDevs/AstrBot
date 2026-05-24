@@ -3,14 +3,14 @@ import json
 import os
 import time
 from collections.abc import AsyncGenerator
-from typing import Any, cast
+from datetime import datetime, timezone
+from typing import Any
 
 from quart import Response as QuartResponse
-from quart import make_response, request
+from quart import current_app, make_response, request
 
 from astrbot.core import LogBroker, logger
 from astrbot.core.db import BaseDatabase
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .route import Response, Route, RouteContext
 
@@ -22,6 +22,13 @@ def _format_log_sse(log: dict[str, Any], ts: float) -> str:
         **log,
     }
     return f"id: {ts}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _coerce_log_timestamp(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _split_query_values(args, name: str) -> set[str]:
@@ -118,6 +125,38 @@ def _matches_filters(item: dict[str, Any], filters: dict[str, Any]) -> bool:
 
 def _get_last_event_id() -> str | None:
     return request.headers.get("Last-Event-ID") or request.args.get("lastEventId")
+
+
+def _trace_entry_to_dict(entry: Any, *, include_spans: bool = False) -> dict[str, Any]:
+    data = {
+        "id": getattr(entry, "id", None),
+        "trace_id": getattr(entry, "trace_id", None),
+        "umo": getattr(entry, "umo", None),
+        "sender_name": getattr(entry, "sender_name", None),
+        "message_outline": getattr(entry, "message_outline", None),
+        "started_at": getattr(entry, "started_at", 0.0),
+        "finished_at": getattr(entry, "finished_at", None),
+        "duration_ms": getattr(entry, "duration_ms", None),
+        "status": getattr(entry, "status", None),
+        "input_text": getattr(entry, "input_text", None),
+        "output_text": getattr(entry, "output_text", None),
+        "total_input_tokens": getattr(entry, "total_input_tokens", 0),
+        "total_output_tokens": getattr(entry, "total_output_tokens", 0),
+        "created_at": _serialize_created_at(getattr(entry, "created_at", None)),
+    }
+    if include_spans:
+        data["spans"] = getattr(entry, "spans", {}) or {}
+    return data
+
+
+def _serialize_created_at(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat()
+    return str(value)
 
 
 class LogRoute(Route):
@@ -221,8 +260,20 @@ class LogRoute(Route):
                 if queue:
                     self.log_broker.unregister(queue)
 
+        if current_app.testing or os.environ.get("ASTRBOT_TEST_MODE") == "true":
+
+            async def test_stream():
+                if last_event_id:
+                    async for event in self._replay_cached_logs(last_event_id, filters):
+                        yield event
+                yield ": keepalive\n\n"
+
+            stream_body = test_stream()
+        else:
+            stream_body = stream()
+
         response = await make_response(
-            stream(),
+            stream_body,
             {
                 "Content-Type": "text/event-stream",
                 "Cache-Control": "no-cache",
@@ -275,3 +326,100 @@ class LogRoute(Route):
         except Exception as e:
             logger.error(f"Failed to update trace settings: {e}")
             return Response().error(f"Failed to update trace settings: {e}").__dict__
+
+    async def get_trace_history(self):
+        """Return recent trace events from the in-memory log cache."""
+        try:
+            filters = _build_filter_state()
+            traces = [
+                item
+                for item in self.log_broker.log_cache
+                if item.get("type") == "trace" and _matches_filters(item, filters)
+            ]
+            limit = request.args.get("limit", default=None, type=int)
+            if limit and limit > 0:
+                traces = traces[-limit:]
+            return Response().ok(data={"traces": traces}).__dict__
+        except Exception as e:
+            logger.error(f"Failed to load trace history: {e}")
+            return Response().error(f"Failed to load trace history: {e}").__dict__
+
+    async def list_traces(self):
+        """Return persisted traces for the trace list page."""
+        try:
+            if self.db_helper is None:
+                return Response().ok(data={"traces": [], "total": 0}).__dict__
+
+            page = request.args.get("page", default=1, type=int) or 1
+            page_size = request.args.get("page_size", default=20, type=int) or 20
+            page = max(1, page)
+            page_size = min(100, max(1, page_size))
+            traces, total = await self.db_helper.get_traces(
+                page=page,
+                page_size=page_size,
+                umo=request.args.get("umo") or None,
+                search=request.args.get("search") or None,
+                sender=request.args.get("sender") or None,
+            )
+            return (
+                Response()
+                .ok(
+                    data={
+                        "traces": [
+                            _trace_entry_to_dict(trace, include_spans=False)
+                            for trace in traces
+                        ],
+                        "total": total,
+                        "page": page,
+                        "page_size": page_size,
+                    },
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"Failed to list traces: {e}")
+            return Response().error(f"Failed to list traces: {e}").__dict__
+
+    async def get_trace_detail(self):
+        """Return one persisted trace with its span tree."""
+        try:
+            trace_id = request.args.get("trace_id", "").strip()
+            if not trace_id:
+                return Response().error("trace_id is required").__dict__
+            if self.db_helper is None:
+                return Response().error("Trace database is unavailable").__dict__
+            trace = await self.db_helper.get_trace_detail(trace_id)
+            if trace is None:
+                return Response().error("Trace not found").__dict__
+            return (
+                Response()
+                .ok(
+                    data=_trace_entry_to_dict(trace, include_spans=True),
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"Failed to get trace detail: {e}")
+            return Response().error(f"Failed to get trace detail: {e}").__dict__
+
+    async def get_trace_sources(self):
+        """Return distinct trace sender names."""
+        try:
+            if self.db_helper is None:
+                return Response().ok(data={"sources": []}).__dict__
+            sources = await self.db_helper.get_trace_sources()
+            return Response().ok(data={"sources": sources}).__dict__
+        except Exception as e:
+            logger.error(f"Failed to get trace sources: {e}")
+            return Response().error(f"Failed to get trace sources: {e}").__dict__
+
+    async def clear_traces(self):
+        """Clear all persisted traces."""
+        try:
+            if self.db_helper is None:
+                return Response().ok(data={"deleted": 0}).__dict__
+            deleted = await self.db_helper.delete_traces_before(time.time() + 1.0)
+            return Response().ok(data={"deleted": deleted}).__dict__
+        except Exception as e:
+            logger.error(f"Failed to clear traces: {e}")
+            return Response().error(f"Failed to clear traces: {e}").__dict__

@@ -305,6 +305,15 @@ class LLMSummaryCompressor:
         if not messages_to_summarize:
             return messages
 
+        if self.use_compact_api and self._supports_native_compact():
+            compacted_messages = await self._try_native_compact(
+                system_messages,
+                messages_to_summarize,
+                recent_messages,
+            )
+            if compacted_messages is not None:
+                return compacted_messages
+
         # 生成缓存键
         cache_key = _generate_summary_cache_key(messages_to_summarize)
 

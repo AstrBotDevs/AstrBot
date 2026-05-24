@@ -1,216 +1,202 @@
 // 静态导入所有翻译文件
 // 这种方式确保构建时所有翻译都会被正确打包
 
-// 中文翻译
-import zhCNCommon from "./locales/zh-CN/core/common.json";
-import zhCNActions from "./locales/zh-CN/core/actions.json";
-import zhCNStatus from "./locales/zh-CN/core/status.json";
-import zhCNNavigation from "./locales/zh-CN/core/navigation.json";
-import zhCNHeader from "./locales/zh-CN/core/header.json";
-import zhCNShared from "./locales/zh-CN/core/shared.json";
-
-import zhCNChat from './locales/zh-CN/features/chat.json';
-import zhCNExtension from './locales/zh-CN/features/extension.json';
-import zhCNConversation from './locales/zh-CN/features/conversation.json';
-import zhCNSessionManagement from './locales/zh-CN/features/session-management.json';
-import zhCNToolUse from './locales/zh-CN/features/tool-use.json';
-import zhCNProvider from './locales/zh-CN/features/provider.json';
-import zhCNPlatform from './locales/zh-CN/features/platform.json';
-import zhCNConfig from './locales/zh-CN/features/config.json';
-import zhCNConfigMetadata from './locales/zh-CN/features/config-metadata.json';
-import zhCNConsole from './locales/zh-CN/features/console.json';
-import zhCNTrace from './locales/zh-CN/features/trace.json';
-import zhCNAbout from './locales/zh-CN/features/about.json';
-import zhCNSettings from './locales/zh-CN/features/settings.json';
-import zhCNAuth from './locales/zh-CN/features/auth.json';
-import zhCNChart from './locales/zh-CN/features/chart.json';
-import zhCNDashboard from './locales/zh-CN/features/dashboard.json';
-import zhCNCron from './locales/zh-CN/features/cron.json';
-import zhCNStats from './locales/zh-CN/features/stats.json';
-import zhCNAlkaidIndex from './locales/zh-CN/features/alkaid/index.json';
-import zhCNAlkaidKnowledgeBase from './locales/zh-CN/features/alkaid/knowledge-base.json';
-import zhCNAlkaidMemory from './locales/zh-CN/features/alkaid/memory.json';
-import zhCNKnowledgeBaseIndex from './locales/zh-CN/features/knowledge-base/index.json';
-import zhCNKnowledgeBaseDetail from './locales/zh-CN/features/knowledge-base/detail.json';
-import zhCNKnowledgeBaseDocument from './locales/zh-CN/features/knowledge-base/document.json';
-import zhCNPersona from './locales/zh-CN/features/persona.json';
-import zhCNMigration from './locales/zh-CN/features/migration.json';
-import zhCNCommand from './locales/zh-CN/features/command.json';
-import zhCNSubagent from './locales/zh-CN/features/subagent.json';
-import zhCNSandbox from './locales/zh-CN/features/sandbox.json';
-import zhCNWelcome from './locales/zh-CN/features/welcome.json';
-
-import zhCNErrors from "./locales/zh-CN/messages/errors.json";
-import zhCNSuccess from "./locales/zh-CN/messages/success.json";
-import zhCNValidation from "./locales/zh-CN/messages/validation.json";
-
-// Traditional Chinese translation (Hong Kong)
-import zhHKCommon from './locales/zh-HK/core/common.json';
-import zhHKActions from './locales/zh-HK/core/actions.json';
-import zhHKStatus from './locales/zh-HK/core/status.json';
-import zhHKNavigation from './locales/zh-HK/core/navigation.json';
-import zhHKHeader from './locales/zh-HK/core/header.json';
-import zhHKShared from './locales/zh-HK/core/shared.json';
-
-import zhHKChat from './locales/zh-HK/features/chat.json';
-import zhHKExtension from './locales/zh-HK/features/extension.json';
-import zhHKConversation from './locales/zh-HK/features/conversation.json';
-import zhHKSessionManagement from './locales/zh-HK/features/session-management.json';
-import zhHKToolUse from './locales/zh-HK/features/tool-use.json';
-import zhHKProvider from './locales/zh-HK/features/provider.json';
-import zhHKPlatform from './locales/zh-HK/features/platform.json';
-import zhHKConfig from './locales/zh-HK/features/config.json';
-import zhHKConfigMetadata from './locales/zh-HK/features/config-metadata.json';
-import zhHKConsole from './locales/zh-HK/features/console.json';
-import zhHKTrace from './locales/zh-HK/features/trace.json';
-import zhHKAbout from './locales/zh-HK/features/about.json';
-import zhHKSettings from './locales/zh-HK/features/settings.json';
-import zhHKAuth from './locales/zh-HK/features/auth.json';
-import zhHKChart from './locales/zh-HK/features/chart.json';
-import zhHKDashboard from './locales/zh-HK/features/dashboard.json';
-import zhHKCron from './locales/zh-HK/features/cron.json';
-import zhHKAlkaidIndex from './locales/zh-HK/features/alkaid/index.json';
-import zhHKAlkaidKnowledgeBase from './locales/zh-HK/features/alkaid/knowledge-base.json';
-import zhHKAlkaidMemory from './locales/zh-HK/features/alkaid/memory.json';
-import zhHKKnowledgeBaseIndex from './locales/zh-HK/features/knowledge-base/index.json';
-import zhHKKnowledgeBaseDetail from './locales/zh-HK/features/knowledge-base/detail.json';
-import zhHKKnowledgeBaseDocument from './locales/zh-HK/features/knowledge-base/document.json';
-import zhHKPersona from './locales/zh-HK/features/persona.json';
-import zhHKMigration from './locales/zh-HK/features/migration.json';
-import zhHKCommand from './locales/zh-HK/features/command.json';
-import zhHKSubagent from './locales/zh-HK/features/subagent.json';
-import zhHKWelcome from './locales/zh-HK/features/welcome.json';
-
-import zhHKErrors from './locales/zh-HK/messages/errors.json';
-import zhHKSuccess from './locales/zh-HK/messages/success.json';
-import zhHKValidation from './locales/zh-HK/messages/validation.json';
-
-// Traditional Chinese translation (Taiwan)
-import zhTWCommon from './locales/zh-TW/core/common.json';
-import zhTWActions from './locales/zh-TW/core/actions.json';
-import zhTWStatus from './locales/zh-TW/core/status.json';
-import zhTWNavigation from './locales/zh-TW/core/navigation.json';
-import zhTWHeader from './locales/zh-TW/core/header.json';
-import zhTWShared from './locales/zh-TW/core/shared.json';
-
-import zhTWChat from './locales/zh-TW/features/chat.json';
-import zhTWExtension from './locales/zh-TW/features/extension.json';
-import zhTWConversation from './locales/zh-TW/features/conversation.json';
-import zhTWSessionManagement from './locales/zh-TW/features/session-management.json';
-import zhTWToolUse from './locales/zh-TW/features/tool-use.json';
-import zhTWProvider from './locales/zh-TW/features/provider.json';
-import zhTWPlatform from './locales/zh-TW/features/platform.json';
-import zhTWConfig from './locales/zh-TW/features/config.json';
-import zhTWConfigMetadata from './locales/zh-TW/features/config-metadata.json';
-import zhTWConsole from './locales/zh-TW/features/console.json';
-import zhTWTrace from './locales/zh-TW/features/trace.json';
-import zhTWAbout from './locales/zh-TW/features/about.json';
-import zhTWSettings from './locales/zh-TW/features/settings.json';
-import zhTWAuth from './locales/zh-TW/features/auth.json';
-import zhTWChart from './locales/zh-TW/features/chart.json';
-import zhTWDashboard from './locales/zh-TW/features/dashboard.json';
-import zhTWCron from './locales/zh-TW/features/cron.json';
-import zhTWAlkaidIndex from './locales/zh-TW/features/alkaid/index.json';
-import zhTWAlkaidKnowledgeBase from './locales/zh-TW/features/alkaid/knowledge-base.json';
-import zhTWAlkaidMemory from './locales/zh-TW/features/alkaid/memory.json';
-import zhTWKnowledgeBaseIndex from './locales/zh-TW/features/knowledge-base/index.json';
-import zhTWKnowledgeBaseDetail from './locales/zh-TW/features/knowledge-base/detail.json';
-import zhTWKnowledgeBaseDocument from './locales/zh-TW/features/knowledge-base/document.json';
-import zhTWPersona from './locales/zh-TW/features/persona.json';
-import zhTWMigration from './locales/zh-TW/features/migration.json';
-import zhTWCommand from './locales/zh-TW/features/command.json';
-import zhTWSubagent from './locales/zh-TW/features/subagent.json';
-import zhTWWelcome from './locales/zh-TW/features/welcome.json';
-
-import zhTWErrors from './locales/zh-TW/messages/errors.json';
-import zhTWSuccess from './locales/zh-TW/messages/success.json';
-import zhTWValidation from './locales/zh-TW/messages/validation.json';
-
+import enUSActions from "./locales/en-US/core/actions.json";
 // English translation
 import enUSCommon from "./locales/en-US/core/common.json";
-import enUSActions from "./locales/en-US/core/actions.json";
-import enUSStatus from "./locales/en-US/core/status.json";
-import enUSNavigation from "./locales/en-US/core/navigation.json";
 import enUSHeader from "./locales/en-US/core/header.json";
+import enUSNavigation from "./locales/en-US/core/navigation.json";
 import enUSShared from "./locales/en-US/core/shared.json";
-
-import enUSChat from './locales/en-US/features/chat.json';
-import enUSExtension from './locales/en-US/features/extension.json';
-import enUSConversation from './locales/en-US/features/conversation.json';
-import enUSSessionManagement from './locales/en-US/features/session-management.json';
-import enUSToolUse from './locales/en-US/features/tool-use.json';
-import enUSProvider from './locales/en-US/features/provider.json';
-import enUSPlatform from './locales/en-US/features/platform.json';
-import enUSConfig from './locales/en-US/features/config.json';
-import enUSConfigMetadata from './locales/en-US/features/config-metadata.json';
-import enUSConsole from './locales/en-US/features/console.json';
-import enUSTrace from './locales/en-US/features/trace.json';
-import enUSAbout from './locales/en-US/features/about.json';
-import enUSSettings from './locales/en-US/features/settings.json';
-import enUSAuth from './locales/en-US/features/auth.json';
-import enUSChart from './locales/en-US/features/chart.json';
-import enUSDashboard from './locales/en-US/features/dashboard.json';
-import enUSCron from './locales/en-US/features/cron.json';
-import enUSStats from './locales/en-US/features/stats.json';
-import enUSAlkaidIndex from './locales/en-US/features/alkaid/index.json';
-import enUSAlkaidKnowledgeBase from './locales/en-US/features/alkaid/knowledge-base.json';
-import enUSAlkaidMemory from './locales/en-US/features/alkaid/memory.json';
-import enUSKnowledgeBaseIndex from './locales/en-US/features/knowledge-base/index.json';
-import enUSKnowledgeBaseDetail from './locales/en-US/features/knowledge-base/detail.json';
-import enUSKnowledgeBaseDocument from './locales/en-US/features/knowledge-base/document.json';
-import enUSPersona from './locales/en-US/features/persona.json';
-import enUSMigration from './locales/en-US/features/migration.json';
-import enUSCommand from './locales/en-US/features/command.json';
-import enUSSubagent from './locales/en-US/features/subagent.json';
-import enUSSandbox from './locales/en-US/features/sandbox.json';
-import enUSWelcome from './locales/en-US/features/welcome.json';
-
+import enUSStatus from "./locales/en-US/core/status.json";
+import enUSAbout from "./locales/en-US/features/about.json";
+import enUSAlkaidIndex from "./locales/en-US/features/alkaid/index.json";
+import enUSAlkaidKnowledgeBase from "./locales/en-US/features/alkaid/knowledge-base.json";
+import enUSAlkaidMemory from "./locales/en-US/features/alkaid/memory.json";
+import enUSAuth from "./locales/en-US/features/auth.json";
+import enUSChart from "./locales/en-US/features/chart.json";
+import enUSChat from "./locales/en-US/features/chat.json";
+import enUSCommand from "./locales/en-US/features/command.json";
+import enUSConfig from "./locales/en-US/features/config.json";
+import enUSConfigMetadata from "./locales/en-US/features/config-metadata.json";
+import enUSConsole from "./locales/en-US/features/console.json";
+import enUSConversation from "./locales/en-US/features/conversation.json";
+import enUSCron from "./locales/en-US/features/cron.json";
+import enUSDashboard from "./locales/en-US/features/dashboard.json";
+import enUSExtension from "./locales/en-US/features/extension.json";
+import enUSKnowledgeBaseDetail from "./locales/en-US/features/knowledge-base/detail.json";
+import enUSKnowledgeBaseDocument from "./locales/en-US/features/knowledge-base/document.json";
+import enUSKnowledgeBaseIndex from "./locales/en-US/features/knowledge-base/index.json";
+import enUSMigration from "./locales/en-US/features/migration.json";
+import enUSPersona from "./locales/en-US/features/persona.json";
+import enUSPlatform from "./locales/en-US/features/platform.json";
+import enUSProvider from "./locales/en-US/features/provider.json";
+import enUSSandbox from "./locales/en-US/features/sandbox.json";
+import enUSSessionManagement from "./locales/en-US/features/session-management.json";
+import enUSSettings from "./locales/en-US/features/settings.json";
+import enUSStats from "./locales/en-US/features/stats.json";
+import enUSSubagent from "./locales/en-US/features/subagent.json";
+import enUSToolUse from "./locales/en-US/features/tool-use.json";
+import enUSTrace from "./locales/en-US/features/trace.json";
+import enUSWelcome from "./locales/en-US/features/welcome.json";
 import enUSErrors from "./locales/en-US/messages/errors.json";
 import enUSSuccess from "./locales/en-US/messages/success.json";
 import enUSValidation from "./locales/en-US/messages/validation.json";
-
+import ruRUActions from "./locales/ru-RU/core/actions.json";
 // Russian translation
 import ruRUCommon from "./locales/ru-RU/core/common.json";
-import ruRUActions from "./locales/ru-RU/core/actions.json";
-import ruRUStatus from "./locales/ru-RU/core/status.json";
-import ruRUNavigation from "./locales/ru-RU/core/navigation.json";
 import ruRUHeader from "./locales/ru-RU/core/header.json";
+import ruRUNavigation from "./locales/ru-RU/core/navigation.json";
 import ruRUShared from "./locales/ru-RU/core/shared.json";
-
-import ruRUChat from './locales/ru-RU/features/chat.json';
-import ruRUExtension from './locales/ru-RU/features/extension.json';
-import ruRUConversation from './locales/ru-RU/features/conversation.json';
-import ruRUSessionManagement from './locales/ru-RU/features/session-management.json';
-import ruRUToolUse from './locales/ru-RU/features/tool-use.json';
-import ruRUProvider from './locales/ru-RU/features/provider.json';
-import ruRUPlatform from './locales/ru-RU/features/platform.json';
-import ruRUConfig from './locales/ru-RU/features/config.json';
-import ruRUConfigMetadata from './locales/ru-RU/features/config-metadata.json';
-import ruRUConsole from './locales/ru-RU/features/console.json';
-import ruRUTrace from './locales/ru-RU/features/trace.json';
-import ruRUAbout from './locales/ru-RU/features/about.json';
-import ruRUSettings from './locales/ru-RU/features/settings.json';
-import ruRUAuth from './locales/ru-RU/features/auth.json';
-import ruRUChart from './locales/ru-RU/features/chart.json';
-import ruRUDashboard from './locales/ru-RU/features/dashboard.json';
-import ruRUCron from './locales/ru-RU/features/cron.json';
-import ruRUStats from './locales/ru-RU/features/stats.json';
-import ruRUAlkaidIndex from './locales/ru-RU/features/alkaid/index.json';
-import ruRUAlkaidKnowledgeBase from './locales/ru-RU/features/alkaid/knowledge-base.json';
-import ruRUAlkaidMemory from './locales/ru-RU/features/alkaid/memory.json';
-import ruRUKnowledgeBaseIndex from './locales/ru-RU/features/knowledge-base/index.json';
-import ruRUKnowledgeBaseDetail from './locales/ru-RU/features/knowledge-base/detail.json';
-import ruRUKnowledgeBaseDocument from './locales/ru-RU/features/knowledge-base/document.json';
-import ruRUPersona from './locales/ru-RU/features/persona.json';
-import ruRUMigration from './locales/ru-RU/features/migration.json';
-import ruRUCommand from './locales/ru-RU/features/command.json';
-import ruRUSubagent from './locales/ru-RU/features/subagent.json';
-import ruRUSandbox from './locales/ru-RU/features/sandbox.json';
-import ruRUWelcome from './locales/ru-RU/features/welcome.json';
-
+import ruRUStatus from "./locales/ru-RU/core/status.json";
+import ruRUAbout from "./locales/ru-RU/features/about.json";
+import ruRUAlkaidIndex from "./locales/ru-RU/features/alkaid/index.json";
+import ruRUAlkaidKnowledgeBase from "./locales/ru-RU/features/alkaid/knowledge-base.json";
+import ruRUAlkaidMemory from "./locales/ru-RU/features/alkaid/memory.json";
+import ruRUAuth from "./locales/ru-RU/features/auth.json";
+import ruRUChart from "./locales/ru-RU/features/chart.json";
+import ruRUChat from "./locales/ru-RU/features/chat.json";
+import ruRUCommand from "./locales/ru-RU/features/command.json";
+import ruRUConfig from "./locales/ru-RU/features/config.json";
+import ruRUConfigMetadata from "./locales/ru-RU/features/config-metadata.json";
+import ruRUConsole from "./locales/ru-RU/features/console.json";
+import ruRUConversation from "./locales/ru-RU/features/conversation.json";
+import ruRUCron from "./locales/ru-RU/features/cron.json";
+import ruRUDashboard from "./locales/ru-RU/features/dashboard.json";
+import ruRUExtension from "./locales/ru-RU/features/extension.json";
+import ruRUKnowledgeBaseDetail from "./locales/ru-RU/features/knowledge-base/detail.json";
+import ruRUKnowledgeBaseDocument from "./locales/ru-RU/features/knowledge-base/document.json";
+import ruRUKnowledgeBaseIndex from "./locales/ru-RU/features/knowledge-base/index.json";
+import ruRUMigration from "./locales/ru-RU/features/migration.json";
+import ruRUPersona from "./locales/ru-RU/features/persona.json";
+import ruRUPlatform from "./locales/ru-RU/features/platform.json";
+import ruRUProvider from "./locales/ru-RU/features/provider.json";
+import ruRUSandbox from "./locales/ru-RU/features/sandbox.json";
+import ruRUSessionManagement from "./locales/ru-RU/features/session-management.json";
+import ruRUSettings from "./locales/ru-RU/features/settings.json";
+import ruRUStats from "./locales/ru-RU/features/stats.json";
+import ruRUSubagent from "./locales/ru-RU/features/subagent.json";
+import ruRUToolUse from "./locales/ru-RU/features/tool-use.json";
+import ruRUTrace from "./locales/ru-RU/features/trace.json";
+import ruRUWelcome from "./locales/ru-RU/features/welcome.json";
 import ruRUErrors from "./locales/ru-RU/messages/errors.json";
 import ruRUSuccess from "./locales/ru-RU/messages/success.json";
 import ruRUValidation from "./locales/ru-RU/messages/validation.json";
+import zhCNActions from "./locales/zh-CN/core/actions.json";
+// 中文翻译
+import zhCNCommon from "./locales/zh-CN/core/common.json";
+import zhCNHeader from "./locales/zh-CN/core/header.json";
+import zhCNNavigation from "./locales/zh-CN/core/navigation.json";
+import zhCNShared from "./locales/zh-CN/core/shared.json";
+import zhCNStatus from "./locales/zh-CN/core/status.json";
+import zhCNAbout from "./locales/zh-CN/features/about.json";
+import zhCNAlkaidIndex from "./locales/zh-CN/features/alkaid/index.json";
+import zhCNAlkaidKnowledgeBase from "./locales/zh-CN/features/alkaid/knowledge-base.json";
+import zhCNAlkaidMemory from "./locales/zh-CN/features/alkaid/memory.json";
+import zhCNAuth from "./locales/zh-CN/features/auth.json";
+import zhCNChart from "./locales/zh-CN/features/chart.json";
+import zhCNChat from "./locales/zh-CN/features/chat.json";
+import zhCNCommand from "./locales/zh-CN/features/command.json";
+import zhCNConfig from "./locales/zh-CN/features/config.json";
+import zhCNConfigMetadata from "./locales/zh-CN/features/config-metadata.json";
+import zhCNConsole from "./locales/zh-CN/features/console.json";
+import zhCNConversation from "./locales/zh-CN/features/conversation.json";
+import zhCNCron from "./locales/zh-CN/features/cron.json";
+import zhCNDashboard from "./locales/zh-CN/features/dashboard.json";
+import zhCNExtension from "./locales/zh-CN/features/extension.json";
+import zhCNKnowledgeBaseDetail from "./locales/zh-CN/features/knowledge-base/detail.json";
+import zhCNKnowledgeBaseDocument from "./locales/zh-CN/features/knowledge-base/document.json";
+import zhCNKnowledgeBaseIndex from "./locales/zh-CN/features/knowledge-base/index.json";
+import zhCNMigration from "./locales/zh-CN/features/migration.json";
+import zhCNPersona from "./locales/zh-CN/features/persona.json";
+import zhCNPlatform from "./locales/zh-CN/features/platform.json";
+import zhCNProvider from "./locales/zh-CN/features/provider.json";
+import zhCNSandbox from "./locales/zh-CN/features/sandbox.json";
+import zhCNSessionManagement from "./locales/zh-CN/features/session-management.json";
+import zhCNSettings from "./locales/zh-CN/features/settings.json";
+import zhCNStats from "./locales/zh-CN/features/stats.json";
+import zhCNSubagent from "./locales/zh-CN/features/subagent.json";
+import zhCNToolUse from "./locales/zh-CN/features/tool-use.json";
+import zhCNTrace from "./locales/zh-CN/features/trace.json";
+import zhCNWelcome from "./locales/zh-CN/features/welcome.json";
+import zhCNErrors from "./locales/zh-CN/messages/errors.json";
+import zhCNSuccess from "./locales/zh-CN/messages/success.json";
+import zhCNValidation from "./locales/zh-CN/messages/validation.json";
+import zhHKActions from "./locales/zh-HK/core/actions.json";
+// Traditional Chinese translation (Hong Kong)
+import zhHKCommon from "./locales/zh-HK/core/common.json";
+import zhHKHeader from "./locales/zh-HK/core/header.json";
+import zhHKNavigation from "./locales/zh-HK/core/navigation.json";
+import zhHKShared from "./locales/zh-HK/core/shared.json";
+import zhHKStatus from "./locales/zh-HK/core/status.json";
+import zhHKAbout from "./locales/zh-HK/features/about.json";
+import zhHKAlkaidIndex from "./locales/zh-HK/features/alkaid/index.json";
+import zhHKAlkaidKnowledgeBase from "./locales/zh-HK/features/alkaid/knowledge-base.json";
+import zhHKAlkaidMemory from "./locales/zh-HK/features/alkaid/memory.json";
+import zhHKAuth from "./locales/zh-HK/features/auth.json";
+import zhHKChart from "./locales/zh-HK/features/chart.json";
+import zhHKChat from "./locales/zh-HK/features/chat.json";
+import zhHKCommand from "./locales/zh-HK/features/command.json";
+import zhHKConfig from "./locales/zh-HK/features/config.json";
+import zhHKConfigMetadata from "./locales/zh-HK/features/config-metadata.json";
+import zhHKConsole from "./locales/zh-HK/features/console.json";
+import zhHKConversation from "./locales/zh-HK/features/conversation.json";
+import zhHKCron from "./locales/zh-HK/features/cron.json";
+import zhHKDashboard from "./locales/zh-HK/features/dashboard.json";
+import zhHKExtension from "./locales/zh-HK/features/extension.json";
+import zhHKKnowledgeBaseDetail from "./locales/zh-HK/features/knowledge-base/detail.json";
+import zhHKKnowledgeBaseDocument from "./locales/zh-HK/features/knowledge-base/document.json";
+import zhHKKnowledgeBaseIndex from "./locales/zh-HK/features/knowledge-base/index.json";
+import zhHKMigration from "./locales/zh-HK/features/migration.json";
+import zhHKPersona from "./locales/zh-HK/features/persona.json";
+import zhHKPlatform from "./locales/zh-HK/features/platform.json";
+import zhHKProvider from "./locales/zh-HK/features/provider.json";
+import zhHKSessionManagement from "./locales/zh-HK/features/session-management.json";
+import zhHKSettings from "./locales/zh-HK/features/settings.json";
+import zhHKSubagent from "./locales/zh-HK/features/subagent.json";
+import zhHKToolUse from "./locales/zh-HK/features/tool-use.json";
+import zhHKTrace from "./locales/zh-HK/features/trace.json";
+import zhHKWelcome from "./locales/zh-HK/features/welcome.json";
+import zhHKErrors from "./locales/zh-HK/messages/errors.json";
+import zhHKSuccess from "./locales/zh-HK/messages/success.json";
+import zhHKValidation from "./locales/zh-HK/messages/validation.json";
+import zhTWActions from "./locales/zh-TW/core/actions.json";
+// Traditional Chinese translation (Taiwan)
+import zhTWCommon from "./locales/zh-TW/core/common.json";
+import zhTWHeader from "./locales/zh-TW/core/header.json";
+import zhTWNavigation from "./locales/zh-TW/core/navigation.json";
+import zhTWShared from "./locales/zh-TW/core/shared.json";
+import zhTWStatus from "./locales/zh-TW/core/status.json";
+import zhTWAbout from "./locales/zh-TW/features/about.json";
+import zhTWAlkaidIndex from "./locales/zh-TW/features/alkaid/index.json";
+import zhTWAlkaidKnowledgeBase from "./locales/zh-TW/features/alkaid/knowledge-base.json";
+import zhTWAlkaidMemory from "./locales/zh-TW/features/alkaid/memory.json";
+import zhTWAuth from "./locales/zh-TW/features/auth.json";
+import zhTWChart from "./locales/zh-TW/features/chart.json";
+import zhTWChat from "./locales/zh-TW/features/chat.json";
+import zhTWCommand from "./locales/zh-TW/features/command.json";
+import zhTWConfig from "./locales/zh-TW/features/config.json";
+import zhTWConfigMetadata from "./locales/zh-TW/features/config-metadata.json";
+import zhTWConsole from "./locales/zh-TW/features/console.json";
+import zhTWConversation from "./locales/zh-TW/features/conversation.json";
+import zhTWCron from "./locales/zh-TW/features/cron.json";
+import zhTWDashboard from "./locales/zh-TW/features/dashboard.json";
+import zhTWExtension from "./locales/zh-TW/features/extension.json";
+import zhTWKnowledgeBaseDetail from "./locales/zh-TW/features/knowledge-base/detail.json";
+import zhTWKnowledgeBaseDocument from "./locales/zh-TW/features/knowledge-base/document.json";
+import zhTWKnowledgeBaseIndex from "./locales/zh-TW/features/knowledge-base/index.json";
+import zhTWMigration from "./locales/zh-TW/features/migration.json";
+import zhTWPersona from "./locales/zh-TW/features/persona.json";
+import zhTWPlatform from "./locales/zh-TW/features/platform.json";
+import zhTWProvider from "./locales/zh-TW/features/provider.json";
+import zhTWSessionManagement from "./locales/zh-TW/features/session-management.json";
+import zhTWSettings from "./locales/zh-TW/features/settings.json";
+import zhTWSubagent from "./locales/zh-TW/features/subagent.json";
+import zhTWToolUse from "./locales/zh-TW/features/tool-use.json";
+import zhTWTrace from "./locales/zh-TW/features/trace.json";
+import zhTWWelcome from "./locales/zh-TW/features/welcome.json";
+import zhTWErrors from "./locales/zh-TW/messages/errors.json";
+import zhTWSuccess from "./locales/zh-TW/messages/success.json";
+import zhTWValidation from "./locales/zh-TW/messages/validation.json";
 
 // 组装翻译对象
 export const translations = {
@@ -256,7 +242,7 @@ export const translations = {
       command: zhCNCommand,
       subagent: zhCNSubagent,
       sandbox: zhCNSandbox,
-      welcome: zhCNWelcome
+      welcome: zhCNWelcome,
     },
     messages: {
       errors: zhCNErrors,
@@ -264,25 +250,25 @@ export const translations = {
       validation: zhCNValidation,
     },
   },
-  'zh-HK': {
+  "zh-HK": {
     core: {
       common: zhHKCommon,
       actions: zhHKActions,
       status: zhHKStatus,
       navigation: zhHKNavigation,
       header: zhHKHeader,
-      shared: zhHKShared
+      shared: zhHKShared,
     },
     features: {
       chat: zhHKChat,
       extension: zhHKExtension,
       conversation: zhHKConversation,
-      'session-management': zhHKSessionManagement,
+      "session-management": zhHKSessionManagement,
       tooluse: zhHKToolUse,
       provider: zhHKProvider,
       platform: zhHKPlatform,
       config: zhHKConfig,
-      'config-metadata': zhHKConfigMetadata,
+      "config-metadata": zhHKConfigMetadata,
       console: zhHKConsole,
       trace: zhHKTrace,
       about: zhHKAbout,
@@ -293,45 +279,45 @@ export const translations = {
       cron: zhHKCron,
       alkaid: {
         index: zhHKAlkaidIndex,
-        'knowledge-base': zhHKAlkaidKnowledgeBase,
-        memory: zhHKAlkaidMemory
+        "knowledge-base": zhHKAlkaidKnowledgeBase,
+        memory: zhHKAlkaidMemory,
       },
-      'knowledge-base': {
+      "knowledge-base": {
         index: zhHKKnowledgeBaseIndex,
         detail: zhHKKnowledgeBaseDetail,
-        document: zhHKKnowledgeBaseDocument
+        document: zhHKKnowledgeBaseDocument,
       },
       persona: zhHKPersona,
       migration: zhHKMigration,
       command: zhHKCommand,
       subagent: zhHKSubagent,
-      welcome: zhHKWelcome
+      welcome: zhHKWelcome,
     },
     messages: {
       errors: zhHKErrors,
       success: zhHKSuccess,
-      validation: zhHKValidation
-    }
+      validation: zhHKValidation,
+    },
   },
-  'zh-TW': {
+  "zh-TW": {
     core: {
       common: zhTWCommon,
       actions: zhTWActions,
       status: zhTWStatus,
       navigation: zhTWNavigation,
       header: zhTWHeader,
-      shared: zhTWShared
+      shared: zhTWShared,
     },
     features: {
       chat: zhTWChat,
       extension: zhTWExtension,
       conversation: zhTWConversation,
-      'session-management': zhTWSessionManagement,
+      "session-management": zhTWSessionManagement,
       tooluse: zhTWToolUse,
       provider: zhTWProvider,
       platform: zhTWPlatform,
       config: zhTWConfig,
-      'config-metadata': zhTWConfigMetadata,
+      "config-metadata": zhTWConfigMetadata,
       console: zhTWConsole,
       trace: zhTWTrace,
       about: zhTWAbout,
@@ -342,27 +328,27 @@ export const translations = {
       cron: zhTWCron,
       alkaid: {
         index: zhTWAlkaidIndex,
-        'knowledge-base': zhTWAlkaidKnowledgeBase,
-        memory: zhTWAlkaidMemory
+        "knowledge-base": zhTWAlkaidKnowledgeBase,
+        memory: zhTWAlkaidMemory,
       },
-      'knowledge-base': {
+      "knowledge-base": {
         index: zhTWKnowledgeBaseIndex,
         detail: zhTWKnowledgeBaseDetail,
-        document: zhTWKnowledgeBaseDocument
+        document: zhTWKnowledgeBaseDocument,
       },
       persona: zhTWPersona,
       migration: zhTWMigration,
       command: zhTWCommand,
       subagent: zhTWSubagent,
-      welcome: zhTWWelcome
+      welcome: zhTWWelcome,
     },
     messages: {
       errors: zhTWErrors,
       success: zhTWSuccess,
-      validation: zhTWValidation
-    }
+      validation: zhTWValidation,
+    },
   },
-  'en-US': {
+  "en-US": {
     core: {
       common: enUSCommon,
       actions: enUSActions,
@@ -404,7 +390,7 @@ export const translations = {
       command: enUSCommand,
       subagent: enUSSubagent,
       sandbox: enUSSandbox,
-      welcome: enUSWelcome
+      welcome: enUSWelcome,
     },
     messages: {
       errors: enUSErrors,
@@ -454,7 +440,7 @@ export const translations = {
       command: ruRUCommand,
       subagent: ruRUSubagent,
       sandbox: ruRUSandbox,
-      welcome: ruRUWelcome
+      welcome: ruRUWelcome,
     },
     messages: {
       errors: ruRUErrors,

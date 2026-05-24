@@ -179,737 +179,743 @@
 </template>
 
 <script>
-import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { enableKatex, enableMermaid, MarkdownCodeBlockNode, setCustomComponents } from 'markstream-vue'
-import 'markstream-vue/index.css'
-import 'katex/dist/katex.min.css'
-import axios from 'axios';
-import { useToast } from '@/utils/toast'
-import ReasoningBlock from './message_list_comps/ReasoningBlock.vue';
-import MessagePartsRenderer from './message_list_comps/MessagePartsRenderer.vue';
-import RefNode from './message_list_comps/RefNode.vue';
-import ActionRef from './message_list_comps/ActionRef.vue';
+import { enableKatex, enableMermaid, MarkdownCodeBlockNode, setCustomComponents } from "markstream-vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import "markstream-vue/index.css";
+import "katex/dist/katex.min.css";
+import axios from "axios";
+import { useToast } from "@/utils/toast";
+import ActionRef from "./message_list_comps/ActionRef.vue";
+import MessagePartsRenderer from "./message_list_comps/MessagePartsRenderer.vue";
+import ReasoningBlock from "./message_list_comps/ReasoningBlock.vue";
+import RefNode from "./message_list_comps/RefNode.vue";
 
 enableKatex();
 enableMermaid();
 
 // 注册 message-list 专用组件：引用节点 + Shiki 代码块渲染
-setCustomComponents('message-list', {
-    ref: RefNode,
-    code_block: MarkdownCodeBlockNode
+setCustomComponents("message-list", {
+  ref: RefNode,
+  code_block: MarkdownCodeBlockNode,
 });
 
 export default {
-    name: 'MessageList',
-    components: {
-        ReasoningBlock,
-        MessagePartsRenderer,
-        RefNode,
-        ActionRef
+  name: "MessageList",
+  components: {
+    ReasoningBlock,
+    MessagePartsRenderer,
+    RefNode,
+    ActionRef,
+  },
+  props: {
+    messages: {
+      type: Array,
+      required: true,
     },
-    props: {
-        messages: {
-            type: Array,
-            required: true
-        },
-        isDark: {
-            type: Boolean,
-            default: false
-        },
-        isStreaming: {
-            type: Boolean,
-            default: false
-        },
-        isLoadingMessages: {
-            type: Boolean,
-            default: false
-        }
+    isDark: {
+      type: Boolean,
+      default: false,
     },
-    emits: ['openImagePreview', 'replyMessage', 'replyWithText', 'openRefs'],
-    setup() {
-        const { t } = useI18n();
-        const { tm } = useModuleI18n('features/chat');
-        const toast = useToast()
-
-        return {
-            t,
-            tm,
-            toast
-        };
+    isStreaming: {
+      type: Boolean,
+      default: false,
     },
-    provide() {
-        return {
-            isDark: this.isDark,
-            webSearchResults: () => this.webSearchResults
-        };
+    isLoadingMessages: {
+      type: Boolean,
+      default: false,
     },
-    data() {
-        return {
-            copiedMessages: new Set(),
-            copyFailedMessages: new Set(),
-            isUserNearBottom: true,
-            scrollThreshold: 1,
-            scrollTimer: null,
-            expandedReasoning: new Set(), // Track which reasoning blocks are expanded
-            downloadingFiles: new Set(), // Track which files are being downloaded
-            elapsedTimeTimer: null, // Timer for updating elapsed time
-            currentTime: Date.now() / 1000, // Current time for elapsed time calculation
-            // 选中文本相关状态
-            selectedText: {
-                content: '',
-                messageIndex: null,
-                position: { top: 0, left: 0 }
-            },
-            // 图片预览
-            imagePreview: {
-                show: false,
-                url: ''
-            },
-            // Web search results mapping: { 'uuid.idx': { url, title, snippet } }
-            webSearchResults: {}
-        };
-    },
-    async mounted() {
-        this.initCodeCopyButtons();
-        this.initImageClickEvents();
-        this.addScrollListener();
-        this.scrollToBottom();
-        this.startElapsedTimeTimer();
-        this.extractWebSearchResults();
-    },
-    updated() {
-        this.initCodeCopyButtons();
-        this.initImageClickEvents();
-        if (this.isUserNearBottom) {
-            this.scrollToBottom();
-        }
-        this.extractWebSearchResults();
-    },
-    methods: {
-        // 从消息中提取 web_search_tavily 的搜索结果
-        extractWebSearchResults() {
-            const results = {};
-            
-            this.messages.forEach(msg => {
-                if (msg.content.type !== 'bot' || !Array.isArray(msg.content.message)) {
-                    return;
-                }
-                
-                msg.content.message.forEach(part => {
-                    if (part.type !== 'tool_call' || !Array.isArray(part.tool_calls)) {
-                        return;
-                    }
-                    
-                    part.tool_calls.forEach(toolCall => {
-                        // 检查是否是支持引用解析的 web_search 工具调用
-                        if (
-                            !['web_search_baidu', 'web_search_tavily', 'web_search_bocha', 'web_search_brave', 'web_search_firecrawl'].includes(toolCall.name) ||
-                            !toolCall.result
-                        ) {
-                            return;
-                        }
-                        
-                        try {
-                            // 解析工具调用结果
-                            const resultData = typeof toolCall.result === 'string' 
-                                ? JSON.parse(toolCall.result) 
-                                : toolCall.result;
-                            
-                            if (resultData.results && Array.isArray(resultData.results)) {
-                                resultData.results.forEach(item => {
-                                    if (item.index) {
-                                        results[item.index] = {
-                                            url: item.url,
-                                            title: item.title,
-                                            snippet: item.snippet
-                                        };
-                                    }
-                                });
-                            }
-                        } catch (e) {
-                            console.error('Failed to parse web search result:', e);
-                        }
-                    });
-                });
-            });
-            
-            this.webSearchResults = results;
-        },
-        
-        // 处理文本选择
-        handleTextSelection() {
-            const selection = window.getSelection();
-            const selectedText = selection.toString();
-
-            if (!selectedText.trim()) {
-                // 清除选中状态
-                this.selectedText.content = '';
-                this.selectedText.messageIndex = null;
-                return;
-            }
-
-            // 获取被选中的元素，找到对应的message-item
-            const range = selection.getRangeAt(0);
-            const startContainer = range.startContainer;
-            let messageItem = null;
-            let node = startContainer.parentElement;
-
-            // 遍历DOM树向上查找message-item
-            while (node && !node.classList.contains('message-item')) {
-                node = node.parentElement;
-            }
-
-            messageItem = node;
-
-            if (!messageItem) {
-                this.selectedText.content = '';
-                this.selectedText.messageIndex = null;
-                return;
-            }
-
-            // 获取message-item在messages数组中的索引
-            const messageItems = this.$refs.messageContainer?.querySelectorAll('.message-item');
-            let messageIndex = -1;
-            if (messageItems) {
-                for (let i = 0; i < messageItems.length; i++) {
-                    if (messageItems[i] === messageItem) {
-                        messageIndex = i;
-                        break;
-                    }
-                }
-            }
-
-            if (messageIndex === -1) {
-                this.selectedText.content = '';
-                this.selectedText.messageIndex = null;
-                return;
-            }
-
-            // 获取选中文本的位置（相对于viewport）
-            const rect = selection.getRangeAt(0).getBoundingClientRect();
-
-            this.selectedText.content = selectedText;
-            this.selectedText.messageIndex = messageIndex;
-            this.selectedText.position = {
-                top: Math.max(0, rect.bottom + 5),
-                left: Math.max(0, (rect.left + rect.right) / 2)
-            };
-        },
-
-        // 处理引用选中的文本
-        handleQuoteSelected() {
-            if (this.selectedText.messageIndex === null) return;
-
-            const msg = this.messages[this.selectedText.messageIndex];
-            if (!msg || !msg.id) return;
-
-            // 触发replyWithText事件，传递选中的文本内容
-            this.$emit('replyWithText', {
-                messageId: msg.id,
-                selectedText: this.selectedText.content,
-                messageIndex: this.selectedText.messageIndex
-            });
-
-            // 清除选中状态
-            this.selectedText.content = '';
-            this.selectedText.messageIndex = null;
-            window.getSelection().removeAllRanges();
-        },
-
-        // 检查 message 中是否有音频
-        hasAudio(messageParts) {
-            if (!Array.isArray(messageParts)) return false;
-            return messageParts.some(part => part.type === 'record' && part.embedded_url);
-        },
-
-        // 获取被引用消息的内容
-        getReplyContent(messageId) {
-            const replyMsg = this.messages.find(m => m.id === messageId);
-            if (!replyMsg) {
-                return this.tm('reply.notFound');
-            }
-            let content = '';
-            if (Array.isArray(replyMsg.content.message)) {
-                const textParts = replyMsg.content.message
-                    .filter(part => part.type === 'plain' && part.text)
-                    .map(part => part.text);
-                content = textParts.join('');
-            }
-            // 截断过长内容
-            if (content.length > 50) {
-                content = content.substring(0, 50) + '...';
-            }
-            return content || '[媒体内容]';
-        },
-
-        // 滚动到指定消息
-        scrollToMessage(messageId) {
-            const msgIndex = this.messages.findIndex(m => m.id === messageId);
-            if (msgIndex === -1) return;
-
-            const container = this.$refs.messageContainer;
-            const messageItems = container?.querySelectorAll('.message-item');
-            if (messageItems && messageItems[msgIndex]) {
-                messageItems[msgIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // 高亮一下
-                messageItems[msgIndex].classList.add('highlight-message');
-                setTimeout(() => {
-                    messageItems[msgIndex].classList.remove('highlight-message');
-                }, 2000);
-            }
-        },
-
-        // Toggle reasoning expansion state
-        toggleReasoning(messageIndex) {
-            if (this.expandedReasoning.has(messageIndex)) {
-                this.expandedReasoning.delete(messageIndex);
-            } else {
-                this.expandedReasoning.add(messageIndex);
-            }
-            // Force reactivity
-            this.expandedReasoning = new Set(this.expandedReasoning);
-        },
-
-        // Check if reasoning is expanded
-        isReasoningExpanded(messageIndex) {
-            return this.expandedReasoning.has(messageIndex);
-        },
-
-        // 下载文件
-        async downloadFile(file) {
-            if (!file.attachment_id) return;
-
-            // 标记为下载中
-            this.downloadingFiles.add(file.attachment_id);
-            this.downloadingFiles = new Set(this.downloadingFiles);
-
-            try {
-                const response = await axios.get(`/api/chat/get_attachment?attachment_id=${file.attachment_id}`, {
-                    responseType: 'blob'
-                });
-
-                const url = URL.createObjectURL(response.data);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = file.filename || 'file';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                setTimeout(() => URL.revokeObjectURL(url), 100);
-            } catch (err) {
-                console.error('Download file failed:', err);
-            } finally {
-                this.downloadingFiles.delete(file.attachment_id);
-                this.downloadingFiles = new Set(this.downloadingFiles);
-            }
-        },
-
-        // 复制代码到剪贴板
-        tryExecCommandCopy(text) {
-            let textArea = null;
-            try {
-                textArea = document.createElement('textarea');
-                textArea.value = text;
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                const ok = document.execCommand('copy');
-                return ok;
-            } catch (_) {
-                return false;
-            } finally {
-                try {
-                    textArea?.remove?.();
-                } catch (_) {
-                    // ignore cleanup errors
-                }
-            }
-        },
-
-        async copyTextToClipboard(text) {
-            // 优先使用同步复制，尽量保留用户手势上下文；
-            // 在非安全来源（例如通过局域网 IP + vite --host）时成功率更高。
-            if (this.tryExecCommandCopy(text)) {
-                return { ok: true, method: 'execCommand' };
-            }
-
-            if (navigator.clipboard?.writeText) {
-                try {
-                    await navigator.clipboard.writeText(text);
-                    return { ok: true, method: 'clipboard' };
-                } catch (error) {
-                    return { ok: false, method: 'clipboard', error };
-                }
-            }
-
-            return { ok: false, method: 'unavailable' };
-        },
-
-        async copyWithFeedback(text, messageIndex = null) {
-            const result = await this.copyTextToClipboard(text);
-            const ok = !!result?.ok;
-
-            if (messageIndex !== null && messageIndex !== undefined) {
-                if (ok) this.showCopySuccess(messageIndex);
-                else this.showCopyFailure(messageIndex);
-            }
-
-            if (ok) {
-                this.toast?.success?.(this.t('core.common.copied'));
-            } else {
-                this.toast?.error?.(this.t('core.common.copyFailed'));
-            }
-
-            return result;
-        },
-
-        buildCopyTextFromParts(messageParts) {
-            if (typeof messageParts === 'string') {
-                return messageParts.trim();
-            }
-            if (!Array.isArray(messageParts)) {
-                return '';
-            }
-
-            const textContents = messageParts
-                .filter(part => part && typeof part === 'object' && part.type === 'plain' && part.text)
-                .map(part => part.text);
-
-            let textToCopy = textContents.join('\n');
-
-            const imageCount = messageParts.filter(part => part?.type === 'image' && part.embedded_url).length;
-            if (imageCount > 0) {
-                if (textToCopy) textToCopy += '\n\n';
-                textToCopy += `[包含 ${imageCount} 张图片]`;
-            }
-
-            const hasAudio = messageParts.some(part => part?.type === 'record' && part.embedded_url);
-            if (hasAudio) {
-                if (textToCopy) textToCopy += '\n\n';
-                textToCopy += '[包含音频内容]';
-            }
-
-            return String(textToCopy || '').trim();
-        },
-
-        async copyCodeToClipboard(code) {
-            const text = String(code ?? '');
-            if (!text) return { ok: false, method: 'empty' };
-            return await this.copyWithFeedback(text, null);
-        },
-
-        // 复制bot消息到剪贴板
-        async copyBotMessage(messageParts, messageIndex) {
-            let textToCopy = this.buildCopyTextFromParts(messageParts);
-            if (!textToCopy) textToCopy = '[媒体内容]';
-            await this.copyWithFeedback(textToCopy, messageIndex);
-        },
-
-        // 显示复制成功提示
-        showCopySuccess(messageIndex) {
-            if (this.copyFailedMessages.has(messageIndex)) {
-                this.copyFailedMessages.delete(messageIndex);
-                this.copyFailedMessages = new Set(this.copyFailedMessages);
-            }
-            this.copiedMessages.add(messageIndex);
-            this.copiedMessages = new Set(this.copiedMessages);
-
-            // 2秒后移除成功状态
-            setTimeout(() => {
-                this.copiedMessages.delete(messageIndex);
-                this.copiedMessages = new Set(this.copiedMessages);
-            }, 2000);
-        },
-
-        // 显示复制失败提示
-        showCopyFailure(messageIndex) {
-            if (this.copiedMessages.has(messageIndex)) {
-                this.copiedMessages.delete(messageIndex);
-                this.copiedMessages = new Set(this.copiedMessages);
-            }
-            this.copyFailedMessages.add(messageIndex);
-            this.copyFailedMessages = new Set(this.copyFailedMessages);
-
-            setTimeout(() => {
-                this.copyFailedMessages.delete(messageIndex);
-                this.copyFailedMessages = new Set(this.copyFailedMessages);
-            }, 2000);
-        },
-
-        // 获取复制按钮图标
-        getCopyIcon(messageIndex) {
-            if (this.copiedMessages.has(messageIndex)) return 'mdi-check';
-            if (this.copyFailedMessages.has(messageIndex)) return 'mdi-alert-circle-outline';
-            return 'mdi-content-copy';
-        },
-
-        // 检查是否为复制成功状态
-        isCopySuccess(messageIndex) {
-            return this.copiedMessages.has(messageIndex);
-        },
-
-        // 检查是否为复制失败状态
-        isCopyFailure(messageIndex) {
-            return this.copyFailedMessages.has(messageIndex);
-        },
-
-        // 获取复制按钮提示文本
-        getCopyTitle(messageIndex) {
-            if (this.isCopySuccess(messageIndex)) return this.t('core.common.copied');
-            if (this.isCopyFailure(messageIndex)) return this.t('core.common.copyFailed');
-            return this.t('core.common.copy');
-        },
-
-        // 获取复制图标SVG
-        getCopyIconSvg() {
-            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
-        },
-
-        // 获取成功图标SVG
-        getSuccessIconSvg() {
-            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"></polyline></svg>';
-        },
-
-        // 获取失败图标SVG
-        getErrorIconSvg() {
-            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="13"></line><circle cx="12" cy="16.5" r="1"></circle></svg>';
-        },
-
-        // 初始化代码块复制按钮
-        initCodeCopyButtons() {
-            this.$nextTick(() => {
-                const codeBlocks = this.$refs.messageContainer?.querySelectorAll('pre code') || [];
-                codeBlocks.forEach((codeBlock, index) => {
-                    const pre = codeBlock.parentElement;
-                    if (pre && !pre.querySelector('.copy-code-btn')) {
-                        const button = document.createElement('button');
-                        button.className = 'copy-code-btn';
-                        button.innerHTML = this.getCopyIconSvg();
-                        button.title = this.t('core.common.copy');
-                        button.addEventListener('click', async () => {
-                            const res = await this.copyCodeToClipboard(codeBlock.textContent || '');
-                            const ok = !!res?.ok;
-                            button.innerHTML = ok ? this.getSuccessIconSvg() : this.getErrorIconSvg();
-                            button.style.color = ok
-                                ? 'rgb(var(--v-theme-success))'
-                                : 'rgb(var(--v-theme-error))';
-                            button.setAttribute("title", this.t(`core.common.${ok ? "copied" : "copyFailed"}`));
-                            setTimeout(() => {
-                                button.innerHTML = this.getCopyIconSvg();
-                                button.style.color = '';
-                                button.setAttribute("title", this.t('core.common.copy'));
-                            }, 2000);
-                        });
-                        pre.style.position = 'relative';
-                        pre.appendChild(button);
-                    }
-                });
-            });
-        },
-
-        initImageClickEvents() {
-            this.$nextTick(() => {
-                // 查找所有动态生成的图片（在markdown-content中）
-                const images = document.querySelectorAll('.markdown-content img');
-                images.forEach((img) => {
-                    if (!img.hasAttribute('data-click-enabled')) {
-                        img.style.cursor = 'pointer';
-                        img.setAttribute('data-click-enabled', 'true');
-                        img.onclick = () => this.openImagePreview(img.src);
-                    }
-                });
-            });
-        },
-
-        scrollToBottom() {
-            this.$nextTick(() => {
-                const container = this.$refs.messageContainer;
-                if (container) {
-                    container.scrollTop = container.scrollHeight;
-                    this.isUserNearBottom = true; // 程序滚动到底部后标记用户在底部
-                }
-            });
-        },
-
-        // 添加滚动事件监听器
-        addScrollListener() {
-            const container = this.$refs.messageContainer;
-            if (container) {
-                container.addEventListener('scroll', this.throttledHandleScroll);
-            }
-        },
-
-        // 节流处理滚动事件
-        throttledHandleScroll() {
-            if (this.scrollTimer) return;
-
-            this.scrollTimer = setTimeout(() => {
-                this.handleScroll();
-                this.scrollTimer = null;
-            }, 50); // 50ms 节流
-        },
-
-        // 处理滚动事件
-        handleScroll() {
-            const container = this.$refs.messageContainer;
-            if (container) {
-                const { scrollTop, scrollHeight, clientHeight } = container;
-                const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
-
-                // 判断用户是否在底部附近
-                this.isUserNearBottom = distanceFromBottom <= this.scrollThreshold;
-            }
-        },
-
-        // 组件销毁时移除监听器
-        beforeUnmount() {
-            const container = this.$refs.messageContainer;
-            if (container) {
-                container.removeEventListener('scroll', this.throttledHandleScroll);
-            }
-            // 清理定时器
-            if (this.scrollTimer) {
-                clearTimeout(this.scrollTimer);
-                this.scrollTimer = null;
-            }
-            // 清理 elapsed time 计时器
-            if (this.elapsedTimeTimer) {
-                clearInterval(this.elapsedTimeTimer);
-                this.elapsedTimeTimer = null;
-            }
-        },
-
-        // 格式化消息时间，支持别名显示
-        formatMessageTime(dateStr) {
-            if (!dateStr) return '';
-
-            const date = new Date(dateStr);
-            const now = new Date();
-
-            // 获取本地时间的日期部分
-            const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-            const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const yesterdayDay = new Date(todayDay);
-            yesterdayDay.setDate(yesterdayDay.getDate() - 1);
-
-            // 格式化时间 HH:MM
-            const hours = date.getHours().toString().padStart(2, '0');
-            const minutes = date.getMinutes().toString().padStart(2, '0');
-            const timeStr = `${hours}:${minutes}`;
-
-            // 判断是今天、昨天还是更早
-            if (dateDay.getTime() === todayDay.getTime()) {
-                return `${this.tm('time.today')} ${timeStr}`;
-            } else if (dateDay.getTime() === yesterdayDay.getTime()) {
-                return `${this.tm('time.yesterday')} ${timeStr}`;
-            } else {
-                // 更早的日期显示完整格式
-                const month = (date.getMonth() + 1).toString().padStart(2, '0');
-                const day = date.getDate().toString().padStart(2, '0');
-                return `${month}-${day} ${timeStr}`;
-            }
-        },
-
-        // Start timer for updating elapsed time
-        startElapsedTimeTimer() {
-            // Update every 12ms for sub-second precision, then every second after 1s
-            let fastUpdateCount = 0;
-            const fastUpdateInterval = 12;
-            const slowUpdateInterval = 1000;
-
-            const updateTime = () => {
-                this.currentTime = Date.now() / 1000;
-
-                // Check if there are any running tool calls
-                const hasRunningToolCalls = this.messages.some(msg =>
-                    Array.isArray(msg.content.message) && msg.content.message.some(part =>
-                        part.type === 'tool_call' && part.tool_calls?.some(tc => !tc.finished_ts)
-                    )
-                );
-
-                if (hasRunningToolCalls) {
-                    // Check if any running tool call is under 1 second
-                    const hasSubSecondToolCall = this.messages.some(msg =>
-                        Array.isArray(msg.content.message) && msg.content.message.some(part =>
-                            part.type === 'tool_call' && part.tool_calls?.some(tc =>
-                                !tc.finished_ts && (this.currentTime - tc.ts) < 1
-                            )
-                        )
-                    );
-
-                    if (hasSubSecondToolCall) {
-                        fastUpdateCount++;
-                        this.elapsedTimeTimer = setTimeout(updateTime, fastUpdateInterval);
-                    } else {
-                        this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
-                    }
-                } else {
-                    // No running tool calls, check again after 1 second
-                    this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
-                }
-            };
-
-            updateTime();
-        },
-
-        // Get elapsed time string for a tool call
-        getElapsedTime(startTs) {
-            const elapsed = this.currentTime - startTs;
-            return this.formatDuration(elapsed);
-        },
-
-        // Format duration in seconds to human readable string
-        formatDuration(seconds) {
-            if (seconds < 1) {
-                return `${Math.round(seconds * 1000)}ms`;
-            } else if (seconds < 60) {
-                return `${seconds.toFixed(1)}s`;
-            } else {
-                const minutes = Math.floor(seconds / 60);
-                const secs = Math.round(seconds % 60);
-                return `${minutes}m ${secs}s`;
-            }
-        },
-
-        // Get input tokens (input_other + input_cached)
-        getInputTokens(tokenUsage) {
-            if (!tokenUsage) return 0;
-            return (tokenUsage.input_other || 0) + (tokenUsage.input_cached || 0);
-        },
-
-        // Format agent duration
-        formatAgentDuration(agentStats) {
-            if (!agentStats) return '';
-            const duration = agentStats.end_time - agentStats.start_time;
-            return this.formatDuration(duration);
-        },
-
-        // Format time to first token
-        formatTTFT(ttft) {
-            if (!ttft || ttft <= 0) return '';
-            return this.formatDuration(ttft);
-        },
-
-        // 打开图片预览
-        openImagePreview(url) {
-            this.imagePreview.url = url;
-            this.imagePreview.show = true;
-        },
-
-        // 关闭图片预览
-        closeImagePreview() {
-            this.imagePreview.show = false;
-            setTimeout(() => {
-                this.imagePreview.url = '';
-            }, 300);
-        },
-
-        // Open refs sidebar
-        openRefsSidebar(refs) {
-            this.$emit('openRefs', refs);
-        }
+  },
+  emits: ["openImagePreview", "replyMessage", "replyWithText", "openRefs"],
+  setup() {
+    const { t } = useI18n();
+    const { tm } = useModuleI18n("features/chat");
+    const toast = useToast();
+
+    return {
+      t,
+      tm,
+      toast,
+    };
+  },
+  provide() {
+    return {
+      isDark: this.isDark,
+      webSearchResults: () => this.webSearchResults,
+    };
+  },
+  data() {
+    return {
+      copiedMessages: new Set(),
+      copyFailedMessages: new Set(),
+      isUserNearBottom: true,
+      scrollThreshold: 1,
+      scrollTimer: null,
+      expandedReasoning: new Set(), // Track which reasoning blocks are expanded
+      downloadingFiles: new Set(), // Track which files are being downloaded
+      elapsedTimeTimer: null, // Timer for updating elapsed time
+      currentTime: Date.now() / 1000, // Current time for elapsed time calculation
+      // 选中文本相关状态
+      selectedText: {
+        content: "",
+        messageIndex: null,
+        position: { top: 0, left: 0 },
+      },
+      // 图片预览
+      imagePreview: {
+        show: false,
+        url: "",
+      },
+      // Web search results mapping: { 'uuid.idx': { url, title, snippet } }
+      webSearchResults: {},
+    };
+  },
+  async mounted() {
+    this.initCodeCopyButtons();
+    this.initImageClickEvents();
+    this.addScrollListener();
+    this.scrollToBottom();
+    this.startElapsedTimeTimer();
+    this.extractWebSearchResults();
+  },
+  updated() {
+    this.initCodeCopyButtons();
+    this.initImageClickEvents();
+    if (this.isUserNearBottom) {
+      this.scrollToBottom();
     }
-}
+    this.extractWebSearchResults();
+  },
+  methods: {
+    // 从消息中提取 web_search_tavily 的搜索结果
+    extractWebSearchResults() {
+      const results = {};
+
+      this.messages.forEach((msg) => {
+        if (msg.content.type !== "bot" || !Array.isArray(msg.content.message)) {
+          return;
+        }
+
+        msg.content.message.forEach((part) => {
+          if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) {
+            return;
+          }
+
+          part.tool_calls.forEach((toolCall) => {
+            // 检查是否是支持引用解析的 web_search 工具调用
+            if (
+              ![
+                "web_search_baidu",
+                "web_search_tavily",
+                "web_search_bocha",
+                "web_search_brave",
+                "web_search_firecrawl",
+              ].includes(toolCall.name) ||
+              !toolCall.result
+            ) {
+              return;
+            }
+
+            try {
+              // 解析工具调用结果
+              const resultData = typeof toolCall.result === "string" ? JSON.parse(toolCall.result) : toolCall.result;
+
+              if (resultData.results && Array.isArray(resultData.results)) {
+                resultData.results.forEach((item) => {
+                  if (item.index) {
+                    results[item.index] = {
+                      url: item.url,
+                      title: item.title,
+                      snippet: item.snippet,
+                    };
+                  }
+                });
+              }
+            } catch (e) {
+              console.error("Failed to parse web search result:", e);
+            }
+          });
+        });
+      });
+
+      this.webSearchResults = results;
+    },
+
+    // 处理文本选择
+    handleTextSelection() {
+      const selection = window.getSelection();
+      const selectedText = selection.toString();
+
+      if (!selectedText.trim()) {
+        // 清除选中状态
+        this.selectedText.content = "";
+        this.selectedText.messageIndex = null;
+        return;
+      }
+
+      // 获取被选中的元素，找到对应的message-item
+      const range = selection.getRangeAt(0);
+      const startContainer = range.startContainer;
+      let messageItem = null;
+      let node = startContainer.parentElement;
+
+      // 遍历DOM树向上查找message-item
+      while (node && !node.classList.contains("message-item")) {
+        node = node.parentElement;
+      }
+
+      messageItem = node;
+
+      if (!messageItem) {
+        this.selectedText.content = "";
+        this.selectedText.messageIndex = null;
+        return;
+      }
+
+      // 获取message-item在messages数组中的索引
+      const messageItems = this.$refs.messageContainer?.querySelectorAll(".message-item");
+      let messageIndex = -1;
+      if (messageItems) {
+        for (let i = 0; i < messageItems.length; i++) {
+          if (messageItems[i] === messageItem) {
+            messageIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (messageIndex === -1) {
+        this.selectedText.content = "";
+        this.selectedText.messageIndex = null;
+        return;
+      }
+
+      // 获取选中文本的位置（相对于viewport）
+      const rect = selection.getRangeAt(0).getBoundingClientRect();
+
+      this.selectedText.content = selectedText;
+      this.selectedText.messageIndex = messageIndex;
+      this.selectedText.position = {
+        top: Math.max(0, rect.bottom + 5),
+        left: Math.max(0, (rect.left + rect.right) / 2),
+      };
+    },
+
+    // 处理引用选中的文本
+    handleQuoteSelected() {
+      if (this.selectedText.messageIndex === null) return;
+
+      const msg = this.messages[this.selectedText.messageIndex];
+      if (!msg || !msg.id) return;
+
+      // 触发replyWithText事件，传递选中的文本内容
+      this.$emit("replyWithText", {
+        messageId: msg.id,
+        selectedText: this.selectedText.content,
+        messageIndex: this.selectedText.messageIndex,
+      });
+
+      // 清除选中状态
+      this.selectedText.content = "";
+      this.selectedText.messageIndex = null;
+      window.getSelection().removeAllRanges();
+    },
+
+    // 检查 message 中是否有音频
+    hasAudio(messageParts) {
+      if (!Array.isArray(messageParts)) return false;
+      return messageParts.some((part) => part.type === "record" && part.embedded_url);
+    },
+
+    // 获取被引用消息的内容
+    getReplyContent(messageId) {
+      const replyMsg = this.messages.find((m) => m.id === messageId);
+      if (!replyMsg) {
+        return this.tm("reply.notFound");
+      }
+      let content = "";
+      if (Array.isArray(replyMsg.content.message)) {
+        const textParts = replyMsg.content.message
+          .filter((part) => part.type === "plain" && part.text)
+          .map((part) => part.text);
+        content = textParts.join("");
+      }
+      // 截断过长内容
+      if (content.length > 50) {
+        content = `${content.substring(0, 50)}...`;
+      }
+      return content || "[媒体内容]";
+    },
+
+    // 滚动到指定消息
+    scrollToMessage(messageId) {
+      const msgIndex = this.messages.findIndex((m) => m.id === messageId);
+      if (msgIndex === -1) return;
+
+      const container = this.$refs.messageContainer;
+      const messageItems = container?.querySelectorAll(".message-item");
+      if (messageItems && messageItems[msgIndex]) {
+        messageItems[msgIndex].scrollIntoView({ behavior: "smooth", block: "center" });
+        // 高亮一下
+        messageItems[msgIndex].classList.add("highlight-message");
+        setTimeout(() => {
+          messageItems[msgIndex].classList.remove("highlight-message");
+        }, 2000);
+      }
+    },
+
+    // Toggle reasoning expansion state
+    toggleReasoning(messageIndex) {
+      if (this.expandedReasoning.has(messageIndex)) {
+        this.expandedReasoning.delete(messageIndex);
+      } else {
+        this.expandedReasoning.add(messageIndex);
+      }
+      // Force reactivity
+      this.expandedReasoning = new Set(this.expandedReasoning);
+    },
+
+    // Check if reasoning is expanded
+    isReasoningExpanded(messageIndex) {
+      return this.expandedReasoning.has(messageIndex);
+    },
+
+    // 下载文件
+    async downloadFile(file) {
+      if (!file.attachment_id) return;
+
+      // 标记为下载中
+      this.downloadingFiles.add(file.attachment_id);
+      this.downloadingFiles = new Set(this.downloadingFiles);
+
+      try {
+        const response = await axios.get(`/api/chat/get_attachment?attachment_id=${file.attachment_id}`, {
+          responseType: "blob",
+        });
+
+        const url = URL.createObjectURL(response.data);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = file.filename || "file";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+      } catch (err) {
+        console.error("Download file failed:", err);
+      } finally {
+        this.downloadingFiles.delete(file.attachment_id);
+        this.downloadingFiles = new Set(this.downloadingFiles);
+      }
+    },
+
+    // 复制代码到剪贴板
+    tryExecCommandCopy(text) {
+      let textArea = null;
+      try {
+        textArea = document.createElement("textarea");
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const ok = document.execCommand("copy");
+        return ok;
+      } catch (_) {
+        return false;
+      } finally {
+        try {
+          textArea?.remove?.();
+        } catch (_) {
+          // ignore cleanup errors
+        }
+      }
+    },
+
+    async copyTextToClipboard(text) {
+      // 优先使用同步复制，尽量保留用户手势上下文；
+      // 在非安全来源（例如通过局域网 IP + vite --host）时成功率更高。
+      if (this.tryExecCommandCopy(text)) {
+        return { ok: true, method: "execCommand" };
+      }
+
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return { ok: true, method: "clipboard" };
+        } catch (error) {
+          return { ok: false, method: "clipboard", error };
+        }
+      }
+
+      return { ok: false, method: "unavailable" };
+    },
+
+    async copyWithFeedback(text, messageIndex = null) {
+      const result = await this.copyTextToClipboard(text);
+      const ok = !!result?.ok;
+
+      if (messageIndex !== null && messageIndex !== undefined) {
+        if (ok) this.showCopySuccess(messageIndex);
+        else this.showCopyFailure(messageIndex);
+      }
+
+      if (ok) {
+        this.toast?.success?.(this.t("core.common.copied"));
+      } else {
+        this.toast?.error?.(this.t("core.common.copyFailed"));
+      }
+
+      return result;
+    },
+
+    buildCopyTextFromParts(messageParts) {
+      if (typeof messageParts === "string") {
+        return messageParts.trim();
+      }
+      if (!Array.isArray(messageParts)) {
+        return "";
+      }
+
+      const textContents = messageParts
+        .filter((part) => part && typeof part === "object" && part.type === "plain" && part.text)
+        .map((part) => part.text);
+
+      let textToCopy = textContents.join("\n");
+
+      const imageCount = messageParts.filter((part) => part?.type === "image" && part.embedded_url).length;
+      if (imageCount > 0) {
+        if (textToCopy) textToCopy += "\n\n";
+        textToCopy += `[包含 ${imageCount} 张图片]`;
+      }
+
+      const hasAudio = messageParts.some((part) => part?.type === "record" && part.embedded_url);
+      if (hasAudio) {
+        if (textToCopy) textToCopy += "\n\n";
+        textToCopy += "[包含音频内容]";
+      }
+
+      return String(textToCopy || "").trim();
+    },
+
+    async copyCodeToClipboard(code) {
+      const text = String(code ?? "");
+      if (!text) return { ok: false, method: "empty" };
+      return await this.copyWithFeedback(text, null);
+    },
+
+    // 复制bot消息到剪贴板
+    async copyBotMessage(messageParts, messageIndex) {
+      let textToCopy = this.buildCopyTextFromParts(messageParts);
+      if (!textToCopy) textToCopy = "[媒体内容]";
+      await this.copyWithFeedback(textToCopy, messageIndex);
+    },
+
+    // 显示复制成功提示
+    showCopySuccess(messageIndex) {
+      if (this.copyFailedMessages.has(messageIndex)) {
+        this.copyFailedMessages.delete(messageIndex);
+        this.copyFailedMessages = new Set(this.copyFailedMessages);
+      }
+      this.copiedMessages.add(messageIndex);
+      this.copiedMessages = new Set(this.copiedMessages);
+
+      // 2秒后移除成功状态
+      setTimeout(() => {
+        this.copiedMessages.delete(messageIndex);
+        this.copiedMessages = new Set(this.copiedMessages);
+      }, 2000);
+    },
+
+    // 显示复制失败提示
+    showCopyFailure(messageIndex) {
+      if (this.copiedMessages.has(messageIndex)) {
+        this.copiedMessages.delete(messageIndex);
+        this.copiedMessages = new Set(this.copiedMessages);
+      }
+      this.copyFailedMessages.add(messageIndex);
+      this.copyFailedMessages = new Set(this.copyFailedMessages);
+
+      setTimeout(() => {
+        this.copyFailedMessages.delete(messageIndex);
+        this.copyFailedMessages = new Set(this.copyFailedMessages);
+      }, 2000);
+    },
+
+    // 获取复制按钮图标
+    getCopyIcon(messageIndex) {
+      if (this.copiedMessages.has(messageIndex)) return "mdi-check";
+      if (this.copyFailedMessages.has(messageIndex)) return "mdi-alert-circle-outline";
+      return "mdi-content-copy";
+    },
+
+    // 检查是否为复制成功状态
+    isCopySuccess(messageIndex) {
+      return this.copiedMessages.has(messageIndex);
+    },
+
+    // 检查是否为复制失败状态
+    isCopyFailure(messageIndex) {
+      return this.copyFailedMessages.has(messageIndex);
+    },
+
+    // 获取复制按钮提示文本
+    getCopyTitle(messageIndex) {
+      if (this.isCopySuccess(messageIndex)) return this.t("core.common.copied");
+      if (this.isCopyFailure(messageIndex)) return this.t("core.common.copyFailed");
+      return this.t("core.common.copy");
+    },
+
+    // 获取复制图标SVG
+    getCopyIconSvg() {
+      return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+    },
+
+    // 获取成功图标SVG
+    getSuccessIconSvg() {
+      return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"></polyline></svg>';
+    },
+
+    // 获取失败图标SVG
+    getErrorIconSvg() {
+      return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="13"></line><circle cx="12" cy="16.5" r="1"></circle></svg>';
+    },
+
+    // 初始化代码块复制按钮
+    initCodeCopyButtons() {
+      this.$nextTick(() => {
+        const codeBlocks = this.$refs.messageContainer?.querySelectorAll("pre code") || [];
+        codeBlocks.forEach((codeBlock, index) => {
+          const pre = codeBlock.parentElement;
+          if (pre && !pre.querySelector(".copy-code-btn")) {
+            const button = document.createElement("button");
+            button.className = "copy-code-btn";
+            button.innerHTML = this.getCopyIconSvg();
+            button.title = this.t("core.common.copy");
+            button.addEventListener("click", async () => {
+              const res = await this.copyCodeToClipboard(codeBlock.textContent || "");
+              const ok = !!res?.ok;
+              button.innerHTML = ok ? this.getSuccessIconSvg() : this.getErrorIconSvg();
+              button.style.color = ok ? "rgb(var(--v-theme-success))" : "rgb(var(--v-theme-error))";
+              button.setAttribute("title", this.t(`core.common.${ok ? "copied" : "copyFailed"}`));
+              setTimeout(() => {
+                button.innerHTML = this.getCopyIconSvg();
+                button.style.color = "";
+                button.setAttribute("title", this.t("core.common.copy"));
+              }, 2000);
+            });
+            pre.style.position = "relative";
+            pre.appendChild(button);
+          }
+        });
+      });
+    },
+
+    initImageClickEvents() {
+      this.$nextTick(() => {
+        // 查找所有动态生成的图片（在markdown-content中）
+        const images = document.querySelectorAll(".markdown-content img");
+        images.forEach((img) => {
+          if (!img.hasAttribute("data-click-enabled")) {
+            img.style.cursor = "pointer";
+            img.setAttribute("data-click-enabled", "true");
+            img.onclick = () => this.openImagePreview(img.src);
+          }
+        });
+      });
+    },
+
+    scrollToBottom() {
+      this.$nextTick(() => {
+        const container = this.$refs.messageContainer;
+        if (container) {
+          container.scrollTop = container.scrollHeight;
+          this.isUserNearBottom = true; // 程序滚动到底部后标记用户在底部
+        }
+      });
+    },
+
+    // 添加滚动事件监听器
+    addScrollListener() {
+      const container = this.$refs.messageContainer;
+      if (container) {
+        container.addEventListener("scroll", this.throttledHandleScroll);
+      }
+    },
+
+    // 节流处理滚动事件
+    throttledHandleScroll() {
+      if (this.scrollTimer) return;
+
+      this.scrollTimer = setTimeout(() => {
+        this.handleScroll();
+        this.scrollTimer = null;
+      }, 50); // 50ms 节流
+    },
+
+    // 处理滚动事件
+    handleScroll() {
+      const container = this.$refs.messageContainer;
+      if (container) {
+        const { scrollTop, scrollHeight, clientHeight } = container;
+        const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+
+        // 判断用户是否在底部附近
+        this.isUserNearBottom = distanceFromBottom <= this.scrollThreshold;
+      }
+    },
+
+    // 组件销毁时移除监听器
+    beforeUnmount() {
+      const container = this.$refs.messageContainer;
+      if (container) {
+        container.removeEventListener("scroll", this.throttledHandleScroll);
+      }
+      // 清理定时器
+      if (this.scrollTimer) {
+        clearTimeout(this.scrollTimer);
+        this.scrollTimer = null;
+      }
+      // 清理 elapsed time 计时器
+      if (this.elapsedTimeTimer) {
+        clearInterval(this.elapsedTimeTimer);
+        this.elapsedTimeTimer = null;
+      }
+    },
+
+    // 格式化消息时间，支持别名显示
+    formatMessageTime(dateStr) {
+      if (!dateStr) return "";
+
+      const date = new Date(dateStr);
+      const now = new Date();
+
+      // 获取本地时间的日期部分
+      const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const yesterdayDay = new Date(todayDay);
+      yesterdayDay.setDate(yesterdayDay.getDate() - 1);
+
+      // 格式化时间 HH:MM
+      const hours = date.getHours().toString().padStart(2, "0");
+      const minutes = date.getMinutes().toString().padStart(2, "0");
+      const timeStr = `${hours}:${minutes}`;
+
+      // 判断是今天、昨天还是更早
+      if (dateDay.getTime() === todayDay.getTime()) {
+        return `${this.tm("time.today")} ${timeStr}`;
+      } else if (dateDay.getTime() === yesterdayDay.getTime()) {
+        return `${this.tm("time.yesterday")} ${timeStr}`;
+      } else {
+        // 更早的日期显示完整格式
+        const month = (date.getMonth() + 1).toString().padStart(2, "0");
+        const day = date.getDate().toString().padStart(2, "0");
+        return `${month}-${day} ${timeStr}`;
+      }
+    },
+
+    // Start timer for updating elapsed time
+    startElapsedTimeTimer() {
+      // Update every 12ms for sub-second precision, then every second after 1s
+      let fastUpdateCount = 0;
+      const fastUpdateInterval = 12;
+      const slowUpdateInterval = 1000;
+
+      const updateTime = () => {
+        this.currentTime = Date.now() / 1000;
+
+        // Check if there are any running tool calls
+        const hasRunningToolCalls = this.messages.some(
+          (msg) =>
+            Array.isArray(msg.content.message) &&
+            msg.content.message.some(
+              (part) => part.type === "tool_call" && part.tool_calls?.some((tc) => !tc.finished_ts),
+            ),
+        );
+
+        if (hasRunningToolCalls) {
+          // Check if any running tool call is under 1 second
+          const hasSubSecondToolCall = this.messages.some(
+            (msg) =>
+              Array.isArray(msg.content.message) &&
+              msg.content.message.some(
+                (part) =>
+                  part.type === "tool_call" &&
+                  part.tool_calls?.some((tc) => !tc.finished_ts && this.currentTime - tc.ts < 1),
+              ),
+          );
+
+          if (hasSubSecondToolCall) {
+            fastUpdateCount++;
+            this.elapsedTimeTimer = setTimeout(updateTime, fastUpdateInterval);
+          } else {
+            this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
+          }
+        } else {
+          // No running tool calls, check again after 1 second
+          this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
+        }
+      };
+
+      updateTime();
+    },
+
+    // Get elapsed time string for a tool call
+    getElapsedTime(startTs) {
+      const elapsed = this.currentTime - startTs;
+      return this.formatDuration(elapsed);
+    },
+
+    // Format duration in seconds to human readable string
+    formatDuration(seconds) {
+      if (seconds < 1) {
+        return `${Math.round(seconds * 1000)}ms`;
+      } else if (seconds < 60) {
+        return `${seconds.toFixed(1)}s`;
+      } else {
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.round(seconds % 60);
+        return `${minutes}m ${secs}s`;
+      }
+    },
+
+    // Get input tokens (input_other + input_cached)
+    getInputTokens(tokenUsage) {
+      if (!tokenUsage) return 0;
+      return (tokenUsage.input_other || 0) + (tokenUsage.input_cached || 0);
+    },
+
+    // Format agent duration
+    formatAgentDuration(agentStats) {
+      if (!agentStats) return "";
+      const duration = agentStats.end_time - agentStats.start_time;
+      return this.formatDuration(duration);
+    },
+
+    // Format time to first token
+    formatTTFT(ttft) {
+      if (!ttft || ttft <= 0) return "";
+      return this.formatDuration(ttft);
+    },
+
+    // 打开图片预览
+    openImagePreview(url) {
+      this.imagePreview.url = url;
+      this.imagePreview.show = true;
+    },
+
+    // 关闭图片预览
+    closeImagePreview() {
+      this.imagePreview.show = false;
+      setTimeout(() => {
+        this.imagePreview.url = "";
+      }, 300);
+    },
+
+    // Open refs sidebar
+    openRefsSidebar(refs) {
+      this.$emit("openRefs", refs);
+    },
+  },
+};
 </script>
 
 <style scoped>

@@ -15,9 +15,6 @@ from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
-from ..context import PipelineContext
-from ..stage import Stage, register_stage
-
 
 async def _check_is_advanced_persona(
     ctx: PipelineContext,

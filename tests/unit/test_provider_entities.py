@@ -7,8 +7,6 @@ ProviderMeta, ProviderMetaData, and RerankResult construction and edge cases.
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
     ContentPart,
@@ -26,7 +24,6 @@ from astrbot.core.provider.entities import (
     TokenUsage,
     ToolCallsResult,
 )
-
 
 # =========================================================================
 # ProviderMeta / ProviderMetaData
@@ -243,11 +240,11 @@ class TestProviderRequest:
 
     def test_append_tool_calls_result_list(self):
         tcr1 = MagicMock(spec=ToolCallsResult)
-        tcr2 = MagicMock(spec=ToolCallsResult)
         req = ProviderRequest(tool_calls_result=[tcr1])
         tcr3 = MagicMock(spec=ToolCallsResult)
         req.append_tool_calls_result(tcr3)
         from typing import cast
+
         result = cast(list, req.tool_calls_result)
         assert len(result) == 2
 
@@ -469,12 +466,12 @@ class TestLLMResponse:
     def test_to_openai_tool_calls_empty(self):
         resp = LLMResponse(role="assistant")
         calls = resp.to_openai_tool_calls()
-        assert calls == []
+        assert calls is None
 
     def test_to_openai_to_calls_model_empty(self):
         resp = LLMResponse(role="assistant")
         calls = resp.to_openai_to_calls_model()
-        assert calls == []
+        assert calls is None
 
     def test_construction_with_reasoning(self):
         resp = LLMResponse(

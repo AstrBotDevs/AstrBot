@@ -281,11 +281,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
+import axios from "@/utils/request";
 
 const { tm: t } = useModuleI18n("features/knowledge-base/document");
 const route = useRoute();
@@ -333,9 +333,7 @@ const headers = [
 const filteredChunks = computed(() => {
   if (!searchQuery.value) return chunks.value;
   const query = searchQuery.value.toLowerCase();
-  return chunks.value.filter((chunk) =>
-    chunk.content.toLowerCase().includes(query),
-  );
+  return chunks.value.filter((chunk) => chunk.content.toLowerCase().includes(query));
 });
 
 // 加载文档详情
@@ -400,8 +398,7 @@ const viewChunk = (chunk: any) => {
 
 // 删除分块
 const deleteChunk = async (chunk: any) => {
-  if (!(await askForConfirmation(t("chunks.deleteConfirm"), confirmDialog)))
-    return;
+  if (!(await askForConfirmation(t("chunks.deleteConfirm"), confirmDialog))) return;
   try {
     const response = await axios.post("/api/kb/chunk/delete", {
       chunk_id: chunk.chunk_id,

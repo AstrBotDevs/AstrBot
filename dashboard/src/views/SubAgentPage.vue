@@ -710,93 +710,93 @@
 </template>
 
 <script setup lang="ts">
-import axios from 'axios'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
-import { useTheme } from 'vuetify'
-import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue'
-import PersonaSelector from '@/components/shared/PersonaSelector.vue'
-import ProviderSelector from '@/components/shared/ProviderSelector.vue'
-import { useModuleI18n } from '@/i18n/composables'
-import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
+import axios from "axios";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { onBeforeRouteLeave } from "vue-router";
+import { useTheme } from "vuetify";
+import PersonaQuickPreview from "@/components/shared/PersonaQuickPreview.vue";
+import PersonaSelector from "@/components/shared/PersonaSelector.vue";
+import ProviderSelector from "@/components/shared/ProviderSelector.vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 
 type SubAgentItem = {
-  __key: string
-  name: string
-  persona_id: string
-  public_description: string
-  enabled: boolean
-  default_handoff_mode: 'normal' | 'silent'
-  provider_id?: string
-}
+  __key: string;
+  name: string;
+  persona_id: string;
+  public_description: string;
+  enabled: boolean;
+  default_handoff_mode: "normal" | "silent";
+  provider_id?: string;
+};
 
 type SubAgentConfig = {
-  main_enable: boolean
-  remove_main_duplicate_tools: boolean
-  router_system_prompt: string
-  agents: SubAgentItem[]
-}
+  main_enable: boolean;
+  remove_main_duplicate_tools: boolean;
+  router_system_prompt: string;
+  agents: SubAgentItem[];
+};
 
 type DynamicAgentsConfig = {
-  enabled: boolean
-  max_dynamic_subagent_count: number
-  auto_cleanup_per_turn: boolean
-  rule_prompt: string
-  tools_blacklist: string[]
-  tools_inherent: string[]
-}
+  enabled: boolean;
+  max_dynamic_subagent_count: number;
+  auto_cleanup_per_turn: boolean;
+  rule_prompt: string;
+  tools_blacklist: string[];
+  tools_inherent: string[];
+};
 
 type SubAgentOrchestratorConfig = {
-  main_enable: boolean
-  remove_main_duplicate_tools: boolean
-  router_system_prompt: string
-  agents: SubAgentItem[]
-  dynamic_agents: DynamicAgentsConfig
-  history_enabled: boolean
-  shared_context_enabled: boolean
-  shared_context_maxlen: number
-  subagent_history_maxlen: number
-  execution_timeout: number
-  time_prompt_enabled: boolean
-}
+  main_enable: boolean;
+  remove_main_duplicate_tools: boolean;
+  router_system_prompt: string;
+  agents: SubAgentItem[];
+  dynamic_agents: DynamicAgentsConfig;
+  history_enabled: boolean;
+  shared_context_enabled: boolean;
+  shared_context_maxlen: number;
+  subagent_history_maxlen: number;
+  execution_timeout: number;
+  time_prompt_enabled: boolean;
+};
 
 type AvailableTool = {
-  name: string
-  description: string
-  parameters: any
-  active: boolean
-  handler_module_path: string
-}
+  name: string;
+  description: string;
+  parameters: any;
+  active: boolean;
+  handler_module_path: string;
+};
 
-const { tm } = useModuleI18n('features/subagent')
-const theme = useTheme()
-const confirmDialog = useConfirmDialog()
+const { tm } = useModuleI18n("features/subagent");
+const theme = useTheme();
+const confirmDialog = useConfirmDialog();
 
-const loading = ref(false)
-const saving = ref(false)
-const importFileInputRef = ref<HTMLInputElement | null>(null)
+const loading = ref(false);
+const saving = ref(false);
+const importFileInputRef = ref<HTMLInputElement | null>(null);
 
 const snackbar = ref({
   show: false,
-  message: '',
-  color: 'success'
-})
-const expandedAgents = ref<Record<string, boolean>>({})
-const initialSnapshot = ref('')
-const hasLoaded = ref(false)
+  message: "",
+  color: "success",
+});
+const expandedAgents = ref<Record<string, boolean>>({});
+const initialSnapshot = ref("");
+const hasLoaded = ref(false);
 
 // 工具选择器相关
-const showToolSelectorDialog = ref(false)
-const toolSelectorMode = ref<'blacklist' | 'inherent'>('blacklist')
-const toolSelectorSearch = ref('')
-const availableTools = ref<AvailableTool[]>([])
+const showToolSelectorDialog = ref(false);
+const toolSelectorMode = ref<"blacklist" | "inherent">("blacklist");
+const toolSelectorSearch = ref("");
+const availableTools = ref<AvailableTool[]>([]);
 
 // 提示词编辑开关
-const editRouterPromptEnabled = ref(false)
-const editRulePromptEnabled = ref(false)
+const editRouterPromptEnabled = ref(false);
+const editRulePromptEnabled = ref(false);
 
 // 默认提示词（用于恢复默认）
-const DEFAULT_ROUTER_SYSTEM_PROMPT = `You are a task router. Your job is to chat naturally, recognize user intent, and delegate work to the most suitable subagent using transfer_to_* tools. Do not try to use domain tools yourself. If no subagent fits, respond directly.`
+const DEFAULT_ROUTER_SYSTEM_PROMPT = `You are a task router. Your job is to chat naturally, recognize user intent, and delegate work to the most suitable subagent using transfer_to_* tools. Do not try to use domain tools yourself. If no subagent fits, respond directly.`;
 
 const DEFAULT_RULE_PROMPT = `# Behavior Rules
 ## Safety
@@ -812,50 +812,48 @@ Follow these rules:
 
 ## Output Guidelines
 - If output exceeds 2000 chars, save to file. Summarize in your response and provide the file path.
-- Mark all generated code/documents with your name and timestamp.`
+- Mark all generated code/documents with your name and timestamp.`;
 
-const availableToolNames = computed(() =>
-  availableTools.value.map((t) => t.name)
-)
+const availableToolNames = computed(() => availableTools.value.map((t) => t.name));
 
-function toast(message: string, color: 'success' | 'error' | 'warning' = 'success') {
-  snackbar.value = { show: true, message, color }
+function toast(message: string, color: "success" | "error" | "warning" = "success") {
+  snackbar.value = { show: true, message, color };
 }
 
 const DEFAULT_BLACKLIST = [
-  'broadcast_shared_context',
-  'create_subagent',
-  'manage_subagent_protection',
-  'remove_subagent',
-  'list_subagents',
-  'wait_for_subagent',
-  'view_shared_context'
-]
+  "broadcast_shared_context",
+  "create_subagent",
+  "manage_subagent_protection",
+  "remove_subagent",
+  "list_subagents",
+  "wait_for_subagent",
+  "view_shared_context",
+];
 
 const DEFAULT_INHERENT = [
-  'astrbot_execute_shell',
-  'astrbot_execute_python',
-  'astrbot_file_read_tool',
-  'astrbot_file_write_tool',
-  'astrbot_file_edit_tool',
-  'astrbot_grep_tool'
-]
+  "astrbot_execute_shell",
+  "astrbot_execute_python",
+  "astrbot_file_read_tool",
+  "astrbot_file_write_tool",
+  "astrbot_file_edit_tool",
+  "astrbot_grep_tool",
+];
 
 const cfg = ref<SubAgentConfig>({
   main_enable: false,
   remove_main_duplicate_tools: false,
-  router_system_prompt: '',
-  agents: []
-})
+  router_system_prompt: "",
+  agents: [],
+});
 
 const dynamicCfg = ref<DynamicAgentsConfig>({
   enabled: false,
   max_dynamic_subagent_count: 3,
   auto_cleanup_per_turn: true,
-  rule_prompt: '',
+  rule_prompt: "",
   tools_blacklist: [...DEFAULT_BLACKLIST],
-  tools_inherent: [...DEFAULT_INHERENT]
-})
+  tools_inherent: [...DEFAULT_INHERENT],
+});
 
 const rootCfg = ref({
   history_enabled: true,
@@ -863,66 +861,66 @@ const rootCfg = ref({
   shared_context_maxlen: 200,
   subagent_history_maxlen: 500,
   execution_timeout: 600,
-  time_prompt_enabled: true
-})
+  time_prompt_enabled: true,
+});
 
 const mainStateDescription = computed(() =>
-  cfg.value.main_enable ? tm('description.enabled') : tm('description.disabled')
-)
+  cfg.value.main_enable ? tm("description.enabled") : tm("description.disabled"),
+);
 
 const hasUnsavedChanges = computed(() => {
-  if (!hasLoaded.value) return false
-  const currentSnapshot = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value)
-  return currentSnapshot !== initialSnapshot.value
-})
+  if (!hasLoaded.value) return false;
+  const currentSnapshot = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value);
+  return currentSnapshot !== initialSnapshot.value;
+});
 
 function normalizeConfig(raw: any): SubAgentConfig {
   // 兼容新旧格式：
   // 新格式: raw 直接包含 main_enable, agents 等字段
   // 旧格式: raw.subagent_orchestrator 包含这些字段
-  const orchData = raw?.subagent_orchestrator || raw || {}
-  const main_enable = !!orchData?.main_enable
-  const remove_main_duplicate_tools = !!orchData?.remove_main_duplicate_tools
-  const router_system_prompt = (orchData?.router_system_prompt ?? '').toString()
-  const agentsRaw = Array.isArray(orchData?.agents) ? orchData.agents : []
+  const orchData = raw?.subagent_orchestrator || raw || {};
+  const main_enable = !!orchData?.main_enable;
+  const remove_main_duplicate_tools = !!orchData?.remove_main_duplicate_tools;
+  const router_system_prompt = (orchData?.router_system_prompt ?? "").toString();
+  const agentsRaw = Array.isArray(orchData?.agents) ? orchData.agents : [];
 
   const agents: SubAgentItem[] = agentsRaw.map((a: any, i: number) => ({
     __key: `${Date.now()}_${i}_${Math.random().toString(16).slice(2)}`,
-    name: (a?.name ?? '').toString(),
-    persona_id: (a?.persona_id ?? '').toString(),
-    public_description: (a?.public_description ?? '').toString(),
+    name: (a?.name ?? "").toString(),
+    persona_id: (a?.persona_id ?? "").toString(),
+    public_description: (a?.public_description ?? "").toString(),
     enabled: a?.enabled !== false,
-    default_handoff_mode: a?.default_handoff_mode === 'silent' ? 'silent' : 'normal',
-    provider_id: (a?.provider_id ?? undefined) as string | undefined
-  }))
+    default_handoff_mode: a?.default_handoff_mode === "silent" ? "silent" : "normal",
+    provider_id: (a?.provider_id ?? undefined) as string | undefined,
+  }));
 
-  return { main_enable, remove_main_duplicate_tools, router_system_prompt, agents }
+  return { main_enable, remove_main_duplicate_tools, router_system_prompt, agents };
 }
 
 function normalizeDynamicAgents(raw: any): DynamicAgentsConfig {
-  const src = raw?.dynamic_agents || {}
-  const blacklist = Array.isArray(src?.tools_blacklist) ? src.tools_blacklist : null
-  const inherent = Array.isArray(src?.tools_inherent) ? src.tools_inherent : null
+  const src = raw?.dynamic_agents || {};
+  const blacklist = Array.isArray(src?.tools_blacklist) ? src.tools_blacklist : null;
+  const inherent = Array.isArray(src?.tools_inherent) ? src.tools_inherent : null;
   return {
     enabled: !!src?.enabled,
     max_dynamic_subagent_count: Number(src?.max_dynamic_subagent_count) || 3,
     auto_cleanup_per_turn: src?.auto_cleanup_per_turn !== false,
-    rule_prompt: (src?.rule_prompt ?? '').toString(),
+    rule_prompt: (src?.rule_prompt ?? "").toString(),
     tools_blacklist: blacklist !== null ? blacklist : [...DEFAULT_BLACKLIST],
-    tools_inherent: inherent !== null ? inherent : [...DEFAULT_INHERENT]
-  }
+    tools_inherent: inherent !== null ? inherent : [...DEFAULT_INHERENT],
+  };
 }
 
 function normalizeRootConfig(raw: any) {
-  const orchData = raw?.subagent_orchestrator || raw || {}
+  const orchData = raw?.subagent_orchestrator || raw || {};
   return {
     history_enabled: orchData?.history_enabled !== false,
     shared_context_enabled: !!orchData?.shared_context_enabled,
     shared_context_maxlen: Number(orchData?.shared_context_maxlen) || 200,
     subagent_history_maxlen: Number(orchData?.subagent_history_maxlen) || 500,
     execution_timeout: Number(orchData?.execution_timeout) || 600,
-    time_prompt_enabled: orchData?.time_prompt_enabled !== false
-  }
+    time_prompt_enabled: orchData?.time_prompt_enabled !== false,
+  };
 }
 
 function serializeFullConfig(config: SubAgentConfig, dynamic: DynamicAgentsConfig, root: any): string {
@@ -936,7 +934,7 @@ function serializeFullConfig(config: SubAgentConfig, dynamic: DynamicAgentsConfi
       public_description: agent.public_description,
       enabled: agent.enabled,
       default_handoff_mode: agent.default_handoff_mode,
-      provider_id: agent.provider_id ?? null
+      provider_id: agent.provider_id ?? null,
     })),
     dynamic_agents: {
       enabled: dynamic.enabled,
@@ -944,83 +942,83 @@ function serializeFullConfig(config: SubAgentConfig, dynamic: DynamicAgentsConfi
       auto_cleanup_per_turn: dynamic.auto_cleanup_per_turn,
       rule_prompt: dynamic.rule_prompt,
       tools_blacklist: dynamic.tools_blacklist,
-      tools_inherent: dynamic.tools_inherent
+      tools_inherent: dynamic.tools_inherent,
     },
     history_enabled: root.history_enabled,
     shared_context_enabled: root.shared_context_enabled,
     shared_context_maxlen: root.shared_context_maxlen,
     subagent_history_maxlen: root.subagent_history_maxlen,
     execution_timeout: root.execution_timeout,
-    time_prompt_enabled: root.time_prompt_enabled
-  })
+    time_prompt_enabled: root.time_prompt_enabled,
+  });
 }
 
 function addToolFromCombobox() {
-  if (!toolSelectorSearch.value) return
-  addToolToList(toolSelectorSearch.value)
+  if (!toolSelectorSearch.value) return;
+  addToolToList(toolSelectorSearch.value);
 }
 
 async function loadAvailableTools() {
   try {
-    const res = await axios.get('/api/subagent/available-tools')
-    if (res.data.status === 'ok') {
-      availableTools.value = res.data.data
+    const res = await axios.get("/api/subagent/available-tools");
+    if (res.data.status === "ok") {
+      availableTools.value = res.data.data;
     }
   } catch (e) {
-    console.error('Failed to load available tools:', e)
+    console.error("Failed to load available tools:", e);
   }
 }
 
 async function loadConfig() {
-  loading.value = true
+  loading.value = true;
   try {
-    const res = await axios.get('/api/subagent/config')
-    if (res.data.status === 'ok') {
-      const data = res.data.data
+    const res = await axios.get("/api/subagent/config");
+    if (res.data.status === "ok") {
+      const data = res.data.data;
       // 兼容新旧格式：data 可能直接包含字段，或通过 subagent_orchestrator 嵌套
-      cfg.value = normalizeConfig(data.subagent_orchestrator || data)
-      dynamicCfg.value = normalizeDynamicAgents(data.subagent_orchestrator || data)
-      rootCfg.value = normalizeRootConfig(data.subagent_orchestrator || data)
-      expandedAgents.value = Object.fromEntries(cfg.value.agents.map((agent) => [agent.__key, false]))
-      initialSnapshot.value = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value)
-      hasLoaded.value = true
+      cfg.value = normalizeConfig(data.subagent_orchestrator || data);
+      dynamicCfg.value = normalizeDynamicAgents(data.subagent_orchestrator || data);
+      rootCfg.value = normalizeRootConfig(data.subagent_orchestrator || data);
+      expandedAgents.value = Object.fromEntries(cfg.value.agents.map((agent) => [agent.__key, false]));
+      initialSnapshot.value = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value);
+      hasLoaded.value = true;
     } else {
-      toast(res.data.message || tm('messages.loadConfigFailed'), 'error')
+      toast(res.data.message || tm("messages.loadConfigFailed"), "error");
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.loadConfigFailed'), 'error')
+    toast(e?.response?.data?.message || tm("messages.loadConfigFailed"), "error");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function addAgent() {
-  const key = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+  const key = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
   cfg.value.agents.push({
     __key: key,
-    name: '',
-    persona_id: '',
-    public_description: '',
+    name: "",
+    persona_id: "",
+    public_description: "",
     enabled: true,
-    default_handoff_mode: 'normal',
-    provider_id: undefined
-  })
-  expandedAgents.value[key] = false
+    default_handoff_mode: "normal",
+    provider_id: undefined,
+  });
+  expandedAgents.value[key] = false;
 }
 
 function removeAgent(idx: number) {
-  const [removed] = cfg.value.agents.splice(idx, 1)
+  const [removed] = cfg.value.agents.splice(idx, 1);
   if (removed) {
-    delete expandedAgents.value[removed.__key]
+    delete expandedAgents.value[removed.__key];
   }
 }
 
 function isAgentExpanded(key: string): boolean {
-  return expandedAgents.value[key] !== false
+  return expandedAgents.value[key] !== false;
 }
 
 function toggleAgentExpanded(key: string) {
-  expandedAgents.value[key] = !isAgentExpanded(key)
+  expandedAgents.value[key] = !isAgentExpanded(key);
 }
 
 function toPersistedConfig(source: SubAgentConfig) {
@@ -1028,108 +1026,107 @@ function toPersistedConfig(source: SubAgentConfig) {
     main_enable: !!source.main_enable,
     remove_main_duplicate_tools: !!source.remove_main_duplicate_tools,
     agents: source.agents.map((a) => ({
-      name: (a.name || '').trim(),
-      persona_id: (a.persona_id || '').trim(),
-      public_description: a.public_description || '',
+      name: (a.name || "").trim(),
+      persona_id: (a.persona_id || "").trim(),
+      public_description: a.public_description || "",
       enabled: a.enabled,
-      provider_id: a.provider_id
-    }))
-  }
+      provider_id: a.provider_id,
+    })),
+  };
 }
 
 function exportConfig() {
-  let url: string | null = null
-  let link: HTMLAnchorElement | null = null
+  let url: string | null = null;
+  let link: HTMLAnchorElement | null = null;
 
   try {
-    const payload = toPersistedConfig(cfg.value)
-    const json = JSON.stringify(payload, null, 2)
-    const blob = new Blob([json], { type: 'application/json;charset=utf-8' })
-    url = URL.createObjectURL(blob)
-    link = document.createElement('a')
-    const date = new Date().toISOString().slice(0, 10)
-    link.href = url
-    link.download = `subagent-config-${date}.json`
-    document.body.appendChild(link)
-    link.click()
-    toast(tm('messages.exportSuccess'), 'success')
+    const payload = toPersistedConfig(cfg.value);
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+    url = URL.createObjectURL(blob);
+    link = document.createElement("a");
+    const date = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `subagent-config-${date}.json`;
+    document.body.appendChild(link);
+    link.click();
+    toast(tm("messages.exportSuccess"), "success");
   } catch (e: unknown) {
-    toast(tm('messages.exportFailed'), 'error')
+    toast(tm("messages.exportFailed"), "error");
   } finally {
     if (link?.parentNode) {
-      link.parentNode.removeChild(link)
+      link.parentNode.removeChild(link);
     }
     if (url) {
-      URL.revokeObjectURL(url)
+      URL.revokeObjectURL(url);
     }
   }
 }
 
 function openImportDialog() {
-  importFileInputRef.value?.click()
+  importFileInputRef.value?.click();
 }
 
 async function handleImportFile(event: Event) {
-  const target = event.target as HTMLInputElement | null
-  const file = target?.files?.[0]
-  if (!file) return
+  const target = event.target as HTMLInputElement | null;
+  const file = target?.files?.[0];
+  if (!file) return;
 
   try {
-    const text = await file.text()
-    const parsed = JSON.parse(text) as unknown
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      toast(tm('messages.importInvalidJson'), 'error')
-      return
+    const text = await file.text();
+    const parsed = JSON.parse(text) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      toast(tm("messages.importInvalidJson"), "error");
+      return;
     }
 
-    const obj = parsed as Record<string, unknown>
-    const hasExpectedTopLevelKey =
-      'agents' in obj || 'main_enable' in obj || 'enable' in obj
+    const obj = parsed as Record<string, unknown>;
+    const hasExpectedTopLevelKey = "agents" in obj || "main_enable" in obj || "enable" in obj;
     if (!hasExpectedTopLevelKey) {
-      toast(tm('messages.importInvalidJson'), 'error')
-      return
+      toast(tm("messages.importInvalidJson"), "error");
+      return;
     }
 
-    cfg.value = normalizeConfig(parsed)
-    toast(tm('messages.importSuccess'), 'success')
+    cfg.value = normalizeConfig(parsed);
+    toast(tm("messages.importSuccess"), "success");
   } catch (e: unknown) {
-    toast(tm('messages.importFailed'), 'error')
+    toast(tm("messages.importFailed"), "error");
   } finally {
-    if (target) target.value = ''
+    if (target) target.value = "";
   }
 }
 
 function validateBeforeSave(): boolean {
-  const nameRe = /^[a-z][a-z0-9_]{0,63}$/
-  const seen = new Set<string>()
+  const nameRe = /^[a-z][a-z0-9_]{0,63}$/;
+  const seen = new Set<string>();
 
   for (const agent of cfg.value.agents) {
-    const name = (agent.name || '').trim()
+    const name = (agent.name || "").trim();
     if (!name) {
-      toast(tm('messages.nameMissing'), 'warning')
-      return false
+      toast(tm("messages.nameMissing"), "warning");
+      return false;
     }
     if (!nameRe.test(name)) {
-      toast(tm('messages.nameInvalid'), 'warning')
-      return false
+      toast(tm("messages.nameInvalid"), "warning");
+      return false;
     }
     if (seen.has(name)) {
-      toast(tm('messages.nameDuplicate', { name }), 'warning')
-      return false
+      toast(tm("messages.nameDuplicate", { name }), "warning");
+      return false;
     }
-    seen.add(name)
+    seen.add(name);
     if (!agent.persona_id) {
-      toast(tm('messages.personaMissing', { name }), 'warning')
-      return false
+      toast(tm("messages.personaMissing", { name }), "warning");
+      return false;
     }
   }
 
-  return true
+  return true;
 }
 
 async function save() {
-  if (!validateBeforeSave()) return
-  saving.value = true
+  if (!validateBeforeSave()) return;
+  saving.value = true;
   try {
     const payload = {
       main_enable: cfg.value.main_enable,
@@ -1141,7 +1138,7 @@ async function save() {
         public_description: agent.public_description,
         enabled: agent.enabled,
         default_handoff_mode: agent.default_handoff_mode,
-        provider_id: agent.provider_id
+        provider_id: agent.provider_id,
       })),
       dynamic_agents: {
         enabled: dynamicCfg.value.enabled,
@@ -1149,126 +1146,120 @@ async function save() {
         auto_cleanup_per_turn: dynamicCfg.value.auto_cleanup_per_turn,
         rule_prompt: dynamicCfg.value.rule_prompt,
         tools_blacklist: dynamicCfg.value.tools_blacklist,
-        tools_inherent: dynamicCfg.value.tools_inherent
+        tools_inherent: dynamicCfg.value.tools_inherent,
       },
       history_enabled: rootCfg.value.history_enabled,
       shared_context_enabled: rootCfg.value.shared_context_enabled,
       shared_context_maxlen: rootCfg.value.shared_context_maxlen,
       subagent_history_maxlen: rootCfg.value.subagent_history_maxlen,
       execution_timeout: rootCfg.value.execution_timeout,
-      time_prompt_enabled: rootCfg.value.time_prompt_enabled
-    }
+      time_prompt_enabled: rootCfg.value.time_prompt_enabled,
+    };
 
-    const res = await axios.post('/api/subagent/config', payload)
-    if (res.data.status === 'ok') {
-      initialSnapshot.value = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value)
-      hasLoaded.value = true
-      toast(res.data.message || tm('messages.saveSuccess'), 'success')
+    const res = await axios.post("/api/subagent/config", payload);
+    if (res.data.status === "ok") {
+      initialSnapshot.value = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value);
+      hasLoaded.value = true;
+      toast(res.data.message || tm("messages.saveSuccess"), "success");
     } else {
-      toast(res.data.message || tm('messages.saveFailed'), 'error')
+      toast(res.data.message || tm("messages.saveFailed"), "error");
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.saveFailed'), 'error')
+    toast(e?.response?.data?.message || tm("messages.saveFailed"), "error");
   } finally {
-    saving.value = false
+    saving.value = false;
   }
 }
 
 async function reload() {
   if (hasUnsavedChanges.value) {
-    const confirmed = await askForConfirmation(
-      tm('messages.unsavedChangesReloadConfirm'),
-      confirmDialog
-    )
+    const confirmed = await askForConfirmation(tm("messages.unsavedChangesReloadConfirm"), confirmDialog);
     if (!confirmed) {
-      return
+      return;
     }
   }
-  await loadConfig()
+  await loadConfig();
 }
 
 async function confirmLeaveIfNeeded(): Promise<boolean> {
   if (!hasUnsavedChanges.value) {
-    return true
+    return true;
   }
 
-  return askForConfirmation(
-    tm('messages.unsavedChangesLeaveConfirm'),
-    confirmDialog
-  )
+  return askForConfirmation(tm("messages.unsavedChangesLeaveConfirm"), confirmDialog);
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {
   if (!hasUnsavedChanges.value) {
-    return
+    return;
   }
 
-  event.preventDefault()
-  event.returnValue = ''
+  event.preventDefault();
+  event.returnValue = "";
 }
 
 // 工具列表操作
 function addToolToList(toolName: string) {
-  if (!toolName || !toolName.trim()) return
-  const name = toolName.trim()
-  if (toolSelectorMode.value === 'blacklist') {
+  if (!toolName || !toolName.trim()) return;
+  const name = toolName.trim();
+  if (toolSelectorMode.value === "blacklist") {
     if (!dynamicCfg.value.tools_blacklist.includes(name)) {
-      dynamicCfg.value.tools_blacklist.push(name)
+      dynamicCfg.value.tools_blacklist.push(name);
     }
-  } else if (toolSelectorMode.value === 'inherent') {
+  } else if (toolSelectorMode.value === "inherent") {
     if (!dynamicCfg.value.tools_inherent.includes(name)) {
-      dynamicCfg.value.tools_inherent.push(name)
+      dynamicCfg.value.tools_inherent.push(name);
     }
   }
-  toolSelectorSearch.value = ''
+  toolSelectorSearch.value = "";
 }
 
 function removeToolFromBlacklist(idx: number) {
-  dynamicCfg.value.tools_blacklist.splice(idx, 1)
+  dynamicCfg.value.tools_blacklist.splice(idx, 1);
 }
 
 function removeToolFromInherent(idx: number) {
-  dynamicCfg.value.tools_inherent.splice(idx, 1)
+  dynamicCfg.value.tools_inherent.splice(idx, 1);
 }
 
 function resetBlacklistToDefault() {
-  dynamicCfg.value.tools_blacklist = [...DEFAULT_BLACKLIST]
+  dynamicCfg.value.tools_blacklist = [...DEFAULT_BLACKLIST];
 }
 
 function resetInherentToDefault() {
-  dynamicCfg.value.tools_inherent = [...DEFAULT_INHERENT]
+  dynamicCfg.value.tools_inherent = [...DEFAULT_INHERENT];
 }
 
 // 恢复默认提示词
 function resetRouterPrompt() {
-  cfg.value.router_system_prompt = DEFAULT_ROUTER_SYSTEM_PROMPT
+  cfg.value.router_system_prompt = DEFAULT_ROUTER_SYSTEM_PROMPT;
 }
 
 function resetRulePrompt() {
-  dynamicCfg.value.rule_prompt = DEFAULT_RULE_PROMPT
+  dynamicCfg.value.rule_prompt = DEFAULT_RULE_PROMPT;
 }
 
 function isToolInTargetList(toolName: string): boolean {
-  if (toolSelectorMode.value === 'blacklist') {
-    return dynamicCfg.value.tools_blacklist.includes(toolName)
+  if (toolSelectorMode.value === "blacklist") {
+    return dynamicCfg.value.tools_blacklist.includes(toolName);
   } else {
-    return dynamicCfg.value.tools_inherent.includes(toolName)
+    return dynamicCfg.value.tools_inherent.includes(toolName);
   }
 }
 
 onMounted(() => {
-  window.addEventListener('beforeunload', handleBeforeUnload)
-  loadConfig()
-  loadAvailableTools()
-})
+  window.addEventListener("beforeunload", handleBeforeUnload);
+  loadConfig();
+  loadAvailableTools();
+});
 
 onBeforeUnmount(() => {
-  window.removeEventListener('beforeunload', handleBeforeUnload)
-})
+  window.removeEventListener("beforeunload", handleBeforeUnload);
+});
 
 onBeforeRouteLeave(async () => {
-  return await confirmLeaveIfNeeded()
-})
+  return await confirmLeaveIfNeeded();
+});
 </script>
 
 <style scoped>

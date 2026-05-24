@@ -1,10 +1,7 @@
 import asyncio
 import pathlib
 import re
-import uuid
 from collections.abc import AsyncGenerator
-from pathlib import Path
-from urllib.parse import urlparse
 
 from aiocqhttp import CQHttp, Event
 

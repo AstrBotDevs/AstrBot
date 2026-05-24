@@ -1,7 +1,6 @@
 """Shared fixtures for dashboard API tests."""
 
 import asyncio
-import os
 
 import pytest
 import pytest_asyncio
@@ -12,16 +11,29 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.dashboard.server import AstrBotDashboard
 
+TEST_DASHBOARD_PASSWORD = "AstrBotTest123"
+
 
 @pytest_asyncio.fixture(scope="module")
 async def core_lifecycle_td(tmp_path_factory):
     """Creates and initializes a core lifecycle instance with a temporary database."""
-    # Set the global config password to the HASH of "astrbot" so auth works
+    # Set a fully upgraded test dashboard password so auth does not depend on
+    # the production first-run random password path.
     from astrbot.core import astrbot_config as global_cfg
-    from astrbot.core.utils.auth_password import hash_dashboard_password
+    from astrbot.core.utils.auth_password import (
+        hash_dashboard_password,
+        hash_legacy_dashboard_password,
+    )
 
-    global_cfg["dashboard"]["password"] = hash_dashboard_password("astrbot")
     global_cfg["dashboard"]["username"] = "astrbot"
+    global_cfg["dashboard"]["pbkdf2_password"] = hash_dashboard_password(
+        TEST_DASHBOARD_PASSWORD,
+    )
+    global_cfg["dashboard"]["password"] = hash_legacy_dashboard_password(
+        TEST_DASHBOARD_PASSWORD,
+    )
+    global_cfg["dashboard"]["password_storage_upgraded"] = True
+    global_cfg["dashboard"]["password_change_required"] = False
 
     tmp_root = tmp_path_factory.mktemp("astrbot_root")
     tmp_db_path = tmp_root / "test_data_v3.db"
@@ -54,9 +66,7 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
 
 def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
     """Return the raw password (not hash) for the test config."""
-    from astrbot.core.utils.auth_password import DEFAULT_DASHBOARD_PASSWORD
-
-    return DEFAULT_DASHBOARD_PASSWORD
+    return TEST_DASHBOARD_PASSWORD
 
 
 @pytest_asyncio.fixture(scope="module")

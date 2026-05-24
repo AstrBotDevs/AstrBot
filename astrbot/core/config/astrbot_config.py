@@ -20,7 +20,7 @@ DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
 DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_DASHBOARD_RESET_PASSWORD"
 logger = logging.getLogger("astrbot")
 
-CORE_COMPUTER_RUNTIME_IDS = {"local", "sandbox", "none"}
+CORE_COMPUTER_RUNTIME_IDS = {"local", "local_sandboxed", "sandbox", "none"}
 
 
 def _is_config_number(value) -> bool:
@@ -116,20 +116,23 @@ class AstrBotConfig(dict):
             with open(config_path, "w", encoding="utf-8-sig") as f:
                 json.dump(default_config, f, indent=4, ensure_ascii=False)
                 object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
+            conf = copy.deepcopy(default_config)
+        else:
+            with open(config_path, encoding="utf-8-sig") as f:
+                conf_str = f.read()
+                # Handle UTF-8 BOM if present
+                if conf_str.startswith("\ufeff"):
+                    conf_str = conf_str[1:]
+                if not conf_str:
+                    raise OSError(f"文件 {config_path} 为空, 请手动处理...")
+                try:
+                    conf = json.loads(conf_str)
+                except Exception as e:
+                    logger.error(f"读取文件失败 {config_path}: {e}")
+                    raise e
 
-        with open(config_path, encoding="utf-8-sig") as f:
-            conf_str = f.read()
-            # Handle UTF-8 BOM if present
-            if conf_str.startswith("\ufeff"):
-                conf_str = conf_str[1:]
-            if not conf_str:
-                raise EnvironmentError(f'文件 {config_path} 为空, 请手动处理...')
-            try:
-                conf = json.loads(conf_str)
-            except Exception as e:
-                logger.error(f'读取文件失败 {config_path}: {e}')
-                raise e
         dashboard_conf = conf.get("dashboard")
+        dashboard_reset_requested = self._is_dashboard_password_reset_requested()
         legacy_dashboard_password_change_required = bool(
             isinstance(dashboard_conf, dict)
             and dashboard_conf.get("password_change_required", False),
@@ -140,6 +143,7 @@ class AstrBotConfig(dict):
                 "_dashboard_password_change_required_from_config",
                 True,
             )
+        config_migrated = self._migrate_legacy_config(conf)
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf, schema=schema)
         if (
@@ -158,8 +162,35 @@ class AstrBotConfig(dict):
                 os.environ[DASHBOARD_RESET_PASSWORD_ENV] = "0"
             has_new = True
         self.update(conf)
+        if config_migrated:
+            has_new = True
         if has_new:
             self.save_config()
+
+    def _migrate_legacy_config(self, conf: dict) -> bool:
+        changed = False
+        provider_settings = conf.get("provider_settings")
+        if isinstance(provider_settings, dict):
+            changed |= self._migrate_legacy_computer_runtime(provider_settings)
+        return changed
+
+    @staticmethod
+    def _migrate_legacy_computer_runtime(provider_settings: dict) -> bool:
+        runtime = provider_settings.get("computer_use_runtime")
+        if not isinstance(runtime, str) or runtime in CORE_COMPUTER_RUNTIME_IDS:
+            return False
+
+        sandbox_config = provider_settings.get("sandbox")
+        if not isinstance(sandbox_config, dict):
+            sandbox_config = {}
+            provider_settings["sandbox"] = sandbox_config
+
+        if not isinstance(sandbox_config.get("booter"), str) or not sandbox_config.get(
+            "booter",
+        ):
+            sandbox_config["booter"] = runtime
+        provider_settings["computer_use_runtime"] = "sandbox"
+        return True
 
     def _reset_generated_dashboard_password(self, conf: dict) -> None:
         generated_password = self._resolve_initial_dashboard_password()

@@ -4,6 +4,7 @@
 在一个会话中可以建立多个对话, 并且支持对话的切换和删除
 """
 
+import inspect
 import json
 from collections.abc import Awaitable, Callable
 from datetime import timezone
@@ -12,7 +13,6 @@ from astrbot.core import sp
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
-from astrbot.core.utils.datetime_utils import to_utc_timestamp
 
 
 class ConversationManager:
@@ -62,13 +62,19 @@ class ConversationManager:
         """将 ConversationV2 对象转换为 Conversation 对象"""
         # SQLite 读回的 datetime 可能丢失时区信息，需要显式标记为 UTC
         ca = conv_v2.created_at
-        if ca.tzinfo is None:
-            ca = ca.replace(tzinfo=timezone.utc)
+        if ca is None:
+            created_at = 0
+        else:
+            if ca.tzinfo is None:
+                ca = ca.replace(tzinfo=timezone.utc)
+            created_at = int(ca.timestamp())
         ua = conv_v2.updated_at
-        if ua.tzinfo is None:
-            ua = ua.replace(tzinfo=timezone.utc)
-        created_at = int(ca.timestamp())
-        updated_at = int(ua.timestamp())
+        if ua is None:
+            updated_at = 0
+        else:
+            if ua.tzinfo is None:
+                ua = ua.replace(tzinfo=timezone.utc)
+            updated_at = int(ua.timestamp())
         return Conversation(
             platform_id=conv_v2.platform_id,
             user_id=conv_v2.user_id,
@@ -90,6 +96,8 @@ class ConversationManager:
         title: str | None = None,
         persona_id: str | None = None,
         is_reset: bool = False,
+        user_name: str | None = None,
+        avatar: str | None = None,
     ) -> str:
         """新建对话,并将当前会话的对话转移到新对话.
 
@@ -107,14 +115,24 @@ class ConversationManager:
                 platform_id = parts[0]
         if not platform_id:
             platform_id = "unknown"
-        conv = await self.db.create_conversation(
-            user_id=unified_msg_origin,
-            platform_id=platform_id,
-            content=content,
-            title=title,
-            persona_id=persona_id,
-            is_reset=is_reset,
-        )
+        create_kwargs = {
+            "user_id": unified_msg_origin,
+            "platform_id": platform_id,
+            "content": content,
+            "title": title,
+            "persona_id": persona_id,
+        }
+        try:
+            params = inspect.signature(self.db.create_conversation).parameters
+        except (TypeError, ValueError):
+            params = {}
+        if not params or "is_reset" in params:
+            create_kwargs["is_reset"] = is_reset
+        if user_name is not None or (not params or "user_name" in params):
+            create_kwargs["user_name"] = user_name
+        if avatar is not None or (not params or "avatar" in params):
+            create_kwargs["avatar"] = avatar
+        conv = await self.db.create_conversation(**create_kwargs)
         self.session_conversations[unified_msg_origin] = conv.conversation_id
         await sp.session_put(unified_msg_origin, "sel_conv_id", conv.conversation_id)
         return conv.conversation_id

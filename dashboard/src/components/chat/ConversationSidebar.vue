@@ -454,16 +454,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import type { Session } from "@/composables/useSessions";
-import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
-import ProjectList from "@/components/chat/ProjectList.vue";
+import { computed, ref } from "vue";
 import type { Project } from "@/components/chat/ProjectList.vue";
-import { useLanguageSwitcher } from "@/i18n/composables";
+import ProjectList from "@/components/chat/ProjectList.vue";
+import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import type { Session } from "@/composables/useSessions";
+import { useI18n, useLanguageSwitcher, useModuleI18n } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
+import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 
 interface Props {
   sessions: Session[];
@@ -512,11 +511,7 @@ const showProviderConfigDialog = ref(false);
 const batchMode = ref(false);
 const batchSelected = ref<string[]>([]);
 
-const isAllSelected = computed(
-  () =>
-    props.sessions.length > 0 &&
-    batchSelected.value.length === props.sessions.length,
-);
+const isAllSelected = computed(() => props.sessions.length > 0 && batchSelected.value.length === props.sessions.length);
 
 function toggleBatchMode() {
   batchMode.value = !batchMode.value;
@@ -569,8 +564,7 @@ const sendShortcutOptions = [
 ];
 
 // Language switcher
-const { languageOptions, currentLanguage, switchLanguage, locale } =
-  useLanguageSwitcher();
+const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
 const languages = computed(() =>
   languageOptions.value.map((lang) => ({
     code: lang.value,
@@ -584,15 +578,11 @@ const changeLanguage = async (langCode: string) => {
 };
 
 const currentTransportLabel = computed(() => {
-  const found = transportOptions.find(
-    (opt) => opt.value === props.transportMode,
-  );
+  const found = transportOptions.find((opt) => opt.value === props.transportMode);
   return found?.label ?? "";
 });
 const currentSendShortcutLabel = computed(() => {
-  const found = sendShortcutOptions.find(
-    (opt) => opt.value === props.sendShortcut,
-  );
+  const found = sendShortcutOptions.find((opt) => opt.value === props.sendShortcut);
   return found?.label ?? "";
 });
 
@@ -606,15 +596,11 @@ if (savedCollapsedState !== null) {
 
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value;
-  localStorage.setItem(
-    "sidebarCollapsed",
-    JSON.stringify(sidebarCollapsed.value),
-  );
+  localStorage.setItem("sidebarCollapsed", JSON.stringify(sidebarCollapsed.value));
 }
 
 async function handleDeleteConversation(session: Session) {
-  const sessionTitle =
-    session.display_name || tm("conversation.newConversation");
+  const sessionTitle = session.display_name || tm("conversation.newConversation");
   const message = tm("conversation.confirmDelete", { name: sessionTitle });
   if (await askForConfirmation(message, confirmDialog)) {
     emit("deleteConversation", session.session_id);

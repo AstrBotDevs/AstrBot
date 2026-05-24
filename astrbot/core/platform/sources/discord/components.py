@@ -1,6 +1,6 @@
 import discord
 
-from astrbot.api.message_components import BaseMessageComponent, ComponentType
+from astrbot.api.message_components import BaseMessageComponent
 
 
 # Discord专用组件

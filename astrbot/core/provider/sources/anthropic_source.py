@@ -675,7 +675,10 @@ class ProviderAnthropic(Provider):
                         parsed_ok = False
 
                         try:
-                            if isinstance(tool_info.get("input_json"), str) and tool_info["input_json"]:
+                            if (
+                                isinstance(tool_info.get("input_json"), str)
+                                and tool_info["input_json"]
+                            ):
                                 tool_info["input"] = json.loads(tool_info["input_json"])
                             else:
                                 tool_info["input"] = {}
@@ -691,7 +694,9 @@ class ProviderAnthropic(Provider):
                             for suffix in ["}", "]", '"}', '"]']:
                                 if raw_json and not raw_json.rstrip().endswith(suffix):
                                     try:
-                                        tool_info["input"] = json.loads(raw_json + suffix)
+                                        tool_info["input"] = json.loads(
+                                            raw_json + suffix
+                                        )
                                         parsed_ok = True
                                         logger.info(
                                             f"工具调用参数 JSON 解析成功 (fallback，修复后缀 '{suffix}')"
@@ -701,11 +706,13 @@ class ProviderAnthropic(Provider):
                                         pass
 
                         if parsed_ok:
-                            final_tool_calls.append({
-                                "id": tool_info["id"],
-                                "name": tool_info["name"],
-                                "input": tool_info["input"],
-                            })
+                            final_tool_calls.append(
+                                {
+                                    "id": tool_info["id"],
+                                    "name": tool_info["name"],
+                                    "input": tool_info["input"],
+                                }
+                            )
                             yield LLMResponse(
                                 role="tool",
                                 completion_text="",

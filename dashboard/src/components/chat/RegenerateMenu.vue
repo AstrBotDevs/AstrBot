@@ -102,8 +102,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
 import axios from "axios";
+import { ref } from "vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useModuleI18n } from "@/i18n/composables";
 

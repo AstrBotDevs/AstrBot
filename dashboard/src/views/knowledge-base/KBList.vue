@@ -345,11 +345,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import axios from 'axios'
-import { useModuleI18n } from '@/i18n/composables'
-import KBPackageImportDialog from './components/KBPackageImportDialog.vue'
+import { onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
+import KBPackageImportDialog from "./components/KBPackageImportDialog.vue";
 
 interface KnowledgeBaseItem {
   kb_id: string;
@@ -392,10 +392,10 @@ const showEmbeddingWarning = ref(false);
 const pendingEmbeddingProvider = ref<string | null>(null);
 
 // 对话框
-const showCreateDialog = ref(false)
-const showEmojiPicker = ref(false)
-const showDeleteDialog = ref(false)
-const showPackageImportDialog = ref(false)
+const showCreateDialog = ref(false);
+const showEmojiPicker = ref(false);
+const showDeleteDialog = ref(false);
+const showPackageImportDialog = ref(false);
 
 // Snackbar 通知
 const snackbar = ref({
@@ -426,83 +426,19 @@ const formData = ref<{
 const emojiCategories = [
   {
     key: "books",
-    emojis: [
-      "📚",
-      "📖",
-      "📕",
-      "📗",
-      "📘",
-      "📙",
-      "📓",
-      "📔",
-      "📒",
-      "📑",
-      "🗂️",
-      "📂",
-      "📁",
-      "🗃️",
-      "🗄️",
-    ],
+    emojis: ["📚", "📖", "📕", "📗", "📘", "📙", "📓", "📔", "📒", "📑", "🗂️", "📂", "📁", "🗃️", "🗄️"],
   },
   {
     key: "emotions",
-    emojis: [
-      "😀",
-      "😃",
-      "😄",
-      "😁",
-      "😆",
-      "😅",
-      "🤣",
-      "😂",
-      "🙂",
-      "🙃",
-      "😉",
-      "😊",
-      "😇",
-      "🥰",
-      "😍",
-    ],
+    emojis: ["😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃", "😉", "😊", "😇", "🥰", "😍"],
   },
   {
     key: "objects",
-    emojis: [
-      "💡",
-      "🔬",
-      "🔭",
-      "🗿",
-      "🏆",
-      "🎯",
-      "🎓",
-      "🔑",
-      "🔒",
-      "🔓",
-      "🔔",
-      "🔕",
-      "🔨",
-      "🛠️",
-      "⚙️",
-    ],
+    emojis: ["💡", "🔬", "🔭", "🗿", "🏆", "🎯", "🎓", "🔑", "🔒", "🔓", "🔔", "🔕", "🔨", "🛠️", "⚙️"],
   },
   {
     key: "symbols",
-    emojis: [
-      "❤️",
-      "🧡",
-      "💛",
-      "💚",
-      "💙",
-      "💜",
-      "🖤",
-      "🤍",
-      "🤎",
-      "⭐",
-      "🌟",
-      "✨",
-      "💫",
-      "⚡",
-      "🔥",
-    ],
+    emojis: ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "⭐", "🌟", "✨", "💫", "⚡", "🔥"],
   },
 ];
 
@@ -536,12 +472,8 @@ const loadProviders = async () => {
       params: { provider_type: "embedding,rerank" },
     });
     if (response.data.status === "ok") {
-      embeddingProviders.value = response.data.data.filter(
-        (p: ProviderInfo) => p.provider_type === "embedding",
-      );
-      rerankProviders.value = response.data.data.filter(
-        (p: ProviderInfo) => p.provider_type === "rerank",
-      );
+      embeddingProviders.value = response.data.data.filter((p: ProviderInfo) => p.provider_type === "embedding");
+      rerankProviders.value = response.data.data.filter((p: ProviderInfo) => p.provider_type === "rerank");
     }
   } catch (error) {
     console.error("Failed to load providers:", error);
@@ -598,10 +530,7 @@ const deleteKB = async () => {
       showDeleteDialog.value = false;
       deleteTarget.value = null;
     } else {
-      showSnackbar(
-        response.data.message || t("messages.deleteFailed"),
-        "error",
-      );
+      showSnackbar(response.data.message || t("messages.deleteFailed"), "error");
     }
   } catch (error: unknown) {
     console.error("Failed to delete knowledge base:", error);
@@ -613,7 +542,7 @@ const deleteKB = async () => {
 
 // 提交表单
 const submitForm = async () => {
-  const { valid } = await formRef.value?.validate() ?? { valid: false };
+  const { valid } = (await formRef.value?.validate()) ?? { valid: false };
   if (!valid) return;
 
   saving.value = true;
@@ -637,28 +566,18 @@ const submitForm = async () => {
     }
 
     if (response.data.status === "ok") {
-      showSnackbar(
-        editingKB.value
-          ? t("messages.updateSuccess")
-          : t("messages.createSuccess"),
-      );
+      showSnackbar(editingKB.value ? t("messages.updateSuccess") : t("messages.createSuccess"));
       closeCreateDialog();
       await loadKnowledgeBases();
     } else {
       showSnackbar(
-        response.data.message ||
-          (editingKB.value
-            ? t("messages.updateFailed")
-            : t("messages.createFailed")),
+        response.data.message || (editingKB.value ? t("messages.updateFailed") : t("messages.createFailed")),
         "error",
       );
     }
   } catch (error: unknown) {
     console.error("Failed to save knowledge base:", error);
-    showSnackbar(
-      editingKB.value ? t("messages.updateFailed") : t("messages.createFailed"),
-      "error",
-    );
+    showSnackbar(editingKB.value ? t("messages.updateFailed") : t("messages.createFailed"), "error");
   } finally {
     saving.value = false;
   }
@@ -682,9 +601,9 @@ const closeCreateDialog = () => {
 };
 
 const handlePackageImported = async () => {
-  showSnackbar(t('messages.importPackageSuccess'))
-  await loadKnowledgeBases()
-}
+  showSnackbar(t("messages.importPackageSuccess"));
+  await loadKnowledgeBases();
+};
 
 // 选择 emoji
 const selectEmoji = (emoji: string) => {

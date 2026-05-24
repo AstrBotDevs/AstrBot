@@ -11,9 +11,7 @@ const props = defineProps<{
   loading?: boolean;
 }>();
 
-const emit = defineEmits<{
-  (e: "toggle-tool", tool: ToolItem): void;
-}>();
+const emit = defineEmits<(e: "toggle-tool", tool: ToolItem) => void>();
 
 const toolHeaders = computed(() => [
   { title: tmTool("functionTools.title"), key: "name", minWidth: "160px" },
@@ -44,8 +42,7 @@ const toolHeaders = computed(() => [
   },
 ]);
 
-const parameterEntries = (tool: ToolItem) =>
-  Object.entries(tool.parameters?.properties || {});
+const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.properties || {});
 const isInternal = (tool: ToolItem) => tool.source === "internal";
 </script>
 

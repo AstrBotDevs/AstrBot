@@ -215,6 +215,15 @@ class KookEvent(AstrMessageEvent):
 
         await super().send(message)
 
+    async def send_typing(self) -> None:
+        return None
+
+    async def stop_typing(self) -> None:
+        return None
+
+    async def _post_send(self) -> None:
+        return None
+
     async def send_streaming(
         self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
     ):

@@ -53,7 +53,7 @@ class EventBus:
             if self._deduplicator.is_duplicate(event):
                 continue
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
-            conf_id = conf_info["id"]
+            conf_id = conf_info.get("id", "")
             conf_name = conf_info.get("name") or conf_id
             with LogManager.contextualize(
                 umo=event.unified_msg_origin,

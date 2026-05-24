@@ -55,11 +55,11 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
 import axios from "axios";
+import { nextTick, ref, watch } from "vue";
+import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import type { ChatRecord, ChatThread, MessagePart } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
-import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 
 const props = defineProps<{
   modelValue: boolean;
@@ -161,10 +161,7 @@ async function send() {
       scrollToBottom();
     });
   } catch (error) {
-    appendPlain(
-      threadBotRecord,
-      `\n\n${String((error as Error)?.message || error)}`,
-    );
+    appendPlain(threadBotRecord, `\n\n${String((error as Error)?.message || error)}`);
     console.error("Failed to send thread message:", error);
   } finally {
     sending.value = false;
@@ -198,10 +195,7 @@ function normalizeParts(parts: unknown): MessagePart[] {
   });
 }
 
-async function readSseStream(
-  stream: ReadableStream<Uint8Array>,
-  onPayload: (payload: any) => void,
-) {
+async function readSseStream(stream: ReadableStream<Uint8Array>, onPayload: (payload: any) => void) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -228,10 +222,7 @@ async function readSseStream(
 }
 
 function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: any) {
-  const normalized =
-    payload?.ct === "chat"
-      ? { ...payload, type: payload.type || payload.t }
-      : payload;
+  const normalized = payload?.ct === "chat" ? { ...payload, type: payload.type || payload.t } : payload;
   const type = normalized?.type || normalized?.t;
   const chainType = normalized?.chain_type;
   const data = normalized?.data ?? "";
@@ -241,8 +232,7 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
   if (type === "user_message_saved") {
     userRecord.id = data?.id || userRecord.id;
     userRecord.created_at = data?.created_at || userRecord.created_at;
-    userRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
+    userRecord.llm_checkpoint_id = data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
     return;
   }
 
@@ -250,8 +240,7 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
     markMessageStarted(botRecord);
     botRecord.id = data?.id || botRecord.id;
     botRecord.created_at = data?.created_at || botRecord.created_at;
-    botRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
+    botRecord.llm_checkpoint_id = data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
     if (data?.refs) {
       botRecord.content.refs = data.refs;
     }
@@ -350,10 +339,7 @@ function markMessageStarted(record: ChatRecord) {
 }
 
 function hasPlainText(record: ChatRecord) {
-  return record.content.message.some(
-    (part) =>
-      part.type === "plain" && typeof part.text === "string" && part.text,
-  );
+  return record.content.message.some((part) => part.type === "plain" && typeof part.text === "string" && part.text);
 }
 
 function payloadText(value: unknown) {

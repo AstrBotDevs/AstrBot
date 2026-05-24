@@ -303,7 +303,7 @@ class ErrorAnalysisRoute(Route):
                 "Transfer-Encoding": "chunked",
             },
         )
-        response.timeout = None  # type: ignore[attr-defined]
+        response.timeout = None
         return response
 
     async def ask_stream(self) -> QuartResponse:
@@ -388,7 +388,7 @@ class ErrorAnalysisRoute(Route):
                 "Transfer-Encoding": "chunked",
             },
         )
-        response.timeout = None  # type: ignore[attr-defined]
+        response.timeout = None
         return response
 
     async def _watch_logs(self):
@@ -825,7 +825,7 @@ class ErrorAnalysisRoute(Route):
                 "Connection": "keep-alive",
             },
         )
-        response.timeout = None  # type: ignore[attr-defined]
+        response.timeout = None
         return response
 
     def _generate_record_id(self, ts: float) -> str:

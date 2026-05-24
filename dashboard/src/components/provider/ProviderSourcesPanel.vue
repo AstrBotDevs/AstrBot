@@ -182,11 +182,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits([
-  "add-provider-source",
-  "select-provider-source",
-  "delete-provider-source",
-]);
+const emit = defineEmits(["add-provider-source", "select-provider-source", "delete-provider-source"]);
 
 const { smAndDown } = useDisplay();
 const selectedId = computed(() => props.selectedProviderSource?.id || null);
@@ -206,9 +202,7 @@ const isActive = (source) => {
 };
 
 const onMobileSourceChange = (sourceId) => {
-  const matched = mobileSourceItems.value.find(
-    (item) => item.value === sourceId,
-  );
+  const matched = mobileSourceItems.value.find((item) => item.value === sourceId);
   if (matched?.source) {
     emitSelectSource(matched.source);
   }

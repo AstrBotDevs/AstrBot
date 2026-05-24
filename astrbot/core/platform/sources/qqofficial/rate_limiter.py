@@ -7,10 +7,9 @@
 - 超过 1 小时 message_id 失效，需要降级为主动消息
 """
 
-import time
 import threading
-from dataclasses import dataclass, field
-from typing import Dict, Optional
+import time
+from dataclasses import dataclass
 
 from astrbot import logger
 
@@ -34,9 +33,9 @@ class ReplyLimitResult:
     # 是否需要降级为主动消息
     should_fallback_to_proactive: bool
     # 降级原因
-    fallback_reason: Optional[str] = None
+    fallback_reason: str | None = None
     # 提示消息
-    message: Optional[str] = None
+    message: str | None = None
 
 
 class MessageReplyLimiter:
@@ -58,7 +57,7 @@ class MessageReplyLimiter:
     MAX_TRACKED_MESSAGES = 10000
 
     def __init__(self):
-        self._tracker: Dict[str, MessageReplyRecord] = {}
+        self._tracker: dict[str, MessageReplyRecord] = {}
         self._lock = threading.RLock()
 
     def check_limit(self, message_id: str) -> ReplyLimitResult:
@@ -147,7 +146,7 @@ class MessageReplyLimiter:
                     f"[QQOfficial] recordReply: {message_id}, count={record.count}"
                 )
 
-    def get_stats(self) -> Dict[str, int]:
+    def get_stats(self) -> dict[str, int]:
         """
         获取消息回复统计信息
 
@@ -161,7 +160,7 @@ class MessageReplyLimiter:
                 "total_replies": total_replies,
             }
 
-    def get_config(self) -> Dict[str, int]:
+    def get_config(self) -> dict[str, int]:
         """
         获取消息回复限制配置（供外部查询）
 
@@ -190,7 +189,7 @@ class MessageReplyLimiter:
 
 
 # 全局限流器实例
-_global_limiter: Optional[MessageReplyLimiter] = None
+_global_limiter: MessageReplyLimiter | None = None
 _global_limiter_lock = threading.RLock()
 
 

@@ -10,8 +10,13 @@ class VersionComparator:
 
         返回 1 表示 v1 > v2,返回 -1 表示 v1 < v2,返回 0 表示 v1 = v2｡
         """
-        v1 = v1.lower().replace("v", "")
-        v2 = v2.lower().replace("v", "")
+
+        def normalize(version: str) -> str:
+            version = version.lower().removeprefix("v")
+            return re.sub(r"(?<=\d)\.(dev|a|b|rc)(?=\d)", r"-\1", version)
+
+        v1 = normalize(v1)
+        v2 = normalize(v2)
 
         def split_version(version):
             match = re.match(

@@ -132,21 +132,21 @@ class ToolSearchIndex:
             A list of ``(FunctionTool, float)`` tuples sorted by descending
             score, filtered to ``score > 0``, limited to *max_results*.
         """
-        if self._bm25 is None:  # type: ignore[has-type]
+        if self._bm25 is None:
             return []
 
         query_tokens = _tokenize(query)
         if not query_tokens:
             return []
 
-        scores = self._bm25.get_scores(query_tokens)  # type: ignore[has-type]
+        scores = self._bm25.get_scores(query_tokens)
 
         # Filter score > 0, pair with tools, sort descending
         # CRITICAL: Do NOT use get_top_n() -- it returns zero-score items
         results: list[tuple[FunctionTool, float]] = []
         for i, score in enumerate(scores):
             if score > 0:
-                results.append((self._tools_list[i], float(score)))  # type: ignore[has-type]
+                results.append((self._tools_list[i], float(score)))
 
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:max_results]

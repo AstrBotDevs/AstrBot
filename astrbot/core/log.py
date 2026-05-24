@@ -2,16 +2,18 @@
 
 import asyncio
 import logging
+import os
 import sys
 import threading
 import time
 from asyncio import Queue
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from loguru import logger as _raw_loguru_logger
 
@@ -19,9 +21,10 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 CACHED_SIZE = 500
-_LOG_CONTEXT: ContextVar[dict[str, Any]] = ContextVar(
+_EMPTY_LOG_CONTEXT: Mapping[str, Any] = MappingProxyType({})
+_LOG_CONTEXT: ContextVar[Mapping[str, Any]] = ContextVar(
     "_astrbot_log_context",
-    default={},
+    default=_EMPTY_LOG_CONTEXT,
 )
 
 if TYPE_CHECKING:
@@ -411,6 +414,7 @@ class LogManager:
     _file_sink_id: int | None = None
     _trace_sink_id: int | None = None
     _reconfigure_lock = threading.RLock()
+    _queue_broker: LogBroker | None = None
     _NOISY_LOGGER_LEVELS: dict[str, int] = {
         "aiosqlite": logging.WARNING,
         "filelock": logging.WARNING,
@@ -509,7 +513,6 @@ class LogManager:
         setattr(handler, cls._QUEUE_HANDLER_FLAG, True)
         handler.setLevel(logging.DEBUG)
         handler.addFilter(_QueueAnsiColorFilter())
-        handler.addFilter(_SSLDebugFilter())
         handler.setFormatter(
             logging.Formatter(
                 "%(ansi_prefix)s[%(asctime)s.%(msecs)03d] %(plugin_tag)s [%(short_levelname)s]%(astrbot_version_tag)s "

@@ -50,29 +50,29 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useModuleI18n } from '@/i18n/composables'
+import { ref } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps({
   modelValue: {
     type: Boolean,
-    default: false
+    default: false,
   },
   recoveryCode: {
     type: String,
-    default: ''
-  }
-})
+    default: "",
+  },
+});
 
-const emit = defineEmits(['update:modelValue', 'close'])
-const { tm } = useModuleI18n('features/config-metadata')
+const emit = defineEmits(["update:modelValue", "close"]);
+const { tm } = useModuleI18n("features/config-metadata");
 
-const acknowledged = ref(false)
+const acknowledged = ref(false);
 
 function onClose() {
-  acknowledged.value = false
-  emit('close')
-  emit('update:modelValue', false)
+  acknowledged.value = false;
+  emit("close");
+  emit("update:modelValue", false);
 }
 </script>
 

@@ -14,7 +14,7 @@ class BaseMemoryModel(SQLModel, table=False):
 class MemoryChunk(BaseMemoryModel, table=True):
     """A chunk of memory stored in the system."""
 
-    __tablename__ = "memory_chunks"  # type: ignore
+    __tablename__ = "memory_chunks"
 
     id: int | None = Field(
         primary_key=True,

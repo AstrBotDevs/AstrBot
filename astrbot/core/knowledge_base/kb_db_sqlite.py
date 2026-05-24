@@ -170,7 +170,9 @@ class KBSQLiteDatabase:
         async with self.get_db() as session:
             try:
                 await session.execute(
-                    text("ALTER TABLE knowledge_bases ADD COLUMN enabled BOOLEAN NOT NULL DEFAULT 1")
+                    text(
+                        "ALTER TABLE knowledge_bases ADD COLUMN enabled BOOLEAN NOT NULL DEFAULT 1"
+                    )
                 )
                 await session.commit()
             except Exception as e:

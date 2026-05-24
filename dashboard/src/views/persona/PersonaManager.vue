@@ -614,37 +614,32 @@
 </template>
 
 <script lang="ts">
+import { mapActions, mapState } from "pinia";
 import { defineComponent } from "vue";
+import type { Folder, FolderTreeNode } from "@/components/folder/types";
+import PersonaForm from "@/components/shared/PersonaForm.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { usePersonaStore } from "@/stores/personaStore";
-import { mapState, mapActions } from "pinia";
-
-import FolderTree from "./FolderTree.vue";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
+import CreateFolderDialog from "./CreateFolderDialog.vue";
 import FolderBreadcrumb from "./FolderBreadcrumb.vue";
 import FolderCard from "./FolderCard.vue";
-import PersonaCard from "./PersonaCard.vue";
-import PersonaForm from "@/components/shared/PersonaForm.vue";
-import CreateFolderDialog from "./CreateFolderDialog.vue";
+import FolderTree from "./FolderTree.vue";
 import MoveToFolderDialog from "./MoveToFolderDialog.vue";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
-
-import type { Folder, FolderTreeNode } from "@/components/folder/types";
+import PersonaCard from "./PersonaCard.vue";
 
 interface Persona {
-    persona_id: string;
-    system_prompt: string;
-    custom_error_message?: string | null;
-    begin_dialogs?: string[] | null;
-    tools?: string[] | null;
-    skills?: string[] | null;
-    subagents?: string[] | null;
-    created_at?: string;
-    updated_at?: string;
-    folder_id?: string | null;
-    [key: string]: any;
+  persona_id: string;
+  system_prompt: string;
+  custom_error_message?: string | null;
+  begin_dialogs?: string[] | null;
+  tools?: string[] | null;
+  skills?: string[] | null;
+  subagents?: string[] | null;
+  created_at?: string;
+  updated_at?: string;
+  folder_id?: string | null;
+  [key: string]: any;
 }
 
 interface RenameFolderData {
@@ -708,13 +703,7 @@ export default defineComponent({
     };
   },
   computed: {
-    ...mapState(usePersonaStore, [
-      "folderTree",
-      "currentFolderId",
-      "currentFolders",
-      "currentPersonas",
-      "loading",
-    ]),
+    ...mapState(usePersonaStore, ["folderTree", "currentFolderId", "currentFolders", "currentPersonas", "loading"]),
     currentFolderName(): string | null {
       if (!this.currentFolderId) {
         return null; // 根目录，PersonaForm 会使用 tm('form.rootFolder')
@@ -759,167 +748,178 @@ export default defineComponent({
       immediate: true,
     },
     async mounted() {
-        await this.initialize();
+      await this.initialize();
     },
     methods: {
-        ...mapActions(usePersonaStore, ['loadFolderTree', 'navigateToFolder', 'updateFolder', 'deleteFolder', 'deletePersona', 'refreshCurrentFolder', 'movePersonaToFolder']),
+      ...mapActions(usePersonaStore, [
+        "loadFolderTree",
+        "navigateToFolder",
+        "updateFolder",
+        "deleteFolder",
+        "deletePersona",
+        "refreshCurrentFolder",
+        "movePersonaToFolder",
+      ]),
 
-        async initialize() {
-            await Promise.all([
-                this.loadFolderTree(),
-                this.navigateToFolder(null)
-            ]);
-        },
+      async initialize() {
+        await Promise.all([this.loadFolderTree(), this.navigateToFolder(null)]);
+      },
 
-        // Persona 操作
-        openCreatePersonaDialog() {
-            this.editingPersona = null;
-            this.showPersonaDialog = true;
-        },
+      // Persona 操作
+      openCreatePersonaDialog() {
+        this.editingPersona = null;
+        this.showPersonaDialog = true;
+      },
 
-        openCreateAdvancedPersonaDialog() {
-            this.$router.push('/persona/advanced');
-        },
+      openCreateAdvancedPersonaDialog() {
+        this.$router.push("/persona/advanced");
+      },
 
-        editPersona(persona: Persona) {
-            if (persona.is_advanced) {
-                this.$router.push(`/persona/advanced/${encodeURIComponent(persona.persona_id)}`);
-                return;
-            }
-            this.editingPersona = persona;
-            this.showPersonaDialog = true;
-        },
-
-        viewPersona(persona: Persona) {
-            this.viewingPersona = persona;
-            this.showViewDialog = true;
-        },
-
-        openEditFromViewDialog() {
-            if (!this.viewingPersona) return;
-            if (this.viewingPersona.is_advanced) {
-                this.showViewDialog = false;
-                this.$router.push(`/persona/advanced/${encodeURIComponent(this.viewingPersona.persona_id)}`);
-                return;
-            }
-            this.editingPersona = this.viewingPersona;
-            this.showViewDialog = false;
-            this.showPersonaDialog = true;
-        },
-
-        handlePersonaSaved(message: string) {
-            this.showSuccess(message);
-            this.refreshCurrentFolder();
-        },
-
-        handlePersonaDeleted(message: string) {
-            this.showSuccess(message);
-            this.refreshCurrentFolder();
-        },
-
-        async confirmDeletePersona(persona: Persona) {
-            if (
-                !(await askForConfirmationDialog(
-                    this.tm('messages.deleteConfirm', { id: persona.persona_id }),
-                    this.confirmDialog,
-                ))
-            ) {
-                return;
-            }
-
-            try {
-                await this.deletePersona(persona.persona_id);
-                this.showSuccess(this.tm('messages.deleteSuccess'));
-            } catch (error: any) {
-                this.showError(error.message || this.tm('messages.deleteError'));
-            }
-        },
-
-        openMovePersonaDialog(persona: Persona) {
-            this.moveDialogType = 'persona';
-            this.moveDialogItem = persona;
-            this.showMoveDialog = true;
-        },
-
-        async handlePersonaDropped({ persona_id, target_folder_id }: { persona_id: string; target_folder_id: string | null }) {
-            try {
-                await this.movePersonaToFolder(persona_id, target_folder_id);
-                this.showSuccess(this.tm('persona.messages.moveSuccess'));
-                // Navigate to the target folder
-                await this.navigateToFolder(target_folder_id);
-            } catch (error: any) {
-                this.showError(error.message || this.tm('persona.messages.moveError'));
-            }
-        },
-
-        // 文件夹操作
-        openRenameFolderDialog(folder: Folder) {
-            this.renameFolderData = { folder, name: folder.name };
-            this.showRenameFolderDialog = true;
-        },
-
-        async submitRenameFolder() {
-            if (!this.renameFolderData.name || !this.renameFolderData.folder) return;
-
-            this.renameLoading = true;
-            try {
-                await this.updateFolder({
-                    folder_id: this.renameFolderData.folder.folder_id,
-                    name: this.renameFolderData.name
-                });
-                this.showSuccess(this.tm('folder.messages.renameSuccess'));
-                this.showRenameFolderDialog = false;
-            } catch (error: any) {
-                this.showError(error.message || this.tm('folder.messages.renameError'));
-            } finally {
-                this.renameLoading = false;
-            }
-        },
-
-        openMoveFolderDialog(folder: Folder) {
-            this.moveDialogType = 'folder';
-            this.moveDialogItem = folder;
-            this.showMoveDialog = true;
-        },
-
-        confirmDeleteFolder(folder: Folder) {
-            this.deleteFolderData = folder;
-            this.showDeleteFolderDialog = true;
-        },
-
-        async submitDeleteFolder() {
-            if (!this.deleteFolderData) return;
-
-            this.deleteLoading = true;
-            try {
-                await this.deleteFolder(this.deleteFolderData.folder_id);
-                this.showSuccess(this.tm('folder.messages.deleteSuccess'));
-                this.showDeleteFolderDialog = false;
-            } catch (error: any) {
-                this.showError(error.message || this.tm('folder.messages.deleteError'));
-            } finally {
-                this.deleteLoading = false;
-            }
-        },
-
-        // 辅助方法
-        formatDate(dateString: string | undefined | null): string {
-            if (!dateString) return '';
-            return new Date(dateString).toLocaleString();
-        },
-
-        showSuccess(message: string) {
-            this.message = message;
-            this.messageType = 'success';
-            this.showMessage = true;
-        },
-
-        showError(message: string) {
-            this.message = message;
-            this.messageType = 'error';
-            this.showMessage = true;
+      editPersona(persona: Persona) {
+        if (persona.is_advanced) {
+          this.$router.push(`/persona/advanced/${encodeURIComponent(persona.persona_id)}`);
+          return;
         }
-    }
+        this.editingPersona = persona;
+        this.showPersonaDialog = true;
+      },
+
+      viewPersona(persona: Persona) {
+        this.viewingPersona = persona;
+        this.showViewDialog = true;
+      },
+
+      openEditFromViewDialog() {
+        if (!this.viewingPersona) return;
+        if (this.viewingPersona.is_advanced) {
+          this.showViewDialog = false;
+          this.$router.push(`/persona/advanced/${encodeURIComponent(this.viewingPersona.persona_id)}`);
+          return;
+        }
+        this.editingPersona = this.viewingPersona;
+        this.showViewDialog = false;
+        this.showPersonaDialog = true;
+      },
+
+      handlePersonaSaved(message: string) {
+        this.showSuccess(message);
+        this.refreshCurrentFolder();
+      },
+
+      handlePersonaDeleted(message: string) {
+        this.showSuccess(message);
+        this.refreshCurrentFolder();
+      },
+
+      async confirmDeletePersona(persona: Persona) {
+        if (
+          !(await askForConfirmationDialog(
+            this.tm("messages.deleteConfirm", { id: persona.persona_id }),
+            this.confirmDialog,
+          ))
+        ) {
+          return;
+        }
+
+        try {
+          await this.deletePersona(persona.persona_id);
+          this.showSuccess(this.tm("messages.deleteSuccess"));
+        } catch (error: any) {
+          this.showError(error.message || this.tm("messages.deleteError"));
+        }
+      },
+
+      openMovePersonaDialog(persona: Persona) {
+        this.moveDialogType = "persona";
+        this.moveDialogItem = persona;
+        this.showMoveDialog = true;
+      },
+
+      async handlePersonaDropped({
+        persona_id,
+        target_folder_id,
+      }: {
+        persona_id: string;
+        target_folder_id: string | null;
+      }) {
+        try {
+          await this.movePersonaToFolder(persona_id, target_folder_id);
+          this.showSuccess(this.tm("persona.messages.moveSuccess"));
+          // Navigate to the target folder
+          await this.navigateToFolder(target_folder_id);
+        } catch (error: any) {
+          this.showError(error.message || this.tm("persona.messages.moveError"));
+        }
+      },
+
+      // 文件夹操作
+      openRenameFolderDialog(folder: Folder) {
+        this.renameFolderData = { folder, name: folder.name };
+        this.showRenameFolderDialog = true;
+      },
+
+      async submitRenameFolder() {
+        if (!this.renameFolderData.name || !this.renameFolderData.folder) return;
+
+        this.renameLoading = true;
+        try {
+          await this.updateFolder({
+            folder_id: this.renameFolderData.folder.folder_id,
+            name: this.renameFolderData.name,
+          });
+          this.showSuccess(this.tm("folder.messages.renameSuccess"));
+          this.showRenameFolderDialog = false;
+        } catch (error: any) {
+          this.showError(error.message || this.tm("folder.messages.renameError"));
+        } finally {
+          this.renameLoading = false;
+        }
+      },
+
+      openMoveFolderDialog(folder: Folder) {
+        this.moveDialogType = "folder";
+        this.moveDialogItem = folder;
+        this.showMoveDialog = true;
+      },
+
+      confirmDeleteFolder(folder: Folder) {
+        this.deleteFolderData = folder;
+        this.showDeleteFolderDialog = true;
+      },
+
+      async submitDeleteFolder() {
+        if (!this.deleteFolderData) return;
+
+        this.deleteLoading = true;
+        try {
+          await this.deleteFolder(this.deleteFolderData.folder_id);
+          this.showSuccess(this.tm("folder.messages.deleteSuccess"));
+          this.showDeleteFolderDialog = false;
+        } catch (error: any) {
+          this.showError(error.message || this.tm("folder.messages.deleteError"));
+        } finally {
+          this.deleteLoading = false;
+        }
+      },
+
+      // 辅助方法
+      formatDate(dateString: string | undefined | null): string {
+        if (!dateString) return "";
+        return new Date(dateString).toLocaleString();
+      },
+
+      showSuccess(message: string) {
+        this.message = message;
+        this.messageType = "success";
+        this.showMessage = true;
+      },
+
+      showError(message: string) {
+        this.message = message;
+        this.messageType = "error";
+        this.showMessage = true;
+      },
+    },
   },
   async mounted() {
     await this.initialize();
@@ -1009,10 +1009,7 @@ export default defineComponent({
 
       this.cloneLoading = true;
       try {
-        await this.clonePersona(
-          this.cloningPersona.persona_id,
-          this.cloneNewPersonaId,
-        );
+        await this.clonePersona(this.cloningPersona.persona_id, this.cloneNewPersonaId);
         this.showSuccess(this.tm("cloneDialog.success"));
         this.showCloneDialog = false;
       } catch (error: any) {
@@ -1064,10 +1061,7 @@ export default defineComponent({
             if (i < dialogs.length) {
               if (typeof dialogs[i] === "string") {
                 userMessage = dialogs[i];
-              } else if (
-                typeof dialogs[i] === "object" &&
-                dialogs[i] !== null
-              ) {
+              } else if (typeof dialogs[i] === "object" && dialogs[i] !== null) {
                 userMessage = (dialogs[i] as any).user || "";
               }
             }
@@ -1077,10 +1071,7 @@ export default defineComponent({
             if (i + 1 < dialogs.length) {
               if (typeof dialogs[i + 1] === "string") {
                 assistantMessage = dialogs[i + 1];
-              } else if (
-                typeof dialogs[i + 1] === "object" &&
-                dialogs[i + 1] !== null
-              ) {
+              } else if (typeof dialogs[i + 1] === "object" && dialogs[i + 1] !== null) {
                 assistantMessage = (dialogs[i + 1] as any).assistant || "";
               }
             }
@@ -1092,7 +1083,7 @@ export default defineComponent({
         }
 
         // 清理文件名中的特殊字符
-        const safeFileName = persona.persona_id.replace(/[\/\\:*?"<>|]/g, "_");
+        const safeFileName = persona.persona_id.replace(/[/\\:*?"<>|]/g, "_");
 
         // 创建 JSON 文件并下载
         const jsonStr = JSON.stringify(exportData, null, 2);
@@ -1149,10 +1140,7 @@ export default defineComponent({
             };
 
             // 转换对话对
-            if (
-              firstPersona.begin_dialogs &&
-              Array.isArray(firstPersona.begin_dialogs)
-            ) {
+            if (firstPersona.begin_dialogs && Array.isArray(firstPersona.begin_dialogs)) {
               for (const dialog of firstPersona.begin_dialogs) {
                 if (dialog.user) {
                   importData.begin_dialogs.push(dialog.user);
@@ -1170,13 +1158,9 @@ export default defineComponent({
           }
 
           // 检查ID是否已存在
-          const existingPersonas = this.currentPersonas.map(
-            (p) => p.persona_id,
-          );
+          const existingPersonas = this.currentPersonas.map((p) => p.persona_id);
           if (existingPersonas.includes(importData.persona_id)) {
-            throw new Error(
-              this.tm("messages.importExists", { id: importData.persona_id }),
-            );
+            throw new Error(this.tm("messages.importExists", { id: importData.persona_id }));
           }
 
           // 执行导入

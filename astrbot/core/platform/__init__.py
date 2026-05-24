@@ -22,4 +22,6 @@ __all__ = [
     "Platform",
     "PlatformMetadata",
     "RawPlatformEvent",
+    "VALID_MESSAGE_MEMBER_ROLES",
+    "normalize_message_member_role",
 ]

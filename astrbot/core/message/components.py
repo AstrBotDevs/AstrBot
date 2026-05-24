@@ -29,7 +29,10 @@ import sys
 import uuid
 from enum import Enum
 from pathlib import Path
+from typing import Any
 from urllib.parse import unquote, urlparse
+
+import anyio
 
 if sys.version_info >= (3, 14):
     from pydantic import BaseModel
@@ -38,7 +41,7 @@ else:
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file, download_image_by_url
+from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
 
 
 async def _file_to_base64_async(file_path: str) -> str:
@@ -72,6 +75,7 @@ class ComponentType(str, Enum):
     Location = "Location"  # TODO
     Music = "Music"
     Json = "Json"
+    WechatEmoji = "WechatEmoji"
     # Discord-specific component types
     DiscordEmbed = "DiscordEmbed"
     DiscordButton = "DiscordButton"
@@ -153,8 +157,9 @@ class Record(BaseMessageComponent):
 
     @staticmethod
     def fromFileSystem(path, **_):
-        file_url = f"file:///{os.path.abspath(path)}"
-        return Record(file=file_url, url=file_url, path=path, **_)
+        path_str = os.fspath(path)
+        file_url = f"file:///{os.path.abspath(path_str)}"
+        return Record(file=file_url, url=file_url, path=path_str, **_)
 
     @staticmethod
     def fromURL(url: str, **_):
@@ -180,12 +185,12 @@ class Record(BaseMessageComponent):
 
     async def _download_audio_url(self, url: str) -> str:
         temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
         file_path = (
             temp_dir / f"recordseg_{uuid.uuid4().hex}{self._get_audio_suffix(url)}"
         )
         await download_file(url, str(file_path))
-        if file_path.exists():
+        if await asyncio.to_thread(file_path.exists):
             return str(file_path.resolve())
         raise RuntimeError(f"download failed: {url}")
 
@@ -212,8 +217,8 @@ class Record(BaseMessageComponent):
             return await self._download_audio_url(url)
         if url.startswith("base64://"):
             return self._write_base64_audio_to_file(url)
-        if os.path.exists(url):
-            return os.path.abspath(url)
+        if await asyncio.to_thread(os.path.exists, url):
+            return await asyncio.to_thread(os.path.abspath, url)
         raise FileNotFoundError(f"not a valid file: {url}")
 
     async def convert_to_base64(self) -> str:
@@ -232,7 +237,7 @@ class Record(BaseMessageComponent):
             bs64_data = file_to_base64(file_path)
         elif url.startswith("base64://"):
             bs64_data = url
-        elif os.path.exists(url):
+        elif await asyncio.to_thread(os.path.exists, url):
             bs64_data = file_to_base64(url)
         else:
             raise FileNotFoundError(f"not a valid file: {url}")
@@ -278,7 +283,8 @@ class Video(BaseMessageComponent):
 
     @staticmethod
     def fromFileSystem(path, **_):
-        return Video(file=f"file:///{os.path.abspath(path)}", path=path, **_)
+        path_str = os.fspath(path)
+        return Video(file=f"file:///{os.path.abspath(path_str)}", path=path_str, **_)
 
     @staticmethod
     def fromURL(url: str, **_):
@@ -492,7 +498,8 @@ class Image(BaseMessageComponent):
 
     @staticmethod
     def fromFileSystem(path, **_):
-        return Image(file=f"file:///{os.path.abspath(path)}", path=path, **_)
+        path_str = os.fspath(path)
+        return Image(file=f"file:///{os.path.abspath(path_str)}", path=path_str, **_)
 
     @staticmethod
     def fromBase64(base64: str, **_):
@@ -590,7 +597,7 @@ class Reply(BaseMessageComponent):
     """所引用的消息 ID"""
     chain: list["BaseMessageComponent"] | None = []
     """被引用的消息段列表"""
-    sender_id: int | None | str = 0
+    sender_id: str | int | None = 0
     """被引用的消息对应的发送者的 ID"""
     sender_nickname: str | None = ""
     """被引用的消息对应的发送者的昵称"""
@@ -786,6 +793,34 @@ class Unknown(BaseMessageComponent):
         return not bool(self.text and self.text.strip())
 
 
+class WechatEmoji(BaseMessageComponent):
+    type: ComponentType = ComponentType.WechatEmoji
+    md5: str | None = ""
+    cdnurl: str | None = ""
+    len_: int | str | None = None
+
+    def __init__(self, **_) -> None:
+        if "len" in _:
+            _["len_"] = _.pop("len")
+        super().__init__(**_)
+
+    def toDict(self) -> dict:
+        data: dict[str, int | str] = {}
+        if self.md5:
+            data["md5"] = self.md5
+        if self.cdnurl:
+            data["cdnurl"] = self.cdnurl
+        if self.len_ is not None:
+            data["len"] = self.len_
+        return {"type": "wechat_emoji", "data": data}
+
+    async def to_dict(self) -> dict:
+        return self.toDict()
+
+    def empty(self) -> bool:
+        return not bool(self.md5 or self.cdnurl)
+
+
 class File(BaseMessageComponent):
     """文件消息段"""
 
@@ -978,5 +1013,7 @@ ComponentTypes = {
     "node": Node,
     "nodes": Nodes,
     "json": Json,
+    "wechat_emoji": WechatEmoji,
+    "wechatemoji": WechatEmoji,
     "unknown": Unknown,
 }

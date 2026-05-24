@@ -82,14 +82,10 @@ def _get_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
                 continue
             name = canonicalize_distribution_name(req.name)
             if name in installed:
-                ver = installed[name]
-                try:
-                    next_major = int(str(ver).split(".")[0]) + 1
-                except (ValueError, TypeError):
-                    constraints.append(f"{name}=={ver}")
+                if req.specifier:
+                    constraints.append(f"{name}{req.specifier}")
                 else:
-                    # Allow compatible upgrades but block next major version
-                    constraints.append(f"{name}>={ver},<{next_major}")
+                    constraints.append(f"{name}>={installed[name]}")
         except Exception:
             continue
 

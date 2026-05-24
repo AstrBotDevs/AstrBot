@@ -84,74 +84,82 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, computed, watch } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
+import { computed, defineComponent, ref, watch } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
 
 interface MoodTag {
-    name: string;
-    weight: number;
+  name: string;
+  weight: number;
 }
 
 interface PersonalityConfig {
-    traits: string;
-    expression_style: string;
-    recognition_rules: string;
-    mood_tags: MoodTag[];
+  traits: string;
+  expression_style: string;
+  recognition_rules: string;
+  mood_tags: MoodTag[];
 }
 
 export default defineComponent({
-    name: 'PersonalitySection',
-    props: {
-        modelValue: {
-            type: Object as () => PersonalityConfig,
-            default: () => ({
-                traits: '',
-                expression_style: '',
-                recognition_rules: '',
-                mood_tags: []
-            })
-        }
+  name: "PersonalitySection",
+  props: {
+    modelValue: {
+      type: Object as () => PersonalityConfig,
+      default: () => ({
+        traits: "",
+        expression_style: "",
+        recognition_rules: "",
+        mood_tags: [],
+      }),
     },
-    emits: ['update:modelValue'],
-    setup(props, { emit }) {
-        const { tm } = useModuleI18n('features/persona');
+  },
+  emits: ["update:modelValue"],
+  setup(props, { emit }) {
+    const { tm } = useModuleI18n("features/persona");
 
-        const localConfig = ref<PersonalityConfig>({
-            ...props.modelValue,
-            mood_tags: [...(props.modelValue.mood_tags || [])]
-        });
+    const localConfig = ref<PersonalityConfig>({
+      ...props.modelValue,
+      mood_tags: [...(props.modelValue.mood_tags || [])],
+    });
 
-        // 监听输入变化
-        watch(localConfig, (newVal) => {
-            emit('update:modelValue', newVal);
-        }, { deep: true });
+    // 监听输入变化
+    watch(
+      localConfig,
+      (newVal) => {
+        emit("update:modelValue", newVal);
+      },
+      { deep: true },
+    );
 
-        // 监听props变化（仅在外部重置时同步，避免递归）
-        watch(() => props.modelValue, (newVal) => {
-            if (JSON.stringify(newVal) !== JSON.stringify(localConfig.value)) {
-                localConfig.value = { ...newVal, mood_tags: [...(newVal.mood_tags || [])] };
-            }
-        }, { deep: true });
+    // 监听props变化（仅在外部重置时同步，避免递归）
+    watch(
+      () => props.modelValue,
+      (newVal) => {
+        if (JSON.stringify(newVal) !== JSON.stringify(localConfig.value)) {
+          localConfig.value = { ...newVal, mood_tags: [...(newVal.mood_tags || [])] };
+        }
+      },
+      { deep: true },
+    );
 
-        const totalWeight = computed(() => {
-            return localConfig.value.mood_tags.reduce((sum, tag) => sum + (tag.weight || 0), 0);
-        });
+    const totalWeight = computed(() => {
+      return localConfig.value.mood_tags.reduce((sum, tag) => sum + (tag.weight || 0), 0);
+    });
 
-        const addMoodTag = () => {
-            localConfig.value.mood_tags.push({ name: '', weight: 0 });
-        };
+    const addMoodTag = () => {
+      localConfig.value.mood_tags.push({ name: "", weight: 0 });
+    };
 
-        const removeMoodTag = (index: number) => {
-            localConfig.value.mood_tags.splice(index, 1);
-        };
+    const removeMoodTag = (index: number) => {
+      localConfig.value.mood_tags.splice(index, 1);
+    };
 
-        return {
-            tm,
-            localConfig,
-            totalWeight,
-            addMoodTag,
-            removeMoodTag
-        };
-    }
+    return {
+      tm,
+      localConfig,
+      totalWeight,
+      addMoodTag,
+      removeMoodTag,
+    };
+  },
 });
 </script>

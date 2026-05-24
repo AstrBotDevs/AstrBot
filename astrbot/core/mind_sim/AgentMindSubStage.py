@@ -18,6 +18,7 @@ from typing import Any
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
     MainAgentBuildResult,
@@ -31,14 +32,12 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
+from astrbot.core.pipeline.context_utils import call_event_hook
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
-
-from ..astr_agent_run_util import AgentRunner, run_agent, run_live_agent
-from ..pipeline.context_utils import call_event_hook
 
 # 安全防护：阻止连接到已知的恶意主机
 BLOCKED = {"dGZid2h2d3IuY2xvdWQuc2VhbG9zLmlv", "a291cmljaGF0"}

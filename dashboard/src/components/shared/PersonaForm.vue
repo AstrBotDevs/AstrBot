@@ -700,12 +700,9 @@
 </template>
 
 <script>
-import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
+import axios from "@/utils/request";
 
 export default {
   name: "PersonaForm",
@@ -759,16 +756,12 @@ export default {
       },
       personaIdRules: [
         (v) => !!v || this.tm("validation.required"),
-        (v) =>
-          (v && v.length >= 1) || this.tm("validation.minLength", { min: 1 }),
-        (v) =>
-          !this.existingPersonaIds.includes(v) ||
-          this.tm("validation.personaIdExists"),
+        (v) => (v && v.length >= 1) || this.tm("validation.minLength", { min: 1 }),
+        (v) => !this.existingPersonaIds.includes(v) || this.tm("validation.personaIdExists"),
       ],
       systemPromptRules: [
         (v) => !!v || this.tm("validation.required"),
-        (v) =>
-          (v && v.length >= 10) || this.tm("validation.minLength", { min: 10 }),
+        (v) => (v && v.length >= 10) || this.tm("validation.minLength", { min: 10 }),
       ],
       toolSearch: "",
       skillSearch: "",
@@ -795,10 +788,8 @@ export default {
       return this.availableTools.filter(
         (tool) =>
           tool.name.toLowerCase().includes(search) ||
-          (tool.description &&
-            tool.description.toLowerCase().includes(search)) ||
-          (tool.mcp_server_name &&
-            tool.mcp_server_name.toLowerCase().includes(search)),
+          (tool.description && tool.description.toLowerCase().includes(search)) ||
+          (tool.mcp_server_name && tool.mcp_server_name.toLowerCase().includes(search)),
       );
     },
     filteredSkills() {
@@ -809,8 +800,7 @@ export default {
       return this.availableSkills.filter(
         (skill) =>
           skill.name.toLowerCase().includes(search) ||
-          (skill.description &&
-            skill.description.toLowerCase().includes(search)),
+          (skill.description && skill.description.toLowerCase().includes(search)),
       );
     },
     filteredSubagents() {
@@ -821,8 +811,7 @@ export default {
       return this.availableSubagents.filter(
         (subagent) =>
           subagent.name.toLowerCase().includes(search) ||
-          (subagent.public_description &&
-            subagent.public_description.toLowerCase().includes(search)),
+          (subagent.public_description && subagent.public_description.toLowerCase().includes(search)),
       );
     },
     folderDisplayName() {
@@ -926,8 +915,7 @@ export default {
         begin_dialogs: [...(persona.begin_dialogs || [])],
         tools: persona.tools === null ? null : [...(persona.tools || [])],
         skills: persona.skills === null ? null : [...(persona.skills || [])],
-        subagents:
-          persona.subagents === null ? null : [...(persona.subagents || [])],
+        subagents: persona.subagents === null ? null : [...(persona.subagents || [])],
         folder_id: persona.folder_id,
       };
       // 根据 tools 的值设置 toolSelectValue
@@ -938,9 +926,7 @@ export default {
     },
 
     getDefaultExpandedPanels() {
-      return this.$vuetify.display.smAndDown
-        ? []
-        : ["tools", "skills", "subagents", "dialogs"];
+      return this.$vuetify.display.smAndDown ? [] : ["tools", "skills", "subagents", "dialogs"];
     },
 
     closeDialog() {
@@ -953,16 +939,10 @@ export default {
         if (response.data.status === "ok") {
           this.mcpServers = response.data.data || [];
         } else {
-          this.$emit(
-            "error",
-            response.data.message || "Failed to load MCP servers",
-          );
+          this.$emit("error", response.data.message || "Failed to load MCP servers");
         }
       } catch (error) {
-        this.$emit(
-          "error",
-          error.response?.data?.message || "Failed to load MCP servers",
-        );
+        this.$emit("error", error.response?.data?.message || "Failed to load MCP servers");
         this.mcpServers = [];
       }
     },
@@ -977,10 +957,7 @@ export default {
           this.$emit("error", response.data.message || "Failed to load tools");
         }
       } catch (error) {
-        this.$emit(
-          "error",
-          error.response?.data?.message || "Failed to load tools",
-        );
+        this.$emit("error", error.response?.data?.message || "Failed to load tools");
         this.availableTools = [];
       } finally {
         this.loadingTools = false;
@@ -994,23 +971,16 @@ export default {
         if (response.data.status === "ok") {
           const payload = response.data.data || [];
           if (Array.isArray(payload)) {
-            this.availableSkills = payload.filter(
-              (skill) => skill.active !== false,
-            );
+            this.availableSkills = payload.filter((skill) => skill.active !== false);
           } else {
             const skills = payload.skills || [];
-            this.availableSkills = skills.filter(
-              (skill) => skill.active !== false,
-            );
+            this.availableSkills = skills.filter((skill) => skill.active !== false);
           }
         } else {
           this.$emit("error", response.data.message || "Failed to load skills");
         }
       } catch (error) {
-        this.$emit(
-          "error",
-          error.response?.data?.message || "Failed to load skills",
-        );
+        this.$emit("error", error.response?.data?.message || "Failed to load skills");
         this.availableSkills = [];
       } finally {
         this.loadingSkills = false;
@@ -1024,20 +994,12 @@ export default {
         if (response.data.status === "ok") {
           const payload = response.data.data || {};
           const subagents = payload.agents || [];
-          this.availableSubagents = subagents.filter(
-            (subagent) => subagent.enabled !== false,
-          );
+          this.availableSubagents = subagents.filter((subagent) => subagent.enabled !== false);
         } else {
-          this.$emit(
-            "error",
-            response.data.message || "Failed to load subagents",
-          );
+          this.$emit("error", response.data.message || "Failed to load subagents");
         }
       } catch (error) {
-        this.$emit(
-          "error",
-          error.response?.data?.message || "Failed to load subagents",
-        );
+        this.$emit("error", error.response?.data?.message || "Failed to load subagents");
         this.availableSubagents = [];
       } finally {
         this.loadingSubagents = false;
@@ -1048,9 +1010,7 @@ export default {
       try {
         const response = await axios.get("/api/persona/list");
         if (response.data.status === "ok") {
-          this.existingPersonaIds = (response.data.data || []).map(
-            (p) => p.persona_id,
-          );
+          this.existingPersonaIds = (response.data.data || []).map((p) => p.persona_id);
         }
       } catch (error) {
         // 加载失败不影响表单使用，只是无法进行前端重名校验
@@ -1064,18 +1024,9 @@ export default {
       // 验证预设对话不能为空
       if (this.personaForm.begin_dialogs.length > 0) {
         for (let i = 0; i < this.personaForm.begin_dialogs.length; i++) {
-          if (
-            !this.personaForm.begin_dialogs[i] ||
-            this.personaForm.begin_dialogs[i].trim() === ""
-          ) {
-            const dialogType =
-              i % 2 === 0
-                ? this.tm("form.userMessage")
-                : this.tm("form.assistantMessage");
-            this.$emit(
-              "error",
-              this.tm("validation.dialogRequired", { type: dialogType }),
-            );
+          if (!this.personaForm.begin_dialogs[i] || this.personaForm.begin_dialogs[i].trim() === "") {
+            const dialogType = i % 2 === 0 ? this.tm("form.userMessage") : this.tm("form.assistantMessage");
+            this.$emit("error", this.tm("validation.dialogRequired", { type: dialogType }));
             return;
           }
         }
@@ -1083,9 +1034,7 @@ export default {
 
       this.saving = true;
       try {
-        const url = this.editingPersona
-          ? "/api/persona/update"
-          : "/api/persona/create";
+        const url = this.editingPersona ? "/api/persona/update" : "/api/persona/create";
 
         // 白名单过滤字段
         const allowedFields = [
@@ -1100,7 +1049,7 @@ export default {
         ];
         const filteredData = {};
         allowedFields.forEach((field) => {
-          if (this.personaForm.hasOwnProperty(field)) {
+          if (Object.hasOwn(this.personaForm, field)) {
             filteredData[field] = this.personaForm[field];
           }
         });
@@ -1108,22 +1057,13 @@ export default {
         const response = await axios.post(url, filteredData);
 
         if (response.data.status === "ok") {
-          this.$emit(
-            "saved",
-            response.data.message || this.tm("messages.saveSuccess"),
-          );
+          this.$emit("saved", response.data.message || this.tm("messages.saveSuccess"));
           this.closeDialog();
         } else {
-          this.$emit(
-            "error",
-            response.data.message || this.tm("messages.saveError"),
-          );
+          this.$emit("error", response.data.message || this.tm("messages.saveError"));
         }
       } catch (error) {
-        this.$emit(
-          "error",
-          error.response?.data?.message || this.tm("messages.saveError"),
-        );
+        this.$emit("error", error.response?.data?.message || this.tm("messages.saveError"));
       }
       this.saving = false;
     },
@@ -1149,22 +1089,13 @@ export default {
         });
 
         if (response.data.status === "ok") {
-          this.$emit(
-            "deleted",
-            response.data.message || this.tm("messages.deleteSuccess"),
-          );
+          this.$emit("deleted", response.data.message || this.tm("messages.deleteSuccess"));
           this.closeDialog();
         } else {
-          this.$emit(
-            "error",
-            response.data.message || this.tm("messages.deleteError"),
-          );
+          this.$emit("error", response.data.message || this.tm("messages.deleteError"));
         }
       } catch (error) {
-        this.$emit(
-          "error",
-          error.response?.data?.message || this.tm("messages.deleteError"),
-        );
+        this.$emit("error", error.response?.data?.message || this.tm("messages.deleteError"));
       } finally {
         this.saving = false;
       }
@@ -1180,10 +1111,7 @@ export default {
 
     removeDialog(index) {
       // 如果是偶数索引（用户消息），删除用户消息和对应的助手消息
-      if (
-        index % 2 === 0 &&
-        index + 1 < this.personaForm.begin_dialogs.length
-      ) {
+      if (index % 2 === 0 && index + 1 < this.personaForm.begin_dialogs.length) {
         this.personaForm.begin_dialogs.splice(index, 2);
       }
       // 如果是奇数索引（助手消息），删除助手消息和对应的用户消息
@@ -1213,15 +1141,11 @@ export default {
 
       // 检查是否所有服务器的工具都已选中
       const serverTools = server.tools;
-      const allSelected = serverTools.every((toolName) =>
-        this.personaForm.tools.includes(toolName),
-      );
+      const allSelected = serverTools.every((toolName) => this.personaForm.tools.includes(toolName));
 
       if (allSelected) {
         // 移除所有服务器工具
-        this.personaForm.tools = this.personaForm.tools.filter(
-          (toolName) => !serverTools.includes(toolName),
-        );
+        this.personaForm.tools = this.personaForm.tools.filter((toolName) => !serverTools.includes(toolName));
       } else {
         // 添加所有服务器工具
         serverTools.forEach((toolName) => {
@@ -1237,9 +1161,7 @@ export default {
       if (this.personaForm.tools === null) {
         // 如果是全选状态，点击某个工具表示要取消选择该工具
         // 所以创建一个包含所有其他工具的数组
-        this.personaForm.tools = this.availableTools
-          .map((tool) => tool.name)
-          .filter((name) => name !== toolName);
+        this.personaForm.tools = this.availableTools.map((tool) => tool.name).filter((name) => name !== toolName);
         this.toolSelectValue = "1"; // 切换到指定工具模式
       } else if (Array.isArray(this.personaForm.tools)) {
         const index = this.personaForm.tools.indexOf(toolName);
@@ -1261,9 +1183,7 @@ export default {
       // 如果当前是全选状态，需要先转换为具体的工具列表
       if (this.personaForm.tools === null) {
         // 创建一个包含所有工具的数组，然后移除指定工具
-        this.personaForm.tools = this.availableTools
-          .map((tool) => tool.name)
-          .filter((name) => name !== toolName);
+        this.personaForm.tools = this.availableTools.map((tool) => tool.name).filter((name) => name !== toolName);
         this.toolSelectValue = "1"; // 切换到指定工具模式
       } else if (Array.isArray(this.personaForm.tools)) {
         const index = this.personaForm.tools.indexOf(toolName);
@@ -1275,9 +1195,7 @@ export default {
 
     toggleSkill(skillName) {
       if (this.personaForm.skills === null) {
-        this.personaForm.skills = this.availableSkills
-          .map((skill) => skill.name)
-          .filter((name) => name !== skillName);
+        this.personaForm.skills = this.availableSkills.map((skill) => skill.name).filter((name) => name !== skillName);
         this.skillSelectValue = "1";
       } else if (Array.isArray(this.personaForm.skills)) {
         const index = this.personaForm.skills.indexOf(skillName);
@@ -1294,9 +1212,7 @@ export default {
 
     removeSkill(skillName) {
       if (this.personaForm.skills === null) {
-        this.personaForm.skills = this.availableSkills
-          .map((skill) => skill.name)
-          .filter((name) => name !== skillName);
+        this.personaForm.skills = this.availableSkills.map((skill) => skill.name).filter((name) => name !== skillName);
         this.skillSelectValue = "1";
       } else if (Array.isArray(this.personaForm.skills)) {
         const index = this.personaForm.skills.indexOf(skillName);
@@ -1341,22 +1257,14 @@ export default {
 
     truncateText(text, maxLength) {
       if (!text) return "";
-      return text.length > maxLength
-        ? text.substring(0, maxLength) + "..."
-        : text;
+      return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
     },
 
     getDialogRules(index) {
-      const dialogType =
-        index % 2 === 0
-          ? this.tm("form.userMessage")
-          : this.tm("form.assistantMessage");
+      const dialogType = index % 2 === 0 ? this.tm("form.userMessage") : this.tm("form.assistantMessage");
       return [
-        (v) =>
-          !!v || this.tm("validation.dialogRequired", { type: dialogType }),
-        (v) =>
-          (v && v.trim().length > 0) ||
-          this.tm("validation.dialogRequired", { type: dialogType }),
+        (v) => !!v || this.tm("validation.dialogRequired", { type: dialogType }),
+        (v) => (v && v.trim().length > 0) || this.tm("validation.dialogRequired", { type: dialogType }),
       ];
     },
 
@@ -1365,30 +1273,21 @@ export default {
       if (this.personaForm.tools === null) {
         return true;
       }
-      return (
-        Array.isArray(this.personaForm.tools) &&
-        this.personaForm.tools.includes(toolName)
-      );
+      return Array.isArray(this.personaForm.tools) && this.personaForm.tools.includes(toolName);
     },
 
     isSkillSelected(skillName) {
       if (this.personaForm.skills === null) {
         return true;
       }
-      return (
-        Array.isArray(this.personaForm.skills) &&
-        this.personaForm.skills.includes(skillName)
-      );
+      return Array.isArray(this.personaForm.skills) && this.personaForm.skills.includes(skillName);
     },
 
     isSubagentSelected(subagentName) {
       if (this.personaForm.subagents === null) {
         return true;
       }
-      return (
-        Array.isArray(this.personaForm.subagents) &&
-        this.personaForm.subagents.includes(subagentName)
-      );
+      return Array.isArray(this.personaForm.subagents) && this.personaForm.subagents.includes(subagentName);
     },
 
     isServerSelected(server) {
@@ -1402,9 +1301,7 @@ export default {
       // 检查服务器的所有工具是否都已选中
       return (
         Array.isArray(this.personaForm.tools) &&
-        server.tools.every((toolName) =>
-          this.personaForm.tools.includes(toolName),
-        )
+        server.tools.every((toolName) => this.personaForm.tools.includes(toolName))
       );
     },
   },

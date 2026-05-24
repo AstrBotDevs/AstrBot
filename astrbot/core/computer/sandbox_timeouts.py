@@ -46,7 +46,7 @@ def lease_is_active(
 
 
 def lease_expires_at_from_timeout(
-    timeout: float | int | None,
+    timeout: float | None,
     *,
     now: float | None = None,
 ) -> float | None:
@@ -60,7 +60,7 @@ def lease_expires_at_from_timeout(
 
 
 def expires_at_from_timeout(
-    timeout: float | int | None,
+    timeout: float | None,
     *,
     now: float | None = None,
 ) -> float | None:
@@ -70,7 +70,7 @@ def expires_at_from_timeout(
 def idle_cleanup_at_from_record(
     *,
     last_used_at: float | None,
-    idle_timeout: float | int | None,
+    idle_timeout: float | None,
     now: float | None = None,
 ) -> float | None:
     if last_used_at is None:

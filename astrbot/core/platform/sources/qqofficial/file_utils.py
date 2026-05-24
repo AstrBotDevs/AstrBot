@@ -4,8 +4,6 @@
 """
 
 import os
-from typing import Optional
-
 
 # ============ 文件类型与大小限制 ============
 
@@ -68,7 +66,7 @@ async def get_file_size_async(file_path: str) -> int:
         return 0
 
 
-def is_image_file(file_path: str, mime_type: Optional[str] = None) -> bool:
+def is_image_file(file_path: str, mime_type: str | None = None) -> bool:
     """判断是否为图片文件"""
     if mime_type and mime_type.startswith("image/"):
         return True
@@ -77,7 +75,7 @@ def is_image_file(file_path: str, mime_type: Optional[str] = None) -> bool:
     return ext in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
 
 
-def is_video_file(file_path: str, mime_type: Optional[str] = None) -> bool:
+def is_video_file(file_path: str, mime_type: str | None = None) -> bool:
     """判断是否为视频文件"""
     if mime_type and mime_type.startswith("video/"):
         return True
@@ -86,7 +84,7 @@ def is_video_file(file_path: str, mime_type: Optional[str] = None) -> bool:
     return ext in {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv"}
 
 
-def is_audio_file(file_path: str, mime_type: Optional[str] = None) -> bool:
+def is_audio_file(file_path: str, mime_type: str | None = None) -> bool:
     """判断是否为音频文件"""
     if mime_type and mime_type.startswith("audio/"):
         return True

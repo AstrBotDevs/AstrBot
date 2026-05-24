@@ -12,6 +12,9 @@ __all__ = [
     "PluginStatus",
     "VersionComparator",
     "build_plug_list",
+    "check_astrbot_root",
+    "check_dashboard",
+    "get_astrbot_root",
     "get_git_repo",
     "manage_plugin",
 ]

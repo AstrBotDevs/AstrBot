@@ -93,85 +93,85 @@
 </template>
 
 <script>
-import { EventSourcePolyfill } from 'event-source-polyfill';
-import { useModuleI18n } from '@/i18n/composables';
-import { useCommonStore } from '@/stores/common';
-import { useCustomizerStore } from '@/stores/customizer';
-import axios, { resolveApiUrl } from '@/utils/request';
+import { EventSourcePolyfill } from "event-source-polyfill";
+import { useModuleI18n } from "@/i18n/composables";
+import { useCommonStore } from "@/stores/common";
+import { useCustomizerStore } from "@/stores/customizer";
+import axios, { resolveApiUrl } from "@/utils/request";
 
-const LEADING_ANSI_PATTERN = /^(\u001b\[[0-9;]+m)/;
-const ANSI_PATTERN = /\u001b\[[0-9;]+m/g;
+const LEADING_ANSI_PATTERN = new RegExp(String.raw`^(\u001b\[[0-9;]+m)`);
+const ANSI_PATTERN = new RegExp(String.raw`\u001b\[[0-9;]+m`, "g");
 
 const lightColorAnsiMap = {
-  '\u001b[1;34m': 'color: #39C5BB; font-weight: bold;',
-  '\u001b[1;36m': 'color: #00FFFF; font-weight: bold;',
-  '\u001b[1;33m': 'color: #FFFF00;',
-  '\u001b[31m': 'color: #FF0000;',
-  '\u001b[1;31m': 'color: #FF0000; font-weight: bold;',
-  '\u001b[0m': 'color: inherit; font-weight: normal;',
-  '\u001b[32m': 'color: #00FF00;',
-  default: 'color: #FFFFFF;'
+  "\u001b[1;34m": "color: #39C5BB; font-weight: bold;",
+  "\u001b[1;36m": "color: #00FFFF; font-weight: bold;",
+  "\u001b[1;33m": "color: #FFFF00;",
+  "\u001b[31m": "color: #FF0000;",
+  "\u001b[1;31m": "color: #FF0000; font-weight: bold;",
+  "\u001b[0m": "color: inherit; font-weight: normal;",
+  "\u001b[32m": "color: #00FF00;",
+  default: "color: #FFFFFF;",
 };
 
 const darkColorAnsiMap = {
-  '\u001b[1;34m': 'color: #6cb6d9; font-weight: bold;',
-  '\u001b[1;36m': 'color: #72c4cc; font-weight: bold;',
-  '\u001b[1;33m': 'color: #d4b95e;',
-  '\u001b[31m': 'color: #d46a6a;',
-  '\u001b[1;31m': 'color: #e06060; font-weight: bold;',
-  '\u001b[0m': 'color: inherit; font-weight: normal;',
-  '\u001b[32m': 'color: #6cc070;',
-  default: 'color: #c8c8c8;'
+  "\u001b[1;34m": "color: #6cb6d9; font-weight: bold;",
+  "\u001b[1;36m": "color: #72c4cc; font-weight: bold;",
+  "\u001b[1;33m": "color: #d4b95e;",
+  "\u001b[31m": "color: #d46a6a;",
+  "\u001b[1;31m": "color: #e06060; font-weight: bold;",
+  "\u001b[0m": "color: inherit; font-weight: normal;",
+  "\u001b[32m": "color: #6cc070;",
+  default: "color: #c8c8c8;",
 };
 
 function stripAnsi(value) {
-  return String(value || '').replace(ANSI_PATTERN, '');
+  return String(value || "").replace(ANSI_PATTERN, "");
 }
 
 export default {
-  name: 'ConsoleDisplayer',
+  name: "ConsoleDisplayer",
   props: {
     historyNum: {
       type: String,
-      default: '-1'
+      default: "-1",
     },
     showLevelBtns: {
       type: Boolean,
-      default: true
+      default: true,
     },
     enableAdvancedFilters: {
       type: Boolean,
-      default: false
+      default: false,
     },
     storageKey: {
       type: String,
-      default: ''
+      default: "",
     },
     autoScroll: {
       type: Boolean,
-      default: true
-    }
+      default: true,
+    },
   },
   setup() {
     const commonStore = useCommonStore();
-    const { tm } = useModuleI18n('features/console');
+    const { tm } = useModuleI18n("features/console");
     return { commonStore, tm };
   },
   data() {
     return {
       isFullscreen: false,
-      flushMode: localStorage.getItem('console_flush_mode') === 'true',
-      logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-      selectedLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+      flushMode: localStorage.getItem("console_flush_mode") === "true",
+      logLevels: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+      selectedLevels: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
       selectedTags: [],
-      tagSearch: '',
-      keyword: '',
+      tagSearch: "",
+      keyword: "",
       levelColors: {
-        DEBUG: 'grey',
-        INFO: 'blue-lighten-3',
-        WARNING: 'amber',
-        ERROR: 'red',
-        CRITICAL: 'purple'
+        DEBUG: "grey",
+        INFO: "blue-lighten-3",
+        WARNING: "amber",
+        ERROR: "red",
+        CRITICAL: "purple",
       },
       availableTags: [],
       localLogCache: [],
@@ -184,28 +184,24 @@ export default {
       knownLogIds: new Set(),
       filterSyncTimer: null,
       reloadSequence: 0,
-      suspendFilterSync: false
+      suspendFilterSync: false,
     };
   },
   computed: {
     logColorAnsiMap() {
       const customizerStore = useCustomizerStore();
-      return customizerStore.uiTheme === 'PurpleThemeDark'
-        ? darkColorAnsiMap
-        : lightColorAnsiMap;
+      return customizerStore.uiTheme === "PurpleThemeDark" ? darkColorAnsiMap : lightColorAnsiMap;
     },
     tagOptions() {
       return [...new Set([...this.availableTags, ...this.selectedTags].filter(Boolean))].sort();
     },
     selectedTagPreview() {
       if (this.tagSearch.trim() || this.selectedTags.length === 0) {
-        return '';
+        return "";
       }
 
       const [firstTag, ...remainingTags] = this.selectedTags;
-      return remainingTags.length > 0
-        ? `${firstTag} +${remainingTags.length}`
-        : firstTag;
+      return remainingTags.length > 0 ? `${firstTag} +${remainingTags.length}` : firstTag;
     },
     hasActiveFilters() {
       return (
@@ -216,10 +212,10 @@ export default {
     },
     emptyStateText() {
       if (this.hasActiveFilters) {
-        return this.tm('filters.emptyFiltered');
+        return this.tm("filters.emptyFiltered");
       }
-      return this.tm('filters.emptyIdle');
-    }
+      return this.tm("filters.emptyIdle");
+    },
   },
   watch: {
     selectedLevels: {
@@ -227,30 +223,30 @@ export default {
         this.queueFilterReload();
         this.persistState();
       },
-      deep: true
+      deep: true,
     },
     selectedTags: {
       handler() {
         this.queueFilterReload();
         this.persistState();
       },
-      deep: true
+      deep: true,
     },
     keyword() {
       this.queueFilterReload();
       this.persistState();
     },
     flushMode(val) {
-      localStorage.setItem('console_flush_mode', val);
-    }
+      localStorage.setItem("console_flush_mode", val);
+    },
   },
   async mounted() {
     this.restorePersistedState();
-    document.addEventListener('fullscreenchange', this.handleFullscreenChange);
+    document.addEventListener("fullscreenchange", this.handleFullscreenChange);
     await this.reloadLogSource();
   },
   beforeUnmount() {
-    document.removeEventListener('fullscreenchange', this.handleFullscreenChange);
+    document.removeEventListener("fullscreenchange", this.handleFullscreenChange);
     this.teardownEventSource();
     if (this.filterSyncTimer) {
       clearTimeout(this.filterSyncTimer);
@@ -265,14 +261,14 @@ export default {
   methods: {
     getStorageKey() {
       if (!this.storageKey) {
-        return '';
+        return "";
       }
       return `console-displayer:${this.storageKey}`;
     },
 
     restorePersistedState() {
       const storageKey = this.getStorageKey();
-      if (!storageKey || typeof window === 'undefined' || !window.localStorage) {
+      if (!storageKey || typeof window === "undefined" || !window.localStorage) {
         return;
       }
 
@@ -288,14 +284,14 @@ export default {
           ? parsed.selectedLevels.filter((level) => this.logLevels.includes(level))
           : [];
         const selectedTags = Array.isArray(parsed.selectedTags)
-          ? parsed.selectedTags.filter((tag) => typeof tag === 'string' && tag.trim())
+          ? parsed.selectedTags.filter((tag) => typeof tag === "string" && tag.trim())
           : [];
 
         this.selectedLevels = selectedLevels.length > 0 ? selectedLevels : [...this.logLevels];
         this.selectedTags = selectedTags;
-        this.keyword = typeof parsed.keyword === 'string' ? parsed.keyword : '';
+        this.keyword = typeof parsed.keyword === "string" ? parsed.keyword : "";
       } catch (error) {
-        console.warn('Failed to restore console filter state:', error);
+        console.warn("Failed to restore console filter state:", error);
       } finally {
         this.suspendFilterSync = false;
       }
@@ -303,7 +299,7 @@ export default {
 
     persistState() {
       const storageKey = this.getStorageKey();
-      if (!storageKey || typeof window === 'undefined' || !window.localStorage) {
+      if (!storageKey || typeof window === "undefined" || !window.localStorage) {
         return;
       }
 
@@ -313,11 +309,11 @@ export default {
           JSON.stringify({
             selectedLevels: this.selectedLevels,
             selectedTags: this.selectedTags,
-            keyword: this.keyword
-          })
+            keyword: this.keyword,
+          }),
         );
       } catch (error) {
-        console.warn('Failed to persist console filter state:', error);
+        console.warn("Failed to persist console filter state:", error);
       }
     },
 
@@ -334,13 +330,11 @@ export default {
       }
 
       if (this.selectedLevels.length !== this.logLevels.length) {
-        params.levels = this.selectedLevels.length > 0
-          ? this.selectedLevels.join(',')
-          : '__none__';
+        params.levels = this.selectedLevels.length > 0 ? this.selectedLevels.join(",") : "__none__";
       }
 
       if (includeTag && this.selectedTags.length > 0) {
-        params.tag = this.selectedTags.join(',');
+        params.tag = this.selectedTags.join(",");
       }
 
       const keyword = this.keyword.trim();
@@ -356,14 +350,12 @@ export default {
       const params = this.getLogQueryParams();
 
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
+        if (value !== undefined && value !== null && value !== "") {
           query.set(key, String(value));
         }
       });
 
-      return resolveApiUrl(
-        query.toString() ? `/api/live-log?${query.toString()}` : '/api/live-log'
-      );
+      return resolveApiUrl(query.toString() ? `/api/live-log?${query.toString()}` : "/api/live-log");
     },
 
     teardownEventSource() {
@@ -377,7 +369,7 @@ export default {
       this.teardownEventSource();
 
       this.eventSource = new EventSourcePolyfill(this.buildLogStreamUrl(), {
-        heartbeatTimeout: 300000
+        heartbeatTimeout: 300000,
       });
 
       this.eventSource.onopen = () => {
@@ -400,7 +392,7 @@ export default {
           const payload = JSON.parse(event.data);
           this.appendLogs([payload]);
         } catch (error) {
-          console.error('Failed to parse log stream payload:', error);
+          console.error("Failed to parse log stream payload:", error);
         }
       };
 
@@ -410,22 +402,19 @@ export default {
         }
 
         if (error.status === 401) {
-          console.error('Log stream authentication failed (401).');
+          console.error("Log stream authentication failed (401).");
         } else {
-          console.warn('Log stream connection failed.', error);
+          console.warn("Log stream connection failed.", error);
         }
 
         this.teardownEventSource();
 
         if (this.retryAttempts >= this.maxRetryAttempts) {
-          console.error('Max log stream retry attempts reached.');
+          console.error("Max log stream retry attempts reached.");
           return;
         }
 
-        const delay = Math.min(
-          this.baseRetryDelay * Math.pow(2, this.retryAttempts),
-          30000
-        );
+        const delay = Math.min(this.baseRetryDelay * 2 ** this.retryAttempts, 30000);
 
         if (this.retryTimer) {
           clearTimeout(this.retryTimer);
@@ -448,37 +437,29 @@ export default {
     },
 
     normalizeLogEntry(log) {
-      if (!log || (log.type && log.type !== 'log')) {
+      if (!log || (log.type && log.type !== "log")) {
         return null;
       }
 
-      const rendered = typeof log.rendered === 'string'
-        ? log.rendered
-        : (typeof log.data === 'string' ? log.data : '');
-      const message = typeof log.message === 'string' ? log.message : stripAnsi(rendered);
-      const tag = typeof log.tag === 'string' && log.tag.trim()
-        ? log.tag
-        : 'core:astrbot';
-      const sourceFile = typeof log.source_file === 'string' ? log.source_file : 'unknown';
-      const uuid = log.uuid || [
-        log.time,
-        log.level,
-        tag,
-        log.logger_name || '',
-        sourceFile,
-        log.source_line || '',
-        rendered || message
-      ].join('|');
+      const rendered = typeof log.rendered === "string" ? log.rendered : typeof log.data === "string" ? log.data : "";
+      const message = typeof log.message === "string" ? log.message : stripAnsi(rendered);
+      const tag = typeof log.tag === "string" && log.tag.trim() ? log.tag : "core:astrbot";
+      const sourceFile = typeof log.source_file === "string" ? log.source_file : "unknown";
+      const uuid =
+        log.uuid ||
+        [log.time, log.level, tag, log.logger_name || "", sourceFile, log.source_line || "", rendered || message].join(
+          "|",
+        );
 
       return {
         ...log,
-        type: 'log',
+        type: "log",
         uuid,
         rendered,
         data: rendered,
         message,
         tag,
-        displayText: stripAnsi(rendered || message)
+        displayText: stripAnsi(rendered || message),
       };
     },
 
@@ -517,9 +498,10 @@ export default {
 
       const appendedLogs = [];
       let shouldSort = false;
-      let lastTime = this.localLogCache.length > 0
-        ? Number(this.localLogCache[this.localLogCache.length - 1].time || 0)
-        : Number.NEGATIVE_INFINITY;
+      let lastTime =
+        this.localLogCache.length > 0
+          ? Number(this.localLogCache[this.localLogCache.length - 1].time || 0)
+          : Number.NEGATIVE_INFINITY;
 
       newLogs.forEach((log) => {
         const entry = this.normalizeLogEntry(log);
@@ -565,8 +547,8 @@ export default {
 
     async fetchLogHistory(sequence = this.reloadSequence) {
       try {
-        const response = await axios.get('/api/log-history', {
-          params: this.getLogQueryParams()
+        const response = await axios.get("/api/log-history", {
+          params: this.getLogQueryParams(),
         });
         if (sequence !== this.reloadSequence) {
           return;
@@ -575,17 +557,17 @@ export default {
         const logs = response.data?.data?.logs || [];
         this.replaceLogHistory(logs);
       } catch (error) {
-        console.error('Failed to fetch log history:', error);
+        console.error("Failed to fetch log history:", error);
       }
     },
 
     async fetchTagOptions(sequence = this.reloadSequence) {
       try {
-        const response = await axios.get('/api/log-history', {
+        const response = await axios.get("/api/log-history", {
           params: this.buildLogQueryParams({
             includeTag: false,
-            includeLimit: false
-          })
+            includeLimit: false,
+          }),
         });
         if (sequence !== this.reloadSequence) {
           return;
@@ -594,12 +576,12 @@ export default {
         const logs = response.data?.data?.logs || [];
         this.updateAvailableTags(logs);
       } catch (error) {
-        console.error('Failed to fetch tag options:', error);
+        console.error("Failed to fetch tag options:", error);
       }
     },
 
     getLevelColor(level) {
-      return this.levelColors[level] || 'grey';
+      return this.levelColors[level] || "grey";
     },
 
     getLineStyle(entry) {
@@ -620,7 +602,7 @@ export default {
     },
 
     toggleFullscreen() {
-      const container = document.getElementById('console-wrapper');
+      const container = document.getElementById("console-wrapper");
       if (!container) {
         return;
       }
@@ -641,8 +623,8 @@ export default {
     clearFilters() {
       this.selectedLevels = [...this.logLevels];
       this.selectedTags = [];
-      this.keyword = '';
-      this.tagSearch = '';
+      this.keyword = "";
+      this.tagSearch = "";
       this.persistState();
       this.queueFilterReload(0);
     },
@@ -674,10 +656,7 @@ export default {
       }
 
       this.retryAttempts = 0;
-      await Promise.all([
-        this.fetchLogHistory(sequence),
-        this.fetchTagOptions(sequence)
-      ]);
+      await Promise.all([this.fetchLogHistory(sequence), this.fetchTagOptions(sequence)]);
 
       if (sequence === this.reloadSequence) {
         this.connectSSE(sequence);
@@ -688,9 +667,7 @@ export default {
       const nextTags = new Set(this.availableTags);
 
       logs.forEach((log) => {
-        const tag = typeof log.tag === 'string' && log.tag.trim()
-          ? log.tag.trim()
-          : '';
+        const tag = typeof log.tag === "string" && log.tag.trim() ? log.tag.trim() : "";
         if (tag) {
           nextTags.add(tag);
         }
@@ -725,8 +702,8 @@ export default {
           element.scrollTop = element.scrollHeight;
         }
       });
-    }
-  }
+    },
+  },
 };
 </script>
 

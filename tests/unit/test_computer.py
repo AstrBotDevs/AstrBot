@@ -4,6 +4,9 @@ This module tests the ComputerClient, local booter implementation,
 filesystem operations, Python execution, shell execution, and security restrictions.
 """
 
+import shutil
+import subprocess
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

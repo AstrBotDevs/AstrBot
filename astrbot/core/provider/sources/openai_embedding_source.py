@@ -1,10 +1,8 @@
+import httpx
 from openai import AsyncOpenAI
 
 # 使用 openai 库内部引用的 httpx 模块，避免打包后 isinstance 校验失败
-from openai._base_client import httpx as _openai_httpx
-
 from astrbot import logger
-from astrbot.core.utils.network_utils import create_proxy_client
 
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
@@ -34,14 +32,14 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         super().__init__(provider_config, provider_settings)
         self.provider_config = provider_config
         self.provider_settings = provider_settings
-        
+
         proxy = provider_config.get("proxy", "")
         provider_id = provider_config.get("id", "unknown_id")
-        http_client = None
+        self._http_client: httpx.AsyncClient | None = None
         if proxy:
             logger.info(f"[OpenAI Embedding] {provider_id} Using proxy: {proxy}")
-            http_client = httpx.AsyncClient(proxy=proxy)
-        
+            self._http_client = httpx.AsyncClient(proxy=proxy)
+
         api_base = (
             provider_config.get("embedding_api_base", "https://api.openai.com/v1")
             .strip()
@@ -51,20 +49,22 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if api_base and not api_base.endswith("/v1") and not api_base.endswith("/v4"):
             # /v4 see #5699
             api_base = api_base + "/v1"
-        
+
         # [新增] 保存处理后的 api_base 并转换为小写，用于后续特征比对
         self.api_base_normalized = api_base.lower()
-        
+
         logger.info(f"[OpenAI Embedding] {provider_id} Using API Base: {api_base}")
-        
-        self.client = AsyncOpenAI(
-            api_key=provider_config.get("embedding_api_key"),
-            base_url=api_base,
-            timeout=int(provider_config.get("timeout", 20)),
-            http_client=self._http_client,
-        )
+
+        client_kwargs = {
+            "api_key": provider_config.get("embedding_api_key"),
+            "base_url": api_base,
+            "timeout": int(provider_config.get("timeout", 20)),
+        }
+        if self._http_client is not None:
+            client_kwargs["http_client"] = self._http_client
+        self.client = AsyncOpenAI(**client_kwargs)
         self.model = provider_config.get("embedding_model", "text-embedding-3-small")
-        
+
         # [新增] 运行时状态标记：一旦触发 400 错误将此设为 True
         self._is_vllm_detected = False
 
@@ -73,20 +73,22 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         # 1. 优先检查运行时已证实的标记
         if self._is_vllm_detected:
             return True
-        
+
         # 2. [核心修改] 检查 API Key 是否为 "vllm"
         api_key = self.provider_config.get("embedding_api_key", "")
         if api_key and api_key.lower() == "vllm":
             logger.info("[OpenAI Embedding] vLLM mode enabled by API Key 'vllm'.")
             return True
-        
+
         # 3. 辅助检查：ID 或 URL 中是否显式包含 "vllm"
         provider_id = self.provider_config.get("id", "").lower()
         api_base = self.api_base_normalized.lower()
         if "vllm" in provider_id or "vllm" in api_base:
-            logger.info(f"[OpenAI Embedding] Detected vLLM by id/api_base: {provider_id}")
+            logger.info(
+                f"[OpenAI Embedding] Detected vLLM by id/api_base: {provider_id}"
+            )
             return True
-        
+
         # 4. 移除对端口 (8000, 8001) 的静态判定，避免误伤其他兼容服务
         return False
 
@@ -227,6 +229,24 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             f"[OpenAI Embedding] {provider_id}: Could not determine dimension (model: {str(model).lower()}, config: '{embedding_dim_config}')"
         )
         return 0
+
+    def _is_embedding_model_id(self, model_id: str) -> bool:
+        model_id_lower = model_id.lower()
+        return any(hint in model_id_lower for hint in self._EMBEDDING_MODEL_HINTS)
+
+    async def get_models(self) -> list[str]:
+        models_response = await self.client.models.list()
+        model_ids = sorted(
+            {
+                str(model.id)
+                for model in getattr(models_response, "data", [])
+                if getattr(model, "id", None)
+            }
+        )
+        embedding_model_ids = [
+            model_id for model_id in model_ids if self._is_embedding_model_id(model_id)
+        ]
+        return embedding_model_ids or model_ids
 
     async def terminate(self):
         if self.client:

@@ -102,15 +102,7 @@ export default defineComponent({
       default: () => ({}),
     },
   },
-  emits: [
-    "click",
-    "contextmenu",
-    "open",
-    "rename",
-    "move",
-    "delete",
-    "item-dropped",
-  ],
+  emits: ["click", "contextmenu", "open", "rename", "move", "delete", "item-dropped"],
   data() {
     return {
       isDragOver: false,
@@ -136,10 +128,7 @@ export default defineComponent({
 
       try {
         const data = JSON.parse(event.dataTransfer.getData("application/json"));
-        if (
-          this.acceptDropTypes.length === 0 ||
-          this.acceptDropTypes.includes(data.type)
-        ) {
+        if (this.acceptDropTypes.length === 0 || this.acceptDropTypes.includes(data.type)) {
           this.$emit("item-dropped", {
             item_id: data.id || data.persona_id || data.item_id,
             item_type: data.type,

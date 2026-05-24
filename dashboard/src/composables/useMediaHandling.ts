@@ -1,4 +1,4 @@
-import { ref, computed } from "vue";
+import { computed, ref } from "vue";
 import axios from "@/utils/request";
 
 export interface StagedFileInfo {
@@ -11,12 +11,12 @@ export interface StagedFileInfo {
 }
 
 export function useMediaHandling() {
-    const stagedAudioUrl = ref<string>('');
-    const stagedFiles = ref<StagedFileInfo[]>([]);
-    const mediaCache = ref<Record<string, string>>({});
-    const pendingFileSignatures = new Set<string>();
-    let chatWidgetApi = false;
-    let chatWidgetApiPackage: Record<string, string> | null = null;
+  const stagedAudioUrl = ref<string>("");
+  const stagedFiles = ref<StagedFileInfo[]>([]);
+  const mediaCache = ref<Record<string, string>>({});
+  const pendingFileSignatures = new Set<string>();
+  let chatWidgetApi = false;
+  let chatWidgetApiPackage: Record<string, string> | null = null;
 
   async function getFileSignature(file: File): Promise<string> {
     if (crypto?.subtle) {
@@ -30,192 +30,178 @@ export function useMediaHandling() {
     return `meta:${file.name}:${file.size}:${file.type}:${file.lastModified}`;
   }
 
-    function isDuplicateFile(signature: string) {
-        return (
-            pendingFileSignatures.has(signature) ||
-            stagedFiles.value.some(file => file.signature === signature)
-        );
+  function isDuplicateFile(signature: string) {
+    return pendingFileSignatures.has(signature) || stagedFiles.value.some((file) => file.signature === signature);
+  }
+
+  async function getMediaFile(filename: string): Promise<string> {
+    if (mediaCache.value[filename]) {
+      return mediaCache.value[filename];
     }
 
-    async function getMediaFile(filename: string): Promise<string> {
-        if (mediaCache.value[filename]) {
-            return mediaCache.value[filename];
+    const params: Record<any, any> = { filename };
+    if (chatWidgetApi) {
+      for (const k in chatWidgetApiPackage) params[k] = chatWidgetApiPackage[k];
+    }
+    try {
+      const response = await axios.get(chatWidgetApi ? "/api/widget/file" : "/api/chat/get_file", {
+        params: params,
+        responseType: "blob",
+      });
+
+      const blobUrl = URL.createObjectURL(response.data);
+      mediaCache.value[filename] = blobUrl;
+      return blobUrl;
+    } catch (error) {
+      console.error("Error fetching media file:", error);
+      return "";
+    }
+  }
+
+  async function uploadStagedFile(file: File, sessionId?: string) {
+    const signature = await getFileSignature(file);
+    if (isDuplicateFile(signature)) return;
+
+    pendingFileSignatures.add(signature);
+    const formData = new FormData();
+    formData.append("file", file);
+    if (sessionId) {
+      formData.append("session_id", sessionId);
+    }
+    if (chatWidgetApi) {
+      for (const k in chatWidgetApiPackage) formData.append(k, chatWidgetApiPackage[k]);
+    }
+
+    try {
+      const response = await axios.post(chatWidgetApi ? "/api/widget/upload" : "/api/chat/post_file", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      const { attachment_id, filename, type, original_filename } = response.data.data;
+      stagedFiles.value.push({
+        attachment_id,
+        filename: original_filename || filename,
+        original_name: original_filename || file.name,
+        url: URL.createObjectURL(file),
+        type,
+        signature,
+      });
+    } catch (err) {
+      console.error("Error uploading file:", err);
+    } finally {
+      pendingFileSignatures.delete(signature);
+    }
+  }
+
+  async function processAndUploadImage(file: File, sessionId?: string) {
+    await uploadStagedFile(file, sessionId);
+  }
+
+  async function processAndUploadFile(file: File, sessionId?: string) {
+    await uploadStagedFile(file, sessionId);
+  }
+
+  async function handlePaste(event: ClipboardEvent, sessionId?: string) {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          await processAndUploadImage(file, sessionId);
         }
+      }
+    }
+  }
 
-        let params: Record<any, any> = { filename };
-        if (chatWidgetApi) {
-            for (const k in chatWidgetApiPackage)
-                params[k] = chatWidgetApiPackage[k];
+  function removeImage(index: number) {
+    // 找到第 index 个图片类型的文件
+    let imageCount = 0;
+    for (let i = 0; i < stagedFiles.value.length; i++) {
+      if (stagedFiles.value[i].type === "image") {
+        if (imageCount === index) {
+          const fileToRemove = stagedFiles.value[i];
+          if (fileToRemove.url.startsWith("blob:")) {
+            URL.revokeObjectURL(fileToRemove.url);
+          }
+          stagedFiles.value.splice(i, 1);
+          return;
         }
-        try {
-            const response = await axios.get(
-                chatWidgetApi ? '/api/widget/file' : '/api/chat/get_file',
-                {
-                    params: params,
-                    responseType: 'blob'
-                }
-            );
+        imageCount++;
+      }
+    }
+  }
 
-            const blobUrl = URL.createObjectURL(response.data);
-            mediaCache.value[filename] = blobUrl;
-            return blobUrl;
-        } catch (error) {
-            console.error('Error fetching media file:', error);
-            return '';
+  function removeAudio() {
+    stagedAudioUrl.value = "";
+  }
+
+  function removeFile(index: number) {
+    // 找到第 index 个非图片类型的文件
+    let fileCount = 0;
+    for (let i = 0; i < stagedFiles.value.length; i++) {
+      if (stagedFiles.value[i].type !== "image") {
+        if (fileCount === index) {
+          const fileToRemove = stagedFiles.value[i];
+          if (fileToRemove.url.startsWith("blob:")) {
+            URL.revokeObjectURL(fileToRemove.url);
+          }
+          stagedFiles.value.splice(i, 1);
+          return;
         }
+        fileCount++;
+      }
     }
+  }
 
-    async function uploadStagedFile(file: File, sessionId?: string) {
-        const signature = await getFileSignature(file);
-        if (isDuplicateFile(signature)) return;
-
-        pendingFileSignatures.add(signature);
-        const formData = new FormData();
-        formData.append('file', file);
-        if (sessionId) {
-            formData.append('session_id', sessionId);
+  function clearStaged(options: { revokeUrls?: boolean } = {}) {
+    const { revokeUrls = true } = options;
+    stagedAudioUrl.value = "";
+    if (revokeUrls) {
+      // 清理文件的 blob URLs
+      stagedFiles.value.forEach((file) => {
+        if (file.url.startsWith("blob:")) {
+          URL.revokeObjectURL(file.url);
         }
-        if (chatWidgetApi) {
-            for (const k in chatWidgetApiPackage)
-                formData.append(k, chatWidgetApiPackage[k]);
-        }
-
-        try {
-            const response = await axios.post(
-                chatWidgetApi ? '/api/widget/upload' : '/api/chat/post_file',
-                formData,
-                {
-                    headers: {
-                        'Content-Type': 'multipart/form-data'
-                    }
-                }
-            );
-
-            const { attachment_id, filename, type, original_filename } = response.data.data;
-            stagedFiles.value.push({
-                attachment_id,
-                filename: original_filename || filename,
-                original_name: original_filename || file.name,
-                url: URL.createObjectURL(file),
-                type,
-                signature
-            });
-        } catch (err) {
-            console.error('Error uploading file:', err);
-        } finally {
-            pendingFileSignatures.delete(signature);
-        }
+      });
     }
+    stagedFiles.value = [];
+  }
 
-    async function processAndUploadImage(file: File, sessionId?: string) {
-        await uploadStagedFile(file, sessionId);
-    }
+  function cleanupMediaCache() {
+    Object.values(mediaCache.value).forEach((url) => {
+      if (url.startsWith("blob:")) {
+        URL.revokeObjectURL(url);
+      }
+    });
+    mediaCache.value = {};
+  }
 
-    async function processAndUploadFile(file: File, sessionId?: string) {
-        await uploadStagedFile(file, sessionId);
-    }
+  // 计算属性：获取图片的 URL 列表（用于预览）
+  const stagedImagesUrl = computed(() => stagedFiles.value.filter((f) => f.type === "image").map((f) => f.url));
 
-    async function handlePaste(event: ClipboardEvent, sessionId?: string) {
-        const items = event.clipboardData?.items;
-        if (!items) return;
+  function chatWidgetSetApiPackage(apiPackage: Record<string, string>) {
+    chatWidgetApi = true;
+    chatWidgetApiPackage = apiPackage;
+  }
 
-        for (let i = 0; i < items.length; i++) {
-            if (items[i].type.indexOf('image') !== -1) {
-                const file = items[i].getAsFile();
-                if (file) {
-                    await processAndUploadImage(file, sessionId);
-                }
-            }
-        }
-    }
-
-    function removeImage(index: number) {
-        // 找到第 index 个图片类型的文件
-        let imageCount = 0;
-        for (let i = 0; i < stagedFiles.value.length; i++) {
-            if (stagedFiles.value[i].type === 'image') {
-                if (imageCount === index) {
-                    const fileToRemove = stagedFiles.value[i];
-                    if (fileToRemove.url.startsWith('blob:')) {
-                        URL.revokeObjectURL(fileToRemove.url);
-                    }
-                    stagedFiles.value.splice(i, 1);
-                    return;
-                }
-                imageCount++;
-            }
-        }
-    }
-
-    function removeAudio() {
-        stagedAudioUrl.value = '';
-    }
-
-    function removeFile(index: number) {
-        // 找到第 index 个非图片类型的文件
-        let fileCount = 0;
-        for (let i = 0; i < stagedFiles.value.length; i++) {
-            if (stagedFiles.value[i].type !== 'image') {
-                if (fileCount === index) {
-                    const fileToRemove = stagedFiles.value[i];
-                    if (fileToRemove.url.startsWith('blob:')) {
-                        URL.revokeObjectURL(fileToRemove.url);
-                    }
-                    stagedFiles.value.splice(i, 1);
-                    return;
-                }
-                fileCount++;
-            }
-        }
-    }
-
-    function clearStaged(options: { revokeUrls?: boolean } = {}) {
-        const { revokeUrls = true } = options;
-        stagedAudioUrl.value = '';
-        if (revokeUrls) {
-            // 清理文件的 blob URLs
-            stagedFiles.value.forEach(file => {
-                if (file.url.startsWith('blob:')) {
-                    URL.revokeObjectURL(file.url);
-                }
-            });
-        }
-        stagedFiles.value = [];
-    }
-
-    function cleanupMediaCache() {
-        Object.values(mediaCache.value).forEach(url => {
-            if (url.startsWith('blob:')) {
-                URL.revokeObjectURL(url);
-            }
-        });
-        mediaCache.value = {};
-    }
-
-    // 计算属性：获取图片的 URL 列表（用于预览）
-  const stagedImagesUrl = computed(() =>
-      stagedFiles.value.filter(f => f.type === 'image').map(f => f.url)
-  );
-
-    function chatWidgetSetApiPackage(apiPackage: Record<string, string>) {
-        chatWidgetApi = true;
-        chatWidgetApiPackage = apiPackage
-    }
-
-    return {
-        stagedImagesUrl,
-        stagedAudioUrl,
-        stagedFiles,
-        stagedNonImageFiles,
-        getMediaFile,
-        processAndUploadImage,
-        processAndUploadFile,
-        handlePaste,
-        removeImage,
-        removeAudio,
-        removeFile,
-        clearStaged,
-        cleanupMediaCache,
-        chatWidgetSetApiPackage,
-    };
+  return {
+    stagedImagesUrl,
+    stagedAudioUrl,
+    stagedFiles,
+    stagedNonImageFiles,
+    getMediaFile,
+    processAndUploadImage,
+    processAndUploadFile,
+    handlePaste,
+    removeImage,
+    removeAudio,
+    removeFile,
+    clearStaged,
+    cleanupMediaCache,
+    chatWidgetSetApiPackage,
+  };
 }

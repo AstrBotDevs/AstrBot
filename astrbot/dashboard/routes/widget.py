@@ -26,7 +26,7 @@ class ChatWidget(Route):
             "/widget/send": ("POST", self.send),
             "/widget/history": ("GET", self.history),
             "/widget/file": ("GET", self.file_get),
-            #"/widget/filename": ("GET", self.filename_get),
+            # "/widget/filename": ("GET", self.filename_get),
             "/widget/upload": ("POST", self.file_upload),
             "/widget/stop": ("POST", self.stop),
         }

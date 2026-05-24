@@ -15,16 +15,13 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import (
-    CUA_LEASE_SECONDS,
     get_booter,
-    renew_cua_sandbox_lease,
 )
+from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
-from ..registry import builtin_tool
 from .util import (
     check_admin_permission,
-    format_exception_message,
     is_local_runtime,
     workspace_root,
 )
@@ -34,6 +31,36 @@ _COMPUTER_RUNTIME_TOOL_CONFIG = {
 }
 LEASE_KEEPALIVE_INTERVAL_SECONDS = 15.0
 LEASE_KEEPALIVE_BUFFER_SECONDS = 5.0
+CUA_LEASE_SECONDS = 600.0
+
+
+def renew_cua_sandbox_lease(*_args: Any, **_kwargs: Any) -> None:
+    try:
+        from astrbot.core.computer import computer_client
+
+        manager = getattr(computer_client, "sandbox_manager", None)
+        registry = getattr(manager, "registry", None)
+        if registry is None:
+            registry = getattr(computer_client, "cua_registry", None) or getattr(
+                computer_client,
+                "sandbox_registry",
+                None,
+            )
+        if registry is None:
+            return
+        sandbox_id = _args[0] if _args else _kwargs.get("sandbox_id")
+        session_id = _args[1] if len(_args) > 1 else _kwargs.get("session_id")
+        if not sandbox_id or not session_id:
+            return
+        ttl = _kwargs.get("ttl")
+        registry.acquire_lease(
+            sandbox_id=str(sandbox_id),
+            session_id=str(session_id),
+            user_id=None,
+            ttl=float(ttl) if ttl is not None else CUA_LEASE_SECONDS,
+        )
+    except Exception:
+        logger.debug("Failed to renew sandbox lease.", exc_info=True)
 
 
 def _quote_redirect_path(path: str, *, local_runtime: bool) -> str:
@@ -124,6 +151,7 @@ async def _keep_shell_lease_alive(
 @dataclass
 class ExecuteShellTool(FunctionTool):
     name: str = "astrbot_execute_shell"
+    is_local: bool = False
     description: str = (
         "Execute a command in the persistent shell. "
         "The shell session is maintained across calls within the same conversation, "
@@ -158,7 +186,7 @@ class ExecuteShellTool(FunctionTool):
         },
     )
 
-    async def call(  # type: ignore[override]
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         command: str,
@@ -177,11 +205,13 @@ class ExecuteShellTool(FunctionTool):
         sandbox_id = getattr(sb, "sandbox_id", None)
         started_at = time.monotonic()
         try:
+            cwd: str | None = None
             # Ensure the workspace directory exists (useful for file operations)
             if is_local_runtime(context):
-                current_workspace_root = init_workspace(
+                current_workspace_root = workspace_root(
                     context.context.event.unified_msg_origin
                 )
+                current_workspace_root.mkdir(parents=True, exist_ok=True)
                 cwd = str(current_workspace_root)
 
             env = dict(env or {})

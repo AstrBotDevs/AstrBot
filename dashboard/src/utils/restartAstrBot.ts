@@ -1,15 +1,12 @@
-import axios from "@/utils/request";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
+import axios from "@/utils/request";
 
 type WaitingForRestartRef = {
   check: (initialStartTime?: number | null) => void | Promise<void>;
   stop?: () => void;
 };
 
-async function triggerWaiting(
-  waitingRef?: WaitingForRestartRef | null,
-  initialStartTime?: number | null,
-) {
+async function triggerWaiting(waitingRef?: WaitingForRestartRef | null, initialStartTime?: number | null) {
   if (!waitingRef) return;
   await waitingRef.check(initialStartTime);
 }
@@ -25,14 +22,8 @@ async function fetchCurrentStartTime(): Promise<number | null> {
   }
 }
 
-export async function restartAstrBot(
-  waitingRef?: WaitingForRestartRef | null,
-): Promise<void> {
-  const {
-    bridge: desktopBridge,
-    hasDesktopRestartCapability,
-    isDesktopRuntime,
-  } = await getDesktopRuntimeInfo();
+export async function restartAstrBot(waitingRef?: WaitingForRestartRef | null): Promise<void> {
+  const { bridge: desktopBridge, hasDesktopRestartCapability, isDesktopRuntime } = await getDesktopRuntimeInfo();
 
   if (desktopBridge && hasDesktopRestartCapability && isDesktopRuntime) {
     const authToken = localStorage.getItem("token");

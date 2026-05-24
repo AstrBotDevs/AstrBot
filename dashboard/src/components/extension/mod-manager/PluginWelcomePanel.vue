@@ -1,102 +1,102 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useModuleI18n } from '@/i18n/composables'
-import { renderMarkdown } from '@/composables/useMarkdownIt'
+import { computed, onMounted, ref } from "vue";
+import { renderMarkdown } from "@/composables/useMarkdownIt";
+import { useModuleI18n } from "@/i18n/composables";
 
-const UPSTREAM_REPO_URL = 'https://github.com/AstrBotDevs/AstrBot'
-const UPSTREAM_README_API_URL = 'https://api.github.com/repos/AstrBotDevs/AstrBot/readme'
-const UPSTREAM_README_CDN_URL = 'https://cdn.jsdelivr.net/gh/AstrBotDevs/AstrBot@main/README.md'
+const UPSTREAM_REPO_URL = "https://github.com/AstrBotDevs/AstrBot";
+const UPSTREAM_README_API_URL = "https://api.github.com/repos/AstrBotDevs/AstrBot/readme";
+const UPSTREAM_README_CDN_URL = "https://cdn.jsdelivr.net/gh/AstrBotDevs/AstrBot@main/README.md";
 
-const { tm } = useModuleI18n('features/extension')
+const { tm } = useModuleI18n("features/extension");
 
-const loading = ref(false)
-const error = ref<string | null>(null)
-const content = ref('')
+const loading = ref(false);
+const error = ref<string | null>(null);
+const content = ref("");
 
 const docsLink = computed(() => ({
-  key: 'docs',
-  label: String(tm('modManager.welcome.links.docs')),
-  icon: 'mdi-book-open-page-variant',
-  url: 'https://astrbot.app/'
-}))
+  key: "docs",
+  label: String(tm("modManager.welcome.links.docs")),
+  icon: "mdi-book-open-page-variant",
+  url: "https://astrbot.app/",
+}));
 
 function openInNewTab(url: string) {
-  if (!url) return
-  window.open(url, '_blank')
+  if (!url) return;
+  window.open(url, "_blank");
 }
 
 function openUpstreamRepo() {
-  openInNewTab(UPSTREAM_REPO_URL)
+  openInNewTab(UPSTREAM_REPO_URL);
 }
 
 function fetchWithoutAuth(url: string, headers: Record<string, string> = {}): Promise<string | null> {
   return new Promise((resolve) => {
-    const xhr = new XMLHttpRequest()
-    xhr.open('GET', url, true)
-    
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", url, true);
+
     // Set custom headers
     for (const [key, value] of Object.entries(headers)) {
-      xhr.setRequestHeader(key, value)
+      xhr.setRequestHeader(key, value);
     }
-    
+
     // Explicitly prevent sending standard credentials/authorization if any ambient config tries to
-    xhr.withCredentials = false
-    
+    xhr.withCredentials = false;
+
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(xhr.responseText || null)
+        resolve(xhr.responseText || null);
       } else {
-        resolve(null)
+        resolve(null);
       }
-    }
-    
+    };
+
     xhr.onerror = () => {
-      resolve(null)
-    }
-    
-    xhr.send(null)
-  })
+      resolve(null);
+    };
+
+    xhr.send(null);
+  });
 }
 
 async function tryFetchGitHubApi(): Promise<string | null> {
   return await fetchWithoutAuth(UPSTREAM_README_API_URL, {
-    Accept: 'application/vnd.github.raw+json'
-  })
+    Accept: "application/vnd.github.raw+json",
+  });
 }
 
 async function tryFetchJsdelivrCdn(): Promise<string | null> {
-  return await fetchWithoutAuth(UPSTREAM_README_CDN_URL)
+  return await fetchWithoutAuth(UPSTREAM_README_CDN_URL);
 }
 
 async function fetchUpstreamReadme() {
-  loading.value = true
-  error.value = null
-  content.value = ''
+  loading.value = true;
+  error.value = null;
+  content.value = "";
 
   try {
     // Primary: GitHub API
-    let rawText = await tryFetchGitHubApi()
+    let rawText = await tryFetchGitHubApi();
     // Fallback: jsdelivr CDN
     if (!rawText) {
-      rawText = await tryFetchJsdelivrCdn()
+      rawText = await tryFetchJsdelivrCdn();
     }
     if (!rawText) {
-      error.value = String(tm('modManager.welcome.readme.errors.fetchFailed'))
-      return
+      error.value = String(tm("modManager.welcome.readme.errors.fetchFailed"));
+      return;
     }
-    content.value = rawText
+    content.value = rawText;
   } catch {
-    error.value = String(tm('modManager.welcome.readme.errors.fetchFailed'))
+    error.value = String(tm("modManager.welcome.readme.errors.fetchFailed"));
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
-const renderedHtml = computed(() => renderMarkdown(content.value))
+const renderedHtml = computed(() => renderMarkdown(content.value));
 
 onMounted(() => {
-  fetchUpstreamReadme()
-})
+  fetchUpstreamReadme();
+});
 </script>
 
 <template>

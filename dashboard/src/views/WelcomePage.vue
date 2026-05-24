@@ -379,22 +379,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from "vue";
-import axios, {
-  getApiBaseUrlValidationError,
-  normalizeConfiguredApiBaseUrl,
-  setApiBaseUrl,
-} from "@/utils/request";
+import { MarkdownRender } from "markstream-vue";
+import { computed, onMounted, ref, watch } from "vue";
+import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
 import AddNewPlatform from "@/components/platform/AddNewPlatform.vue";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
-import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
+import { useApiStore } from "@/stores/api";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
+import axios, { getApiBaseUrlValidationError, normalizeConfiguredApiBaseUrl, setApiBaseUrl } from "@/utils/request";
 import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
 import { useToast } from "@/utils/toast";
-import { useApiStore } from "@/stores/api";
-import { MarkdownRender } from "markstream-vue";
 import "markstream-vue/index.css";
 import "highlight.js/styles/github.css";
 
@@ -489,9 +485,7 @@ function resolveWelcomeAnnouncement(raw: unknown, currentLocale: string) {
   return "";
 }
 
-const welcomeAnnouncement = computed(() =>
-  resolveWelcomeAnnouncement(welcomeAnnouncementRaw.value, locale.value),
-);
+const welcomeAnnouncement = computed(() => resolveWelcomeAnnouncement(welcomeAnnouncementRaw.value, locale.value));
 const showAnnouncement = computed(() => welcomeAnnouncement.value.length > 0);
 
 const springFestivalDates: Record<number, string> = {
@@ -647,9 +641,7 @@ async function fetchChatProviders() {
 
 function pickDefaultProviderId(providers: ProviderPayloadItem[]) {
   if (!providers.length) return "";
-  const enabledProvider = providers.find(
-    (provider) => provider.enable !== false,
-  );
+  const enabledProvider = providers.find((provider) => provider.enable !== false);
   return (enabledProvider || providers[0]).id || "";
 }
 
@@ -668,8 +660,7 @@ async function syncDefaultConfigProviderIfNeeded() {
     configData.provider_settings = {};
   }
 
-  if (configData.provider_settings.default_provider_id === targetProviderId)
-    return;
+  if (configData.provider_settings.default_provider_id === targetProviderId) return;
 
   configData.provider_settings.default_provider_id = targetProviderId;
 
@@ -678,9 +669,7 @@ async function syncDefaultConfigProviderIfNeeded() {
     config: configData,
   });
   if (updateRes.data.status !== "ok") {
-    throw new Error(
-      updateRes.data.message || tm("onboard.providerUpdateFailed"),
-    );
+    throw new Error(updateRes.data.message || tm("onboard.providerUpdateFailed"));
   }
 
   showSuccess(tm("onboard.providerDefaultUpdated", { id: targetProviderId }));
@@ -688,11 +677,8 @@ async function syncDefaultConfigProviderIfNeeded() {
 
 async function loadWelcomeAnnouncement() {
   try {
-    const res = await axios.get(
-      "https://cloud.astrbot.app/api/v1/announcement",
-    );
-    welcomeAnnouncementRaw.value =
-      res?.data?.data?.notice?.welcome_page ?? null;
+    const res = await axios.get("https://cloud.astrbot.app/api/v1/announcement");
+    welcomeAnnouncementRaw.value = res?.data?.data?.notice?.welcome_page ?? null;
   } catch (e) {
     welcomeAnnouncementRaw.value = null;
     console.error(e);
@@ -772,8 +758,7 @@ async function saveComputerAccessRuntime() {
     if (!configData.provider_settings) {
       configData.provider_settings = {};
     }
-    configData.provider_settings.computer_use_runtime =
-      computerAccessRuntime.value;
+    configData.provider_settings.computer_use_runtime = computerAccessRuntime.value;
     const updateRes = await axios.post("/api/config/astrbot/update", {
       conf_id: "default",
       config: configData,
@@ -806,10 +791,7 @@ async function syncLanguage(configData: any) {
 }
 
 async function promptRestartAfterLanguageChange() {
-  const shouldRestart = await askForConfirmation(
-    tm("onboard.languageRestartConfirm"),
-    confirmDialog,
-  );
+  const shouldRestart = await askForConfirmation(tm("onboard.languageRestartConfirm"), confirmDialog);
   if (!shouldRestart) return;
 
   try {
@@ -840,11 +822,7 @@ async function saveLanguage() {
     await promptRestartAfterLanguageChange();
   } catch (err: any) {
     selectedLanguage.value = savedLanguage.value;
-    showError(
-      err?.response?.data?.message ||
-        err?.message ||
-        tm("onboard.languageUpdateFailed"),
-    );
+    showError(err?.response?.data?.message || err?.message || tm("onboard.languageUpdateFailed"));
   } finally {
     savingLanguage.value = false;
   }
@@ -854,17 +832,11 @@ async function openPlatformDialog() {
   loadingPlatformDialog.value = true;
   try {
     await loadPlatformConfigBase();
-    platformCountBeforeOpen.value = (
-      platformConfigData.value.platform || []
-    ).length;
+    platformCountBeforeOpen.value = (platformConfigData.value.platform || []).length;
     showAddPlatformDialog.value = true;
   } catch (err: unknown) {
     const apiErr = err as ApiError;
-    showError(
-      apiErr?.response?.data?.message ||
-        apiErr?.message ||
-        tm("onboard.platformLoadFailed"),
-    );
+    showError(apiErr?.response?.data?.message || apiErr?.message || tm("onboard.platformLoadFailed"));
   } finally {
     loadingPlatformDialog.value = false;
   }
@@ -877,11 +849,7 @@ async function openProviderDialog() {
     showProviderDialog.value = true;
   } catch (err: unknown) {
     const apiErr = err as ApiError;
-    showError(
-      apiErr?.response?.data?.message ||
-        apiErr?.message ||
-        tm("onboard.providerLoadFailed"),
-    );
+    showError(apiErr?.response?.data?.message || apiErr?.message || tm("onboard.providerLoadFailed"));
   }
 }
 
@@ -895,11 +863,7 @@ watch(showAddPlatformDialog, async (visible, wasVisible) => {
     }
   } catch (err: unknown) {
     const apiErr = err as ApiError;
-    showError(
-      apiErr?.response?.data?.message ||
-        apiErr?.message ||
-        tm("onboard.platformLoadFailed"),
-    );
+    showError(apiErr?.response?.data?.message || apiErr?.message || tm("onboard.platformLoadFailed"));
   }
 });
 
@@ -913,11 +877,7 @@ watch(showProviderDialog, async (visible, wasVisible) => {
     }
   } catch (err: unknown) {
     const apiErr = err as ApiError;
-    showError(
-      apiErr?.response?.data?.message ||
-        apiErr?.message ||
-        tm("onboard.providerUpdateFailed"),
-    );
+    showError(apiErr?.response?.data?.message || apiErr?.message || tm("onboard.providerUpdateFailed"));
   }
 });
 

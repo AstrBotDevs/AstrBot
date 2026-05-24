@@ -11,13 +11,7 @@
         },
         "agent_runner_type": {
           "description": "執行器",
-          "labels":[
-            "內建 Agent",
-            "Dify",
-            "Coze",
-            "阿里雲百鍊應用",
-            "DeerFlow"
-          ]
+          "labels": ["內建 Agent", "Dify", "Coze", "阿里雲百鍊應用", "DeerFlow"]
         },
         "coze_agent_runner_provider_id": {
           "description": "Coze Agent 執行器供應商 ID"
@@ -225,10 +219,7 @@
         },
         "context_limit_reached_strategy": {
           "description": "超出模型上下文視窗時的處理方式",
-          "labels":[
-            "按對話輪數截斷",
-            "由 LLM 壓縮上下文"
-          ],
+          "labels": ["按對話輪數截斷", "由 LLM 壓縮上下文"],
           "hint": "當按對話輪數截斷時，會根據上面\"丟棄對話輪數\"的設定丟棄最舊的 N 輪對話。當由 LLM 壓縮上下文時，會使用指定的模型進行上下文壓縮。"
         },
         "llm_compress_instruction": {
@@ -313,10 +304,7 @@
         "tool_schema_mode": {
           "description": "工具呼叫模式",
           "hint": "skills-like 先下發工具名稱與描述，再下發參數；full 一次性下發完整參數。",
-          "labels":[
-            "Skills-like（兩階段）",
-            "Full（完整參數）"
-          ]
+          "labels": ["Skills-like（兩階段）", "Full（完整參數）"]
         },
         "streaming_response": {
           "description": "流式輸出"
@@ -324,10 +312,7 @@
         "unsupported_streaming_strategy": {
           "description": "不支援流式回覆的平台",
           "hint": "選擇在不支援流式回覆的平台上的處理方式。即時分段回覆會在系統接收流式回應偵測到諸如標點符號等分段點時，立即發送目前已接收的內容",
-          "labels":[
-            "即時分段回覆",
-            "關閉流式回覆"
-          ]
+          "labels": ["即時分段回覆", "關閉流式回覆"]
         },
         "wake_prefix": {
           "description": "LLM 聊天額外喚醒前綴",
@@ -429,10 +414,7 @@
       },
       "lark_connection_mode": {
         "description": "訂閱方式",
-        "labels":[
-          "長連線模式",
-          "推播至伺服器模式"
-        ]
+        "labels": ["長連線模式", "推播至伺服器模式"]
       },
       "lark_encrypt_key": {
         "description": "Encrypt Key",
@@ -909,10 +891,7 @@
           "split_mode": {
             "description": "分段模式",
             "hint": "用於分隔一段訊息。預設情況下會根據句號、問號等標點符號分隔。如填寫 `[。？！]` 將移除所有的句號、問號、驚嘆號。re.findall(r'<regex>', text)",
-            "labels": [
-              "正規表示式",
-              "分段詞列表"
-            ]
+            "labels": ["正規表示式", "分段詞列表"]
           },
           "regex": {
             "description": "分段正規表示式",
@@ -1101,11 +1080,7 @@
       "modalities": {
         "description": "模型能力",
         "hint": "模型支援的模態。如所填寫的模型不支援圖像，請取消勾選圖像。",
-        "labels":[
-          "文字",
-          "圖像",
-          "工具使用"
-        ]
+        "labels": ["文字", "圖像", "工具使用"]
       },
       "custom_headers": {
         "description": "自訂新增請求頭",

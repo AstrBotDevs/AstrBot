@@ -1,4 +1,3 @@
-import builtins
 from typing import TYPE_CHECKING
 
 from astrbot.api import star
@@ -54,7 +53,11 @@ class PersonaCommands:
         if not persona_id:
             return None
         return next(
-            (p for p in self.context.persona_manager.personas if p.persona_id == persona_id),
+            (
+                p
+                for p in self.context.persona_manager.personas
+                if p.persona_id == persona_id
+            ),
             None,
         )
 
@@ -157,20 +160,20 @@ class PersonaCommands:
 
             msg = "\n".join(lines)
             message.set_result(MessageEventResult().message(msg).use_t2i(False))
-            
-        elif l[1] == "view":
-            if len(l) == 2:
+
+        elif parts[1] == "view":
+            if len(parts) == 2:
                 message.set_result(MessageEventResult().message("请输入人格情景名"))
                 return
-            ps = l[2].strip()
+            ps = parts[2].strip()
             if persona := self._get_persona_by_id(ps):
                 msg = f"人格{ps}的详细信息：\n"
                 msg += f"{persona.system_prompt}\n"
             else:
                 msg = f"人格{ps}不存在"
             message.set_result(MessageEventResult().message(msg))
-            
-        elif l[1] == "unset":
+
+        elif parts[1] == "unset":
             if not cid:
                 message.set_result(
                     MessageEventResult().message("当前没有对话,无法取消人格｡"),
@@ -181,7 +184,7 @@ class PersonaCommands:
                 "[%None]",
             )
             message.set_result(MessageEventResult().message("取消人格成功。"))
-            
+
         else:
             ps = "".join(parts[1:]).strip()
             if not cid:

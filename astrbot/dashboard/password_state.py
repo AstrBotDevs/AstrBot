@@ -19,6 +19,8 @@ def _set_dashboard_flag(config: AstrBotConfig, key: str, value: bool) -> None:
 
 def _has_usable_pbkdf2_password(config: AstrBotConfig) -> bool:
     password = config["dashboard"].get("pbkdf2_password", "")
+    if isinstance(password, str) and password.startswith("$argon2"):
+        return True
     if not isinstance(password, str) or not password.startswith("pbkdf2_sha256$"):
         return False
 

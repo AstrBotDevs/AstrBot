@@ -12,8 +12,7 @@ import certifi
 import httpx
 
 from astrbot.core import logger
-from astrbot.core.utils.github_token import get_github_api_auth_header
-from astrbot.core.utils.io import download_file, on_error
+from astrbot.core.utils.io import ensure_dir, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
 
@@ -126,28 +125,10 @@ class RepoZipUpdator:
         返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
         """
         try:
-            ssl_context = ssl.create_default_context(
-                cafile=certifi.where(),
-            )  # 新增：创建基于 certifi 的 SSL 上下文
-            connector = aiohttp.TCPConnector(
-                ssl=ssl_context,
-            )  # 新增：使用 TCPConnector 指定 SSL 上下文
-            async with (
-                aiohttp.ClientSession(
-                    trust_env=True,
-                    connector=connector,
-                    headers=get_github_api_auth_header(url),
-                ) as session,
-                session.get(url) as response,
-            ):
-                # 检查 HTTP 状态码
-                if response.status != 200:
-                    text = await response.text()
-                    logger.error(
-                        f"请求 {url} 失败，状态码: {response.status}, 内容: {text}",
-                    )
-                    raise Exception(f"请求失败，状态码: {response.status}")
-                result = await response.json()
+            async with self._create_httpx_client(timeout=30.0) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                result = response.json()
             if not result:
                 return []
             # if latest:

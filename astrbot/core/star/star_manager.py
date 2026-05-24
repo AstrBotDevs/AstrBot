@@ -54,10 +54,8 @@ from .context import Context
 from .error_messages import format_plugin_error
 from .filter.permission import PermissionType, PermissionTypeFilter
 from .star import star_map, star_registry
-from .star_handler import EventType, star_handlers_registry
+from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 from .updator import PluginUpdator
-from .star_handler import EventType, StarHandlerMetadata
-import networkx as nx
 
 try:
     from watchfiles import PythonFilter, awatch
@@ -190,7 +188,12 @@ async def _get_global_list_preference(key: str) -> list[Any]:
 async def _get_global_dict_preference(key: str) -> dict[Any, Any]:
     value = await sp.global_get(key, {})
     if not isinstance(value, dict):
-        raise TypeError(f"全局偏好设置 {key} 应为 dict, 实际为 {type(value).__name__}")
+        logger.warning(
+            "全局偏好设置 %s 应为 dict, 实际为 %s, 已使用空字典。",
+            key,
+            type(value).__name__,
+        )
+        return {}
     return value
 
 
@@ -199,7 +202,7 @@ class PluginManager:
         self.updator = PluginUpdator()
 
         self.context = context
-        self.context._star_manager = self  # type: ignore
+        self.context._star_manager = self
         StarTools.initialize(context)
 
         self.config = config
@@ -334,11 +337,13 @@ class PluginManager:
                 if os.path.exists(os.path.join(path, d, "main.py")) or os.path.exists(
                     os.path.join(path, d, d + ".py"),
                 ):
-                    modules.append({
-                        "pname": d,
-                        "module": module_str,
-                        "module_path": os.path.join(path, d, module_str),
-                    })
+                    modules.append(
+                        {
+                            "pname": d,
+                            "module": module_str,
+                            "module_path": os.path.join(path, d, module_str),
+                        }
+                    )
         return modules
 
     def _get_plugin_modules(self) -> list[dict]:
@@ -351,6 +356,32 @@ class PluginManager:
                 p["reserved"] = True
             plugins.extend(_p)
         return plugins
+
+    @staticmethod
+    def _build_module_path(plugin_module: dict) -> str:
+        root_dir_name = plugin_module["pname"]
+        module_str = plugin_module["module"]
+        prefix = (
+            "astrbot.builtin_stars."
+            if plugin_module.get("reserved", False)
+            else "data.plugins."
+        )
+        return f"{prefix}{root_dir_name}.{module_str}"
+
+    async def _get_load_order(
+        self,
+        specified_module_path: str | None = None,
+    ) -> list[dict]:
+        plugin_modules = self._get_plugin_modules()
+        if plugin_modules is None:
+            return []
+        if specified_module_path:
+            return [
+                plugin_module
+                for plugin_module in plugin_modules
+                if self._build_module_path(plugin_module) == specified_module_path
+            ]
+        return plugin_modules
 
     async def _check_plugin_dept_update(
         self,
@@ -909,7 +940,13 @@ class PluginManager:
 
             return result
 
-    async def load(self, plugin_modules=None):
+    async def load(
+        self,
+        plugin_modules=None,
+        specified_module_path=None,
+        specified_dir_name=None,
+        ignore_version_check: bool = False,
+    ):
         """载入插件。
         当 specified_module_path 或者 specified_dir_name 不为 None 时，只载入指定的插件。
 
@@ -930,11 +967,13 @@ class PluginManager:
         alter_cmd = await _get_global_dict_preference("alter_cmd")
 
         if plugin_modules is None:
+            plugin_modules = self._get_plugin_modules()
+        if plugin_modules is None:
             return False, "未找到任何插件模块"
+        has_load_error = False
         logger.info(
             f"正在按顺序加载插件: {[plugin_module['pname'] for plugin_module in plugin_modules]}"
         )
-        fail_rec = ""
 
         # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
@@ -1104,7 +1143,7 @@ class PluginManager:
                     for handler in related_handlers:
                         handler.handler = functools.partial(
                             handler.handler,
-                            metadata.star_cls,  # type: ignore
+                            metadata.star_cls,
                         )
                     # 绑定 llm_tool handler
                     for func_tool in llm_tools.func_list:
@@ -1126,7 +1165,7 @@ class PluginManager:
                                 ft.handler_module_path = metadata.module_path
                                 ft.handler = functools.partial(
                                     ft.handler,
-                                    metadata.star_cls,  # type: ignore
+                                    metadata.star_cls,
                                 )
                             if ft.name in inactivated_llm_tools:
                                 ft.active = False
@@ -1470,7 +1509,8 @@ class PluginManager:
                 ):
                     raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
                 if target_plugin_path != plugin_path:
-                    os.rename(plugin_path, target_plugin_path)
+                    if await asyncio.to_thread(os.path.exists, plugin_path):
+                        os.rename(plugin_path, target_plugin_path)
                     plugin_path = target_plugin_path
                     dir_name = metadata_dir_name
                 await self._ensure_plugin_requirements(
@@ -1689,7 +1729,7 @@ class PluginManager:
                             "failed_plugin_dir_remove_error",
                             error=f"{e!s}",
                         ),
-                    )
+                    ) from e
 
             self.failed_plugin_dict.pop(dir_name, None)
             self._rebuild_failed_plugin_info()
@@ -1889,6 +1929,28 @@ class PluginManager:
         for plugin in self.context.get_all_stars():
             await self._terminate_plugin(plugin)
 
+    async def _trigger_star_lifecycle_event(
+        self,
+        event_type: EventType,
+        star_metadata: StarMetadata,
+    ) -> None:
+        handlers = star_handlers_registry.get_handlers_by_event_type(event_type)
+        handlers_to_run: list[StarHandlerMetadata] = []
+        for handler in handlers:
+            target_star_name = handler.extras_configs.get("target_star_name")
+            if target_star_name and target_star_name != star_metadata.name:
+                continue
+            handlers_to_run.append(handler)
+
+        for handler in handlers_to_run:
+            try:
+                logger.info(
+                    f"hook({event_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name} (目标插件: {star_metadata.name})"
+                )
+                await handler.handler(star_metadata)
+            except Exception:
+                logger.error(traceback.format_exc())
+
     async def turn_on_plugin(self, plugin_name: str) -> None:
         plugin = self.context.get_registered_star(plugin_name)
         if plugin is None:
@@ -1944,7 +2006,8 @@ class PluginManager:
                 skip_failed_tracking = True
                 raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
             if target_plugin_path != desti_dir:
-                os.rename(desti_dir, target_plugin_path)
+                if await asyncio.to_thread(os.path.exists, desti_dir):
+                    os.rename(desti_dir, target_plugin_path)
                 dir_name = metadata_dir_name
                 desti_dir = target_plugin_path
 
@@ -1987,18 +2050,29 @@ class PluginManager:
                 except Exception as e:
                     logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {e!s}")
 
-        for handler in handlers:
-            # 检查这个 handler 是否监听了特定的插件名
-            target_star_name = handler.extras_configs.get("target_star_name")
-            if target_star_name and target_star_name == star_metadata.name:
-                # 如果指定了目标插件名，则只在匹配时添加
-                handlers_to_run.append(handler)
+            plugin_info = None
+            if plugin:
+                plugin_info = {
+                    "repo": plugin.repo,
+                    "readme": readme_content,
+                    "name": plugin.name,
+                }
 
-        for handler in handlers_to_run:
-            try:
-                # 调用插件的钩子函数，并传入 StarMetadata 对象
-                logger.info(
-                    f"hook({event_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name} (目标插件: {star_metadata.name})"
+                if plugin.repo:
+                    asyncio.create_task(
+                        Metric.upload(
+                            et="install_star_f",
+                            repo=plugin.repo,
+                        ),
+                    )
+
+            return plugin_info
+        except Exception as e:
+            if not skip_failed_tracking:
+                self._track_failed_install_dir(
+                    dir_name=dir_name,
+                    plugin_path=desti_dir,
+                    error=e,
                 )
             logger.warning(
                 f"安装插件 {dir_name} 失败，插件安装目录：{desti_dir}",
@@ -2015,11 +2089,8 @@ class PluginManager:
                     remove_dir(temp_desti_dir)
                 except Exception as e:
                     logger.warning(
-                        f"插件 {node_name} 声明依赖 {neighbor}, 但该插件未被发现，跳过加载。"
+                        f"清理临时插件解压目录失败: {temp_desti_dir}，原因: {e!s}",
                     )
-        for node in nodes_to_remove:
-            G.remove_node(node)
-        return G
 
     async def batch_reload(self, specified_module_path=None, plugin_modules=None):
         if not plugin_modules:

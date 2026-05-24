@@ -1,8 +1,7 @@
 import base64
 import os
 import re
-import sys
-import typing as T
+from typing import Any, override
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger, sp

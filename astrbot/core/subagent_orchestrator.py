@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
-from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
 if TYPE_CHECKING:
@@ -89,18 +88,11 @@ class SubAgentOrchestrator:
             if tools is None:
                 tools = None
             elif not isinstance(tools, list):
-                tools = []
+                tools = None
             else:
                 tools = [str(t).strip() for t in tools if str(t).strip()]
             if skills is None:
-                skills = None
-            elif not isinstance(skills, list):
                 skills = []
-            else:
-                skills = [str(s).strip() for s in skills if str(s).strip()]
-
-            if skills is None:
-                skills = None
             elif not isinstance(skills, list):
                 skills = []
             else:
@@ -108,7 +100,7 @@ class SubAgentOrchestrator:
             agent = Agent[AstrAgentContext](
                 name=name,
                 instructions=instructions,
-                tools=tools,  # type: ignore
+                tools=tools,
                 skills=skills,
             )
             agent.begin_dialogs = begin_dialogs
@@ -147,7 +139,7 @@ class SubAgentOrchestrator:
         except ImportError:
             return
 
-        for handoff, skills in zip(self.handoffs, self.handoff_skills):
+        for handoff, skills in zip(self.handoffs, self.handoff_skills, strict=False):
             try:
                 workdir = None
                 # Try to get skills from the handoff tool or agent

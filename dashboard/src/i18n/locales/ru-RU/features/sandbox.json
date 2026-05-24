@@ -1,126 +1,126 @@
 {
-    "title": "Sandbox Management",
-    "subtitle": "Inspect and operate managed sandboxes across providers.",
-    "actions": {
-        "create": "Create",
-        "refresh": "Refresh",
-        "inspect": "Inspect",
-        "setDefault": "Set default",
-        "configure": "Configure",
-        "switch": "Switch",
-        "takeover": "Take over",
-        "console": "Console",
-        "release": "Release",
-        "screenshot": "Screenshot",
-        "destroy": "Destroy",
-        "cancel": "Cancel",
-        "close": "Close",
-        "save": "Save"
-    },
-    "metrics": {
-        "total": "Managed sandboxes",
-        "providers": "Providers",
-        "busy": "Occupied",
-        "default": "Provider defaults"
-    },
-    "labels": {
-        "default": "Default",
-        "busy": "Occupied",
-        "available": "Idle",
-        "noController": "No controller",
-        "unknown": "Unknown",
-        "none": "None",
-        "temporary": "Temporary",
-        "persistent": "Persistent",
-        "creating": "Creating",
-        "restoring": "Restoring",
-        "running": "Running",
-        "error": "Error",
-        "stopping": "Stopping",
-        "stopped": "Stopped",
-        "unknownStatus": "Unknown status: {status}"
-    },
-    "headers": {
-        "sandbox": "Sandbox",
-        "provider": "Provider",
-        "capabilities": "Capabilities",
-        "status": "Status",
-        "lastUsed": "Last used",
-        "actions": "Actions"
-    },
-    "fields": {
-        "provider": "Provider",
-        "capabilities": "Capabilities",
-        "toolNames": "Tools",
-        "status": "Status",
-        "owner": "Owner session",
-        "controller": "Controller session",
-        "retentionPolicy": "Retention policy",
-        "occupiedUntil": "Occupied until",
-        "idleCleanupAt": "Idle cleanup at",
-        "expiresAt": "Expiration cleanup at",
-        "connectInfo": "Connection info"
-    },
-    "empty": {
-        "title": "No managed sandboxes",
-        "subtitle": "Create a managed sandbox or wait for a provider to register one."
-    },
-    "create": {
-        "title": "Create sandbox",
-        "name": "Sandbox name",
-        "providerHint": "This provider is visible in the dashboard model but creation is not wired in this phase."
-    },
-    "screenshot": {
-        "title": "Sandbox screenshot",
-        "noPreview": "Screenshot captured. Preview rendering will be added later."
-    },
-    "console": {
-        "title": "Sandbox console",
-        "notice": "The console does not change sandbox occupancy, but commands directly affect this sandbox environment.",
-        "command": "Shell command",
-        "run": "Run command",
-        "output": "Command output",
-        "empty": "No commands executed yet.",
-        "running": "Running...",
-        "dangerConfirm": "This command may destroy sandbox data: {command}\nContinue?"
-    },
-    "config": {
-        "title": "Sandbox configuration",
-        "name": "Sandbox name",
-        "nameRequired": "Sandbox name is required",
-        "idleTimeout": "Idle timeout (seconds)",
-        "idleTimeoutHint": "With the temporary policy, sandboxes can be cleaned after this idle duration. Empty or 0 disables idle cleanup.",
-        "expiresAt": "Fixed expiration time",
-        "expiresAtHint": "Optional. The sandbox can be cleaned after this time."
-    },
-    "tooltips": {
-        "takeover": "Bind the current dashboard session to this sandbox and obtain control. If another controller exists, control is transferred.",
-        "console": "Open a shell console without changing the sandbox occupancy."
-    },
-    "destroyConfirm": {
-        "title": "Destroy sandbox?",
-        "message": "Destroy {name}? This shuts down the sandbox and removes its managed record."
-    },
-    "messages": {
-        "loadFailed": "Failed to load sandboxes.",
-        "operationFailed": "Sandbox operation failed.",
-        "created": "Sandbox created.",
-        "createSubmitted": "Sandbox creation request submitted.",
-        "createReady": "Sandbox is now running.",
-        "createFailed": "Sandbox creation failed.",
-        "createUnknown": "Sandbox state is unknown. Refresh manually or inspect the backend.",
-        "createRefreshUnstable": "Sandbox status refresh became unstable during creation. Refresh manually later.",
-        "createNotVisible": "Sandbox {sandboxId} is not visible in the list yet. Refresh manually later.",
-        "createTimedOut": "Sandbox {sandboxId} is still processing. Refresh manually later.",
-        "createUnexpectedStatus": "Sandbox creation ended with status: {status}.",
-        "maxSandboxesReached": "Достигнут максимальный лимит песочниц: {max}. Сначала освободите или удалите ненужную песочницу.",
-        "defaultSet": "Default sandbox updated.",
-        "configSaved": "Sandbox configuration saved.",
-        "released": "Sandbox occupancy released.",
-        "takeover": "Current session now controls this sandbox.",
-        "destroyed": "Sandbox destroyed.",
-        "destroyRefreshUnstable": "Sandbox status refresh became unstable during destroy. Refresh manually later.",
-        "destroyTimedOut": "Sandbox {sandboxId} is still being destroyed. Refresh manually later.",
-        "screenshot": "Screenshot captured."
-    }
+  "title": "Sandbox Management",
+  "subtitle": "Inspect and operate managed sandboxes across providers.",
+  "actions": {
+    "create": "Create",
+    "refresh": "Refresh",
+    "inspect": "Inspect",
+    "setDefault": "Set default",
+    "configure": "Configure",
+    "switch": "Switch",
+    "takeover": "Take over",
+    "console": "Console",
+    "release": "Release",
+    "screenshot": "Screenshot",
+    "destroy": "Destroy",
+    "cancel": "Cancel",
+    "close": "Close",
+    "save": "Save"
+  },
+  "metrics": {
+    "total": "Managed sandboxes",
+    "providers": "Providers",
+    "busy": "Occupied",
+    "default": "Provider defaults"
+  },
+  "labels": {
+    "default": "Default",
+    "busy": "Occupied",
+    "available": "Idle",
+    "noController": "No controller",
+    "unknown": "Unknown",
+    "none": "None",
+    "temporary": "Temporary",
+    "persistent": "Persistent",
+    "creating": "Creating",
+    "restoring": "Restoring",
+    "running": "Running",
+    "error": "Error",
+    "stopping": "Stopping",
+    "stopped": "Stopped",
+    "unknownStatus": "Unknown status: {status}"
+  },
+  "headers": {
+    "sandbox": "Sandbox",
+    "provider": "Provider",
+    "capabilities": "Capabilities",
+    "status": "Status",
+    "lastUsed": "Last used",
+    "actions": "Actions"
+  },
+  "fields": {
+    "provider": "Provider",
+    "capabilities": "Capabilities",
+    "toolNames": "Tools",
+    "status": "Status",
+    "owner": "Owner session",
+    "controller": "Controller session",
+    "retentionPolicy": "Retention policy",
+    "occupiedUntil": "Occupied until",
+    "idleCleanupAt": "Idle cleanup at",
+    "expiresAt": "Expiration cleanup at",
+    "connectInfo": "Connection info"
+  },
+  "empty": {
+    "title": "No managed sandboxes",
+    "subtitle": "Create a managed sandbox or wait for a provider to register one."
+  },
+  "create": {
+    "title": "Create sandbox",
+    "name": "Sandbox name",
+    "providerHint": "This provider is visible in the dashboard model but creation is not wired in this phase."
+  },
+  "screenshot": {
+    "title": "Sandbox screenshot",
+    "noPreview": "Screenshot captured. Preview rendering will be added later."
+  },
+  "console": {
+    "title": "Sandbox console",
+    "notice": "The console does not change sandbox occupancy, but commands directly affect this sandbox environment.",
+    "command": "Shell command",
+    "run": "Run command",
+    "output": "Command output",
+    "empty": "No commands executed yet.",
+    "running": "Running...",
+    "dangerConfirm": "This command may destroy sandbox data: {command}\nContinue?"
+  },
+  "config": {
+    "title": "Sandbox configuration",
+    "name": "Sandbox name",
+    "nameRequired": "Sandbox name is required",
+    "idleTimeout": "Idle timeout (seconds)",
+    "idleTimeoutHint": "With the temporary policy, sandboxes can be cleaned after this idle duration. Empty or 0 disables idle cleanup.",
+    "expiresAt": "Fixed expiration time",
+    "expiresAtHint": "Optional. The sandbox can be cleaned after this time."
+  },
+  "tooltips": {
+    "takeover": "Bind the current dashboard session to this sandbox and obtain control. If another controller exists, control is transferred.",
+    "console": "Open a shell console without changing the sandbox occupancy."
+  },
+  "destroyConfirm": {
+    "title": "Destroy sandbox?",
+    "message": "Destroy {name}? This shuts down the sandbox and removes its managed record."
+  },
+  "messages": {
+    "loadFailed": "Failed to load sandboxes.",
+    "operationFailed": "Sandbox operation failed.",
+    "created": "Sandbox created.",
+    "createSubmitted": "Sandbox creation request submitted.",
+    "createReady": "Sandbox is now running.",
+    "createFailed": "Sandbox creation failed.",
+    "createUnknown": "Sandbox state is unknown. Refresh manually or inspect the backend.",
+    "createRefreshUnstable": "Sandbox status refresh became unstable during creation. Refresh manually later.",
+    "createNotVisible": "Sandbox {sandboxId} is not visible in the list yet. Refresh manually later.",
+    "createTimedOut": "Sandbox {sandboxId} is still processing. Refresh manually later.",
+    "createUnexpectedStatus": "Sandbox creation ended with status: {status}.",
+    "maxSandboxesReached": "Достигнут максимальный лимит песочниц: {max}. Сначала освободите или удалите ненужную песочницу.",
+    "defaultSet": "Default sandbox updated.",
+    "configSaved": "Sandbox configuration saved.",
+    "released": "Sandbox occupancy released.",
+    "takeover": "Current session now controls this sandbox.",
+    "destroyed": "Sandbox destroyed.",
+    "destroyRefreshUnstable": "Sandbox status refresh became unstable during destroy. Refresh manually later.",
+    "destroyTimedOut": "Sandbox {sandboxId} is still being destroyed. Refresh manually later.",
+    "screenshot": "Screenshot captured."
+  }
 }

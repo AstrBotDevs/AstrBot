@@ -1,14 +1,11 @@
 <script setup>
-import ExtensionCard from "@/components/shared/ExtensionCard.vue";
-import PluginImportDialog from "@/components/extension/PluginImportDialog.vue";
-import { normalizeTextInput } from "@/utils/inputValue";
-import LZString from 'lz-string';
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
-import {
-  readPinnedExtensions,
-  writePinnedExtensions,
-} from "./extensionPreferenceStorage.mjs";
+import LZString from "lz-string";
 import { computed, ref, watch } from "vue";
+import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import PluginImportDialog from "@/components/extension/PluginImportDialog.vue";
+import ExtensionCard from "@/components/shared/ExtensionCard.vue";
+import { normalizeTextInput } from "@/utils/inputValue";
+import { readPinnedExtensions, writePinnedExtensions } from "./extensionPreferenceStorage.mjs";
 
 const props = defineProps({
   state: {
@@ -168,12 +165,8 @@ const pinnedExtensionOrder = computed(() => {
 const sortedInstalledPlugins = computed(() => {
   const order = pinnedExtensionOrder.value;
   return [...filteredPlugins.value].sort((a, b) => {
-    const aIndex = order.has(a?.name)
-      ? order.get(a.name)
-      : Number.POSITIVE_INFINITY;
-    const bIndex = order.has(b?.name)
-      ? order.get(b.name)
-      : Number.POSITIVE_INFINITY;
+    const aIndex = order.has(a?.name) ? order.get(a.name) : Number.POSITIVE_INFINITY;
+    const bIndex = order.has(b?.name) ? order.get(b.name) : Number.POSITIVE_INFINITY;
 
     if (aIndex !== bIndex) {
       return aIndex - bIndex;
@@ -206,16 +199,11 @@ const togglePinnedExtension = (extension) => {
   pinnedExtensionNames.value = next;
 };
 
-
 const showExportCode = ref(false);
 const exportCode = ref("");
 
 const EXPORT_BLACKLIST = new Set(["astrbot", "builtin_commands"]);
-const exportablePlugins = computed(() =>
-  filteredPlugins.value.filter(
-    (p) => p?.name && !EXPORT_BLACKLIST.has(p.name),
-  ),
-);
+const exportablePlugins = computed(() => filteredPlugins.value.filter((p) => p?.name && !EXPORT_BLACKLIST.has(p.name)));
 
 const exportPlugin = (pluginList) => {
   if (!pluginList || pluginList.length === 0) {
@@ -232,17 +220,17 @@ const exportPlugin = (pluginList) => {
     })),
   );
   exportCode.value = LZString.compressToEncodedURIComponent(jsonStr);
-}
+};
 
 const exportFiltered = () => {
   exportPlugin(exportablePlugins.value);
-}
+};
 
 const exportPinned = () => {
   const pinnedNames = pinnedExtensionNames.value;
   const pinned = exportablePlugins.value.filter((p) => pinnedNames.includes(p?.name));
   exportPlugin(pinned);
-}
+};
 
 const showExportSelectDialog = ref(false);
 const exportSelected = ref([]);
@@ -250,26 +238,20 @@ const exportSelected = ref([]);
 const openExportSelectDialog = () => {
   exportSelected.value = exportablePlugins.value.map(() => false);
   showExportSelectDialog.value = true;
-}
+};
 
-const selectedExportCount = computed(() =>
-  exportSelected.value.filter(Boolean).length,
-);
+const selectedExportCount = computed(() => exportSelected.value.filter(Boolean).length);
 
 const allExportSelected = computed(
-  () =>
-    exportablePlugins.value.length > 0 &&
-    selectedExportCount.value === exportablePlugins.value.length,
+  () => exportablePlugins.value.length > 0 && selectedExportCount.value === exportablePlugins.value.length,
 );
 
-const someExportSelected = computed(
-  () => selectedExportCount.value > 0 && !allExportSelected.value,
-);
+const someExportSelected = computed(() => selectedExportCount.value > 0 && !allExportSelected.value);
 
 const toggleExportSelectAll = () => {
   const next = !allExportSelected.value;
   exportSelected.value = exportablePlugins.value.map(() => next);
-}
+};
 
 const confirmExportSelected = () => {
   const picked = exportablePlugins.value.filter((_, i) => exportSelected.value[i]);
@@ -279,7 +261,7 @@ const confirmExportSelected = () => {
   }
   showExportSelectDialog.value = false;
   exportPlugin(picked);
-}
+};
 
 const copyExportCode = async () => {
   try {
@@ -289,14 +271,13 @@ const copyExportCode = async () => {
     console.error("Copy failed", err);
     toast(tm("exportImport.errors.copyFailed"), "error");
   }
-}
+};
 
 const showImportDialog = ref(false);
 
 const openImportDialog = () => {
   showImportDialog.value = true;
-}
-
+};
 </script>
 
 <template>

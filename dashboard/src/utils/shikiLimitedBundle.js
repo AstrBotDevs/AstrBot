@@ -85,10 +85,7 @@ export const LIMITED_SHIKI_LANGUAGE_ALIASES = {
 
 export const LIMITED_SHIKI_SUPPORTED_LANGUAGES = new Set([
   ...BUILT_IN_LANGUAGES,
-  ...LIMITED_SHIKI_LANGUAGES.flatMap((language) => [
-    language.name,
-    ...(language.aliases || []),
-  ]),
+  ...LIMITED_SHIKI_LANGUAGES.flatMap((language) => [language.name, ...(language.aliases || [])]),
 ]);
 
 function getThemeName(theme) {

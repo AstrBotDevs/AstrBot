@@ -221,7 +221,7 @@ def read_local_text_range_sync(
             if end is not None and index >= end:
                 break
             lines.append(line)
-    return "".join(lines)
+    return "".join(lines).replace("\r\n", "\n")
 
 
 async def read_local_text_range(

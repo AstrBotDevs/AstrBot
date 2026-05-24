@@ -53,101 +53,101 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import axios from 'axios'
-import { useModuleI18n } from '@/i18n/composables'
+import { ref } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
-const { tm: t } = useModuleI18n('features/knowledge-base/detail')
+const { tm: t } = useModuleI18n("features/knowledge-base/detail");
 
 const props = defineProps<{
-  kb: any
-}>()
+  kb: any;
+}>();
 
-const status = ref<'idle' | 'processing' | 'completed' | 'failed'>('idle')
-const taskId = ref('')
-const progress = ref({ current: 0, total: 100, message: '' })
-const result = ref<any>(null)
-const errorMessage = ref('')
+const status = ref<"idle" | "processing" | "completed" | "failed">("idle");
+const taskId = ref("");
+const progress = ref({ current: 0, total: 100, message: "" });
+const result = ref<any>(null);
+const errorMessage = ref("");
 
 const startExport = async () => {
-  status.value = 'processing'
-  progress.value = { current: 0, total: 100, message: '' }
-  errorMessage.value = ''
+  status.value = "processing";
+  progress.value = { current: 0, total: 100, message: "" };
+  errorMessage.value = "";
 
   try {
-    const response = await axios.post('/api/kb/package/export', {
-      kb_id: props.kb.kb_id
-    })
-    if (response.data.status !== 'ok') {
-      throw new Error(response.data.message)
+    const response = await axios.post("/api/kb/package/export", {
+      kb_id: props.kb.kb_id,
+    });
+    if (response.data.status !== "ok") {
+      throw new Error(response.data.message);
     }
 
-    taskId.value = response.data.data.task_id
-    pollProgress()
+    taskId.value = response.data.data.task_id;
+    pollProgress();
   } catch (error: any) {
-    status.value = 'failed'
-    errorMessage.value = error.response?.data?.message || error.message || t('packageExport.failed')
+    status.value = "failed";
+    errorMessage.value = error.response?.data?.message || error.message || t("packageExport.failed");
   }
-}
+};
 
 const pollProgress = async () => {
-  if (!taskId.value) return
+  if (!taskId.value) return;
 
   try {
-    const response = await axios.get('/api/kb/package/progress', {
-      params: { task_id: taskId.value }
-    })
-    if (response.data.status !== 'ok') {
-      throw new Error(response.data.message)
+    const response = await axios.get("/api/kb/package/progress", {
+      params: { task_id: taskId.value },
+    });
+    if (response.data.status !== "ok") {
+      throw new Error(response.data.message);
     }
 
-    const data = response.data.data
-    if (data.status === 'processing' && data.progress) {
+    const data = response.data.data;
+    if (data.status === "processing" && data.progress) {
       progress.value = {
         current: data.progress.current || 0,
         total: data.progress.total || 100,
-        message: data.progress.message || ''
-      }
-      setTimeout(pollProgress, 1000)
-      return
+        message: data.progress.message || "",
+      };
+      setTimeout(pollProgress, 1000);
+      return;
     }
 
-    if (data.status === 'completed') {
-      result.value = data.result
-      status.value = 'completed'
-      return
+    if (data.status === "completed") {
+      result.value = data.result;
+      status.value = "completed";
+      return;
     }
 
-    if (data.status === 'failed') {
-      throw new Error(data.error || t('packageExport.failed'))
+    if (data.status === "failed") {
+      throw new Error(data.error || t("packageExport.failed"));
     }
 
-    setTimeout(pollProgress, 1000)
+    setTimeout(pollProgress, 1000);
   } catch (error: any) {
-    status.value = 'failed'
-    errorMessage.value = error.response?.data?.message || error.message || t('packageExport.failed')
+    status.value = "failed";
+    errorMessage.value = error.response?.data?.message || error.message || t("packageExport.failed");
   }
-}
+};
 
 const downloadPackage = () => {
-  if (!result.value?.filename) return
-  const token = localStorage.getItem('token')
-  if (!token) return
+  if (!result.value?.filename) return;
+  const token = localStorage.getItem("token");
+  if (!token) return;
 
-  const link = document.createElement('a')
-  link.href = `/api/kb/package/download?filename=${encodeURIComponent(result.value.filename)}&token=${encodeURIComponent(token)}`
-  link.download = result.value.filename
-  link.style.display = 'none'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-}
+  const link = document.createElement("a");
+  link.href = `/api/kb/package/download?filename=${encodeURIComponent(result.value.filename)}&token=${encodeURIComponent(token)}`;
+  link.download = result.value.filename;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
 
 const resetExport = () => {
-  status.value = 'idle'
-  taskId.value = ''
-  progress.value = { current: 0, total: 100, message: '' }
-  result.value = null
-  errorMessage.value = ''
-}
+  status.value = "idle";
+  taskId.value = "";
+  progress.value = { current: 0, total: 100, message: "" };
+  result.value = null;
+  errorMessage.value = "";
+};
 </script>

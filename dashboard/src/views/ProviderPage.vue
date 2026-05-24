@@ -400,36 +400,40 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import axios from '@/utils/request'
-import { useModuleI18n } from '@/i18n/composables'
-import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
-import ItemCard from '@/components/shared/ItemCard.vue'
-import AddNewProvider from '@/components/provider/AddNewProvider.vue'
-import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
-import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
-import { buildProviderSourceSchema, isDeepSeekOpenAISource, useProviderSources } from '@/composables/useProviderSources'
-import { getProviderIcon } from '@/utils/providerUtils'
+import { computed, ref, watch } from "vue";
+import { useRouter } from "vue-router";
+import AddNewProvider from "@/components/provider/AddNewProvider.vue";
+import ProviderModelsPanel from "@/components/provider/ProviderModelsPanel.vue";
+import ProviderSourcesPanel from "@/components/provider/ProviderSourcesPanel.vue";
+import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
+import ItemCard from "@/components/shared/ItemCard.vue";
+import {
+  buildProviderSourceSchema,
+  isDeepSeekOpenAISource,
+  useProviderSources,
+} from "@/composables/useProviderSources";
+import { useModuleI18n } from "@/i18n/composables";
+import { getProviderIcon } from "@/utils/providerUtils";
+import axios from "@/utils/request";
 
 const props = defineProps({
   defaultTab: {
     type: String,
-    default: 'chat_completion'
-  }
-})
+    default: "chat_completion",
+  },
+});
 
-const { tm } = useModuleI18n('features/provider')
-const router = useRouter()
+const { tm } = useModuleI18n("features/provider");
+const router = useRouter();
 
 const snackbar = ref({
   show: false,
-  message: '',
-  color: 'success'
-})
+  message: "",
+  color: "success",
+});
 
-function showMessage(message, color = 'success') {
-  snackbar.value = { show: true, message, color }
+function showMessage(message, color = "success") {
+  snackbar.value = { show: true, message, color };
 }
 
 const {
@@ -472,514 +476,514 @@ const {
   deleteProvider,
   modelAlreadyConfigured,
   testProvider,
-  loadConfig
+  loadConfig,
 } = useProviderSources({
   defaultTab: props.defaultTab,
   tm,
-  showMessage
-})
+  showMessage,
+});
 
-const showAddProviderDialog = ref(false)
-const showProviderCfg = ref(false)
-const newSelectedProviderName = ref('')
-const newSelectedProviderConfig = ref({})
-const newProviderOriginalId = ref('')
-const updatingMode = ref(false)
-const loading = ref(false)
-const providerStatuses = ref([])
-const showAgentRunnerDialog = ref(false)
-const showManualModelDialog = ref(false)
+const showAddProviderDialog = ref(false);
+const showProviderCfg = ref(false);
+const newSelectedProviderName = ref("");
+const newSelectedProviderConfig = ref({});
+const newProviderOriginalId = ref("");
+const updatingMode = ref(false);
+const loading = ref(false);
+const providerStatuses = ref([]);
+const showAgentRunnerDialog = ref(false);
+const showManualModelDialog = ref(false);
 
-const savingProviders = ref([])
-const openaiAuthorizeUrl = ref('')
-const openaiOauthInput = ref('')
+const savingProviders = ref([]);
+const openaiAuthorizeUrl = ref("");
+const openaiOauthInput = ref("");
 const openaiOauthLoading = ref({
   start: false,
   complete: false,
   refresh: false,
-  disconnect: false
-})
+  disconnect: false,
+});
 
 const isOpenAIOAuthSupportedSource = computed(() => {
-  const source = selectedProviderSource.value
-  return source?.provider === 'openai' && source?.type === 'openai_oauth_chat_completion'
-})
+  const source = selectedProviderSource.value;
+  return source?.provider === "openai" && source?.type === "openai_oauth_chat_completion";
+});
 
 const isOpenAIOAuthBound = computed(() => {
-  return Boolean(editableProviderSource.value?.oauth_access_token) && editableProviderSource.value?.auth_mode === 'openai_oauth'
-})
+  return (
+    Boolean(editableProviderSource.value?.oauth_access_token) &&
+    editableProviderSource.value?.auth_mode === "openai_oauth"
+  );
+});
 
-const openaiOauthAccountEmail = computed(() => editableProviderSource.value?.oauth_account_email || '')
-const openaiOauthExpiresAt = computed(() => editableProviderSource.value?.oauth_expires_at || '')
+const openaiOauthAccountEmail = computed(() => editableProviderSource.value?.oauth_account_email || "");
+const openaiOauthExpiresAt = computed(() => editableProviderSource.value?.oauth_expires_at || "");
 
 function formatOpenAIOAuthTime(value) {
-  if (!value) return ''
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleString()
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString();
 }
 
 async function copyTextToClipboard(text) {
-  if (!text || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
-    return false
+  if (!text || typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+    return false;
   }
   try {
-    await navigator.clipboard.writeText(text)
-    return true
+    await navigator.clipboard.writeText(text);
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
 async function refreshSelectedProviderSource(sourceId) {
-  await loadConfig()
-  if (!sourceId) return
-  const matchedSource = providerSources.value.find((source) => source.id === sourceId)
+  await loadConfig();
+  if (!sourceId) return;
+  const matchedSource = providerSources.value.find((source) => source.id === sourceId);
   if (matchedSource) {
-    selectProviderSource(matchedSource)
+    selectProviderSource(matchedSource);
   }
 }
 
 async function ensureSelectedProviderSourceSaved() {
-  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value?.id
-  if (!sourceId) return ''
+  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value?.id;
+  if (!sourceId) return "";
   if (isSourceModified.value) {
-    const saved = await saveProviderSource()
-    if (!saved) return ''
-    await refreshSelectedProviderSource(sourceId)
+    const saved = await saveProviderSource();
+    if (!saved) return "";
+    await refreshSelectedProviderSource(sourceId);
   }
-  return editableProviderSource.value?.id || selectedProviderSource.value?.id || sourceId
+  return editableProviderSource.value?.id || selectedProviderSource.value?.id || sourceId;
 }
 
 async function startOpenAIOAuth() {
-  const sourceId = await ensureSelectedProviderSourceSaved()
-  if (!sourceId) return
+  const sourceId = await ensureSelectedProviderSourceSaved();
+  if (!sourceId) return;
 
-  openaiOauthLoading.value.start = true
+  openaiOauthLoading.value.start = true;
   try {
-    const res = await axios.post('/api/config/provider_sources/openai_oauth/start', { source_id: sourceId, config: editableProviderSource.value })
-    if (res.data?.status !== 'ok') {
-      throw new Error(res.data?.message || tm('providerSources.oauth.startError'))
+    const res = await axios.post("/api/config/provider_sources/openai_oauth/start", {
+      source_id: sourceId,
+      config: editableProviderSource.value,
+    });
+    if (res.data?.status !== "ok") {
+      throw new Error(res.data?.message || tm("providerSources.oauth.startError"));
     }
-    openaiAuthorizeUrl.value = res.data.data?.authorize_url || ''
-    openaiOauthInput.value = ''
-    if (openaiAuthorizeUrl.value && typeof window !== 'undefined') {
-      window.open(openaiAuthorizeUrl.value, '_blank', 'noopener,noreferrer')
+    openaiAuthorizeUrl.value = res.data.data?.authorize_url || "";
+    openaiOauthInput.value = "";
+    if (openaiAuthorizeUrl.value && typeof window !== "undefined") {
+      window.open(openaiAuthorizeUrl.value, "_blank", "noopener,noreferrer");
     }
-    showMessage(res.data?.message || tm('providerSources.oauth.startSuccess'))
+    showMessage(res.data?.message || tm("providerSources.oauth.startSuccess"));
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || tm('providerSources.oauth.startError'), 'error')
+    showMessage(err.response?.data?.message || err.message || tm("providerSources.oauth.startError"), "error");
   } finally {
-    openaiOauthLoading.value.start = false
+    openaiOauthLoading.value.start = false;
   }
 }
 
 async function copyOpenAIAuthorizeUrl() {
-  const ok = await copyTextToClipboard(openaiAuthorizeUrl.value)
+  const ok = await copyTextToClipboard(openaiAuthorizeUrl.value);
   if (ok) {
-    showMessage(tm('providerSources.oauth.copySuccess'))
-    return
+    showMessage(tm("providerSources.oauth.copySuccess"));
+    return;
   }
-  showMessage(tm('providerSources.oauth.copyError'), 'error')
+  showMessage(tm("providerSources.oauth.copyError"), "error");
 }
 
 function openOpenAIAuthorizeUrl() {
-  if (!openaiAuthorizeUrl.value || typeof window === 'undefined') return
-  window.open(openaiAuthorizeUrl.value, '_blank', 'noopener,noreferrer')
+  if (!openaiAuthorizeUrl.value || typeof window === "undefined") return;
+  window.open(openaiAuthorizeUrl.value, "_blank", "noopener,noreferrer");
 }
 
 async function completeOpenAIOAuth() {
-  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value?.id
-  if (!sourceId) return
+  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value?.id;
+  if (!sourceId) return;
   if (!openaiOauthInput.value.trim()) {
-    showMessage(tm('providerSources.oauth.authInputRequired'), 'error')
-    return
+    showMessage(tm("providerSources.oauth.authInputRequired"), "error");
+    return;
   }
 
-  openaiOauthLoading.value.complete = true
+  openaiOauthLoading.value.complete = true;
   try {
-    const res = await axios.post('/api/config/provider_sources/openai_oauth/complete', {
+    const res = await axios.post("/api/config/provider_sources/openai_oauth/complete", {
       source_id: sourceId,
-      input: openaiOauthInput.value.trim()
-    })
-    if (res.data?.status !== 'ok') {
-      throw new Error(res.data?.message || tm('providerSources.oauth.completeError'))
+      input: openaiOauthInput.value.trim(),
+    });
+    if (res.data?.status !== "ok") {
+      throw new Error(res.data?.message || tm("providerSources.oauth.completeError"));
     }
-    openaiAuthorizeUrl.value = ''
-    openaiOauthInput.value = ''
-    await refreshSelectedProviderSource(sourceId)
-    showMessage(res.data?.message || tm('providerSources.oauth.completeSuccess'))
+    openaiAuthorizeUrl.value = "";
+    openaiOauthInput.value = "";
+    await refreshSelectedProviderSource(sourceId);
+    showMessage(res.data?.message || tm("providerSources.oauth.completeSuccess"));
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || tm('providerSources.oauth.completeError'), 'error')
+    showMessage(err.response?.data?.message || err.message || tm("providerSources.oauth.completeError"), "error");
   } finally {
-    openaiOauthLoading.value.complete = false
+    openaiOauthLoading.value.complete = false;
   }
 }
 
 async function refreshOpenAIOAuth() {
-  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value?.id
-  if (!sourceId) return
+  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value?.id;
+  if (!sourceId) return;
 
-  openaiOauthLoading.value.refresh = true
+  openaiOauthLoading.value.refresh = true;
   try {
-    const res = await axios.post('/api/config/provider_sources/openai_oauth/refresh', { source_id: sourceId })
-    if (res.data?.status !== 'ok') {
-      throw new Error(res.data?.message || tm('providerSources.oauth.refreshError'))
+    const res = await axios.post("/api/config/provider_sources/openai_oauth/refresh", { source_id: sourceId });
+    if (res.data?.status !== "ok") {
+      throw new Error(res.data?.message || tm("providerSources.oauth.refreshError"));
     }
-    await refreshSelectedProviderSource(sourceId)
-    showMessage(res.data?.message || tm('providerSources.oauth.refreshSuccess'))
+    await refreshSelectedProviderSource(sourceId);
+    showMessage(res.data?.message || tm("providerSources.oauth.refreshSuccess"));
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || tm('providerSources.oauth.refreshError'), 'error')
+    showMessage(err.response?.data?.message || err.message || tm("providerSources.oauth.refreshError"), "error");
   } finally {
-    openaiOauthLoading.value.refresh = false
+    openaiOauthLoading.value.refresh = false;
   }
 }
 
 async function disconnectOpenAIOAuth() {
-  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value?.id
-  if (!sourceId) return
+  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value?.id;
+  if (!sourceId) return;
 
-  openaiOauthLoading.value.disconnect = true
+  openaiOauthLoading.value.disconnect = true;
   try {
-    const res = await axios.post('/api/config/provider_sources/openai_oauth/disconnect', { source_id: sourceId })
-    if (res.data?.status !== 'ok') {
-      throw new Error(res.data?.message || tm('providerSources.oauth.disconnectError'))
+    const res = await axios.post("/api/config/provider_sources/openai_oauth/disconnect", { source_id: sourceId });
+    if (res.data?.status !== "ok") {
+      throw new Error(res.data?.message || tm("providerSources.oauth.disconnectError"));
     }
-    openaiAuthorizeUrl.value = ''
-    openaiOauthInput.value = ''
-    await refreshSelectedProviderSource(sourceId)
-    showMessage(res.data?.message || tm('providerSources.oauth.disconnectSuccess'))
+    openaiAuthorizeUrl.value = "";
+    openaiOauthInput.value = "";
+    await refreshSelectedProviderSource(sourceId);
+    showMessage(res.data?.message || tm("providerSources.oauth.disconnectSuccess"));
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || tm('providerSources.oauth.disconnectError'), 'error')
+    showMessage(err.response?.data?.message || err.message || tm("providerSources.oauth.disconnectError"), "error");
   } finally {
-    openaiOauthLoading.value.disconnect = false
+    openaiOauthLoading.value.disconnect = false;
   }
 }
 
 const deepseekSourceNote = computed(() => {
-  const source = selectedProviderSource.value
-  if (!source || source.provider !== 'deepseek') {
-    return ''
+  const source = selectedProviderSource.value;
+  if (!source || source.provider !== "deepseek") {
+    return "";
   }
 
   if (isDeepSeekOpenAISource(source)) {
-    return tm('providerSources.deepseekOpenAIActiveNote')
+    return tm("providerSources.deepseekOpenAIActiveNote");
   }
 
-  return source.type === 'anthropic_chat_completion'
-    ? tm('providerSources.deepseekAnthropicActiveNote')
-    : ''
-})
+  return source.type === "anthropic_chat_completion" ? tm("providerSources.deepseekAnthropicActiveNote") : "";
+});
 
 const newProviderSourceSchema = computed(() => {
-  return buildProviderSourceSchema(
-    configSchema.value,
-    tm,
-    newSelectedProviderConfig.value
-  )
-})
+  return buildProviderSourceSchema(configSchema.value, tm, newSelectedProviderConfig.value);
+});
 
 function openProviderEdit(provider) {
-  providerEditData.value = JSON.parse(JSON.stringify(provider))
-  providerEditOriginalId.value = provider.id
-  showProviderEditDialog.value = true
+  providerEditData.value = JSON.parse(JSON.stringify(provider));
+  providerEditOriginalId.value = provider.id;
+  showProviderEditDialog.value = true;
 }
 
 function openManualModelDialog() {
   if (!selectedProviderSource.value) {
-    showMessage(tm('providerSources.selectHint'), 'error')
-    return
+    showMessage(tm("providerSources.selectHint"), "error");
+    return;
   }
-  manualModelId.value = ''
-  showManualModelDialog.value = true
+  manualModelId.value = "";
+  showManualModelDialog.value = true;
 }
 
 async function confirmManualModel() {
-  const modelId = manualModelId.value.trim()
+  const modelId = manualModelId.value.trim();
   if (!selectedProviderSource.value) {
-    showMessage(tm('providerSources.selectHint'), 'error')
-    return
+    showMessage(tm("providerSources.selectHint"), "error");
+    return;
   }
   if (!modelId) {
-    showMessage(tm('models.manualModelRequired'), 'error')
-    return
+    showMessage(tm("models.manualModelRequired"), "error");
+    return;
   }
   if (modelAlreadyConfigured(modelId)) {
-    showMessage(tm('models.manualModelExists'), 'error')
-    return
+    showMessage(tm("models.manualModelExists"), "error");
+    return;
   }
-  showManualModelDialog.value = false
-  openModelAddDialog(modelId)
+  showManualModelDialog.value = false;
+  openModelAddDialog(modelId);
 }
 
-watch(() => props.defaultTab, (val) => {
-  updateDefaultTab(val)
-})
+watch(
+  () => props.defaultTab,
+  (val) => {
+    updateDefaultTab(val);
+  },
+);
 
-watch(() => selectedProviderSource.value?.id, () => {
-  openaiAuthorizeUrl.value = ''
-  openaiOauthInput.value = ''
-})
+watch(
+  () => selectedProviderSource.value?.id,
+  () => {
+    openaiAuthorizeUrl.value = "";
+    openaiOauthInput.value = "";
+  },
+);
 
 // ===== 非 chat 类型的方法 =====
 function getEmptyText() {
-  return tm('providers.empty.typed', { type: selectedProviderType.value })
+  return tm("providers.empty.typed", { type: selectedProviderType.value });
 }
 
 function selectProviderTemplate(name) {
-  newSelectedProviderName.value = name
-  newProviderOriginalId.value = ''
-  showProviderCfg.value = true
-  updatingMode.value = false
-  newSelectedProviderConfig.value = JSON.parse(JSON.stringify(
-    configSchema.value.provider.config_template[name] || {}
-  ))
+  newSelectedProviderName.value = name;
+  newProviderOriginalId.value = "";
+  showProviderCfg.value = true;
+  updatingMode.value = false;
+  newSelectedProviderConfig.value = JSON.parse(JSON.stringify(configSchema.value.provider.config_template[name] || {}));
 }
 
 function configExistingProvider(provider) {
-  newSelectedProviderName.value = provider.id
-  newProviderOriginalId.value = provider.id
-  newSelectedProviderConfig.value = {}
+  newSelectedProviderName.value = provider.id;
+  newProviderOriginalId.value = provider.id;
+  newSelectedProviderConfig.value = {};
 
-  let templates = configSchema.value.provider.config_template || {}
-  let defaultConfig = {}
+  let templates = configSchema.value.provider.config_template || {};
+  let defaultConfig = {};
   for (let key in templates) {
     if (templates[key]?.type === provider.type) {
-      defaultConfig = templates[key]
-      break
+      defaultConfig = templates[key];
+      break;
     }
   }
 
   const mergeConfigWithOrder = (target, source, reference) => {
-    if (source && typeof source === 'object' && !Array.isArray(source)) {
+    if (source && typeof source === "object" && !Array.isArray(source)) {
       for (let key in source) {
-        if (source.hasOwnProperty(key)) {
-          if (typeof source[key] === 'object' && source[key] !== null) {
-            target[key] = Array.isArray(source[key]) ? [...source[key]] : { ...source[key] }
+        if (Object.hasOwn(source, key)) {
+          if (typeof source[key] === "object" && source[key] !== null) {
+            target[key] = Array.isArray(source[key]) ? [...source[key]] : { ...source[key] };
           } else {
-            target[key] = source[key]
+            target[key] = source[key];
           }
         }
       }
     }
 
     for (let key in reference) {
-      if (typeof reference[key] === 'object' && reference[key] !== null) {
+      if (typeof reference[key] === "object" && reference[key] !== null) {
         if (!(key in target)) {
           if (Array.isArray(reference[key])) {
-            target[key] = [...reference[key]]
+            target[key] = [...reference[key]];
           } else {
-            target[key] = {}
+            target[key] = {};
           }
         }
         if (!Array.isArray(reference[key])) {
-          mergeConfigWithOrder(
-            target[key],
-            source && source[key] ? source[key] : {},
-            reference[key]
-          )
+          mergeConfigWithOrder(target[key], source && source[key] ? source[key] : {}, reference[key]);
         }
       } else if (!(key in target)) {
-        target[key] = reference[key]
+        target[key] = reference[key];
       }
     }
-  }
+  };
 
   if (defaultConfig) {
-    mergeConfigWithOrder(newSelectedProviderConfig.value, provider, defaultConfig)
+    mergeConfigWithOrder(newSelectedProviderConfig.value, provider, defaultConfig);
   }
 
-  showProviderCfg.value = true
-  updatingMode.value = true
+  showProviderCfg.value = true;
+  updatingMode.value = true;
 }
 
 async function newProvider() {
-  loading.value = true
-  const wasUpdating = updatingMode.value
+  loading.value = true;
+  const wasUpdating = updatingMode.value;
   try {
     if (wasUpdating) {
-      const res = await axios.post('/api/config/provider/update', {
+      const res = await axios.post("/api/config/provider/update", {
         id: newProviderOriginalId.value || newSelectedProviderName.value,
-        config: newSelectedProviderConfig.value
-      })
-      if (res.data.status === 'error') {
-        showMessage(res.data.message || '更新失败!', 'error')
-        return
+        config: newSelectedProviderConfig.value,
+      });
+      if (res.data.status === "error") {
+        showMessage(res.data.message || "更新失败!", "error");
+        return;
       }
-      showMessage(res.data.message || '更新成功!')
+      showMessage(res.data.message || "更新成功!");
       if (wasUpdating) {
-        updatingMode.value = false
+        updatingMode.value = false;
       }
     } else {
-      const res = await axios.post('/api/config/provider/new', newSelectedProviderConfig.value)
-      if (res.data.status === 'error') {
-        showMessage(res.data.message || '添加失败!', 'error')
-        return
+      const res = await axios.post("/api/config/provider/new", newSelectedProviderConfig.value);
+      if (res.data.status === "error") {
+        showMessage(res.data.message || "添加失败!", "error");
+        return;
       }
-      showMessage(res.data.message || '添加成功!')
+      showMessage(res.data.message || "添加成功!");
     }
-    showProviderCfg.value = false
+    showProviderCfg.value = false;
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message, 'error')
+    showMessage(err.response?.data?.message || err.message, "error");
   } finally {
-    loading.value = false
-    await loadConfig()
+    loading.value = false;
+    await loadConfig();
   }
 }
 
 async function copyProvider(providerToCopy) {
-  const newProviderConfig = JSON.parse(JSON.stringify(providerToCopy))
+  const newProviderConfig = JSON.parse(JSON.stringify(providerToCopy));
 
   const generateUniqueId = (baseId) => {
-    let newId = `${baseId}_copy`
-    let counter = 1
-    const existingIds = providers.value.map(p => p.id)
+    let newId = `${baseId}_copy`;
+    let counter = 1;
+    const existingIds = providers.value.map((p) => p.id);
     while (existingIds.includes(newId)) {
-      newId = `${baseId}_copy_${counter}`
-      counter++
+      newId = `${baseId}_copy_${counter}`;
+      counter++;
     }
-    return newId
-  }
-  newProviderConfig.id = generateUniqueId(providerToCopy.id)
-  newProviderConfig.enable = false
+    return newId;
+  };
+  newProviderConfig.id = generateUniqueId(providerToCopy.id);
+  newProviderConfig.enable = false;
 
-  loading.value = true
+  loading.value = true;
   try {
-    const res = await axios.post('/api/config/provider/new', newProviderConfig)
-    showMessage(res.data.message || `成功复制并创建了 ${newProviderConfig.id}`)
-    await loadConfig()
+    const res = await axios.post("/api/config/provider/new", newProviderConfig);
+    showMessage(res.data.message || `成功复制并创建了 ${newProviderConfig.id}`);
+    await loadConfig();
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message, 'error')
+    showMessage(err.response?.data?.message || err.message, "error");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function toggleProviderEnable(provider, value) {
-  provider.enable = value
+  provider.enable = value;
 
   try {
-    const res = await axios.post('/api/config/provider/update', {
+    const res = await axios.post("/api/config/provider/update", {
       id: provider.id,
-      config: provider
-    })
+      config: provider,
+    });
 
-    if (res.data.status === 'error') {
-      throw new Error(res.data.message)
+    if (res.data.status === "error") {
+      throw new Error(res.data.message);
     }
-    showMessage(res.data.message || tm('messages.success.statusUpdate'))
+    showMessage(res.data.message || tm("messages.success.statusUpdate"));
   } catch (error) {
-    showMessage(error.response?.data?.message || error.message || tm('providerSources.saveError'), 'error')
+    showMessage(error.response?.data?.message || error.message || tm("providerSources.saveError"), "error");
   } finally {
-    await loadConfig()
+    await loadConfig();
   }
 }
 
 function isProviderTesting(providerId) {
-  return testingProviders.value.includes(providerId)
+  return testingProviders.value.includes(providerId);
 }
 
 function getProviderStatus(providerId) {
-  return providerStatuses.value.find(s => s.id === providerId)
+  return providerStatuses.value.find((s) => s.id === providerId);
 }
 
 async function testSingleProvider(provider) {
-  if (isProviderTesting(provider.id)) return
+  if (isProviderTesting(provider.id)) return;
 
-  testingProviders.value.push(provider.id)
+  testingProviders.value.push(provider.id);
 
-  const statusIndex = providerStatuses.value.findIndex(s => s.id === provider.id)
+  const statusIndex = providerStatuses.value.findIndex((s) => s.id === provider.id);
   const pendingStatus = {
     id: provider.id,
     name: provider.id,
-    status: 'pending',
-    error: null
-  }
+    status: "pending",
+    error: null,
+  };
   if (statusIndex !== -1) {
-    providerStatuses.value.splice(statusIndex, 1, pendingStatus)
+    providerStatuses.value.splice(statusIndex, 1, pendingStatus);
   } else {
-    providerStatuses.value.unshift(pendingStatus)
+    providerStatuses.value.unshift(pendingStatus);
   }
 
   try {
     if (!provider.enable) {
-      throw new Error('该提供商未被用户启用')
+      throw new Error("该提供商未被用户启用");
     }
-    if (provider.provider_type === 'agent_runner') {
-      showAgentRunnerDialog.value = true
-      providerStatuses.value = providerStatuses.value.filter(s => s.id !== provider.id)
-      return
-    }
-
-    const startTime = performance.now()
-    const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`)
-    if (!res.data || res.data.status !== 'ok') {
-      throw new Error(res.data?.message || `Failed to check status for ${provider.id}`)
+    if (provider.provider_type === "agent_runner") {
+      showAgentRunnerDialog.value = true;
+      providerStatuses.value = providerStatuses.value.filter((s) => s.id !== provider.id);
+      return;
     }
 
-    const result = res.data.data
+    const startTime = performance.now();
+    const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`);
+    if (!res.data || res.data.status !== "ok") {
+      throw new Error(res.data?.message || `Failed to check status for ${provider.id}`);
+    }
+
+    const result = res.data.data;
     if (!result) {
-      throw new Error(`Failed to check status for ${provider.id}`)
+      throw new Error(`Failed to check status for ${provider.id}`);
     }
 
-    const index = providerStatuses.value.findIndex(s => s.id === provider.id)
+    const index = providerStatuses.value.findIndex((s) => s.id === provider.id);
     if (index !== -1) {
-      providerStatuses.value.splice(index, 1, result)
+      providerStatuses.value.splice(index, 1, result);
     }
 
-    const isAvailable = result.status === 'available' && result.error == null
+    const isAvailable = result.status === "available" && result.error == null;
     if (!isAvailable) {
-      throw new Error(result.error || tm('models.testError'))
+      throw new Error(result.error || tm("models.testError"));
     }
 
-    const latency = Math.max(0, Math.round(performance.now() - startTime))
-    showMessage(tm('models.testSuccessWithLatency', { id: provider.id, latency }))
+    const latency = Math.max(0, Math.round(performance.now() - startTime));
+    showMessage(tm("models.testSuccessWithLatency", { id: provider.id, latency }));
   } catch (err) {
-    const errorMessage = err.response?.data?.message || err.message || tm('models.testError')
-    const index = providerStatuses.value.findIndex(s => s.id === provider.id)
+    const errorMessage = err.response?.data?.message || err.message || tm("models.testError");
+    const index = providerStatuses.value.findIndex((s) => s.id === provider.id);
     const failedStatus = {
       id: provider.id,
       name: provider.id,
-      status: 'unavailable',
-      error: errorMessage
-    }
+      status: "unavailable",
+      error: errorMessage,
+    };
     if (index !== -1) {
-      providerStatuses.value.splice(index, 1, failedStatus)
+      providerStatuses.value.splice(index, 1, failedStatus);
     }
-    showMessage(errorMessage, 'error')
+    showMessage(errorMessage, "error");
   } finally {
-    const index = testingProviders.value.indexOf(provider.id)
+    const index = testingProviders.value.indexOf(provider.id);
     if (index > -1) {
-      testingProviders.value.splice(index, 1)
+      testingProviders.value.splice(index, 1);
     }
   }
 }
 
 function getStatusColor(status) {
   switch (status) {
-    case 'available':
-      return 'success'
-    case 'unavailable':
-      return 'error'
-    case 'pending':
-      return 'grey'
+    case "available":
+      return "success";
+    case "unavailable":
+      return "error";
+    case "pending":
+      return "grey";
     default:
-      return 'default'
+      return "default";
   }
 }
 
 function getStatusText(status) {
   const messages = {
-    available: tm('availability.available'),
-    unavailable: tm('availability.unavailable'),
-    pending: tm('availability.pending')
-  }
-  return messages[status] || status
+    available: tm("availability.available"),
+    unavailable: tm("availability.unavailable"),
+    pending: tm("availability.pending"),
+  };
+  return messages[status] || status;
 }
 
 function goToConfigPage() {
-  router.push('/config')
-  showAgentRunnerDialog.value = false
+  router.push("/config");
+  showAgentRunnerDialog.value = false;
 }
 </script>
 

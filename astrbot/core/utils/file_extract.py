@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import anyio
 import httpx
 
@@ -17,7 +15,7 @@ async def extract_file_moonshotai(file_path: str, api_key: str) -> str:
     headers = {
         "Authorization": f"Bearer {api_key}",
     }
-    source_path = Path(file_path)
+    source_path = anyio.Path(file_path)
 
     async with httpx.AsyncClient(
         base_url=base_url,
@@ -25,7 +23,7 @@ async def extract_file_moonshotai(file_path: str, api_key: str) -> str:
         follow_redirects=True,
         timeout=60.0,
     ) as client:
-        source_bytes = await anyio.Path(source_path).read_bytes()
+        source_bytes = await source_path.read_bytes()
         upload_response = await client.post(
             "/files",
             data={"purpose": "file-extract"},

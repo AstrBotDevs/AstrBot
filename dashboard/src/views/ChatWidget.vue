@@ -1,11 +1,8 @@
 <script setup lang="ts">
-import {
-  onBeforeMount,
-  ref,
-} from "vue";
-import {useRoute} from 'vue-router';
-import standaloneChat from '@/components/chat/StandaloneChat.vue';
-import {useCustomizerStore} from '@/stores/customizer';
+import { onBeforeMount, ref } from "vue";
+import { useRoute } from "vue-router";
+import standaloneChat from "@/components/chat/StandaloneChat.vue";
+import { useCustomizerStore } from "@/stores/customizer";
 
 const customizer = useCustomizerStore();
 const route = useRoute();
@@ -20,33 +17,27 @@ const welcomeTitle = ref("");
 onBeforeMount(() => {
   try {
     api_package.value = {
-      appid: route.query?.appid as string ?? '',
-      data: route.query?.data as string ?? '',
-      noise: route.query?.noise as string ?? '',
-      expiry_date: route.query?.expiry_date as string ?? '',
-      signature: route.query?.signature as string ?? '',
+      appid: (route.query?.appid as string) ?? "",
+      data: (route.query?.data as string) ?? "",
+      noise: (route.query?.noise as string) ?? "",
+      expiry_date: (route.query?.expiry_date as string) ?? "",
+      signature: (route.query?.signature as string) ?? "",
     };
     api_decode_data.value = JSON.parse(
-      new TextDecoder().decode(
-        Uint8Array.from(
-          atob(api_package.value.data as string),
-          c => c.charCodeAt(0)
-        )
-      )
+      new TextDecoder().decode(Uint8Array.from(atob(api_package.value.data as string), (c) => c.charCodeAt(0))),
     );
-    if (!api_decode_data.value?.session_id) throw new Error('args `session_id` is miss')
-    if (!api_decode_data.value?.username) throw new Error('args `username` is miss')
-    if (!api_decode_data.value?.config_id) throw new Error('args `config_id` is miss')
-    if (!api_decode_data.value?.selected_provider) throw new Error('args `selected_provider` is miss')
+    if (!api_decode_data.value?.session_id) throw new Error("args `session_id` is miss");
+    if (!api_decode_data.value?.username) throw new Error("args `username` is miss");
+    if (!api_decode_data.value?.config_id) throw new Error("args `config_id` is miss");
+    if (!api_decode_data.value?.selected_provider) throw new Error("args `selected_provider` is miss");
     attachmentEnabled.value = api_decode_data.value?.file_upload === true;
-    welcomeTitle.value = route.query?.welcomeTitle as string ?? '';
+    welcomeTitle.value = (route.query?.welcomeTitle as string) ?? "";
   } catch (err) {
     apiErrorMsg.value = err instanceof Error ? err.message : String(err);
     apiStatusError.value = true;
     console.error(err);
   }
 });
-
 </script>
 
 <style scoped>

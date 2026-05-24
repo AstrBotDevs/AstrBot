@@ -7,7 +7,7 @@ from typing import Any
 
 import anyio
 
-from astrbot.core import logger
+from astrbot.core import astrbot_config, logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -118,6 +118,31 @@ def _build_chain_signature(msg_chain: MessageChain) -> str:
     return re.sub(r"\s+", " ", signature)
 
 
+def _should_buffer_llm_result(
+    buffer_intermediate_messages: bool,
+    stream_to_general: bool,
+    agent_runner: AgentRunner,
+) -> bool:
+    return (
+        buffer_intermediate_messages
+        and not stream_to_general
+        and not agent_runner.streaming
+    )
+
+
+def _merge_buffered_llm_chains(
+    buffered_llm_chains: list[MessageChain],
+) -> MessageChain | None:
+    if not buffered_llm_chains:
+        return None
+
+    merged_chain = MessageChain()
+    for chain in buffered_llm_chains:
+        merged_chain.chain.extend(chain.chain)
+    buffered_llm_chains.clear()
+    return merged_chain
+
+
 async def run_agent(
     agent_runner: AgentRunner,
     max_step: int = 3,
@@ -125,11 +150,27 @@ async def run_agent(
     show_tool_call_result: bool = False,
     stream_to_general: bool = False,
     show_reasoning: bool = False,
+    buffer_intermediate_messages: bool = False,
     repeat_reply_guard_threshold: int = DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
+    step_callback: Callable[[int, str, Any], None] | None = None,
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
     tool_name_by_call_id: dict[str, str] = {}
+    buffered_llm_chains: list[MessageChain] = []
+    can_buffer_llm_result = _should_buffer_llm_result(
+        buffer_intermediate_messages,
+        stream_to_general,
+        agent_runner,
+    )
+    _trace_on = astrbot_config.get("trace_enable", False)
+    _llm_parent = get_current_span() or getattr(
+        astr_event,
+        "_llm_agent_span",
+        astr_event.trace,
+    )
+    _step_span = None
+    _tool_spans: dict[str, TraceSpan] = {}
     guard_threshold = normalize_repeat_reply_guard_threshold(
         repeat_reply_guard_threshold
     )

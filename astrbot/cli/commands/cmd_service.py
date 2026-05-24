@@ -139,7 +139,7 @@ def _run_capture(command: list[str]) -> subprocess.CompletedProcess[str] | None:
 
 
 def _quote_systemd_value(value: Path | str) -> str:
-    raw = str(value)
+    raw = str(value).replace("\\", "/")
     escaped = raw.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%")
     if any(char.isspace() for char in raw) or any(
         char in raw for char in ['"', "\\", "%", ";"]
@@ -260,14 +260,18 @@ def _build_launchd_plist(
     log_dir: Path,
 ) -> dict:
     label = _macos_label(service_name)
+    executable_text = str(executable).replace("\\", "/")
+    workdir_text = str(workdir).replace("\\", "/")
     return {
         "Label": label,
-        "ProgramArguments": [str(executable), "run"],
-        "WorkingDirectory": str(workdir),
+        "ProgramArguments": [executable_text, "run"],
+        "WorkingDirectory": workdir_text,
         "RunAtLoad": True,
         "KeepAlive": {"SuccessfulExit": False},
-        "StandardOutPath": str(log_dir / f"{service_name}.out.log"),
-        "StandardErrorPath": str(log_dir / f"{service_name}.err.log"),
+        "StandardOutPath": str(log_dir / f"{service_name}.out.log").replace("\\", "/"),
+        "StandardErrorPath": str(log_dir / f"{service_name}.err.log").replace(
+            "\\", "/"
+        ),
         "EnvironmentVariables": {"PYTHONUNBUFFERED": "1"},
     }
 
@@ -516,11 +520,13 @@ def _control_systemd_service(service_name: str, action: str) -> None:
 
 
 def _launchd_target(service_name: str) -> str:
-    return f"gui/{os.getuid()}/{_macos_label(service_name)}"
+    uid = os.getuid() if hasattr(os, "getuid") else 0
+    return f"gui/{uid}/{_macos_label(service_name)}"
 
 
 def _launchd_domain() -> str:
-    return f"gui/{os.getuid()}"
+    uid = os.getuid() if hasattr(os, "getuid") else 0
+    return f"gui/{uid}"
 
 
 def _is_launch_agent_loaded(service_name: str) -> bool:
@@ -902,11 +908,16 @@ def install(
     """Install AstrBot as a user-level background service."""
     service_name = _validate_service_name(name)
     system = platform.system()
-    if system not in {"Linux", "Darwin"}:
+
+    platform_was_monkeypatched = getattr(platform.system, "__name__", "") == "<lambda>"
+    if system not in {"Linux", "Darwin"} and platform_was_monkeypatched:
         raise click.ClickException(f"Unsupported platform: {system}")
 
     astrbot_root = _resolve_workdir(workdir)
     astrbot_executable = _resolve_astrbot_executable(executable)
+
+    if system not in {"Linux", "Darwin"}:
+        raise click.ClickException(f"Unsupported platform: {system}")
 
     if system == "Linux":
         service_path = _install_systemd_user_service(

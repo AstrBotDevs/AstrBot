@@ -170,7 +170,7 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                     to_remove.append((session_id, session))
 
         # Stop reading and join threads outside the lock to avoid blocking
-        for session_id, session in to_remove:
+        for _, session in to_remove:
             session.stop_reading.set()
             for t in session.read_threads:
                 if t.is_alive():

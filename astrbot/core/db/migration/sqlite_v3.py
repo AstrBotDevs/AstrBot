@@ -473,14 +473,16 @@ class SQLiteDatabase:
             offset = (page - 1) * page_size
 
             # 构建分页数据查询
-            data_sql = f"""
-                SELECT user_id, cid, created_at, updated_at, title, persona_id
-                FROM webchat_conversation
-                {where_sql}
-                ORDER BY updated_at DESC
-                LIMIT ? OFFSET ?
-            """
-            query_params = [*params, page_size, offset]
+            data_sql = (
+                "SELECT user_id, cid, created_at, updated_at, title, persona_id "
+                f"FROM webchat_conversation{where_sql} "
+                "ORDER BY updated_at DESC LIMIT :page_size OFFSET :offset"
+            )
+            query_params = {
+                **params,
+                "page_size": page_size,
+                "offset": offset,
+            }
 
             # 获取分页数据
             c.execute(data_sql, query_params)

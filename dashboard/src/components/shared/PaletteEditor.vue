@@ -160,234 +160,240 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useI18n } from '@/i18n/composables'
+import { computed, ref, watch } from "vue";
+import { useI18n } from "@/i18n/composables";
 import {
-  hexToRgb,
-  rgbToHex,
-  rgbToHsv,
-  parseAnyColor,
   ColorFormat,
   type ColorFormatType,
-  type RgbColor
-} from '@/utils/color'
+  hexToRgb,
+  parseAnyColor,
+  type RgbColor,
+  rgbToHex,
+  rgbToHsv,
+} from "@/utils/color";
 
 interface Props {
-  modelValue?: string
-  format?: ColorFormatType
+  modelValue?: string;
+  format?: ColorFormatType;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  modelValue: '',
-  format: ColorFormat.HEX
-})
+  modelValue: "",
+  format: ColorFormat.HEX,
+});
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string]
-}>()
-const { t } = useI18n()
+  "update:modelValue": [value: string];
+}>();
+const { t } = useI18n();
 
-const menuOpen = ref(false)
-const localValue = ref(props.modelValue)
-const pickerColor = ref('#FFFFFF')
-const hexInput = ref('#FFFFFF')
-const rgbInput = ref('rgb(255, 255, 255)')
-const hsvInput = ref('hsv(0, 0%, 100%)')
-const snackbar = ref(false)
-const snackbarText = ref('')
+const menuOpen = ref(false);
+const localValue = ref(props.modelValue);
+const pickerColor = ref("#FFFFFF");
+const hexInput = ref("#FFFFFF");
+const rgbInput = ref("rgb(255, 255, 255)");
+const hsvInput = ref("hsv(0, 0%, 100%)");
+const snackbar = ref(false);
+const snackbarText = ref("");
 
 const formatPlaceholder = computed(() => {
   switch (props.format) {
-    case ColorFormat.RGB: return t('core.common.palette.placeholderRgb')
-    case ColorFormat.HSV: return t('core.common.palette.placeholderHsv')
-    default: return t('core.common.palette.placeholderHex')
+    case ColorFormat.RGB:
+      return t("core.common.palette.placeholderRgb");
+    case ColorFormat.HSV:
+      return t("core.common.palette.placeholderHsv");
+    default:
+      return t("core.common.palette.placeholderHex");
   }
-})
+});
 
 const hasColor = computed(() => {
-  return localValue.value && localValue.value.trim() !== ''
-})
+  return localValue.value && localValue.value.trim() !== "";
+});
 
 const previewColor = computed(() => {
-  if (!hasColor.value) return '#FFFFFF'
-  const parsed = parseAnyColor(localValue.value)
-  return parsed ? rgbToHex(parsed.r, parsed.g, parsed.b) : '#FFFFFF'
-})
+  if (!hasColor.value) return "#FFFFFF";
+  const parsed = parseAnyColor(localValue.value);
+  return parsed ? rgbToHex(parsed.r, parsed.g, parsed.b) : "#FFFFFF";
+});
 
 const validationError = computed(() => {
-  if (!hasColor.value) return ''
-  const parsed = parseAnyColor(localValue.value)
+  if (!hasColor.value) return "";
+  const parsed = parseAnyColor(localValue.value);
   if (!parsed) {
-    return t('core.common.palette.invalidFormat')
+    return t("core.common.palette.invalidFormat");
   }
-  return ''
-})
+  return "";
+});
 
 function parsePickerColor(color: string | RgbColor | null | undefined): RgbColor {
-  if (!color) return { r: 255, g: 255, b: 255 }
-  if (typeof color === 'string') {
-    return hexToRgb(color) || { r: 255, g: 255, b: 255 }
+  if (!color) return { r: 255, g: 255, b: 255 };
+  if (typeof color === "string") {
+    return hexToRgb(color) || { r: 255, g: 255, b: 255 };
   }
-  if (typeof color === 'object') {
-    return { r: color.r || 0, g: color.g || 0, b: color.b || 0 }
+  if (typeof color === "object") {
+    return { r: color.r || 0, g: color.g || 0, b: color.b || 0 };
   }
-  return { r: 255, g: 255, b: 255 }
+  return { r: 255, g: 255, b: 255 };
 }
 
 function formatOutput(r: number, g: number, b: number): string {
   switch (props.format) {
     case ColorFormat.RGB:
-      return `rgb(${r}, ${g}, ${b})`
+      return `rgb(${r}, ${g}, ${b})`;
     case ColorFormat.HSV: {
-      const hsv = rgbToHsv(r, g, b)
-      return `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`
+      const hsv = rgbToHsv(r, g, b);
+      return `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`;
     }
     default:
-      return rgbToHex(r, g, b)
+      return rgbToHex(r, g, b);
   }
 }
 
 function syncInputsFromColor(r: number, g: number, b: number): void {
-  hexInput.value = rgbToHex(r, g, b)
-  rgbInput.value = `rgb(${r}, ${g}, ${b})`
-  const hsv = rgbToHsv(r, g, b)
-  hsvInput.value = `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`
+  hexInput.value = rgbToHex(r, g, b);
+  rgbInput.value = `rgb(${r}, ${g}, ${b})`;
+  const hsv = rgbToHsv(r, g, b);
+  hsvInput.value = `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`;
 }
 
 function syncFromPicker() {
-  const color = parsePickerColor(pickerColor.value)
-  syncInputsFromColor(color.r, color.g, color.b)
+  const color = parsePickerColor(pickerColor.value);
+  syncInputsFromColor(color.r, color.g, color.b);
 }
 
 watch(pickerColor, () => {
-  syncFromPicker()
-})
+  syncFromPicker();
+});
 
 function syncInternalState() {
   if (hasColor.value) {
-    const parsed = parseAnyColor(localValue.value)
+    const parsed = parseAnyColor(localValue.value);
     if (parsed) {
-      const newHex = rgbToHex(parsed.r, parsed.g, parsed.b)
+      const newHex = rgbToHex(parsed.r, parsed.g, parsed.b);
       if (pickerColor.value !== newHex) {
-        pickerColor.value = newHex
-        syncInputsFromColor(parsed.r, parsed.g, parsed.b)
+        pickerColor.value = newHex;
+        syncInputsFromColor(parsed.r, parsed.g, parsed.b);
       }
     }
   } else {
-    pickerColor.value = '#FFFFFF'
-    syncInputsFromColor(255, 255, 255)
+    pickerColor.value = "#FFFFFF";
+    syncInputsFromColor(255, 255, 255);
   }
 }
 
 watch(menuOpen, (open) => {
-  if (open) syncInternalState()
-})
+  if (open) syncInternalState();
+});
 
-watch(() => props.modelValue, (newVal) => {
-  if (newVal !== localValue.value) {
-    localValue.value = newVal
-    syncInternalState()
-  }
-})
+watch(
+  () => props.modelValue,
+  (newVal) => {
+    if (newVal !== localValue.value) {
+      localValue.value = newVal;
+      syncInternalState();
+    }
+  },
+);
 
 function onHexInput(value: string): void {
-  const parsed = parseAnyColor(value)
+  const parsed = parseAnyColor(value);
   if (parsed) {
-    pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
-    rgbInput.value = `rgb(${parsed.r}, ${parsed.g}, ${parsed.b})`
-    const hsv = rgbToHsv(parsed.r, parsed.g, parsed.b)
-    hsvInput.value = `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`
+    pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b);
+    rgbInput.value = `rgb(${parsed.r}, ${parsed.g}, ${parsed.b})`;
+    const hsv = rgbToHsv(parsed.r, parsed.g, parsed.b);
+    hsvInput.value = `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`;
   }
 }
 
 function onRgbInput(value: string): void {
-  const parsed = parseAnyColor(value)
+  const parsed = parseAnyColor(value);
   if (parsed) {
-    pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
-    hexInput.value = rgbToHex(parsed.r, parsed.g, parsed.b)
-    const hsv = rgbToHsv(parsed.r, parsed.g, parsed.b)
-    hsvInput.value = `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`
+    pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b);
+    hexInput.value = rgbToHex(parsed.r, parsed.g, parsed.b);
+    const hsv = rgbToHsv(parsed.r, parsed.g, parsed.b);
+    hsvInput.value = `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`;
   }
 }
 
 function onHsvInput(value: string): void {
-  const parsed = parseAnyColor(value)
+  const parsed = parseAnyColor(value);
   if (parsed) {
-    pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
-    hexInput.value = rgbToHex(parsed.r, parsed.g, parsed.b)
-    rgbInput.value = `rgb(${parsed.r}, ${parsed.g}, ${parsed.b})`
+    pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b);
+    hexInput.value = rgbToHex(parsed.r, parsed.g, parsed.b);
+    rgbInput.value = `rgb(${parsed.r}, ${parsed.g}, ${parsed.b})`;
   }
 }
 
 function confirmColor() {
-  const color = parsePickerColor(pickerColor.value)
-  emit('update:modelValue', formatOutput(color.r, color.g, color.b))
-  menuOpen.value = false
+  const color = parsePickerColor(pickerColor.value);
+  emit("update:modelValue", formatOutput(color.r, color.g, color.b));
+  menuOpen.value = false;
 }
 
 function clearColor() {
-  emit('update:modelValue', '')
-  menuOpen.value = false
+  emit("update:modelValue", "");
+  menuOpen.value = false;
 }
 
 function onInputValueChange(value: string): void {
-  localValue.value = value
-  const parsed = parseAnyColor(value)
+  localValue.value = value;
+  const parsed = parseAnyColor(value);
   if (parsed) {
     // 只有当输入有效时，才向父组件发送规范化后的值
-    emit('update:modelValue', formatOutput(parsed.r, parsed.g, parsed.b))
+    emit("update:modelValue", formatOutput(parsed.r, parsed.g, parsed.b));
     // 同时更新内部拾色器状态，以便预览正确
-    pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
+    pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b);
   }
 }
 
 async function copyToClipboard(text: string): Promise<void> {
   if (!navigator.clipboard) {
-    snackbarText.value = t('core.common.palette.copyFailed')
-    snackbar.value = true
-    return
+    snackbarText.value = t("core.common.palette.copyFailed");
+    snackbar.value = true;
+    return;
   }
   try {
-    await navigator.clipboard.writeText(text)
-    snackbarText.value = t('core.common.copied')
-    snackbar.value = true
+    await navigator.clipboard.writeText(text);
+    snackbarText.value = t("core.common.copied");
+    snackbar.value = true;
   } catch {
-    snackbarText.value = t('core.common.palette.copyFailed')
-    snackbar.value = true
+    snackbarText.value = t("core.common.palette.copyFailed");
+    snackbar.value = true;
   }
 }
 
 async function pasteFromClipboard() {
   if (!navigator.clipboard) {
-    snackbarText.value = t('core.common.palette.pasteFailed')
-    snackbar.value = true
-    return
+    snackbarText.value = t("core.common.palette.pasteFailed");
+    snackbar.value = true;
+    return;
   }
   try {
-    const text = await navigator.clipboard.readText()
-    const parsed = parseAnyColor(text.trim())
+    const text = await navigator.clipboard.readText();
+    const parsed = parseAnyColor(text.trim());
     if (parsed) {
-      pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
-      syncInputsFromColor(parsed.r, parsed.g, parsed.b)
-      snackbarText.value = t('core.common.palette.pasteSuccess')
-      snackbar.value = true
+      pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b);
+      syncInputsFromColor(parsed.r, parsed.g, parsed.b);
+      snackbarText.value = t("core.common.palette.pasteSuccess");
+      snackbar.value = true;
     } else {
-      snackbarText.value = t('core.common.palette.pasteInvalid')
-      snackbar.value = true
+      snackbarText.value = t("core.common.palette.pasteInvalid");
+      snackbar.value = true;
     }
   } catch {
-    snackbarText.value = t('core.common.palette.pasteFailed')
-    snackbar.value = true
+    snackbarText.value = t("core.common.palette.pasteFailed");
+    snackbar.value = true;
   }
 }
 
 function onPaste(event: ClipboardEvent): void {
-  const text = event.clipboardData?.getData('text')
+  const text = event.clipboardData?.getData("text");
   if (text) {
-    const parsed = parseAnyColor(text.trim())
+    const parsed = parseAnyColor(text.trim());
     if (parsed) {
-      event.preventDefault()
-      emit('update:modelValue', formatOutput(parsed.r, parsed.g, parsed.b))
+      event.preventDefault();
+      emit("update:modelValue", formatOutput(parsed.r, parsed.g, parsed.b));
     }
   }
 }

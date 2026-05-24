@@ -9,8 +9,8 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext, AstrMessageEvent
 from astrbot.core.computer.computer_client import get_booter, get_local_booter
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.tools.registry import builtin_tool
 
-from ..registry import builtin_tool
 from .util import check_admin_permission, format_exception_message
 
 _OS_NAME = platform.system()
@@ -117,7 +117,8 @@ class PythonTool(FunctionTool):
 class LocalPythonTool(FunctionTool):
     name: str = "astrbot_execute_python"
     description: str = (
-        "Execute code in a local Python environment. "
+        f"Execute code in a local Python environment. Current OS: {_OS_NAME}. "
+        "Use system-compatible code and paths. "
         "In local_sandboxed runtime, writes are restricted to ~/.astrbot/workspace/<session>."
     )
 
@@ -138,8 +139,13 @@ class LocalPythonTool(FunctionTool):
             cfg.get("provider_settings", {}).get("computer_use_runtime", "local")
         )
         sb = get_local_booter(
-            event.unified_msg_origin,
+            session_id=event.unified_msg_origin,
             sandboxed=runtime == "local_sandboxed",
+        )
+        effective_timeout = (
+            min(timeout, context.tool_call_timeout)
+            if timeout > 0
+            else context.tool_call_timeout
         )
         try:
             result = await sb.python.exec(

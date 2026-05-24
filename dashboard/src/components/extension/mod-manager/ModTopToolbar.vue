@@ -92,36 +92,35 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useModuleI18n } from '@/i18n/composables'
+import { computed } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
 
-const { tm } = useModuleI18n('features/extension')
+const { tm } = useModuleI18n("features/extension");
 
 const props = defineProps<{
-  search: string
-  showReserved: boolean
-  updatableCount: number
-  updatingAll?: boolean
-  failedMessage?: string
-}>()
+  search: string;
+  showReserved: boolean;
+  updatableCount: number;
+  updatingAll?: boolean;
+  failedMessage?: string;
+}>();
 
 const emit = defineEmits<{
-  (e: 'update:search', value: string): void
-  (e: 'toggle-show-reserved'): void
-  (e: 'install'): void
-  (e: 'update-all'): void
-}>()
+  (e: "update:search", value: string): void;
+  (e: "toggle-show-reserved"): void;
+  (e: "install"): void;
+  (e: "update-all"): void;
+}>();
 
 const searchModel = computed<string>({
-  get: () => props.search ?? '',
-  set: (val) => emit('update:search', val ?? '')
-})
+  get: () => props.search ?? "",
+  set: (val) => emit("update:search", val ?? ""),
+});
 
-const isUpdatingAll = computed(() => props.updatingAll ?? false)
+const isUpdatingAll = computed(() => props.updatingAll ?? false);
 
-const failedMessageText = computed(() => (props.failedMessage ?? '').trim())
-const hasFailedMessage = computed(() => failedMessageText.value.length > 0)
-
+const failedMessageText = computed(() => (props.failedMessage ?? "").trim());
+const hasFailedMessage = computed(() => failedMessageText.value.length > 0);
 </script>
 
 <style scoped>

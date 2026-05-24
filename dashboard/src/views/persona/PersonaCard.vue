@@ -118,17 +118,17 @@ import { defineComponent, type PropType } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 interface Persona {
-    persona_id: string;
-    system_prompt: string;
-    custom_error_message?: string | null;
-    begin_dialogs?: string[] | null;
-    tools?: string[] | null;
-    skills?: string[] | null;
-    subagents?: string[] | null;
-    created_at?: string;
-    updated_at?: string;
-    folder_id?: string | null;
-    [key: string]: any;
+  persona_id: string;
+  system_prompt: string;
+  custom_error_message?: string | null;
+  begin_dialogs?: string[] | null;
+  tools?: string[] | null;
+  skills?: string[] | null;
+  subagents?: string[] | null;
+  created_at?: string;
+  updated_at?: string;
+  folder_id?: string | null;
+  [key: string]: any;
 }
 
 export default defineComponent({
@@ -175,9 +175,7 @@ export default defineComponent({
     },
     truncateText(text: string | undefined | null, maxLength: number): string {
       if (!text) return "";
-      return text.length > maxLength
-        ? text.substring(0, maxLength) + "..."
-        : text;
+      return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
     },
     formatDate(dateString: string | undefined | null): string {
       if (!dateString) return "";

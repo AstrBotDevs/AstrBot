@@ -158,4 +158,4 @@
     "partialFailure": "{total} 個對話中有 {failed} 個刪除失敗",
     "requestFailed": "刪除對話失敗，請重試。"
   }
-} 
+}

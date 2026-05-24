@@ -101,15 +101,9 @@
 <script lang="ts">
 import type { PropType } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { getProviderIcon, getProviderDescription } from "@/utils/providerUtils";
+import { getProviderDescription, getProviderIcon } from "@/utils/providerUtils";
 
-const AVAILABLE_PROVIDER_TABS = [
-  "agent_runner",
-  "speech_to_text",
-  "text_to_speech",
-  "embedding",
-  "rerank",
-];
+const AVAILABLE_PROVIDER_TABS = ["agent_runner", "speech_to_text", "text_to_speech", "embedding", "rerank"];
 
 interface ProviderTemplate {
   provider: string;
@@ -138,7 +132,7 @@ export default {
     currentProviderType: {
       type: String,
       default: "agent_runner",
-    }
+    },
   },
   emits: ["update:show", "select-template"],
   setup() {
@@ -170,7 +164,7 @@ export default {
       if (this.showDialog) {
         this.syncActiveProviderTab();
       }
-    }
+    },
   },
   methods: {
     syncActiveProviderTab() {

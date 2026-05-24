@@ -13,23 +13,47 @@ from .platform import Platform, PlatformStatus
 from .register import platform_cls_map
 from .sources.webchat.webchat_adapter import WebChatAdapter
 
-PLATFORM_ADAPTER_MODULES: dict[str, str] = {
-    "aiocqhttp": ".sources.aiocqhttp.aiocqhttp_platform_adapter",
-    "qq_official": ".sources.qqofficial.qqofficial_platform_adapter",
-    "qq_official_webhook": ".sources.qqofficial_webhook.qo_webhook_adapter",
-    "lark": ".sources.lark.lark_adapter",
-    "dingtalk": ".sources.dingtalk.dingtalk_adapter",
-    "telegram": ".sources.telegram.tg_adapter",
-    "wecom": ".sources.wecom.wecom_adapter",
-    "wecom_ai_bot": ".sources.wecom_ai_bot.wecomai_adapter",
-    "weixin_official_account": ".sources.weixin_official_account.weixin_offacc_adapter",
-    "discord": ".sources.discord.discord_platform_adapter",
-    "misskey": ".sources.misskey.misskey_adapter",
-    "slack": ".sources.slack.slack_adapter",
-    "satori": ".sources.satori.satori_adapter",
-    "line": ".sources.line.line_adapter",
-    "kook": ".sources.kook.kook_adapter",
+PLATFORM_IMPORTS: dict[str, tuple[str, str]] = {
+    "aiocqhttp": (
+        ".sources.aiocqhttp.aiocqhttp_platform_adapter",
+        "AiocqhttpAdapter",
+    ),
+    "qq_official": (
+        ".sources.qqofficial.qqofficial_platform_adapter",
+        "QQOfficialPlatformAdapter",
+    ),
+    "qq_official_webhook": (
+        ".sources.qqofficial_webhook.qo_webhook_adapter",
+        "QQOfficialWebhookPlatformAdapter",
+    ),
+    "lark": (".sources.lark.lark_adapter", "LarkPlatformAdapter"),
+    "dingtalk": (".sources.dingtalk.dingtalk_adapter", "DingtalkPlatformAdapter"),
+    "telegram": (".sources.telegram.tg_adapter", "TelegramPlatformAdapter"),
+    "wecom": (".sources.wecom.wecom_adapter", "WecomPlatformAdapter"),
+    "wecom_ai_bot": (".sources.wecom_ai_bot.wecomai_adapter", "WecomAIBotAdapter"),
+    "weixin_official_account": (
+        ".sources.weixin_official_account.weixin_offacc_adapter",
+        "WeixinOfficialAccountPlatformAdapter",
+    ),
+    "discord": (".sources.discord.discord_platform_adapter", "DiscordPlatformAdapter"),
+    "misskey": (".sources.misskey.misskey_adapter", "MisskeyPlatformAdapter"),
+    "slack": (".sources.slack.slack_adapter", "SlackAdapter"),
+    "satori": (".sources.satori.satori_adapter", "SatoriPlatformAdapter"),
+    "line": (".sources.line.line_adapter", "LinePlatformAdapter"),
+    "kook": (".sources.kook.kook_adapter", "KookPlatformAdapter"),
+    "weibo": (".sources.weibo.weibo_adapter", "WeiboPlatformAdapter"),
+    "weixin_oc": (".sources.weixin_oc.weixin_oc_adapter", "WeixinOCAdapter"),
+    "mattermost": (
+        ".sources.mattermost.mattermost_adapter",
+        "MattermostPlatformAdapter",
+    ),
+    "heihe": (".sources.heihe.heihe_adapter", "HeihePlatformAdapter"),
 }
+PLATFORM_ADAPTER_MODULES: dict[str, str] = {
+    platform_type: module_path
+    for platform_type, (module_path, _) in PLATFORM_IMPORTS.items()
+}
+BUILTIN_PLATFORM_TYPES: tuple[str, ...] = tuple(PLATFORM_IMPORTS)
 
 
 @dataclass
@@ -80,10 +104,14 @@ class PlatformManager:
         tasks = self._platform_tasks.pop(client_id, None)
         if not tasks:
             return
-        for task in (tasks.run, tasks.wrapper):
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(tasks.run, tasks.wrapper, return_exceptions=True)
+        if not tasks.run.done():
+            await asyncio.sleep(0)
+        if not tasks.run.done():
+            tasks.run.cancel()
+        await asyncio.gather(tasks.run, return_exceptions=True)
+        if not tasks.wrapper.done():
+            tasks.wrapper.cancel()
+        await asyncio.gather(tasks.wrapper, return_exceptions=True)
 
     async def _terminate_inst_and_tasks(self, inst: Platform) -> None:
         client_id = inst.client_self_id

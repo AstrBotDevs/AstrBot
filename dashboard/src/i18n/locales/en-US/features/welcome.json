@@ -23,7 +23,6 @@
     "step3HelpTitle": "Allow Agent to Use Computer",
     "step3HelpItem1": "The agent will be able to access workspace directories (each user's workspace is isolated) and use Skills to perform more complex tasks.",
     "step3HelpItem2": "For AstrBot administrators, the agent is additionally allowed to execute Shell commands, Python code, and access all local directories.",
-    "step3HelpItem3": "For more granular permission and capability configuration, go to Config File -> General Config -> Computer Use to continue.",
     "step3HelpClose": "Close",
     "step3SelectLabel": "Computer Access",
     "step3Allow": "Allow",

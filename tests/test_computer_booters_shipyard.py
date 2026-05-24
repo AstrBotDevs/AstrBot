@@ -1,34 +1,23 @@
-"""Import smoke tests for Shipyard booter."""
+"""Shipyard runtime extraction smoke tests."""
 
-import pytest
+import importlib.util
 
 
-class TestShipyardBooterImports:
-    """Verify shipyard.py module can be imported and key classes exist."""
+class TestShipyardBooterExtraction:
+    """Concrete Shipyard runtimes are provided by plugins, not core."""
 
-    def test_module_import(self):
-        """Import the module without error."""
-        from astrbot.core.computer.booters import shipyard
-        assert shipyard is not None
+    def test_core_shipyard_modules_are_absent(self):
+        assert (
+            importlib.util.find_spec("astrbot.core.computer.booters.shipyard") is None
+        )
+        assert (
+            importlib.util.find_spec("astrbot.core.computer.booters.shipyard_neo")
+            is None
+        )
+        assert importlib.util.find_spec("astrbot.core.computer.booters.boxlite") is None
 
-    def test_shipyard_booter_class(self):
-        """ShipyardBooter is present and subclasses ComputerBooter."""
-        from astrbot.core.computer.booters.base import ComputerBooter
-        from astrbot.core.computer.booters.shipyard import ShipyardBooter
-        assert ShipyardBooter is not None
-        assert issubclass(ShipyardBooter, ComputerBooter)
-
-    def test_shipyard_shell_wrapper(self):
-        """ShipyardShellWrapper is present."""
-        from astrbot.core.computer.booters.shipyard import ShipyardShellWrapper
-        assert ShipyardShellWrapper is not None
-
-    def test_shipyard_filesystem_wrapper(self):
-        """ShipyardFileSystemWrapper is present."""
-        from astrbot.core.computer.booters.shipyard import ShipyardFileSystemWrapper
-        assert ShipyardFileSystemWrapper is not None
-
-    def test_default_tools_method(self):
-        """ShipyardBooter.get_default_tools exists and returns a list."""
-        from astrbot.core.computer.booters.shipyard import ShipyardBooter
-        assert hasattr(ShipyardBooter, "get_default_tools")
+    def test_core_shipyard_tool_modules_are_absent(self):
+        assert (
+            importlib.util.find_spec("astrbot.core.tools.computer_tools.shipyard_neo")
+            is None
+        )

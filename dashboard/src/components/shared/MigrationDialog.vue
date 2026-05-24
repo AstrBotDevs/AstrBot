@@ -151,9 +151,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
-import axios from "@/utils/request";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
 import ConsoleDisplayer from "./ConsoleDisplayer.vue";
 import WaitingForRestart from "./WaitingForRestart.vue";
@@ -190,9 +190,7 @@ const platformGroups = computed(() => {
 
 // 计算属性：检查是否可以开始迁移
 const canMigrate = computed(() => {
-  return platformGroups.value.every(
-    (group) => selectedPlatforms.value[group.type],
-  );
+  return platformGroups.value.every((group) => selectedPlatforms.value[group.type]);
 });
 
 // 监听 isOpen 变化，当对话框打开时加载平台列表
@@ -227,8 +225,7 @@ const loadPlatforms = async () => {
         }
       });
     } else {
-      error.value =
-        response.data.message || t("features.migration.dialog.loadError");
+      error.value = response.data.message || t("features.migration.dialog.loadError");
     }
   } catch (err) {
     console.error("Failed to load platforms:", err);
@@ -266,13 +263,10 @@ const handleMigration = async () => {
       migrationCompleted.value = true;
       migrationResult.value = {
         success: true,
-        message:
-          response.data.message || t("features.migration.dialog.success"),
+        message: response.data.message || t("features.migration.dialog.success"),
       };
     } else {
-      throw new Error(
-        response.data.message || t("features.migration.dialog.migrationError"),
-      );
+      throw new Error(response.data.message || t("features.migration.dialog.migrationError"));
     }
   } catch (err) {
     console.error("Migration failed:", err);

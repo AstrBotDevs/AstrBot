@@ -12,6 +12,8 @@ from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.config.default import DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.provider.register import llm_tools
+from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 
 

@@ -91,63 +91,63 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import axios from 'axios'
-import { useModuleI18n } from '@/i18n/composables'
+import { computed, ref } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
-const emit = defineEmits(['update:modelValue', 'disableCompleted'])
-const { tm } = useModuleI18n('features/config-metadata')
+const emit = defineEmits(["update:modelValue", "disableCompleted"]);
+const { tm } = useModuleI18n("features/config-metadata");
 
-const code = ref('')
-const recoveryCode = ref('')
-const showRecovery = ref(false)
-const verifying = ref(false)
-const errorMsg = ref('')
+const code = ref("");
+const recoveryCode = ref("");
+const showRecovery = ref(false);
+const verifying = ref(false);
+const errorMsg = ref("");
 
 const isValidRecoveryCode = computed(() => {
-  if (!recoveryCode.value) return false
-  const normalized = recoveryCode.value.replace(/[^A-Za-z0-9]/g, '')
-  return normalized.length === 32
-})
+  if (!recoveryCode.value) return false;
+  const normalized = recoveryCode.value.replace(/[^A-Za-z0-9]/g, "");
+  return normalized.length === 32;
+});
 
 function resetState() {
-  code.value = ''
-  recoveryCode.value = ''
-  showRecovery.value = false
-  verifying.value = false
-  errorMsg.value = ''
+  code.value = "";
+  recoveryCode.value = "";
+  showRecovery.value = false;
+  verifying.value = false;
+  errorMsg.value = "";
 }
 
 function onVisibilityChange(val) {
   if (!val) {
-    resetState()
+    resetState();
   }
-  emit('update:modelValue', val)
+  emit("update:modelValue", val);
 }
 
 function onCancel() {
-  resetState()
-  emit('update:modelValue', false)
+  resetState();
+  emit("update:modelValue", false);
 }
 
 async function confirmDisable() {
-  const inputCode = showRecovery.value ? recoveryCode.value : code.value
-  if (!inputCode) return
-  verifying.value = true
-  errorMsg.value = ''
+  const inputCode = showRecovery.value ? recoveryCode.value : code.value;
+  if (!inputCode) return;
+  verifying.value = true;
+  errorMsg.value = "";
   try {
-    const res = await axios.post('/api/auth/totp/disable', { code: inputCode })
-    if (res.data.status !== 'ok') {
-      errorMsg.value = res.data.message || tm('system_group.system.dashboard.totp.disableError')
-      return
+    const res = await axios.post("/api/auth/totp/disable", { code: inputCode });
+    if (res.data.status !== "ok") {
+      errorMsg.value = res.data.message || tm("system_group.system.dashboard.totp.disableError");
+      return;
     }
-    resetState()
-    emit('disableCompleted')
-    emit('update:modelValue', false)
+    resetState();
+    emit("disableCompleted");
+    emit("update:modelValue", false);
   } catch (error) {
-    errorMsg.value = String(error || '') || tm('system_group.system.dashboard.totp.disableError')
+    errorMsg.value = String(error || "") || tm("system_group.system.dashboard.totp.disableError");
   } finally {
-    verifying.value = false
+    verifying.value = false;
   }
 }
 </script>

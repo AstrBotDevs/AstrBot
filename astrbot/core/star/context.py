@@ -11,13 +11,14 @@ from deprecated import deprecated
 from astrbot.core import astrbot_config
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import Message
-from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.exceptions import ProviderNotFoundError
 from astrbot.core.group_message_flow_mgr import GroupMessageFlowManager
+from astrbot.core.i18n import normalize_language
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.memory.memory_manager import MemoryManager
 from astrbot.core.message.message_event_result import MessageChain
@@ -98,7 +99,9 @@ class Context:
         cron_manager: CronJobManager,
         subagent_orchestrator: SubAgentOrchestrator | None = None,
         group_message_flow_manager: GroupMessageFlowManager | None = None,
+        memory_manager: MemoryManager | None = None,
     ) -> None:
+        self._registered_web_apis: list[RegisteredWebApi] = []
         self.registered_unified_webhooks: dict[str, UnifiedWebhook] = {}
 
         self._event_queue = event_queue
@@ -124,7 +127,16 @@ class Context:
         self.astrbot_config_mgr = astrbot_config_mgr
         """配置文件管理器(非webui)"""
         self.kb_manager = knowledge_base_manager
-        self.memory_manager = memory_manager
+        self.cron_manager = cron_manager
+        self.memory_manager = memory_manager or MemoryManager()
+
+    @property
+    def registered_web_apis(self) -> list[RegisteredWebApi]:
+        return self._registered_web_apis
+
+    @registered_web_apis.setter
+    def registered_web_apis(self, value: list[RegisteredWebApi]) -> None:
+        self._registered_web_apis = value
 
     async def llm_generate(
         self,
@@ -217,6 +229,9 @@ class Context:
 
         """
         # Import here to avoid circular imports
+        from astrbot.core.agent.runners.tool_loop_agent_runner import (
+            ToolLoopAgentRunner,
+        )
         from astrbot.core.astr_agent_context import (
             AgentContextWrapper,
             AstrAgentContext,

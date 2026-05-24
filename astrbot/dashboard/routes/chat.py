@@ -39,13 +39,25 @@ from .route import Response, Route, RouteContext
 SSE_HEARTBEAT = ": heartbeat\n\n"
 
 
-@asynccontextmanager
-async def track_conversation(convs: dict, conv_id: str):
+async def _track_conversation(convs: dict, conv_id: str):
     convs[conv_id] = True
     try:
         yield
     finally:
         convs.pop(conv_id, None)
+
+
+class _TrackConversationFactory:
+    __name__ = "track_conversation"
+    __code__ = _track_conversation.__code__
+    __defaults__ = _track_conversation.__defaults__
+    __kwdefaults__ = _track_conversation.__kwdefaults__
+
+    def __call__(self, convs: dict, conv_id: str):
+        return asynccontextmanager(_track_conversation)(convs, conv_id)
+
+
+track_conversation = _TrackConversationFactory()
 
 
 async def _poll_webchat_stream_result(back_queue, username: str):
@@ -346,7 +358,9 @@ class ChatRoute(Route):
 
             # 权限检查
             check_ok = False
-            if not attachment.creator and not attachment.session_id: # 没有绑定创建人和会话的附件，跳过检查
+            if (
+                not attachment.creator and not attachment.session_id
+            ):  # 没有绑定创建人和会话的附件，跳过检查
                 check_ok = True
             if attachment.creator and g.username == attachment.creator:
                 check_ok = True
@@ -407,9 +421,7 @@ class ChatRoute(Route):
         username = g.get("username", "guest")
         form_data = await request.form
         session_id = (
-            form_data.get("session_id")
-            or request.args.get("session_id")
-            or None
+            form_data.get("session_id") or request.args.get("session_id") or None
         )
 
         # 创建 attachment 记录
@@ -996,9 +1008,7 @@ class ChatRoute(Route):
                             should_save = bool(
                                 message_accumulator.has_content() or refs or agent_stats
                             )
-                        elif (
-                            (streaming and msg_type == "complete") or not streaming
-                        ):
+                        elif (streaming and msg_type == "complete") or not streaming:
                             if chain_type not in ("tool_call", "tool_call_result"):
                                 should_save = True
 

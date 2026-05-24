@@ -5,6 +5,7 @@ import numpy as np
 
 from astrbot import logger
 from astrbot.core.db.vec_db.base import BaseVecDB, Result
+from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 
 from .document_storage import DocumentStorage
@@ -86,8 +87,9 @@ class FaissVecDB(BaseVecDB):
             )
             return []
 
+        content_count = len(contents)
         start = time.time()
-        logger.debug(f"Generating embeddings for {len(contents)} contents...")
+        logger.debug(f"Generating embeddings for {content_count} contents...")
         try:
             vectors = await self.embedding_provider.get_embeddings_batch(
                 contents,
@@ -108,6 +110,18 @@ class FaissVecDB(BaseVecDB):
         logger.debug(
             f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds.",
         )
+        if len(vectors) != content_count:
+            raise KnowledgeBaseUploadError(
+                stage="embedding",
+                user_message=(
+                    "向量化失败：嵌入向量数量与文本数量不一致，"
+                    f"期望 {content_count}，实际 {len(vectors)}。"
+                ),
+                details={
+                    "expected_contents": content_count,
+                    "actual_vectors": len(vectors),
+                },
+            )
 
         # 使用 DocumentStorage 的批量插入方法
         int_ids = await self.document_storage.insert_documents_batch(

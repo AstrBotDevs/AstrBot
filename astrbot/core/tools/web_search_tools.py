@@ -54,10 +54,23 @@ _BAIDU_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "baidu_ai_search",
 }
+_EXA_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "exa",
+}
 _METASO_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "metaso",
 }
+_EXA_SEARCH_TYPES = (
+    "auto",
+    "fast",
+    "deep",
+    "deep-lite",
+    "deep-reasoning",
+    "instant",
+    "neural",
+)
 
 
 @std_dataclass
@@ -139,6 +152,28 @@ def _get_runtime(context) -> tuple[dict, dict, str]:
     cfg = agent_ctx.context.get_config(umo=event.unified_msg_origin)
     provider_settings = cfg.get("provider_settings", {})
     return cfg, provider_settings, event.unified_msg_origin
+
+
+def _normalize_timeout(timeout: float | str | None) -> aiohttp.ClientTimeout:
+    try:
+        timeout_value = int(timeout) if timeout is not None else MIN_WEB_SEARCH_TIMEOUT
+    except (TypeError, ValueError):
+        timeout_value = MIN_WEB_SEARCH_TIMEOUT
+    return aiohttp.ClientTimeout(total=max(timeout_value, MIN_WEB_SEARCH_TIMEOUT))
+
+
+def _normalize_count(
+    value: float | str | None,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    try:
+        count = int(value) if value is not None else default
+    except (TypeError, ValueError):
+        count = default
+    return max(minimum, min(count, maximum))
 
 
 def _validate_search_query(kwargs: dict) -> str | None:
@@ -310,9 +345,8 @@ async def _bocha_search(
         # See: https://github.com/aio-libs/aiohttp/issues/11898
         "Accept-Encoding": "gzip, deflate",
     }
-    async with (
-        aiohttp.ClientSession(trust_env=True) as session,
-        session.post(
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
             "https://api.bochaai.com/v1/web-search",
             json=payload,
             headers=header,
@@ -346,9 +380,8 @@ async def _brave_search(
         "Accept": "application/json",
         "X-Subscription-Token": brave_key,
     }
-    async with (
-        aiohttp.ClientSession(trust_env=True) as session,
-        session.get(
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.get(
             "https://api.search.brave.com/res/v1/web/search",
             params=payload,
             headers=header,
@@ -479,6 +512,126 @@ async def _baidu_search(
                 )
                 for item in references
                 if item.get("url")
+            ]
+
+
+async def _exa_search(
+    provider_settings: dict,
+    payload: dict,
+    timeout: int = MIN_WEB_SEARCH_TIMEOUT,
+) -> list[SearchResult]:
+    exa_key = await _EXA_KEY_ROTATOR.get(provider_settings)
+    url = f"{_get_exa_base_url(provider_settings)}/search"
+    header = {
+        "x-api-key": exa_key,
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            url,
+            json=payload,
+            headers=header,
+            timeout=_normalize_timeout(timeout),
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    _format_provider_request_error(
+                        "Exa",
+                        "web search",
+                        url,
+                        reason,
+                        response.status,
+                    )
+                )
+            data = await response.json()
+            return [
+                SearchResult(
+                    title=item.get("title", ""),
+                    url=item.get("url", ""),
+                    snippet=(item.get("text") or "")[:500],
+                    favicon=item.get("favicon"),
+                )
+                for item in data.get("results", [])
+            ]
+
+
+async def _exa_extract(
+    provider_settings: dict,
+    payload: dict,
+    timeout: int = MIN_WEB_SEARCH_TIMEOUT,
+) -> list[dict]:
+    exa_key = await _EXA_KEY_ROTATOR.get(provider_settings)
+    url = f"{_get_exa_base_url(provider_settings)}/contents"
+    header = {
+        "x-api-key": exa_key,
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            url,
+            json=payload,
+            headers=header,
+            timeout=_normalize_timeout(timeout),
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    _format_provider_request_error(
+                        "Exa",
+                        "content extraction",
+                        url,
+                        reason,
+                        response.status,
+                    )
+                )
+            data = await response.json()
+            status_error = _format_exa_contents_status_error(
+                data.get("statuses", []),
+            )
+            if status_error:
+                raise ValueError(status_error)
+            return data.get("results", [])
+
+
+async def _exa_find_similar(
+    provider_settings: dict,
+    payload: dict,
+    timeout: int = MIN_WEB_SEARCH_TIMEOUT,
+) -> list[SearchResult]:
+    exa_key = await _EXA_KEY_ROTATOR.get(provider_settings)
+    url = f"{_get_exa_base_url(provider_settings)}/findSimilar"
+    header = {
+        "x-api-key": exa_key,
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            url,
+            json=payload,
+            headers=header,
+            timeout=_normalize_timeout(timeout),
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    _format_provider_request_error(
+                        "Exa",
+                        "find similar",
+                        url,
+                        reason,
+                        response.status,
+                    )
+                )
+            data = await response.json()
+            return [
+                SearchResult(
+                    title=item.get("title", ""),
+                    url=item.get("url", ""),
+                    snippet=(item.get("text") or "")[:500],
+                    favicon=item.get("favicon"),
+                )
+                for item in data.get("results", [])
             ]
 
 
@@ -1196,7 +1349,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         if site:
             sites = [s.strip() for s in site.replace("|", ",").split(",") if s.strip()]
             if sites:
-                payload["search_filter"] = {"match": {"site": sites[:100]}}  # type: ignore
+                payload["search_filter"] = {"match": {"site": sites[:100]}}
 
         results = await _baidu_search(
             provider_settings,
@@ -1256,6 +1409,9 @@ __all__ = [
     "BaiduWebSearchTool",
     "BochaWebSearchTool",
     "BraveWebSearchTool",
+    "ExaExtractWebPageTool",
+    "ExaFindSimilarTool",
+    "ExaWebSearchTool",
     "FirecrawlExtractWebPageTool",
     "FirecrawlWebSearchTool",
     "MetasoWebSearchTool",

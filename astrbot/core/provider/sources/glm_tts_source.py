@@ -88,7 +88,7 @@ class ProviderGLMTTS(TTSProvider):
                     return output_path
 
         except aiohttp.ClientError as e:
-            raise Exception(f"GLM-TTS API request failed: {e!s}")
+            raise Exception(f"GLM-TTS API request failed: {e!s}") from e
 
     async def terminate(self):
         pass

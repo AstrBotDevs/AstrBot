@@ -149,7 +149,7 @@ async def test_telegram_reply_to_user_keeps_sender_id_as_user_id():
     assert reply.sender_id == "87654321"
     assert reply.qq == 87654321
     # reply metadata should be preserved
-    assert reply.id == reply_to_message.message_id
+    assert reply.id == str(reply_to_message.message_id)
     assert reply.chain
     # ensure the reply chain still carries the original reply text
     if getattr(reply_to_message, "text", None):

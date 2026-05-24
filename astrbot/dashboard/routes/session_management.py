@@ -135,7 +135,6 @@ class SessionManagementRoute(Route):
                 search=search,
             )
             rules_list = []
-            filtered_count = 0
             for umo, rules in umo_rules.items():
                 rule_info = {"umo": umo, "rules": rules}
                 parts = umo.split(":")
@@ -842,7 +841,6 @@ class SessionManagementRoute(Route):
                 group["name"] = name.strip()
             if umos is not None:
                 group["umos"] = umos
-                new_umos = set(umos)
             else:
                 current_umos = set(group.get("umos", []))
                 if add_umos:
@@ -869,6 +867,68 @@ class SessionManagementRoute(Route):
         except Exception as e:
             logger.error(f"更新分组失败: {e!s}")
             return Response().error(f"更新分组失败: {e!s}").to_json()
+
+    async def update_group_config(self):
+        """Update a group's reusable session rule configuration."""
+        try:
+            data = await request.json
+            group_id = data.get("id") or data.get("group_id")
+            config = data.get("config", {})
+            sync_to_umos = data.get("sync_to_umos", True)
+            if not group_id:
+                return Response().error("分组 ID 不能为空").to_json()
+            if not isinstance(config, dict):
+                return Response().error("配置必须是对象").to_json()
+
+            invalid_keys = [
+                rule_key
+                for rule_key in config
+                if rule_key not in AVAILABLE_SESSION_RULE_KEYS
+            ]
+            if invalid_keys:
+                return (
+                    Response()
+                    .error(f"不支持的规则键: {', '.join(invalid_keys)}")
+                    .to_json()
+                )
+
+            groups = self._get_groups()
+            if group_id not in groups:
+                return Response().error(f"分组 '{group_id}' 不存在").to_json()
+
+            group = groups[group_id]
+            group["config"] = config
+            self._save_groups(groups)
+
+            success_count = 0
+            failed_umos: list[str] = []
+            if sync_to_umos:
+                success_count, failed_umos = await self._sync_group_config_to_umos(
+                    config,
+                    group.get("umos", []),
+                )
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "message": f"分组 '{group.get('name', group_id)}' 配置已更新",
+                        "group": {
+                            "id": group_id,
+                            "name": group.get("name", ""),
+                            "umos": group.get("umos", []),
+                            "umo_count": len(group.get("umos", [])),
+                            "config": config,
+                        },
+                        "sync_success_count": success_count,
+                        "sync_failed_umos": failed_umos,
+                    },
+                )
+                .to_json()
+            )
+        except Exception as e:
+            logger.error(f"更新分组配置失败: {e!s}")
+            return Response().error(f"更新分组配置失败: {e!s}").to_json()
 
     async def delete_group(self):
         """删除分组"""

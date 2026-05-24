@@ -1,8 +1,8 @@
 <script setup>
 import LZString from "lz-string";
-import axios from "axios";
 import { computed, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
 const { tm } = useModuleI18n("features/extension");
 
@@ -26,19 +26,13 @@ const selected = ref([]);
 const installStatus = ref({});
 const installing = ref(false);
 
-const selectedCount = computed(
-  () => importPlugins.value.filter((_, idx) => selected.value[idx]).length,
-);
+const selectedCount = computed(() => importPlugins.value.filter((_, idx) => selected.value[idx]).length);
 
 const allSelected = computed(
-  () =>
-    importPlugins.value.length > 0 &&
-    selectedCount.value === importPlugins.value.length,
+  () => importPlugins.value.length > 0 && selectedCount.value === importPlugins.value.length,
 );
 
-const someSelected = computed(
-  () => selectedCount.value > 0 && !allSelected.value,
-);
+const someSelected = computed(() => selectedCount.value > 0 && !allSelected.value);
 
 const progressText = computed(() => {
   const entries = Object.entries(installStatus.value).filter(([key]) => !key.endsWith("_msg"));
@@ -117,8 +111,7 @@ const installOne = async (plugin, idx) => {
     });
     installStatus.value = { ...installStatus.value, [idx]: "success" };
   } catch (err) {
-    const msg =
-      err?.response?.data?.message || err?.message || tm("exportImport.errors.unknownError");
+    const msg = err?.response?.data?.message || err?.message || tm("exportImport.errors.unknownError");
     installStatus.value = { ...installStatus.value, [idx]: "error", [`${idx}_msg`]: msg };
   }
 };
@@ -138,9 +131,7 @@ const runInstall = async (indices) => {
 };
 
 const importSelected = () => {
-  const indices = importPlugins.value
-    .map((_, i) => i)
-    .filter((i) => selected.value[i]);
+  const indices = importPlugins.value.map((_, i) => i).filter((i) => selected.value[i]);
   runInstall(indices);
 };
 

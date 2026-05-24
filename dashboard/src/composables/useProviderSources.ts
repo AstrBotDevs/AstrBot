@@ -1,9 +1,9 @@
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import axios from 'axios'
-import { getProviderIcon } from '@/utils/providerUtils'
-import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
-import { normalizeTextInput } from '@/utils/inputValue'
-import { mergeDynamicTranslations } from '@/i18n/composables'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { mergeDynamicTranslations } from "@/i18n/composables";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
+import { normalizeTextInput } from "@/utils/inputValue";
+import { getProviderIcon } from "@/utils/providerUtils";
+import axios from "@/utils/request";
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string;
@@ -11,131 +11,128 @@ export interface UseProviderSourcesOptions {
   showMessage: (message: string, color?: string) => void;
 }
 
-const DEEPSEEK_PROVIDER = 'deepseek'
-const DEEPSEEK_ANTHROPIC_TYPE = 'anthropic_chat_completion'
-const DEEPSEEK_OPENAI_TYPE = 'openai_chat_completion'
+const DEEPSEEK_PROVIDER = "deepseek";
+const DEEPSEEK_ANTHROPIC_TYPE = "anthropic_chat_completion";
+const DEEPSEEK_OPENAI_TYPE = "openai_chat_completion";
 
 function cloneProviderSchema<T>(schema: T): T {
-  if (typeof structuredClone === 'function') {
-    return structuredClone(schema)
+  if (typeof structuredClone === "function") {
+    return structuredClone(schema);
   }
 
-  return JSON.parse(JSON.stringify(schema)) as T
+  return JSON.parse(JSON.stringify(schema)) as T;
 }
 
 export function isDeepSeekAnthropicSource(source?: Record<string, any> | null) {
-  if (!source || typeof source !== 'object') {
-    return false
+  if (!source || typeof source !== "object") {
+    return false;
   }
 
-  return source.provider === DEEPSEEK_PROVIDER && source.type === DEEPSEEK_ANTHROPIC_TYPE
+  return source.provider === DEEPSEEK_PROVIDER && source.type === DEEPSEEK_ANTHROPIC_TYPE;
 }
 
 export function isDeepSeekOpenAISource(source?: Record<string, any> | null) {
-  if (!source || typeof source !== 'object') {
-    return false
+  if (!source || typeof source !== "object") {
+    return false;
   }
 
-  return source.provider === DEEPSEEK_PROVIDER && source.type === DEEPSEEK_OPENAI_TYPE
+  return source.provider === DEEPSEEK_PROVIDER && source.type === DEEPSEEK_OPENAI_TYPE;
 }
 
 export function buildProviderSourceSchema(
   schema: Record<string, any>,
   tm: (key: string, params?: Record<string, unknown>) => string,
-  source?: Record<string, any> | null
+  source?: Record<string, any> | null,
 ) {
   if (!schema || !schema.provider) {
-    return schema
+    return schema;
   }
 
-  const customSchema = cloneProviderSchema(schema)
+  const customSchema = cloneProviderSchema(schema);
 
   if (customSchema.provider?.items?.id) {
-    customSchema.provider.items.id.hint = tm('providerSources.hints.id')
-    customSchema.provider.items.key.hint = tm('providerSources.hints.key')
-    customSchema.provider.items.api_base.hint = tm('providerSources.hints.apiBase')
+    customSchema.provider.items.id.hint = tm("providerSources.hints.id");
+    customSchema.provider.items.key.hint = tm("providerSources.hints.key");
+    customSchema.provider.items.api_base.hint = tm("providerSources.hints.apiBase");
   }
 
   if (customSchema.provider?.items?.proxy) {
-    customSchema.provider.items.proxy.description = tm('providerSources.labels.proxy')
-    customSchema.provider.items.proxy.hint = tm('providerSources.hints.proxy')
+    customSchema.provider.items.proxy.description = tm("providerSources.labels.proxy");
+    customSchema.provider.items.proxy.hint = tm("providerSources.hints.proxy");
   }
 
   if (isDeepSeekOpenAISource(source)) {
     if (customSchema.provider?.items?.id) {
-      customSchema.provider.items.id.hint = tm('providerSources.deepseekOpenAI.hints.id')
+      customSchema.provider.items.id.hint = tm("providerSources.deepseekOpenAI.hints.id");
     }
 
     if (customSchema.provider?.items?.key) {
-      customSchema.provider.items.key.hint = tm('providerSources.deepseekOpenAI.hints.key')
+      customSchema.provider.items.key.hint = tm("providerSources.deepseekOpenAI.hints.key");
     }
 
     if (customSchema.provider?.items?.api_base) {
-      customSchema.provider.items.api_base.description = tm('providerSources.deepseekOpenAI.labels.apiBase')
-      customSchema.provider.items.api_base.hint = tm('providerSources.deepseekOpenAI.hints.apiBase')
+      customSchema.provider.items.api_base.description = tm("providerSources.deepseekOpenAI.labels.apiBase");
+      customSchema.provider.items.api_base.hint = tm("providerSources.deepseekOpenAI.hints.apiBase");
     }
 
     if (customSchema.provider?.items?.custom_headers) {
-      customSchema.provider.items.custom_headers.hint = tm('providerSources.deepseekOpenAI.hints.customHeaders')
+      customSchema.provider.items.custom_headers.hint = tm("providerSources.deepseekOpenAI.hints.customHeaders");
     }
 
-    return customSchema
+    return customSchema;
   }
 
   if (!isDeepSeekAnthropicSource(source)) {
-    return customSchema
+    return customSchema;
   }
 
   if (customSchema.provider?.items?.id) {
-    customSchema.provider.items.id.hint = tm('providerSources.deepseekAnthropic.hints.id')
+    customSchema.provider.items.id.hint = tm("providerSources.deepseekAnthropic.hints.id");
   }
 
   if (customSchema.provider?.items?.key) {
-    customSchema.provider.items.key.hint = tm('providerSources.deepseekAnthropic.hints.key')
+    customSchema.provider.items.key.hint = tm("providerSources.deepseekAnthropic.hints.key");
   }
 
   if (customSchema.provider?.items?.api_base) {
-    customSchema.provider.items.api_base.description = tm('providerSources.deepseekAnthropic.labels.apiBase')
-    customSchema.provider.items.api_base.hint = tm('providerSources.deepseekAnthropic.hints.apiBase')
+    customSchema.provider.items.api_base.description = tm("providerSources.deepseekAnthropic.labels.apiBase");
+    customSchema.provider.items.api_base.hint = tm("providerSources.deepseekAnthropic.hints.apiBase");
   }
 
   if (customSchema.provider?.items?.custom_headers) {
-    customSchema.provider.items.custom_headers.hint = tm('providerSources.deepseekAnthropic.hints.customHeaders')
+    customSchema.provider.items.custom_headers.hint = tm("providerSources.deepseekAnthropic.hints.customHeaders");
   }
 
   if (customSchema.provider?.items?.anth_thinking_config) {
-    customSchema.provider.items.anth_thinking_config.description = tm('providerSources.deepseekAnthropic.labels.thinkingConfig')
-    customSchema.provider.items.anth_thinking_config.items.type.hint = tm('providerSources.deepseekAnthropic.hints.thinkingType')
-    customSchema.provider.items.anth_thinking_config.items.budget.hint = tm('providerSources.deepseekAnthropic.hints.thinkingBudget')
-    customSchema.provider.items.anth_thinking_config.items.effort.hint = tm('providerSources.deepseekAnthropic.hints.thinkingEffort')
+    customSchema.provider.items.anth_thinking_config.description = tm(
+      "providerSources.deepseekAnthropic.labels.thinkingConfig",
+    );
+    customSchema.provider.items.anth_thinking_config.items.type.hint = tm(
+      "providerSources.deepseekAnthropic.hints.thinkingType",
+    );
+    customSchema.provider.items.anth_thinking_config.items.budget.hint = tm(
+      "providerSources.deepseekAnthropic.hints.thinkingBudget",
+    );
+    customSchema.provider.items.anth_thinking_config.items.effort.hint = tm(
+      "providerSources.deepseekAnthropic.hints.thinkingEffort",
+    );
   }
 
-  return customSchema
+  return customSchema;
 }
 
 export function resolveDefaultTab(value?: string) {
   const normalized = (value || "").toLowerCase();
 
-  if (
-    normalized.startsWith("select_agent_runner_provider") ||
-    normalized === "agent_runner"
-  ) {
+  if (normalized.startsWith("select_agent_runner_provider") || normalized === "agent_runner") {
     return "agent_runner";
   }
 
-  if (
-    normalized === "select_provider_stt" ||
-    normalized === "speech_to_text" ||
-    normalized.includes("stt")
-  ) {
+  if (normalized === "select_provider_stt" || normalized === "speech_to_text" || normalized.includes("stt")) {
     return "speech_to_text";
   }
 
-  if (
-    normalized === "select_provider_tts" ||
-    normalized === "text_to_speech" ||
-    normalized.includes("tts")
-  ) {
+  if (normalized === "select_provider_tts" || normalized === "text_to_speech" || normalized.includes("tts")) {
     return "text_to_speech";
   }
 
@@ -160,13 +157,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   function applyProviderDynamicI18n(providerI18nTranslations?: Record<string, any>) {
-    if (providerI18nTranslations && typeof providerI18nTranslations === 'object') {
-      mergeDynamicTranslations('features.config-metadata', providerI18nTranslations)
+    if (providerI18nTranslations && typeof providerI18nTranslations === "object") {
+      mergeDynamicTranslations("features.config-metadata", providerI18nTranslations);
     }
   }
 
   function handleLocaleChange() {
-    void loadProviderTemplate()
+    void loadProviderTemplate();
   }
 
   // ===== State =====
@@ -174,9 +171,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const metadata = ref<Record<string, any>>({});
   const providerSources = ref<any[]>([]);
   const providers = ref<any[]>([]);
-  const selectedProviderType = ref<string>(
-    resolveDefaultTab(options.defaultTab),
-  );
+  const selectedProviderType = ref<string>(resolveDefaultTab(options.defaultTab));
   const selectedProviderSource = ref<any | null>(null);
   const selectedProviderSourceOriginalId = ref<string | null>(null);
   const editableProviderSource = ref<any | null>(null);
@@ -228,23 +223,18 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   // ===== Computed =====
   const availableSourceTypes = computed(() => {
-    if (
-      !providerTemplates.value ||
-      Object.keys(providerTemplates.value).length === 0
-    ) {
+    if (!providerTemplates.value || Object.keys(providerTemplates.value).length === 0) {
       return [];
     }
 
     const types: Array<{ value: string; label: string; icon: string }> = [];
-    for (const [templateName, template] of Object.entries(
-      providerTemplates.value,
-    )) {
+    for (const [templateName, template] of Object.entries(providerTemplates.value)) {
       if (template.provider_type === selectedProviderType.value) {
         types.push({
           value: templateName,
           label: templateName,
-          icon: getProviderIcon(template.provider || template.id || template.type || templateName)
-        })
+          icon: getProviderIcon(template.provider || template.id || template.type || templateName),
+        });
       }
     }
 
@@ -257,8 +247,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return providerSources.value.filter(
       (source) =>
         source.provider_type === selectedProviderType.value ||
-        (source.type &&
-          isTypeMatchingProviderType(source.type, selectedProviderType.value)),
+        (source.type && isTypeMatchingProviderType(source.type, selectedProviderType.value)),
     );
   });
 
@@ -269,9 +258,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const sourceProviders = computed(() => {
     if (!selectedProviderSource.value || !providers.value) return [];
 
-    return providers.value.filter(
-      (p) => p.provider_source_id === selectedProviderSource.value.id,
-    );
+    return providers.value.filter((p) => p.provider_source_id === selectedProviderSource.value.id);
   });
 
   const existingModelsForSelectedSource = computed(() => {
@@ -293,13 +280,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   });
 
   const mergedModelEntries = computed(() => {
-    const configuredEntries = (sourceProviders.value || []).map(
-      (provider: any) => ({
-        type: "configured",
-        provider,
-        metadata: getModelMetadata(provider.model),
-      }),
-    );
+    const configuredEntries = (sourceProviders.value || []).map((provider: any) => ({
+      type: "configured",
+      provider,
+      metadata: getModelMetadata(provider.model),
+    }));
 
     const availableEntries = (sortedAvailableModels.value || [])
       .filter((item: any) => {
@@ -311,8 +296,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         return {
           type: "available",
           model: name,
-          metadata:
-            typeof item === "object" ? item?.metadata : getModelMetadata(name),
+          metadata: typeof item === "object" ? item?.metadata : getModelMetadata(name),
         };
       });
 
@@ -366,15 +350,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const advancedSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null;
 
-    const excluded = new Set([
-      "id",
-      "key",
-      "api_base",
-      "enable",
-      "type",
-      "provider_type",
-      "provider",
-    ]);
+    const excluded = new Set(["id", "key", "api_base", "enable", "type", "provider_type", "provider"]);
     const advanced: Record<string, any> = {};
 
     for (const key of Object.keys(editableProviderSource.value)) {
@@ -397,19 +373,16 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return [];
     }
 
-    return providers.value.filter(
-      (provider: any) =>
-        getProviderType(provider) === selectedProviderType.value,
-    );
+    return providers.value.filter((provider: any) => getProviderType(provider) === selectedProviderType.value);
   });
 
   const providerSourceSchema = computed(() => {
     return buildProviderSourceSchema(
       configSchema.value,
       tm,
-      editableProviderSource.value || selectedProviderSource.value
-    )
-  })
+      editableProviderSource.value || selectedProviderSource.value,
+    );
+  });
 
   // ===== Watches =====
   watch(
@@ -432,8 +405,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   function resolveSourceIcon(source: any) {
-    if (!source) return ''
-    return getProviderIcon(source.provider || source.id || source.type || source.templateKey) || ''
+    if (!source) return "";
+    return getProviderIcon(source.provider || source.id || source.type || source.templateKey) || "";
   }
 
   function getSourceDisplayName(source: any) {
@@ -480,29 +453,29 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     const oldVersionProviderTypeMapping: Record<string, string> = {
-      openai_chat_completion: 'chat_completion',
-      qiniu_chat_completion: 'chat_completion',
-      anthropic_chat_completion: 'chat_completion',
-      googlegenai_chat_completion: 'chat_completion',
-      zhipu_chat_completion: 'chat_completion',
-      dify: 'agent_runner',
-      coze: 'agent_runner',
-      dashscope: 'chat_completion',
-      openai_whisper_api: 'speech_to_text',
-      openai_whisper_selfhost: 'speech_to_text',
-      sensevoice_stt_selfhost: 'speech_to_text',
-      openai_tts_api: 'text_to_speech',
-      edge_tts: 'text_to_speech',
-      gsvi_tts_api: 'text_to_speech',
-      fishaudio_tts_api: 'text_to_speech',
-      dashscope_tts: 'text_to_speech',
-      azure_tts: 'text_to_speech',
-      minimax_tts_api: 'text_to_speech',
-      volcengine_tts: 'text_to_speech',
-      glm_asr: 'speech_to_text',
-      glm_tts: 'text_to_speech'
-    }
-    return oldVersionProviderTypeMapping[provider.type]
+      openai_chat_completion: "chat_completion",
+      qiniu_chat_completion: "chat_completion",
+      anthropic_chat_completion: "chat_completion",
+      googlegenai_chat_completion: "chat_completion",
+      zhipu_chat_completion: "chat_completion",
+      dify: "agent_runner",
+      coze: "agent_runner",
+      dashscope: "chat_completion",
+      openai_whisper_api: "speech_to_text",
+      openai_whisper_selfhost: "speech_to_text",
+      sensevoice_stt_selfhost: "speech_to_text",
+      openai_tts_api: "text_to_speech",
+      edge_tts: "text_to_speech",
+      gsvi_tts_api: "text_to_speech",
+      fishaudio_tts_api: "text_to_speech",
+      dashscope_tts: "text_to_speech",
+      azure_tts: "text_to_speech",
+      minimax_tts_api: "text_to_speech",
+      volcengine_tts: "text_to_speech",
+      glm_asr: "speech_to_text",
+      glm_tts: "text_to_speech",
+    };
+    return oldVersionProviderTypeMapping[provider.type];
   }
 
   function selectProviderSource(source: any) {
@@ -514,9 +487,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     selectedProviderSource.value = source;
     selectedProviderSourceOriginalId.value = source?.id || null;
     suppressSourceWatch = true;
-    editableProviderSource.value = source
-      ? ensureProviderSourceDefaults(JSON.parse(JSON.stringify(source)))
-      : null;
+    editableProviderSource.value = source ? ensureProviderSourceDefaults(JSON.parse(JSON.stringify(source))) : null;
     nextTick(() => {
       suppressSourceWatch = false;
     });
@@ -530,10 +501,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return source;
     }
 
-    if (
-      source.provider === "ollama" &&
-      source.ollama_disable_thinking === undefined
-    ) {
+    if (source.provider === "ollama" && source.ollama_disable_thinking === undefined) {
       source.ollama_disable_thinking = false;
     }
 
@@ -542,14 +510,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   function extractSourceFieldsFromTemplate(template: Record<string, any>) {
     const sourceFields: Record<string, any> = {};
-    const excludeKeys = [
-      "id",
-      "enable",
-      "model",
-      "provider_source_id",
-      "modalities",
-      "custom_extra_body",
-    ];
+    const excludeKeys = ["id", "enable", "model", "provider_source_id", "modalities", "custom_extra_body"];
 
     for (const [key, value] of Object.entries(template)) {
       if (!excludeKeys.includes(key)) {
@@ -601,9 +562,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function deleteProviderSource(source: any) {
-    const confirmed = await askForConfirmation(
-      tm("providerSources.deleteConfirm", { id: source.id }),
-    );
+    const confirmed = await askForConfirmation(tm("providerSources.deleteConfirm", { id: source.id }));
     if (!confirmed) return;
 
     try {
@@ -611,12 +570,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         id: source.id,
       });
 
-      providers.value = providers.value.filter(
-        (p) => p.provider_source_id !== source.id,
-      );
-      providerSources.value = providerSources.value.filter(
-        (s) => s.id !== source.id,
-      );
+      providers.value = providers.value.filter((p) => p.provider_source_id !== source.id);
+      providerSources.value = providerSources.value.filter((s) => s.id !== source.id);
 
       if (selectedProviderSource.value?.id === source.id) {
         selectedProviderSource.value = null;
@@ -636,8 +591,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!selectedProviderSource.value) return;
 
     savingSource.value = true;
-    const originalId =
-      selectedProviderSourceOriginalId.value || selectedProviderSource.value.id;
+    const originalId = selectedProviderSourceOriginalId.value || selectedProviderSource.value.id;
     try {
       const response = await axios.post("/api/config/provider_sources/update", {
         config: editableProviderSource.value,
@@ -650,19 +604,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
       if (editableProviderSource.value!.id !== originalId) {
         providers.value = providers.value.map((p) =>
-          p.provider_source_id === originalId
-            ? { ...p, provider_source_id: editableProviderSource.value!.id }
-            : p,
+          p.provider_source_id === originalId ? { ...p, provider_source_id: editableProviderSource.value!.id } : p,
         );
-        selectedProviderSourceOriginalId.value =
-          editableProviderSource.value!.id;
+        selectedProviderSourceOriginalId.value = editableProviderSource.value!.id;
       }
 
       const idx = providerSources.value.findIndex((ps) => ps.id === originalId);
       if (idx !== -1) {
-        providerSources.value[idx] = JSON.parse(
-          JSON.stringify(editableProviderSource.value),
-        );
+        providerSources.value[idx] = JSON.parse(JSON.stringify(editableProviderSource.value));
         selectedProviderSource.value = providerSources.value[idx];
       }
 
@@ -676,12 +625,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       showMessage(response.data.message || tm("providerSources.saveSuccess"));
       return true;
     } catch (error: any) {
-      showMessage(
-        error.response?.data?.message ||
-          error.message ||
-          tm("providerSources.saveError"),
-        "error",
-      );
+      showMessage(error.response?.data?.message || error.message || tm("providerSources.saveError"), "error");
       return false;
     } finally {
       savingSource.value = false;
@@ -701,20 +645,17 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     loadingModels.value = true;
     try {
-      const sourceId =
-        editableProviderSource.value?.id || selectedProviderSource.value.id;
+      const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id;
       const response = await axios.get("/api/config/provider_sources/models", {
         params: { source_id: sourceId },
       });
       if (response.data.status === "ok") {
         const metadataMap = response.data.data.model_metadata || {};
         modelMetadata.value = metadataMap;
-        availableModels.value = (response.data.data.models || []).map(
-          (model: string) => ({
-            name: model,
-            metadata: metadataMap?.[model] || null,
-          }),
-        );
+        availableModels.value = (response.data.data.models || []).map((model: string) => ({
+          name: model,
+          metadata: metadataMap?.[model] || null,
+        }));
         if (availableModels.value.length === 0) {
           showMessage(tm("models.noModelsFound"), "info");
         }
@@ -723,12 +664,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       }
     } catch (error: any) {
       modelMetadata.value = {};
-      showMessage(
-        error.response?.data?.message ||
-          error.message ||
-          tm("models.fetchError"),
-        "error",
-      );
+      showMessage(error.response?.data?.message || error.message || tm("models.fetchError"), "error");
     } finally {
       loadingModels.value = false;
     }
@@ -737,10 +673,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   function buildModelProviderConfig(modelName: string) {
     if (!selectedProviderSource.value) return;
 
-    const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
-    const newId = modelName.startsWith(`${sourceId}/`)
-      ? modelName
-      : `${sourceId}/${modelName}`
+    const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id;
+    const newId = modelName.startsWith(`${sourceId}/`) ? modelName : `${sourceId}/${modelName}`;
 
     const metadata = getModelMetadata(modelName);
     let modalities: string[];
@@ -761,10 +695,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     let max_context_tokens = 0;
-    if (
-      metadata?.limit?.context &&
-      typeof metadata.limit.context === "number"
-    ) {
+    if (metadata?.limit?.context && typeof metadata.limit.context === "number") {
       max_context_tokens = metadata.limit.context;
     }
 
@@ -789,16 +720,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         throw new Error(res.data.message);
       }
       providers.value.push(newProvider);
-      showMessage(
-        res.data.message || tm("models.addSuccess", { model: modelName }),
-      );
+      showMessage(res.data.message || tm("models.addSuccess", { model: modelName }));
     } catch (error: any) {
-      showMessage(
-        error.response?.data?.message ||
-          error.message ||
-          tm("providerSources.saveError"),
-        "error",
-      );
+      showMessage(error.response?.data?.message || error.message || tm("providerSources.saveError"), "error");
     } finally {
       await loadConfig();
     }
@@ -809,9 +733,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function deleteProvider(provider: any) {
-    const confirmed = await askForConfirmation(
-      tm("models.deleteConfirm", { id: provider.id }),
-    );
+    const confirmed = await askForConfirmation(tm("models.deleteConfirm", { id: provider.id }));
     if (!confirmed) return;
 
     try {
@@ -834,23 +756,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       });
       if (response.data.status === "ok" && response.data.data.error === null) {
         const latency = Math.max(0, Math.round(performance.now() - startTime));
-        showMessage(
-          tm("models.testSuccessWithLatency", { id: provider.id, latency }),
-        );
+        showMessage(tm("models.testSuccessWithLatency", { id: provider.id, latency }));
       } else {
         throw new Error(response.data.data.error || tm("models.testError"));
       }
     } catch (error: any) {
-      showMessage(
-        error.response?.data?.message ||
-          error.message ||
-          tm("models.testError"),
-        "error",
-      );
+      showMessage(error.response?.data?.message || error.message || tm("models.testError"), "error");
     } finally {
-      testingProviders.value = testingProviders.value.filter(
-        (id) => id !== provider.id,
-      );
+      testingProviders.value = testingProviders.value.filter((id) => id !== provider.id);
     }
   }
 
@@ -860,10 +773,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   async function loadProviderTemplate() {
     try {
-      const response = await axios.get('/api/config/provider/template')
-      if (response.data.status === 'ok') {
-        applyProviderDynamicI18n(response.data.data.provider_i18n_translations)
-        configSchema.value = response.data.data.config_schema || {}
+      const response = await axios.get("/api/config/provider/template");
+      if (response.data.status === "ok") {
+        applyProviderDynamicI18n(response.data.data.provider_i18n_translations);
+        configSchema.value = response.data.data.config_schema || {};
         if (configSchema.value.provider?.config_template) {
           providerTemplates.value = configSchema.value.provider.config_template;
         }
@@ -880,13 +793,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   onMounted(async () => {
-    window.addEventListener('astrbot-locale-changed', handleLocaleChange)
-    await loadProviderTemplate()
-  })
+    window.addEventListener("astrbot-locale-changed", handleLocaleChange);
+    await loadProviderTemplate();
+  });
 
   onBeforeUnmount(() => {
-    window.removeEventListener('astrbot-locale-changed', handleLocaleChange)
-  })
+    window.removeEventListener("astrbot-locale-changed", handleLocaleChange);
+  });
 
   return {
     // state

@@ -152,149 +152,157 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, watch } from 'vue';
-import type { PropType } from 'vue';
-import ModelSelector from './ModelSelector.vue';
+import type { PropType } from "vue";
+import { defineComponent, ref, watch } from "vue";
+import ModelSelector from "./ModelSelector.vue";
 
 interface ModelConfig {
-    provider_id: string;
-    model: string;
-    temperature: number;
-    max_tokens: number;
-    thinking_enabled: boolean;
-    thinking_budget?: number;
-    prompt?: string;
+  provider_id: string;
+  model: string;
+  temperature: number;
+  max_tokens: number;
+  thinking_enabled: boolean;
+  thinking_budget?: number;
+  prompt?: string;
 }
 
 interface ThinkingModels {
-    deep: ModelConfig;
-    medium: ModelConfig;
-    fast: ModelConfig;
+  deep: ModelConfig;
+  medium: ModelConfig;
+  fast: ModelConfig;
 }
 
 interface ModelConfigData {
-    function_model: ModelConfig;
-    reply_model: ModelConfig;
-    thinking_models: ThinkingModels;
-    image_caption_model: ModelConfig;
+  function_model: ModelConfig;
+  reply_model: ModelConfig;
+  thinking_models: ThinkingModels;
+  image_caption_model: ModelConfig;
 }
 
 export default defineComponent({
-    name: 'ModelConfigSection',
-    components: {
-        ModelSelector
-    },
-    props: {
-        modelValue: {
-            type: Object as PropType<ModelConfigData>,
-            default: () => ({
-                function_model: {
-                    provider_id: '',
-                    model: '',
-                    temperature: 0.7,
-                    max_tokens: 2048,
-                    thinking_enabled: false
-                },
-                reply_model: {
-                    provider_id: '',
-                    model: '',
-                    temperature: 0.8,
-                    max_tokens: 2048,
-                    thinking_enabled: false
-                },
-                thinking_models: {
-                    deep: {
-                        provider_id: '',
-                        model: '',
-                        temperature: 0.7,
-                        max_tokens: 4096,
-                        thinking_enabled: false
-                    },
-                    medium: {
-                        provider_id: '',
-                        model: '',
-                        temperature: 0.7,
-                        max_tokens: 4096,
-                        thinking_enabled: false
-                    },
-                    fast: {
-                        provider_id: '',
-                        model: '',
-                        temperature: 0.7,
-                        max_tokens: 2048,
-                        thinking_enabled: false
-                    }
-                },
-                image_caption_model: {
-                    provider_id: '',
-                    model: '',
-                    temperature: 0.7,
-                    max_tokens: 256,
-                    thinking_enabled: false,
-                    thinking_budget: undefined,
-                    prompt: '请简洁描述这张图片的内容，用一句话概括。'
-                }
-            })
+  name: "ModelConfigSection",
+  components: {
+    ModelSelector,
+  },
+  props: {
+    modelValue: {
+      type: Object as PropType<ModelConfigData>,
+      default: () => ({
+        function_model: {
+          provider_id: "",
+          model: "",
+          temperature: 0.7,
+          max_tokens: 2048,
+          thinking_enabled: false,
         },
-        providers: {
-            type: Array as PropType<any[]>,
-            default: () => []
+        reply_model: {
+          provider_id: "",
+          model: "",
+          temperature: 0.8,
+          max_tokens: 2048,
+          thinking_enabled: false,
         },
-        loadingProviders: {
-            type: Boolean,
-            default: false
-        }
+        thinking_models: {
+          deep: {
+            provider_id: "",
+            model: "",
+            temperature: 0.7,
+            max_tokens: 4096,
+            thinking_enabled: false,
+          },
+          medium: {
+            provider_id: "",
+            model: "",
+            temperature: 0.7,
+            max_tokens: 4096,
+            thinking_enabled: false,
+          },
+          fast: {
+            provider_id: "",
+            model: "",
+            temperature: 0.7,
+            max_tokens: 2048,
+            thinking_enabled: false,
+          },
+        },
+        image_caption_model: {
+          provider_id: "",
+          model: "",
+          temperature: 0.7,
+          max_tokens: 256,
+          thinking_enabled: false,
+          thinking_budget: undefined,
+          prompt: "请简洁描述这张图片的内容，用一句话概括。",
+        },
+      }),
     },
-    emits: ['update:modelValue', 'refresh-providers'],
-    setup(props, { emit }) {
-        const localConfig = ref<ModelConfigData>(JSON.parse(JSON.stringify(props.modelValue)));
+    providers: {
+      type: Array as PropType<any[]>,
+      default: () => [],
+    },
+    loadingProviders: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  emits: ["update:modelValue", "refresh-providers"],
+  setup(props, { emit }) {
+    const localConfig = ref<ModelConfigData>(JSON.parse(JSON.stringify(props.modelValue)));
 
-        // 安全检查：确保 image_caption_model 始终存在（兼容旧配置）
-        if (!localConfig.value.image_caption_model) {
-            localConfig.value.image_caption_model = {
-                provider_id: '',
-                model: '',
-                temperature: 0.7,
-                max_tokens: 256,
-                thinking_enabled: false,
-                thinking_budget: undefined,
-                prompt: '请简洁描述这张图片的内容，用一句话概括。'
-            };
-        }
-
-        // 监听输入变化
-        watch(localConfig, (newVal) => {
-            emit('update:modelValue', newVal);
-        }, { deep: true });
-
-        // 监听props变化
-        watch(() => props.modelValue, (newVal) => {
-            localConfig.value = JSON.parse(JSON.stringify(newVal));
-            // props 变化后也要安全检查
-            if (!localConfig.value.image_caption_model) {
-                localConfig.value.image_caption_model = {
-                    provider_id: '',
-                    model: '',
-                    temperature: 0.7,
-                    max_tokens: 256,
-                    thinking_enabled: false,
-                    thinking_budget: undefined,
-                    prompt: '请简洁描述这张图片的内容，用一句话概括。'
-                };
-            }
-        }, { deep: true });
-
-        // 更新图片描述提示词
-        const updateImageCaptionPrompt = (value: any) => {
-            if (localConfig.value.image_caption_model) {
-                localConfig.value.image_caption_model.prompt = value;
-            }
-        };
-
-        return {
-            localConfig,
-            updateImageCaptionPrompt
-        };
+    // 安全检查：确保 image_caption_model 始终存在（兼容旧配置）
+    if (!localConfig.value.image_caption_model) {
+      localConfig.value.image_caption_model = {
+        provider_id: "",
+        model: "",
+        temperature: 0.7,
+        max_tokens: 256,
+        thinking_enabled: false,
+        thinking_budget: undefined,
+        prompt: "请简洁描述这张图片的内容，用一句话概括。",
+      };
     }
+
+    // 监听输入变化
+    watch(
+      localConfig,
+      (newVal) => {
+        emit("update:modelValue", newVal);
+      },
+      { deep: true },
+    );
+
+    // 监听props变化
+    watch(
+      () => props.modelValue,
+      (newVal) => {
+        localConfig.value = JSON.parse(JSON.stringify(newVal));
+        // props 变化后也要安全检查
+        if (!localConfig.value.image_caption_model) {
+          localConfig.value.image_caption_model = {
+            provider_id: "",
+            model: "",
+            temperature: 0.7,
+            max_tokens: 256,
+            thinking_enabled: false,
+            thinking_budget: undefined,
+            prompt: "请简洁描述这张图片的内容，用一句话概括。",
+          };
+        }
+      },
+      { deep: true },
+    );
+
+    // 更新图片描述提示词
+    const updateImageCaptionPrompt = (value: any) => {
+      if (localConfig.value.image_caption_model) {
+        localConfig.value.image_caption_model.prompt = value;
+      }
+    };
+
+    return {
+      localConfig,
+      updateImageCaptionPrompt,
+    };
+  },
 });
 </script>

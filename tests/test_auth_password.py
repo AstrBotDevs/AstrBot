@@ -95,10 +95,12 @@ class TestVerifyDashboardPassword:
     def test_verify_legacy_md5(self):
         md5 = hashlib.md5(b"testpassword").hexdigest()
         assert verify_dashboard_password(md5, "testpassword") is True
+        assert verify_dashboard_password(md5, md5) is False
 
     def test_verify_legacy_sha256(self):
         sha256 = hashlib.sha256(b"testpassword").hexdigest()
         assert verify_dashboard_password(sha256, "testpassword") is True
+        assert verify_dashboard_password(sha256, sha256) is False
 
 
 class TestNormalizeDashboardPasswordHash:

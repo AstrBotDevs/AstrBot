@@ -13,21 +13,19 @@
  * - components/DetailsDialog.vue: 详情对话框
  */
 import { computed, onActivated, onMounted, ref, watch } from "vue";
-import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
 import { normalizeTextInput } from "@/utils/inputValue";
-
-// Composables
-import { useComponentData } from "./composables/useComponentData";
-import { useCommandFilters } from "./composables/useCommandFilters";
-import { useCommandActions } from "./composables/useCommandActions";
-
+import axios from "@/utils/request";
 // Components
 import CommandFilters from "./components/CommandFilters.vue";
 import CommandTable from "./components/CommandTable.vue";
-import ToolTable from "./components/ToolTable.vue";
-import RenameDialog from "./components/RenameDialog.vue";
 import DetailsDialog from "./components/DetailsDialog.vue";
+import RenameDialog from "./components/RenameDialog.vue";
+import ToolTable from "./components/ToolTable.vue";
+import { useCommandActions } from "./composables/useCommandActions";
+import { useCommandFilters } from "./composables/useCommandFilters";
+// Composables
+import { useComponentData } from "./composables/useComponentData";
 
 // Types
 import type { CommandItem, ToolItem } from "./types";
@@ -44,17 +42,8 @@ const viewMode = ref<"commands" | "tools">("commands");
 const toolSearch = ref("");
 
 // 数据管理
-const {
-  loading,
-  commands,
-  tools,
-  toolsLoading,
-  summary,
-  snackbar,
-  toast,
-  fetchCommands,
-  fetchTools,
-} = useComponentData();
+const { loading, commands, tools, toolsLoading, summary, snackbar, toast, fetchCommands, fetchTools } =
+  useComponentData();
 
 // 过滤逻辑
 const {
@@ -87,31 +76,17 @@ const filteredTools = computed(() => {
   const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
   if (!query) return tools.value;
   return tools.value.filter(
-    (tool) =>
-      tool.name?.toLowerCase().includes(query) ||
-      tool.description?.toLowerCase().includes(query),
+    (tool) => tool.name?.toLowerCase().includes(query) || tool.description?.toLowerCase().includes(query),
   );
 });
 
 // 处理切换指令状态
 const handleToggleCommand = async (cmd: CommandItem) => {
-  await toggleCommand(
-    cmd,
-    tm("messages.toggleSuccess"),
-    tm("messages.toggleFailed"),
-  );
+  await toggleCommand(cmd, tm("messages.toggleSuccess"), tm("messages.toggleFailed"));
 };
 
-const handleUpdatePermission = async (
-  cmd: CommandItem,
-  permission: "admin" | "member",
-) => {
-  await updatePermission(
-    cmd,
-    permission,
-    tm("messages.updateSuccess"),
-    tm("messages.updateFailed"),
-  );
+const handleUpdatePermission = async (cmd: CommandItem, permission: "admin" | "member") => {
+  await updatePermission(cmd, permission, tm("messages.updateSuccess"), tm("messages.updateFailed"));
 };
 
 const handleToggleTool = async (tool: ToolItem) => {
@@ -129,17 +104,12 @@ const handleToggleTool = async (tool: ToolItem) => {
       toast(res.data.message || tmTool("messages.toggleToolSuccess"));
     } else {
       tool.active = previous;
-      toast(
-        res.data.message || tmTool("messages.toggleToolError", { error: "" }),
-        "error",
-      );
+      toast(res.data.message || tmTool("messages.toggleToolError", { error: "" }), "error");
     }
   } catch (error: any) {
     tool.active = previous;
     toast(
-      error?.response?.data?.message ||
-        error?.message ||
-        tmTool("messages.toggleToolError", { error: "" }),
+      error?.response?.data?.message || error?.message || tmTool("messages.toggleToolError", { error: "" }),
       "error",
     );
   }
@@ -147,10 +117,7 @@ const handleToggleTool = async (tool: ToolItem) => {
 
 // 处理确认重命名
 const handleConfirmRename = async () => {
-  await confirmRename(
-    tm("messages.renameSuccess"),
-    tm("messages.renameFailed"),
-  );
+  await confirmRename(tm("messages.renameSuccess"), tm("messages.renameFailed"));
 };
 
 // 生命周期

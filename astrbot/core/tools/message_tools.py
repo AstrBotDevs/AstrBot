@@ -153,9 +153,12 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return local_path, True
         except Exception as exc:
             logger.warning(f"Failed to check/download file from sandbox: {exc}")
-            raise
 
-        raise FileNotFoundError(f"{component_type} path does not exist: {path}")
+        raise FileNotFoundError(
+            errno.ENOENT,
+            os.strerror(errno.ENOENT),
+            path,
+        )
 
     def _require_existing_file(self, resolved_path: str, original_path: str) -> str:
         if os.path.isfile(resolved_path):
@@ -285,8 +288,6 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     return (
                         f"error: unsupported message type '{msg_type}' at index {idx}."
                     )
-            except FileNotFoundError as exc:
-                return f"error: {exc}"
             except Exception as exc:
                 return f"error: failed to build messages[{idx}] component: {exc}"
 
@@ -331,6 +332,12 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 exc_info=True,
             )
             return f"error: {exc}"
+        if str(target_session) == current_session:
+            event = context.context.event
+            event._has_send_oper = True
+            set_extra = getattr(event, "set_extra", None)
+            if callable(set_extra):
+                set_extra("_send_message_to_user_current_session", True)
         return f"Message sent to session {target_session}"
 
 

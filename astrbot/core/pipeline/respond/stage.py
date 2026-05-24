@@ -1,6 +1,7 @@
 import asyncio
 import math
 import random
+from collections.abc import Callable
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger
@@ -9,13 +10,44 @@ from astrbot.core.message.message_event_result import MessageChain, ResultConten
 from astrbot.core.pipeline.context import PipelineContext, call_event_hook
 from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.platform.sources.qqofficial.components import QQCButton, QQCKeyboard
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.path_util import path_Mapping
 
 
 @register_stage
 class RespondStage(Stage):
+    _component_validators: dict[
+        type[BaseMessageComponent],
+        Callable[[BaseMessageComponent], bool],
+    ] = {
+        component_type: (lambda comp: not comp.empty())
+        for component_type in (
+            Comp.Plain,
+            Comp.Face,
+            Comp.Record,
+            Comp.Video,
+            Comp.At,
+            Comp.AtAll,
+            Comp.RPS,
+            Comp.Dice,
+            Comp.Shake,
+            Comp.Share,
+            Comp.Contact,
+            Comp.Location,
+            Comp.Music,
+            Comp.Image,
+            Comp.Reply,
+            Comp.Poke,
+            Comp.Forward,
+            Comp.Node,
+            Comp.Nodes,
+            Comp.Json,
+            Comp.Unknown,
+            Comp.WechatEmoji,
+            Comp.File,
+        )
+    }
+
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.config = ctx.astrbot_config

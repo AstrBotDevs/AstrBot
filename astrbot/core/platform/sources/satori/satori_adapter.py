@@ -368,7 +368,7 @@ class SatoriPlatformAdapter(Platform):
 
             elements = event.message.message
             if raw_quote := event.message._raw_data.get("quote"):
-                quote: element.Quote | None = element.transform([raw_quote])[0]  # type: ignore
+                quote: element.Quote | None = element.transform([raw_quote])[0]
             elif quotes := element.select(elements, element.Quote):
                 quote = quotes[0]
             else:

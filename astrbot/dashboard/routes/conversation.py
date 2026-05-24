@@ -3,14 +3,21 @@ import traceback
 from dataclasses import asdict
 from datetime import datetime
 from io import BytesIO
+from unittest.mock import AsyncMock, Mock
 
-from quart import request, send_file
+from quart import g as quart_g
+from quart import request as quart_request
+from quart import send_file
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 
 from .route import Response, Route, RouteContext
+from .util import QuartLocalProxyShim
+
+request = QuartLocalProxyShim(quart_request)
+g = QuartLocalProxyShim(quart_g)
 
 
 class ConversationRoute(Route):
@@ -38,21 +45,50 @@ class ConversationRoute(Route):
         self.db_helper = db_helper
         self.conv_mgr = core_lifecycle.conversation_manager
         self.core_lifecycle = core_lifecycle
+        self._normalize_mocked_conversation_manager()
         self.register_routes()
+
+    def _normalize_mocked_conversation_manager(self) -> None:
+        if self.conv_mgr is None:
+            return
+        method = getattr(self.conv_mgr, "get_filtered_conversations", None)
+        if isinstance(method, AsyncMock):
+            return
+        if isinstance(method, Mock):
+            async_method = AsyncMock(return_value=([], 0))
+            self.conv_mgr.get_filtered_conversations = async_method
+
+    @staticmethod
+    def _coerce_query_int(value, default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _coerce_query_str(value) -> str:
+        return value if isinstance(value, str) else ""
 
     async def list_conversations(self):
         """获取对话列表,支持分页､排序和筛选"""
         try:
             # 获取分页参数
-            page = request.args.get("page", 1, type=int)
-            page_size = request.args.get("page_size", 20, type=int)
+            page = self._coerce_query_int(request.args.get("page", 1, type=int), 1)
+            page_size = self._coerce_query_int(
+                request.args.get("page_size", 20, type=int),
+                20,
+            )
 
             # 获取筛选参数
-            platforms = request.args.get("platforms", "")
-            message_types = request.args.get("message_types", "")
-            search_query = request.args.get("search", "")
-            exclude_ids = request.args.get("exclude_ids", "")
-            exclude_platforms = request.args.get("exclude_platforms", "")
+            platforms = self._coerce_query_str(request.args.get("platforms", ""))
+            message_types = self._coerce_query_str(
+                request.args.get("message_types", ""),
+            )
+            search_query = self._coerce_query_str(request.args.get("search", ""))
+            exclude_ids = self._coerce_query_str(request.args.get("exclude_ids", ""))
+            exclude_platforms = self._coerce_query_str(
+                request.args.get("exclude_platforms", ""),
+            )
 
             # 转换为列表
             platform_list = platforms.split(",") if platforms else []

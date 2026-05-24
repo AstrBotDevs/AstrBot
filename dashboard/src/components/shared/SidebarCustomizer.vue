@@ -110,14 +110,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { onMounted, ref } from "vue";
 import { useI18n } from "@/i18n/composables";
 import sidebarItems from "@/layouts/full/vertical-sidebar/sidebarItem";
 import {
-  getSidebarCustomization,
-  setSidebarCustomization,
   clearSidebarCustomization,
+  getSidebarCustomization,
   resolveSidebarItems,
+  setSidebarCustomization,
 } from "@/utils/sidebarCustomization";
 
 const { t } = useI18n();
@@ -129,8 +129,7 @@ const draggedItem = ref(null);
 
 function initializeItems() {
   const customization = getSidebarCustomization();
-  const { mainItems: resolvedMain, moreItems: resolvedMore } =
-    resolveSidebarItems(sidebarItems, customization);
+  const { mainItems: resolvedMain, moreItems: resolvedMore } = resolveSidebarItems(sidebarItems, customization);
   mainItems.value = resolvedMain;
   moreItems.value = resolvedMore;
 }

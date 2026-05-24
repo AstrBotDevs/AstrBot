@@ -170,8 +170,8 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
 const { tm: t } = useModuleI18n("features/knowledge-base/detail");
 
@@ -228,14 +228,9 @@ const performRetrieval = async () => {
         debugVisualize.value = response.data.data.visualization;
       }
 
-      showSnackbar(
-        t("retrieval.searchSuccess", { count: results.value.length }),
-      );
+      showSnackbar(t("retrieval.searchSuccess", { count: results.value.length }));
     } else {
-      showSnackbar(
-        response.data.message || t("retrieval.searchFailed"),
-        "error",
-      );
+      showSnackbar(response.data.message || t("retrieval.searchFailed"), "error");
     }
   } catch (error) {
     console.error("Retrieval failed:", error);

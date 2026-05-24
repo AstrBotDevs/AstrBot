@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator
 from slack_sdk.web.async_client import AsyncWebClient
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import BaseMessageComponent, File, Image, Plain
+from astrbot.api.message_components import BaseMessageComponent, Plain
 from astrbot.api.platform import Group, MessageMember
 
 from .session_codec import (
@@ -41,48 +41,7 @@ class SlackMessageEvent(AstrMessageEvent):
         fallbacks: dict[str, str] | None = None,
     ) -> dict | None:
         """将消息段转换为 Slack 块格式"""
-        if isinstance(segment, Plain):
-            return {"type": "section", "text": {"type": "mrkdwn", "text": segment.text}}
-        if isinstance(segment, Image):
-            url = segment.url or segment.file
-            if url and url.startswith("http"):
-                return {"type": "image", "image_url": url, "alt_text": "图片"}
-            path = await segment.convert_to_file_path()
-            response = await web_client.files_upload_v2(file=path, filename="image.jpg")
-            if not response["ok"]:
-                logger.error(f"Slack file upload failed: {response['error']}")
-                return {
-                    "type": "section",
-                    "text": {"type": "mrkdwn", "text": "图片上传失败"},
-                }
-            image_url = response["files"][0]["url_private"]
-            logger.debug(f"Slack file upload response: {response}")
-            return {
-                "type": "image",
-                "slack_file": {"url": image_url},
-                "alt_text": "图片",
-            }
-        if isinstance(segment, File):
-            url = segment.url or segment.file
-            response = await web_client.files_upload_v2(
-                file=url,
-                filename=segment.name or "file",
-            )
-            if not response["ok"]:
-                logger.error(f"Slack file upload failed: {response['error']}")
-                return {
-                    "type": "section",
-                    "text": {"type": "mrkdwn", "text": "文件上传失败"},
-                }
-            file_url = response["files"][0]["permalink"]
-            return {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"文件: <{file_url}|{segment.name or '文件'}>",
-                },
-            }
-        return None
+        return await from_segment_to_slack_block(segment, web_client, fallbacks)
 
     @staticmethod
     async def _parse_slack_blocks(
@@ -91,71 +50,36 @@ class SlackMessageEvent(AstrMessageEvent):
         fallbacks: dict[str, str] | None = None,
     ):
         """解析成 Slack 块格式"""
-        blocks = []
-        text_content = ""
-        for segment in message_chain.chain:
-            if isinstance(segment, Plain):
-                text_content += segment.text
-            else:
-                if text_content.strip():
-                    blocks.append(
-                        {
-                            "type": "section",
-                            "text": {"type": "mrkdwn", "text": text_content},
-                        },
-                    )
-                    text_content = ""
-                block = await SlackMessageEvent._from_segment_to_slack_block(
-                    segment,
-                    web_client,
-                )
-                if block:
-                    blocks.append(block)
-        if text_content.strip():
-            blocks.append(
-                {"type": "section", "text": {"type": "mrkdwn", "text": text_content}},
-            )
-        return (blocks, "" if blocks else text_content)
+        return await parse_slack_blocks(message_chain, web_client, fallbacks)
+
+    _build_text_fallback_from_chain = staticmethod(build_text_fallback_from_chain)
 
     async def send(self, message: MessageChain) -> None:
-        blocks, text = await SlackMessageEvent._parse_slack_blocks(
-            message,
-            self.web_client,
+        channel_id, thread_ts = resolve_target_from_event(
+            session_id=self.session_id,
+            raw_message=self.message_obj.raw_message,
+            group_id=self.get_group_id(),
         )
-        try:
-            if self.get_group_id():
-                await self.web_client.chat_postMessage(
-                    channel=self.get_group_id(),
-                    text=text,
-                    blocks=blocks or None,
-                )
-            else:
-                await self.web_client.chat_postMessage(
-                    channel=self.get_sender_id(),
-                    text=text,
-                    blocks=blocks or None,
-                )
-        except Exception:
-            parts = []
-            for segment in message.chain:
-                if isinstance(segment, Plain):
-                    parts.append(segment.text)
-                elif isinstance(segment, File):
-                    parts.append(f" [文件: {segment.name}] ")
-                elif isinstance(segment, Image):
-                    parts.append(" [图片] ")
-            fallback_text = "".join(parts)
-            if self.get_group_id():
-                await self.web_client.chat_postMessage(
-                    channel=self.get_group_id(),
-                    text=fallback_text,
-                )
-            else:
-                await self.web_client.chat_postMessage(
-                    channel=self.get_sender_id(),
-                    text=fallback_text,
-                )
+        await send_with_blocks_and_fallback(
+            web_client=self.web_client,
+            channel=channel_id,
+            thread_ts=thread_ts,
+            message_chain=message,
+            fallbacks=self.text_fallbacks,
+            parse_blocks=SlackMessageEvent._parse_slack_blocks,
+            build_text_fallback=SlackMessageEvent._build_text_fallback_from_chain,
+            session_id=self.session_id,
+        )
         await super().send(message)
+
+    async def send_typing(self) -> None:
+        return None
+
+    async def stop_typing(self) -> None:
+        return None
+
+    async def _post_send(self) -> None:
+        return None
 
     async def send_streaming(
         self,

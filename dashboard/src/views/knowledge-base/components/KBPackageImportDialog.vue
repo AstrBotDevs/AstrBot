@@ -170,221 +170,217 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import axios from 'axios'
-import { useModuleI18n } from '@/i18n/composables'
+import { computed, ref, watch } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
-const { tm: t } = useModuleI18n('features/knowledge-base/index')
+const { tm: t } = useModuleI18n("features/knowledge-base/index");
 
 const props = defineProps<{
-  modelValue: boolean
-  embeddingProviders: any[]
-  rerankProviders: any[]
-}>()
+  modelValue: boolean;
+  embeddingProviders: any[];
+  rerankProviders: any[];
+}>();
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: boolean): void
-  (e: 'imported'): void
-}>()
+  (e: "update:modelValue", value: boolean): void;
+  (e: "imported"): void;
+}>();
 
-const status = ref<'idle' | 'checking' | 'confirm' | 'processing' | 'completed' | 'failed'>('idle')
-const packageFile = ref<File | null>(null)
-const uploadedFilename = ref('')
-const uploading = ref(false)
-const checkResult = ref<any>(null)
-const kbName = ref('')
-const embeddingProviderId = ref('')
-const rerankProviderId = ref<string | null>(null)
-const taskId = ref('')
-const progress = ref({ current: 0, total: 100, message: '' })
-const errorMessage = ref('')
-const importResult = ref<any>(null)
+const status = ref<"idle" | "checking" | "confirm" | "processing" | "completed" | "failed">("idle");
+const packageFile = ref<File | null>(null);
+const uploadedFilename = ref("");
+const uploading = ref(false);
+const checkResult = ref<any>(null);
+const kbName = ref("");
+const embeddingProviderId = ref("");
+const rerankProviderId = ref<string | null>(null);
+const taskId = ref("");
+const progress = ref({ current: 0, total: 100, message: "" });
+const errorMessage = ref("");
+const importResult = ref<any>(null);
 
 const versionAlertType = computed(() => {
-  if (checkResult.value?.version_status === 'major_diff') return 'error'
-  if (checkResult.value?.version_status === 'minor_diff') return 'warning'
-  return 'info'
-})
+  if (checkResult.value?.version_status === "major_diff") return "error";
+  if (checkResult.value?.version_status === "minor_diff") return "warning";
+  return "info";
+});
 
 const versionAlertMessage = computed(() => {
-  if (checkResult.value?.version_status === 'major_diff') {
-    return t('packageImport.versionMajorDiff', {
-      backup: checkResult.value?.backup_version || '-',
-      current: checkResult.value?.current_version || '-'
-    })
+  if (checkResult.value?.version_status === "major_diff") {
+    return t("packageImport.versionMajorDiff", {
+      backup: checkResult.value?.backup_version || "-",
+      current: checkResult.value?.current_version || "-",
+    });
   }
-  if (checkResult.value?.version_status === 'minor_diff') {
-    return t('packageImport.versionMinorDiff', {
-      backup: checkResult.value?.backup_version || '-',
-      current: checkResult.value?.current_version || '-'
-    })
+  if (checkResult.value?.version_status === "minor_diff") {
+    return t("packageImport.versionMinorDiff", {
+      backup: checkResult.value?.backup_version || "-",
+      current: checkResult.value?.current_version || "-",
+    });
   }
-  return t('packageImport.versionMatch', {
-    backup: checkResult.value?.backup_version || '-'
-  })
-})
+  return t("packageImport.versionMatch", {
+    backup: checkResult.value?.backup_version || "-",
+  });
+});
 
 const importBlockingMessage = computed(() => {
-  if (checkResult.value?.can_import) return ''
-  if (checkResult.value?.version_status === 'major_diff') return ''
-  return checkResult.value?.error || t('packageImport.importBlocked')
-})
+  if (checkResult.value?.can_import) return "";
+  if (checkResult.value?.version_status === "major_diff") return "";
+  return checkResult.value?.error || t("packageImport.importBlocked");
+});
 
 const embeddingHint = computed(() => {
-  const required = checkResult.value?.local_provider_matches?.embedding?.required_dimensions
-  if (!required) return ''
-  return t('packageImport.embeddingHint', { count: required })
-})
+  const required = checkResult.value?.local_provider_matches?.embedding?.required_dimensions;
+  if (!required) return "";
+  return t("packageImport.embeddingHint", { count: required });
+});
 
 const canImport = computed(() => {
-  return Boolean(
-    kbName.value.trim() &&
-    embeddingProviderId.value &&
-    checkResult.value?.can_import
-  )
-})
+  return Boolean(kbName.value.trim() && embeddingProviderId.value && checkResult.value?.can_import);
+});
 
 watch(
   () => props.modelValue,
   (open) => {
     if (!open) {
-      resetState()
+      resetState();
     }
-  }
-)
+  },
+);
 
 const resetState = () => {
-  status.value = 'idle'
-  packageFile.value = null
-  uploadedFilename.value = ''
-  uploading.value = false
-  checkResult.value = null
-  kbName.value = ''
-  embeddingProviderId.value = ''
-  rerankProviderId.value = null
-  taskId.value = ''
-  progress.value = { current: 0, total: 100, message: '' }
-  errorMessage.value = ''
-  importResult.value = null
-}
+  status.value = "idle";
+  packageFile.value = null;
+  uploadedFilename.value = "";
+  uploading.value = false;
+  checkResult.value = null;
+  kbName.value = "";
+  embeddingProviderId.value = "";
+  rerankProviderId.value = null;
+  taskId.value = "";
+  progress.value = { current: 0, total: 100, message: "" };
+  errorMessage.value = "";
+  importResult.value = null;
+};
 
 const handleClose = () => {
-  emit('update:modelValue', false)
-  resetState()
-}
+  emit("update:modelValue", false);
+  resetState();
+};
 
 const uploadAndCheck = async () => {
-  if (!packageFile.value) return
+  if (!packageFile.value) return;
 
-  uploading.value = true
-  status.value = 'checking'
-  errorMessage.value = ''
+  uploading.value = true;
+  status.value = "checking";
+  errorMessage.value = "";
 
   try {
-    const formData = new FormData()
-    formData.append('file', packageFile.value)
-    const uploadResponse = await axios.post('/api/kb/package/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    const formData = new FormData();
+    formData.append("file", packageFile.value);
+    const uploadResponse = await axios.post("/api/kb/package/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
 
-    if (uploadResponse.data.status !== 'ok') {
-      throw new Error(uploadResponse.data.message)
+    if (uploadResponse.data.status !== "ok") {
+      throw new Error(uploadResponse.data.message);
     }
 
-    uploadedFilename.value = uploadResponse.data.data.filename
-    const checkResponse = await axios.post('/api/kb/package/check', {
-      filename: uploadedFilename.value
-    })
+    uploadedFilename.value = uploadResponse.data.data.filename;
+    const checkResponse = await axios.post("/api/kb/package/check", {
+      filename: uploadedFilename.value,
+    });
 
-    if (checkResponse.data.status !== 'ok') {
-      throw new Error(checkResponse.data.message)
+    if (checkResponse.data.status !== "ok") {
+      throw new Error(checkResponse.data.message);
     }
 
-    checkResult.value = checkResponse.data.data
+    checkResult.value = checkResponse.data.data;
     if (!checkResult.value.valid) {
-      throw new Error(checkResult.value.error || t('packageImport.invalidPackage'))
+      throw new Error(checkResult.value.error || t("packageImport.invalidPackage"));
     }
 
-    kbName.value = checkResult.value.suggested_kb_name || ''
-    embeddingProviderId.value = checkResult.value.local_provider_matches?.embedding?.preselected_provider_id || ''
-    rerankProviderId.value = checkResult.value.local_provider_matches?.rerank?.preselected_provider_id || null
-    status.value = 'confirm'
+    kbName.value = checkResult.value.suggested_kb_name || "";
+    embeddingProviderId.value = checkResult.value.local_provider_matches?.embedding?.preselected_provider_id || "";
+    rerankProviderId.value = checkResult.value.local_provider_matches?.rerank?.preselected_provider_id || null;
+    status.value = "confirm";
   } catch (error: any) {
-    status.value = 'failed'
-    errorMessage.value = error.response?.data?.message || error.message || t('packageImport.invalidPackage')
+    status.value = "failed";
+    errorMessage.value = error.response?.data?.message || error.message || t("packageImport.invalidPackage");
   } finally {
-    uploading.value = false
+    uploading.value = false;
   }
-}
+};
 
 const confirmImport = async () => {
-  status.value = 'processing'
-  progress.value = { current: 0, total: 100, message: '' }
-  errorMessage.value = ''
+  status.value = "processing";
+  progress.value = { current: 0, total: 100, message: "" };
+  errorMessage.value = "";
 
   try {
-    const response = await axios.post('/api/kb/package/import', {
+    const response = await axios.post("/api/kb/package/import", {
       filename: uploadedFilename.value,
       confirmed: true,
       kb_name: kbName.value.trim(),
       embedding_provider_id: embeddingProviderId.value,
-      rerank_provider_id: rerankProviderId.value
-    })
+      rerank_provider_id: rerankProviderId.value,
+    });
 
-    if (response.data.status !== 'ok') {
-      throw new Error(response.data.message)
+    if (response.data.status !== "ok") {
+      throw new Error(response.data.message);
     }
 
-    taskId.value = response.data.data.task_id
-    pollProgress()
+    taskId.value = response.data.data.task_id;
+    pollProgress();
   } catch (error: any) {
-    status.value = 'failed'
-    errorMessage.value = error.response?.data?.message || error.message || t('packageImport.importFailed')
+    status.value = "failed";
+    errorMessage.value = error.response?.data?.message || error.message || t("packageImport.importFailed");
   }
-}
+};
 
 const pollProgress = async () => {
-  if (!taskId.value) return
+  if (!taskId.value) return;
 
   try {
-    const response = await axios.get('/api/kb/package/progress', {
-      params: { task_id: taskId.value }
-    })
-    if (response.data.status !== 'ok') {
-      throw new Error(response.data.message)
+    const response = await axios.get("/api/kb/package/progress", {
+      params: { task_id: taskId.value },
+    });
+    if (response.data.status !== "ok") {
+      throw new Error(response.data.message);
     }
 
-    const data = response.data.data
-    if (data.status === 'processing' && data.progress) {
+    const data = response.data.data;
+    if (data.status === "processing" && data.progress) {
       progress.value = {
         current: data.progress.current || 0,
         total: data.progress.total || 100,
-        message: data.progress.message || ''
-      }
-      setTimeout(pollProgress, 1000)
-      return
+        message: data.progress.message || "",
+      };
+      setTimeout(pollProgress, 1000);
+      return;
     }
 
-    if (data.status === 'completed') {
-      importResult.value = data.result
-      status.value = 'completed'
-      emit('imported')
-      return
+    if (data.status === "completed") {
+      importResult.value = data.result;
+      status.value = "completed";
+      emit("imported");
+      return;
     }
 
-    if (data.status === 'failed') {
-      throw new Error(data.error || t('packageImport.importFailed'))
+    if (data.status === "failed") {
+      throw new Error(data.error || t("packageImport.importFailed"));
     }
 
-    setTimeout(pollProgress, 1000)
+    setTimeout(pollProgress, 1000);
   } catch (error: any) {
-    status.value = 'failed'
-    errorMessage.value = error.response?.data?.message || error.message || t('packageImport.importFailed')
+    status.value = "failed";
+    errorMessage.value = error.response?.data?.message || error.message || t("packageImport.importFailed");
   }
-}
+};
 
 const formatDate = (value?: string) => {
-  if (!value) return '-'
-  return new Date(value).toLocaleString('zh-CN')
-}
+  if (!value) return "-";
+  return new Date(value).toLocaleString("zh-CN");
+};
 </script>

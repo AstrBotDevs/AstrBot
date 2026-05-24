@@ -4,6 +4,7 @@ import binascii
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
+from typing import cast
 
 import discord
 
@@ -278,7 +279,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 return
             raw = self.message_obj.raw_message
             if hasattr(raw, "remove_reaction") and self.client.user:
-                await cast(discord.Message, raw).remove_reaction(emoji, self.client.user)
+                await cast(discord.Message, raw).remove_reaction(
+                    emoji, self.client.user
+                )
         except Exception as e:
             logger.warning(f"[Discord] 移除反应失败: {e}")
 

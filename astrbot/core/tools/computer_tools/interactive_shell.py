@@ -24,8 +24,8 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
+from astrbot.core.tools.registry import builtin_tool
 
-from ..registry import builtin_tool
 from .util import check_admin_permission, is_local_runtime, workspace_root
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {

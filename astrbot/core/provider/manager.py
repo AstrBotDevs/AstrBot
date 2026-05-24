@@ -291,7 +291,7 @@ class ProviderManager:
     async def initialize(
         self,
         *,
-        init_timeout: float | int | str | None = None,
+        init_timeout: float | str | None = None,
     ) -> None:
         # 逐个初始化提供商
         for provider_config in self.providers_config:
@@ -366,7 +366,7 @@ class ProviderManager:
                 raise_on_all_failed=strict_mcp_init,
                 init_timeout=init_timeout,
             )
-        except Exception as e:
+        except Exception:
             logger.error("MCP service initialization failed", exc_info=True)
 
     def dynamic_import_provider(self, type: str) -> None:

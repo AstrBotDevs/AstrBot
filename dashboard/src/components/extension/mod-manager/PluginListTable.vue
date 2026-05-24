@@ -1,312 +1,304 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { PluginSummary } from './types'
-import { useModuleI18n } from '@/i18n/composables'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import type { PluginSummary } from "./types";
 
-const { tm } = useModuleI18n('features/extension')
+const { tm } = useModuleI18n("features/extension");
 
-type Mode = 'inactive' | 'active'
+type Mode = "inactive" | "active";
 
 const props = defineProps<{
-  title: string
-  items: PluginSummary[]
-  selectedNames: string[]
-  selectedPluginName: string | null
-  mode: Mode
-  pinnedNames?: string[]
+  title: string;
+  items: PluginSummary[];
+  selectedNames: string[];
+  selectedPluginName: string | null;
+  mode: Mode;
+  pinnedNames?: string[];
 
-  loading?: boolean
-}>()
+  loading?: boolean;
+}>();
 
 const emit = defineEmits<{
-  (e: 'update:selectedNames', names: string[]): void
-  (e: 'row-click', name: string): void
-  (e: 'action-primary', plugin: PluginSummary): void
+  (e: "update:selectedNames", names: string[]): void;
+  (e: "row-click", name: string): void;
+  (e: "action-primary", plugin: PluginSummary): void;
 
-  (e: 'batch-primary', plugins: PluginSummary[]): void
-  (e: 'batch-update', names: string[]): void
-  (e: 'batch-uninstall', names: string[]): void
-  (e: 'clear-selection'): void
+  (e: "batch-primary", plugins: PluginSummary[]): void;
+  (e: "batch-update", names: string[]): void;
+  (e: "batch-uninstall", names: string[]): void;
+  (e: "clear-selection"): void;
 
-  (e: 'action-configure', plugin: PluginSummary): void
-  (e: 'action-open-readme', plugin: PluginSummary): void
-  (e: 'action-reload', name: string): void
-  (e: 'action-update', name: string): void
-  (e: 'action-uninstall', name: string): void
-  (e: 'action-open-repo', url: string): void
-  (e: 'toggle-pin', plugin: PluginSummary): void
-}>()
+  (e: "action-configure", plugin: PluginSummary): void;
+  (e: "action-open-readme", plugin: PluginSummary): void;
+  (e: "action-reload", name: string): void;
+  (e: "action-update", name: string): void;
+  (e: "action-uninstall", name: string): void;
+  (e: "action-open-repo", url: string): void;
+  (e: "toggle-pin", plugin: PluginSummary): void;
+}>();
 
 const selectionModel = computed<string[]>({
   get: () => props.selectedNames ?? [],
-  set: (val) => emit('update:selectedNames', val ?? [])
-})
+  set: (val) => emit("update:selectedNames", val ?? []),
+});
 
 const primaryAction = computed(() => {
-  if (props.mode === 'inactive') {
+  if (props.mode === "inactive") {
     return {
-      color: 'success',
-      icon: 'mdi-play-circle-outline',
-      tooltip: '启用'
-    }
+      color: "success",
+      icon: "mdi-play-circle-outline",
+      tooltip: "启用",
+    };
   }
   return {
-    color: 'error',
-    icon: 'mdi-stop-circle-outline',
-    tooltip: '停用'
-  }
-})
+    color: "error",
+    icon: "mdi-stop-circle-outline",
+    tooltip: "停用",
+  };
+});
 
 const headers = computed(() => [
-  { title: tm('table.headers.index'), key: 'index', sortable: false, width: '48px' },
-  { title: '', key: 'data-table-select', sortable: false, width: '32px' },
-  { title: '插件', key: 'name', minWidth: '160px' }
-])
+  { title: tm("table.headers.index"), key: "index", sortable: false, width: "48px" },
+  { title: "", key: "data-table-select", sortable: false, width: "32px" },
+  { title: "插件", key: "name", minWidth: "160px" },
+]);
 
-const pluginCount = computed(() => props.items?.length ?? 0)
+const pluginCount = computed(() => props.items?.length ?? 0);
 
 const indexByName = computed(() => {
-  const map = new Map<string, number>()
+  const map = new Map<string, number>();
   for (const [idx, plugin] of (props.items ?? []).entries()) {
-    map.set(plugin.name, idx)
+    map.set(plugin.name, idx);
   }
-  return map
-})
+  return map;
+});
 
 const selectedPlugins = computed<PluginSummary[]>(() => {
-  const names = new Set(props.selectedNames ?? [])
-  return (props.items ?? []).filter((p) => names.has(p.name))
-})
+  const names = new Set(props.selectedNames ?? []);
+  return (props.items ?? []).filter((p) => names.has(p.name));
+});
 
 const updatableSelectedNames = computed(() =>
-  selectedPlugins.value.filter((p) => Boolean(p.has_update)).map((p) => p.name)
-)
+  selectedPlugins.value.filter((p) => Boolean(p.has_update)).map((p) => p.name),
+);
 
-const uninstallableSelectedNames = computed(() =>
-  selectedPlugins.value.filter((p) => !p.reserved).map((p) => p.name)
-)
+const uninstallableSelectedNames = computed(() => selectedPlugins.value.filter((p) => !p.reserved).map((p) => p.name));
 
-const batchLabel = computed(() => (props.mode === 'inactive' ? '批量激活' : '批量停用'))
-const batchIcon = computed(() => (props.mode === 'inactive' ? 'mdi-play' : 'mdi-pause'))
-const batchColor = computed(() => (props.mode === 'inactive' ? 'success' : 'warning'))
+const batchLabel = computed(() => (props.mode === "inactive" ? "批量激活" : "批量停用"));
+const batchIcon = computed(() => (props.mode === "inactive" ? "mdi-play" : "mdi-pause"));
+const batchColor = computed(() => (props.mode === "inactive" ? "success" : "warning"));
 
 const handleBatchPrimary = () => {
-  emit('batch-primary', selectedPlugins.value)
-}
+  emit("batch-primary", selectedPlugins.value);
+};
 
 const handleBatchUpdate = () => {
-  const names = updatableSelectedNames.value
-  if (names.length === 0) return
-  emit('batch-update', names)
-}
+  const names = updatableSelectedNames.value;
+  if (names.length === 0) return;
+  emit("batch-update", names);
+};
 
-const showUninstallDialog = ref(false)
-const pendingUninstallNames = ref<string[]>([])
+const showUninstallDialog = ref(false);
+const pendingUninstallNames = ref<string[]>([]);
 
 const openBatchUninstallConfirm = () => {
-  pendingUninstallNames.value = uninstallableSelectedNames.value
-  showUninstallDialog.value = true
-}
+  pendingUninstallNames.value = uninstallableSelectedNames.value;
+  showUninstallDialog.value = true;
+};
 
 const confirmBatchUninstall = () => {
-  const names = pendingUninstallNames.value
-  showUninstallDialog.value = false
-  if (names.length === 0) return
-  emit('batch-uninstall', names)
-}
+  const names = pendingUninstallNames.value;
+  showUninstallDialog.value = false;
+  if (names.length === 0) return;
+  emit("batch-uninstall", names);
+};
 
-const handleClearSelection = () => emit('clear-selection')
+const handleClearSelection = () => emit("clear-selection");
 
-const titleBarRef = ref<HTMLElement | null>(null)
-const titleMetaRef = ref<HTMLElement | null>(null)
-const secondaryMeasureRef = ref<HTMLElement | null>(null)
+const titleBarRef = ref<HTMLElement | null>(null);
+const titleMetaRef = ref<HTMLElement | null>(null);
+const secondaryMeasureRef = ref<HTMLElement | null>(null);
 
 const resolveElement = (value: unknown): HTMLElement | null => {
-  const candidate = value as any
-  if (candidate instanceof HTMLElement) return candidate
-  if (candidate?.$el instanceof HTMLElement) return candidate.$el
-  return null
-}
+  const candidate = value as any;
+  if (candidate instanceof HTMLElement) return candidate;
+  if (candidate?.$el instanceof HTMLElement) return candidate.$el;
+  return null;
+};
 
-const showInlinePrimary = ref(true)
-const showInlineBatchUpdate = ref(true)
-const showInlineBatchUninstall = ref(true)
-const showInlineClearSelection = ref(true)
+const showInlinePrimary = ref(true);
+const showInlineBatchUpdate = ref(true);
+const showInlineBatchUninstall = ref(true);
+const showInlineClearSelection = ref(true);
 
 const showSecondaryMenu = computed(
   () =>
     !showInlinePrimary.value ||
     !showInlineBatchUpdate.value ||
     !showInlineBatchUninstall.value ||
-    !showInlineClearSelection.value
-)
+    !showInlineClearSelection.value,
+);
 
 const getMeasuredWidth = (key: string): number => {
-  const root = resolveElement(secondaryMeasureRef.value)
-  if (!root) return 0
-  const el = root.querySelector(`[data-measure="${key}"]`) as HTMLElement | null
-  if (!el) return 0
-  return el.getBoundingClientRect().width
-}
+  const root = resolveElement(secondaryMeasureRef.value);
+  if (!root) return 0;
+  const el = root.querySelector(`[data-measure="${key}"]`) as HTMLElement | null;
+  if (!el) return 0;
+  return el.getBoundingClientRect().width;
+};
 
 const recomputeSecondaryActions = () => {
-  const titleBar = resolveElement(titleBarRef.value)
-  const titleMeta = resolveElement(titleMetaRef.value)
-  const secondaryMeasure = resolveElement(secondaryMeasureRef.value)
+  const titleBar = resolveElement(titleBarRef.value);
+  const titleMeta = resolveElement(titleMetaRef.value);
+  const secondaryMeasure = resolveElement(secondaryMeasureRef.value);
 
   if (!titleBar || !titleMeta || !secondaryMeasure) {
-    showInlinePrimary.value = false
-    showInlineBatchUpdate.value = false
-    showInlineBatchUninstall.value = false
-    showInlineClearSelection.value = false
-    return
+    showInlinePrimary.value = false;
+    showInlineBatchUpdate.value = false;
+    showInlineBatchUninstall.value = false;
+    showInlineClearSelection.value = false;
+    return;
   }
 
-  const available = titleBar.clientWidth
-  const left = Math.max(titleMeta.getBoundingClientRect().width, titleMeta.scrollWidth)
+  const available = titleBar.clientWidth;
+  const left = Math.max(titleMeta.getBoundingClientRect().width, titleMeta.scrollWidth);
 
-  const wPrimary = getMeasuredWidth('batch-primary')
-  const wUpdate = getMeasuredWidth('batch-update')
-  const wUninstall = getMeasuredWidth('batch-uninstall')
-  const wClear = getMeasuredWidth('clear-selection')
-  const wMenu = getMeasuredWidth('more-menu')
+  const wPrimary = getMeasuredWidth("batch-primary");
+  const wUpdate = getMeasuredWidth("batch-update");
+  const wUninstall = getMeasuredWidth("batch-uninstall");
+  const wClear = getMeasuredWidth("clear-selection");
+  const wMenu = getMeasuredWidth("more-menu");
 
-  const basePadding = 24
+  const basePadding = 24;
 
-  const calcRequired = (opts: {
-    primary: boolean
-    update: boolean
-    uninstall: boolean
-    clear: boolean
-  }): number => {
+  const calcRequired = (opts: { primary: boolean; update: boolean; uninstall: boolean; clear: boolean }): number => {
     const inlineWidth =
       (opts.primary ? wPrimary : 0) +
       (opts.update ? wUpdate : 0) +
       (opts.uninstall ? wUninstall : 0) +
-      (opts.clear ? wClear : 0)
+      (opts.clear ? wClear : 0);
 
-    const needsMenu = !opts.primary || !opts.update || !opts.uninstall || !opts.clear
-    return left + inlineWidth + (needsMenu ? wMenu : 0) + basePadding
-  }
+    const needsMenu = !opts.primary || !opts.update || !opts.uninstall || !opts.clear;
+    return left + inlineWidth + (needsMenu ? wMenu : 0) + basePadding;
+  };
 
   // 标题永远不截断；空间不够时继续折叠按钮（先清理、再卸载、再更新、最后才折叠主按钮）
-  let opts = { primary: true, update: true, uninstall: true, clear: true }
+  let opts = { primary: true, update: true, uninstall: true, clear: true };
   if (calcRequired(opts) <= available) {
-    showInlinePrimary.value = opts.primary
-    showInlineBatchUpdate.value = opts.update
-    showInlineBatchUninstall.value = opts.uninstall
-    showInlineClearSelection.value = opts.clear
-    return
+    showInlinePrimary.value = opts.primary;
+    showInlineBatchUpdate.value = opts.update;
+    showInlineBatchUninstall.value = opts.uninstall;
+    showInlineClearSelection.value = opts.clear;
+    return;
   }
 
-  opts = { primary: true, update: true, uninstall: true, clear: false }
+  opts = { primary: true, update: true, uninstall: true, clear: false };
   if (calcRequired(opts) <= available) {
-    showInlinePrimary.value = opts.primary
-    showInlineBatchUpdate.value = opts.update
-    showInlineBatchUninstall.value = opts.uninstall
-    showInlineClearSelection.value = opts.clear
-    return
+    showInlinePrimary.value = opts.primary;
+    showInlineBatchUpdate.value = opts.update;
+    showInlineBatchUninstall.value = opts.uninstall;
+    showInlineClearSelection.value = opts.clear;
+    return;
   }
 
-  opts = { primary: true, update: true, uninstall: false, clear: false }
+  opts = { primary: true, update: true, uninstall: false, clear: false };
   if (calcRequired(opts) <= available) {
-    showInlinePrimary.value = opts.primary
-    showInlineBatchUpdate.value = opts.update
-    showInlineBatchUninstall.value = opts.uninstall
-    showInlineClearSelection.value = opts.clear
-    return
+    showInlinePrimary.value = opts.primary;
+    showInlineBatchUpdate.value = opts.update;
+    showInlineBatchUninstall.value = opts.uninstall;
+    showInlineClearSelection.value = opts.clear;
+    return;
   }
 
-  opts = { primary: true, update: false, uninstall: false, clear: false }
+  opts = { primary: true, update: false, uninstall: false, clear: false };
   if (calcRequired(opts) <= available) {
-    showInlinePrimary.value = opts.primary
-    showInlineBatchUpdate.value = opts.update
-    showInlineBatchUninstall.value = opts.uninstall
-    showInlineClearSelection.value = opts.clear
-    return
+    showInlinePrimary.value = opts.primary;
+    showInlineBatchUpdate.value = opts.update;
+    showInlineBatchUninstall.value = opts.uninstall;
+    showInlineClearSelection.value = opts.clear;
+    return;
   }
 
-  opts = { primary: false, update: false, uninstall: false, clear: false }
-  showInlinePrimary.value = opts.primary
-  showInlineBatchUpdate.value = opts.update
-  showInlineBatchUninstall.value = opts.uninstall
-  showInlineClearSelection.value = opts.clear
-}
+  opts = { primary: false, update: false, uninstall: false, clear: false };
+  showInlinePrimary.value = opts.primary;
+  showInlineBatchUpdate.value = opts.update;
+  showInlineBatchUninstall.value = opts.uninstall;
+  showInlineClearSelection.value = opts.clear;
+};
 
-let resizeObserver: ResizeObserver | null = null
+let resizeObserver: ResizeObserver | null = null;
 
 onMounted(() => {
   resizeObserver = new ResizeObserver(() => {
-    recomputeSecondaryActions()
-  })
-  const el = resolveElement(titleBarRef.value)
+    recomputeSecondaryActions();
+  });
+  const el = resolveElement(titleBarRef.value);
   if (el) {
-    resizeObserver.observe(el)
+    resizeObserver.observe(el);
   }
-  void nextTick(() => recomputeSecondaryActions())
-})
+  void nextTick(() => recomputeSecondaryActions());
+});
 
 onBeforeUnmount(() => {
-  resizeObserver?.disconnect()
-  resizeObserver = null
-})
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+});
 
 watch(
   () => [selectedPlugins.value.length, updatableSelectedNames.value.length, uninstallableSelectedNames.value.length],
   () => nextTick(() => recomputeSecondaryActions()),
-  { flush: 'post' }
-)
+  { flush: "post" },
+);
 
 const getOnlineVersion = (plugin: PluginSummary): string | null => {
-  return (plugin.online_version || plugin.online_vesion || null) as string | null
-}
+  return (plugin.online_version || plugin.online_vesion || null) as string | null;
+};
 
 const isPinned = (name: string): boolean => {
-  return (props.pinnedNames ?? []).includes(name)
-}
+  return (props.pinnedNames ?? []).includes(name);
+};
 
-const isUpgradable = (plugin: PluginSummary) => Boolean(plugin.has_update && getOnlineVersion(plugin))
+const isUpgradable = (plugin: PluginSummary) => Boolean(plugin.has_update && getOnlineVersion(plugin));
 
 const shouldIgnoreRowClick = (target: EventTarget | null): boolean => {
-  const el = target as HTMLElement | null
-  if (!el) return false
+  const el = target as HTMLElement | null;
+  if (!el) return false;
 
   return Boolean(
     el.closest(
       [
-        'button',
-        'a',
+        "button",
+        "a",
         '[role="button"]',
-        '.v-btn',
-        '.v-btn-group',
-        '.v-selection-control',
-        '.v-checkbox',
-        '.v-input',
-        '.v-field',
-        '.v-icon'
-      ].join(',')
-    )
-  )
-}
+        ".v-btn",
+        ".v-btn-group",
+        ".v-selection-control",
+        ".v-checkbox",
+        ".v-input",
+        ".v-field",
+        ".v-icon",
+      ].join(","),
+    ),
+  );
+};
 
 const handleRowClick = (pluginName: string, event: MouseEvent) => {
-  if (shouldIgnoreRowClick(event.target)) return
-  emit('row-click', pluginName)
-}
+  if (shouldIgnoreRowClick(event.target)) return;
+  emit("row-click", pluginName);
+};
 
 const getRowProps = ({ item }: { item: PluginSummary }) => {
-  const classes: string[] = ['plugin-row']
+  const classes: string[] = ["plugin-row"];
   if (props.selectedPluginName && item.name === props.selectedPluginName) {
-    classes.push('plugin-selected-row')
+    classes.push("plugin-selected-row");
   }
-
 
   return {
-    class: classes.join(' '),
-    'data-plugin-name': item.name,
-    onClick: (e: MouseEvent) => handleRowClick(item.name, e)
-  }
-}
+    class: classes.join(" "),
+    "data-plugin-name": item.name,
+    onClick: (e: MouseEvent) => handleRowClick(item.name, e),
+  };
+};
 </script>
 
 <template>

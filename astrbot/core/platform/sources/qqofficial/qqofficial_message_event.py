@@ -4,10 +4,8 @@ import logging
 import os
 import random
 import uuid
-from typing import Callable, cast, Optional, Dict, List, Tuple
+from typing import cast
 
-import aiofiles
-import anyio
 import botpy
 import botpy.errors
 import botpy.interaction
@@ -31,11 +29,16 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 
 from ._markdown_media import image_to_markdown_fragment
+from .chunked_upload import QQBotHttpClient, QQBotHttpClientManager
 from .components import QQCButton, QQCKeyboard
+from .rate_limiter import (
+    MessageReplyLimiter,
+    check_message_reply_limit,
+    record_message_reply,
+)
 
 
 def _patch_qq_botpy_formdata() -> None:
@@ -75,7 +78,7 @@ TEXT_CHUNK_OVERLAP = 50  # 分块重叠字符数（避免句子被切断）
 
 def chunk_text(
     text: str, limit: int = TEXT_CHUNK_LIMIT, overlap: int = TEXT_CHUNK_OVERLAP
-) -> List[str]:
+) -> list[str]:
     """
     将长文本分割为多个小块
 
@@ -144,6 +147,22 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self._interaction_ack_done = asyncio.Event()
         self._interaction_ack_code: int = 0
 
+        # 凭据配置
+        self.appid = appid
+        self.secret = secret
+
+        # 分片上传 HTTP 客户端（延迟初始化）
+        self._http_client: QQBotHttpClient | None = None
+
+        # 限流器实例
+        self._rate_limiter = MessageReplyLimiter()
+
+        # 临时文件跟踪（用于清理）
+        self._temp_files: list[str] = []
+
+        # 媒体上传失败的兜底 URL
+        self._upload_failed_media: dict[str, str] = {}
+
     async def ack_interaction(self, code: int = 0) -> None:
         """向 QQ 官方上报按钮交互结果。
 
@@ -169,22 +188,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             logger.warning(f"[QQOfficial] interaction ack 失败: {e}")
         finally:
             self._interaction_ack_done.set()
-
-        # 凭据配置
-        self.appid = appid
-        self.secret = secret
-
-        # 分片上传 HTTP 客户端（延迟初始化）
-        self._http_client: Optional[QQBotHttpClient] = None
-
-        # 限流器实例
-        self._rate_limiter = MessageReplyLimiter()
-
-        # 临时文件跟踪（用于清理）
-        self._temp_files: list[str] = []
-
-        # 媒体上传失败的兜底 URL
-        self._upload_failed_media: Dict[str, str] = {}
 
     def set_credentials(self, appid: str, secret: str) -> None:
         """设置 QQ Bot 凭据（用于分片上传）"""
@@ -231,9 +234,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             )
         return self._http_client
 
-    def _check_reply_limit(
-        self, msg_id: str
-    ) -> Tuple[bool, Optional[str], Optional[str]]:
+    def _check_reply_limit(self, msg_id: str) -> tuple[bool, str | None, str | None]:
         """
         检查消息回复是否受到限流
 
@@ -251,7 +252,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return (True, None, None)
 
-    def _should_use_passive_reply(self, source) -> Tuple[bool, Optional[str]]:
+    def _should_use_passive_reply(self, source) -> tuple[bool, str | None]:
         """
         判断是否应该使用被动回复
 
@@ -278,6 +279,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     async def send(self, message: MessageChain) -> None:
         self.send_buffer = message
         await self._post_send()
+
+    async def send_typing(self) -> None:
+        return None
+
+    async def stop_typing(self) -> None:
+        return None
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         """流式输出仅支持消息列表私聊（C2C），其他消息源退化为普通发送"""
@@ -456,11 +463,14 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             botpy.message.Message | botpy.message.DirectMessage,
         ):
             payload["msg_seq"] = random.randint(1, 10000)
+
+        use_passive, _ = self._should_use_passive_reply(source)
+        effective_msg_id = self.message_obj.message_id
         ret = None
         # 若 keyboard 和非 markdown-内联媒体同时存在，媒体路径会把 msg_type 改成 7
         # 并 pop markdown/keyboard。这里预先探测，稍后补发一条带 keyboard 的 markdown 消息。
         media_overrides_keyboard = keyboard_payload is not None and (
-            image_base64 or record_file_path or video_file_source or file_source
+            image_source or record_file_path or video_file_source or file_source
         )
         if media_overrides_keyboard:
             payload.pop("keyboard", None)
@@ -679,7 +689,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 if chat_type == 1 and source.group_openid:
                     ret = await self._send_with_stream_newline_fix(
                         send_func=lambda retry_payload: self.bot.api.post_group_message(
-                            group_openid=source.group_openid,  # type: ignore
+                            group_openid=source.group_openid,
                             **retry_payload,
                         ),
                         payload=payload,
@@ -688,7 +698,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 elif chat_type == 2 and source.user_openid:
                     ret = await self._send_with_stream_newline_fix(
                         send_func=lambda retry_payload: self.post_c2c_message(
-                            openid=source.user_openid,  # type: ignore
+                            openid=source.user_openid,
                             **retry_payload,
                         ),
                         payload=payload,
@@ -702,7 +712,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     # 频道接口用 msg_id 或 event_id 都可，保留 event_id
                     ret = await self._send_with_stream_newline_fix(
                         send_func=lambda retry_payload: self.bot.api.post_message(
-                            channel_id=source.channel_id,  # type: ignore
+                            channel_id=source.channel_id,
                             **retry_payload,
                         ),
                         payload=guild_payload,
@@ -878,9 +888,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             **kwargs,
         )
 
-    @staticmethod
     async def post_c2c_message(
-        send_helper,
+        self,
         openid: str,
         msg_type: int = 0,
         content: str | None = None,
@@ -904,7 +913,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 stream_data.pop("id", None)
             payload["stream"] = stream_data
         route = Route("POST", "/v2/users/{openid}/messages", openid=openid)
-        result = await bot.api._http.request(route, json=payload)
+        result = await self.bot.api._http.request(route, json=payload)
 
         if result is None:
             logger.warning("[QQOfficial] post_c2c_message: API 返回 None,跳过本次发送")
@@ -912,7 +921,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         if not isinstance(result, dict):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
             return None
-        return result
+        return message.Message(**result)
 
     @staticmethod
     async def _parse_to_qqofficial(
@@ -928,12 +937,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 这样图片能和 keyboard/markdown 共存于同一条 msg_type=2 消息。
 
         Returns:
-            (plain_text, image_base64, image_file_path, record_file_path,
+            (plain_text, image_source, record_file_path,
              video_file_source, file_source, file_name, keyboard_payload)
         """
         plain_text = ""
-        image_base64 = None  # only one img supported for msg_type=7 path
-        image_file_path = None
+        image_source = None  # only one image supported for msg_type=7 path
         record_file_path = None
         video_file_source = None
         file_source = None
@@ -959,7 +967,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         "[QQOfficial] 图片转 markdown 失败，回退到 msg_type=7；"
                         "若消息链包含 keyboard 则 keyboard 会被丢弃。"
                     )
-                if image_base64:
+                if image_source:
                     continue  # msg_type=7 路径只带第一张
                 if i.file and i.file.startswith("file:///"):
                     image_source = i.file[8:]

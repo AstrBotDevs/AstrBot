@@ -1,4 +1,4 @@
-import { ref, computed } from "vue";
+import { computed, ref } from "vue";
 import { translations as staticTranslations } from "./translations";
 import type { Locale } from "./types";
 
@@ -73,12 +73,9 @@ export function useI18n() {
 
     // 处理参数插值
     if (params) {
-      result = result.replace(
-        /\{(\w+)\}/g,
-        (match: string, paramKey: string) => {
-          return params[paramKey]?.toString() || match;
-        },
-      );
+      result = result.replace(/\{(\w+)\}/g, (match: string, paramKey: string) => {
+        return params[paramKey]?.toString() || match;
+      });
     }
 
     return result;
@@ -108,7 +105,7 @@ export function useI18n() {
   const locale = computed(() => currentLocale.value);
 
   // 获取可用语言列表
-  const availableLocales: Locale[] = ['zh-CN', 'zh-HK', 'zh-TW', 'en-US', 'ru-RU'];
+  const availableLocales: Locale[] = ["zh-CN", "zh-HK", "zh-TW", "en-US", "ru-RU"];
 
   // 检查是否已加载
   const isLoaded = computed(() => Object.keys(translations.value).length > 0);
@@ -128,10 +125,7 @@ export function useI18n() {
 export function useModuleI18n(moduleName: string) {
   const { t } = useI18n();
 
-  const tm = (
-    key: string,
-    params?: Record<string, string | number>,
-  ): string => {
+  const tm = (key: string, params?: Record<string, string | number>): string => {
     // 将斜杠转换为点号以匹配嵌套对象结构
     const normalizedModuleName = moduleName.replace(/\//g, ".");
     return t(`${normalizedModuleName}.${key}`, params);
@@ -165,11 +159,11 @@ export function useLanguageSwitcher() {
   const { locale, setLocale, availableLocales } = useI18n();
 
   const languageOptions = computed(() => [
-    { value: 'zh-CN', label: '简体中文', flag: '🇨🇳' },
-    { value: 'zh-HK', label: '繁體中文（香港）', flag: '🇭🇰' },
-    { value: 'zh-TW', label: '繁體中文（台灣）', flag: '🇹🇼' },
-    { value: 'en-US', label: 'English', flag: '🇺🇸' },
-    { value: 'ru-RU', label: 'Русский', flag: '🇷🇺' }
+    { value: "zh-CN", label: "简体中文", flag: "🇨🇳" },
+    { value: "zh-HK", label: "繁體中文（香港）", flag: "🇭🇰" },
+    { value: "zh-TW", label: "繁體中文（台灣）", flag: "🇹🇼" },
+    { value: "en-US", label: "English", flag: "🇺🇸" },
+    { value: "ru-RU", label: "Русский", flag: "🇷🇺" },
   ]);
 
   const currentLanguage = computed(() => {
@@ -194,10 +188,7 @@ export function useLanguageSwitcher() {
  * @param modulePath 模块路径，如 'features.config-metadata'
  * @param allLocaleData 所有语言的翻译数据，如 { "zh-CN": {...}, "en-US": {...} }
  */
-export function mergeDynamicTranslations(
-  modulePath: string,
-  allLocaleData: Record<string, any>,
-) {
+export function mergeDynamicTranslations(modulePath: string, allLocaleData: Record<string, any>) {
   const locale = currentLocale.value;
   const localeData = allLocaleData[locale];
   if (!localeData || typeof localeData !== "object") return;
@@ -219,11 +210,7 @@ export function mergeDynamicTranslations(
 
 function deepMerge(target: Record<string, any>, source: Record<string, any>) {
   for (const key of Object.keys(source)) {
-    if (
-      source[key] &&
-      typeof source[key] === "object" &&
-      !Array.isArray(source[key])
-    ) {
+    if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
       if (!(key in target) || typeof target[key] !== "object") {
         target[key] = {};
       }
@@ -237,10 +224,9 @@ function deepMerge(target: Record<string, any>, source: Record<string, any>) {
 // 初始化函数（在应用启动时调用）
 export async function setupI18n() {
   // 从localStorage获取保存的语言设置
-  const savedLocale = localStorage.getItem('astrbot-locale') as Locale;
-  const initialLocale = savedLocale && ['zh-CN', 'zh-HK', 'zh-TW', 'en-US', 'ru-RU'].includes(savedLocale)
-    ? savedLocale
-    : 'zh-CN';
+  const savedLocale = localStorage.getItem("astrbot-locale") as Locale;
+  const initialLocale =
+    savedLocale && ["zh-CN", "zh-HK", "zh-TW", "en-US", "ru-RU"].includes(savedLocale) ? savedLocale : "zh-CN";
 
   await initI18n(initialLocale);
 }

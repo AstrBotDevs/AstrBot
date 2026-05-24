@@ -105,6 +105,7 @@ class SandboxRegistry:
         sandbox_id: str,
         sandbox_name: str,
         provider: str,
+        booter_type: str | None = None,
         managed: bool,
         created_by_astrbot: bool,
         owner_user_id: str | None,
@@ -112,7 +113,7 @@ class SandboxRegistry:
         connect_info: dict[str, Any],
         is_default: bool | object = _UNSET,
         status: str | object = _UNSET,
-        idle_timeout: int | float | None | object = _UNSET,
+        idle_timeout: float | None | object = _UNSET,
         expires_at: float | None | object = _UNSET,
         retention_policy: str | object = _UNSET,
         last_used_at: float | None | object = _UNSET,
@@ -234,8 +235,8 @@ class SandboxRegistry:
         *,
         sandbox_name: str | object = _UNSET,
         connect_info: dict[str, Any] | object = _UNSET,
-        idle_timeout: int | float | None | object = _UNSET,
-        expires_at: int | float | None | object = _UNSET,
+        idle_timeout: float | None | object = _UNSET,
+        expires_at: float | None | object = _UNSET,
         retention_policy: str | object = _UNSET,
     ) -> dict[str, Any] | None:
         record = self._payload["sandboxes"].get(sandbox_id)
@@ -282,7 +283,7 @@ class SandboxRegistry:
         sandbox_id: str,
         session_id: str,
         user_id: str | None,
-        ttl: int | float,
+        ttl: float,
         now: float | None = None,
     ) -> bool:
         record = self._payload["sandboxes"].get(sandbox_id)
@@ -317,7 +318,7 @@ class SandboxRegistry:
         sandbox_id: str,
         session_id: str,
         user_id: str | None,
-        ttl: int | float,
+        ttl: float,
         now: float | None = None,
     ) -> dict[str, Any] | None:
         record = self._payload["sandboxes"].get(sandbox_id)
@@ -332,11 +333,13 @@ class SandboxRegistry:
         return deepcopy(record)
 
     def reconcile_startup(self) -> None:
-        self._payload["session_current"] = {}
+        stale_current_sandbox_ids: set[str] = set()
         for sandbox_id, record in list(self._payload["sandboxes"].items()):
-            record["controller_session_id"] = None
-            record["controller_user_id"] = None
-            record["lease_expires_at"] = None
+            if record.get("managed"):
+                record["controller_session_id"] = None
+                record["controller_user_id"] = None
+                record["lease_expires_at"] = None
+                stale_current_sandbox_ids.add(sandbox_id)
             if record.get("retention_policy") == "persistent":
                 if record.get("status") == SandboxStatus.RUNNING:
                     record["status"] = SandboxStatus.UNKNOWN.value
@@ -352,6 +355,10 @@ class SandboxRegistry:
                 SandboxStatus.UNKNOWN,
             }:
                 record["status"] = SandboxStatus.ERROR.value
+                stale_current_sandbox_ids.add(sandbox_id)
+        for session_id, current_id in list(self._payload["session_current"].items()):
+            if current_id in stale_current_sandbox_ids:
+                self._payload["session_current"].pop(session_id, None)
         self._prune_default_references()
 
     def _prune_default_references(self) -> None:

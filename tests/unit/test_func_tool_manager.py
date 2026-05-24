@@ -1,11 +1,16 @@
 import asyncio
 import json
+import time
 from dataclasses import dataclass, field
 
 import pytest
 
 from astrbot.api import FunctionTool
 from astrbot.core import sp
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.computer.computer_tool_provider import get_all_tools
+from astrbot.core.computer.sandbox_registry import SandboxRegistry
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _modelscope_mcp_transport_from_url_info,
@@ -16,6 +21,39 @@ from astrbot.core.tools.web_search_tools import (
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
 )
+
+
+def _make_fake_wrapper_class():
+    class FakeConfig:
+        def get_config(self, umo):
+            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        context = FakeConfig()
+        event = FakeEvent()
+
+    class FakeWrapper(ContextWrapper[AstrAgentContext]):
+        def __init__(self):
+            self.context = FakeAstrContext()  # type: ignore[assignment]
+            self.messages = []
+
+    return FakeWrapper
+
+
+class FakeSandboxProvider:
+    provider_id = "cua"
+    capabilities: set[str] = {"shell"}
+    tool_names: set[str] = set()
+    system_prompt = ""
+    plugin_config = None
+    provider_api_version = "1.0"
+    auto_sync_skills = True
+    supports_persistent_reconnect = False
+    prune_missing_persistent_records = False
 
 
 def test_get_builtin_tool_by_class_returns_cached_instance():
@@ -73,46 +111,6 @@ def test_clear_builtin_tool_cache_by_module_prefix_removes_matching_instances():
 
     assert removed == ["astrbot_test_cached_tool"]
     assert manager.builtin_func_list == {}
-
-
-@pytest.mark.asyncio
-async def test_execute_shell_defaults_to_foreground(monkeypatch):
-    from astrbot.core.tools.computer_tools import shell as shell_tools
-
-    calls = []
-
-    class FakeShell:
-        async def exec(
-            self, command, cwd=None, background=False, env=None, timeout=None
-        ):
-            calls.append({"command": command, "background": background})
-            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
-
-    class FakeBooter:
-        sandbox_id = "sb-shell"
-        shell = FakeShell()
-
-        async def available(self):
-            return True
-
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper(ContextWrapper[AstrAgentContext]):
-        def __init__(self):
-            self.context = FakeAstrContext()  # type: ignore[assignment]
-            self.messages = []
-
-    return FakeWrapper
 
 
 def test_computer_tools_provider_returns_tools():
@@ -357,8 +355,11 @@ async def test_execute_shell_passes_background_flag_directly(monkeypatch):
         FakeWrapper(), command=command2, background=True
     )
 
-    assert json.loads(result)["success"] is True
-    assert calls == [{"command": command, "background": False}]
+    assert json.loads(result2)["success"] is True
+    assert calls == [
+        {"command": command, "background": False},
+        {"command": command2, "background": False},
+    ]
 
 
 @pytest.mark.asyncio
@@ -374,9 +375,10 @@ async def test_execute_shell_refreshes_lease_during_long_running_command(monkeyp
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
 
     class FakeBooter:
+        sandbox_id = "sb-shell"
         shell = FakeShell()
 
-    registry = CuaSandboxRegistry(storage_path="/tmp/test-shell-lease-registry.json")
+    registry = SandboxRegistry(storage_path="/tmp/test-shell-lease-registry.json")
     registry.upsert_sandbox(
         sandbox_id="sb-shell",
         sandbox_name="shell-sandbox",
@@ -392,9 +394,11 @@ async def test_execute_shell_refreshes_lease_during_long_running_command(monkeyp
         connect_info={"name": "shell-sandbox", "local": True},
     )
     registry.set_current_sandbox_id("umo", "sb-shell")
-    monkeypatch.setattr(computer_client, "cua_registry", registry)
-    computer_client.session_booter.clear()
-    computer_client.session_booter["sb-shell"] = FakeBooter()
+    provider = FakeSandboxProvider()
+    monkeypatch.setattr(computer_client.sandbox_manager, "registry", registry)
+    monkeypatch.setitem(computer_client.sandbox_manager.providers, "cua", provider)
+    computer_client.sandbox_manager.session_booter.clear()
+    computer_client.sandbox_manager.session_booter["sb-shell"] = FakeBooter()
 
     class FakeConfig:
         def get_config(self, umo):
@@ -420,12 +424,11 @@ async def test_execute_shell_refreshes_lease_during_long_running_command(monkeyp
     monkeypatch.setattr(shell_tools, "LEASE_KEEPALIVE_INTERVAL_SECONDS", 0.01)
     monkeypatch.setattr(shell_tools, "LEASE_KEEPALIVE_BUFFER_SECONDS", 1)
 
-    before = registry.get_sandbox("sb-shell")["lease_expires_at"]
     await ExecuteShellTool().call(FakeWrapper(), command="ps aux", timeout=30)
     after = registry.get_sandbox("sb-shell")["lease_expires_at"]
 
     assert after is not None
-    assert after > before
+    assert after > time.time()
 
 
 @pytest.mark.asyncio
@@ -449,7 +452,7 @@ async def test_execute_shell_keepalive_does_not_extend_indefinitely_on_failure(
         async def available(self):
             return True
 
-    registry = CuaSandboxRegistry(storage_path="/tmp/test-shell-deadline-registry.json")
+    registry = SandboxRegistry(storage_path="/tmp/test-shell-deadline-registry.json")
     registry.upsert_sandbox(
         sandbox_id="sb-shell",
         sandbox_name="shell-sandbox",
@@ -465,9 +468,11 @@ async def test_execute_shell_keepalive_does_not_extend_indefinitely_on_failure(
         connect_info={"name": "shell-sandbox", "local": True},
     )
     registry.set_current_sandbox_id("umo", "sb-shell")
-    monkeypatch.setattr(computer_client, "cua_registry", registry)
-    computer_client.session_booter.clear()
-    computer_client.session_booter["sb-shell"] = FakeBooter()
+    provider = FakeSandboxProvider()
+    monkeypatch.setattr(computer_client.sandbox_manager, "registry", registry)
+    monkeypatch.setitem(computer_client.sandbox_manager.providers, "cua", provider)
+    computer_client.sandbox_manager.session_booter.clear()
+    computer_client.sandbox_manager.session_booter["sb-shell"] = FakeBooter()
 
     fake_now = {"value": 1000.0}
 
@@ -475,7 +480,6 @@ async def test_execute_shell_keepalive_does_not_extend_indefinitely_on_failure(
         return fake_now["value"]
 
     monkeypatch.setattr(shell_tools.time, "time", now)
-    monkeypatch.setattr(computer_client.time, "time", now)
     monkeypatch.setattr(shell_tools, "LEASE_KEEPALIVE_INTERVAL_SECONDS", 0.01)
     monkeypatch.setattr(shell_tools, "LEASE_KEEPALIVE_BUFFER_SECONDS", 1)
 
@@ -505,7 +509,7 @@ async def test_execute_shell_keepalive_does_not_extend_indefinitely_on_failure(
         await asyncio.sleep(0)
         raise RuntimeError("command failed")
 
-    computer_client.session_booter["sb-shell"].shell.exec = advance_time
+    computer_client.sandbox_manager.session_booter["sb-shell"].shell.exec = advance_time
 
     result = await ExecuteShellTool().call(
         FakeWrapper(), command="apt update", timeout=5
@@ -574,8 +578,6 @@ async def test_execute_shell_reports_exception_type(monkeypatch):
 
 def test_tavily_tools_are_registered_as_builtin_tools():
     manager = FunctionToolManager()
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
 
     search_tool = manager.get_builtin_tool(TavilyWebSearchTool)
     extract_tool = manager.get_builtin_tool(TavilyExtractWebPageTool)

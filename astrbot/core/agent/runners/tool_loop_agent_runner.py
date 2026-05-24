@@ -1,10 +1,13 @@
 import asyncio
 import copy
 import hashlib
+import inspect
 import json
+import os
 import time
 import traceback
 import typing as T
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
@@ -449,6 +452,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
             llm_compress_provider=self.llm_compress_provider,
+            llm_compress_use_compact_api=self.llm_compress_use_compact_api,
             token_counter_mode=self.token_counter_mode,
             token_counter_model=provider.get_model(),
             custom_token_counter=self.custom_token_counter,
@@ -457,6 +461,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.request_context_guard = RequestContextGuard(
             self.request_context_guard_config
         )
+        self.context_config = self.request_context_guard_config
+        self.context_manager = self.request_context_guard
 
         self.provider = provider
         self.fallback_providers: list[Provider] = []
@@ -557,11 +563,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # append existing messages in the run context
         messages = bind_checkpoint_messages(request.contexts or [])
+        image_urls = request.image_urls if isinstance(request.image_urls, list) else []
+        audio_urls = request.audio_urls if isinstance(request.audio_urls, list) else []
+        extra_user_content_parts = (
+            request.extra_user_content_parts
+            if isinstance(request.extra_user_content_parts, list)
+            else []
+        )
         if (
             request.prompt is not None
-            or request.image_urls
-            or request.audio_urls
-            or request.extra_user_content_parts
+            or image_urls
+            or audio_urls
+            or extra_user_content_parts
         ):
             m = await self._assemble_request_context_for_provider(request)
             messages.append(Message.model_validate(m))
@@ -620,25 +633,124 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return f"`{self.read_tool.name}`"
         return "the available file-read tool"
 
+    async def _write_tool_result_overflow_file(
+        self,
+        *,
+        tool_call_id: str,
+        content: str,
+    ) -> str:
+        if self.tool_result_overflow_dir is None:
+            raise ValueError("tool_result_overflow_dir is not configured")
+
+        safe_tool_call_id = (
+            "".join(
+                ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
+                for ch in tool_call_id
+            ).strip("._")
+            or "tool_call"
+        )
+        file_name = f"{safe_tool_call_id}_{uuid.uuid4().hex[:8]}.txt"
+
+        def _write() -> str:
+            overflow_dir = os.path.abspath(self.tool_result_overflow_dir or "")
+            os.makedirs(overflow_dir, exist_ok=True)
+            overflow_path = os.path.join(overflow_dir, file_name)
+            with open(overflow_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            return overflow_path
+
+        return await asyncio.to_thread(_write)
+
+    def _truncate_tool_result_preview(
+        self,
+        content: str,
+        *,
+        tool_call_id: str,
+    ) -> str:
+        preview = content
+        while preview:
+            estimated_tokens = self._tool_result_token_counter.count_tokens(
+                [Message(role="tool", content=preview, tool_call_id=tool_call_id)]
+            )
+            if estimated_tokens <= self.TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS:
+                return preview
+            next_len = len(preview) // 2
+            if next_len <= 0:
+                break
+            preview = preview[:next_len]
+        return preview
+
+    async def _materialize_large_tool_result(
+        self,
+        *,
+        tool_call_id: str,
+        content: str,
+    ) -> str:
+        if self.tool_result_overflow_dir is None or self.read_tool is None:
+            return content
+
+        estimated_tokens = self._tool_result_token_counter.count_tokens(
+            [Message(role="tool", content=content, tool_call_id=tool_call_id)]
+        )
+        if estimated_tokens <= self.TOOL_RESULT_MAX_ESTIMATED_TOKENS:
+            return content
+
+        preview = self._truncate_tool_result_preview(content, tool_call_id=tool_call_id)
+        try:
+            overflow_path = await self._write_tool_result_overflow_file(
+                tool_call_id=tool_call_id,
+                content=content,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to spill oversized tool result for %s: %s",
+                tool_call_id,
+                exc,
+                exc_info=True,
+            )
+            error_notice = (
+                "Tool output exceeded the inline result limit "
+                f"({estimated_tokens} estimated tokens > "
+                f"{self.TOOL_RESULT_MAX_ESTIMATED_TOKENS}) and could not be written "
+                f"to `{self.tool_result_overflow_dir}`: {exc}"
+            )
+            if not preview:
+                return error_notice
+            return f"{preview}\n\n{error_notice}"
+
+        notice = self.TOOL_RESULT_OVERFLOW_NOTICE_TEMPLATE.format(
+            overflow_path=overflow_path,
+            read_tool_hint=self._read_tool_hint(),
+        )
+        if not preview:
+            return notice
+        return f"{preview}\n\n{notice}"
+
     async def _assemble_request_context_for_provider(
         self,
         request: ProviderRequest,
     ) -> dict[str, T.Any]:
+        async def assemble(req: ProviderRequest) -> dict[str, T.Any]:
+            context = req.assemble_context()
+            if inspect.isawaitable(context):
+                return await context
+            return context
+
         modalities = self.provider.provider_config.get("modalities", None)
         if not isinstance(modalities, list):
-            return await request.assemble_context()
+            return await assemble(request)
 
         supports_image = "image" in modalities
         supports_audio = "audio" in modalities
         if supports_image and supports_audio:
-            return await request.assemble_context()
+            return await assemble(request)
 
         adjusted_request = replace(
             request,
             image_urls=request.image_urls if supports_image else [],
             audio_urls=request.audio_urls if supports_audio else [],
         )
-        context = await adjusted_request.assemble_context()
+        context = await assemble(adjusted_request)
         content = context.get("content")
         if isinstance(content, str):
             content_blocks: list[dict[str, T.Any]] = [{"type": "text", "text": content}]
@@ -659,12 +771,60 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def _should_run_post_tool_compaction(self) -> bool:
         if not hasattr(self, "post_tool_compaction_controller"):
             return False
+        token_counter = self._get_context_token_counter()
+        if token_counter is None:
+            return False
+        context_config = getattr(
+            self,
+            "context_config",
+            getattr(self, "request_context_guard_config", None),
+        )
         return self.post_tool_compaction_controller.should_compact(
             messages=self.run_context.messages,
-            token_counter=self.request_context_guard.token_counter,
+            token_counter=token_counter,
             max_context_tokens=int(
-                self.request_context_guard_config.max_context_tokens or 0
+                getattr(context_config, "max_context_tokens", 0) or 0
             ),
+        )
+
+    def _refresh_tool_compaction_baseline(
+        self,
+        *,
+        trusted_token_usage: int = 0,
+    ) -> None:
+        if not hasattr(self, "post_tool_compaction_controller") or not hasattr(
+            self,
+            "request_context_guard",
+        ):
+            return
+        token_counter = self._get_context_token_counter()
+        if token_counter is None:
+            return
+        self.post_tool_compaction_controller.refresh_baseline(
+            messages=self.run_context.messages,
+            token_counter=token_counter,
+            trusted_token_usage=trusted_token_usage,
+        )
+
+    def _get_context_token_counter(self) -> T.Any:
+        context_manager = getattr(self, "context_manager", None)
+        token_counter = getattr(context_manager, "token_counter", None)
+        if token_counter is not None:
+            return token_counter
+        request_context_guard = getattr(self, "request_context_guard", None)
+        manager = getattr(request_context_guard, "_manager", None)
+        return getattr(manager, "token_counter", None)
+
+    async def _process_context_guard(
+        self,
+        messages: list[Message],
+        *,
+        trusted_token_usage: int = 0,
+    ) -> list[Message]:
+        context_manager = getattr(self, "context_manager", self.request_context_guard)
+        return await context_manager.process(
+            messages,
+            trusted_token_usage=trusted_token_usage,
         )
 
     async def _iter_llm_responses(
@@ -1044,7 +1204,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # conversation / memory layer.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]")
-        self._provider_messages = await self.request_context_guard.process(
+        self._provider_messages = await self._process_context_guard(
             self.run_context.messages, trusted_token_usage=token_usage
         )
         self._refresh_tool_compaction_baseline(trusted_token_usage=token_usage)
@@ -1300,7 +1460,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 token_usage = (
                     self.req.conversation.token_usage if self.req.conversation else 0
                 )
-                self.run_context.messages = await self.request_context_guard.process(
+                self.run_context.messages = await self._process_context_guard(
                     self.run_context.messages,
                     trusted_token_usage=token_usage,
                 )
@@ -1312,8 +1472,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> T.AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
         step_count = 0
-        # TODO:将max_step由30改为一个较小的值
-        max_step = min(max_step, 3)
         while not self.done() and step_count < max_step:
             step_count += 1
             async for resp in self.step():
@@ -1364,7 +1522,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             strict=False,
         ):
             tool_result_blocks_start = len(tool_call_result_blocks)
-            tool_call_streak = self._track_tool_call_streak(func_tool_name)
+            tool_call_streak = self._track_tool_call_streak(
+                func_tool_name,
+                func_tool_args,
+            )
             is_silent_handoff = False
             try:
                 if not req.func_tool:
@@ -1511,7 +1672,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 _final_resp: CallToolResult | None = None
                 tool_result_parts: list[str] = []
-                async for resp in self._iter_tool_executor_results(executor):  # type: ignore
+                async for resp in self._iter_tool_executor_results(executor):
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
@@ -1577,19 +1738,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             self._maybe_register_dynamic_tool_from_result(
                                 result_content
                             )
-
-                            inline_result = "\n\n".join(result_parts)
-                            inline_result = await self._materialize_large_tool_result(
-                                tool_call_id=func_tool_id,
-                                content=inline_result,
-                            )
-                            _append_tool_call_result(
-                                func_tool_id,
-                                inline_result
-                                + self._build_repeated_tool_call_guidance(
-                                    func_tool_name, tool_call_streak
-                                ),
-                            )
+                            tool_result_parts.append(result_content)
 
                     elif resp is None:
                         # Tool 直接请求发送消息给用户

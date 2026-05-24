@@ -4,6 +4,7 @@ import io
 import os
 import re
 import shutil
+import time
 import uuid
 import zipfile
 from datetime import datetime
@@ -23,7 +24,7 @@ from astrbot.core.computer.cua_registry import CuaSandboxRegistry
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.provider.provider import EmbeddingProvider
-from astrbot.core.star.star import star_registry
+from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
@@ -345,7 +346,8 @@ async def test_auth_login(
         },
     )
     data = await response.get_json()
-    assert data["status"] == "ok" and "token" in data["data"]
+    assert data["status"] == "ok"
+    assert "token" in data["data"]
     set_cookie_headers = response.headers.getlist("Set-Cookie")
     jwt_cookie_header = next(
         (value for value in set_cookie_headers if DASHBOARD_JWT_COOKIE_NAME in value),
@@ -2311,7 +2313,8 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
     response = await test_client.get("/api/stat/get", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
-    assert data["status"] == "ok" and "platform" in data["data"]
+    assert data["status"] == "ok"
+    assert "platform" in data["data"]
 
 
 @pytest.mark.asyncio
@@ -2598,8 +2601,8 @@ async def test_sandbox_dashboard_api_switch_release_takeover_destroy(
         connect_info={"name": "CUA worker", "local": True},
     )
     monkeypatch.setattr(computer_client, "cua_registry", registry)
-    computer_client.session_booter.clear()
-    computer_client.session_booter["sb-cua"] = FakeBooter()
+    computer_client.sandbox_manager.session_booter.clear()
+    computer_client.sandbox_manager.session_booter["sb-cua"] = FakeBooter()
     client = app.test_client()
 
     switch_response = await client.post(
@@ -2666,7 +2669,7 @@ async def test_sandbox_dashboard_api_create_uses_runtime_provider_payload(
     registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
     monkeypatch.setattr(computer_client, "cua_registry", registry)
     monkeypatch.setattr(computer_client, "_boot_managed_cua_sandbox", fake_boot_managed)
-    computer_client.session_booter.clear()
+    computer_client.sandbox_manager.session_booter.clear()
 
     response = await app.test_client().post(
         "/api/sandboxes/create",
@@ -2789,8 +2792,8 @@ async def test_sandbox_dashboard_api_screenshot_returns_inline_image(
         connect_info={"name": "Sandbox"},
     )
     monkeypatch.setattr(computer_client, "cua_registry", registry)
-    computer_client.session_booter.clear()
-    computer_client.session_booter["sb-cua"] = FakeBooter()
+    computer_client.sandbox_manager.session_booter.clear()
+    computer_client.sandbox_manager.session_booter["sb-cua"] = FakeBooter()
 
     response = await app.test_client().post(
         "/api/sandboxes/screenshot",
@@ -2856,8 +2859,8 @@ async def test_sandbox_dashboard_api_shell_executes_without_taking_over(
         connect_info={"name": "Sandbox"},
     )
     monkeypatch.setattr(computer_client, "cua_registry", registry)
-    computer_client.session_booter.clear()
-    computer_client.session_booter["sb-cua"] = FakeBooter()
+    computer_client.sandbox_manager.session_booter.clear()
+    computer_client.sandbox_manager.session_booter["sb-cua"] = FakeBooter()
 
     response = await app.test_client().post(
         "/api/sandboxes/shell",

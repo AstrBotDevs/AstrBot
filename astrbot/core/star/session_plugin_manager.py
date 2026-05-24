@@ -44,6 +44,8 @@ class SessionPluginManager:
     @staticmethod
     async def get_session_plugin_config(session_id: str) -> dict:
         """获取指定会话的插件配置。"""
+        if not isinstance(session_id, str) or not session_id:
+            return {}
         session_plugin_config = await sp.get_async(
             scope="umo",
             scope_id=session_id,
@@ -121,6 +123,8 @@ class SessionPluginManager:
         from astrbot.core.star.star import star_map
 
         session_id = event.unified_msg_origin
+        if not isinstance(session_id, str) or not session_id:
+            return handlers
         filtered_handlers = []
 
         session_config = await SessionPluginManager.get_session_plugin_config(

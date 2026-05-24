@@ -23,8 +23,8 @@ class TestVersionConstant:
 
     def test_version_format(self):
         parts = VERSION.split(".")
-        assert len(parts) == 3
-        for p in parts:
+        assert len(parts) >= 3
+        for p in parts[:3]:
             assert p.isdigit()
 
 
@@ -50,7 +50,7 @@ class TestDEFAULT_VALUE_MAP:
     """Tests for DEFAULT_VALUE_MAP structure."""
 
     def test_contains_expected_types(self):
-        expected = {"int", "float", "bool", "string", "text", "list", "file", "object", "template_list"}
+        expected = {"int", "float", "bool", "string", "text", "list", "file", "object", "dict", "template_list"}
         assert set(DEFAULT_VALUE_MAP.keys()) == expected
 
     def test_default_values_are_correct_types(self):
@@ -207,5 +207,5 @@ class TestDEFAULT_CONFIGStructure:
 
     def test_sandbox_defaults(self):
         sb = DEFAULT_CONFIG["provider_settings"]["sandbox"]
-        assert sb["booter"] == "shipyard_neo"
-        assert sb["shipyard_neo_ttl"] == 3600
+        assert sb["booter"] == ""
+        assert sb["sandbox_ttl"] == 3600

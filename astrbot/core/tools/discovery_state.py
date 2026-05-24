@@ -39,5 +39,5 @@ class DiscoveryState:
     def __len__(self) -> int:
         return len(self._names)
 
-    def __contains__(self, tool_name: str) -> bool:  # type: ignore[override]
+    def __contains__(self, tool_name: str) -> bool:
         return tool_name in self._seen

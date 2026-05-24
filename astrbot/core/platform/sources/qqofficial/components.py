@@ -53,7 +53,7 @@ class QQCButton(BaseMessageComponent):
       1 - 蓝色边框（primary，默认）
     """
 
-    type: str = "qqc_button"  # type: ignore[assignment]
+    type: str = "qqc_button"
     id: str = ""
     label: str = ""
     visited_label: str | None = None
@@ -100,7 +100,7 @@ class QQCButton(BaseMessageComponent):
             at_bot_show_channel_list=at_bot_show_channel_list,
         )
 
-    def to_dict(self) -> dict:  # type: ignore[override]
+    def to_dict(self) -> dict:
         render_data = {
             "label": self.label,
             "visited_label": self.visited_label,
@@ -136,7 +136,7 @@ class QQCKeyboard(BaseMessageComponent):
     rows: 二维列表，每行是一组按钮。QQ 限制最多 5 行、每行最多 5 个按钮。
     """
 
-    type: str = "qqc_keyboard"  # type: ignore[assignment]
+    type: str = "qqc_keyboard"
     rows: list[list[QQCButton]]
 
     MAX_ROWS: ClassVar[int] = 5
@@ -153,7 +153,7 @@ class QQCKeyboard(BaseMessageComponent):
                 )
         super().__init__(rows=rows)
 
-    def to_dict(self) -> dict:  # type: ignore[override]
+    def to_dict(self) -> dict:
         return {
             "content": {
                 "rows": [

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import "markstream-vue/index.css";
-import {MarkdownRender, setCustomComponents} from "markstream-vue";
+import { MarkdownRender, setCustomComponents } from "markstream-vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
 import ThreadNode from "@/components/chat/message_list_comps/ThreadNode.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
-import {onMounted, onUnmounted, ref} from "vue";
-import {useCustomizerStore} from '@/stores/customizer';
+import { useCustomizerStore } from "@/stores/customizer";
 
 const customizer = useCustomizerStore();
 const customHtmlTags = ref([] as string[]);
@@ -18,17 +18,17 @@ setCustomComponents("chat-message", {
 });
 
 const handleMessage = (event: any) => {
-  if (event.data.type == 'PrintData.Send') {
+  if (event.data.type === "PrintData.Send") {
     print_content.value = event.data.data;
-    window.opener.postMessage('PrintData.Ready')
+    window.opener.postMessage("PrintData.Ready");
   }
 };
 
 onMounted(() => {
-  window.addEventListener('message', handleMessage);
+  window.addEventListener("message", handleMessage);
 });
 onUnmounted(() => {
-  window.removeEventListener('message', handleMessage);
+  window.removeEventListener("message", handleMessage);
 });
 function printPage() {
   window.print();

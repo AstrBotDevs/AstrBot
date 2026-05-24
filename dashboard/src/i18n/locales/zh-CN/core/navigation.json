@@ -6,7 +6,6 @@
   "commands": "指令管理",
   "persona": "人格设定",
   "subagent": "子代理编排",
-  "sandboxes": "沙盒管理",
   "toolUse": "MCP",
   "extension": "插件",
   "extensionTabs": {

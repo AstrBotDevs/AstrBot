@@ -17,16 +17,15 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import os
+import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Dict, Tuple
 
 import aiohttp
 
 from astrbot import logger
-
 
 # ============ 常量 ============
 
@@ -68,7 +67,7 @@ class ApiError(Exception):
     """API 错误"""
 
     def __init__(
-        self, message: str, status: int, path: str, biz_code: Optional[int] = None
+        self, message: str, status: int, path: str, biz_code: int | None = None
     ):
         self.status = status
         self.path = path
@@ -84,17 +83,12 @@ class ChunkedUploadError(Exception):
         message: str,
         file_path: str,
         file_size: int,
-        cause: Optional[Exception] = None,
+        cause: Exception | None = None,
     ):
         self.file_path = file_path
         self.file_size = file_size
         self.cause = cause
         super().__init__(message)
-
-
-# ============ 全局 HTTP 客户端管理器（按 appId 隔离）============
-
-import threading
 
 
 class QQBotHttpClientManager:
@@ -109,12 +103,12 @@ class QQBotHttpClientManager:
     避免 asyncio.Lock 在非事件循环上下文中的问题。
     """
 
-    _instance: Optional["QQBotHttpClientManager"] = None
-    _clients: Dict[str, QQBotHttpClient] = {}
+    _instance: QQBotHttpClientManager | None = None
+    _clients: dict[str, QQBotHttpClient] = {}
     _lock = threading.Lock()
 
     @classmethod
-    def get_instance(cls) -> "QQBotHttpClientManager":
+    def get_instance(cls) -> QQBotHttpClientManager:
         """获取单例实例"""
         if cls._instance is None:
             cls._instance = cls()
@@ -149,7 +143,7 @@ class QQBotHttpClientManager:
         logger.debug("[QQBotHttpClientManager] All clients cleared")
 
     @classmethod
-    def get_stats(cls) -> Dict[str, Dict]:
+    def get_stats(cls) -> dict[str, dict]:
         """获取各客户端状态统计"""
         with cls._lock:
             return {
@@ -273,11 +267,11 @@ class QQBotHttpClient:
     def __init__(self, appid: str, secret: str):
         self.appid = appid
         self.secret = secret
-        self._token: Optional[str] = None
+        self._token: str | None = None
         self._token_expires_at: float = 0
         self._token_fetch_lock = asyncio.Lock()
-        self._token_fetch_promise: Optional[asyncio.Future[str]] = None
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._token_fetch_promise: asyncio.Future[str] | None = None
+        self._session: aiohttp.ClientSession | None = None
         self._session_lock = asyncio.Lock()
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -363,7 +357,7 @@ class QQBotHttpClient:
         self,
         method: str,
         path: str,
-        body: Optional[dict] = None,
+        body: dict | None = None,
         timeout: float = 300.0,
     ) -> dict:
         """API 请求封装（带详细日志）"""
@@ -425,7 +419,7 @@ class QQBotHttpClient:
                         f"API Error [{path}] HTTP {resp.status}: {raw[:200]}",
                         resp.status,
                         path,
-                    )
+                    ) from e
 
             import json
 
@@ -435,7 +429,7 @@ class QQBotHttpClient:
         self,
         file_type: int,
         file_data: str,
-        file_name: Optional[str] = None,
+        file_name: str | None = None,
         srv_send_msg: bool = False,
         target_type: str = "c2c",
         target_id: str = "",
@@ -531,7 +525,7 @@ class QQBotHttpClient:
         part_index: int,
         block_size: int,
         md5: str,
-        retry_timeout_ms: Optional[int] = None,
+        retry_timeout_ms: int | None = None,
     ) -> None:
         """C2C 完成分片上传（带持续重试）"""
         logger.debug(f"[QQBotHttpClient] C2C upload_part_finish: part={part_index}")
@@ -608,7 +602,7 @@ class QQBotHttpClient:
         part_index: int,
         block_size: int,
         md5: str,
-        retry_timeout_ms: Optional[int] = None,
+        retry_timeout_ms: int | None = None,
     ) -> None:
         """Group 完成分片上传（带持续重试）"""
         await self._part_finish_with_retry(
@@ -634,15 +628,14 @@ class QQBotHttpClient:
     # ============ 内部重试逻辑 ============
 
     async def _part_finish_with_retry(
-        self, method: str, path: str, body: dict, retry_timeout_ms: Optional[int] = None
+        self, method: str, path: str, body: dict, retry_timeout_ms: int | None = None
     ) -> None:
         """分片完成接口重试策略"""
         PART_FINISH_MAX_RETRIES = 2
         PART_FINISH_BASE_DELAY_MS = 1000
         PART_FINISH_RETRYABLE_DEFAULT_TIMEOUT_MS = 2 * 60 * 1000
-        PART_FINISH_RETRYABLE_INTERVAL_MS = 1000
 
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
 
         for attempt in range(PART_FINISH_MAX_RETRIES + 1):
             try:
@@ -698,7 +691,7 @@ class QQBotHttpClient:
                     and err.biz_code in PART_FINISH_RETRYABLE_CODES
                 ):
                     logger.error(
-                        f"[chunked] PartFinish persistent retry: error is no longer retryable"
+                        "[chunked] PartFinish persistent retry: error is no longer retryable"
                     )
                     raise
 
@@ -723,7 +716,7 @@ class QQBotHttpClient:
         COMPLETE_UPLOAD_MAX_RETRIES = 2
         COMPLETE_UPLOAD_BASE_DELAY_MS = 2000
 
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
 
         for attempt in range(COMPLETE_UPLOAD_MAX_RETRIES + 1):
             try:
@@ -757,7 +750,7 @@ async def put_to_presigned_url(
     total_parts: int = 0,
 ) -> None:
     """PUT 分片数据到预签名 URL（带重试）"""
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
 
     for attempt in range(PART_UPLOAD_MAX_RETRIES + 1):
         try:
@@ -793,7 +786,7 @@ async def chunked_upload_c2c(
     user_id: str,
     file_path: str,
     file_type: int,
-    on_progress: Optional[Callable[[ChunkedUploadProgress], None]] = None,
+    on_progress: Callable[[ChunkedUploadProgress], None] | None = None,
     log_prefix: str = "[chunked]",
 ) -> MediaUploadResponse:
     """C2C 大文件分片上传"""
@@ -819,7 +812,7 @@ async def chunked_upload_c2c(
         )
     except ApiError as e:
         if e.biz_code == UPLOAD_PREPARE_FALLBACK_CODE:
-            raise UploadDailyLimitExceededError(file_path, file_size, str(e))
+            raise UploadDailyLimitExceededError(file_path, file_size, str(e)) from e
         raise
 
     upload_id = prepare_resp.upload_id
@@ -900,7 +893,7 @@ async def chunked_upload_group(
     group_id: str,
     file_path: str,
     file_type: int,
-    on_progress: Optional[Callable[[ChunkedUploadProgress], None]] = None,
+    on_progress: Callable[[ChunkedUploadProgress], None] | None = None,
     log_prefix: str = "[chunked]",
 ) -> MediaUploadResponse:
     """Group 大文件分片上传"""
@@ -925,7 +918,7 @@ async def chunked_upload_group(
         )
     except ApiError as e:
         if e.biz_code == UPLOAD_PREPARE_FALLBACK_CODE:
-            raise UploadDailyLimitExceededError(file_path, file_size, str(e))
+            raise UploadDailyLimitExceededError(file_path, file_size, str(e)) from e
         raise
 
     upload_id = prepare_resp.upload_id

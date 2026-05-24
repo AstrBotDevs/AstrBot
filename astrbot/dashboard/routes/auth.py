@@ -9,10 +9,13 @@ from quart import current_app, g, jsonify, make_response, request
 
 from astrbot import logger
 from astrbot.core import DEMO_MODE
+from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.auth_password import (
+    get_dashboard_login_challenge,
     is_default_dashboard_password,
     is_legacy_dashboard_password,
     validate_dashboard_password,
+    verify_dashboard_login_proof,
     verify_dashboard_password,
 )
 from astrbot.core.utils.totp import (
@@ -65,6 +68,7 @@ class AuthRoute(Route):
     def __init__(self, context: RouteContext, db: BaseDatabase) -> None:
         super().__init__(context)
         self.db = db
+        self._login_challenges: dict[str, dict[str, object]] = {}
         self.routes = {
             "/auth/login/challenge": ("POST", self.login_challenge),
             "/auth/login": ("POST", self.login),
@@ -274,13 +278,24 @@ class AuthRoute(Route):
         req_password = (
             post_data.get("password") if isinstance(post_data, dict) else None
         )
+        req_challenge_id = (
+            post_data.get("challenge_id") if isinstance(post_data, dict) else None
+        )
+        req_password_proof = (
+            post_data.get("password_proof") if isinstance(post_data, dict) else None
+        )
         totp_code = post_data.get("code") if isinstance(post_data, dict) else None
         trust_device_flag = (
             post_data.get("trust_device_flag") is True
             if isinstance(post_data, dict)
             else False
         )
-        if not isinstance(req_username, str) or not isinstance(req_password, str):
+        has_password = isinstance(req_password, str)
+        has_challenge = isinstance(req_challenge_id, str) and isinstance(
+            req_password_proof,
+            str,
+        )
+        if not isinstance(req_username, str) or not (has_password or has_challenge):
             return Response().error("Invalid request payload").__dict__
 
         login_verified = False
@@ -409,6 +424,7 @@ class AuthRoute(Route):
 
         storage_upgraded = await is_password_storage_upgraded(self.db, self.config)
         password = get_dashboard_password_hash(self.config, upgraded=storage_upgraded)
+        old_username = self.config["dashboard"]["username"]
         post_data = await request.json
         if not isinstance(post_data, dict):
             return Response().error("Invalid request payload").__dict__

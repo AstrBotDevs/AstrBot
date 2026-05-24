@@ -70,8 +70,8 @@
 </template>
 
 <script setup lang="ts">
-import { useModuleI18n } from '@/i18n/composables';
-import { getPlatformIcon } from '@/utils/platformUtils';
+import { useModuleI18n } from "@/i18n/composables";
+import { getPlatformIcon } from "@/utils/platformUtils";
 
 interface ConfigInfo {
   id: string;
@@ -84,16 +84,19 @@ interface ConfigBinding {
   umops: string[];
 }
 
-const props = withDefaults(defineProps<{
-  configs: ConfigInfo[];
-  selectedConfigId: string | null;
-  bindingsByConfigId: Record<string, ConfigBinding[]>;
-  disabled?: boolean;
-}>(), {
-  selectedConfigId: null,
-  bindingsByConfigId: () => ({}),
-  disabled: false
-});
+const props = withDefaults(
+  defineProps<{
+    configs: ConfigInfo[];
+    selectedConfigId: string | null;
+    bindingsByConfigId: Record<string, ConfigBinding[]>;
+    disabled?: boolean;
+  }>(),
+  {
+    selectedConfigId: null,
+    bindingsByConfigId: () => ({}),
+    disabled: false,
+  },
+);
 
 const emit = defineEmits<{
   select: [configId: string];
@@ -101,7 +104,7 @@ const emit = defineEmits<{
   manageRoutes: [payload: { configId: string }];
 }>();
 
-const { tm } = useModuleI18n('features/config');
+const { tm } = useModuleI18n("features/config");
 
 const maxVisibleBindings = 6;
 
@@ -109,14 +112,14 @@ function onSelect(configId: string): void {
   if (props.disabled) {
     return;
   }
-  emit('select', configId);
+  emit("select", configId);
 }
 
 function onManageRoutes(configId: string): void {
   if (props.disabled) {
     return;
   }
-  emit('manageRoutes', { configId });
+  emit("manageRoutes", { configId });
 }
 
 function bindingsForConfig(configId: string): ConfigBinding[] {

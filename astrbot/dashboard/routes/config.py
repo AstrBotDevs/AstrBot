@@ -10,7 +10,8 @@ from typing import Any
 import anyio
 from quart import request
 
-from astrbot.core import LogManager, astrbot_config, file_token_service, logger
+from astrbot.core import astrbot_config, file_token_service, logger
+from astrbot.core.computer import computer_client
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -55,6 +56,7 @@ OPENAI_OAUTH_FLOW_TTL_SECONDS = 10 * 60
 
 def _resolve_path(path: Path) -> Path:
     return path.resolve(strict=False)
+
 
 _RUNTIME_LOG_KEYS = (
     "log_level",
@@ -395,6 +397,7 @@ def _ssl_config_file_exists(path_value: str) -> bool:
         path = Path(get_astrbot_data_path()) / path
     return path.is_file()
 
+
 def _log_computer_config_changes(old_config: dict, new_config: dict) -> None:
     """Compare and log Computer/sandbox configuration changes."""
     old_ps = old_config.get("provider_settings", {})
@@ -426,6 +429,7 @@ def _log_computer_config_changes(old_config: dict, new_config: dict) -> None:
                 old_display,
                 new_display,
             )
+
 
 async def _validate_neo_connectivity(
     post_config: dict,
@@ -961,10 +965,7 @@ class ConfigRoute(Route):
         provider_schema = provider_metadata["provider_group"]["metadata"]["provider"]
         config_schema = {"provider": provider_schema}
 
-        provider_default_tmpl = config_schema["provider"]["config_template"]
-        provider_schema_wrapper = {
-            "provider_group": {"metadata": {"provider": provider_schema}}
-        }
+        config_schema["provider"]["config_template"]
         _merge_registered_providers_into(
             config_schema["provider"].setdefault("config_template", {})
         )
@@ -1099,6 +1100,8 @@ class ConfigRoute(Route):
                 return Response().ok({"config": abconf, "metadata": metadata}).to_json()
             if abconf_id is None:
                 raise ValueError("abconf_id cannot be None")
+            if abconf_id not in acm.confs:
+                return Response().error("配置文件不存在").__dict__
             abconf = self.acm.confs[abconf_id]
             metadata = ConfigMetadataI18n.convert_to_i18n_keys(
                 self._inject_sandbox_provider_options(copy.deepcopy(CONFIG_METADATA_3))
@@ -1432,7 +1435,16 @@ class ConfigRoute(Route):
                 logger.info("Detected vLLM specific error, bypassing...")
                 # 伪造一个成功的响应，告知前端进入"兼容模式"
                 return Response().ok({"embedding_dimensions": "vLLM-Adaptive"}).__dict__
-            return Response().error(f"获取嵌入维度失败: {e!s}").__dict__
+            return Response().error(f"获取嵌入模型列表失败: {e!s}").__dict__
+        finally:
+            terminate_fn = getattr(inst, "terminate", None) if inst else None
+            if terminate_fn is not None:
+                try:
+                    result = terminate_fn()
+                    if inspect.isawaitable(result):
+                        await result
+                except Exception:
+                    logger.warning("释放嵌入 provider 资源失败")
 
     async def get_provider_source_models(self):
         """获取指定 provider_source 支持的模型列表
@@ -1951,6 +1963,7 @@ class ConfigRoute(Route):
     async def _get_astrbot_config(self):
         config = self.config
         metadata: Any = copy.deepcopy(CONFIG_METADATA_2)
+        provider_i18n_translations: dict[str, Any] = {}
         _pg: Any = metadata["platform_group"]
         _pg_meta: Any = _pg["metadata"]
         _platform_meta: Any = _pg_meta["platform"]

@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 
 const customizer = useCustomizerStore();
@@ -66,9 +66,7 @@ function draw() {
   const my = smoothY.value;
 
   // draw static base grid (very faint)
-  ctx.strokeStyle = dark
-    ? "rgba(255, 255, 255, 0.03)"
-    : "rgba(0, 49, 83, 0.03)";
+  ctx.strokeStyle = dark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 49, 83, 0.03)";
   ctx.lineWidth = 0.5;
   for (let x = 0; x <= W; x += GRID) {
     ctx.beginPath();

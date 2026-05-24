@@ -237,7 +237,7 @@ class TestAstrBotConfigLoad:
             generated_password,
         )
         assert config["dashboard"]["pbkdf2_password"].startswith(
-            "pbkdf2_sha256$600000$"
+            ("$argon2", "pbkdf2_sha256$600000$"),
         )
         assert config["dashboard"]["password_change_required"] is True
         assert config["dashboard"]["password_storage_upgraded"] is True

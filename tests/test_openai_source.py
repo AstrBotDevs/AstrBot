@@ -1,6 +1,8 @@
 import base64
 import builtins
 import importlib
+from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse, urlunparse
 
@@ -78,6 +80,43 @@ def _make_opencode_go_provider_for_unit_tests(
     models: list[str] | None = None,
 ) -> ProviderOpenCodeGo:
     return _OpenCodeGoUnitProvider(models or [])
+
+
+def _make_tool_call_completion(
+    tool_call_id: str,
+    tool_name: str,
+    *,
+    completion_id: str,
+) -> ChatCompletion:
+    return ChatCompletion.model_validate(
+        {
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": 0,
+            "model": "gpt-4o-mini",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "refusal": None,
+                        "tool_calls": [
+                            {
+                                "id": tool_call_id,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_name,
+                                    "arguments": "{}",
+                                },
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
+        }
+    )
 
 
 def test_create_http_client_uses_openai_httpx_module(monkeypatch):

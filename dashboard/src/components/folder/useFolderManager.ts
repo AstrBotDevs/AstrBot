@@ -3,14 +3,14 @@
  *
  * 提供文件夹管理的核心逻辑，可以被不同的业务模块复用
  */
-import { ref, computed, reactive, type Ref, type ComputedRef } from "vue";
+import { type ComputedRef, computed, type Ref, reactive, ref } from "vue";
 import type {
-  Folder,
-  FolderTreeNode,
-  FolderOperations,
-  CreateFolderData,
-  UpdateFolderData,
   BreadcrumbItem,
+  CreateFolderData,
+  Folder,
+  FolderOperations,
+  FolderTreeNode,
+  UpdateFolderData,
 } from "./types";
 
 export interface UseFolderManagerOptions {
@@ -46,10 +46,7 @@ export interface UseFolderManagerReturn {
   createFolder: (data: CreateFolderData) => Promise<Folder>;
   updateFolder: (data: UpdateFolderData) => Promise<void>;
   deleteFolder: (folderId: string) => Promise<void>;
-  moveFolder: (
-    folderId: string,
-    targetParentId: string | null,
-  ) => Promise<void>;
+  moveFolder: (folderId: string, targetParentId: string | null) => Promise<void>;
 
   toggleFolderExpansion: (folderId: string) => void;
   setFolderExpansion: (folderId: string, expanded: boolean) => void;
@@ -63,9 +60,7 @@ export interface UseFolderManagerReturn {
 /**
  * 创建文件夹管理 composable
  */
-export function useFolderManager(
-  options: UseFolderManagerOptions,
-): UseFolderManagerReturn {
+export function useFolderManager(options: UseFolderManagerOptions): UseFolderManagerReturn {
   const { operations, rootFolderName = "根目录", autoLoad = false } = options;
 
   // 状态
@@ -82,10 +77,7 @@ export function useFolderManager(
     if (breadcrumbPath.value.length === 0) {
       return rootFolderName;
     }
-    return (
-      breadcrumbPath.value[breadcrumbPath.value.length - 1]?.name ||
-      rootFolderName
-    );
+    return breadcrumbPath.value[breadcrumbPath.value.length - 1]?.name || rootFolderName;
   });
 
   const breadcrumbItems = computed((): BreadcrumbItem[] => {
@@ -121,10 +113,7 @@ export function useFolderManager(
         return [...path, node];
       }
       if (node.children && node.children.length > 0) {
-        const result = findPathToFolderInternal(node.children, targetId, [
-          ...path,
-          node,
-        ]);
+        const result = findPathToFolderInternal(node.children, targetId, [...path, node]);
         if (result) return result;
       }
     }
@@ -187,10 +176,7 @@ export function useFolderManager(
     await Promise.all([refreshCurrentFolder(), loadFolderTree()]);
   };
 
-  const moveFolder = async (
-    folderId: string,
-    targetParentId: string | null,
-  ): Promise<void> => {
+  const moveFolder = async (folderId: string, targetParentId: string | null): Promise<void> => {
     if (operations.moveFolder) {
       await operations.moveFolder(folderId, targetParentId);
     } else {
@@ -302,10 +288,7 @@ export function useFolderManager(
  * 收集文件夹及其所有子文件夹的 ID
  * 用于禁用移动对话框中不能选择的目标
  */
-export function collectFolderAndChildrenIds(
-  folderTree: FolderTreeNode[],
-  folderId: string,
-): string[] {
+export function collectFolderAndChildrenIds(folderTree: FolderTreeNode[], folderId: string): string[] {
   const ids: string[] = [folderId];
 
   const collectChildIds = (nodes: FolderTreeNode[]): boolean => {

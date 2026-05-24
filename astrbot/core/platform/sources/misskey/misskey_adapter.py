@@ -100,9 +100,13 @@ class MisskeyPlatformAdapter(Platform):
         except Exception:
             self.reply_context_max_depth = 1
         try:
-            _raw_len = int(self.config.get("misskey_reply_context_max_text_length", 500))
+            _raw_len = int(
+                self.config.get("misskey_reply_context_max_text_length", 500)
+            )
             # -1 表示不截断；否则强制下限 50 防止误填导致摘要几乎为空
-            self.reply_context_max_text_length = -1 if _raw_len < 0 else max(50, _raw_len)
+            self.reply_context_max_text_length = (
+                -1 if _raw_len < 0 else max(50, _raw_len)
+            )
         except Exception:
             self.reply_context_max_text_length = 500
 

@@ -370,6 +370,28 @@ class TestAstrBotCoreLifecycleInit:
         """Test lifecycle state drives events and compatibility properties."""
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
+        lifecycle._set_lifecycle_state(LifecycleState.CORE_READY)
+        assert lifecycle.core_initialized is True
+        assert lifecycle.runtime_ready is False
+        assert lifecycle.runtime_ready_event.is_set() is False
+
+        lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_READY)
+        assert lifecycle.runtime_ready is True
+        assert lifecycle.runtime_failed is False
+        assert lifecycle.runtime_ready_event.is_set() is True
+        assert lifecycle.runtime_failed_event.is_set() is False
+
+        lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_FAILED)
+        assert lifecycle.runtime_ready is False
+        assert lifecycle.runtime_failed is True
+        assert lifecycle.runtime_ready_event.is_set() is False
+        assert lifecycle.runtime_failed_event.is_set() is True
+
+        lifecycle._set_lifecycle_state(LifecycleState.CREATED)
+        assert lifecycle.core_initialized is False
+        assert lifecycle.runtime_ready is False
+        assert lifecycle.runtime_failed is False
+
 
 class TestProviderManagerCleanup:
     """Tests for ProviderManager cleanup safety."""
@@ -1066,7 +1088,6 @@ class TestAstrBotCoreLifecycleInitialize:
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         mocks = build_initialize_test_mocks()
         error = RuntimeError("platform init failed after partial bootstrap")
-        pipeline_scheduler_mapping = {"default": MagicMock()}
         provider_manager = mocks["provider_manager"]
         platform_manager = mocks["platform_manager"]
         kb_manager = mocks["kb_manager"]
@@ -1989,6 +2010,9 @@ class TestAstrBotCoreLifecycleStopAdditional:
         lifecycle.kb_manager.terminate = AsyncMock()
         lifecycle.dashboard_shutdown_event = asyncio.Event()
 
+        async def terminate_provider() -> None:
+            assert lifecycle.runtime_ready_event.is_set() is False
+
         lifecycle.provider_manager = MagicMock()
         lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
 
@@ -2175,6 +2199,9 @@ class TestAstrBotCoreLifecycleRestart:
         lifecycle.kb_manager.terminate = AsyncMock()
         lifecycle.dashboard_shutdown_event = asyncio.Event()
         lifecycle.astrbot_updator = MagicMock()
+
+        async def terminate_provider() -> None:
+            assert lifecycle.runtime_ready_event.is_set() is False
 
         lifecycle.provider_manager = MagicMock()
         lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)

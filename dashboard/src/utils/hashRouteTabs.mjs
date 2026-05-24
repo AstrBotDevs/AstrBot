@@ -6,11 +6,7 @@ export function getValidHashTab(routeHash, validTabs) {
   return validTabs.includes(tab) ? tab : null;
 }
 
-export function createTabRouteLocation(
-  route,
-  tab,
-  fallbackRouteName = EXTENSION_ROUTE_NAME,
-) {
+export function createTabRouteLocation(route, tab, fallbackRouteName = EXTENSION_ROUTE_NAME) {
   const query = route?.query ? { ...route.query } : {};
   const params = route?.params ? { ...route.params } : undefined;
 

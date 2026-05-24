@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
+
 from astrbot.core.knowledge_base.retrieval.manager import (
     RetrievalManager,
     RetrievalResult,
@@ -17,8 +19,11 @@ class TestRetrievalManagerImports:
 
     def test_import_retrieval_result(self):
         assert RetrievalResult is not None
-        assert hasattr(RetrievalResult, "chunk_id")
-        assert hasattr(RetrievalResult, "doc_id")
-        assert hasattr(RetrievalResult, "content")
-        assert hasattr(RetrievalResult, "score")
-        assert hasattr(RetrievalResult, "metadata")
+        result_fields = {field.name for field in fields(RetrievalResult)}
+        assert {
+            "chunk_id",
+            "doc_id",
+            "content",
+            "score",
+            "metadata",
+        }.issubset(result_fields)

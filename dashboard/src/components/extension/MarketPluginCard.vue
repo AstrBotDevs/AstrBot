@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
+import { computed, ref } from "vue";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
+import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 
 const { tm } = useModuleI18n("features/extension");
@@ -29,9 +29,7 @@ const normalizePlatformList = (platforms) => {
   return platforms.filter((item) => typeof item === "string");
 };
 
-const platformDisplayList = computed(() =>
-  normalizePlatformList(props.plugin?.support_platforms),
-);
+const platformDisplayList = computed(() => normalizePlatformList(props.plugin?.support_platforms));
 
 const cardDescription = computed(() =>
   pluginShortDesc(props.plugin, props.plugin?.short_desc || props.plugin?.desc || ""),
@@ -53,9 +51,9 @@ const authorHomepageUrl = computed(() => {
   try {
     // 解析 GitHub URL，提取 owner
     const url = new URL(repoUrl);
-    if (url.hostname.toLowerCase() !== 'github.com') return null;
+    if (url.hostname.toLowerCase() !== "github.com") return null;
 
-    const pathParts = url.pathname.split('/').filter(p => p);
+    const pathParts = url.pathname.split("/").filter((p) => p);
     if (pathParts.length < 1) return null;
 
     const owner = pathParts[0];
@@ -64,7 +62,6 @@ const authorHomepageUrl = computed(() => {
     return null;
   }
 });
-
 </script>
 
 <template>

@@ -3,12 +3,7 @@
  * 国际化验证器，用于检查翻译完整性、使用情况分析和错误检测
  */
 
-import type {
-  ValidationResult,
-  ValidationError,
-  UsageReport,
-  TranslationStats,
-} from "./types";
+import type { TranslationStats, UsageReport, ValidationError, ValidationResult } from "./types";
 
 export class I18nValidator {
   private baseLocale = "zh-CN";
@@ -106,12 +101,7 @@ export class I18nValidator {
   /**
    * 递归验证嵌套值
    */
-  private validateNestedValues(
-    obj: any,
-    locale: string,
-    parentKey: string,
-    errors: ValidationError[],
-  ): void {
+  private validateNestedValues(obj: any, locale: string, parentKey: string, errors: ValidationError[]): void {
     for (const [key, value] of Object.entries(obj)) {
       const fullKey = parentKey ? `${parentKey}.${key}` : key;
 
@@ -156,9 +146,7 @@ export class I18nValidator {
    */
   validateUsage(translationKeys: string[], usedKeys: string[]): UsageReport {
     const unusedKeys = translationKeys.filter((key) => !usedKeys.includes(key));
-    const undefinedKeys = usedKeys.filter(
-      (key) => !translationKeys.includes(key),
-    );
+    const undefinedKeys = usedKeys.filter((key) => !translationKeys.includes(key));
 
     return {
       unusedKeys,
@@ -204,8 +192,7 @@ export class I18nValidator {
     // 计算总体统计
     const locales = Object.values(stats.locales);
     stats.overall.totalKeys = Math.max(...locales.map((l) => l.totalKeys));
-    stats.overall.averageCoverage =
-      locales.reduce((sum, l) => sum + l.coverage, 0) / locales.length;
+    stats.overall.averageCoverage = locales.reduce((sum, l) => sum + l.coverage, 0) / locales.length;
 
     return stats;
   }
@@ -213,11 +200,7 @@ export class I18nValidator {
   /**
    * 分析模块统计
    */
-  private analyzeModules(
-    data: any,
-    locale: string,
-    modules: TranslationStats["modules"],
-  ): void {
+  private analyzeModules(data: any, locale: string, modules: TranslationStats["modules"]): void {
     for (const [moduleName, moduleData] of Object.entries(data)) {
       if (typeof moduleData === "object" && moduleData !== null) {
         const moduleKey = `${locale}.${moduleName}`;
@@ -236,8 +219,7 @@ export class I18nValidator {
         }
 
         modules[moduleKey].keys = keys.length;
-        modules[moduleKey].coverage =
-          (translatedKeys.length / keys.length) * 100;
+        modules[moduleKey].coverage = (translatedKeys.length / keys.length) * 100;
       }
     }
   }
@@ -296,14 +278,9 @@ export class I18nValidator {
         const targetValue = this.getValueByKey(targetData, key);
         if (typeof targetValue !== "string") continue;
 
-        const targetPlaceholders = (
-          targetValue.match(/\{[^}]+\}/g) || []
-        ).sort();
+        const targetPlaceholders = (targetValue.match(/\{[^}]+\}/g) || []).sort();
 
-        if (
-          JSON.stringify(basePlaceholders) !==
-          JSON.stringify(targetPlaceholders)
-        ) {
+        if (JSON.stringify(basePlaceholders) !== JSON.stringify(targetPlaceholders)) {
           errors.push({
             type: "type_mismatch",
             key: `${locale}.${key}`,
@@ -325,13 +302,7 @@ export class I18nValidator {
     const keyNamingPattern = /^[a-z][a-zA-Z0-9]*$/;
 
     for (const [locale, data] of Object.entries(localeData)) {
-      this.validateKeyNamingRecursive(
-        data,
-        locale,
-        "",
-        keyNamingPattern,
-        errors,
-      );
+      this.validateKeyNamingRecursive(data, locale, "", keyNamingPattern, errors);
     }
 
     return errors;
@@ -360,13 +331,7 @@ export class I18nValidator {
       }
 
       if (typeof obj[key] === "object" && obj[key] !== null) {
-        this.validateKeyNamingRecursive(
-          obj[key],
-          locale,
-          fullKey,
-          pattern,
-          errors,
-        );
+        this.validateKeyNamingRecursive(obj[key], locale, fullKey, pattern, errors);
       }
     }
   }
@@ -416,10 +381,7 @@ export class I18nValidator {
 
     // 生成汇总报告
     const totalKeys = results.length * 100; // 估算的总键数
-    const missingKeys = results.reduce(
-      (sum, r) => sum + r.missingKeys.length,
-      0,
-    );
+    const missingKeys = results.reduce((sum, r) => sum + r.missingKeys.length, 0);
 
     return {
       summary: {
@@ -428,8 +390,7 @@ export class I18nValidator {
         missingKeys,
         emptyValues: 0, // 暂时设为0
         invalidInterpolations: 0, // 暂时设为0
-        completeness:
-          totalKeys > 0 ? ((totalKeys - missingKeys) / totalKeys) * 100 : 100,
+        completeness: totalKeys > 0 ? ((totalKeys - missingKeys) / totalKeys) * 100 : 100,
       },
       details: results,
       recommendations: [

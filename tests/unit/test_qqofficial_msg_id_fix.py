@@ -408,21 +408,17 @@ class TestFriendMessageMsgSeqPresent:
 
 
 class TestNoMsgIdReturnEarly:
-    """Verify that when there is NO cached msg_id, the adapter returns early."""
+    """Verify that FRIEND_MESSAGE sends proactively when no msg_id is cached."""
 
     @pytest.mark.asyncio
-    async def test_no_cached_msg_id_returns_early(self):
-        """If no msg_id is cached for the session, _send_by_session_common returns early.
-
-        This means proactive messages to users who have never messaged the bot
-        will silently fail. This is the existing behavior (not changed by the PR).
-        """
+    async def test_no_cached_msg_id_sends_without_msg_id(self):
+        """If no msg_id is cached, FRIEND_MESSAGE uses proactive C2C send."""
         adapter = _build_adapter()
         session_id = "never-messaged-user"
         # Do NOT call remember_session_message_id
 
         session = _build_session(session_id, MessageType.FRIEND_MESSAGE)
-        chain = _plain_chain("This should not be sent")
+        chain = _plain_chain("This should be sent")
 
         mock_post = AsyncMock()
 
@@ -435,7 +431,7 @@ class TestNoMsgIdReturnEarly:
                 "astrbot.core.platform.sources.qqofficial.qqofficial_message_event"
                 ".QQOfficialMessageEvent._parse_to_qqofficial",
                 return_value=(
-                    "This should not be sent",
+                    "This should be sent",
                     None,
                     None,
                     None,
@@ -446,4 +442,8 @@ class TestNoMsgIdReturnEarly:
             ):
                 await adapter._send_by_session_common(session, chain)
 
-        mock_post.assert_not_called()
+        mock_post.assert_awaited_once()
+        payload = mock_post.call_args.kwargs
+        assert payload["openid"] == session_id
+        assert "msg_id" not in payload
+        assert "msg_seq" in payload

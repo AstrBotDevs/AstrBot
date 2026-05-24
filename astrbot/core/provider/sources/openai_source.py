@@ -1,10 +1,8 @@
 import asyncio
 import base64
 import binascii
-import copy
 import hashlib
 import inspect
-
 import json
 import random
 import re
@@ -18,6 +16,7 @@ from urllib.parse import unquote, urlparse
 import anyio
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
@@ -57,6 +56,8 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 )
 class ProviderOpenAIOfficial(Provider):
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
+    _TOOL_CALL_ID_DEDUPE_MIN_LEN = 16
+    _TOOL_CALL_NAME_DEDUPE_MIN_LEN = 8
     # 部分 OpenAI 兼容中转站会校验 data URL 的 MIME 类型是否和图片字节一致。
     # 这里统一维护格式映射，确保本地文件和 `base64://` 图片引用使用相同声明。
     _IMAGE_FORMAT_MIME_TYPES = {
@@ -222,11 +223,15 @@ class ProviderOpenAIOfficial(Provider):
     def _clean_gemini_tool_list(schema: Any) -> Any:
         """非破坏性地递归移除 JSON Schema 中的 examples 字段，以适配 Gemini。"""
         if isinstance(schema, dict):
-            return {k: ProviderOpenAIOfficial._clean_gemini_tool_list(v) for k, v in schema.items() if k != "examples"}
+            return {
+                k: ProviderOpenAIOfficial._clean_gemini_tool_list(v)
+                for k, v in schema.items()
+                if k != "examples"
+            }
         if isinstance(schema, list):
             return [ProviderOpenAIOfficial._clean_gemini_tool_list(i) for i in schema]
         return schema
-        
+
     @classmethod
     def _encode_image_file_to_data_url(
         cls,
@@ -839,7 +844,7 @@ class ProviderOpenAIOfficial(Provider):
                 tid = msg.get("tool_call_id")
                 if tid and tid in id_map:
                     msg["tool_call_id"] = id_map[tid]
-                    
+
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         await self._ensure_client()
         if tools:
@@ -886,29 +891,33 @@ class ProviderOpenAIOfficial(Provider):
             stream=False,
             extra_body=extra_body,
         )
-        
+
         # --- 新增：兼容某些 API 强制返回 SSE 格式的 Bug ---
         if isinstance(completion, str):
-            logger.warning(f"检测到 API 返回了字符串而非对象，尝试自动修复: {completion[:100]}...")
+            logger.warning(
+                f"检测到 API 返回了字符串而非对象，尝试自动修复: {completion[:100]}..."
+            )
             try:
                 # 如果是 data:{...} 格式，去掉 "data:" 并解析 JSON
                 json_str = completion.strip()
                 if json_str.startswith("data:"):
                     json_str = json_str[5:].strip()
-                
+
                 # 尝试解析 JSON
                 completion_dict = json.loads(json_str)
-                
+
                 # 重新构造 ChatCompletion 对象
                 completion = ChatCompletion.construct(**completion_dict)
                 logger.info("成功将字符串响应转换为 ChatCompletion 对象。")
-                
+
             except Exception as e:
                 logger.error(f"自动修复失败: {e}")
                 # 如果修复失败，继续抛出原始错误
-                raise Exception(f"API 返回格式错误且无法修复：{type(completion)}: {completion}。")
+                raise Exception(
+                    f"API 返回格式错误且无法修复：{type(completion)}: {completion}。"
+                ) from e
         # ---------------------------------------------------
-        
+
         if not isinstance(completion, ChatCompletion):
             raise Exception(
                 f"API 返回的 completion 类型错误:{type(completion)}: {completion}｡",
@@ -965,14 +974,14 @@ class ProviderOpenAIOfficial(Provider):
         stream = await self.client.chat.completions.create(
             **payloads,
             stream=True,
-            stream_options=stream_options,
+            stream_options={"include_usage": True},
             extra_body=extra_body,
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
 
         state = ChatCompletionStreamState()
-        
+
         # Track partial thinking tags across chunks for MiniMax-style reasoning
         thinking_buffer = ""
         # Compile regex once outside the loop for efficiency
@@ -1011,7 +1020,7 @@ class ProviderOpenAIOfficial(Provider):
             if delta and delta.content:
                 # Don't strip streaming chunks to preserve spaces between words
                 completion_text = self._normalize_content(delta.content, strip=False)
-                
+
                 # Handle partial   think... ‍ think tags that may span multiple chunks (MiniMax)
                 # Prepend any leftover thinking content from previous chunk
                 if thinking_buffer:
@@ -1374,9 +1383,9 @@ class ProviderOpenAIOfficial(Provider):
                         else tool_call.function.name
                     )
                     args_ls.append(args)
-                    func_name_ls.append(tool_call.function.name)
+                    func_name_ls.append(tool_call_name)
 
-                    raw_id = tool_call.id
+                    raw_id = tool_call_id
                     safe_id = self._shorten_tool_call_id(raw_id)
                     if raw_id and safe_id != raw_id:
                         # Log only the length and the normalized short ID —
@@ -1395,7 +1404,7 @@ class ProviderOpenAIOfficial(Provider):
                     extra_content = getattr(tool_call, "extra_content", None)
                     if extra_content is not None:
                         tool_call_extra_content_dict[safe_id] = extra_content
-                        
+
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
@@ -1437,12 +1446,6 @@ class ProviderOpenAIOfficial(Provider):
         extra_user_content_parts: list[ContentPart] | None = None,
         **kwargs,
     ) -> tuple:
-        import traceback
-
-        def target_function():
-            print("=== CALL STACK ===")
-            traceback.print_stack()
-        target_function()
         """准备聊天所需的有效载荷和上下文"""
         logger.debug(
             f"Preparing chat payload with prompt: {prompt}, image_urls: {image_urls}, contexts: {contexts}, system_prompt: {system_prompt}, tool_calls_result: {tool_calls_result}, model: {model}, extra_user_content_parts: {extra_user_content_parts}"
@@ -1483,6 +1486,9 @@ class ProviderOpenAIOfficial(Provider):
             else:
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
+
+        if self._context_contains_image(context_query):
+            context_query = await self._materialize_context_image_parts(context_query)
 
         model = model or self.get_model()
         logger.debug(f"Prepared context query for OpenAI API: {context_query}")
@@ -1691,8 +1697,8 @@ class ProviderOpenAIOfficial(Provider):
         import traceback
 
         def target_function():
-            print("=== CALL STACK ===")
             traceback.print_stack()
+
         target_function()
         logger.debug(f"Prepared payloads for OpenAI API: {payloads}")
 

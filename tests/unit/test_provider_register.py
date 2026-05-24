@@ -15,7 +15,6 @@ from astrbot.core.provider.register import (
     register_provider_adapter,
 )
 
-
 # =========================================================================
 # Fixtures — fresh state per test
 # =========================================================================
@@ -26,6 +25,8 @@ def _clear_registries():
     """Clear global registries before and after each test to avoid cross-test pollution."""
     before_keys = set(provider_cls_map.keys())
     before_len = len(provider_registry)
+    before_llm_tools = list(llm_tools.func_list)
+    llm_tools.func_list.clear()
 
     yield
 
@@ -38,6 +39,7 @@ def _clear_registries():
     for _ in range(added_items):
         if provider_registry:
             provider_registry.pop()
+    llm_tools.func_list = before_llm_tools
 
 
 # =========================================================================

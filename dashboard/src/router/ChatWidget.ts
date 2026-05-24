@@ -11,7 +11,7 @@ const ChatWidgetRoutes = {
       name: "MarkdownPrit",
       path: "/markdownPrint",
       component: () => import("@/views/print.vue"),
-    }
+    },
   ],
 };
 

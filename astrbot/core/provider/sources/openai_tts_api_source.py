@@ -56,7 +56,9 @@ class ProviderOpenAITTSAPI(TTSProvider):
         return text_like / len(sample) > 0.95
 
     @classmethod
-    def _resolve_audio_extension(cls, content_type: str | None, audio_bytes: bytes) -> str:
+    def _resolve_audio_extension(
+        cls, content_type: str | None, audio_bytes: bytes
+    ) -> str:
         normalized = (content_type or "").split(";", 1)[0].strip().lower()
         extension_map = {
             "audio/wav": ".wav",
@@ -113,18 +115,24 @@ class ProviderOpenAITTSAPI(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
-        path = os.path.join(temp_dir, f"openai_tts_api_{uuid.uuid4()}.wav")
-        async with (
-            self.client.audio.speech.with_streaming_response.create(
-                model=self.model_name,
-                voice=self.voice,
-                response_format="wav",
-                input=text,
-            ) as response,
-            aiofiles.open(path, "wb") as f,
-        ):
+        os.makedirs(temp_dir, exist_ok=True)
+        audio_chunks = bytearray()
+        content_type = None
+        async with self.client.audio.speech.with_streaming_response.create(
+            model=self.model_name,
+            voice=self.voice,
+            response_format="wav",
+            input=text,
+        ) as response:
+            content_type = response.headers.get("content-type")
             async for chunk in response.iter_bytes(chunk_size=1024):
-                await f.write(chunk)
+                audio_chunks.extend(chunk)
+
+        audio_bytes = bytes(audio_chunks)
+        extension = self._resolve_audio_extension(content_type, audio_bytes)
+        path = os.path.join(temp_dir, f"openai_tts_api_{uuid.uuid4()}{extension}")
+        async with aiofiles.open(path, "wb") as f:
+            await f.write(audio_bytes)
         return path
 
     async def terminate(self):

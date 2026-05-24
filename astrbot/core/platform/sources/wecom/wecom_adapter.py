@@ -4,7 +4,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, cast, override
+from typing import Any, NamedTuple, cast, override
 from urllib.parse import unquote
 
 import quart
@@ -34,6 +34,27 @@ from astrbot.core.utils.webhook_utils import log_webhook_info
 from .wecom_event import WecomPlatformEvent
 from .wecom_kf import WeChatKF
 from .wecom_kf_message import WeChatKFMessage
+
+
+def _extract_wecom_media_filename(disposition: str | None) -> str | None:
+    if not disposition:
+        return None
+
+    for part in disposition.split(";"):
+        token = part.strip()
+        token_lower = token.lower()
+        if token_lower.startswith("filename*="):
+            value = token.split("=", 1)[1].strip().strip('"')
+            if value.lower().startswith("utf-8''"):
+                value = value[7:]
+            filename = Path(unquote(value).replace("\\", "/")).name
+            return filename or None
+        if token_lower.startswith("filename="):
+            value = token.split("=", 1)[1].strip().strip('"')
+            filename = Path(value.replace("\\", "/")).name
+            return filename or None
+
+    return None
 
 
 # 客户信息缓存条目
@@ -428,6 +449,8 @@ class WecomPlatformAdapter(Platform):
         abm.raw_message = msg
         abm.raw_message["_wechat_kf_flag"] = None  # 方便处理
         abm.self_id = msg["open_kfid"]
+        nickname = external_userid
+        avatar = None
         abm.sender = MessageMember(external_userid, nickname, avatar)
         abm.session_id = external_userid
         abm.type = MessageType.FRIEND_MESSAGE

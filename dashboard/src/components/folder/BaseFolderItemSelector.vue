@@ -343,11 +343,7 @@
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
 import BaseMoveTargetNode from "./BaseMoveTargetNode.vue";
-import type {
-  FolderTreeNode,
-  FolderItemSelectorLabels,
-  SelectableItem,
-} from "./types";
+import type { FolderItemSelectorLabels, FolderTreeNode, SelectableItem } from "./types";
 
 export default defineComponent({
   name: "BaseFolderItemSelector",
@@ -425,36 +421,28 @@ export default defineComponent({
     },
 
     currentFolderLabel(): string {
-      if (this.currentFolderId === null)
-        return this.labels.rootFolder || "根目录";
+      if (this.currentFolderId === null) return this.labels.rootFolder || "根目录";
       const currentFolder = this.breadcrumbPath[this.breadcrumbPath.length - 1];
       return currentFolder?.name || this.labels.rootFolder || "根目录";
     },
 
     displayValue(): string {
-      if (this.displayValueFormatter)
-        return this.displayValueFormatter(this.modelValue);
-      if (
-        this.defaultItem &&
-        this.modelValue === this.getItemId(this.defaultItem)
-      )
+      if (this.displayValueFormatter) return this.displayValueFormatter(this.modelValue);
+      if (this.defaultItem && this.modelValue === this.getItemId(this.defaultItem))
         return this.labels.defaultItem || this.getItemName(this.defaultItem);
       return this.modelValue;
     },
 
     currentItems(): SelectableItem[] {
       const items: SelectableItem[] = [];
-      if (this.currentFolderId === null && this.defaultItem)
-        items.push(this.defaultItem);
+      if (this.currentFolderId === null && this.defaultItem) items.push(this.defaultItem);
       items.push(...this.items);
       return items;
     },
 
     currentSubFolders(): FolderTreeNode[] {
       if (this.currentFolderId === null) return this.folderTree;
-      return (
-        this.folderMaps.map.get(this.currentFolderId as string)?.children || []
-      );
+      return this.folderMaps.map.get(this.currentFolderId as string)?.children || [];
     },
 
     breadcrumbItems(): any[] {
@@ -485,24 +473,16 @@ export default defineComponent({
     },
 
     getItemName(item: SelectableItem): string {
-      return String(
-        (item as any)[this.itemNameField] ?? (item as any).name ?? "",
-      );
+      return String((item as any)[this.itemNameField] ?? (item as any).name ?? "");
     },
 
     getItemDescription(item: SelectableItem): string {
-      return String(
-        (item as any)[this.itemDescriptionField] ??
-          (item as any).description ??
-          "",
-      );
+      return String((item as any)[this.itemDescriptionField] ?? (item as any).description ?? "");
     },
 
     truncateText(text: string, maxLength: number): string {
       if (!text) return "";
-      return text.length > maxLength
-        ? text.substring(0, maxLength) + "..."
-        : text;
+      return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
     },
 
     openDialog() {

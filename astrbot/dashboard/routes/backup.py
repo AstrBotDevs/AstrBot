@@ -44,8 +44,12 @@ def secure_filename(filename: str) -> str:
     """
     # 跨平台处理:先将反斜杠替换为正斜杠,再取文件名
     filename = filename.replace("\\", "/")
-    # 仅保留文件名部分,移除路径
-    filename = os.path.basename(filename)
+    basename = filename.rsplit("/", 1)[-1]
+    if any(part == ".." for part in filename.split("/")):
+        _, ext = os.path.splitext(basename)
+        filename = f"backup{ext}" if ext else "backup"
+    else:
+        filename = basename
 
     # 替换路径遍历字符
     filename = filename.replace("..", "_")

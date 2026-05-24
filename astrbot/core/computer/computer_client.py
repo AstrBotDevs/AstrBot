@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import shutil
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
 from astrbot.core.agent.tool import FunctionTool
@@ -18,7 +19,6 @@ from astrbot.core.utils.astrbot_path import (
 )
 
 from .booters.base import ComputerBooter
-from .booters.constants import BOOTER_BOXLITE, BOOTER_SHIPYARD, BOOTER_SHIPYARD_NEO
 from .booters.local import LocalBooter
 from .sandbox_manager import SandboxManager
 from .sandbox_models import SandboxStatus
@@ -26,14 +26,35 @@ from .sandbox_provider import SandboxProvider
 from .sandbox_registry import SandboxRegistry
 from .sandbox_tool_binding import mark_tool_as_sandbox_provider_tool
 
+if TYPE_CHECKING:
+    from astrbot.core.agent.tool import ToolSchema
+
 local_booter: LocalBooter | None = None
 sandbox_registry = SandboxRegistry()
+cua_registry = sandbox_registry
 sandbox_manager = SandboxManager(registry=sandbox_registry, providers={})
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
 _SANDBOX_SKILLS_SYNC_LOCK = asyncio.Lock()
 
 # Tracks tools registered per provider so core can remove them on unregister.
 _provider_tools: dict[str, list[FunctionTool]] = {}
+
+
+async def _boot_managed_cua_sandbox(
+    context: Context,
+    session_id: str,
+    sandbox_id: str,
+    cua_kwargs: dict,
+) -> ComputerBooter:
+    """Compatibility hook for legacy CUA dashboard/API tests.
+
+    The built-in CUA runtime has been extracted from core; plugin providers
+    should register through `register_sandbox_provider`.
+    """
+    raise RuntimeError(
+        "Built-in CUA sandbox runtime has been extracted from core. "
+        "Install and enable a sandbox provider plugin instead."
+    )
 
 
 def _sandbox_provider_info(provider_id: str, provider: SandboxProvider) -> dict:
@@ -314,6 +335,8 @@ async def cleanup_managed_sandboxes() -> None:
 
 
 def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
+    if not skills_root.is_dir():
+        return []
     skills: list[Path] = []
     for entry in sorted(skills_root.iterdir()):
         if not entry.is_dir():
@@ -324,24 +347,39 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
     return skills
 
 
-def _compute_local_skills_revision(skills_root: Path) -> str:
+def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
+    skills_root = Path(get_astrbot_skills_path())
+    result: list[tuple[str, Path]] = []
+    seen: set[str] = set()
+    for path in _list_local_skill_dirs(skills_root):
+        result.append((path.name, path))
+        seen.add(path.name)
+
+    for skill_name, _plugin_name, skill_dir in SkillManager()._iter_plugin_skill_dirs():
+        if skill_name in seen:
+            continue
+        result.append((skill_name, skill_dir))
+        seen.add(skill_name)
+
+    return result
+
+
+def _compute_sync_skills_revision(skill_dirs: list[tuple[str, Path]]) -> str:
     """Return a stable fingerprint for the current local skills tree.
 
     Includes all managed skill files so sandbox reuse can detect local skill
     updates even when the same sandbox session stays alive.
     """
-    if not skills_root.is_dir():
-        return "missing"
-
     digest = hashlib.sha256()
-    local_skill_dirs = _list_local_skill_dirs(skills_root)
-    if not local_skill_dirs:
+    if not skill_dirs:
         digest.update(b"empty")
         return digest.hexdigest()
 
-    for skill_dir in local_skill_dirs:
+    for skill_name, skill_dir in sorted(skill_dirs, key=lambda item: item[0]):
+        digest.update(skill_name.encode("utf-8"))
+        digest.update(b"\0")
         for path in sorted(skill_dir.rglob("*")):
-            relative = path.relative_to(skills_root).as_posix()
+            relative = path.relative_to(skill_dir).as_posix()
             stat = path.stat()
             # Use explicit null-byte separators to avoid ambiguous concatenation,
             # e.g. ("foo", "12345") vs ("foo1", "2345").
@@ -361,7 +399,7 @@ def _get_booter_skills_revision(booter: ComputerBooter) -> str | None:
 
 
 def _set_booter_skills_revision(booter: ComputerBooter, revision: str) -> None:
-    setattr(booter, "_astrbot_skills_revision", revision)
+    booter._astrbot_skills_revision = revision
 
 
 def _build_python_exec_command(script: str) -> str:
@@ -572,6 +610,17 @@ def _shell_exec_succeeded(result: dict) -> bool:
     return exit_code in (0, None)
 
 
+def _normalize_shell_exec_result(result: Any) -> dict:
+    if isinstance(result, dict):
+        return result
+    return {
+        "success": False,
+        "stdout": "",
+        "stderr": str(result),
+        "exit_code": None,
+    }
+
+
 def _format_exec_error_detail(result: dict) -> str:
     """Format shell execution details for better observability.
 
@@ -610,7 +659,11 @@ def _update_sandbox_skills_cache(
     skills = payload.get("skills", [])
     if not isinstance(skills, list):
         return
-    SkillManager().set_sandbox_skills_cache(skills, provider_id=provider_id)
+    manager = SkillManager()
+    if provider_id is None:
+        manager.set_sandbox_skills_cache(skills)
+    else:
+        manager.set_sandbox_skills_cache(skills, provider_id=provider_id)
 
 
 async def _apply_skills_to_sandbox(
@@ -668,7 +721,22 @@ async def _sync_skills_to_sandbox(
     splitting into `apply` and `scan` phases.
     """
     async with _SANDBOX_SKILLS_SYNC_LOCK:
+        skills_root = Path(get_astrbot_skills_path())
+        if not skills_root.is_dir():
+            logger.info(
+                "[Computer] sandbox_sync status=skipped reason=missing_skills_root",
+            )
+            return
         sync_skill_dirs = _collect_sync_skill_dirs()
+        local_revision = _compute_sync_skills_revision(sync_skill_dirs)
+        if _get_booter_skills_revision(booter) == local_revision:
+            logger.info("[Computer] sandbox_sync status=skipped reason=unchanged")
+            return
+
+        if not sync_skill_dirs:
+            logger.info(
+                "[Computer] No local skills found; refreshing sandbox metadata only."
+            )
 
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
@@ -676,32 +744,49 @@ async def _sync_skills_to_sandbox(
         zip_path = zip_base.with_suffix(".zip")
         bundle_root = temp_dir / f"{zip_base.name}_contents"
         remote_zip_name = f"{zip_base.name}.zip"
-        remote_zip = Path(SANDBOX_SKILLS_ROOT) / remote_zip_name
+        remote_zip = (Path(SANDBOX_SKILLS_ROOT) / remote_zip_name).as_posix()
 
-    try:
-        if sync_skill_dirs:
-            if zip_path.exists():
-                zip_path.unlink()
-            if bundle_root.exists():
-                shutil.rmtree(bundle_root)
-            bundle_root.mkdir(parents=True)
-            for skill_name, skill_dir in sync_skill_dirs:
-                shutil.copytree(skill_dir, bundle_root / skill_name)
-            shutil.make_archive(str(zip_base), "zip", str(bundle_root))
-            # Force forward slashes for sandbox compatibility.
-            remote_zip = (Path(SANDBOX_SKILLS_ROOT) / "skills.zip").as_posix()
-            logger.info("Uploading skills bundle to sandbox...")
-            await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
-            upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
-            if not upload_result.get("success", False):
-                raise RuntimeError("Failed to upload skills bundle to sandbox.")
-        else:
-            logger.info(
-                "No local skills found. Keeping sandbox built-ins and refreshing metadata."
+        try:
+            if not sync_skill_dirs:
+                await booter.shell.exec(f"rm -f {remote_zip}")
+                try:
+                    payload = await _scan_sandbox_skills(booter)
+                except RuntimeError as exc:
+                    logger.warning(
+                        "[Computer] sandbox_sync phase=scan status=skipped reason=%s",
+                        exc,
+                    )
+                    return
+                _update_sandbox_skills_cache(payload, provider_id=provider_id)
+                _set_booter_skills_revision(booter, local_revision)
+                return
+
+            if sync_skill_dirs:
+                if zip_path.exists():
+                    zip_path.unlink()
+                if bundle_root.exists():
+                    shutil.rmtree(bundle_root)
+                bundle_root.mkdir(parents=True)
+                for skill_name, skill_dir in sync_skill_dirs:
+                    shutil.copytree(skill_dir, bundle_root / skill_name)
+                shutil.make_archive(str(zip_base), "zip", str(bundle_root))
+                logger.info("Uploading skills bundle to sandbox...")
+                await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
+                upload_result = await booter.upload_file(str(zip_path), remote_zip)
+                if not upload_result.get("success", False):
+                    raise RuntimeError("Failed to upload skills bundle to sandbox.")
+
+            await _apply_skills_to_sandbox(booter, remote_zip_name)
+            await booter.shell.exec(f"rm -f {remote_zip}")
+            payload = await _scan_sandbox_skills(booter)
+            _update_sandbox_skills_cache(payload, provider_id=provider_id)
+            _set_booter_skills_revision(booter, local_revision)
+            managed = (
+                payload.get("managed_skills", []) if isinstance(payload, dict) else []
             )
             logger.info(
                 "[Computer] Sandbox skill sync complete: managed=%d",
-                len(managed),
+                len(managed) if isinstance(managed, list) else 0,
             )
         finally:
             if bundle_root.exists():
@@ -783,10 +868,17 @@ async def sync_skills_to_active_sandboxes() -> None:
             )
 
 
-def get_local_booter() -> ComputerBooter:
+def get_local_booter(
+    session_id: str = "default",
+    *,
+    sandboxed: bool = False,
+) -> ComputerBooter:
     global local_booter
-    if local_booter is None:
-        local_booter = LocalBooter()
+    if local_booter is None or sandboxed:
+        local_booter = LocalBooter(
+            session_id=session_id,
+            sandboxed=sandboxed,
+        )
     return local_booter
 
 
@@ -797,18 +889,6 @@ def get_local_booter() -> ComputerBooter:
 
 def _get_booter_class(booter_type: str) -> type[ComputerBooter] | None:
     """Map booter_type string to class (lazy import)."""
-    if booter_type == BOOTER_SHIPYARD:
-        from .booters.shipyard import ShipyardBooter
-
-        return ShipyardBooter
-    if booter_type == BOOTER_SHIPYARD_NEO:
-        from .booters.shipyard_neo import ShipyardNeoBooter
-
-        return ShipyardNeoBooter
-    if booter_type == BOOTER_BOXLITE:
-        from .booters.boxlite import BoxliteBooter
-
-        return BoxliteBooter
     logger.warning(
         "[Computer] booter_class_lookup booter=%s found=false",
         booter_type,
@@ -818,7 +898,7 @@ def _get_booter_class(booter_type: str) -> type[ComputerBooter] | None:
 
 def get_sandbox_tools(session_id: str) -> list[ToolSchema]:
     """Return precise tool list from a booted session, or [] if not booted."""
-    booter = session_booter.get(session_id)
+    booter = sandbox_manager.session_booter.get(session_id)
     if booter is None:
         logger.debug(
             "[Computer] sandbox_tools source=booted session=%s booter=none tools=0 capabilities=none",
@@ -839,7 +919,7 @@ def get_sandbox_tools(session_id: str) -> list[ToolSchema]:
 
 def get_sandbox_capabilities(session_id: str) -> tuple[str, ...] | None:
     """Return capability tuple from a booted session, or None if unavailable."""
-    booter = session_booter.get(session_id)
+    booter = sandbox_manager.session_booter.get(session_id)
     if booter is None:
         logger.debug(
             "[Computer] sandbox_capabilities session=%s booter=none capabilities=none",
@@ -858,7 +938,7 @@ def get_sandbox_capabilities(session_id: str) -> tuple[str, ...] | None:
 
 def get_default_sandbox_tools(sandbox_cfg: dict) -> list[ToolSchema]:
     """Return conservative (pre-boot) tool list based on config. No instance needed."""
-    booter_type = sandbox_cfg.get("booter", BOOTER_SHIPYARD_NEO)
+    booter_type = str(sandbox_cfg.get("booter", "") or "")
     cls = _get_booter_class(booter_type)
     tools = cls.get_default_tools() if cls else []
     logger.debug(
@@ -871,7 +951,7 @@ def get_default_sandbox_tools(sandbox_cfg: dict) -> list[ToolSchema]:
 
 def get_sandbox_prompt_parts(sandbox_cfg: dict) -> list[str]:
     """Return booter-specific system prompt fragments based on config."""
-    booter_type = sandbox_cfg.get("booter", BOOTER_SHIPYARD_NEO)
+    booter_type = str(sandbox_cfg.get("booter", "") or "")
     cls = _get_booter_class(booter_type)
     prompt_parts = cls.get_system_prompt_parts() if cls else []
     logger.debug(

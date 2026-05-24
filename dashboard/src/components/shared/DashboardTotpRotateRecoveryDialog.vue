@@ -55,77 +55,77 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import axios from 'axios'
-import { useModuleI18n } from '@/i18n/composables'
+import { computed, ref } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
 const props = defineProps({
   modelValue: {
     type: Boolean,
-    default: false
+    default: false,
   },
   configRoot: {
     type: Object,
-    default: null
-  }
-})
+    default: null,
+  },
+});
 
-const emit = defineEmits(['update:modelValue', 'rotated'])
-const { tm } = useModuleI18n('features/config-metadata')
+const emit = defineEmits(["update:modelValue", "rotated"]);
+const { tm } = useModuleI18n("features/config-metadata");
 
-const code = ref('')
-const codeError = ref('')
-const verifying = ref(false)
+const code = ref("");
+const codeError = ref("");
+const verifying = ref(false);
 
-const totpSecret = computed(() => props.configRoot?.dashboard?.totp?.secret || '')
+const totpSecret = computed(() => props.configRoot?.dashboard?.totp?.secret || "");
 
 function resetState() {
-  code.value = ''
-  codeError.value = ''
-  verifying.value = false
+  code.value = "";
+  codeError.value = "";
+  verifying.value = false;
 }
 
 function onVisibilityChange(val) {
   if (!val) {
-    resetState()
+    resetState();
   }
-  emit('update:modelValue', val)
+  emit("update:modelValue", val);
 }
 
 function onCancel() {
-  resetState()
-  emit('update:modelValue', false)
+  resetState();
+  emit("update:modelValue", false);
 }
 
 async function confirmRotate() {
   if (!totpSecret.value) {
-    codeError.value = tm('system_group.system.dashboard.totp.rotateRecoveryMissingSecret')
-    return
+    codeError.value = tm("system_group.system.dashboard.totp.rotateRecoveryMissingSecret");
+    return;
   }
   if (!code.value || code.value.length < 6) {
-    return
+    return;
   }
-  verifying.value = true
-  codeError.value = ''
+  verifying.value = true;
+  codeError.value = "";
   try {
-    const res = await axios.post('/api/auth/totp/verify-setup', {
+    const res = await axios.post("/api/auth/totp/verify-setup", {
       secret: totpSecret.value,
       code: code.value,
-    })
-    if (res.data.status !== 'ok') {
-      codeError.value = res.data.message || tm('system_group.system.dashboard.totp.rotateError')
-      return
+    });
+    if (res.data.status !== "ok") {
+      codeError.value = res.data.message || tm("system_group.system.dashboard.totp.rotateError");
+      return;
     }
-    emit('rotated', {
-      recoveryCode: String(res.data.data?.recovery_code || ''),
-      recoveryCodeHash: String(res.data.data?.recovery_code_hash || ''),
-    })
-    resetState()
-    emit('update:modelValue', false)
+    emit("rotated", {
+      recoveryCode: String(res.data.data?.recovery_code || ""),
+      recoveryCodeHash: String(res.data.data?.recovery_code_hash || ""),
+    });
+    resetState();
+    emit("update:modelValue", false);
   } catch {
-    codeError.value = tm('system_group.system.dashboard.totp.rotateError')
+    codeError.value = tm("system_group.system.dashboard.totp.rotateError");
   } finally {
-    verifying.value = false
+    verifying.value = false;
   }
 }
 </script>

@@ -443,7 +443,7 @@ class KnowledgeBasePackageImporter:
                 await kb_helper.initialize()
                 await self.kb_manager.kb_db.update_kb_stats(
                     kb_id=created_kb_id,
-                    vec_db=kb_helper.vec_db,  # type: ignore[arg-type]
+                    vec_db=kb_helper.vec_db,
                 )
                 await kb_helper.refresh_kb()
 

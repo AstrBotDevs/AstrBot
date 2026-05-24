@@ -339,18 +339,18 @@
 
 <script setup lang="ts">
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
-import { computed, ref, type PropType } from "vue";
-import ListConfigItem from "./ListConfigItem.vue";
-import FileConfigItem from "./FileConfigItem.vue";
-import ObjectEditor from "./ObjectEditor.vue";
-import ProviderSelector from "./ProviderSelector.vue";
-import PersonaSelector from "./PersonaSelector.vue";
-import KnowledgeBaseSelector from "./KnowledgeBaseSelector.vue";
-import PluginSetSelector from "./PluginSetSelector.vue";
-import T2ITemplateEditor from "./T2ITemplateEditor.vue";
-import DashboardTotpManager from "./DashboardTotpManager.vue";
+import { computed, type PropType, ref } from "vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
+import DashboardTotpManager from "./DashboardTotpManager.vue";
+import FileConfigItem from "./FileConfigItem.vue";
+import KnowledgeBaseSelector from "./KnowledgeBaseSelector.vue";
+import ListConfigItem from "./ListConfigItem.vue";
+import ObjectEditor from "./ObjectEditor.vue";
+import PersonaSelector from "./PersonaSelector.vue";
+import PluginSetSelector from "./PluginSetSelector.vue";
+import ProviderSelector from "./ProviderSelector.vue";
+import T2ITemplateEditor from "./T2ITemplateEditor.vue";
 
 interface SliderConfig {
   min: number;
@@ -405,44 +405,37 @@ const props = defineProps({
   },
   loadingModels: {
     type: Boolean,
-    default: false
+    default: false,
   },
   availableModels: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   showFullscreenBtn: {
     type: Boolean,
-    default: false
+    default: false,
   },
   configRoot: {
     type: Object,
-    default: null
-  }
-})
+    default: null,
+  },
+});
 
-const emit = defineEmits([
-  'update:modelValue',
-  'get-embedding-dim',
-  'get-embedding-models',
-  'open-fullscreen'
-])
-const { t } = useI18n()
-const { getRaw } = useModuleI18n('features/config-metadata')
+const emit = defineEmits(["update:modelValue", "get-embedding-dim", "get-embedding-models", "open-fullscreen"]);
+const { t } = useI18n();
+const { getRaw } = useModuleI18n("features/config-metadata");
 
 function emitUpdate(val: unknown) {
   emit("update:modelValue", val);
 }
 
 const listSelectItems = computed(() =>
-  props.itemMeta?.type === "list" && props.itemMeta?.options
-    ? getSelectItems(props.itemMeta)
-    : [],
+  props.itemMeta?.type === "list" && props.itemMeta?.options ? getSelectItems(props.itemMeta) : [],
 );
 
 function toNumber(val: unknown): number {
   const n = parseFloat(String(val));
-  return isNaN(n) ? 0 : n;
+  return Number.isNaN(n) ? 0 : n;
 }
 
 function getLabel(itemMeta: ItemMeta, index: number, option: unknown): string {
@@ -451,18 +444,8 @@ function getLabel(itemMeta: ItemMeta, index: number, option: unknown): string {
 }
 
 function getTranslatedLabels(itemMeta: ItemMeta): string[] | null {
-  if (
-    props.pluginName &&
-    props.configKey &&
-    props.pluginI18n &&
-    Object.keys(props.pluginI18n).length > 0
-  ) {
-    const translatedLabels = configText(
-      props.pluginI18n,
-      props.configKey,
-      "labels",
-      null,
-    );
+  if (props.pluginName && props.configKey && props.pluginI18n && Object.keys(props.pluginI18n).length > 0) {
+    const translatedLabels = configText(props.pluginI18n, props.configKey, "labels", null);
     if (Array.isArray(translatedLabels)) {
       return translatedLabels as string[];
     }
@@ -491,9 +474,7 @@ function getSelectItems(itemMeta: ItemMeta): unknown[] {
   return itemMeta.options || [];
 }
 
-function parseSpecialValue(
-  value: string | undefined,
-): { name: string; subtype: string } {
+function parseSpecialValue(value: string | undefined): { name: string; subtype: string } {
   if (!value || typeof value !== "string") {
     return { name: "", subtype: "" };
   }

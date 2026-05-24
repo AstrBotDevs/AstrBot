@@ -3,13 +3,15 @@ import hashlib
 import json
 import mimetypes
 import os
+import posixpath
 import re
 import ssl
 import traceback
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from typing import Any, cast
+from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlsplit, urlunsplit
 
 import aiofiles
 import aiohttp
@@ -124,6 +126,11 @@ class RegistrySource:
     urls: list[str]
     cache_file: str
     md5_url: str | None  # None means "no remote MD5, always treat cache as stale"
+
+
+RegistrySource.urls = []
+RegistrySource.cache_file = ""
+RegistrySource.md5_url = None
 
 
 class PluginRoute(Route):
@@ -1325,8 +1332,7 @@ class PluginRoute(Route):
                     plugin.root_dir_name or "",
                 )
             _t["extension_page"] = await asyncio.to_thread(
-                os.path.exists,
-                os.path.join(plugin_dir, "web", "index.html")
+                os.path.exists, os.path.join(plugin_dir, "web", "index.html")
             )
             # 检查是否为全空的幽灵插件
             if not any(

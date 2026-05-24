@@ -12,7 +12,6 @@ from astrbot.api import logger, sp
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.tools import (
     AnnotateExecutionTool,
     BrowserBatchExecTool,
@@ -74,6 +73,7 @@ def check_all_kb(kb_list: list[KBHelper | None]) -> bool:
     return not any(
         kb and (kb.kb.doc_count != 0 or kb.kb.chunk_count != 0) for kb in kb_list
     )
+
 
 SANDBOX_GUI_PROMPT = (
     " When working with GUI-capable sandboxes, send screenshots to the user to show progress whenever it is helpful, especially after each meaningful GUI step."
@@ -181,6 +181,19 @@ BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT = (
     "{background_task_result}"
 )
 
+CONVERSATION_HISTORY_INJECT_PREFIX = (
+    "\n\nBelow is your and the user's previous conversation history:\n"
+)
+
+BACKGROUND_TASK_WOKE_USER_PROMPT = (
+    "Proceed according to your system instructions. "
+    "Output using same language as previous conversation. "
+    "If you need to deliver the result to the user immediately, "
+    "you MUST use `send_message_to_user` tool to send the message directly to the user, "
+    "otherwise the user will not see the result. "
+    "After completing your task, summarize and output your actions and results. "
+)
+
 
 @dataclass
 class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
@@ -286,6 +299,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         # Try to check if the file exists in the sandbox
         try:
+            from astrbot.core.computer.computer_client import get_booter
+
             sb = await get_booter(
                 context.context.context,
                 context.context.event.unified_msg_origin,
@@ -310,7 +325,12 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
-        session = kwargs.get("session") or context.context.event.unified_msg_origin
+        event = context.context.event
+        session = (
+            kwargs.get("session")
+            or getattr(event, "session", None)
+            or event.unified_msg_origin
+        )
         messages = kwargs.get("messages")
 
         if not isinstance(messages, list) or not messages:
@@ -421,6 +441,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             target_session,
             MessageChain(chain=components),
         )
+        current_session = event.unified_msg_origin
+        if str(target_session) == current_session:
+            event._has_send_oper = True
+            event.set_extra("_send_message_to_user_current_session", True)
 
         # if file_from_sandbox:
         #     try:

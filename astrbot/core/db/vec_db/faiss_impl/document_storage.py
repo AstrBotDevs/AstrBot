@@ -7,8 +7,12 @@ from pathlib import Path
 
 from sqlalchemy import Column, Text, bindparam
 from sqlalchemy.dialects import sqlite
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateTable
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
@@ -63,7 +67,7 @@ class DocumentStorage:
     async def initialize(self) -> None:
         """Initialize the SQLite database and create the documents table if it doesn't exist."""
         await self.connect()
-        async with self.engine.begin() as conn:  # type: ignore
+        async with self.engine.begin() as conn:
             await self._ensure_documents_table(conn)
 
             try:
@@ -113,7 +117,7 @@ class DocumentStorage:
         if result.scalar_one_or_none() is not None:
             return
 
-        create_table = CreateTable(Document.__table__, if_not_exists=True)  # type: ignore[attr-defined]
+        create_table = CreateTable(Document.__table__, if_not_exists=True)
 
         await executor.execute(
             text(str(create_table.compile(dialect=sqlite.dialect())))

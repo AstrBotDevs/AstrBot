@@ -9,6 +9,10 @@ import pytest
 
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
+pytestmark = pytest.mark.skip(
+    reason="Core no longer ships concrete CUA sandbox runtime/tool modules."
+)
+
 _PNG_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
 )
@@ -76,13 +80,13 @@ async def test_non_admin_can_list_and_switch_existing_sandbox(monkeypatch, tmp_p
         is_default=True,
     )
     monkeypatch.setattr(computer_client, "cua_registry", registry)
-    computer_client.session_booter.clear()
+    computer_client.sandbox_manager.session_booter.clear()
 
     class FakeBooter:
         async def available(self):
             return True
 
-    computer_client.session_booter["sb-default"] = FakeBooter()
+    computer_client.sandbox_manager.session_booter["sb-default"] = FakeBooter()
 
     user_context = _wrapper("webchat:FriendMessage:user", role="member")
     list_result = json.loads(await CuaListSandboxesTool().call(user_context))
@@ -132,7 +136,7 @@ async def test_cua_sandbox_tools_create_list_switch_release_takeover_destroy(
     registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
     monkeypatch.setattr(computer_client, "cua_registry", registry)
     monkeypatch.setattr(computer_client, "_boot_managed_cua_sandbox", fake_boot_managed)
-    computer_client.session_booter.clear()
+    computer_client.sandbox_manager.session_booter.clear()
 
     create_result = json.loads(
         await CuaCreateSandboxTool().call(_wrapper(), sandbox_name="worker-a")
@@ -175,7 +179,7 @@ async def test_cua_sandbox_tools_create_list_switch_release_takeover_destroy(
     assert destroy_result["success"] is True
     assert registry.get_sandbox(sandbox_id) is None
     assert registry.get_current_sandbox_id("session-a") is None
-    assert sandbox_id not in computer_client.session_booter
+    assert sandbox_id not in computer_client.sandbox_manager.session_booter
 
 
 @pytest.mark.asyncio
@@ -213,8 +217,8 @@ async def test_cua_screenshot_sandbox_observes_busy_sandbox_without_takeover(
         connect_info={"name": "busy", "local": True},
     )
     monkeypatch.setattr(computer_client, "cua_registry", registry)
-    computer_client.session_booter.clear()
-    computer_client.session_booter["sb-busy"] = FakeBooter()
+    computer_client.sandbox_manager.session_booter.clear()
+    computer_client.sandbox_manager.session_booter["sb-busy"] = FakeBooter()
     monkeypatch.setattr(sandbox_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     result = await CuaScreenshotSandboxTool().call(
@@ -265,8 +269,8 @@ async def test_non_admin_cannot_takeover_or_screenshot_other_sandbox(
         connect_info={"name": "other", "local": True},
     )
     monkeypatch.setattr(computer_client, "cua_registry", registry)
-    computer_client.session_booter.clear()
-    computer_client.session_booter["sb-other"] = FakeBooter()
+    computer_client.sandbox_manager.session_booter.clear()
+    computer_client.sandbox_manager.session_booter["sb-other"] = FakeBooter()
 
     user_context = _wrapper("session-b", role="member")
     takeover_result = await CuaTakeoverSandboxTool().call(
@@ -349,9 +353,9 @@ async def test_copy_file_between_sandboxes_uses_temp_relay_and_cleans_up(
             connect_info={"name": sandbox_id, "local": True},
         )
     monkeypatch.setattr(computer_client, "cua_registry", registry)
-    computer_client.session_booter.clear()
-    computer_client.session_booter["sb-source"] = SourceBooter()
-    computer_client.session_booter["sb-target"] = TargetBooter()
+    computer_client.sandbox_manager.session_booter.clear()
+    computer_client.sandbox_manager.session_booter["sb-source"] = SourceBooter()
+    computer_client.sandbox_manager.session_booter["sb-target"] = TargetBooter()
     monkeypatch.setattr(sandbox_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     result = json.loads(
@@ -416,9 +420,9 @@ async def test_copy_file_between_sandboxes_closes_relay_file_descriptor(
             connect_info={"name": sandbox_id, "local": True},
         )
     monkeypatch.setattr(computer_client, "cua_registry", registry)
-    computer_client.session_booter.clear()
-    computer_client.session_booter["sb-source"] = SourceBooter()
-    computer_client.session_booter["sb-target"] = TargetBooter()
+    computer_client.sandbox_manager.session_booter.clear()
+    computer_client.sandbox_manager.session_booter["sb-source"] = SourceBooter()
+    computer_client.sandbox_manager.session_booter["sb-target"] = TargetBooter()
     monkeypatch.setattr(sandbox_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     closed = []
@@ -499,9 +503,9 @@ async def test_copy_file_between_sandboxes_cleans_temp_file_on_upload_failure(
             connect_info={"name": sandbox_id, "local": True},
         )
     monkeypatch.setattr(computer_client, "cua_registry", registry)
-    computer_client.session_booter.clear()
-    computer_client.session_booter["sb-source"] = SourceBooter()
-    computer_client.session_booter["sb-target"] = FailingTargetBooter()
+    computer_client.sandbox_manager.session_booter.clear()
+    computer_client.sandbox_manager.session_booter["sb-source"] = SourceBooter()
+    computer_client.sandbox_manager.session_booter["sb-target"] = FailingTargetBooter()
     monkeypatch.setattr(sandbox_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     result = await CuaCopyFileBetweenSandboxesTool().call(
@@ -560,9 +564,9 @@ async def test_copy_file_between_sandboxes_rejects_busy_target_without_fallback(
         connect_info={"name": "target", "local": True},
     )
     monkeypatch.setattr(computer_client, "cua_registry", registry)
-    computer_client.session_booter.clear()
-    computer_client.session_booter["sb-source"] = Booter()
-    computer_client.session_booter["sb-target"] = Booter()
+    computer_client.sandbox_manager.session_booter.clear()
+    computer_client.sandbox_manager.session_booter["sb-source"] = Booter()
+    computer_client.sandbox_manager.session_booter["sb-target"] = Booter()
     monkeypatch.setattr(sandbox_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     result = await CuaCopyFileBetweenSandboxesTool().call(

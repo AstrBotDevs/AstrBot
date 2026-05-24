@@ -117,19 +117,14 @@ const sidebarItem: menu[] = [
         to: "/subagent",
       },
       {
-        title: 'core.navigation.sandboxes',
-        icon: 'mdi-cube-outline',
-        to: '/sandboxes'
+        title: "core.navigation.sandboxes",
+        icon: "mdi-cube-outline",
+        to: "/sandboxes",
       },
       {
-        title: 'core.navigation.sandboxes',
-        icon: 'mdi-cube-outline',
-        to: '/sandboxes'
-      },
-      {
-        title: 'core.navigation.dashboard',
-        icon: 'mdi-view-dashboard',
-        to: '/dashboard/default'
+        title: "core.navigation.dashboard",
+        icon: "mdi-view-dashboard",
+        to: "/dashboard/default",
       },
       {
         title: "core.navigation.console",
@@ -142,12 +137,12 @@ const sidebarItem: menu[] = [
         to: "/trace",
       },
       {
-        title: 'core.navigation.errorAnalysis',
-        icon: 'mdi-alert-decagram-outline',
-        to: '/error-analysis'
+        title: "core.navigation.errorAnalysis",
+        icon: "mdi-alert-decagram-outline",
+        to: "/error-analysis",
       },
-    ]
-  }
+    ],
+  },
   // {
   //   title: 'Project ATRI',
   //   icon: 'mdi-grain',

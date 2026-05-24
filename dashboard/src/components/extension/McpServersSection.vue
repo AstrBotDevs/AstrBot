@@ -525,22 +525,19 @@
 </template>
 
 <script>
-import axios from 'axios';
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
-import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
+import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
+import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
+import QrCodeViewer from "@/components/shared/QrCodeViewer.vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
+import axios from "@/utils/request";
 
 export default {
   name: "McpServersSection",
   components: {
     VueMonacoEditor,
     OutlinedActionListItem,
-    QrCodeViewer
+    QrCodeViewer,
   },
   setup() {
     const { t } = useI18n();
@@ -561,11 +558,11 @@ export default {
       loading: false,
       loadingGettingServers: false,
       mcpServerUpdateLoaders: {},
-      oauthFlowId: '',
-      oauthUrl: '',
+      oauthFlowId: "",
+      oauthUrl: "",
       showQrCodeDialog: false,
-      oauthFlowStatus: '',
-      oauthFlowError: '',
+      oauthFlowStatus: "",
+      oauthFlowError: "",
       oauthPollTimer: null,
       oauthPollInFlight: false,
       isEditMode: false,
@@ -597,47 +594,49 @@ export default {
       }
     },
     currentOauthConfig() {
-      if (!this.parsedServerConfig || typeof this.parsedServerConfig !== 'object') {
+      if (!this.parsedServerConfig || typeof this.parsedServerConfig !== "object") {
         return null;
       }
       return this.parsedServerConfig.oauth2 || this.parsedServerConfig.oauth || null;
     },
     hasAuthorizationCodeOAuthConfig() {
-      return !!this.currentOauthConfig
-        && (this.currentOauthConfig.grant_type || 'authorization_code') === 'authorization_code';
+      return (
+        !!this.currentOauthConfig &&
+        (this.currentOauthConfig.grant_type || "authorization_code") === "authorization_code"
+      );
     },
     oauthFlowStatusColor() {
-      if (this.oauthFlowStatus === 'completed') {
-        return 'success';
+      if (this.oauthFlowStatus === "completed") {
+        return "success";
       }
-      if (this.oauthFlowStatus === 'failed') {
-        return 'error';
+      if (this.oauthFlowStatus === "failed") {
+        return "error";
       }
-      return 'warning';
+      return "warning";
     },
     oauthFlowStatusClass() {
-      if (this.oauthFlowStatus === 'completed') {
-        return 'text-success';
+      if (this.oauthFlowStatus === "completed") {
+        return "text-success";
       }
-      if (this.oauthFlowStatus === 'failed') {
-        return 'text-error';
+      if (this.oauthFlowStatus === "failed") {
+        return "text-error";
       }
-      return 'text-medium-emphasis';
+      return "text-medium-emphasis";
     },
     oauthFlowStatusText() {
-      if (this.oauthFlowStatus === 'completed') {
-        return this.tm('dialogs.addServer.oauth.status.authorized');
+      if (this.oauthFlowStatus === "completed") {
+        return this.tm("dialogs.addServer.oauth.status.authorized");
       }
-      if (this.oauthFlowStatus === 'awaiting_user') {
-        return this.tm('dialogs.addServer.oauth.status.awaitingUser');
+      if (this.oauthFlowStatus === "awaiting_user") {
+        return this.tm("dialogs.addServer.oauth.status.awaitingUser");
       }
-      if (this.oauthFlowStatus === 'authorizing') {
-        return this.tm('dialogs.addServer.oauth.status.authorizing');
+      if (this.oauthFlowStatus === "authorizing") {
+        return this.tm("dialogs.addServer.oauth.status.authorizing");
       }
-      if (this.oauthFlowStatus === 'failed') {
-        return this.oauthFlowError || this.tm('dialogs.addServer.oauth.status.failed');
+      if (this.oauthFlowStatus === "failed") {
+        return this.oauthFlowError || this.tm("dialogs.addServer.oauth.status.failed");
       }
-      return this.tm('dialogs.addServer.oauth.status.notAuthorized');
+      return this.tm("dialogs.addServer.oauth.status.notAuthorized");
     },
     getServerConfigSummary() {
       return (server) => {
@@ -650,8 +649,9 @@ export default {
         if (server.url) {
           return server.url;
         }
-        const configKeys = Object.keys(server).filter(key =>
-          !['name', 'active', 'tools', 'oauth2_enabled', 'oauth2_authorized', 'oauth2_grant_type'].includes(key)
+        const configKeys = Object.keys(server).filter(
+          (key) =>
+            !["name", "active", "tools", "oauth2_enabled", "oauth2_authorized", "oauth2_grant_type"].includes(key),
         );
         if (configKeys.length > 0) {
           return this.tm("mcpServers.status.configSummary", {
@@ -663,19 +663,19 @@ export default {
     },
     getServerConfigIcon() {
       return (server) => {
-        const transport = String(server.transport || '').toLowerCase();
-        if (transport === 'streamable_http') {
-          return 'mdi-web';
+        const transport = String(server.transport || "").toLowerCase();
+        if (transport === "streamable_http") {
+          return "mdi-web";
         }
-        if (transport === 'sse') {
-          return 'mdi-broadcast';
+        if (transport === "sse") {
+          return "mdi-broadcast";
         }
         if (server.command) {
-          return 'mdi-console-line';
+          return "mdi-console-line";
         }
-        return 'mdi-file-code-outline';
+        return "mdi-file-code-outline";
       };
-    }
+    },
   },
   mounted() {
     this.getServers();
@@ -701,10 +701,7 @@ export default {
         .get("/api/tools/mcp/servers")
         .then((response) => {
           if (response.data.status === "error") {
-            this.showError(
-              response.data.message ||
-                this.tm("messages.getServersError", { error: "Unknown error" }),
-            );
+            this.showError(response.data.message || this.tm("messages.getServersError", { error: "Unknown error" }));
             return;
           }
           this.mcpServers = response.data.data || [];
@@ -715,9 +712,7 @@ export default {
           });
         })
         .catch((error) => {
-          this.showError(
-            this.tm("messages.getServersError", { error: error.message }),
-          );
+          this.showError(this.tm("messages.getServersError", { error: error.message }));
         })
         .finally(() => {
           this.loadingGettingServers = false;
@@ -757,17 +752,17 @@ export default {
           timeout: 5,
           sse_read_timeout: 300,
         };
-      } else if (type === 'streamable_http_oauth') {
+      } else if (type === "streamable_http_oauth") {
         template = {
-          transport: 'streamable_http',
-          url: 'your mcp server url',
+          transport: "streamable_http",
+          url: "your mcp server url",
           headers: {},
           timeout: 5,
           sse_read_timeout: 300,
           oauth2: {
-            grant_type: 'authorization_code',
-            client_name: 'AstrBot MCP Client'
-          }
+            grant_type: "authorization_code",
+            client_name: "AstrBot MCP Client",
+          },
         };
       } else {
         template = {
@@ -792,26 +787,19 @@ export default {
         if (this.isEditMode && this.originalServerName) {
           serverData.oldName = this.originalServerName;
         }
-        const endpoint = this.isEditMode
-          ? "/api/tools/mcp/update"
-          : "/api/tools/mcp/add";
+        const endpoint = this.isEditMode ? "/api/tools/mcp/update" : "/api/tools/mcp/add";
         axios
           .post(endpoint, serverData)
           .then((response) => {
             this.loading = false;
             if (response.data.status === "error") {
-              this.showError(
-                response.data.message ||
-                  this.tm("messages.saveError", { error: "Unknown error" }),
-              );
+              this.showError(response.data.message || this.tm("messages.saveError", { error: "Unknown error" }));
               return;
             }
             this.showMcpServerDialog = false;
             this.addServerDialogMessage = "";
             this.getServers();
-            this.showSuccess(
-              response.data.message || this.tm("messages.saveSuccess"),
-            );
+            this.showSuccess(response.data.message || this.tm("messages.saveSuccess"));
             this.resetForm();
           })
           .catch((error) => {
@@ -824,9 +812,7 @@ export default {
           });
       } catch (e) {
         this.loading = false;
-        this.showError(
-          this.tm("dialogs.addServer.errors.jsonParse", { error: e.message }),
-        );
+        this.showError(this.tm("dialogs.addServer.errors.jsonParse", { error: e.message }));
       }
     },
     async deleteServer(server) {
@@ -840,9 +826,7 @@ export default {
         .post("/api/tools/mcp/delete", { name: serverName })
         .then((response) => {
           this.getServers();
-          this.showSuccess(
-            response.data.message || this.tm("messages.deleteSuccess"),
-          );
+          this.showSuccess(response.data.message || this.tm("messages.deleteSuccess"));
         })
         .catch((error) => {
           this.showError(
@@ -867,8 +851,8 @@ export default {
         tools: server.tools || [],
       };
       this.originalServerName = server.name;
-      this.oauthFlowStatus = server.oauth2_authorized ? 'completed' : '';
-      this.oauthFlowError = '';
+      this.oauthFlowStatus = server.oauth2_authorized ? "completed" : "";
+      this.oauthFlowError = "";
       this.serverConfigJson = JSON.stringify(configCopy, null, 2);
       this.isEditMode = true;
       this.showMcpServerDialog = true;
@@ -880,9 +864,7 @@ export default {
         .post("/api/tools/mcp/update", server)
         .then((response) => {
           this.getServers();
-          this.showSuccess(
-            response.data.message || this.tm("messages.updateSuccess"),
-          );
+          this.showSuccess(response.data.message || this.tm("messages.updateSuccess"));
         })
         .catch((error) => {
           this.showError(
@@ -913,37 +895,37 @@ export default {
         return;
       }
       this.oauthPollInFlight = true;
-      const serverName = this.currentServer.name || 'unknown';
+      const serverName = this.currentServer.name || "unknown";
       try {
-        const response = await axios.get('/api/tools/mcp/oauth/status', {
-          params: { 
+        const response = await axios.get("/api/tools/mcp/oauth/status", {
+          params: {
             flow_id: this.oauthFlowId,
-            name: serverName
-          }
+            name: serverName,
+          },
         });
-        if (response.data.status === 'error') {
+        if (response.data.status === "error") {
           this.stopOauthPolling();
-          this.oauthFlowStatus = 'failed';
-          this.oauthFlowError = response.data.message || this.tm('dialogs.addServer.oauth.status.failed');
+          this.oauthFlowStatus = "failed";
+          this.oauthFlowError = response.data.message || this.tm("dialogs.addServer.oauth.status.failed");
           this.showError(this.oauthFlowError);
           return;
         }
         const flow = response.data.data || {};
-        this.oauthFlowStatus = flow.status || '';
-        this.oauthFlowError = flow.error || '';
-        if (this.oauthFlowStatus === 'completed') {
+        this.oauthFlowStatus = flow.status || "";
+        this.oauthFlowError = flow.error || "";
+        if (this.oauthFlowStatus === "completed") {
           this.stopOauthPolling();
-          this.addServerDialogMessage = this.tm('messages.oauthAuthorized');
-          this.showSuccess(this.tm('messages.oauthAuthorized'));
-        } else if (this.oauthFlowStatus === 'failed') {
+          this.addServerDialogMessage = this.tm("messages.oauthAuthorized");
+          this.showSuccess(this.tm("messages.oauthAuthorized"));
+        } else if (this.oauthFlowStatus === "failed") {
           this.stopOauthPolling();
-          const errorMessage = flow.error || this.tm('dialogs.addServer.oauth.status.failed');
+          const errorMessage = flow.error || this.tm("dialogs.addServer.oauth.status.failed");
           this.addServerDialogMessage = errorMessage;
           this.showError(errorMessage);
         }
       } catch (error) {
         this.stopOauthPolling();
-        this.oauthFlowStatus = 'failed';
+        this.oauthFlowStatus = "failed";
         this.oauthFlowError = error.response?.data?.message || error.message;
         this.showError(this.oauthFlowError);
       } finally {
@@ -959,11 +941,14 @@ export default {
     },
     copyOauthUrl() {
       if (!this.oauthUrl) return;
-      navigator.clipboard.writeText(this.oauthUrl).then(() => {
-        this.showSuccess('链接已复制到剪贴板');
-      }).catch(err => {
-        this.showError('复制失败：' + err);
-      });
+      navigator.clipboard
+        .writeText(this.oauthUrl)
+        .then(() => {
+          this.showSuccess("链接已复制到剪贴板");
+        })
+        .catch((err) => {
+          this.showError(`复制失败：${err}`);
+        });
     },
     async authorizeOauth() {
       if (!this.validateJson()) {
@@ -971,33 +956,37 @@ export default {
       }
       const configObj = this.parsedServerConfig;
       if (!configObj) {
-        this.showError(this.tm('dialogs.addServer.errors.configEmpty'));
+        this.showError(this.tm("dialogs.addServer.errors.configEmpty"));
         return;
       }
 
       this.loading = true;
-      this.oauthFlowError = '';
-      this.oauthUrl = '';
-      const serverName = this.currentServer.name || 'unknown';
+      this.oauthFlowError = "";
+      this.oauthUrl = "";
+      const serverName = this.currentServer.name || "unknown";
 
       try {
-        const response = await axios.post('/api/tools/mcp/oauth/start', {
-          mcp_server_config: configObj,
-          callback_base_url: window.location.origin,
-          force: true
-        }, {
-          params: { name: serverName }
-        });
+        const response = await axios.post(
+          "/api/tools/mcp/oauth/start",
+          {
+            mcp_server_config: configObj,
+            callback_base_url: window.location.origin,
+            force: true,
+          },
+          {
+            params: { name: serverName },
+          },
+        );
 
-        if (response.data.status === 'error') {
-          this.showError(response.data.message || this.tm('messages.oauthStartError', { error: 'Unknown error' }));
+        if (response.data.status === "error") {
+          this.showError(response.data.message || this.tm("messages.oauthStartError", { error: "Unknown error" }));
           return;
         }
 
         const flow = response.data.data || {};
-        this.oauthFlowId = flow.flow_id || '';
-        this.oauthFlowStatus = flow.status || '';
-        this.addServerDialogMessage = '';
+        this.oauthFlowId = flow.flow_id || "";
+        this.oauthFlowStatus = flow.status || "";
+        this.addServerDialogMessage = "";
 
         if (flow.authorization_url) {
           this.oauthUrl = flow.authorization_url;
@@ -1019,9 +1008,7 @@ export default {
         configObj = JSON.parse(this.serverConfigJson);
       } catch (e) {
         this.loading = false;
-        this.showError(
-          this.tm("dialogs.addServer.errors.jsonParse", { error: e.message }),
-        );
+        this.showError(this.tm("dialogs.addServer.errors.jsonParse", { error: e.message }));
         return;
       }
       axios
@@ -1050,9 +1037,9 @@ export default {
       };
       this.serverConfigJson = "";
       this.jsonError = null;
-      this.oauthFlowId = '';
-      this.oauthFlowStatus = '';
-      this.oauthFlowError = '';
+      this.oauthFlowId = "";
+      this.oauthFlowStatus = "";
+      this.oauthFlowError = "";
       this.isEditMode = false;
       this.originalServerName = "";
     },
@@ -1068,13 +1055,13 @@ export default {
     },
     async fetchMcpRouterServers() {
       if (!this.mcprouterApiKey.trim()) {
-        this.showError(this.tm('syncProvider.status.enterApiKey'));
+        this.showError(this.tm("syncProvider.status.enterApiKey"));
         return;
       }
       this.mcprouterServersLoading = true;
       try {
         const requestData = {
-          api_key: this.mcprouterApiKey.trim()
+          api_key: this.mcprouterApiKey.trim(),
         };
         if (this.mcprouterAppUrl.trim()) {
           requestData.app_url = this.mcprouterAppUrl.trim();
@@ -1082,20 +1069,25 @@ export default {
         if (this.mcprouterAppName.trim()) {
           requestData.app_name = this.mcprouterAppName.trim();
         }
-        const response = await axios.post('/api/tools/mcp/providers/mcprouter/list-servers', requestData);
-        if (response.data.status === 'ok') {
+        const response = await axios.post("/api/tools/mcp/providers/mcprouter/list-servers", requestData);
+        if (response.data.status === "ok") {
           this.mcprouterServers = response.data.data || [];
-          this.showSuccess(response.data.message || this.tm('syncProvider.messages.fetchServersSuccess', { count: this.mcprouterServers.length }));
+          this.showSuccess(
+            response.data.message ||
+              this.tm("syncProvider.messages.fetchServersSuccess", { count: this.mcprouterServers.length }),
+          );
         } else {
-          this.showError(response.data.message || this.tm('syncProvider.messages.fetchServersError', { error: 'Unknown error' }));
+          this.showError(
+            response.data.message || this.tm("syncProvider.messages.fetchServersError", { error: "Unknown error" }),
+          );
         }
       } catch (error) {
-        this.showError(this.tm('syncProvider.messages.fetchServersError', {
-          error:
-            error.response?.data?.message ||
-            error.message ||
-            this.tm('syncProvider.messages.networkOrApiKeyIssue')
-        }));
+        this.showError(
+          this.tm("syncProvider.messages.fetchServersError", {
+            error:
+              error.response?.data?.message || error.message || this.tm("syncProvider.messages.networkOrApiKeyIssue"),
+          }),
+        );
       } finally {
         this.mcprouterServersLoading = false;
       }
@@ -1120,14 +1112,14 @@ export default {
             return;
           }
           requestData.access_token = this.mcpProviderToken.trim();
-        } else if (this.selectedMcpServerProvider === 'mcprouter') {
+        } else if (this.selectedMcpServerProvider === "mcprouter") {
           if (!this.mcprouterApiKey.trim()) {
-            this.showError(this.tm('syncProvider.status.enterApiKey'));
+            this.showError(this.tm("syncProvider.status.enterApiKey"));
             this.loading = false;
             return;
           }
           if (!this.mcprouterServers.length) {
-            this.showError(this.tm('syncProvider.status.fetchServersFirst'));
+            this.showError(this.tm("syncProvider.status.fetchServersFirst"));
             this.loading = false;
             return;
           }
@@ -1140,15 +1132,9 @@ export default {
           }
           requestData.servers = this.mcprouterServers;
         }
-        const response = await axios.post(
-          "/api/tools/mcp/sync-provider",
-          requestData,
-        );
+        const response = await axios.post("/api/tools/mcp/sync-provider", requestData);
         if (response.data.status === "ok") {
-          this.showSuccess(
-            response.data.message ||
-              this.tm("syncProvider.messages.syncSuccess"),
-          );
+          this.showSuccess(response.data.message || this.tm("syncProvider.messages.syncSuccess"));
           this.showSyncMcpServerDialog = false;
           this.mcpProviderToken = "";
           this.getServers();
@@ -1163,10 +1149,7 @@ export default {
       } catch (error) {
         this.showError(
           this.tm("syncProvider.messages.syncError", {
-            error:
-              error.response?.data?.message ||
-              error.message ||
-              "网络连接或访问令牌问题",
+            error: error.response?.data?.message || error.message || "网络连接或访问令牌问题",
           }),
         );
       } finally {

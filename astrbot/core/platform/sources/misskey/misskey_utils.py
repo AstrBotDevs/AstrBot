@@ -339,11 +339,7 @@ def summarize_note_for_context(
         author = nickname or "未知用户"
 
     text = note.get("text") or ""
-    if (
-        isinstance(text, str)
-        and max_text_length >= 0
-        and len(text) > max_text_length
-    ):
+    if isinstance(text, str) and max_text_length >= 0 and len(text) > max_text_length:
         text = text[:max_text_length] + "...(已截断)"
 
     cw = note.get("cw")

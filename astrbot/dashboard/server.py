@@ -6,6 +6,7 @@ import os
 import platform
 import re
 import socket
+import ssl
 import time
 from datetime import datetime
 from ipaddress import IPv4Address, IPv6Address, ip_address
@@ -49,6 +50,7 @@ from .routes import (
     ConfigRoute,
     ConversationRoute,
     CronRoute,
+    ErrorAnalysisRoute,
     FileRoute,
     KnowledgeBaseRoute,
     LiveChatRoute,
@@ -59,6 +61,7 @@ from .routes import (
     PluginRoute,
     Response,
     RouteContext,
+    SandboxRoute,
     SessionManagementRoute,
     SkillsRoute,
     StaticFileRoute,
@@ -70,15 +73,41 @@ from .routes import (
 )
 from .routes.api_key import ALL_OPEN_API_SCOPES
 from .routes.auth import DASHBOARD_JWT_COOKIE_NAME
-from .routes.backup import BackupRoute
-from .routes.live_chat import LiveChatRoute
-from .routes.platform import PlatformRoute
-from .routes.route import Response, RouteContext
-from .routes.sandbox import SandboxRoute
-from .routes.session_management import SessionManagementRoute
-from .routes.subagent import SubAgentRoute
-from .routes.t2i import T2iRoute
-from .routes.widget import ChatWidget
+from .routes.route import is_runtime_request_ready, runtime_loading_response
+
+_PUBLIC_ALLOWED_ENDPOINT_PREFIXES = (
+    "/api/auth/login",
+    "/api/file",
+    "/api/platform/webhook",
+    "/api/stat/start-time",
+    "/api/backup/download",
+    "/api/kb/package/download",
+)
+_RUNTIME_EXTRA_BYPASS_ENDPOINT_PREFIXES = (
+    "/api/auth/logout",
+    "/api/auth/setup-status",
+    "/api/auth/setup",
+    "/api/stat/version",
+    "/api/stat/runtime-status",
+    "/api/stat/restart-core",
+    "/api/stat/changelog",
+    "/api/stat/changelog/list",
+    "/api/stat/first-notice",
+)
+_RUNTIME_BYPASS_ENDPOINT_PREFIXES = (
+    tuple(
+        prefix
+        for prefix in _PUBLIC_ALLOWED_ENDPOINT_PREFIXES
+        if prefix != "/api/platform/webhook"
+    )
+    + _RUNTIME_EXTRA_BYPASS_ENDPOINT_PREFIXES
+)
+_RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES = (
+    "/api/config/",
+    "/api/plugin/reload-failed",
+    "/api/plugin/uninstall-failed",
+    "/api/plugin/source/get-failed-plugins",
+)
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
@@ -111,10 +140,6 @@ class _AuthRateLimiter:
 
 
 _rate_limiters: dict[str, _AuthRateLimiter] = {}
-
-
-class _AddrWithPort(Protocol):
-    port: int
 
 
 APP: Quart
@@ -166,6 +191,14 @@ def _parse_env_bool(value: str | None, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _expand_env_placeholders(value: str, field_name: str) -> str:
+    return expand_env_placeholders(
+        value,
+        field_name=f"dashboard {field_name}",
+        strict=True,
+    )
+
+
 def _resolve_dashboard_value(
     value: str | int | None,
     *,
@@ -173,11 +206,13 @@ def _resolve_dashboard_value(
 ) -> str | int | None:
     if not isinstance(value, str):
         return value
-    return expand_env_placeholders(
-        value,
-        field_name=f"dashboard {field_name}",
-        strict=True,
-    ).strip()
+    resolved = _expand_env_placeholders(value, field_name).strip()
+    if field_name == "port":
+        try:
+            return int(resolved)
+        except ValueError:
+            return resolved
+    return resolved
 
 
 class AstrBotJSONProvider(DefaultJSONProvider):
@@ -212,7 +247,6 @@ class AstrBotDashboard:
         self._webui_fallback = False  # True if frontend was enabled but files missing
 
         self._init_paths(webui_dir)
-        self._init_app()
         self.context = RouteContext(self.config, self.app)
 
         self._init_routes(db)
@@ -326,9 +360,12 @@ class AstrBotDashboard:
         PluginRoute(self.context, self.core_lifecycle, plugin_manager)
 
         self.command_route = CommandRoute(self.context)
-        self.cr = ConfigRoute(self.context, core_lifecycle)
-        self.lr = LogRoute(self.context, core_lifecycle.log_broker)
-        self.error_analysis_route = ErrorAnalysisRoute(self.context, core_lifecycle)
+        self.cr = ConfigRoute(self.context, self.core_lifecycle)
+        self.lr = LogRoute(self.context, self.core_lifecycle.log_broker, db)
+        self.error_analysis_route = ErrorAnalysisRoute(
+            self.context,
+            self.core_lifecycle,
+        )
         self.app.before_serving(self.error_analysis_route.start)
         self.sfr = StaticFileRoute(self.context)
         self.ar = AuthRoute(self.context, db)
@@ -355,15 +392,14 @@ class AstrBotDashboard:
             db,
             self.core_lifecycle,
         )
-        self.sandbox_route = SandboxRoute(self.context, core_lifecycle)
-        self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
-        self.cron_route = CronRoute(self.context, core_lifecycle)
-        self.t2i_route = T2iRoute(self.context, core_lifecycle)
-        self.kb_route = KnowledgeBaseRoute(self.context, core_lifecycle)
-        self.platform_route = PlatformRoute(self.context, core_lifecycle)
-        self.backup_route = BackupRoute(self.context, db, core_lifecycle)
-        self.live_chat_route = LiveChatRoute(self.context, db, core_lifecycle)
-        self.sandbox_route = SandboxRoute(self.context)
+        self.sandbox_route = SandboxRoute(self.context, self.core_lifecycle)
+        self.persona_route = PersonaRoute(self.context, db, self.core_lifecycle)
+        self.cron_route = CronRoute(self.context, self.core_lifecycle)
+        self.t2i_route = T2iRoute(self.context, self.core_lifecycle)
+        self.kb_route = KnowledgeBaseRoute(self.context, self.core_lifecycle)
+        self.platform_route = PlatformRoute(self.context, self.core_lifecycle)
+        self.backup_route = BackupRoute(self.context, db, self.core_lifecycle)
+        self.live_chat_route = LiveChatRoute(self.context, db, self.core_lifecycle)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
@@ -729,6 +765,15 @@ class AstrBotDashboard:
             )
             return False
 
+    def _check_port_in_use_compat(self, host: str, port: int) -> bool:
+        try:
+            return self.check_port_in_use(host, port)
+        except TypeError as original_error:
+            try:
+                return self.check_port_in_use(port)
+            except TypeError:
+                raise original_error from None
+
     def get_process_using_port(self, port: int) -> str:
         """获取占用端口的进程信息"""
         try:
@@ -836,7 +881,19 @@ class AstrBotDashboard:
 
         return True, resolved_ssl_config
 
-    async def run(self) -> None:
+    def run(self):
+        dashboard_config = self.core_lifecycle.astrbot_config.get("dashboard", {})
+        enable = _parse_env_bool(
+            os.environ.get("ASTRBOT_DASHBOARD_ENABLE")
+            or os.environ.get("DASHBOARD_ENABLE"),
+            bool(dashboard_config.get("enable", True)),
+        )
+        if not enable:
+            logger.info("WebUI disabled.")
+            return None
+        return self._run()
+
+    async def _run(self):
         if self._webui_fallback:
             logger.warning(
                 "前端未内置或未初始化, 回退到仅启动后端. 请访问在线面板: dash.astrbot.men",
@@ -887,6 +944,7 @@ class AstrBotDashboard:
         port_value = (
             os.environ.get("DASHBOARD_PORT")
             or os.environ.get("ASTRBOT_DASHBOARD_PORT")
+            or os.environ.get("ASTRBOT_PORT")
             or dashboard_config.get("port", 6185)
         )
         port = _resolve_dashboard_value(port_value, field_name="port")
@@ -919,7 +977,7 @@ class AstrBotDashboard:
                 ip_addr = get_local_ip_addresses()
             except Exception as _:
                 pass
-        if self.check_port_in_use(port):
+        if self._check_port_in_use_compat(host, port):
             process_info = self.get_process_using_port(port)
             logger.error(
                 f"错误：端口 {port} 已被占用\n"
@@ -934,7 +992,7 @@ class AstrBotDashboard:
         if host not in ("127.0.0.1", "localhost", "::1"):
             check_hosts.add("127.0.0.1")
         for check_host in check_hosts:
-            if self.check_port_in_use(check_host, port):
+            if self._check_port_in_use_compat(check_host, port):
                 info = self.get_process_using_port(port)
                 raise RuntimeError(f"端口 {port} 已被占用\n{info}")
 
@@ -971,10 +1029,10 @@ class AstrBotDashboard:
             config.access_log_format = "%(h)s %(r)s %(s)s %(b)s %(D)s"
 
         try:
-            await serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
+            return await serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
         except (ssl.SSLError, asyncio.CancelledError):
             # Client disconnected abruptly — SSL shutdown errors are benign.
-            pass
+            return None
 
     @staticmethod
     def _build_bind(host: str, port: int) -> str:

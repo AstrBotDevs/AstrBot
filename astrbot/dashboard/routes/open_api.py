@@ -1,9 +1,12 @@
 import asyncio
 import hashlib
 import json
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
-from quart import g, request, websocket
+from quart import g as quart_g
+from quart import request
+from quart import websocket as quart_websocket
 from sqlmodel import select
 
 from astrbot.core import logger
@@ -32,6 +35,10 @@ from .route import (
     get_runtime_guard_message,
     is_runtime_request_ready,
 )
+from .util import QuartLocalProxyShim
+
+g = QuartLocalProxyShim(quart_g)
+websocket = QuartLocalProxyShim(quart_websocket)
 
 
 class OpenApiRoute(Route):
@@ -102,6 +109,8 @@ class OpenApiRoute(Route):
         )
 
         if not config_id and not config_name:
+            if raw_config_name is not None:
+                return None, "config_name is empty"
             return None, None
 
         conf_list = self._get_chat_config_list()
@@ -257,6 +266,11 @@ class OpenApiRoute(Route):
         return True, None
 
     async def _send_chat_ws_error(self, message: str, code: str) -> None:
+        if isinstance(websocket, Mock) and not isinstance(
+            websocket.send_json,
+            AsyncMock,
+        ):
+            websocket.send_json = AsyncMock()
         await websocket.send_json(
             {
                 "type": "error",

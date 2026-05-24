@@ -60,68 +60,76 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, watch } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
+import { defineComponent, ref, watch } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
 
 interface RobotConfig {
-    nickname: string;
-    aliases: string[];
-    platforms: string[];
+  nickname: string;
+  aliases: string[];
+  platforms: string[];
 }
 
 export default defineComponent({
-    name: 'RobotSection',
-    props: {
-        modelValue: {
-            type: Object as () => RobotConfig,
-            default: () => ({
-                nickname: '',
-                aliases: [],
-                platforms: []
-            })
-        }
+  name: "RobotSection",
+  props: {
+    modelValue: {
+      type: Object as () => RobotConfig,
+      default: () => ({
+        nickname: "",
+        aliases: [],
+        platforms: [],
+      }),
     },
-    emits: ['update:modelValue'],
-    setup(props, { emit }) {
-        const { tm } = useModuleI18n('features/persona');
+  },
+  emits: ["update:modelValue"],
+  setup(props, { emit }) {
+    const { tm } = useModuleI18n("features/persona");
 
-        const localConfig = ref<RobotConfig>({ ...props.modelValue });
+    const localConfig = ref<RobotConfig>({ ...props.modelValue });
 
-        // 平台选项 - 从后端获取或使用默认选项
-        const platformOptions = [
-            { title: 'Telegram', value: 'telegram' },
-            { title: 'QQ', value: 'qq' },
-            { title: 'Discord', value: 'discord' },
-            { title: 'Slack', value: 'slack' },
-            { title: '微信', value: 'wechat' },
-            { title: 'Web', value: 'web' }
-        ];
+    // 平台选项 - 从后端获取或使用默认选项
+    const platformOptions = [
+      { title: "Telegram", value: "telegram" },
+      { title: "QQ", value: "qq" },
+      { title: "Discord", value: "discord" },
+      { title: "Slack", value: "slack" },
+      { title: "微信", value: "wechat" },
+      { title: "Web", value: "web" },
+    ];
 
-        // 监听输入变化
-        watch(localConfig, (newVal) => {
-            emit('update:modelValue', newVal);
-        }, { deep: true });
+    // 监听输入变化
+    watch(
+      localConfig,
+      (newVal) => {
+        emit("update:modelValue", newVal);
+      },
+      { deep: true },
+    );
 
-        // 监听props变化
-        watch(() => props.modelValue, (newVal) => {
-            localConfig.value = { ...newVal };
-        }, { deep: true });
+    // 监听props变化
+    watch(
+      () => props.modelValue,
+      (newVal) => {
+        localConfig.value = { ...newVal };
+      },
+      { deep: true },
+    );
 
-        const addAlias = () => {
-            localConfig.value.aliases.push('');
-        };
+    const addAlias = () => {
+      localConfig.value.aliases.push("");
+    };
 
-        const removeAlias = (index: number) => {
-            localConfig.value.aliases.splice(index, 1);
-        };
+    const removeAlias = (index: number) => {
+      localConfig.value.aliases.splice(index, 1);
+    };
 
-        return {
-            tm,
-            localConfig,
-            platformOptions,
-            addAlias,
-            removeAlias
-        };
-    }
+    return {
+      tm,
+      localConfig,
+      platformOptions,
+      addAlias,
+      removeAlias,
+    };
+  },
 });
 </script>

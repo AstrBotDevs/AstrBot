@@ -1,50 +1,50 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import axios from 'axios'
-import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue'
-import 'markstream-vue/index.css'
-import { useModuleI18n } from '@/i18n/composables'
+import { enableKatex, enableMermaid, MarkdownRender } from "markstream-vue";
+import { computed, ref, watch } from "vue";
+import axios from "@/utils/request";
+import "markstream-vue/index.css";
+import { useModuleI18n } from "@/i18n/composables";
 
-enableKatex()
-enableMermaid()
+enableKatex();
+enableMermaid();
 
 const props = defineProps<{
-  pluginName: string
-  active?: boolean
-}>()
+  pluginName: string;
+  active?: boolean;
+}>();
 
-const { tm } = useModuleI18n('features/extension')
+const { tm } = useModuleI18n("features/extension");
 
-const loading = ref(false)
-const error = ref<string | null>(null)
-const content = ref('')
+const loading = ref(false);
+const error = ref<string | null>(null);
+const content = ref("");
 
-const canFetch = computed(() => Boolean(props.active) && Boolean(props.pluginName))
+const canFetch = computed(() => Boolean(props.active) && Boolean(props.pluginName));
 
 function resetState() {
-  loading.value = false
-  error.value = null
-  content.value = ''
+  loading.value = false;
+  error.value = null;
+  content.value = "";
 }
 
 async function fetchChangelog() {
-  if (!props.pluginName) return
+  if (!props.pluginName) return;
 
-  loading.value = true
-  error.value = null
-  content.value = ''
+  loading.value = true;
+  error.value = null;
+  content.value = "";
 
   try {
-    const res = await axios.get(`/api/plugin/changelog?name=${encodeURIComponent(props.pluginName)}`)
-    if (res.data?.status === 'ok') {
-      content.value = res.data.data?.content || ''
+    const res = await axios.get(`/api/plugin/changelog?name=${encodeURIComponent(props.pluginName)}`);
+    if (res.data?.status === "ok") {
+      content.value = res.data.data?.content || "";
     } else {
-      error.value = res.data?.message || tm('modManager.changelogPanel.errors.fetchFailed')
+      error.value = res.data?.message || tm("modManager.changelogPanel.errors.fetchFailed");
     }
   } catch (err: any) {
-    error.value = err?.message || tm('modManager.changelogPanel.errors.fetchError')
+    error.value = err?.message || tm("modManager.changelogPanel.errors.fetchError");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
@@ -52,22 +52,22 @@ watch(
   () => props.active,
   (isActive) => {
     if (isActive && props.pluginName) {
-      fetchChangelog()
+      fetchChangelog();
     }
   },
-  { immediate: true }
-)
+  { immediate: true },
+);
 
 watch(
   () => props.pluginName,
   (name) => {
     if (props.active && name) {
-      fetchChangelog()
+      fetchChangelog();
     } else {
-      resetState()
+      resetState();
     }
-  }
-)
+  },
+);
 </script>
 
 <template>

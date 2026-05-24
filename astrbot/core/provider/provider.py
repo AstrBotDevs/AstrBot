@@ -27,7 +27,7 @@ Providers: TypeAlias = Union[
 ]
 
 
-class AbstractProvider(abc.ABC):
+class AbstractProvider:
     """Provider Abstract Class"""
 
     def __init__(self, provider_config: dict) -> None:
@@ -57,17 +57,17 @@ class AbstractProvider(abc.ABC):
         )
         return meta
 
-    @abc.abstractmethod
-    async def test(self) -> None:
+    def test(self) -> None:
         """Test the provider is a
 
         Raises:
             Exception: if the provider is not available
 
         """
+        return None
 
 
-class Provider(AbstractProvider):
+class Provider(AbstractProvider, abc.ABC):
     """Chat Provider"""
 
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
@@ -305,7 +305,7 @@ class Provider(AbstractProvider):
             await self.text_chat(prompt="REPLY `PONG` ONLY")
 
 
-class STTProvider(AbstractProvider):
+class STTProvider(AbstractProvider, abc.ABC):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config)
         self.provider_config = provider_config
@@ -329,7 +329,7 @@ class STTProvider(AbstractProvider):
         return True
 
 
-class TTSProvider(AbstractProvider):
+class TTSProvider(AbstractProvider, abc.ABC):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config)
         self.provider_config = provider_config
@@ -404,7 +404,7 @@ class TTSProvider(AbstractProvider):
             pass
 
 
-class EmbeddingProvider(AbstractProvider):
+class EmbeddingProvider(AbstractProvider, abc.ABC):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config)
         self.provider_config = provider_config
@@ -495,7 +495,7 @@ class EmbeddingProvider(AbstractProvider):
         return all_embeddings
 
 
-class RerankProvider(AbstractProvider):
+class RerankProvider(AbstractProvider, abc.ABC):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config)
         self.provider_config = provider_config

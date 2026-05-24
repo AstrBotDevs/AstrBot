@@ -214,135 +214,135 @@
 </template>
 
 <script setup lang="ts">
-import axios from 'axios'
-import { computed, onMounted, ref } from 'vue'
-import { useTheme } from 'vuetify'
-import { useModuleI18n } from '@/i18n/composables'
+import axios from "axios";
+import { computed, onMounted, ref } from "vue";
+import { useTheme } from "vuetify";
+import { useModuleI18n } from "@/i18n/composables";
 
-const { tm } = useModuleI18n('features/cron')
-const theme = useTheme()
+const { tm } = useModuleI18n("features/cron");
+const theme = useTheme();
 
-const isDark = computed(() => theme.global.current.value.dark)
-const loading = ref(false)
-const jobs = ref<any[]>([])
-const proactivePlatforms = ref<{ id: string; name: string; display_name?: string }[]>([])
-const createDialog = ref(false)
-const creating = ref(false)
-const editingJobId = ref('')
+const isDark = computed(() => theme.global.current.value.dark);
+const loading = ref(false);
+const jobs = ref<any[]>([]);
+const proactivePlatforms = ref<{ id: string; name: string; display_name?: string }[]>([]);
+const createDialog = ref(false);
+const creating = ref(false);
+const editingJobId = ref("");
 const newJob = ref({
   run_once: false,
-  name: '',
-  note: '',
-  cron_expression: '',
-  run_at: '',
-  session: '',
-  timezone: '',
-  enabled: true
-})
+  name: "",
+  note: "",
+  cron_expression: "",
+  run_at: "",
+  session: "",
+  timezone: "",
+  enabled: true,
+});
 
-const snackbar = ref({ show: false, message: '', color: 'success' })
+const snackbar = ref({ show: false, message: "", color: "success" });
 
 const proactivePlatformText = computed(() =>
-  proactivePlatforms.value.map((p) => `${p.display_name || p.name}(${p.id})`).join(' / ')
-)
+  proactivePlatforms.value.map((p) => `${p.display_name || p.name}(${p.id})`).join(" / "),
+);
 
 const sortedJobs = computed(() =>
   [...jobs.value].sort((a, b) => {
     if (a.enabled !== b.enabled) {
-      return a.enabled ? -1 : 1
+      return a.enabled ? -1 : 1;
     }
 
-    const nextA = parseTimeValue(a.next_run_time ?? a.run_at)
-    const nextB = parseTimeValue(b.next_run_time ?? b.run_at)
+    const nextA = parseTimeValue(a.next_run_time ?? a.run_at);
+    const nextB = parseTimeValue(b.next_run_time ?? b.run_at);
 
     if (nextA !== nextB) {
-      if (!nextA) return 1
-      if (!nextB) return -1
-      return nextA - nextB
+      if (!nextA) return 1;
+      if (!nextB) return -1;
+      return nextA - nextB;
     }
 
-    return String(a.name || '').localeCompare(String(b.name || ''))
-  })
-)
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  }),
+);
 
-const isEditing = computed(() => !!editingJobId.value)
-const dialogTitle = computed(() => tm(isEditing.value ? 'form.editTitle' : 'form.title'))
-const dialogSubmitText = computed(() => tm(isEditing.value ? 'actions.save' : 'actions.submit'))
+const isEditing = computed(() => !!editingJobId.value);
+const dialogTitle = computed(() => tm(isEditing.value ? "form.editTitle" : "form.title"));
+const dialogSubmitText = computed(() => tm(isEditing.value ? "actions.save" : "actions.submit"));
 
-function toast(message: string, color: 'success' | 'error' | 'warning' = 'success') {
-  snackbar.value = { show: true, message, color }
+function toast(message: string, color: "success" | "error" | "warning" = "success") {
+  snackbar.value = { show: true, message, color };
 }
 
 function parseTimeValue(value: any): number {
-  if (!value) return 0
-  const ts = new Date(value).getTime()
-  return Number.isNaN(ts) ? 0 : ts
+  if (!value) return 0;
+  const ts = new Date(value).getTime();
+  return Number.isNaN(ts) ? 0 : ts;
 }
 
 function formatTime(val: any): string {
-  if (!val) return tm('table.notAvailable')
+  if (!val) return tm("table.notAvailable");
   try {
-    return new Date(val).toLocaleString()
+    return new Date(val).toLocaleString();
   } catch {
-    return String(val)
+    return String(val);
   }
 }
 
 function jobTypeLabel(item: any): string {
-  if (item.run_once) return tm('table.type.once')
-  const type = item.job_type || 'active_agent'
+  if (item.run_once) return tm("table.type.once");
+  const type = item.job_type || "active_agent";
   const map: Record<string, string> = {
-    active_agent: tm('table.type.activeAgent'),
-    workflow: tm('table.type.workflow')
-  }
-  return map[type] || tm('table.type.unknown', { type })
+    active_agent: tm("table.type.activeAgent"),
+    workflow: tm("table.type.workflow"),
+  };
+  return map[type] || tm("table.type.unknown", { type });
 }
 
 function scheduleLabel(item: any): string {
   if (item.run_once) {
-    return formatTime(item.run_at)
+    return formatTime(item.run_at);
   }
-  return item.cron_expression || tm('table.notAvailable')
+  return item.cron_expression || tm("table.notAvailable");
 }
 
 function scheduleMeta(item: any): string {
   if (item.run_once) {
-    return tm('table.type.once')
+    return tm("table.type.once");
   }
-  return item.timezone || tm('table.timezoneLocal')
+  return item.timezone || tm("table.timezoneLocal");
 }
 
 async function loadJobs() {
-  loading.value = true
+  loading.value = true;
   try {
-    const res = await axios.get('/api/cron/jobs')
-    if (res.data.status === 'ok') {
-      const data = Array.isArray(res.data.data) ? res.data.data : []
+    const res = await axios.get("/api/cron/jobs");
+    if (res.data.status === "ok") {
+      const data = Array.isArray(res.data.data) ? res.data.data : [];
       jobs.value = data.map((job: any) => ({
         ...job,
-        session: job?.payload?.session || job?.session || ''
-      }))
+        session: job?.payload?.session || job?.session || "",
+      }));
     } else {
-      toast(res.data.message || tm('messages.loadFailed'), 'error')
+      toast(res.data.message || tm("messages.loadFailed"), "error");
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.loadFailed'), 'error')
+    toast(e?.response?.data?.message || tm("messages.loadFailed"), "error");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function loadPlatforms() {
   try {
-    const res = await axios.get('/api/platform/stats')
-    if (res.data.status === 'ok' && Array.isArray(res.data.data?.platforms)) {
+    const res = await axios.get("/api/platform/stats");
+    if (res.data.status === "ok" && Array.isArray(res.data.data?.platforms)) {
       proactivePlatforms.value = res.data.data.platforms
         .filter((p: any) => p?.meta?.support_proactive_message)
         .map((p: any) => ({
-          id: p?.id || p?.meta?.id || 'unknown',
-          name: p?.meta?.name || p?.type || '',
-          display_name: p?.meta?.display_name || p?.display_name
-        }))
+          id: p?.id || p?.meta?.id || "unknown",
+          name: p?.meta?.name || p?.type || "",
+          display_name: p?.meta?.display_name || p?.display_name,
+        }));
     }
   } catch {
     // Ignore platform fetch failures and keep the fallback state.
@@ -351,178 +351,178 @@ async function loadPlatforms() {
 
 async function toggleJob(job: any) {
   try {
-    const res = await axios.patch(`/api/cron/jobs/${job.job_id}`, { enabled: job.enabled })
-    if (res.data.status !== 'ok') {
-      toast(res.data.message || tm('messages.updateFailed'), 'error')
-      await loadJobs()
+    const res = await axios.patch(`/api/cron/jobs/${job.job_id}`, { enabled: job.enabled });
+    if (res.data.status !== "ok") {
+      toast(res.data.message || tm("messages.updateFailed"), "error");
+      await loadJobs();
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.updateFailed'), 'error')
-    await loadJobs()
+    toast(e?.response?.data?.message || tm("messages.updateFailed"), "error");
+    await loadJobs();
   }
 }
 
 async function deleteJob(job: any) {
   try {
-    const res = await axios.delete(`/api/cron/jobs/${job.job_id}`)
-    if (res.data.status === 'ok') {
-      toast(tm('messages.deleteSuccess'))
-      jobs.value = jobs.value.filter((item) => item.job_id !== job.job_id)
+    const res = await axios.delete(`/api/cron/jobs/${job.job_id}`);
+    if (res.data.status === "ok") {
+      toast(tm("messages.deleteSuccess"));
+      jobs.value = jobs.value.filter((item) => item.job_id !== job.job_id);
     } else {
-      toast(res.data.message || tm('messages.deleteFailed'), 'error')
+      toast(res.data.message || tm("messages.deleteFailed"), "error");
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.deleteFailed'), 'error')
+    toast(e?.response?.data?.message || tm("messages.deleteFailed"), "error");
   }
 }
 
 function openCreate() {
-  editingJobId.value = ''
-  resetNewJob()
-  createDialog.value = true
+  editingJobId.value = "";
+  resetNewJob();
+  createDialog.value = true;
 }
 
 function toDatetimeLocalValue(value: any): string {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const offset = date.getTimezoneOffset()
-  const local = new Date(date.getTime() - offset * 60_000)
-  return local.toISOString().slice(0, 16)
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60_000);
+  return local.toISOString().slice(0, 16);
 }
 
 function toIsoDatetime(value: string): string {
-  if (!value) return ''
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toISOString()
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
 function resetNewJob() {
   newJob.value = {
     run_once: false,
-    name: '',
-    note: '',
-    cron_expression: '',
-    run_at: '',
-    session: '',
-    timezone: '',
-    enabled: true
-  }
+    name: "",
+    note: "",
+    cron_expression: "",
+    run_at: "",
+    session: "",
+    timezone: "",
+    enabled: true,
+  };
 }
 
 function openEdit(job: any) {
-  editingJobId.value = job.job_id
+  editingJobId.value = job.job_id;
   newJob.value = {
     run_once: !!job.run_once,
-    name: job.name || '',
-    note: job.note || job.description || '',
-    cron_expression: job.cron_expression || '',
+    name: job.name || "",
+    note: job.note || job.description || "",
+    cron_expression: job.cron_expression || "",
     run_at: toDatetimeLocalValue(job.run_at),
-    session: job.session || job?.payload?.session || '',
-    timezone: job.timezone || '',
-    enabled: job.enabled !== false
-  }
-  createDialog.value = true
+    session: job.session || job?.payload?.session || "",
+    timezone: job.timezone || "",
+    enabled: job.enabled !== false,
+  };
+  createDialog.value = true;
 }
 
 async function createJob() {
   if (!newJob.value.session) {
-    toast(tm('messages.sessionRequired'), 'warning')
-    return
+    toast(tm("messages.sessionRequired"), "warning");
+    return;
   }
   if (!newJob.value.note) {
-    toast(tm('messages.noteRequired'), 'warning')
-    return
+    toast(tm("messages.noteRequired"), "warning");
+    return;
   }
   if (!newJob.value.run_once && !newJob.value.cron_expression) {
-    toast(tm('messages.cronRequired'), 'warning')
-    return
+    toast(tm("messages.cronRequired"), "warning");
+    return;
   }
   if (newJob.value.run_once && !newJob.value.run_at) {
-    toast(tm('messages.runAtRequired'), 'warning')
-    return
+    toast(tm("messages.runAtRequired"), "warning");
+    return;
   }
 
-  creating.value = true
+  creating.value = true;
   try {
     const payload = {
       ...newJob.value,
-      run_at: newJob.value.run_once ? toIsoDatetime(newJob.value.run_at) : ''
-    }
-    const res = await axios.post('/api/cron/jobs', payload)
-    if (res.data.status === 'ok') {
-      toast(tm('messages.createSuccess'))
-      createDialog.value = false
-      editingJobId.value = ''
-      resetNewJob()
-      await loadJobs()
+      run_at: newJob.value.run_once ? toIsoDatetime(newJob.value.run_at) : "",
+    };
+    const res = await axios.post("/api/cron/jobs", payload);
+    if (res.data.status === "ok") {
+      toast(tm("messages.createSuccess"));
+      createDialog.value = false;
+      editingJobId.value = "";
+      resetNewJob();
+      await loadJobs();
     } else {
-      toast(res.data.message || tm('messages.createFailed'), 'error')
+      toast(res.data.message || tm("messages.createFailed"), "error");
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.createFailed'), 'error')
+    toast(e?.response?.data?.message || tm("messages.createFailed"), "error");
   } finally {
-    creating.value = false
+    creating.value = false;
   }
 }
 
 async function updateJob() {
   if (!editingJobId.value) {
-    return
+    return;
   }
   if (!newJob.value.session) {
-    toast(tm('messages.sessionRequired'), 'warning')
-    return
+    toast(tm("messages.sessionRequired"), "warning");
+    return;
   }
   if (!newJob.value.note) {
-    toast(tm('messages.noteRequired'), 'warning')
-    return
+    toast(tm("messages.noteRequired"), "warning");
+    return;
   }
   if (!newJob.value.run_once && !newJob.value.cron_expression) {
-    toast(tm('messages.cronRequired'), 'warning')
-    return
+    toast(tm("messages.cronRequired"), "warning");
+    return;
   }
   if (newJob.value.run_once && !newJob.value.run_at) {
-    toast(tm('messages.runAtRequired'), 'warning')
-    return
+    toast(tm("messages.runAtRequired"), "warning");
+    return;
   }
 
-  creating.value = true
+  creating.value = true;
   try {
     const payload = {
       ...newJob.value,
-      run_at: newJob.value.run_once ? toIsoDatetime(newJob.value.run_at) : '',
-      description: newJob.value.note
-    }
-    const res = await axios.patch(`/api/cron/jobs/${editingJobId.value}`, payload)
-    if (res.data.status === 'ok') {
-      toast(tm('messages.updateSuccess'))
-      createDialog.value = false
-      editingJobId.value = ''
-      resetNewJob()
-      await loadJobs()
+      run_at: newJob.value.run_once ? toIsoDatetime(newJob.value.run_at) : "",
+      description: newJob.value.note,
+    };
+    const res = await axios.patch(`/api/cron/jobs/${editingJobId.value}`, payload);
+    if (res.data.status === "ok") {
+      toast(tm("messages.updateSuccess"));
+      createDialog.value = false;
+      editingJobId.value = "";
+      resetNewJob();
+      await loadJobs();
     } else {
-      toast(res.data.message || tm('messages.updateFailed'), 'error')
+      toast(res.data.message || tm("messages.updateFailed"), "error");
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.updateFailed'), 'error')
+    toast(e?.response?.data?.message || tm("messages.updateFailed"), "error");
   } finally {
-    creating.value = false
+    creating.value = false;
   }
 }
 
 async function submitJob() {
   if (isEditing.value) {
-    await updateJob()
-    return
+    await updateJob();
+    return;
   }
-  await createJob()
+  await createJob();
 }
 
 onMounted(() => {
-  loadJobs()
-  loadPlatforms()
-})
+  loadJobs();
+  loadPlatforms();
+});
 </script>
 
 <style scoped>

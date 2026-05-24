@@ -20,11 +20,11 @@
 </template>
 
 <script setup lang="ts">
-import { RouterView } from "vue-router";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useToastStore } from "@/stores/toast";
+import { RouterView } from "vue-router";
+import type WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
 import { useCustomizerStore } from "@/stores/customizer";
-import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
+import { useToastStore } from "@/stores/toast";
 
 type SnackAnchor =
   | "top"
@@ -52,7 +52,9 @@ const snackbarShow = computed({
   },
 });
 
-const snackbarLocation = computed<SnackAnchor | undefined>(() => toastStore.current?.location as SnackAnchor | undefined);
+const snackbarLocation = computed<SnackAnchor | undefined>(
+  () => toastStore.current?.location as SnackAnchor | undefined,
+);
 
 // 统一监听 uiTheme 变化并同步到 Vuetify
 watch(

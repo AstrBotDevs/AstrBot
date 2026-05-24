@@ -193,21 +193,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import axios from 'axios';
-import { useI18n } from '@/i18n/composables';
+import { onMounted, ref } from "vue";
+import { useI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
 const { t } = useI18n();
 
 interface MemoryStatus {
-    initialized: boolean;
-    embedding_provider_id: string | null;
-    merge_llm_provider_id: string | null;
+  initialized: boolean;
+  embedding_provider_id: string | null;
+  merge_llm_provider_id: string | null;
 }
 
 interface Provider {
-    value: string;
-    text: string;
+  value: string;
+  text: string;
 }
 
 const loading = ref(true);
@@ -215,138 +215,138 @@ const initializing = ref(false);
 const updating = ref(false);
 
 const memoryStatus = ref<MemoryStatus>({
-    initialized: false,
-    embedding_provider_id: null,
-    merge_llm_provider_id: null,
+  initialized: false,
+  embedding_provider_id: null,
+  merge_llm_provider_id: null,
 });
 
 const embeddingProviders = ref<Provider[]>([]);
 const llmProviders = ref<Provider[]>([]);
 
-const selectedEmbeddingProvider = ref<string>('');
-const selectedMergeLLM = ref<string>('');
-const newMergeLLM = ref<string>('');
+const selectedEmbeddingProvider = ref<string>("");
+const selectedMergeLLM = ref<string>("");
+const newMergeLLM = ref<string>("");
 
 const snackbar = ref({
-    show: false,
-    message: '',
-    color: 'success',
+  show: false,
+  message: "",
+  color: "success",
 });
 
-const showMessage = (message: string, color: string = 'success') => {
-    snackbar.value.message = message;
-    snackbar.value.color = color;
-    snackbar.value.show = true;
+const showMessage = (message: string, color: string = "success") => {
+  snackbar.value.message = message;
+  snackbar.value.color = color;
+  snackbar.value.show = true;
 };
 
 const getProviderName = (providerId: string | null): string => {
-    if (!providerId) return '未设置';
-    const embedding = embeddingProviders.value.find(p => p.value === providerId);
-    const llm = llmProviders.value.find(p => p.value === providerId);
-    return embedding?.text || llm?.text || providerId;
+  if (!providerId) return "未设置";
+  const embedding = embeddingProviders.value.find((p) => p.value === providerId);
+  const llm = llmProviders.value.find((p) => p.value === providerId);
+  return embedding?.text || llm?.text || providerId;
 };
 
 const loadProviders = async () => {
-    try {
-        // Load embedding providers
-        const embeddingResponse = await axios.get('/api/config/provider/list', {
-            params: { provider_type: 'embedding' }
-        });
-        if (embeddingResponse.data.status === 'ok') {
-            embeddingProviders.value = (embeddingResponse.data.data || []).map((p: any) => ({
-                value: p.id,
-                text: `${p.embedding_model} (${p.id})`,
-            }));
-        }
-
-        // Load LLM providers
-        const llmResponse = await axios.get('/api/config/provider/list', {
-            params: { provider_type: 'chat_completion' }
-        });
-        if (llmResponse.data.status === 'ok') {
-            llmProviders.value = (llmResponse.data.data || []).map((p: any) => ({
-                value: p.id,
-                text: `${p?.model_config?.model} (${p.id})`,
-            }));
-        }
-    } catch (error) {
-        console.error('Failed to load providers:', error);
-        showMessage('加载提供商列表失败', 'error');
+  try {
+    // Load embedding providers
+    const embeddingResponse = await axios.get("/api/config/provider/list", {
+      params: { provider_type: "embedding" },
+    });
+    if (embeddingResponse.data.status === "ok") {
+      embeddingProviders.value = (embeddingResponse.data.data || []).map((p: any) => ({
+        value: p.id,
+        text: `${p.embedding_model} (${p.id})`,
+      }));
     }
+
+    // Load LLM providers
+    const llmResponse = await axios.get("/api/config/provider/list", {
+      params: { provider_type: "chat_completion" },
+    });
+    if (llmResponse.data.status === "ok") {
+      llmProviders.value = (llmResponse.data.data || []).map((p: any) => ({
+        value: p.id,
+        text: `${p?.model_config?.model} (${p.id})`,
+      }));
+    }
+  } catch (error) {
+    console.error("Failed to load providers:", error);
+    showMessage("加载提供商列表失败", "error");
+  }
 };
 
 const loadStatus = async () => {
-    try {
-        const response = await axios.get('/api/memory/status');
-        if (response.data.status === 'ok') {
-            memoryStatus.value = response.data.data;
-            if (memoryStatus.value.merge_llm_provider_id) {
-                newMergeLLM.value = memoryStatus.value.merge_llm_provider_id;
-            }
-        }
-    } catch (error) {
-        console.error('Failed to load memory status:', error);
-        showMessage('加载记忆系统状态失败', 'error');
+  try {
+    const response = await axios.get("/api/memory/status");
+    if (response.data.status === "ok") {
+      memoryStatus.value = response.data.data;
+      if (memoryStatus.value.merge_llm_provider_id) {
+        newMergeLLM.value = memoryStatus.value.merge_llm_provider_id;
+      }
     }
+  } catch (error) {
+    console.error("Failed to load memory status:", error);
+    showMessage("加载记忆系统状态失败", "error");
+  }
 };
 
 const initializeMemory = async () => {
-    if (!selectedEmbeddingProvider.value || !selectedMergeLLM.value) {
-        showMessage('请选择 Embedding 模型和合并 LLM', 'warning');
-        return;
-    }
+  if (!selectedEmbeddingProvider.value || !selectedMergeLLM.value) {
+    showMessage("请选择 Embedding 模型和合并 LLM", "warning");
+    return;
+  }
 
-    initializing.value = true;
-    try {
-        const response = await axios.post('/api/memory/initialize', {
-            embedding_provider_id: selectedEmbeddingProvider.value,
-            merge_llm_provider_id: selectedMergeLLM.value,
-        });
+  initializing.value = true;
+  try {
+    const response = await axios.post("/api/memory/initialize", {
+      embedding_provider_id: selectedEmbeddingProvider.value,
+      merge_llm_provider_id: selectedMergeLLM.value,
+    });
 
-        if (response.data.status === 'ok') {
-            showMessage('记忆系统初始化成功', 'success');
-            await loadStatus();
-        } else {
-            showMessage(response.data.message || '初始化失败', 'error');
-        }
-    } catch (error: any) {
-        console.error('Failed to initialize memory:', error);
-        showMessage(error.response?.data?.message || '初始化失败', 'error');
-    } finally {
-        initializing.value = false;
+    if (response.data.status === "ok") {
+      showMessage("记忆系统初始化成功", "success");
+      await loadStatus();
+    } else {
+      showMessage(response.data.message || "初始化失败", "error");
     }
+  } catch (error: any) {
+    console.error("Failed to initialize memory:", error);
+    showMessage(error.response?.data?.message || "初始化失败", "error");
+  } finally {
+    initializing.value = false;
+  }
 };
 
 const updateMergeLLM = async () => {
-    if (!newMergeLLM.value) {
-        showMessage('请选择新的合并 LLM', 'warning');
-        return;
-    }
+  if (!newMergeLLM.value) {
+    showMessage("请选择新的合并 LLM", "warning");
+    return;
+  }
 
-    updating.value = true;
-    try {
-        const response = await axios.post('/api/memory/update_merge_llm', {
-            merge_llm_provider_id: newMergeLLM.value,
-        });
+  updating.value = true;
+  try {
+    const response = await axios.post("/api/memory/update_merge_llm", {
+      merge_llm_provider_id: newMergeLLM.value,
+    });
 
-        if (response.data.status === 'ok') {
-            showMessage('合并 LLM 更新成功', 'success');
-            await loadStatus();
-        } else {
-            showMessage(response.data.message || '更新失败', 'error');
-        }
-    } catch (error: any) {
-        console.error('Failed to update merge LLM:', error);
-        showMessage(error.response?.data?.message || '更新失败', 'error');
-    } finally {
-        updating.value = false;
+    if (response.data.status === "ok") {
+      showMessage("合并 LLM 更新成功", "success");
+      await loadStatus();
+    } else {
+      showMessage(response.data.message || "更新失败", "error");
     }
+  } catch (error: any) {
+    console.error("Failed to update merge LLM:", error);
+    showMessage(error.response?.data?.message || "更新失败", "error");
+  } finally {
+    updating.value = false;
+  }
 };
 
 onMounted(async () => {
-    loading.value = true;
-    await Promise.all([loadProviders(), loadStatus()]);
-    loading.value = false;
+  loading.value = true;
+  await Promise.all([loadProviders(), loadStatus()]);
+  loading.value = false;
 });
 </script>
 
