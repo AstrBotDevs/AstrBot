@@ -138,6 +138,7 @@ class TelegramPlatformAdapter(Platform):
             # get_updates (long-polling) timeouts:
             #   read_timeout must exceed Telegram's long-poll timeout (~30s)
             #   pool_timeout must allow recovery when the single connection stalls
+            .get_updates_connection_pool_size(2)
             .get_updates_read_timeout(60.0)
             .get_updates_connect_timeout(15.0)
             .get_updates_pool_timeout(10.0)
@@ -180,8 +181,10 @@ class TelegramPlatformAdapter(Platform):
                     "Telegram updater stop timed out; connection pool may be exhausted."
                 )
             except Exception:
-                pass
-
+                logger.warning(
+                    "Error while stopping Telegram updater; shutdown may be incomplete.",
+                    exc_info=True,
+                )
         if delete_commands and self.enable_command_register:
             with suppress(Exception):
                 await self.client.delete_my_commands()
