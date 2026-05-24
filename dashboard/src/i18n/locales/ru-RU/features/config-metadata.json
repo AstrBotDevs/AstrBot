@@ -1318,6 +1318,9 @@
             "gemini_embedding": {
                 "hint": "Gemini Embedding не требует ручного добавления /v1beta."
             },
+            "dashscope_embedding": {
+                "hint": "text-embedding-v4 поддерживает несколько размеров: 64, 128, 256, 512, 768, 1024 (по умолчанию), 1536, 2048. API base по умолчанию использует совместимый режим DashScope."
+            },
             "volcengine_cluster": {
                 "description": "Кластер Volcengine",
                 "hint": "Для моделей клонирования голоса выберите volcano_icl или volcano_icl_concurr; по умолчанию volcano_tts."

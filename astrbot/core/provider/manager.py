@@ -477,6 +477,10 @@ class ProviderManager:
                 from .sources.ollama_embedding_source import (
                     OllamaEmbeddingProvider as OllamaEmbeddingProvider,
                 )
+            case "dashscope_embedding":
+                from .sources.dashscope_embedding_source import (
+                    DashscopeEmbeddingProvider as DashscopeEmbeddingProvider,
+                )
             case "vllm_rerank":
                 from .sources.vllm_rerank_source import (
                     VLLMRerankProvider as VLLMRerankProvider,

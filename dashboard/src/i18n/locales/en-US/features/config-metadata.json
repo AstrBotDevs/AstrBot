@@ -1321,6 +1321,9 @@
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."
       },
+      "dashscope_embedding": {
+        "hint": "text-embedding-v4 supports multiple dimensions: 64, 128, 256, 512, 768, 1024 (default), 1536, 2048. API base defaults to DashScope compatible mode."
+      },
       "volcengine_cluster": {
         "description": "Volcengine cluster",
         "hint": "For voice cloning models, choose volcano_icl or volcano_icl_concurr; default is volcano_tts."
