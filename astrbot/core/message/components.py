@@ -39,6 +39,21 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
 
 
+def _write_base64_payload_to_temp_file(
+    payload: str,
+    *,
+    prefix: str,
+    suffix: str,
+) -> str:
+    file_bytes = base64.b64decode(payload)
+    file_path = os.path.join(
+        get_astrbot_temp_path(), f"{prefix}_{uuid.uuid4().hex}{suffix}"
+    )
+    with open(file_path, "wb") as f:
+        f.write(file_bytes)
+    return os.path.abspath(file_path)
+
+
 class ComponentType(str, Enum):
     # Basic Segment Types
     Plain = "Plain"  # plain text message
@@ -139,6 +154,12 @@ class Record(BaseMessageComponent):
     def fromBase64(bs64_data: str, **_):
         return Record(file=f"base64://{bs64_data}", **_)
 
+    def _get_source(self) -> str:
+        for candidate in (self.url, self.file, self.path):
+            if isinstance(candidate, str) and candidate:
+                return candidate
+        return ""
+
     async def convert_to_file_path(self) -> str:
         """将这个语音统一转换为本地文件路径。这个方法避免了手动判断语音数据类型，直接返回语音数据的本地路径（如果是网络 URL, 则会自动进行下载）。
 
@@ -146,25 +167,24 @@ class Record(BaseMessageComponent):
             str: 语音的本地路径，以绝对路径表示。
 
         """
-        if not self.file:
+        source = self._get_source()
+        if not source:
             raise Exception(f"not a valid file: {self.file}")
-        if self.file.startswith("file:///"):
-            return self.file[8:]
-        if self.file.startswith("http"):
-            file_path = await download_image_by_url(self.file)
+        if source.startswith("file:///"):
+            return source[8:]
+        if source.startswith("http"):
+            file_path = await download_image_by_url(source)
             return os.path.abspath(file_path)
-        if self.file.startswith("base64://"):
-            bs64_data = self.file.removeprefix("base64://")
-            image_bytes = base64.b64decode(bs64_data)
-            file_path = os.path.join(
-                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.jpg"
+        if source.startswith("base64://"):
+            bs64_data = source.removeprefix("base64://")
+            return _write_base64_payload_to_temp_file(
+                bs64_data,
+                prefix="recordseg",
+                suffix=".amr",
             )
-            with open(file_path, "wb") as f:
-                f.write(image_bytes)
-            return os.path.abspath(file_path)
-        if os.path.exists(self.file):
-            return os.path.abspath(self.file)
-        raise Exception(f"not a valid file: {self.file}")
+        if os.path.exists(source):
+            return os.path.abspath(source)
+        raise Exception(f"not a valid file: {source}")
 
     async def convert_to_base64(self) -> str:
         """将语音统一转换为 base64 编码。这个方法避免了手动判断语音数据类型，直接返回语音数据的 base64 编码。
@@ -174,19 +194,20 @@ class Record(BaseMessageComponent):
 
         """
         # convert to base64
-        if not self.file:
+        source = self._get_source()
+        if not source:
             raise Exception(f"not a valid file: {self.file}")
-        if self.file.startswith("file:///"):
-            bs64_data = file_to_base64(self.file[8:])
-        elif self.file.startswith("http"):
-            file_path = await download_image_by_url(self.file)
+        if source.startswith("file:///"):
+            bs64_data = file_to_base64(source[8:])
+        elif source.startswith("http"):
+            file_path = await download_image_by_url(source)
             bs64_data = file_to_base64(file_path)
-        elif self.file.startswith("base64://"):
-            bs64_data = self.file
-        elif os.path.exists(self.file):
-            bs64_data = file_to_base64(self.file)
+        elif source.startswith("base64://"):
+            bs64_data = source
+        elif os.path.exists(source):
+            bs64_data = file_to_base64(source)
         else:
-            raise Exception(f"not a valid file: {self.file}")
+            raise Exception(f"not a valid file: {source}")
         bs64_data = bs64_data.removeprefix("base64://")
         return bs64_data
 
@@ -217,6 +238,7 @@ class Record(BaseMessageComponent):
 class Video(BaseMessageComponent):
     type: ComponentType = ComponentType.Video
     file: str
+    url: str | None = ""
     cover: str | None = ""
     # 额外
     path: str | None = ""
@@ -234,6 +256,12 @@ class Video(BaseMessageComponent):
             return Video(file=url, **_)
         raise Exception("not a valid url")
 
+    def _get_source(self) -> str:
+        for candidate in (self.url, self.file, self.path):
+            if isinstance(candidate, str) and candidate:
+                return candidate
+        return ""
+
     async def convert_to_file_path(self) -> str:
         """将这个视频统一转换为本地文件路径。这个方法避免了手动判断视频数据类型，直接返回视频数据的本地路径（如果是网络 URL，则会自动进行下载）。
 
@@ -241,7 +269,7 @@ class Video(BaseMessageComponent):
             str: 视频的本地路径，以绝对路径表示。
 
         """
-        url = self.file
+        url = self._get_source()
         if url and url.startswith("file:///"):
             return url[8:]
         if url and url.startswith("http"):
@@ -281,7 +309,7 @@ class Video(BaseMessageComponent):
 
     async def to_dict(self):
         """需要和 toDict 区分开，toDict 是同步方法"""
-        url_or_path = self.file
+        url_or_path = self._get_source()
         if url_or_path.startswith("http"):
             payload_file = url_or_path
         elif callback_host := astrbot_config.get("callback_api_base"):
@@ -440,13 +468,11 @@ class Image(BaseMessageComponent):
             return os.path.abspath(image_file_path)
         if url.startswith("base64://"):
             bs64_data = url.removeprefix("base64://")
-            image_bytes = base64.b64decode(bs64_data)
-            image_file_path = os.path.join(
-                get_astrbot_temp_path(), f"imgseg_{uuid.uuid4()}.jpg"
+            return _write_base64_payload_to_temp_file(
+                bs64_data,
+                prefix="imgseg",
+                suffix=".jpg",
             )
-            with open(image_file_path, "wb") as f:
-                f.write(image_bytes)
-            return os.path.abspath(image_file_path)
         if os.path.exists(url):
             return os.path.abspath(url)
         raise Exception(f"not a valid file: {url}")

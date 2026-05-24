@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import itertools
 import logging
+import os
 import time
 import uuid
 from collections.abc import Awaitable
@@ -25,6 +26,141 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
 from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
+
+
+def _looks_like_resolved_media_ref(value: str) -> bool:
+    return value.startswith(("http://", "https://", "file://")) or os.path.isabs(value)
+
+
+def _pick_usable_media_source(seg_data: dict[str, Any]) -> str:
+    for key in ("url", "file", "path", "file_path"):
+        value = seg_data.get(key)
+        if isinstance(value, str) and value.strip():
+            candidate = value.strip()
+            if _looks_like_resolved_media_ref(candidate) or os.path.exists(candidate):
+                return candidate
+    return ""
+
+
+def _unwrap_onebot_action_data(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    data = payload.get("data")
+    if isinstance(data, dict):
+        return data
+    return payload
+
+
+async def _resolve_onebot_file_reference(
+    bot: CQHttp,
+    *,
+    message_type: str,
+    group_id: str | int | None,
+    file_ref: str,
+    seg_type: str | None = None,
+) -> str | None:
+    normalized = str(file_ref or "").strip()
+    if not normalized:
+        return None
+    if _looks_like_resolved_media_ref(normalized) or os.path.exists(normalized):
+        return normalized
+
+    candidates = [normalized]
+    base_name = os.path.basename(normalized)
+    if base_name and base_name not in candidates:
+        candidates.append(base_name)
+    stem, ext = os.path.splitext(base_name)
+    if stem and ext and stem not in candidates:
+        candidates.append(stem)
+
+    actions: list[tuple[str, dict[str, Any]]] = []
+    if seg_type == "record":
+        for candidate in candidates:
+            actions.append(("get_record", {"file": candidate}))
+    for candidate in candidates:
+        actions.extend(
+            [
+                ("get_file", {"file_id": candidate}),
+                ("get_file", {"file": candidate}),
+                ("get_image", {"file": candidate}),
+                ("get_image", {"file_id": candidate}),
+                ("get_private_file_url", {"file_id": candidate}),
+            ]
+        )
+        if str(message_type).lower() == "group" and group_id not in (None, ""):
+            actions.append(
+                (
+                    "get_group_file_url",
+                    {"group_id": group_id, "file_id": candidate},
+                )
+            )
+
+    for action, params in actions:
+        try:
+            ret = await bot.call_action(action=action, **params)
+        except Exception:
+            continue
+        data = _unwrap_onebot_action_data(ret)
+        for key in ("url", "file"):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                resolved = value.strip()
+                if _looks_like_resolved_media_ref(resolved) or os.path.exists(resolved):
+                    return resolved
+    return None
+
+
+async def _normalize_onebot_media_data(
+    bot: CQHttp,
+    seg_type: str,
+    seg_data: dict[str, Any],
+    *,
+    message_type: str,
+    group_id: str | int | None,
+) -> dict[str, Any]:
+    normalized = dict(seg_data)
+
+    if seg_type not in {"video", "record", "file"}:
+        return normalized
+
+    direct_url = normalized.get("url")
+    if isinstance(direct_url, str) and direct_url.strip():
+        usable_source = _pick_usable_media_source(normalized) or direct_url.strip()
+        normalized["file"] = usable_source
+        if seg_type == "file":
+            normalized.setdefault("url", usable_source)
+        return normalized
+
+    file_ref = normalized.get("file")
+    file_id = normalized.get("file_id")
+    candidate = file_ref or file_id
+    if not isinstance(candidate, str) or not candidate.strip():
+        usable_source = _pick_usable_media_source(normalized)
+        if usable_source:
+            normalized["file"] = usable_source
+            if seg_type == "file":
+                normalized.setdefault("url", usable_source)
+            return normalized
+        return normalized
+    candidate = candidate.strip()
+    if _looks_like_resolved_media_ref(candidate) or os.path.exists(candidate):
+        normalized["file"] = candidate
+        return normalized
+
+    resolved = await _resolve_onebot_file_reference(
+        bot,
+        message_type=message_type,
+        group_id=group_id,
+        file_ref=candidate,
+        seg_type=seg_type,
+    )
+    if not resolved:
+        return normalized
+
+    normalized["file"] = resolved
+    if seg_type == "file":
+        normalized.setdefault("url", resolved)
+    return normalized
 
 
 @register_platform_adapter(
@@ -265,6 +401,27 @@ class AiocqhttpAdapter(Platform):
                         abm.message.append(File(name=file_name, url=m["data"]["url"]))
                     else:
                         try:
+                            normalized_data = await _normalize_onebot_media_data(
+                                self.bot,
+                                "file",
+                                m["data"],
+                                message_type=event["message_type"],
+                                group_id=event.get("group_id"),
+                            )
+                            if normalized_data.get("url"):
+                                file_name = (
+                                    normalized_data.get("file_name", "")
+                                    or normalized_data.get("name", "")
+                                    or normalized_data.get("file", "")
+                                    or "file"
+                                )
+                                abm.message.append(
+                                    File(
+                                        name=file_name,
+                                        url=cast(str, normalized_data["url"]),
+                                    )
+                                )
+                                continue
                             # Napcat
                             ret = None
                             if abm.type == MessageType.GROUP_MESSAGE:
@@ -402,7 +559,14 @@ class AiocqhttpAdapter(Platform):
                                 f"不支持的消息段类型，已忽略: {t}, data={m['data']}"
                             )
                             continue
-                        a = ComponentTypes[t](**m["data"])
+                        normalized_data = await _normalize_onebot_media_data(
+                            self.bot,
+                            t,
+                            m["data"],
+                            message_type=event["message_type"],
+                            group_id=event.get("group_id"),
+                        )
+                        a = ComponentTypes[t](**normalized_data)
                         abm.message.append(a)
                     except Exception as e:
                         logger.exception(
