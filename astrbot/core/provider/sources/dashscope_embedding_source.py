@@ -16,8 +16,6 @@ from ..register import register_provider_adapter
 class DashscopeEmbeddingProvider(EmbeddingProvider):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
-        self.provider_config = provider_config
-        self.provider_settings = provider_settings
         proxy = provider_config.get("proxy", "")
         provider_id = provider_config.get("id", "unknown_id")
         http_client = None
@@ -51,6 +49,8 @@ class DashscopeEmbeddingProvider(EmbeddingProvider):
             model=self.model,
             **kwargs,
         )
+        if not embedding.data:
+            raise Exception("DashScope API returned no embedding data.")
         return embedding.data[0].embedding
 
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
@@ -81,7 +81,7 @@ class DashscopeEmbeddingProvider(EmbeddingProvider):
                 logger.warning(
                     f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored."
                 )
-        return 0
+        return 1024
 
     async def terminate(self):
         if self.client:
