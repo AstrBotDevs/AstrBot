@@ -438,10 +438,17 @@ class ProviderOpenAIOfficial(Provider):
             image_fallback_used,
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
-        return create_proxy_client("OpenAI", proxy)
+        httpx_module: Any = httpx
+        try:
+            from openai import _base_client as openai_base_client
+
+            httpx_module = getattr(openai_base_client, "httpx", httpx)
+        except ImportError:
+            pass
+        return create_proxy_client("OpenAI", proxy, httpx_module=httpx_module)
 
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
@@ -519,6 +526,42 @@ class ProviderOpenAIOfficial(Provider):
         except NotFoundError as e:
             raise Exception(f"获取模型列表失败：{e}")
 
+    @staticmethod
+    def _sanitize_assistant_messages(payloads: dict) -> None:
+        """在请求发送前过滤/规范化空的 assistant 消息。
+
+        严格 API（Moonshot、DeepSeek Reasoner 等）会在 assistant 消息同时缺少
+        ``content`` 和 ``tool_calls`` 时返回 400。把 ``""`` / ``None`` / ``[]``
+        都视作空内容：无 tool_calls 时整条过滤掉；有 tool_calls 时将 content
+        设为 ``None`` 以符合 OpenAI 规范。就地修改 ``payloads["messages"]``。
+        """
+        messages = payloads.get("messages")
+        if not isinstance(messages, list):
+            return
+
+        def _is_empty(content: Any) -> bool:
+            return content is None or content == "" or content == []
+
+        cleaned: list[Any] = []
+        for idx, msg in enumerate(messages):
+            if not isinstance(msg, dict) or msg.get("role") != "assistant":
+                cleaned.append(msg)
+                continue
+
+            content = msg.get("content")
+            tool_calls = msg.get("tool_calls")
+
+            if _is_empty(content) and not tool_calls:
+                logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
+                continue
+
+            if _is_empty(content) and tool_calls:
+                msg["content"] = None
+
+            cleaned.append(msg)
+
+        payloads["messages"] = cleaned
+
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
@@ -548,26 +591,7 @@ class ProviderOpenAIOfficial(Provider):
 
         model = payloads.get("model", "").lower()
 
-        if "messages" in payloads and isinstance(payloads["messages"], list):
-            cleaned_messages = []
-            for idx, msg in enumerate(payloads["messages"]):
-                # 过滤空的 assistant 消息，防止严格 API（如 Moonshot）返回 400 错误
-                if msg.get("role") == "assistant":
-                    content = msg.get("content")
-                    tool_calls = msg.get("tool_calls")
-
-                    # 情况1: 空/null content 且无 tool_calls -> 过滤掉
-                    if not tool_calls and (content == "" or content is None):
-                        logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
-                        continue
-
-                    # 情况2: 空 content 但有 tool_calls -> 设为 None (符合 OpenAI 规范)
-                    if content == "" and tool_calls:
-                        msg["content"] = None
-
-                cleaned_messages.append(msg)
-
-            payloads["messages"] = cleaned_messages
+        self._sanitize_assistant_messages(payloads)
 
         completion = await self.client.chat.completions.create(
             **payloads,
@@ -619,6 +643,8 @@ class ProviderOpenAIOfficial(Provider):
             del payloads[key]
         self._apply_provider_specific_extra_body_overrides(extra_body)
 
+        self._sanitize_assistant_messages(payloads)
+
         stream = await self.client.chat.completions.create(
             **payloads,
             stream=True,
@@ -643,16 +669,24 @@ class ProviderOpenAIOfficial(Provider):
                     # Gemini and some OpenAI-compatible proxies omit this field
                     if not hasattr(tc, "index") or tc.index is None:
                         tc.index = idx
-            try:
-                state.handle_chunk(chunk)
-            except Exception as e:
-                logger.error("Saving chunk state error: " + str(e))
+            # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
+            # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
+            # refs: AstrBot#6689 / openai-python#5069 / #5047
+            # 例外：流末尾的 usage chunk（choices=[]，delta=None 但有 usage 数据）
+            # 需要传给 state，否则最终 completion 会丢失 usage 信息
+            if delta is not None or chunk.usage:
+                try:
+                    state.handle_chunk(chunk)
+                except Exception as e:
+                    logger.error("Saving chunk state error: " + str(e))
             # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)
             _y = False
             llm_response.id = chunk.id
-            if reasoning:
+            llm_response.reasoning_content = None
+            llm_response.completion_text = ""
+            if reasoning is not None:
                 llm_response.reasoning_content = reasoning
                 _y = True
             if delta and delta.content:
@@ -672,30 +706,40 @@ class ProviderOpenAIOfficial(Provider):
             if _y:
                 yield llm_response
 
-        final_completion = state.get_final_completion()
-        llm_response = await self._parse_openai_completion(final_completion, tools)
-
-        yield llm_response
+        try:
+            final_completion = state.get_final_completion()
+            llm_response = await self._parse_openai_completion(final_completion, tools)
+            yield llm_response
+        except Exception as e:
+            logger.error("get_final_completion error: " + str(e))
+            # 流式内容已通过 yield 发出，记录错误后正常结束即可
+            return
 
     def _extract_reasoning_content(
         self,
         completion: ChatCompletion | ChatCompletionChunk,
-    ) -> str:
+    ) -> str | None:
         """Extract reasoning content from OpenAI ChatCompletion if available."""
-        reasoning_text = ""
+
+        def _get_reasoning_attr(obj: Any) -> str | None:
+            fields_set = getattr(obj, "model_fields_set", None)
+            if isinstance(fields_set, set) and self.reasoning_key in fields_set:
+                attr = getattr(obj, self.reasoning_key, "")
+                return "" if attr is None else str(attr)
+            attr = getattr(obj, self.reasoning_key, None)
+            return None if attr is None else str(attr)
+
         if not completion.choices:
-            return reasoning_text
+            return None
         if isinstance(completion, ChatCompletion):
             choice = completion.choices[0]
-            reasoning_attr = getattr(choice.message, self.reasoning_key, None)
-            if reasoning_attr:
-                reasoning_text = str(reasoning_attr)
+            reasoning_attr = _get_reasoning_attr(choice.message)
         elif isinstance(completion, ChatCompletionChunk):
             delta = completion.choices[0].delta
-            reasoning_attr = getattr(delta, self.reasoning_key, None)
-            if reasoning_attr:
-                reasoning_text = str(reasoning_attr)
-        return reasoning_text
+            reasoning_attr = _get_reasoning_attr(delta)
+        else:
+            return None
+        return reasoning_attr
 
     def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
         ptd = getattr(usage, "prompt_tokens_details", None)
@@ -838,7 +882,9 @@ class ProviderOpenAIOfficial(Provider):
 
         # parse the reasoning content if any
         # the priority is higher than the <think> tag extraction
-        llm_response.reasoning_content = self._extract_reasoning_content(completion)
+        reasoning_content = self._extract_reasoning_content(completion)
+        if reasoning_content is not None:
+            llm_response.reasoning_content = reasoning_content
 
         # parse tool calls if any
         if choice.message.tool_calls and tools is not None:
@@ -854,24 +900,29 @@ class ProviderOpenAIOfficial(Provider):
                     # 工具集未提供
                     # Should be unreachable
                     raise Exception("工具集未提供")
-                for tool in tools.func_list:
-                    if (
-                        tool_call.type == "function"
-                        and tool.name == tool_call.function.name
-                    ):
-                        # workaround for #1454
-                        if isinstance(tool_call.function.arguments, str):
-                            args = json.loads(tool_call.function.arguments)
-                        else:
-                            args = tool_call.function.arguments
-                        args_ls.append(args)
-                        func_name_ls.append(tool_call.function.name)
-                        tool_call_ids.append(tool_call.id)
 
-                        # gemini-2.5 / gemini-3 series extra_content handling
-                        extra_content = getattr(tool_call, "extra_content", None)
-                        if extra_content is not None:
-                            tool_call_extra_content_dict[tool_call.id] = extra_content
+                if tool_call.type == "function":
+                    # workaround for #1454
+                    if isinstance(tool_call.function.arguments, str):
+                        try:
+                            args = json.loads(tool_call.function.arguments)
+                        except json.JSONDecodeError as e:
+                            logger.error(f"解析参数失败: {e}")
+                            args = {}
+                    else:
+                        args = tool_call.function.arguments
+                    # Some API may return None for tools with no parameters
+                    if args is None:
+                        args = {}
+                    args_ls.append(args)
+                    func_name_ls.append(tool_call.function.name)
+                    tool_call_ids.append(tool_call.id)
+
+                    # gemini-2.5 / gemini-3 series extra_content handling
+                    extra_content = getattr(tool_call, "extra_content", None)
+                    if extra_content is not None:
+                        tool_call_extra_content_dict[tool_call.id] = extra_content
+
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
@@ -883,7 +934,7 @@ class ProviderOpenAIOfficial(Provider):
                 "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。",
             )
         has_text_output = bool((llm_response.completion_text or "").strip())
-        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        has_reasoning_output = bool((llm_response.reasoning_content or "").strip())
         if (
             not has_text_output
             and not has_reasoning_output
@@ -959,23 +1010,38 @@ class ProviderOpenAIOfficial(Provider):
         """Finally convert the payload. Such as think part conversion, tool inject."""
         model = payloads.get("model", "").lower()
         is_gemini = "gemini" in model
-
+        deepseek_reasoning_models = {"deepseek-v4-pro", "deepseek-v4-flash"}
+        is_deepseek_v4_reasoning = (
+            model in deepseek_reasoning_models
+            or "api.deepseek.com" in self.client.base_url.host
+        )
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list
             ):
                 reasoning_content = ""
+                reasoning_content_present = False
                 new_content = []  # not including think part
                 for part in message["content"]:
                     if part.get("type") == "think":
+                        reasoning_content_present = True
                         reasoning_content += str(part.get("think"))
                     else:
                         new_content.append(part)
                 # Some providers (Grok, etc.) reject empty content lists.
                 # When all parts were think blocks, fall back to None.
                 message["content"] = new_content or None
-                if reasoning_content:
+                if reasoning_content_present:
                     message["reasoning_content"] = reasoning_content
+
+            if (
+                message.get("role") == "assistant"
+                and is_deepseek_v4_reasoning
+                and "reasoning_content" not in message
+            ):
+                # DeepSeek v4 reasoning models require the field on assistant
+                # history messages, even when the reasoning content is empty.
+                message["reasoning_content"] = ""
 
             # Gemini 的 function_response 要求 google.protobuf.Struct（即 JSON 对象），
             # 纯文本会触发 400 Invalid argument，需要包一层 JSON。
@@ -1023,7 +1089,7 @@ class ProviderOpenAIOfficial(Provider):
                     image_fallback_used,
                 )
             raise e
-        if "maximum context length" in str(e):
+        if "maximum context length" in str(e) or "context length" in str(e).lower():
             logger.warning(
                 f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}",
             )
@@ -1082,8 +1148,8 @@ class ProviderOpenAIOfficial(Provider):
             or ("function" in str(e).lower() and "support" in str(e).lower())
         ):
             # openai, ollama, gemini openai, siliconcloud 的错误提示与 code 不统一，只能通过字符串匹配
-            logger.info(
-                f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。",
+            logger.warning(
+                f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。如需永久关闭，可前往 WebUI 中关闭工具调用。",
             )
             payloads.pop("tools", None)
             return (
@@ -1096,9 +1162,6 @@ class ProviderOpenAIOfficial(Provider):
                 image_fallback_used,
             )
         # logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
-
-        if "tool" in str(e).lower() and "support" in str(e).lower():
-            logger.error("疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
 
         if is_connection_error(e):
             proxy = self.provider_config.get("proxy", "")

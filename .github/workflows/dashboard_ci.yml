@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5.0.0
+        uses: pnpm/action-setup@v6.0.8
         with:
           version: 10.28.2
 
@@ -27,9 +27,10 @@ jobs:
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Install and Build
+        working-directory: dashboard
         run: |
-          pnpm --dir dashboard install --frozen-lockfile
-          pnpm --dir dashboard run build
+          pnpm install --frozen-lockfile
+          pnpm run build
 
       - name: Inject Commit SHA
         id: get_sha

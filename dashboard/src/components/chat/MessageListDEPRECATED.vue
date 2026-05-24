@@ -303,7 +303,7 @@ export default {
                     part.tool_calls.forEach(toolCall => {
                         // 检查是否是支持引用解析的 web_search 工具调用
                         if (
-                            !['web_search_baidu', 'web_search_tavily', 'web_search_bocha', 'web_search_brave'].includes(toolCall.name) ||
+                            !['web_search_baidu', 'web_search_tavily', 'web_search_bocha', 'web_search_brave', 'web_search_firecrawl'].includes(toolCall.name) ||
                             !toolCall.result
                         ) {
                             return;

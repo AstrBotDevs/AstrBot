@@ -32,14 +32,9 @@ In AstrBot, web search, todo reminders, and code interpreter tools are provided 
 
 In addition to providing traditional command invocation, also offer function calling capabilities.
 
-Related commands:
+Tool management (enable/disable) can be done in the WebUI.
 
-- `/tool ls` - View the list of available tools
-- `/tool on` - Enable a specific tool
-- `/tool off` - Disable a specific tool
-- `/tool off_all` - Disable all tools
-
-Some models may not support function calling and will return errors such as `tool call is not supported`, `function calling is not supported`, `tool use is not supported`, etc. In most cases, AstrBot can detect these errors and automatically remove function calling tools for you. If you find that a model doesn't support function calling, you can also use the `/tool off_all` command to disable all tools and try again, or switch to a model that supports function calling.
+Some models may not support function calling and will return errors such as `tool call is not supported`, `function calling is not supported`, `tool use is not supported`, etc. In most cases, AstrBot can detect these errors and automatically remove function calling tools for you. If you find that a model doesn't support function calling, you can also disable all calling tools in the WebUI and try again, or switch to a model that supports function calling.
 
 
 Below are some common tool calling demos:
@@ -51,4 +46,4 @@ Below are some common tool calling demos:
 
 ## MCP
 
-Please refer to this documentation: [AstrBot - MCP](/use/mcp).
+Please refer to this documentation: [AstrBot - MCP](/en/use/mcp).

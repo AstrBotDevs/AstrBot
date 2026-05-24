@@ -289,7 +289,9 @@ class ResultDecorateStage(Stage):
                         ),
                     )
                 else:
-                    result.chain.insert(0, Plain(f"🤔 思考: {reasoning_content}\n"))
+                    result.chain.insert(
+                        0, Plain(f"🤔 思考: {reasoning_content}\n\n────\n")
+                    )
 
             if should_tts and tts_provider:
                 new_chain = []
@@ -366,7 +368,7 @@ class ResultDecorateStage(Stage):
                         return
                     if time.time() - render_start > 3:
                         logger.warning(
-                            "文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。",
+                            "文本转图片耗时超过了 3 秒，如果觉得很慢可以在 WebUI 中关闭文本转图片模式。",
                         )
                     if url:
                         if url.startswith("http"):

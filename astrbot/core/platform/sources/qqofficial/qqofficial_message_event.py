@@ -58,10 +58,12 @@ _qqofficial_retry = retry(
         (
             botpy.errors.ServerError,
             botpy.errors.SequenceNumberError,
+            OSError,
+            asyncio.TimeoutError,
         )
     ),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=10),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
     before_sleep=before_sleep_log(logger, logging.WARNING),
     reraise=True,
 )
@@ -233,12 +235,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             plain_text = plain_text + "\n"
 
-        payload: dict = {
-            # "content": plain_text,
-            "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
-            "msg_type": 2,
-            "msg_id": self.message_obj.message_id,
-        }
+        # 根据消息链的 use_markdown_ 标记决定发送模式
+        use_md = getattr(self.send_buffer, "use_markdown_", None)
+        if use_md is False:
+            payload: dict = {
+                "content": plain_text,
+                "msg_type": 0,
+                "msg_id": self.message_obj.message_id,
+            }
+        else:
+            payload = {
+                "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
+                "msg_type": 2,
+                "msg_id": self.message_obj.message_id,
+            }
 
         if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
             payload["msg_seq"] = random.randint(1, 10000)
@@ -564,7 +574,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     ttl=result.get("ttl", 0),
                 )
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
-            logger.error(f"上传媒体文件失败，共尝试3次后放弃: {file_source}")
+            logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
         except Exception as e:
             logger.error(f"上传请求错误: {e}")
 

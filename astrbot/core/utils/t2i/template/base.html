@@ -242,14 +242,14 @@
   </div>
   <article style="margin-top: 32px" id="content"></article>
 
-  <script>{{ shiki_runtime | safe }}</script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+  <textarea id="markdown-source" hidden>{{ text | safe }}</textarea>
   <script>
     (function () {
       const contentElement = document.getElementById("content");
-      const source = decodeBase64Utf8("{{ text_base64 }}");
+      const source = document.getElementById("markdown-source").value;
 
       contentElement.innerHTML = marked.parse(source);
 
@@ -266,20 +266,6 @@
         });
       }
 
-      function decodeBase64Utf8(base64Text) {
-        const binary = window.atob(base64Text || "");
-        const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-
-        if (window.TextDecoder) {
-          return new TextDecoder().decode(bytes);
-        }
-
-        let fallback = "";
-        bytes.forEach((byte) => {
-          fallback += String.fromCharCode(byte);
-        });
-        return decodeURIComponent(escape(fallback));
-      }
     })();
   </script>
 </body>

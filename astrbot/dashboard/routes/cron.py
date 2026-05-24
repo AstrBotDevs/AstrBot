@@ -1,5 +1,5 @@
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 
 from quart import jsonify, request
 
@@ -26,8 +26,12 @@ class CronRoute(Route):
     def _serialize_job(self, job) -> dict:
         data = job.model_dump() if hasattr(job, "model_dump") else job.__dict__
         for k in ["created_at", "updated_at", "last_run_at", "next_run_time"]:
-            if isinstance(data.get(k), datetime):
-                data[k] = data[k].isoformat()
+            v = data.get(k)
+            if isinstance(v, datetime):
+                # Attach UTC
+                if v.tzinfo is None:
+                    v = v.replace(tzinfo=timezone.utc)
+                data[k] = v.isoformat()
         # expose note explicitly for UI (prefer payload.note then description)
         payload = data.get("payload") or {}
         data["note"] = payload.get("note") or data.get("description") or ""

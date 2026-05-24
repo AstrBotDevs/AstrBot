@@ -109,6 +109,10 @@ Text chunk to process:
     return [chunk]
 
 
+def _compact_chunks(chunks: list[str]) -> list[str]:
+    return [chunk.strip() for chunk in chunks if chunk and chunk.strip()]
+
+
 class KBHelper:
     vec_db: BaseVecDB
     kb: KnowledgeBase
@@ -249,7 +253,7 @@ class KBHelper:
 
             if pre_chunked_text is not None:
                 # 如果提供了预分块文本，直接使用
-                chunks_text = pre_chunked_text
+                chunks_text = _compact_chunks(pre_chunked_text)
                 file_size = sum(len(chunk) for chunk in chunks_text)
                 logger.info(f"使用预分块文本进行上传，共 {len(chunks_text)} 个块。")
             else:
@@ -316,6 +320,7 @@ class KBHelper:
                         chunk_size=chunk_size,
                         chunk_overlap=chunk_overlap,
                     )
+                    chunks_text = _compact_chunks(chunks_text)
                 except KnowledgeBaseUploadError:
                     raise
                 except Exception as exc:
@@ -727,6 +732,8 @@ class KBHelper:
                     final_chunks.append(initial_chunks[i])
                 elif isinstance(result, list):
                     final_chunks.extend(result)
+
+            final_chunks = _compact_chunks(final_chunks)
 
             logger.info(
                 f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块。"

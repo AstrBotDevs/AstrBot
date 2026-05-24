@@ -11,7 +11,7 @@
 <br>
 
 <div>
-<a href="https://trendshift.io/repositories/12875" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12875" alt="Soulter%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/21369" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21369" alt="AstrBotDevs%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 <a href="https://hellogithub.com/repository/AstrBotDevs/AstrBot" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=d127d50cd5e54c5382328acc3bb25483&claim_uid=ZO9by7qCXgSd6Lp&t=2" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 </div>
 
@@ -100,7 +100,7 @@ uv tool upgrade astrbot --python 3.12
 
 コンテナ運用に慣れており、より安定した本番向けのデプロイ方法を求めるユーザーには、Docker / Docker Compose での AstrBot デプロイをおすすめします。
 
-公式ドキュメント [Docker を使用した AstrBot のデプロイ](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) をご参照ください。
+公式ドキュメント [Docker を使用した AstrBot のデプロイ](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) をご参照ください。
 
 ### 雨云でのデプロイ
 
@@ -138,7 +138,7 @@ yay -S astrbot-git
 
 **その他のデプロイ方法**
 
-パネル操作での導入やより高度なカスタマイズが必要な場合は、[宝塔パネルデプロイ](https://astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 経由の導入）、[1Panel デプロイ](https://astrbot.app/deploy/astrbot/1panel.html)（1Panel アプリマーケット経由）、[CasaOS デプロイ](https://astrbot.app/deploy/astrbot/casaos.html)（NAS / ホームサーバー向け可視化導入）、[手動デプロイ](https://astrbot.app/deploy/astrbot/cli.html)（`uv` とソースベースのフルカスタム導入）を参照してください。
+パネル操作での導入やより高度なカスタマイズが必要な場合は、[宝塔パネルデプロイ](https://docs.astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 経由の導入）、[1Panel デプロイ](https://docs.astrbot.app/deploy/astrbot/1panel.html)（1Panel アプリマーケット経由）、[CasaOS デプロイ](https://docs.astrbot.app/deploy/astrbot/casaos.html)（NAS / ホームサーバー向け可視化導入）、[手動デプロイ](https://docs.astrbot.app/deploy/astrbot/cli.html)（`uv` とソースベースのフルカスタム導入）を参照してください。
 
 ## サポートされているメッセージプラットフォーム
 
@@ -249,7 +249,7 @@ pre-commit install
 AstrBot への貢献をしていただいたすべてのコントリビューターとプラグイン開発者に特別な感謝を ❤️
 
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=200&columns=14" />
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
 </a>
 
 また、このプロジェクトの誕生は以下のオープンソースプロジェクトの助けなしには実現できませんでした:

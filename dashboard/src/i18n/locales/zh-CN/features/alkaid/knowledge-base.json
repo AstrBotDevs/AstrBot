@@ -70,7 +70,7 @@
   },
   "upload": {
     "title": "上传文件到知识库",
-    "subtitle": "支持 txt、pdf、word、excel 等多种格式",
+    "subtitle": "支持 txt、pdf、epub、word、excel 等多种格式",
     "dropzone": "拖放文件到这里或点击上传",
     "chunkSettings": {
       "title": "分片设置",

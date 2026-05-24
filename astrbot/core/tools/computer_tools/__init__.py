@@ -1,3 +1,8 @@
+from .cua import (
+    CuaKeyboardTypeTool,
+    CuaMouseClickTool,
+    CuaScreenshotTool,
+)
 from .fs import (
     FileDownloadTool,
     FileEditTool,
@@ -32,6 +37,9 @@ __all__ = [
     "BrowserExecTool",
     "CreateSkillCandidateTool",
     "CreateSkillPayloadTool",
+    "CuaKeyboardTypeTool",
+    "CuaMouseClickTool",
+    "CuaScreenshotTool",
     "EvaluateSkillCandidateTool",
     "ExecuteShellTool",
     "FileDownloadTool",

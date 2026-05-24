@@ -7,6 +7,7 @@ import io
 import time
 import uuid
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -95,6 +96,7 @@ class WeixinOCReplyMeta:
     support_streaming_message=False,
 )
 class WeixinOCAdapter(Platform):
+    SESSION_TIMEOUT_ERRCODE = -14
     IMAGE_ITEM_TYPE = 2
     VOICE_ITEM_TYPE = 3
     FILE_ITEM_TYPE = 4
@@ -149,6 +151,7 @@ class WeixinOCAdapter(Platform):
         self._sync_buf = ""
         self._qr_expired_count = 0
         self._context_tokens: dict[str, str] = {}
+        self._context_tokens_dirty = False
         self._typing_states: dict[str, TypingSessionState] = {}
         self._last_inbound_error = ""
         self._recent_message_cache_size = self._get_int_config(
@@ -538,12 +541,29 @@ class WeixinOCAdapter(Platform):
         saved_base = str(self.config.get("weixin_oc_base_url", "")).strip()
         if saved_base:
             self.base_url = saved_base.rstrip("/")
+        raw_context_tokens = self.config.get("weixin_oc_context_tokens", {})
+        if isinstance(raw_context_tokens, dict):
+            self._context_tokens = self._normalize_context_tokens(raw_context_tokens)
+
+    def _normalize_context_tokens(
+        self, raw_context_tokens: Mapping[object, object]
+    ) -> dict[str, str]:
+        normalized_context_tokens: dict[str, str] = {}
+        for user_id, context_token in raw_context_tokens.items():
+            normalized_user_id = str(user_id).strip()
+            normalized_context_token = str(context_token).strip()
+            if not normalized_user_id or not normalized_context_token:
+                continue
+            normalized_context_tokens[normalized_user_id] = normalized_context_token
+        return normalized_context_tokens
 
     async def _save_account_state(self) -> None:
+        normalized_context_tokens = self._normalize_context_tokens(self._context_tokens)
         self.config["weixin_oc_token"] = self.token or ""
         self.config["weixin_oc_account_id"] = self.account_id or ""
         self.config["weixin_oc_sync_buf"] = self._sync_buf
         self.config["weixin_oc_base_url"] = self.base_url
+        self.config["weixin_oc_context_tokens"] = normalized_context_tokens
 
         for platform in astrbot_config.get("platform", []):
             if not isinstance(platform, dict):
@@ -556,10 +576,12 @@ class WeixinOCAdapter(Platform):
             platform["weixin_oc_account_id"] = self.account_id or ""
             platform["weixin_oc_sync_buf"] = self._sync_buf
             platform["weixin_oc_base_url"] = self.base_url
+            platform["weixin_oc_context_tokens"] = normalized_context_tokens
             break
 
         self._sync_client_state()
         astrbot_config.save_config()
+        self._context_tokens_dirty = False
 
     def _is_login_session_valid(
         self, login_session: OpenClawLoginSession | None
@@ -930,6 +952,23 @@ class WeixinOCAdapter(Platform):
         errmsg = str(payload.get("errmsg", ""))
         return f"ret={ret}, errcode={errcode}, errmsg={errmsg}"
 
+    @staticmethod
+    def _api_errcode(payload: dict[str, Any]) -> int:
+        return int(payload.get("errcode") or 0)
+
+    async def _handle_inbound_session_timeout(self) -> None:
+        logger.warning(
+            "weixin_oc(%s): session timed out, clearing login state and waiting for QR login.",
+            self.meta().id,
+        )
+        self.token = None
+        self.account_id = None
+        self._sync_buf = ""
+        self._context_tokens = {}
+        self._context_tokens_dirty = False
+        self._login_session = None
+        await self._save_account_state()
+
     async def _send_media_segment(
         self,
         user_id: str,
@@ -972,7 +1011,12 @@ class WeixinOCAdapter(Platform):
                 file_name,
             )
         except Exception as e:
-            logger.error("weixin_oc(%s): prepare media failed: %s", self.meta().id, e)
+            logger.error(
+                "weixin_oc(%s): prepare media failed: %s",
+                self.meta().id,
+                e,
+                exc_info=True,
+            )
             return False
 
         if text:
@@ -1445,7 +1489,10 @@ class WeixinOCAdapter(Platform):
 
         context_token = str(msg.get("context_token", "")).strip()
         if context_token:
-            self._context_tokens[from_user_id] = context_token
+            previous_context_token = self._context_tokens.get(from_user_id)
+            if previous_context_token != context_token:
+                self._context_tokens[from_user_id] = context_token
+                self._context_tokens_dirty = True
 
         item_list = cast(list[dict[str, Any]], msg.get("item_list", []))
         reply_component = None
@@ -1537,11 +1584,16 @@ class WeixinOCAdapter(Platform):
                 self.meta().id,
                 self._last_inbound_error,
             )
+            if self._api_errcode(data) == self.SESSION_TIMEOUT_ERRCODE:
+                await self._handle_inbound_session_timeout()
+                return
+            await asyncio.sleep(5)
             return
 
+        should_save_state = self._context_tokens_dirty
         if data.get("get_updates_buf"):
             self._sync_buf = str(data.get("get_updates_buf"))
-            await self._save_account_state()
+            should_save_state = True
 
         for msg in data.get("msgs", []) if isinstance(data.get("msgs"), list) else []:
             if self._shutdown_event.is_set():
@@ -1549,6 +1601,8 @@ class WeixinOCAdapter(Platform):
             if not isinstance(msg, dict):
                 continue
             await self._handle_inbound_message(msg)
+        if should_save_state:
+            await self._save_account_state()
 
     def _message_chain_to_text(self, message_chain: MessageChain) -> str:
         text = ""
@@ -1581,6 +1635,7 @@ class WeixinOCAdapter(Platform):
         target_user = session.session_id
         pending_text = ""
         has_supported_segment = False
+        failed_segments = 0
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
                 pending_text += segment.text
@@ -1588,11 +1643,13 @@ class WeixinOCAdapter(Platform):
 
             if isinstance(segment, (Image, Video, File)):
                 has_supported_segment = True
-                await self._send_media_segment(
+                sent = await self._send_media_segment(
                     target_user,
                     segment,
                     text=pending_text.strip() or None,
                 )
+                if not sent:
+                    failed_segments += 1
                 pending_text = ""
                 continue
 
@@ -1604,12 +1661,19 @@ class WeixinOCAdapter(Platform):
 
         if pending_text:
             has_supported_segment = True
-            await self._send_to_session(target_user, pending_text.strip())
+            sent = await self._send_to_session(target_user, pending_text.strip())
+            if not sent:
+                failed_segments += 1
 
         if not has_supported_segment:
             logger.warning(
                 "weixin_oc(%s): outbound message ignored, no supported segments",
                 self.meta().id,
+            )
+        if failed_segments:
+            raise RuntimeError(
+                f"weixin_oc({self.meta().id}, target_user={target_user}) "
+                f"failed to send {failed_segments} message segment(s)"
             )
         await super().send_by_session(session, message_chain)
 

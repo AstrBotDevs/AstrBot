@@ -52,7 +52,6 @@ class ToolImageCache:
         self._initialized = True
         self._cache_dir = os.path.join(get_astrbot_temp_path(), self.CACHE_DIR_NAME)
         os.makedirs(self._cache_dir, exist_ok=True)
-        logger.debug(f"ToolImageCache initialized, cache dir: {self._cache_dir}")
 
     def _get_file_extension(self, mime_type: str) -> str:
         """Get file extension from MIME type."""

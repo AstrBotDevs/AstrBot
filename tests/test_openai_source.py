@@ -1,3 +1,4 @@
+import builtins
 from types import SimpleNamespace
 
 import pytest
@@ -5,6 +6,7 @@ from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
 
+import astrbot.core.provider.sources.openai_source as openai_source_module
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
@@ -50,6 +52,66 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
         provider_config=provider_config,
         provider_settings={},
     )
+
+
+def test_create_http_client_uses_openai_httpx_module(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_create_proxy_client(
+        provider_label: str,
+        proxy: str | None = None,
+        headers: dict[str, str] | None = None,
+        verify=None,
+        httpx_module=None,
+    ):
+        captured["httpx_module"] = httpx_module
+        return object()
+
+    monkeypatch.setattr(
+        openai_source_module,
+        "create_proxy_client",
+        fake_create_proxy_client,
+    )
+
+    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
+    provider._create_http_client({"proxy": ""})
+
+    from openai import _base_client as openai_base_client
+
+    assert captured["httpx_module"] is openai_base_client.httpx
+
+
+def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_create_proxy_client(
+        provider_label: str,
+        proxy: str | None = None,
+        headers: dict[str, str] | None = None,
+        verify=None,
+        httpx_module=None,
+    ):
+        captured["httpx_module"] = httpx_module
+        return object()
+
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "openai" and fromlist:
+            raise ImportError("missing openai._base_client")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(
+        openai_source_module,
+        "create_proxy_client",
+        fake_create_proxy_client,
+    )
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
+    provider._create_http_client({"proxy": ""})
+
+    assert captured["httpx_module"] is openai_source_module.httpx
 
 
 @pytest.mark.asyncio
@@ -1616,5 +1678,111 @@ async def test_query_does_not_filter_user_or_system_messages(monkeypatch):
         assert messages[0] == {"role": "system", "content": ""}
         assert messages[1] == {"role": "user", "content": ""}
         assert messages[2] == {"role": "user", "content": "hello"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_stream_filters_empty_assistant_message(monkeypatch):
+    """Regression for #7721: streaming path must also filter empty assistant messages.
+
+    Previously only ``_query`` sanitized the payload; ``_query_stream`` forwarded
+    the raw history and strict providers (e.g. DeepSeek Reasoner) returned 400 on
+    the next turn after a tool call whose assistant entry had reasoning only.
+    """
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+
+        async def fake_stream():
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "deepseek-reasoner",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+            )
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        payloads = {
+            "model": "deepseek-reasoner",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": ""},  # should be filtered
+                {"role": "user", "content": "world"},
+            ],
+        }
+
+        async for _ in provider._query_stream(payloads=payloads, tools=None):
+            pass
+
+        messages = captured_kwargs["messages"]
+        assert len(messages) == 2
+        assert messages[0] == {"role": "user", "content": "hello"}
+        assert messages[1] == {"role": "user", "content": "world"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
+    """Empty-list content (``content == []``) must also be filtered, not just ``""`` / ``None``."""
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            )
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        payloads = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": []},  # should be filtered
+                {"role": "user", "content": "again"},
+            ],
+        }
+
+        await provider._query(payloads=payloads, tools=None)
+
+        messages = captured_kwargs["messages"]
+        assert len(messages) == 2
+        assert messages[0] == {"role": "user", "content": "hi"}
+        assert messages[1] == {"role": "user", "content": "again"}
     finally:
         await provider.terminate()
