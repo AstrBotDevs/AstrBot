@@ -226,6 +226,7 @@ class Context:
             agent_context = AstrAgentContext(
                 context=self,
                 event=event,
+                trace_span=kwargs.get("trace_span"),
             )
         agent_runner = ToolLoopAgentRunner()
         tool_executor = FunctionToolExecutor()

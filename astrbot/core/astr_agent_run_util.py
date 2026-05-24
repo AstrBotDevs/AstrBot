@@ -185,13 +185,6 @@ async def run_agent(
                 if resp.type == "tool_call_result":
                     msg_chain = resp.data["chain"]
 
-                    astr_event.trace.record(
-                        "agent_tool_result",
-                        tool_result=msg_chain.get_plain_text(
-                            with_other_comps_mark=True
-                        ),
-                    )
-
                     if msg_chain.type == "tool_direct_result":
                         # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
                         await astr_event.send(msg_chain)
@@ -218,10 +211,6 @@ async def run_agent(
                         yield MessageChain(chain=[], type="break")
 
                     tool_info = _extract_chain_json_data(resp.data["chain"])
-                    astr_event.trace.record(
-                        "agent_tool_call",
-                        tool_name=tool_info if tool_info else "unknown",
-                    )
                     _record_tool_call_name(tool_info, tool_name_by_call_id)
 
                     if astr_event.get_platform_name() == "webchat":

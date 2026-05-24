@@ -41,12 +41,14 @@ class TraceSpan:
         umo: str | None = None,
         sender_name: str | None = None,
         message_outline: str | None = None,
+        parent_span_id: str | None = None,
     ) -> None:
         self.span_id = str(uuid.uuid4())
         self.name = name
         self.umo = umo
         self.sender_name = sender_name
         self.message_outline = message_outline
+        self.parent_span_id = parent_span_id
         self.started_at = time.time()
 
     def record(self, action: str, **fields: Any) -> None:
@@ -59,6 +61,7 @@ class TraceSpan:
             "level": "TRACE",
             "time": time.time(),
             "span_id": self.span_id,
+            "parent_span_id": self.parent_span_id,
             "name": self.name,
             "umo": self.umo,
             "sender_name": self.sender_name,

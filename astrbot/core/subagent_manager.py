@@ -67,6 +67,7 @@ class SubAgentSession:
     )  # 后台subagent结果存储: {agent_name: {task_id: SubAgentExecutionResult}}
     # 任务计数器: {agent_name: next_task_id}
     background_task_counters: dict = field(default_factory=dict)
+    subagent_traces: dict = field(default_factory=dict)  # {agent_name: TraceSpan}
     last_activity_at: float = field(default_factory=time.time)  # 最后活跃时间戳
 
 
@@ -778,7 +779,16 @@ Create sub-agents ONLY when:
     def set_subagent_status(cls, session_id: str, agent_name: str, status: str) -> None:
         session = cls._get_or_create_session(session_id)
         if agent_name in session.subagents:
+            old_status = session.subagent_status.get(agent_name, "UNKNOWN")
             session.subagent_status[agent_name] = status
+            trace = session.subagent_traces.get(agent_name)
+            if trace:
+                trace.record(
+                    "subagent_status_change",
+                    agent_name=agent_name,
+                    from_status=old_status,
+                    to_status=status,
+                )
 
     # for read-only operations
     @classmethod
@@ -845,11 +855,21 @@ Create sub-agents ONLY when:
             protected: If True, the subagent will not be auto-cleaned per turn.
                        Static subagents from config should be protected.
         """
+        from astrbot.core.utils.trace import TraceSpan
+
+        trace = TraceSpan(name=f"SubAgent:{config.name}", umo=session_id)
         session = cls._get_or_create_session(session_id)
         if config.name not in session.subagents:
             # Check max count limit
             active_count = len(session.subagents.keys())
             if active_count >= cls._max_subagent_count:
+                trace.record(
+                    "subagent_created",
+                    agent_name=config.name,
+                    success=False,
+                    reason="max_count_reached",
+                    max_count=cls._max_subagent_count,
+                )
                 return (
                     f"Error: Maximum number of subagents ({cls._max_subagent_count}) reached. More subagents is not allowed.",
                     None,
@@ -892,6 +912,16 @@ Create sub-agents ONLY when:
         # 如果标记为protected，则加入protected集合
         if protected:
             session.protected_agents.add(config.name)
+        trace.record(
+            "subagent_created",
+            agent_name=config.name,
+            success=True,
+            tools=list(config.tools) if config.tools else [],
+            skills=list(config.skills) if config.skills else [],
+            protected=protected,
+            provider_id=config.provider_id,
+        )
+        session.subagent_traces[config.name] = trace
         logger.info(
             "[SubAgent:Create] Created subagent: %s (protected=%s)",
             config.name,
@@ -927,6 +957,19 @@ Create sub-agents ONLY when:
         if (
             config.name not in session.subagents
         ):  # if the static agent already exists, pass
+            from astrbot.core.utils.trace import TraceSpan
+
+            trace = TraceSpan(name=f"SubAgent:{config.name}", umo=session_id)
+            trace.record(
+                "subagent_created",
+                agent_name=config.name,
+                success=True,
+                static=True,
+                tools=list(config.tools) if config.tools else [],
+                skills=list(config.skills) if config.skills else [],
+            )
+            session.subagent_traces[config.name] = trace
+
             if config.tools is None:
                 config.tools = None
             if config.tools is not None and not config.tools:
@@ -984,6 +1027,7 @@ Create sub-agents ONLY when:
             session.subagent_histories.pop(name, None)
             session.subagent_background_results.pop(name, None)
             session.background_task_counters.pop(name, None)
+            session.subagent_traces.pop(name, None)
             # 清理公共上下文中包含该Agent的内容
             cls.cleanup_shared_context_by_agent(session_id, name)
 
@@ -1004,6 +1048,7 @@ Create sub-agents ONLY when:
                 session.shared_context.clear()
                 session.subagent_background_results.clear()
                 session.background_task_counters.clear()
+                session.subagent_traces.clear()
                 logger.info("[SubAgent:Cleanup] All subagents cleaned.")
                 return "__SUBAGENT_REMOVED__: All subagents have been removed."
         else:
@@ -1164,6 +1209,17 @@ Create sub-agents ONLY when:
         task_store[task_id].completed_at = time.time()
         if metadata:
             task_store[task_id].metadata.update(metadata)
+
+        trace = session.subagent_traces.get(agent_name)
+        if trace:
+            trace.record(
+                "subagent_result_stored",
+                agent_name=agent_name,
+                task_id=task_id,
+                success=success,
+                execution_time=execution_time,
+                has_error=error is not None,
+            )
 
     @classmethod
     def get_subagent_result(
