@@ -999,50 +999,6 @@
           "description": "截断历史工具输出",
           "hint": "仅影响群聊 LTM 历史轮，不影响当前工具调用轮的完整推理。"
         },
-        "history_tool_result_max_chars": {
-          "description": "历史工具输出截断上限",
-          "hint": "单条工具输出写入群聊历史时的最大字符数，默认 8192。"
-        },
-        "ltm_compaction_strategy": {
-          "description": "LTM 上下文压缩策略",
-          "hint": "truncate: 按轮截断; llm_summary: 调用 LLM 做长期摘要。"
-        },
-        "ltm_max_rounds": {
-          "description": "LTM 最大保留轮数",
-          "hint": "truncate 策略生效时的截断上限，默认 80。"
-        },
-        "ltm_truncate_drop_rounds": {
-          "description": "截断时丢弃轮数",
-          "hint": "truncate 策略触发截断时，从前面丢弃的轮数。默认 50。"
-        },
-        "ltm_summary_trigger_rounds": {
-          "description": "摘要触发轮数",
-          "hint": "超过多少轮时触发 LLM 摘要压缩，默认 80。"
-        },
-        "ltm_summary_keep_recent_rounds": {
-          "description": "摘要时保留最近轮数",
-          "hint": "llm_summary 策略下保留最近 N 轮精确上下文，默认 30。"
-        },
-        "ltm_summary_provider_id": {
-          "description": "LTM 摘要模型",
-          "hint": "llm_summary 策略使用的模型，留空使用当前聊天模型。"
-        },
-        "ltm_summary_prompt": {
-          "description": "LTM 摘要提示词",
-          "hint": "llm_summary 策略的自定义摘要 prompt，不更改以使用内置默认。"
-        },
-        "ltm_raw_records_max_bytes": {
-          "description": "原始消息缓冲区内存上限",
-          "hint": "每个群聊的未消费消息缓冲区的最大字节数。用于防止长期未 @bot 的群内存溢出，默认 500000 (500KB)。"
-        },
-        "ltm_max_msgs_per_user_segment": {
-          "description": "用户段最大消息数",
-          "hint": "两次 @bot 之间积累的群聊消息合并为一个 user segment 时，最多保留多少条，默认 50。与字符上限同时生效，先到先停，至少保留一条。"
-        },
-        "ltm_max_chars_per_user_segment": {
-          "description": "用户段最大字符数",
-          "hint": "两次 @bot 之间积累的群聊消息合并为一个 user segment 时，最多保留多少字符，默认 3000。与条数上限同时生效，先到先停，至少保留一条。"
-        },
         "active_reply": {
           "enable": {
             "description": "主动回复"
