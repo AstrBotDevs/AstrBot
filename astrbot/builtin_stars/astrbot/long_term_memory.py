@@ -24,6 +24,8 @@ CHATROOM_SYSTEM_NOTE = (
     "You are now in a chatroom. "
     "Chat history messages below use the format '[username/time]: content'. "
     "Your own messages are presented via the standard assistant role.\n"
+    "Messages prefixed with '⚠️[DIRECTED AT YOU]' were explicitly "
+    "addressed to you via @mention. Prioritize these over surrounding chatter.\n"
 )
 
 MAX_MSGS_PER_USER_SEGMENT = 50
@@ -226,6 +228,12 @@ class LongTermMemory:
                     else:
                         parts.append(" [Image]")
                 elif isinstance(comp, At):
+                    is_at_self = str(comp.qq) in (
+                        event.get_self_id(),
+                        "all",
+                    )
+                    if is_at_self:
+                        parts.insert(1, "⚠️[DIRECTED AT YOU] ")
                     parts.append(f" [At: {comp.name}]")
 
             final_message = "".join(parts)
