@@ -322,11 +322,21 @@ class ProviderAnthropic(Provider):
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
-                payloads["tool_choice"] = {
-                    "type": "any"
-                    if payloads.get("tool_choice") == "required"
-                    else "auto"
-                }
+                # 转换为 Anthropic API 要求的 tool_choice 格式
+                # 参考: https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools#providing-tool-use-examples
+                if "tool_choice" in payloads:
+                    tool_choice = payloads["tool_choice"]
+                    if isinstance(tool_choice, dict):
+                        payloads["tool_choice"] = tool_choice
+                    elif tool_choice == "required":
+                        # 兼容 OpenAI 命名
+                        payloads["tool_choice"] = {"type": "any"}
+                    elif tool_choice in ("auto", "any", "none", "tool"):
+                        payloads["tool_choice"] = {"type": tool_choice}
+                    else:
+                        payloads["tool_choice"] = {"type": "auto"}
+                else:
+                    payloads["tool_choice"] = {"type": "auto"}
 
         extra_body = self.provider_config.get("custom_extra_body", {})
 
@@ -409,11 +419,20 @@ class ProviderAnthropic(Provider):
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
-                payloads["tool_choice"] = {
-                    "type": "any"
-                    if payloads.get("tool_choice") == "required"
-                    else "auto"
-                }
+                # 转换为 Anthropic API 要求的 tool_choice 格式
+                if "tool_choice" in payloads:
+                    tool_choice = payloads["tool_choice"]
+                    if isinstance(tool_choice, dict):
+                        payloads["tool_choice"] = tool_choice
+                    elif tool_choice == "required":
+                        # 兼容 OpenAI 命名
+                        payloads["tool_choice"] = {"type": "any"}
+                    elif tool_choice in ("auto", "any", "none", "tool"):
+                        payloads["tool_choice"] = {"type": tool_choice}
+                    else:
+                        payloads["tool_choice"] = {"type": "auto"}
+                else:
+                    payloads["tool_choice"] = {"type": "auto"}
 
         # 用于累积工具调用信息
         tool_use_buffer = {}
@@ -569,7 +588,7 @@ class ProviderAnthropic(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
-        tool_choice: Literal["auto", "required"] = "auto",
+        tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -598,8 +617,8 @@ class ProviderAnthropic(Provider):
             if not isinstance(tool_calls_result, list):
                 context_query.extend(tool_calls_result.to_openai_messages())
             else:
-                for tcr in tool_calls_result:
-                    context_query.extend(tcr.to_openai_messages())
+                for tool_choicer in tool_calls_result:
+                    context_query.extend(tool_choicer.to_openai_messages())
 
         system_prompt, new_messages = self._prepare_payload(context_query)
 
@@ -637,7 +656,7 @@ class ProviderAnthropic(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
-        tool_choice: Literal["auto", "required"] = "auto",
+        tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
         **kwargs,
     ):
         if contexts is None:
@@ -665,8 +684,8 @@ class ProviderAnthropic(Provider):
             if not isinstance(tool_calls_result, list):
                 context_query.extend(tool_calls_result.to_openai_messages())
             else:
-                for tcr in tool_calls_result:
-                    context_query.extend(tcr.to_openai_messages())
+                for tool_choicer in tool_calls_result:
+                    context_query.extend(tool_choicer.to_openai_messages())
 
         system_prompt, new_messages = self._prepare_payload(context_query)
 
