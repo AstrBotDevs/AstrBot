@@ -1025,10 +1025,7 @@ class ProviderOpenAIOfficial(Provider):
             "mimo-v2-omni",
             "mimo-v2-flash",
         }
-        is_mimo_reasoning = (
-            model in mimo_reasoning_models
-            or "xiaomimimo.com" in self.client.base_url.host
-        )
+        is_mimo_reasoning = model in mimo_reasoning_models
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list

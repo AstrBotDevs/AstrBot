@@ -1856,34 +1856,6 @@ async def test_mimo_non_reasoning_model_does_not_add_reasoning_content(model: st
 
 
 @pytest.mark.asyncio
-async def test_mimo_api_host_adds_reasoning_content():
-    """通过 xiaomimimo.com 端点调用的模型自动补 reasoning_content"""
-    import httpx
-
-    provider = _make_provider()
-    try:
-        provider.client.base_url = httpx.URL("https://api.xiaomimimo.com/v1")
-
-        payloads = {
-            "model": "some-unknown-model",
-            "messages": [
-                {"role": "user", "content": "hello"},
-                {
-                    "role": "assistant",
-                    "content": "response",
-                },
-            ],
-        }
-
-        provider._finally_convert_payload(payloads)
-
-        assistant = payloads["messages"][1]
-        assert assistant["reasoning_content"] == ""
-    finally:
-        await provider.terminate()
-
-
-@pytest.mark.asyncio
 async def test_mimo_reasoning_preserves_existing_reasoning_content():
     """已有 reasoning_content 的 assistant 消息不会被覆盖"""
     provider = _make_provider()
