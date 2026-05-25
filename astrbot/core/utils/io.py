@@ -16,6 +16,8 @@ import certifi
 import psutil
 from PIL import Image
 
+from astrbot.core.config.update_config import UpdateConfig
+
 from .astrbot_path import get_astrbot_data_path, get_astrbot_path, get_astrbot_temp_path
 from .version_comparator import VersionComparator
 
@@ -400,14 +402,21 @@ async def download_dashboard(
     progress_callback=None,
 ) -> None:
     """下载管理面板文件"""
+    update_config = UpdateConfig()
+
     if path is None:
         zip_path = Path(get_astrbot_data_path()).absolute() / "dashboard.zip"
     else:
         zip_path = Path(path).absolute()
 
+    # 使用配置的代理（如果未传入 proxy 参数）
+    effective_proxy = proxy
+    if not effective_proxy and update_config.is_proxy_enabled():
+        effective_proxy = update_config.get_proxy_url()
+
     if latest or len(str(version)) != 40:
         ver_name = "latest" if latest else version
-        dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
+        dashboard_release_url = update_config.get_dashboard_registry_url(ver_name)
         logger.info(
             f"Downloading AstrBot WebUI from {dashboard_release_url}",
         )
@@ -427,7 +436,7 @@ async def download_dashboard(
                     trust_env=True,
                 ) as session:
                     async with session.get(
-                        "https://api.github.com/repos/AstrBotDevs/AstrBot/releases/latest",
+                        update_config.get_dashboard_github_release_api_url(),
                         timeout=30,
                         headers={"Accept": "application/vnd.github+json"},
                     ) as api_resp:
@@ -436,9 +445,9 @@ async def download_dashboard(
                         tag = release_data["tag_name"]
             else:
                 tag = version
-            dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{tag}/AstrBot-{tag}-dashboard.zip"
-            if proxy:
-                dashboard_release_url = f"{proxy}/{dashboard_release_url}"
+            dashboard_release_url = update_config.get_dashboard_github_release_download_url(tag)
+            if effective_proxy:
+                dashboard_release_url = f"{effective_proxy}/{dashboard_release_url}"
             await download_file(
                 dashboard_release_url,
                 str(zip_path),
@@ -446,10 +455,10 @@ async def download_dashboard(
                 progress_callback=progress_callback,
             )
     else:
-        url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
+        url = update_config.get_dashboard_harbour_url(version)
         logger.info(f"Downloading AstrBot WebUI from {url}")
-        if proxy:
-            url = f"{proxy}/{url}"
+        if effective_proxy:
+            url = f"{effective_proxy}/{url}"
         await download_file(
             url,
             str(zip_path),
