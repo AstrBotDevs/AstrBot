@@ -1786,3 +1786,126 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert messages[1] == {"role": "user", "content": "again"}
     finally:
         await provider.terminate()
+
+
+# ===== MiMo reasoning_content 回传测试 =====
+
+MIMO_REASONING_MODELS = [
+    "mimo-v2.5-pro",
+    "mimo-v2.5",
+    "mimo-v2-pro",
+    "mimo-v2-omni",
+    "mimo-v2-flash",
+]
+
+MIMO_NON_REASONING_MODELS = [
+    "mimo-v2-tts",
+    "mimo-v2.5-tts",
+    "mimo-v2.5-tts-voicedesign",
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", MIMO_REASONING_MODELS)
+async def test_mimo_reasoning_model_adds_empty_reasoning_content(model: str):
+    """MiMo 推理模型：assistant 消息缺少 reasoning_content 时自动补空字符串"""
+    provider = _make_provider()
+    try:
+        payloads = {
+            "model": model,
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {
+                    "role": "assistant",
+                    "content": "I will help with that.",
+                },
+            ],
+        }
+
+        provider._finally_convert_payload(payloads)
+
+        assistant = payloads["messages"][1]
+        assert assistant["reasoning_content"] == ""
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", MIMO_NON_REASONING_MODELS)
+async def test_mimo_non_reasoning_model_does_not_add_reasoning_content(model: str):
+    """MiMo 非推理模型（TTS 等）：不应自动注入 reasoning_content"""
+    provider = _make_provider()
+    try:
+        payloads = {
+            "model": model,
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {
+                    "role": "assistant",
+                    "content": "speaking...",
+                },
+            ],
+        }
+
+        provider._finally_convert_payload(payloads)
+
+        assistant = payloads["messages"][1]
+        assert "reasoning_content" not in assistant
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_mimo_api_host_adds_reasoning_content():
+    """通过 xiaomimimo.com 端点调用的模型自动补 reasoning_content"""
+    import httpx
+
+    provider = _make_provider()
+    try:
+        provider.client.base_url = httpx.URL("https://api.xiaomimimo.com/v1")
+
+        payloads = {
+            "model": "some-unknown-model",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {
+                    "role": "assistant",
+                    "content": "response",
+                },
+            ],
+        }
+
+        provider._finally_convert_payload(payloads)
+
+        assistant = payloads["messages"][1]
+        assert assistant["reasoning_content"] == ""
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_mimo_reasoning_preserves_existing_reasoning_content():
+    """已有 reasoning_content 的 assistant 消息不会被覆盖"""
+    provider = _make_provider()
+    try:
+        payloads = {
+            "model": "mimo-v2.5-pro",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "think", "think": "let me think..."},
+                        {"type": "text", "text": "here is the answer"},
+                    ],
+                },
+            ],
+        }
+
+        provider._finally_convert_payload(payloads)
+
+        assistant = payloads["messages"][1]
+        assert assistant["reasoning_content"] == "let me think..."
+        assert assistant["content"] == [{"type": "text", "text": "here is the answer"}]
+    finally:
+        await provider.terminate()
