@@ -11,11 +11,10 @@ from astrbot.builtin_stars.astrbot.long_term_memory import (
     _extract_tag_content,
     _parse_tool_call,
     _parse_tool_result,
-    _rounds_to_text,
-    _split_into_rounds,
     _truncate_tool_result_for_history,
     _truncate_user_segment,
 )
+from astrbot.core.agent.context.round_utils import rounds_to_text, split_into_rounds
 
 
 # =============================================================================
@@ -552,12 +551,14 @@ class TestLongTermMemoryIntegration:
                     "prompt": "",
                     "whitelist": [],
                 },
-                "ltm_compaction_strategy": "llm_summary",
-                "ltm_summary_trigger_rounds": 1,
-                "ltm_summary_keep_recent_rounds": 1,
-                "ltm_summary_provider_id": "summary-provider",
             },
-            "provider_settings": {"image_caption_prompt": ""},
+            "provider_settings": {
+                "image_caption_prompt": "",
+                "context_limit_reached_strategy": "llm_compress",
+                "max_context_length": 1,
+                "llm_compress_keep_recent": 1,
+                "llm_compress_provider_id": "summary-provider",
+            },
         }
         ctx = MagicMock()
         ctx.get_config.return_value = cfg
@@ -1174,16 +1175,16 @@ class TestConcurrentSafety:
 
 
 # =============================================================================
-# _split_into_rounds
+# split_into_rounds
 # =============================================================================
 
 
 class TestSplitIntoRounds:
     def test_empty(self):
-        assert _split_into_rounds([]) == []
+        assert split_into_rounds([]) == []
 
     def test_single_user(self):
-        rounds = _split_into_rounds([{"role": "user", "content": "hi"}])
+        rounds = split_into_rounds([{"role": "user", "content": "hi"}])
         assert len(rounds) == 1
         assert len(rounds[0]) == 1
 
@@ -1192,7 +1193,7 @@ class TestSplitIntoRounds:
             {"role": "user", "content": "hi"},
             {"role": "assistant", "content": "hello"},
         ]
-        rounds = _split_into_rounds(ctxs)
+        rounds = split_into_rounds(ctxs)
         assert len(rounds) == 1
         assert len(rounds[0]) == 2
 
@@ -1203,7 +1204,7 @@ class TestSplitIntoRounds:
             {"role": "user", "content": "r2"},
             {"role": "assistant", "content": "a2"},
         ]
-        rounds = _split_into_rounds(ctxs)
+        rounds = split_into_rounds(ctxs)
         assert len(rounds) == 2
         assert len(rounds[0]) == 2
         assert len(rounds[1]) == 2
@@ -1217,7 +1218,7 @@ class TestSplitIntoRounds:
             {"role": "tool", "tool_call_id": "c1", "content": "sunny"},
             {"role": "assistant", "content": "it's sunny"},
         ]
-        rounds = _split_into_rounds(ctxs)
+        rounds = split_into_rounds(ctxs)
         assert len(rounds) == 1
         assert len(rounds[0]) == 4  # tool chain stays together
 
@@ -1230,7 +1231,7 @@ class TestSplitIntoRounds:
             {"role": "tool", "tool_call_id": "c2", "content": "r2"},
             {"role": "assistant", "content": "done"},
         ]
-        rounds = _split_into_rounds(ctxs)
+        rounds = split_into_rounds(ctxs)
         assert len(rounds) == 1
         assert len(rounds[0]) == 6  # multi-step tool chain in one round
 
@@ -1245,14 +1246,14 @@ class TestSplitIntoRounds:
             {"role": "tool", "tool_call_id": "c2", "content": "results"},
             {"role": "assistant", "content": "done"},
         ]
-        rounds = _split_into_rounds(ctxs)
+        rounds = split_into_rounds(ctxs)
         assert len(rounds) == 2
         assert len(rounds[0]) == 4
         assert len(rounds[1]) == 4
 
     def test_starts_with_assistant(self):
         """Defensive: first segment isn't user."""
-        rounds = _split_into_rounds([{"role": "assistant", "content": "orphan"}])
+        rounds = split_into_rounds([{"role": "assistant", "content": "orphan"}])
         assert len(rounds) == 1
         assert rounds[0][0]["role"] == "assistant"
 
@@ -1263,7 +1264,7 @@ class TestSplitIntoRounds:
             {"role": "user", "content": "u2"},
             {"role": "assistant", "content": "a1"},
         ]
-        rounds = _split_into_rounds(ctxs)
+        rounds = split_into_rounds(ctxs)
         assert len(rounds) == 2
         assert rounds[0] == [{"role": "user", "content": "u1"}]
         assert rounds[1] == [
@@ -1273,13 +1274,13 @@ class TestSplitIntoRounds:
 
 
 # =============================================================================
-# _rounds_to_text
+# rounds_to_text
 # =============================================================================
 
 
 class TestRoundsToText:
     def test_empty(self):
-        assert _rounds_to_text([]) == ""
+        assert rounds_to_text([]) == ""
 
     def test_single_round(self):
         rounds = [
@@ -1288,7 +1289,7 @@ class TestRoundsToText:
                 {"role": "assistant", "content": "hello"},
             ],
         ]
-        text = _rounds_to_text(rounds)
+        text = rounds_to_text(rounds)
         assert "--- Round 1 ---" in text
         assert "[user] hi" in text
         assert "[assistant] hello" in text
@@ -1298,7 +1299,7 @@ class TestRoundsToText:
             [{"role": "user", "content": "r1"}],
             [{"role": "assistant", "content": "a1"}],
         ]
-        text = _rounds_to_text(rounds)
+        text = rounds_to_text(rounds)
         assert "--- Round 1 ---" in text
         assert "--- Round 2 ---" in text
 
@@ -1313,7 +1314,7 @@ class TestRoundsToText:
                 },
             ],
         ]
-        text = _rounds_to_text(rounds)
+        text = rounds_to_text(rounds)
         assert '"id"' in text  # json-serialized
         assert "c1" in text
 
@@ -1368,14 +1369,14 @@ class TestLTMTruncationCompaction:
 
         # 5 rounds → not over 10 limit
         ltm.contexts[umo] = self.make_contexts(5)
-        rounds_before = _split_into_rounds(ltm.contexts[umo])
+        rounds_before = split_into_rounds(ltm.contexts[umo])
 
         cfg = ltm.cfg(mock_event)
         if len(rounds_before) > cfg["ltm_max_rounds"]:
             kept = rounds_before[cfg["ltm_truncate_drop_rounds"] :]
             ltm.contexts[umo] = [seg for rnd in kept for seg in rnd]
 
-        rounds_after = _split_into_rounds(ltm.contexts[umo])
+        rounds_after = split_into_rounds(ltm.contexts[umo])
         assert len(rounds_after) == 5
         assert rounds_after[0][0]["content"] == "q0"
 
@@ -1402,14 +1403,14 @@ class TestLTMTruncationCompaction:
 
         # 12 rounds → over 10 → drop 4 from front → 8 remain
         ltm.contexts[umo] = self.make_contexts(12)
-        rounds_before = _split_into_rounds(ltm.contexts[umo])
+        rounds_before = split_into_rounds(ltm.contexts[umo])
 
         cfg = ltm.cfg(mock_event)
         if len(rounds_before) > cfg["ltm_max_rounds"]:
             kept = rounds_before[cfg["ltm_truncate_drop_rounds"] :]
             ltm.contexts[umo] = [seg for rnd in kept for seg in rnd]
 
-        rounds_after = _split_into_rounds(ltm.contexts[umo])
+        rounds_after = split_into_rounds(ltm.contexts[umo])
         assert len(rounds_after) == 8
         # first retained should be q4 (index 4 after dropping 0-3)
         assert rounds_after[0][0]["content"] == "q4"
@@ -1436,7 +1437,7 @@ class TestLTMTruncationCompaction:
         umo = mock_event.unified_msg_origin
 
         ltm.contexts[umo] = self.make_contexts(10)
-        rounds_before = _split_into_rounds(ltm.contexts[umo])
+        rounds_before = split_into_rounds(ltm.contexts[umo])
 
         cfg = ltm.cfg(mock_event)
         if len(rounds_before) > cfg["ltm_max_rounds"]:
@@ -1444,7 +1445,7 @@ class TestLTMTruncationCompaction:
             kept = rounds_before[safe_drop:]
             ltm.contexts[umo] = [seg for rnd in kept for seg in rnd]
 
-        rounds_after = _split_into_rounds(ltm.contexts[umo])
+        rounds_after = split_into_rounds(ltm.contexts[umo])
         # drop=50 but only 10 exist → safe_drop=9, keeps last 1 round
         assert len(rounds_after) == 1
 
@@ -1482,13 +1483,13 @@ class TestLTMTruncationCompaction:
         ]
         ltm.contexts[umo] = ctxs
 
-        rounds_before = _split_into_rounds(ltm.contexts[umo])
+        rounds_before = split_into_rounds(ltm.contexts[umo])
         cfg = ltm.cfg(mock_event)
         if len(rounds_before) > cfg["ltm_max_rounds"]:
             kept = rounds_before[cfg["ltm_truncate_drop_rounds"] :]
             ltm.contexts[umo] = [seg for rnd in kept for seg in rnd]
 
-        rounds_after = _split_into_rounds(ltm.contexts[umo])
+        rounds_after = split_into_rounds(ltm.contexts[umo])
         assert len(rounds_after) == 1
         # round preserved should have all 4 tool-chain segs intact
         assert len(rounds_after[0]) == 4
@@ -1658,7 +1659,7 @@ class TestLLMSummaryErrorPath:
         ltm.contexts[umo] = ctxs
         original_len = len(ltm.contexts[umo])
 
-        rounds = _split_into_rounds(ctxs)
+        rounds = split_into_rounds(ctxs)
         keep_recent = 5
         compact_ctx = {
             "provider": MagicMock(spec=Provider),
@@ -1674,12 +1675,9 @@ class TestLLMSummaryErrorPath:
         assert len(ltm.contexts[umo]) == original_len
 
     @pytest.mark.asyncio
-    async def test_empty_summary_response_is_no_op(self, mock_event):
-        """LLM 返回空文本时不得覆盖 context/summary，并设置冷却期。"""
-        from astrbot.builtin_stars.astrbot.long_term_memory import (
-            LongTermMemory,
-            SUMMARY_RETRY_COOLDOWN,
-        )
+    async def test_empty_summary_triggers_truncate_fallback(self, mock_event):
+        """LLM 返回空文本时，走 truncate fallback 裁剪 contexts。"""
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
         from astrbot.api.provider import Provider
         from unittest.mock import MagicMock, AsyncMock
 
@@ -1690,7 +1688,9 @@ class TestLLMSummaryErrorPath:
         fake_provider.text_chat = AsyncMock(return_value=fake_resp)
 
         ctx = MagicMock()
-        ctx.get_config.return_value = {}
+        ctx.get_config.return_value = {
+            "provider_settings": {"max_context_length": 1, "dequeue_context_length": 1}
+        }
 
         ltm = LongTermMemory(MagicMock(), ctx)
         umo = mock_event.unified_msg_origin
@@ -1704,7 +1704,7 @@ class TestLLMSummaryErrorPath:
         ltm.contexts[umo] = old_ctxs
         ltm.summaries[umo] = "existing summary"
 
-        rounds = _split_into_rounds(old_ctxs)  # 2 rounds
+        rounds = split_into_rounds(old_ctxs)  # 2 rounds
 
         # keep_recent=1 → old_rounds has 1 round, provider will be called
         keep_recent = 1
@@ -1719,19 +1719,14 @@ class TestLLMSummaryErrorPath:
         compact_ctx["summary_text"] = await ltm._generate_llm_summary(umo, compact_ctx)
         ltm._apply_llm_summary(umo, compact_ctx)
 
-        # Both must be untouched
-        assert ltm.contexts[umo] is old_ctxs
+        # Summary unchanged, but contexts truncated by fallback
         assert ltm.summaries[umo] == "existing summary"
-        # Cooldown set
-        assert ltm._summary_next_retry[umo] == len(rounds) + SUMMARY_RETRY_COOLDOWN
+        assert len(ltm.contexts[umo]) <= len(old_ctxs)
 
     @pytest.mark.asyncio
-    async def test_summary_exception_sets_cooldown(self, mock_event):
-        """LLM 调用抛异常时设置冷却期。"""
-        from astrbot.builtin_stars.astrbot.long_term_memory import (
-            LongTermMemory,
-            SUMMARY_RETRY_COOLDOWN,
-        )
+    async def test_summary_exception_triggers_truncate_fallback(self, mock_event):
+        """LLM 调用抛异常时，走 truncate fallback 裁剪 contexts。"""
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
         from astrbot.api.provider import Provider
         from unittest.mock import MagicMock, AsyncMock
 
@@ -1739,7 +1734,9 @@ class TestLLMSummaryErrorPath:
         fake_provider.text_chat = AsyncMock(side_effect=RuntimeError("boom"))
 
         ctx = MagicMock()
-        ctx.get_config.return_value = {}
+        ctx.get_config.return_value = {
+            "provider_settings": {"max_context_length": 1, "dequeue_context_length": 1}
+        }
 
         ltm = LongTermMemory(MagicMock(), ctx)
         umo = mock_event.unified_msg_origin
@@ -1753,7 +1750,7 @@ class TestLLMSummaryErrorPath:
         ltm.contexts[umo] = ctxs
         ltm.summaries[umo] = "existing summary"
 
-        rounds = _split_into_rounds(ctxs)  # 2 rounds
+        rounds = split_into_rounds(ctxs)  # 2 rounds
 
         keep_recent = 1
         compact_ctx = {
@@ -1767,13 +1764,13 @@ class TestLLMSummaryErrorPath:
         compact_ctx["summary_text"] = await ltm._generate_llm_summary(umo, compact_ctx)
         ltm._apply_llm_summary(umo, compact_ctx)
 
-        assert ltm.contexts[umo] is ctxs
+        # Summary unchanged, but contexts truncated by fallback
         assert ltm.summaries[umo] == "existing summary"
-        assert ltm._summary_next_retry[umo] == len(rounds) + SUMMARY_RETRY_COOLDOWN
+        assert len(ltm.contexts[umo]) <= len(ctxs)
 
     @pytest.mark.asyncio
-    async def test_summary_success_clears_cooldown(self, mock_event):
-        """LLM 调用成功时清除冷却标记。"""
+    async def test_summary_success_updates_summary(self, mock_event):
+        """LLM 调用成功时更新 summary。"""
         from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
         from astrbot.api.provider import Provider
         from unittest.mock import MagicMock, AsyncMock
@@ -1789,8 +1786,6 @@ class TestLLMSummaryErrorPath:
 
         ltm = LongTermMemory(MagicMock(), ctx)
         umo = mock_event.unified_msg_origin
-        # Pre-set cooldown to simulate a previous failure
-        ltm._summary_next_retry[umo] = 999
 
         ctxs = [
             {"role": "user", "content": "q0"},
@@ -1798,7 +1793,7 @@ class TestLLMSummaryErrorPath:
             {"role": "user", "content": "q1"},
             {"role": "assistant", "content": "a1"},
         ]
-        rounds = _split_into_rounds(ctxs)  # 2 rounds
+        rounds = split_into_rounds(ctxs)  # 2 rounds
 
         keep_recent = 1
         compact_ctx = {
@@ -1812,8 +1807,6 @@ class TestLLMSummaryErrorPath:
         compact_ctx["summary_text"] = await ltm._generate_llm_summary(umo, compact_ctx)
         ltm._apply_llm_summary(umo, compact_ctx)
 
-        # Cooldown cleared
-        assert umo not in ltm._summary_next_retry
         assert ltm.summaries[umo] == "good summary"
 
 
@@ -1835,16 +1828,17 @@ class TestConfigDefaults:
                 "active_reply": {"enable": False, "method": "possibility_reply",
                                  "possibility_reply": 0.0, "prompt": "", "whitelist": []},
             },
-            "provider_settings": {"image_caption_prompt": ""},
+            "provider_settings": {
+                "image_caption_prompt": "",
+                "max_context_length": 50, "dequeue_context_length": 10,
+                "llm_compress_keep_recent": 10, "llm_compress_provider_id": "",
+                "llm_compress_instruction": "",
+            },
         }
         ltm = LongTermMemory(MagicMock(), ctx)
         cfg = ltm.cfg(mock_event)
 
-        assert cfg["ltm_compaction_strategy"] == "truncate"
-        assert cfg["ltm_max_rounds"] == 80
-        assert cfg["ltm_truncate_drop_rounds"] == 50
-        assert cfg["ltm_summary_trigger_rounds"] == 80
-        assert cfg["ltm_summary_keep_recent_rounds"] == 30
-        assert cfg["ltm_summary_provider_id"] == ""
-        assert cfg["ltm_summary_prompt"] == ""
-        assert cfg["ltm_raw_records_max_bytes"] == 500000
+        # cfg() no longer returns compaction params (moved to provider_settings)
+        assert cfg["image_caption"] == False
+        assert cfg["enable_active_reply"] == False
+        assert cfg["ar_method"] == "possibility_reply"

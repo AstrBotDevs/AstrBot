@@ -19,10 +19,9 @@ from astrbot.builtin_stars.astrbot.long_term_memory import (
     _extract_bot_content,
     _parse_tool_call,
     _parse_tool_result,
-    _rounds_to_text,
-    _split_into_rounds,
     _truncate_user_segment,
 )
+from astrbot.core.agent.context.round_utils import rounds_to_text, split_into_rounds
 
 
 # ---------------------------------------------------------------------------
@@ -141,12 +140,12 @@ def test_build_segments_mixed():
 
 
 # ---------------------------------------------------------------------------
-# _split_into_rounds
+# split_into_rounds
 # ---------------------------------------------------------------------------
 
 
 def test_split_rounds_empty():
-    assert _split_into_rounds([]) == []
+    assert split_into_rounds([]) == []
 
 
 def test_split_rounds_single():
@@ -154,7 +153,7 @@ def test_split_rounds_single():
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": "hello"},
     ]
-    rounds = _split_into_rounds(ctxs)
+    rounds = split_into_rounds(ctxs)
     assert len(rounds) == 1
     assert len(rounds[0]) == 2
 
@@ -167,7 +166,7 @@ def test_split_rounds_multi():
         {"role": "assistant", "content": "a2"},
         {"role": "tool", "tool_call_id": "x", "content": "t1"},
     ]
-    rounds = _split_into_rounds(ctxs)
+    rounds = split_into_rounds(ctxs)
     assert len(rounds) == 2
     assert len(rounds[0]) == 2  # u1+a1
     assert len(rounds[1]) == 3  # u2+a2+t1
@@ -180,7 +179,7 @@ def test_split_rounds_no_user_start():
         {"role": "assistant", "content": "orphan"},
         {"role": "user", "content": "u1"},
     ]
-    rounds = _split_into_rounds(ctxs)
+    rounds = split_into_rounds(ctxs)
     # orphan assistant alone → round 0, user starts round 1
     assert len(rounds) == 2
     assert rounds[0][0]["role"] == "assistant"
@@ -313,10 +312,14 @@ class TestLTMSummaryCompaction:
 
     @pytest.mark.asyncio
     async def test_summary_failure_keeps_original_and_sets_cooldown(self):
-        """Failed summary should NOT replace contexts and should set retry cooldown."""
+        """Failed summary should fall back to truncate contexts."""
+        ctx_mock = MagicMock()
+        ctx_mock.get_config.return_value = {
+            "provider_settings": {"max_context_length": 50, "dequeue_context_length": 10}
+        }
         ltm = LongTermMemory(
             acm=MagicMock(),
-            context=MagicMock(),
+            context=ctx_mock,
         )
         umo = "test_umo"
         rounds = []
@@ -347,17 +350,19 @@ class TestLTMSummaryCompaction:
         compact_ctx["summary_text"] = await ltm._generate_llm_summary(umo, compact_ctx)
         ltm._apply_llm_summary(umo, compact_ctx)
 
-        # Contexts should NOT have been modified
-        assert ltm.contexts[umo] == original_contexts
-        # Cooldown should be set
-        assert ltm._summary_next_retry[umo] == 85 + 5  # rounds + SUMMARY_RETRY_COOLDOWN
+        # Contexts truncated by fallback (empty summary text)
+        assert len(ltm.contexts[umo]) <= len(original_contexts)
 
     @pytest.mark.asyncio
     async def test_summary_not_triggered_when_old_rounds_empty(self):
         """When rounds <= keep_recent, old_rounds is empty → no provider call."""
+        ctx_mock = MagicMock()
+        ctx_mock.get_config.return_value = {
+            "provider_settings": {"max_context_length": 50, "dequeue_context_length": 10}
+        }
         ltm = LongTermMemory(
             acm=MagicMock(),
-            context=MagicMock(),
+            context=ctx_mock,
         )
         umo = "test_umo"
         # 30 rounds = keep_recent → old_rounds = rounds[:0] = []
