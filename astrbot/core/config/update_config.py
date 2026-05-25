@@ -87,10 +87,14 @@ class UpdateConfig(dict):
             return merged
 
         except json.JSONDecodeError as e:
-            logger.warning("更新配置文件格式错误 (%s)，使用默认配置: %s", e, self.config_path)
+            logger.warning(
+                "更新配置文件格式错误 (%s)，使用默认配置: %s", e, self.config_path
+            )
             return DEFAULT_CONFIG.copy()
         except Exception as e:
-            logger.warning("读取更新配置文件失败 (%s)，使用默认配置: %s", e, self.config_path)
+            logger.warning(
+                "读取更新配置文件失败 (%s)，使用默认配置: %s", e, self.config_path
+            )
             return DEFAULT_CONFIG.copy()
 
     @staticmethod
@@ -98,7 +102,11 @@ class UpdateConfig(dict):
         """递归合并配置，用户配置覆盖默认值."""
         result = default.copy()
         for key, value in user.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
                 result[key] = UpdateConfig._merge_config(result[key], value)
             else:
                 result[key] = value
@@ -143,7 +151,10 @@ class UpdateConfig(dict):
 
     def get_core_release_api_url(self) -> str:
         """获取 Core 版本检查 API 地址."""
-        return self._get_value("core_update.release_api_url", DEFAULT_CONFIG["core_update"]["release_api_url"])
+        return self._get_value(
+            "core_update.release_api_url",
+            DEFAULT_CONFIG["core_update"]["release_api_url"],
+        )
 
     def get_github_archive_url(self, version: str) -> str:
         """获取 GitHub 归档下载地址.

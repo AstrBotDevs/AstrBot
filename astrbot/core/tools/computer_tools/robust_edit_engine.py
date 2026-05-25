@@ -18,10 +18,10 @@ import asyncio
 import difflib
 import os
 import weakref
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Literal
 
 Replacer = Callable[[str, str], Iterator[str]]
 
@@ -59,8 +59,6 @@ def _normalize_line_endings(text: str) -> str:
     _escape_normalized_replacer in the replacer chain.
     """
     return text.replace("\r\n", "\n")
-
-
 
 
 def _detect_line_ending(text: str) -> Literal["\n", "\r\n"]:
@@ -335,12 +333,8 @@ def _indentation_flexible_replacer(content: str, find: str) -> Iterator[str]:
         non_empty = [ln for ln in lines if ln.strip()]
         if not non_empty:
             return text
-        min_indent = min(
-            len(ln) - len(ln.lstrip()) for ln in non_empty if ln.strip()
-        )
-        return "\n".join(
-            ln[min_indent:] if ln.strip() else ln for ln in lines
-        )
+        min_indent = min(len(ln) - len(ln.lstrip()) for ln in non_empty if ln.strip())
+        return "\n".join(ln[min_indent:] if ln.strip() else ln for ln in lines)
 
     normalized_find = _remove_indent(find)
     content_lines = content.split("\n")
@@ -463,7 +457,9 @@ def robust_replace(
                     matches are found (when replace_all=False).
     """
     if old_string == new_string:
-        raise ValueError("No changes to apply: old_string and new_string are identical.")
+        raise ValueError(
+            "No changes to apply: old_string and new_string are identical."
+        )
 
     not_found = True
 
@@ -495,14 +491,16 @@ def robust_replace(
             new_content = content
             replacements = 0
             for idx, match in sorted(match_positions, key=lambda x: x[0], reverse=True):
-                new_content = new_content[:idx] + new_string + new_content[idx + len(match):]
+                new_content = (
+                    new_content[:idx] + new_string + new_content[idx + len(match) :]
+                )
                 replacements += 1
             return new_content, replacements
 
         # Single replacement mode: require exactly one match
         if len(match_positions) == 1:
             idx, match = match_positions[0]
-            return content[:idx] + new_string + content[idx + len(match):], 1
+            return content[:idx] + new_string + content[idx + len(match) :], 1
 
         # Multiple matches found in single-replacement mode: continue to next replacer
         # to try a more specific strategy
@@ -582,7 +580,10 @@ async def edit_file(
             normalized_content = _normalize_line_endings(old_content)
             # Perform replacement
             new_content, replacements = robust_replace(
-                normalized_content, normalized_old, normalized_new, replace_all=replace_all
+                normalized_content,
+                normalized_old,
+                normalized_new,
+                replace_all=replace_all,
             )
 
             # Convert back to original line endings
@@ -600,8 +601,10 @@ async def edit_file(
 
             # Generate unified diff
             diff = _generate_unified_diff(
-                path, old_content.splitlines(keepends=True),
-                path, new_content.splitlines(keepends=True)
+                path,
+                old_content.splitlines(keepends=True),
+                path,
+                new_content.splitlines(keepends=True),
             )
 
             return EditResult(

@@ -22,14 +22,14 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 
+from ..registry import builtin_tool
 from .fs import (
+    _COMPUTER_RUNTIME_TOOL_CONFIG,
     _is_restricted_env,
     _normalize_rw_path,
-    _COMPUTER_RUNTIME_TOOL_CONFIG,
 )
-from .util import is_local_runtime
-from ..registry import builtin_tool
 from .robust_edit_engine import edit_file
+from .util import is_local_runtime
 
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)

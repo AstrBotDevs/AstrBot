@@ -100,9 +100,10 @@ _CMD_CONFIG_PATH = Path(__file__).parent / "data" / "cmd_config.json"
 def _get_default_webui_url() -> str:
     """从 cmd_config.json 读取 dashboard 的 host 和 port，构造 WebUI 地址。
 
-     fallback 到硬编码默认值，避免因配置文件缺失或字段不全导致托盘异常。
+    fallback 到硬编码默认值，避免因配置文件缺失或字段不全导致托盘异常。
     """
     import json
+
     try:
         with open(_CMD_CONFIG_PATH, encoding="utf-8-sig") as f:
             conf_str = f.read()
@@ -189,7 +190,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
 
 async def main_async(
     webui_dir_arg: str | None,
-    log_broker: "LogBroker",
+    log_broker: LogBroker,
     stop_event: asyncio.Event,
 ) -> None:
     """主异步入口

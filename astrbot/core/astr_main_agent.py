@@ -72,10 +72,11 @@ from astrbot.core.tools.computer_tools import (
     LocalPythonTool,
     PromoteSkillCandidateTool,
     PythonTool,
+    RobustFileEditTool,
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
     SyncSkillReleaseTool,
-    normalize_umo_for_workspace, RobustFileEditTool,
+    normalize_umo_for_workspace,
 )
 from astrbot.core.tools.computer_tools.interactive_shell import (
     InteractiveShellListTool,

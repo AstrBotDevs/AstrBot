@@ -445,7 +445,9 @@ async def download_dashboard(
                         tag = release_data["tag_name"]
             else:
                 tag = version
-            dashboard_release_url = update_config.get_dashboard_github_release_download_url(tag)
+            dashboard_release_url = (
+                update_config.get_dashboard_github_release_download_url(tag)
+            )
             if effective_proxy:
                 dashboard_release_url = f"{effective_proxy}/{dashboard_release_url}"
             await download_file(
