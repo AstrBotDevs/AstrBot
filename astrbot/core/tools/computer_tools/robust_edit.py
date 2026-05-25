@@ -44,7 +44,7 @@ class RobustFileEditTool(FunctionTool):
     specificity before giving up.
     """
 
-    name: str = "astrbot_robust_file_edit_tool"
+    name: str = "robust_file_edit_tool"
     description: str = (
         "Editing files with robust fuzzy matching. "
         "Supports exact match, escape-normalized match, line-trimmed match, block-anchor match, "
