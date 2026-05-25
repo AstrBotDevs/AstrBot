@@ -1,5 +1,5 @@
 <template>
-    <div class="flex-grow-1" style="display: flex; flex-direction: column; height: 100%;">
+    <div class="knowledge-base-view flex-grow-1" style="display: flex; flex-direction: column; height: 100%;">
         <div style="flex-grow: 1; width: 100%; border: 1px solid #eee; border-radius: 8px; padding: 16px">
             <v-banner lines="one">
                 <template v-slot:text>
@@ -11,14 +11,14 @@
                 style="flex-grow: 1; width: 100%; height: 100%;">
                 <h2>{{ tm('notInstalled.title') }}
                     <v-icon class="ml-2" size="small" color="grey"
-                        @click="openUrl('https://astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
+                        @click="openUrl('https://docs.astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
                 </h2>
                 <v-btn style="margin-top: 16px;" variant="tonal" color="primary" @click="installPlugin"
                     :loading="installing">
                     {{ tm('notInstalled.install') }}
                 </v-btn>
                 <ConsoleDisplayer v-show="installing"
-                    style="background-color: #fff; max-height: 300px; margin-top: 16px; max-width: 100%"
+                    style="max-height: 300px; margin-top: 16px; max-width: 100%"
                     :show-level-btns="false"></ConsoleDisplayer>
             </div>
             <div v-else-if="kbCollections.length == 0" class="d-flex align-center justify-center flex-column"
@@ -31,7 +31,7 @@
             <div v-else>
                 <h2 class="mb-4">{{ tm('list.title') }}
                     <v-icon class="ml-2" size="x-small" color="grey"
-                        @click="openUrl('https://astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
+                        @click="openUrl('https://docs.astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
                 </h2>
                 <v-btn class="mb-4" prepend-icon="mdi-plus" variant="tonal" color="primary"
                     @click="showCreateDialog = true">
@@ -353,10 +353,11 @@
                         <v-window-item value="search">
                             <div class="search-container pa-4">
                                 <v-form @submit.prevent="searchKnowledgeBase" class="d-flex align-center">
-                                    <v-text-field v-model="searchQuery" :label="tm('search.queryLabel')"
+                                    <v-text-field :model-value="searchQuery"
+                                        @update:model-value="onSearchQueryInput" :label="tm('search.queryLabel')"
                                         append-icon="mdi-magnify" variant="outlined" class="flex-grow-1 me-2"
                                         @click:append="searchKnowledgeBase" @keyup.enter="searchKnowledgeBase"
-                                        :placeholder="tm('search.queryPlaceholder')" hide-details></v-text-field>
+                                        :placeholder="tm('search.queryPlaceholder')" hide-details clearable></v-text-field>
 
                                     <v-select v-model="topK" :items="[3, 5, 10, 20]"
                                         :label="tm('search.resultCountLabel')" variant="outlined"
@@ -434,6 +435,7 @@
 import axios from 'axios';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
+import { normalizeTextInput } from '@/utils/inputValue';
 
 export default {
     name: 'KnowledgeBase',
@@ -580,6 +582,9 @@ export default {
         this.getProviderList();
     },
     methods: {
+        onSearchQueryInput(value) {
+            this.searchQuery = normalizeTextInput(value);
+        },
         getSelectedGitHubProxy() {
             if (typeof window === "undefined" || !window.localStorage) return "";
             return localStorage.getItem("githubProxyRadioValue") === "1"
@@ -825,6 +830,7 @@ export default {
             if (files.length > 0) {
                 this.selectedFile = files[0];
             }
+            event.target.value = '';
         },
 
         onFileDrop(event) {
@@ -840,6 +846,8 @@ export default {
             switch (extension) {
                 case 'pdf':
                     return 'mdi-file-pdf-box';
+                case 'epub':
+                    return 'mdi-book-open-page-variant';
                 case 'doc':
                 case 'docx':
                     return 'mdi-file-word-box';
@@ -877,11 +885,7 @@ export default {
                 formData.append('chunk_overlap', this.overlap);
             }
 
-            axios.post('/api/plug/alkaid/kb/collection/add_file', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
-            })
+            axios.post('/api/plug/alkaid/kb/collection/add_file', formData)
                 .then(response => {
                     if (response.data.status === 'ok') {
                         this.showSnackbar(this.tm('messages.operationSuccess', { message: response.data.message }));
@@ -903,7 +907,8 @@ export default {
         },
 
         searchKnowledgeBase() {
-            if (!this.searchQuery.trim()) {
+            const query = normalizeTextInput(this.searchQuery).trim();
+            if (!query) {
                 this.showSnackbar(this.tm('messages.pleaseEnterSearchContent'), 'warning');
                 return;
             }
@@ -914,7 +919,7 @@ export default {
             axios.get(`/api/plug/alkaid/kb/collection/search`, {
                 params: {
                     collection_name: this.currentKB.collection_name,
-                    query: this.searchQuery,
+                    query,
                     top_k: this.topK
                 }
             })
@@ -1365,5 +1370,19 @@ export default {
 
 .data-source-select :deep(.v-field__prepend-inner) {
     padding-right: 12px;
+}
+</style>
+
+<style>
+.v-theme--PurpleThemeDark .knowledge-base-view .book-content {
+    background: linear-gradient(145deg, rgb(var(--v-theme-background)) 0%, rgb(var(--v-theme-lightprimary)) 100%);
+}
+
+.v-theme--PurpleThemeDark .knowledge-base-view .kb-name {
+    color: rgba(var(--v-theme-on-surface-variant), 0.84);
+}
+
+.v-theme--PurpleThemeDark .knowledge-base-view .kb-count {
+    color: rgba(var(--v-theme-on-surface-variant), 0.58);
 }
 </style>

@@ -71,30 +71,74 @@
                         class="elevation-0" :items-per-page="pagination.page_size"
                         :items-per-page-options="pageSizeOptions" show-select return-object
                         :disabled="loading" @update:options="handleTableOptions">
-                        <template v-slot:item.title="{ item }">
-                            <div class="d-flex align-center">
-                                <span>{{ item.title || tm('status.noTitle') }}</span>
+                        <template v-slot:header.umo_source>
+                            <div class="umo-header-cell">
+                                <span>{{ tm('table.headers.umo') }}</span>
+                                <v-btn-toggle
+                                    v-model="umoDisplayMode"
+                                    mandatory
+                                    density="compact"
+                                    divided
+                                    variant="outlined"
+                                    class="umo-header-toggle"
+                                >
+                                    <v-btn value="parsed" size="x-small">
+                                        {{ tm('table.umoDisplay.parsed') }}
+                                    </v-btn>
+                                    <v-btn value="raw" size="x-small">
+                                        {{ tm('table.umoDisplay.raw') }}
+                                    </v-btn>
+                                </v-btn-toggle>
                             </div>
                         </template>
 
-                        <template v-slot:item.platform="{ item }">
-                            <v-chip size="small" label>
-                                {{ item.sessionInfo.platform || tm('status.unknown') }}
-                            </v-chip>
+                        <template v-slot:item.title="{ item }">
+                            <div class="conversation-title-cell">
+                                <div class="conversation-title-row">
+                                    <span class="conversation-title-text">{{ item.title || tm('status.noTitle') }}</span>
+                                    <v-btn
+                                        icon
+                                        variant="plain"
+                                        size="x-small"
+                                        density="compact"
+                                        :ripple="false"
+                                        class="conversation-inline-edit"
+                                        @click.stop="editConversation(item)"
+                                        :disabled="loading"
+                                    >
+                                        <v-icon size="14">mdi-pencil</v-icon>
+                                    </v-btn>
+                                </div>
+                                <span class="conversation-title-meta">{{ item.cid || tm('status.unknown') }}</span>
+                            </div>
                         </template>
 
-                        <template v-slot:item.messageType="{ item }">
-                            <v-chip size="small" label>
-                                {{ getMessageTypeDisplay(item.sessionInfo.messageType) }}
-                            </v-chip>
-                        </template>
-
-                        <template v-slot:item.cid="{ item }">
-                            <span class="text-truncate">{{ item.cid || tm('status.unknown') }}</span>
-                        </template>
-
-                        <template v-slot:item.sessionId="{ item }">
-                            <span>{{ item.sessionInfo.sessionId || tm('status.unknown') }}</span>
+                        <template v-slot:item.umo_source="{ item }">
+                            <div class="umo-source-cell">
+                                <div class="umo-source-content">
+                                    <template v-if="umoDisplayMode === 'parsed'">
+                                        <v-chip size="x-small" label>
+                                            {{ item.sessionInfo.platform || tm('status.unknown') }}
+                                        </v-chip>
+                                        <span class="umo-separator">:</span>
+                                        <v-chip size="x-small" label>
+                                            {{ getMessageTypeDisplay(item.sessionInfo.messageType) }}
+                                        </v-chip>
+                                        <span class="umo-separator">:</span>
+                                        <span class="umo-session-id">{{ item.sessionInfo.sessionId || tm('status.unknown') }}</span>
+                                    </template>
+                                    <span v-else class="umo-raw-text">{{ item.user_id || tm('status.unknown') }}</span>
+                                </div>
+                                <v-btn
+                                    icon
+                                    variant="plain"
+                                    size="x-small"
+                                    class="umo-copy-button"
+                                    @click.stop="copyUmoSource(item)"
+                                >
+                                    <v-icon size="16">mdi-content-copy</v-icon>
+                                </v-btn>
+                            </div>
                         </template>
 
                         <template v-slot:item.created_at="{ item }">
@@ -110,10 +154,6 @@
                                 <v-btn icon variant="plain" size="x-small" class="action-button"
                                     @click="viewConversation(item)" :disabled="loading">
                                     <v-icon>mdi-eye</v-icon>
-                                </v-btn>
-                                <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="editConversation(item)" :disabled="loading">
-                                    <v-icon>mdi-pencil</v-icon>
                                 </v-btn>
                                 <v-btn icon color="error" variant="plain" size="x-small" class="action-button"
                                     @click="confirmDeleteConversation(item)" :disabled="loading">
@@ -198,7 +238,9 @@
                     </div>
 
                     <!-- 预览模式 - 聊天界面 -->
-                    <div v-else class="conversation-messages-container" style="background-color: var(--v-theme-surface);">
+                    <div v-else class="conversation-messages-container" style="background-color: var(--v-theme-surface);"
+                        ref="messagesContainer"
+                        @wheel.prevent="onContainerWheel">
                         <!-- 空对话提示 -->
                         <div v-if="conversationHistory.length === 0" class="text-center py-5">
                             <v-icon size="48" color="grey">mdi-chat-remove</v-icon>
@@ -337,6 +379,7 @@ import {
     askForConfirmation as askForConfirmationDialog,
     useConfirmDialog
 } from '@/utils/confirmDialog';
+import { copyToClipboard } from '@/utils/clipboard';
 
 export default {
     name: 'ConversationPage',
@@ -413,6 +456,7 @@ export default {
             editedHistory: '',
             savingHistory: false,
             monacoEditor: null,
+            umoDisplayMode: 'parsed',
 
             commonStore: useCommonStore()
         }
@@ -443,17 +487,8 @@ export default {
         // 动态表头
         tableHeaders() {
             return [
-                { title: this.tm('table.headers.title'), key: 'title', sortable: true },
-                { title: this.tm('table.headers.cid'), key: 'cid', sortable: true, width: '100px' },
-                {
-                    title: this.tm('table.headers.umo'),
-                    align: 'center',
-                    children: [
-                        { title: this.tm('table.headers.platform'), key: 'platform', sortable: true, width: '120px' },
-                        { title: this.tm('table.headers.type'), key: 'messageType', sortable: true, width: '100px' },
-                        { title: this.tm('table.headers.sessionId'), key: 'sessionId', sortable: true, width: '100px' },
-                    ],
-                },
+                { title: this.tm('table.headers.title'), key: 'title', sortable: true, minWidth: '80px', width: '200px' },
+                { title: this.tm('table.headers.umo'), key: 'umo_source', sortable: false, minWidth: '280px', width: '360px' },
                 { title: this.tm('table.headers.createdAt'), key: 'created_at', sortable: true, width: '180px' },
                 { title: this.tm('table.headers.updatedAt'), key: 'updated_at', sortable: true, width: '180px' },
                 { title: this.tm('table.headers.actions'), key: 'actions', sortable: false, align: 'center' }
@@ -504,28 +539,54 @@ export default {
 
         // 将对话历史转换为 MessageList 组件期望的格式
         formattedMessages() {
-            return this.conversationHistory.map(msg => {
-                console.log('处理消息:', msg.role, msg.content);
-                
-                // 将消息内容转换为 MessagePart[] 格式
-                const messageParts = this.convertContentToMessageParts(msg.content);
-                
-                if (msg.role === 'user') {
-                    return {
-                        content: {
-                            type: 'user',
-                            message: messageParts
-                        }
-                    };
-                } else {
-                    return {
-                        content: {
-                            type: 'bot',
-                            message: messageParts
-                        }
-                    };
+            // 按 tool_call_id 索引 tool 角色消息的执行结果
+            const toolResultsById = {};
+            for (const msg of this.conversationHistory) {
+                if (msg.role === 'tool' && msg.tool_call_id) {
+                    toolResultsById[msg.tool_call_id] = msg.content;
                 }
-            });
+            }
+
+            return this.conversationHistory
+                // tool / system 等非聊天角色不直接渲染为气泡，避免大文本走 markdown 路径卡死页面
+                .filter(msg => msg.role === 'user' || msg.role === 'assistant')
+                .map(msg => {
+                    console.log('处理消息:', msg.role, msg.content);
+
+                    const messageParts = this.convertContentToMessageParts(msg.content)
+                        // 丢弃 convertContentToMessageParts 兜底插入的空 plain，避免 assistant 仅有工具调用时渲染空气泡
+                        .filter(part => part.type !== 'plain' || (part.text && part.text.trim()));
+
+                    // 把 OpenAI 风格的 assistant.tool_calls 转成 MessageList 已支持的 tool_call part
+                    if (msg.role === 'assistant' && Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
+                        const toolCalls = msg.tool_calls.map(tc => {
+                            const fn = tc.function || {};
+                            return {
+                                id: tc.id,
+                                name: fn.name || tc.name,
+                                args: fn.arguments ?? tc.arguments,
+                                result: toolResultsById[tc.id],
+                                // 历史回放无真实耗时数据：
+                                // ts: 0  → ToolCallCard.toolCallDuration 在 startTime<=0 时早退，跳过时长显示
+                                // finished_ts: 1 → MessageList.toolCallStatusText 视为已完成（避免误显示"运行中"）
+                                ts: 0,
+                                finished_ts: 1,
+                            };
+                        });
+                        messageParts.push({ type: 'tool_call', tool_calls: toolCalls });
+                    }
+
+                    const finalParts = messageParts.length
+                        ? messageParts
+                        : [{ type: 'plain', text: '' }];
+
+                    return {
+                        content: {
+                            type: msg.role === 'user' ? 'user' : 'bot',
+                            message: finalParts,
+                        }
+                    };
+                });
         }
     },
 
@@ -586,6 +647,30 @@ export default {
             };
 
             return typeMap[messageType] || typeMap.default;
+        },
+
+        formatUmoSource(item) {
+            if (!item?.sessionInfo) {
+                return item?.user_id || this.tm('status.unknown');
+            }
+
+            if (this.umoDisplayMode === 'raw') {
+                return item.user_id || this.tm('status.unknown');
+            }
+
+            const platform = item.sessionInfo.platform || this.tm('status.unknown');
+            const messageType = this.getMessageTypeDisplay(item.sessionInfo.messageType);
+            const sessionId = item.sessionInfo.sessionId || this.tm('status.unknown');
+            return `${platform}:${messageType}:${sessionId}`;
+        },
+
+        async copyUmoSource(item) {
+            const ok = await copyToClipboard(this.formatUmoSource(item));
+            if (ok) {
+                this.showSuccessMessage(this.tm('messages.copySuccess'));
+            } else {
+                this.showErrorMessage(this.tm('messages.copyError'));
+            }
         },
 
         // 获取对话列表
@@ -1052,6 +1137,13 @@ export default {
             return parts;
         },
 
+        // Manually handle wheel scrolling inside the dialog preview container.
+        onContainerWheel(event) {
+            const el = this.$refs.messagesContainer;
+            if (!el) return;
+            el.scrollTop += event.deltaY;
+        },
+
         // 从内容中提取文本（保留用于其他用途）
         extractTextFromContent(content) {
             if (typeof content === 'string') {
@@ -1107,6 +1199,18 @@ export default {
     background-color: #f9f9f9;
 }
 
+/* 让 ToolCallCard 内部的 args/result 自然展开，由外层容器统一滚动，避免双滚动条 */
+.conversation-messages-container .detail-json,
+.conversation-messages-container .detail-result {
+    max-height: none;
+    overflow: visible;
+}
+
+/* 历史回放无真实状态数据，隐藏 IPython 工具的"已完成"标签，与其它工具卡片保持一致 */
+.conversation-messages-container .tool-call-inline-status {
+    display: none;
+}
+
 /* 暗色模式下的聊天消息容器 */
 .v-theme--dark .conversation-messages-container {
     background-color: #1e1e1e;
@@ -1125,6 +1229,87 @@ export default {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.conversation-title-cell {
+    padding: 6px 0px;
+    min-width: 100px;
+    max-width: 145px;
+}
+
+.conversation-title-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+
+.conversation-title-text {
+    display: inline-block;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.conversation-inline-edit {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    flex-shrink: 0;
+}
+
+.conversation-title-meta {
+    display: block;
+    color: rgba(var(--v-theme-on-surface), 0.58);
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.umo-header-cell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.umo-header-toggle {
+    flex-shrink: 0;
+}
+
+.umo-source-cell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.umo-source-content {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.umo-separator {
+    color: rgba(var(--v-theme-on-surface), 0.5);
+    flex-shrink: 0;
+}
+
+.umo-session-id,
+.umo-raw-text {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.umo-copy-button {
+    flex-shrink: 0;
 }
 
 /* 动画 */

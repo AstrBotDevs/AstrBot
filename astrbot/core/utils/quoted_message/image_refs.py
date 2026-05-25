@@ -3,16 +3,9 @@ from __future__ import annotations
 import os
 from urllib.parse import urlsplit
 
-IMAGE_EXTENSIONS = {
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".webp",
-    ".bmp",
-    ".tif",
-    ".tiff",
-    ".gif",
-}
+from astrbot.core.utils.image_ref_utils import ALLOWED_IMAGE_EXTENSIONS
+
+IMAGE_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS
 
 
 def normalize_file_like_url(path: str | None) -> str | None:

@@ -27,8 +27,24 @@ class MessageChain:
 
     chain: list[BaseMessageComponent] = field(default_factory=list)
     use_t2i_: bool | None = None  # None 为跟随用户设置
+    use_markdown_: bool | None = (
+        None  # 是否使用 Markdown 发送消息。None 跟随平台默认，True 强制 Markdown，False 强制纯文本。
+    )
     type: str | None = None
     """消息链承载的消息的类型。可选，用于让消息平台区分不同业务场景的消息链。"""
+
+    def derive(self, chain: list[BaseMessageComponent] | None = None) -> "MessageChain":
+        """基于当前消息链创建一个新的 MessageChain，继承元数据（use_t2i_、use_markdown_ 等）。
+
+        Args:
+            chain: 新消息链的组件列表。如果为 None，则使用空列表。
+
+        """
+        new = MessageChain(chain=chain if chain is not None else [])
+        new.use_t2i_ = self.use_t2i_
+        new.use_markdown_ = self.use_markdown_
+        new.type = self.type
+        return new
 
     def message(self, message: str):
         """添加一条文本消息到消息链 `chain` 中。
@@ -118,6 +134,18 @@ class MessageChain:
         self.use_t2i_ = use_t2i
         return self
 
+    def use_markdown(self, use: bool | None = True):
+        """设置是否使用 Markdown 发送消息。
+
+        仅对支持 Markdown 的平台生效（如 QQ Official），不支持的平台会忽略此字段。
+
+        Args:
+            use: True 强制使用 Markdown，False 强制纯文本，None 跟随平台默认行为。
+
+        """
+        self.use_markdown_ = use
+        return self
+
     def get_plain_text(self, with_other_comps_mark: bool = False) -> str:
         """获取纯文本消息。这个方法将获取 chain 中所有 Plain 组件的文本并拼接成一条消息。空格分隔。
 
@@ -182,6 +210,8 @@ class ResultContentType(enum.Enum):
 
     LLM_RESULT = enum.auto()
     """调用 LLM 产生的结果"""
+    AGENT_RUNNER_ERROR = enum.auto()
+    """第三方 Agent Runner 返回的错误结果"""
     GENERAL_RESULT = enum.auto()
     """普通的消息结果"""
     STREAMING_RESULT = enum.auto()
@@ -245,6 +275,13 @@ class MessageEventResult(MessageChain):
     def is_llm_result(self) -> bool:
         """是否为 LLM 结果。"""
         return self.result_content_type == ResultContentType.LLM_RESULT
+
+    def is_model_result(self) -> bool:
+        """Whether result comes from model execution (including runner errors)."""
+        return self.result_content_type in (
+            ResultContentType.LLM_RESULT,
+            ResultContentType.AGENT_RUNNER_ERROR,
+        )
 
 
 # 为了兼容旧版代码，保留 CommandResult 的别名

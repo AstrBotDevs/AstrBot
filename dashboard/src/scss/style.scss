@@ -13,5 +13,10 @@
 @import './components/VTextField';
 @import './components/VTabs';
 @import './components/VScrollbar';
+@import './components/CodeBlockDark';
 
 @import './pages/dashboards';
+
+html, body {
+  overscroll-behavior-y: none;
+}

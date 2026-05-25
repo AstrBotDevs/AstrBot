@@ -15,6 +15,7 @@
 import { computed, onActivated, onMounted, ref, watch} from 'vue';
 import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
+import { normalizeTextInput } from '@/utils/inputValue';
 
 // Composables
 import { useComponentData } from './composables/useComponentData';
@@ -83,7 +84,7 @@ const {
 } = useCommandActions(toast, () => fetchCommands(tm('messages.loadFailed')));
 
 const filteredTools = computed(() => {
-  const query = toolSearch.value.trim().toLowerCase();
+  const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
   if (!query) return tools.value;
   return tools.value.filter(tool => 
     tool.name?.toLowerCase().includes(query) ||
@@ -101,6 +102,10 @@ const handleUpdatePermission = async (cmd: CommandItem, permission: 'admin' | 'm
 };
 
 const handleToggleTool = async (tool: ToolItem) => {
+  if (tool.readonly) {
+    toast(tmTool('messages.toggleToolReadonly'), 'info');
+    return;
+  }
   const previous = tool.active;
   tool.active = !tool.active;
   try {
@@ -253,7 +258,8 @@ watch(viewMode, async (mode) => {
             <div class="d-flex flex-wrap align-center ga-3 mb-4">
               <div style="min-width: 240px; max-width: 380px; flex: 1;">
                 <v-text-field
-                  v-model="toolSearch"
+                  :model-value="toolSearch"
+                  @update:model-value="toolSearch = normalizeTextInput($event)"
                   prepend-inner-icon="mdi-magnify"
                   :label="tmTool('functionTools.search')"
                   variant="outlined"
@@ -261,19 +267,6 @@ watch(viewMode, async (mode) => {
                   hide-details
                   clearable
                 />
-              </div>
-              <div class="d-flex align-center ga-2">
-                <div class="d-flex align-center">
-                  <v-icon size="18" color="primary" class="mr-1">mdi-function-variant</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.total') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-primary">{{ filteredTools.length }}</span>
-                </div>
-                <v-divider vertical class="mx-1" style="height: 20px;" />
-                <div class="d-flex align-center">
-                  <v-icon size="18" color="success" class="mr-1">mdi-check-circle-outline</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('status.enabled') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-success">{{ filteredTools.filter(t => t.active).length }}</span>
-                </div>
               </div>
             </div>
 

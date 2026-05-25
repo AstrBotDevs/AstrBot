@@ -1,4 +1,5 @@
 import asyncio
+import os
 from pathlib import Path
 
 import click
@@ -6,18 +7,26 @@ from filelock import FileLock, Timeout
 
 from ..utils import check_dashboard, get_astrbot_root
 
+DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
+
+
+def _initialize_config_from_env(astrbot_root: Path) -> None:
+    if DASHBOARD_INITIAL_PASSWORD_ENV not in os.environ:
+        return
+
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+
+    AstrBotConfig(config_path=str(astrbot_root / "data" / "cmd_config.json"))
+    click.echo("Initialized data/cmd_config.json with dashboard initial password.")
+
 
 async def initialize_astrbot(astrbot_root: Path) -> None:
-    """执行 AstrBot 初始化逻辑"""
+    """Execute AstrBot initialization logic"""
     dot_astrbot = astrbot_root / ".astrbot"
 
     if not dot_astrbot.exists():
-        click.echo(f"Current Directory: {astrbot_root}")
-        click.echo(
-            "如果你确认这是 Astrbot root directory, 你需要在当前目录下创建一个 .astrbot 文件标记该目录为 AstrBot 的数据目录。",
-        )
         if click.confirm(
-            f"请检查当前目录是否正确，确认正确请回车: {astrbot_root}",
+            f"Install AstrBot to this directory? {astrbot_root}",
             default=True,
             abort=True,
         ):
@@ -35,12 +44,14 @@ async def initialize_astrbot(astrbot_root: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
         click.echo(f"{'Created' if not path.exists() else 'Directory exists'}: {path}")
 
+    _initialize_config_from_env(astrbot_root)
+
     await check_dashboard(astrbot_root / "data")
 
 
 @click.command()
 def init() -> None:
-    """初始化 AstrBot"""
+    """Initialize AstrBot"""
     click.echo("Initializing AstrBot...")
     astrbot_root = get_astrbot_root()
     lock_file = astrbot_root / "astrbot.lock"
@@ -49,8 +60,11 @@ def init() -> None:
     try:
         with lock.acquire():
             asyncio.run(initialize_astrbot(astrbot_root))
+            click.echo("Done! You can now run 'astrbot run' to start AstrBot")
     except Timeout:
-        raise click.ClickException("无法获取锁文件，请检查是否有其他实例正在运行")
+        raise click.ClickException(
+            "Cannot acquire lock file. Please check if another instance is running"
+        )
 
     except Exception as e:
-        raise click.ClickException(f"初始化失败: {e!s}")
+        raise click.ClickException(f"Initialization failed: {e!s}")

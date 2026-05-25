@@ -1,0 +1,5 @@
+/* Keep only the top-left navbar title in Outfit; use VitePress defaults elsewhere. */
+.VPNavBarTitle .title,
+.VPNavBarTitle .title .text {
+    font-family: "Outfit", sans-serif !important;
+}

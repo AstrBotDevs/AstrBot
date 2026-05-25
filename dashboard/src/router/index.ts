@@ -28,13 +28,13 @@ router.beforeEach(async (to, from, next) => {
     loadingStore.start();
   }
 
-  const publicPages = ['/auth/login'];
+  const publicPages = ['/auth/login', '/auth/setup'];
   const authRequired = !publicPages.includes(to.path);
   const auth: AuthStore = useAuthStore();
 
   // 如果用户已登录且试图访问登录页面，则重定向到首页
   if (to.path === '/auth/login' && auth.has_token()) {
-    return next(auth.returnUrl || '/');
+    return next('/welcome');
   }
 
   if (to.matched.some((record) => record.meta.requiresAuth)) {

@@ -2,16 +2,16 @@
 
 <div align="center">
 
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">中文</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_en.md">English</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh.md">简体中文</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">English</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh-TW.md">繁體中文</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a>
 
 <br>
 
 <div>
-<a href="https://trendshift.io/repositories/12875" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12875" alt="Soulter%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/21369" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21369" alt="AstrBotDevs%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 <a href="https://hellogithub.com/repository/AstrBotDevs/AstrBot" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=d127d50cd5e54c5382328acc3bb25483&claim_uid=ZO9by7qCXgSd6Lp&t=2" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 </div>
 
@@ -33,6 +33,7 @@
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">Feuille de route</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/issues">Signaler un problème</a>
+<a href="mailto:community@astrbot.app">Email Support</a>
 </div>
 
 AstrBot est une plateforme de chatbot Agent tout-en-un open source qui s'intègre aux principales applications de messagerie instantanée. Elle fournit une infrastructure d'IA conversationnelle fiable et évolutive pour les particuliers, les développeurs et les équipes. Que vous construisiez un compagnon IA personnel, un service client intelligent, un assistant d'automatisation ou une base de connaissances d'entreprise, AstrBot vous permet de créer rapidement des applications d'IA prêtes pour la production dans les flux de travail de votre plateforme de messagerie.
@@ -70,156 +71,137 @@ AstrBot est une plateforme de chatbot Agent tout-en-un open source qui s'intègr
 
 ## Démarrage rapide
 
-#### Déploiement Docker (Recommandé 🥳)
+### Déploiement en un clic
 
-Nous recommandons de déployer AstrBot en utilisant Docker ou Docker Compose.
-
-Veuillez consulter la documentation officielle : [Déployer AstrBot avec Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
-
-#### Déploiement uv
+Pour les utilisateurs qui veulent découvrir AstrBot rapidement, qui sont familiers avec la ligne de commande et peuvent installer eux-mêmes l'environnement `uv`, nous recommandons la méthode de déploiement en un clic avec `uv` ⚡️ :
 
 ```bash
-uv tool install astrbot
-astrbot
+uv tool install astrbot --python 3.12
+astrbot init # Exécutez cette commande uniquement la première fois pour initialiser l'environnement
+astrbot run
 ```
 
-#### Application de bureau (Tauri)
+> [uv](https://docs.astral.sh/uv/) doit être installé.
+> AstrBot nécessite Python 3.12 ou une version plus récente. L'option `--python 3.12` garantit que `uv` crée l'environnement tool avec Python 3.12.
 
-Dépôt de l'application de bureau : [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop).
+> [!NOTE]
+> Pour les utilisateurs macOS : en raison des vérifications de sécurité de macOS, la première exécution de la commande `astrbot` peut prendre plus de temps (environ 10-20s).
 
-Prend en charge plusieurs architectures système, installation directe, prête à l'emploi. La solution de déploiement de bureau en un clic la plus adaptée aux débutants. Non recommandée pour les serveurs.
+Mettre à jour `astrbot` :
 
-#### Déploiement en un clic avec le lanceur (AstrBot Launcher)
+```bash
+uv tool upgrade astrbot --python 3.12
+```
 
-Déploiement rapide et solution multi-instances, isolation de l'environnement. Accédez au dépôt [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher), trouvez le package d'installation correspondant à votre système sous la dernière version sur la page Releases.
+> [!WARNING]
+> AstrBot déployé via `uv` **ne prend pas en charge la mise à jour via le WebUI**. Pour mettre à jour, exécutez la commande ci-dessus depuis le terminal.
 
-#### Déploiement BT-Panel
+### Déploiement Docker
 
-AstrBot s'est associé à BT-Panel et est maintenant disponible sur leur marketplace.
+Pour les utilisateurs familiers avec les conteneurs et qui souhaitent une méthode plus stable et adaptée à la production, nous recommandons de déployer AstrBot avec Docker / Docker Compose.
 
-Veuillez consulter la documentation officielle : [Déploiement BT-Panel](https://astrbot.app/deploy/astrbot/btpanel.html).
+Veuillez consulter la documentation officielle [Déployer AstrBot avec Docker](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
 
-#### Déploiement 1Panel
+### Déployer sur RainYun
 
-AstrBot a été officiellement listé sur le marketplace 1Panel.
-
-Veuillez consulter la documentation officielle : [Déploiement 1Panel](https://astrbot.app/deploy/astrbot/1panel.html).
-
-#### Déployer sur RainYun
-
-AstrBot a été officiellement listé sur la plateforme d'applications cloud de RainYun avec un déploiement en un clic.
+Pour les utilisateurs qui souhaitent déployer AstrBot en un clic sans gérer le serveur eux-mêmes, nous recommandons le service de déploiement cloud en un clic de RainYun ☁️ :
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-#### Déployer sur Replit
+### Déploiement de l'application de bureau
 
-Méthode de déploiement contribuée par la communauté.
+Pour les utilisateurs qui veulent utiliser AstrBot sur desktop et passer principalement par ChatUI, nous recommandons AstrBot App.
+
+Accédez à [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop) pour télécharger et installer l'application ; cette méthode est conçue pour un usage desktop et n'est pas recommandée pour les scénarios serveur.
+
+### Déploiement avec le lanceur
+
+Également sur desktop, pour les utilisateurs qui souhaitent un déploiement rapide avec isolation d'environnement et multi-instances, nous recommandons AstrBot Launcher.
+
+Accédez à [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) pour télécharger et installer.
+
+### Déployer sur Replit
+
+Le déploiement sur Replit est maintenu par la communauté et convient aux démonstrations en ligne et aux essais légers.
 
 [![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
-#### Installateur Windows en un clic
+### AUR
 
-Veuillez consulter la documentation officielle : [Déployer AstrBot avec l'installateur Windows en un clic](https://astrbot.app/deploy/astrbot/windows.html).
+Le mode AUR s'adresse aux utilisateurs Arch Linux qui préfèrent installer AstrBot via le gestionnaire de paquets système.
 
-#### Déploiement CasaOS
-
-Méthode de déploiement contribuée par la communauté.
-
-Veuillez consulter la documentation officielle : [Déploiement CasaOS](https://astrbot.app/deploy/astrbot/casaos.html).
-
-#### Déploiement manuel
-
-Tout d'abord, installez uv :
-
-```bash
-pip install uv
-```
-
-Installez AstrBot via Git Clone :
-
-```bash
-git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
-uv run main.py
-```
-
-Ou consultez la documentation officielle : [Déployer AstrBot depuis les sources](https://astrbot.app/deploy/astrbot/cli.html).
-
-#### Installation via le gestionnaire de paquets du système
-
-##### Arch Linux
+Exécutez la commande ci-dessous pour installer `astrbot-git`, puis lancez AstrBot localement.
 
 ```bash
 yay -S astrbot-git
-# ou utiliser paru
-paru -S astrbot-git
 ```
+
+**Autres méthodes de déploiement**
+
+Si vous avez besoin d'une gestion par panneau ou d'une personnalisation plus poussée, consultez [Déploiement BT-Panel](https://docs.astrbot.app/deploy/astrbot/btpanel.html) pour une installation via BT Panel, [Déploiement 1Panel](https://docs.astrbot.app/deploy/astrbot/1panel.html) pour le marketplace 1Panel, [Déploiement CasaOS](https://docs.astrbot.app/deploy/astrbot/casaos.html) pour un déploiement visuel sur NAS/serveur domestique, et [Déploiement manuel](https://docs.astrbot.app/deploy/astrbot/cli.html) pour une installation complète depuis les sources avec `uv`.
 
 ## Plateformes de messagerie prises en charge
 
-**Maintenues officiellement**
+Connectez AstrBot à vos plateformes de chat préférées.
 
-- QQ (Plateforme officielle & OneBot)
-- Telegram
-- Application WeChat Work & Bot intelligent WeChat Work
-- Service client WeChat & Comptes officiels WeChat
-- Feishu (Lark)
-- DingTalk
-- Slack
-- Discord
-- Satori
-- Misskey
-- LINE
-- WhatsApp (Bientôt disponible)
-
-**Maintenues par la communauté**
-
-- [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter)
-- [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
-- [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
+| Plateforme | Maintenance |
+|---------|---------------|
+| QQ | Officielle |
+| Implémentation du protocole OneBot v11 | Officielle |
+| Telegram | Officielle |
+| Application WeChat Work & Bot intelligent WeChat Work | Officielle |
+| Service client WeChat & Comptes officiels WeChat | Officielle |
+| Feishu (Lark) | Officielle |
+| DingTalk | Officielle |
+| Slack | Officielle |
+| Discord | Officielle |
+| LINE | Officielle |
+| Satori | Officielle |
+| KOOK | Officielle |
+| Misskey | Officielle |
+| Mattermost | Officielle |
+| WhatsApp (Bientôt disponible) | Officielle |
+| [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | Communauté |
+| [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | Communauté |
+| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | Communauté |
 
 ## Services de modèles pris en charge
 
-**Services LLM**
-
-- OpenAI et services compatibles
-- Anthropic
-- Google Gemini
-- Moonshot AI
-- Zhipu AI
-- DeepSeek
-- Ollama (Auto-hébergé)
-- LM Studio (Auto-hébergé)
-- [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74)
-- [302.AI](https://share.302.ai/rr1M3l)
-- [TokenPony](https://www.tokenpony.cn/3YPyf)
-- [SiliconFlow](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot)
-- [PPIO Cloud](https://ppio.com/user/register?invited_by=AIOONE)
-- ModelScope
-- OneAPI
-
-**Plateformes LLMOps**
-
-- Dify
-- Applications Alibaba Cloud Bailian
-- Coze
-
-**Services de reconnaissance vocale**
-
-- OpenAI Whisper
-- SenseVoice
-
-**Services de synthèse vocale**
-
-- OpenAI TTS
-- Gemini TTS
-- GPT-Sovits-Inference
-- GPT-Sovits
-- FishAudio
-- Edge TTS
-- Alibaba Cloud Bailian TTS
-- Azure TTS
-- Minimax TTS
-- Volcano Engine TTS
+| Service | Type |
+|---------|---------------|
+| OpenAI et services compatibles | Services LLM |
+| Anthropic | Services LLM |
+| Google Gemini | Services LLM |
+| Moonshot AI | Services LLM |
+| Zhipu AI | Services LLM |
+| DeepSeek | Services LLM |
+| Ollama (Auto-hébergé) | Services LLM |
+| LM Studio (Auto-hébergé) | Services LLM |
+| [AIHubMix](https://aihubmix.com/?aff=4bfH) | Services LLM (Passerelle API, prend en charge tous les modèles) |
+| [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | Services LLM |
+| [302.AI](https://share.302.ai/rr1M3l) | Services LLM |
+| [TokenPony](https://www.tokenpony.cn/3YPyf) | Services LLM |
+| [SiliconFlow](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot) | Services LLM |
+| [PPIO Cloud](https://ppio.com/user/register?invited_by=AIOONE) | Services LLM |
+| ModelScope | Services LLM |
+| OneAPI | Services LLM |
+| Dify | Plateformes LLMOps |
+| Applications Alibaba Cloud Bailian | Plateformes LLMOps |
+| Coze | Plateformes LLMOps |
+| OpenAI Whisper | Services de reconnaissance vocale |
+| SenseVoice | Services de reconnaissance vocale |
+| Xiaomi MiMo Omni | Services de reconnaissance vocale |
+| OpenAI TTS | Services de synthèse vocale |
+| Gemini TTS | Services de synthèse vocale |
+| GPT-Sovits-Inference | Services de synthèse vocale |
+| GPT-Sovits | Services de synthèse vocale |
+| FishAudio | Services de synthèse vocale |
+| Edge TTS | Services de synthèse vocale |
+| Alibaba Cloud Bailian TTS | Services de synthèse vocale |
+| Azure TTS | Services de synthèse vocale |
+| Minimax TTS | Services de synthèse vocale |
+| Xiaomi MiMo TTS | Services de synthèse vocale |
+| Volcano Engine TTS | Services de synthèse vocale |
 
 ## ❤️ Contribuer
 
@@ -243,15 +225,19 @@ pre-commit install
 
 ### Groupes QQ
 
-- Groupe 1 : 322154837
-- Groupe 3 : 630166526
-- Groupe 5 : 822130018
-- Groupe 6 : 753075035
+- Groupe 12 : 916228568 (nouveau)
+- Groupe 9 : 1076659624 (complet)
+- Groupe 10 : 1078079676 (complet)
+- Groupe 11 : 704659519 (complet)
+- Groupe 1 : 322154837 (complet)
+- Groupe 3 : 630166526 (complet)
+- Groupe 4 : 1077826412 (complet)
+- Groupe 5 : 822130018 (complet)
+- Groupe 6 : 753075035 (complet)
+- Groupe 7 : 743746109 (complet)
+- Groupe 8 : 1030353265 (complet)
 - Groupe développeurs : 975206796
-
-### Groupe Telegram
-
-<a href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
+- Groupe développeurs (officiel) : 1039761811
 
 ### Serveur Discord
 
@@ -262,7 +248,7 @@ pre-commit install
 Un grand merci à tous les contributeurs et développeurs de plugins pour leurs contributions à AstrBot ❤️
 
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=200&columns=14" />
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
 </a>
 
 De plus, la naissance de ce projet n'aurait pas été possible sans l'aide des projets open source suivants :

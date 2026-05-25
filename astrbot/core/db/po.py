@@ -38,6 +38,30 @@ class PlatformStat(SQLModel, table=True):
     )
 
 
+class ProviderStat(TimestampMixin, SQLModel, table=True):
+    """Per-response provider stats for internal agent runs."""
+
+    __tablename__: str = "provider_stats"
+
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    agent_type: str = Field(default="internal", nullable=False, index=True)
+    status: str = Field(default="completed", nullable=False, index=True)
+    umo: str = Field(nullable=False, index=True)
+    conversation_id: str | None = Field(default=None, index=True)
+    provider_id: str = Field(nullable=False, index=True)
+    provider_model: str | None = Field(default=None, index=True)
+    token_input_other: int = Field(default=0, nullable=False)
+    token_input_cached: int = Field(default=0, nullable=False)
+    token_output: int = Field(default=0, nullable=False)
+    start_time: float = Field(default=0.0, nullable=False)
+    end_time: float = Field(default=0.0, nullable=False)
+    time_to_first_token: float = Field(default=0.0, nullable=False)
+
+
 class ConversationV2(TimestampMixin, SQLModel, table=True):
     __tablename__: str = "conversations"
 
@@ -126,6 +150,8 @@ class Persona(TimestampMixin, SQLModel, table=True):
     """None means use ALL tools for default, empty list means no tools, otherwise a list of tool names."""
     skills: list | None = Field(default=None, sa_type=JSON)
     """None means use ALL skills for default, empty list means no skills, otherwise a list of skill names."""
+    custom_error_message: str | None = Field(default=None, sa_type=Text)
+    """Optional custom error message sent to end users when the agent request fails."""
     folder_id: str | None = Field(default=None, max_length=36)
     """所属文件夹ID，NULL 表示在根目录"""
     sort_order: int = Field(default=0)
@@ -218,6 +244,37 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
         default=None,
     )  # Name of the sender in the platform
     content: dict = Field(sa_type=JSON, nullable=False)  # a message chain list
+    llm_checkpoint_id: str | None = Field(default=None, index=True)
+
+
+class WebChatThread(TimestampMixin, SQLModel, table=True):
+    """A side thread created from a selected WebChat assistant response."""
+
+    __tablename__: str = "webchat_threads"
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    thread_id: str = Field(
+        max_length=36,
+        nullable=False,
+        unique=True,
+        default_factory=lambda: str(uuid.uuid4()),
+    )
+    creator: str = Field(nullable=False, index=True)
+    parent_session_id: str = Field(nullable=False, index=True)
+    parent_message_id: int = Field(nullable=False, index=True)
+    base_checkpoint_id: str = Field(nullable=False, index=True)
+    selected_text: str = Field(sa_type=Text, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "thread_id",
+            name="uix_webchat_thread_id",
+        ),
+    )
 
 
 class PlatformSession(TimestampMixin, SQLModel, table=True):
@@ -472,6 +529,8 @@ class Personality(TypedDict):
     """工具列表。None 表示使用所有工具，空列表表示不使用任何工具"""
     skills: list[str] | None
     """Skills 列表。None 表示使用所有 Skills，空列表表示不使用任何 Skills"""
+    custom_error_message: str | None
+    """可选的人格自定义报错回复信息。配置后将优先发送给最终用户。"""
 
     # cache
     _begin_dialogs_processed: list[dict]

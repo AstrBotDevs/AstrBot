@@ -1,0 +1,108 @@
+﻿{
+    "title": "Управление диалогами",
+    "subtitle": "Просмотр и управление историей сообщений",
+    "filters": {
+        "title": "Фильтры",
+        "platform": "ID бота",
+        "type": "Тип",
+        "search": "Поиск по ключевым словам",
+        "reset": "Сбросить"
+    },
+    "history": {
+        "title": "История",
+        "refresh": "Обновить"
+    },
+    "batch": {
+        "deleteSelected": "Удалить выбранные ({count})",
+        "exportSelected": "Экспорт выбранных ({count})"
+    },
+    "pagination": {
+        "itemsPerPage": "на странице",
+        "showingItems": "Показано {start}-{end} из {total}"
+    },
+    "table": {
+        "headers": {
+            "title": "Заголовок диалога",
+            "platform": "ID бота",
+            "type": "Тип сообщения",
+            "cid": "ID диалога",
+            "umo": "Источник сообщения",
+            "sessionId": "ID сессии",
+            "createdAt": "Создан",
+            "updatedAt": "Обновлен",
+            "actions": "Действия"
+        },
+        "umoDisplay": {
+            "parsed": "Разобрано",
+            "raw": "UMO"
+        }
+    },
+    "actions": {
+        "view": "Просмотр",
+        "edit": "Редактировать",
+        "delete": "Удалить"
+    },
+    "messageTypes": {
+        "group": "Группа",
+        "friend": "ЛС",
+        "unknown": "Неизвестно"
+    },
+    "status": {
+        "noTitle": "Без заголовка",
+        "unknown": "Неизвестно",
+        "noData": "История диалогов пуста",
+        "emptyContent": "Содержимое диалога пусто",
+        "audioNotSupported": "Ваш браузер не поддерживает воспроизведение аудио."
+    },
+    "dialogs": {
+        "view": {
+            "title": "Детали диалога",
+            "editMode": "Режим редактирования",
+            "previewMode": "Режим просмотра",
+            "saveChanges": "Сохранить изменения",
+            "close": "Закрыть",
+            "confirmClose": "У вас есть несохраненные изменения. Вы уверены, что хотите закрыть?"
+        },
+        "edit": {
+            "title": "Изменить информацию",
+            "titleLabel": "Заголовок диалога",
+            "titlePlaceholder": "Введите заголовок",
+            "cancel": "Отмена",
+            "save": "Сохранить"
+        },
+        "delete": {
+            "title": "Подтверждение удаления",
+            "message": "Вы уверены, что хотите удалить диалог «{title}»? Это действие необратимо.",
+            "cancel": "Отмена",
+            "confirm": "Удалить"
+        },
+        "batchDelete": {
+            "title": "Массовое удаление",
+            "message": "Вы уверены, что хотите удалить {count} выбранных диалогов? Это действие необратимо!",
+            "andMore": "и еще {count}",
+            "cancel": "Отмена",
+            "confirm": "Удалить всё",
+            "warning": "Внимание: удаление нельзя будет отменить!"
+        }
+    },
+    "messages": {
+        "fetchError": "Не удалось загрузить список диалогов",
+        "saveSuccess": "Сохранено",
+        "saveError": "Ошибка сохранения",
+        "deleteSuccess": "Удалено",
+        "deleteError": "Ошибка удаления",
+        "historyError": "Не удалось загрузить историю диалога",
+        "historySaveSuccess": "История сохранена",
+        "historySaveError": "Ошибка сохранения истории",
+        "invalidJson": "Некорректный формат JSON",
+        "noItemSelected": "Сначала выберите диалоги для удаления",
+        "batchDeleteSuccess": "Успешно удалено {count} диалогов",
+        "batchDeleteError": "Ошибка массового удаления",
+        "batchDeletePartial": "Удаление завершено: успешно {deleted}, ошибок {failed}",
+        "exportSuccess": "Экспорт завершен",
+        "exportError": "Ошибка экспорта",
+        "noItemSelectedForExport": "Сначала выберите диалоги для экспорта",
+        "copySuccess": "Скопировано",
+        "copyError": "Не удалось скопировать"
+    }
+}

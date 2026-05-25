@@ -12,7 +12,7 @@ import os
 import shutil
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +25,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_knowledge_base_path,
 )
+from astrbot.core.utils.io import ensure_dir
 from astrbot.core.utils.version_comparator import VersionComparator
 
 # 从共享常量模块导入
@@ -59,8 +60,85 @@ def _get_major_version(version_str: str) -> str:
     return "0.0"
 
 
+def _validate_path_within(target_path: Path, base_dir: Path) -> bool:
+    """Validate that target_path is within base_dir after resolving symlinks.
+
+    Prevents path traversal attacks (CWE-22) by ensuring the resolved
+    target path is relative to the resolved base directory.
+    """
+    try:
+        resolved = target_path.resolve(strict=False)
+        base_resolved = base_dir.resolve(strict=False)
+        return resolved.is_relative_to(base_resolved)
+    except (OSError, ValueError):
+        return False
+
+
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 KB_PATH = get_astrbot_knowledge_base_path()
+DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = 5
+PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV = (
+    "ASTRBOT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT"
+)
+
+
+def _load_platform_stats_invalid_count_warn_limit() -> int:
+    raw_value = os.getenv(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV)
+    if raw_value is None:
+        return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+
+    try:
+        value = int(raw_value)
+        if value < 0:
+            raise ValueError("negative")
+        return value
+    except (TypeError, ValueError):
+        logger.warning(
+            "Invalid env %s=%r, fallback to default %d",
+            PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV,
+            raw_value,
+            DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
+        )
+        return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+
+
+PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = (
+    _load_platform_stats_invalid_count_warn_limit()
+)
+
+
+class _InvalidCountWarnLimiter:
+    """Rate-limit warnings for invalid platform_stats count values."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self._count = 0
+        self._suppression_logged = False
+
+    def warn_invalid_count(self, value: Any, key_for_log: tuple[Any, ...]) -> None:
+        if self.limit > 0:
+            if self._count < self.limit:
+                logger.warning(
+                    "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
+                    value,
+                    key_for_log,
+                )
+                self._count += 1
+                if self._count == self.limit and not self._suppression_logged:
+                    logger.warning(
+                        "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
+                        self.limit,
+                    )
+                    self._suppression_logged = True
+            return
+
+        if not self._suppression_logged:
+            # limit <= 0: emit only one suppression warning.
+            logger.warning(
+                "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
+                self.limit,
+            )
+            self._suppression_logged = True
 
 
 @dataclass
@@ -136,6 +214,10 @@ class ImportResult:
             "warnings": self.warnings,
             "errors": self.errors,
         }
+
+
+class DatabaseClearError(RuntimeError):
+    """Raised when clearing the main database in replace mode fails."""
 
 
 class AstrBotImporter:
@@ -342,6 +424,9 @@ class AstrBotImporter:
 
                     imported = await self._import_main_database(main_data)
                     result.imported_tables.update(imported)
+                except DatabaseClearError as e:
+                    result.add_error(f"清空主数据库失败: {e}")
+                    return result
                 except Exception as e:
                     result.add_error(f"导入主数据库失败: {e}")
                     return result
@@ -452,7 +537,9 @@ class AstrBotImporter:
                         await session.execute(delete(model_class))
                         logger.debug(f"已清空表 {table_name}")
                     except Exception as e:
-                        logger.warning(f"清空表 {table_name} 失败: {e}")
+                        raise DatabaseClearError(
+                            f"清空表 {table_name} 失败: {e}"
+                        ) from e
 
     async def _clear_kb_data(self) -> None:
         """清空知识库数据"""
@@ -494,9 +581,10 @@ class AstrBotImporter:
                     if not model_class:
                         logger.warning(f"未知的表: {table_name}")
                         continue
+                    normalized_rows = self._preprocess_main_table_rows(table_name, rows)
 
                     count = 0
-                    for row in rows:
+                    for row in normalized_rows:
                         try:
                             # 转换 datetime 字符串为 datetime 对象
                             row = self._convert_datetime_fields(row, model_class)
@@ -510,6 +598,118 @@ class AstrBotImporter:
                     logger.debug(f"导入表 {table_name}: {count} 条记录")
 
         return imported
+
+    def _preprocess_main_table_rows(
+        self, table_name: str, rows: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        if table_name == "platform_stats":
+            normalized_rows = self._merge_platform_stats_rows(rows)
+            duplicate_count = len(rows) - len(normalized_rows)
+            if duplicate_count > 0:
+                logger.warning(
+                    "检测到 %s 重复键 %d 条，已在导入前聚合",
+                    table_name,
+                    duplicate_count,
+                )
+            return normalized_rows
+        return rows
+
+    def _merge_platform_stats_rows(
+        self, rows: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Merge duplicate platform_stats rows by normalized timestamp/platform key.
+
+        Note:
+        - Invalid/empty timestamps are kept as distinct rows to avoid accidental merging.
+        - Non-string platform_id/platform_type are kept as distinct rows.
+        - Invalid count warnings are rate-limited per function invocation.
+        """
+        merged: dict[tuple[str, str, str], dict[str, Any]] = {}
+        result: list[dict[str, Any]] = []
+        warn_limiter = _InvalidCountWarnLimiter(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT)
+
+        for row in rows:
+            normalized_row, normalized_timestamp, count = (
+                self._normalize_platform_stats_entry(row, warn_limiter)
+            )
+            platform_id = normalized_row.get("platform_id")
+            platform_type = normalized_row.get("platform_type")
+
+            if (
+                normalized_timestamp is None
+                or not isinstance(platform_id, str)
+                or not isinstance(platform_type, str)
+            ):
+                result.append(normalized_row)
+                continue
+
+            merge_key = (normalized_timestamp, platform_id, platform_type)
+            existing = merged.get(merge_key)
+            if existing is None:
+                merged[merge_key] = normalized_row
+                result.append(normalized_row)
+            else:
+                existing["count"] += count
+
+        return result
+
+    def _normalize_platform_stats_entry(
+        self,
+        row: dict[str, Any],
+        warn_limiter: _InvalidCountWarnLimiter,
+    ) -> tuple[dict[str, Any], str | None, int]:
+        normalized_row = dict(row)
+        raw_timestamp = normalized_row.get("timestamp")
+        normalized_timestamp = self._normalize_platform_stats_timestamp(raw_timestamp)
+
+        if normalized_timestamp is not None:
+            normalized_row["timestamp"] = normalized_timestamp
+        elif isinstance(raw_timestamp, str):
+            normalized_row["timestamp"] = raw_timestamp.strip()
+        elif raw_timestamp is None:
+            normalized_row["timestamp"] = ""
+        else:
+            normalized_row["timestamp"] = str(raw_timestamp)
+
+        raw_count = normalized_row.get("count", 0)
+        try:
+            count = int(raw_count)
+        except (TypeError, ValueError):
+            key_for_log = (
+                normalized_row.get("timestamp"),
+                repr(normalized_row.get("platform_id")),
+                repr(normalized_row.get("platform_type")),
+            )
+            warn_limiter.warn_invalid_count(raw_count, key_for_log)
+            count = 0
+
+        normalized_row["count"] = count
+        return normalized_row, normalized_timestamp, count
+
+    def _normalize_platform_stats_timestamp(self, value: Any) -> str | None:
+        if isinstance(value, datetime):
+            dt = value
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return dt.isoformat()
+        if isinstance(value, str):
+            timestamp = value.strip()
+            if not timestamp:
+                return None
+            if timestamp.endswith("Z"):
+                timestamp = f"{timestamp[:-1]}+00:00"
+            try:
+                dt = datetime.fromisoformat(timestamp)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                else:
+                    dt = dt.astimezone(timezone.utc)
+                return dt.isoformat()
+            except ValueError:
+                return None
+        return None
 
     async def _import_knowledge_bases(
         self,
@@ -580,6 +780,10 @@ class AstrBotImporter:
                     try:
                         rel_path = name[len(media_prefix) :]
                         target_path = kb_dir / rel_path
+                        # Validate path is within kb directory (CWE-22)
+                        if not _validate_path_within(target_path, kb_dir):
+                            logger.warning(f"媒体文件路径越界，已跳过: {target_path}")
+                            continue
                         target_path.parent.mkdir(parents=True, exist_ok=True)
                         with zf.open(name) as src, open(target_path, "wb") as dst:
                             dst.write(src.read())
@@ -641,6 +845,11 @@ class AstrBotImporter:
                         target_path = Path(original_path)
                     else:
                         target_path = attachments_dir / os.path.basename(name)
+
+                    # Validate path is within attachments directory (CWE-22)
+                    if not _validate_path_within(target_path, attachments_dir):
+                        logger.warning(f"附件路径越界，已跳过: {target_path}")
+                        continue
 
                     target_path.parent.mkdir(parents=True, exist_ok=True)
                     with zf.open(name) as src, open(target_path, "wb") as dst:
@@ -719,6 +928,15 @@ class AstrBotImporter:
                             continue
 
                         target_path = target_dir / rel_path
+                        # Validate path is within target directory (CWE-22)
+                        if not _validate_path_within(target_path, target_dir):
+                            result.add_warning(f"文件路径越界，已跳过: {name}")
+                            continue
+
+                        if zf.getinfo(name).is_dir():
+                            ensure_dir(target_path)
+                            continue
+
                         target_path.parent.mkdir(parents=True, exist_ok=True)
 
                         with zf.open(name) as src, open(target_path, "wb") as dst:

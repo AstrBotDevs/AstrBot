@@ -87,7 +87,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         model: str,
         text: str,
     ) -> tuple[bytes | None, str]:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(None, self._call_qwen_tts, model, text)
         audio_bytes = await self._extract_audio_from_response(response)
         if not audio_bytes:
@@ -143,7 +143,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             voice=self.voice,
             format=AudioFormat.WAV_24000HZ_MONO_16BIT,
         )
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         audio_bytes = await loop.run_in_executor(
             None,
             synthesizer.call,

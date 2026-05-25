@@ -1,6 +1,10 @@
 import traceback
 
 from astrbot.core import astrbot_config, logger
+from astrbot.core.agent.runners.deerflow.constants import (
+    DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
+    DEERFLOW_PROVIDER_TYPE,
+)
 from astrbot.core.astrbot_config_mgr import AstrBotConfig, AstrBotConfigManager
 from astrbot.core.db.migration.migra_45_to_46 import migrate_45_to_46
 from astrbot.core.db.migration.migra_token_usage import migrate_token_usage
@@ -27,6 +31,11 @@ def _migra_agent_runner_configs(conf: AstrBotConfig, ids_map: dict) -> None:
                     "id"
                 ]
                 conf["provider_settings"]["agent_runner_type"] = "dashscope"
+            elif p["type"] == DEERFLOW_PROVIDER_TYPE:
+                conf["provider_settings"][DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY] = p[
+                    "id"
+                ]
+                conf["provider_settings"]["agent_runner_type"] = DEERFLOW_PROVIDER_TYPE
             conf.save_config()
     except Exception as e:
         logger.error(f"Migration for third party agent runner configs failed: {e!s}")
@@ -153,7 +162,7 @@ async def migra(
     ids_map = {}
     for prov in providers:
         type_ = prov.get("type")
-        if type_ in ["dify", "coze", "dashscope"]:
+        if type_ in ["dify", "coze", "dashscope", DEERFLOW_PROVIDER_TYPE]:
             prov["provider_type"] = "agent_runner"
             ids_map[prov["id"]] = {
                 "type": type_,

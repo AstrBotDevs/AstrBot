@@ -1,0 +1,133 @@
+﻿{
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "close": "Закрыть",
+    "copy": "Копировать",
+    "copied": "Скопировано",
+    "copyFailed": "Ошибка копирования",
+    "delete": "Удалить",
+    "edit": "Редактировать",
+    "add": "Добавить",
+    "confirm": "Подтвердить",
+    "loading": "Загрузка...",
+    "success": "Успешно",
+    "error": "Ошибка",
+    "warning": "Внимание",
+    "info": "Информация",
+    "name": "Имя",
+    "description": "Описание",
+    "author": "Автор",
+    "status": "Статус",
+    "actions": "Действия",
+    "enable": "Включить",
+    "disable": "Выключить",
+    "enabled": "Включено",
+    "disabled": "Выключено",
+    "reload": "Перезагрузить",
+    "configure": "Настроить",
+    "install": "Установить",
+    "uninstall": "Удалить",
+    "update": "Обновить",
+    "language": "Язык",
+    "settings": "Настройки",
+    "locale": "JSON",
+    "type": "Тип",
+    "press": "Нажмите",
+    "longPress": "Долгое нажатие",
+    "yes": "Да",
+    "no": "Нет",
+    "imagePreview": "Предпросмотр изображения",
+    "autoDetect": "Автоопределение",
+    "dialog": {
+        "confirmTitle": "Подтверждение",
+        "confirmMessage": "Вы уверены, что хотите выполнить это действие?",
+        "confirmButton": "ОК",
+        "cancelButton": "Отмена"
+    },
+    "restart": {
+        "waiting": "Ожидание перезагрузки AstrBot...",
+        "maxRetriesReached": "Превышено количество попыток проверки статуса. Пожалуйста, проверьте вручную."
+    },
+    "readme": {
+        "title": "Документация плагина",
+        "buttons": {
+            "viewOnGithub": "Открыть репозиторий на GitHub",
+            "refresh": "Обновить"
+        },
+        "loading": "Загрузка README...",
+        "errors": {
+            "fetchFailed": "Не удалось загрузить README",
+            "fetchError": "Произошла ошибка при загрузке README"
+        },
+        "empty": {
+            "title": "У этого плагина нет ссылки на документацию или репозиторий GitHub.",
+            "subtitle": "Пожалуйста, посетите магазин плагинов или свяжитесь с автором для получения дополнительной информации."
+        }
+    },
+    "changelog": {
+        "title": "Журнал изменений",
+        "loading": "Загрузка журнала изменений...",
+        "empty": {
+            "title": "У этого плагина нет журнала изменений",
+            "subtitle": "Разработчики могут добавить файл CHANGELOG.md в директорию плагина"
+        }
+    },
+    "editor": {
+        "fullscreen": "На весь экран",
+        "editingTitle": "Редактирование содержимого"
+    },
+    "templateList": {
+        "addEntry": "Добавить запись",
+        "empty": "Записей нет, выберите шаблон для добавления",
+        "missingTemplate": "Шаблон не найден, пожалуйста, удалите и добавьте заново.",
+        "unknownTemplate": "Неизвестный шаблон"
+    },
+    "list": {
+        "addItemPlaceholder": "Добавьте новый элемент и нажмите Enter",
+        "addButton": "Добавить",
+        "addMore": "Добавить еще",
+        "batchImport": "Массовый импорт",
+        "batchImportTitle": "Массовый импорт",
+        "batchImportLabel": "Один элемент на строку",
+        "batchImportPlaceholder": "Например:\nЭлемент 1\nЭлемент 2\nЭлемент 3",
+        "batchImportHint": "Каждая строка будет считаться отдельным элементом. Пустые строки игнорируются.",
+        "batchImportButton": "Импортировать {count} эл.",
+        "noItems": "Список пуст",
+        "noItemsHint": "Элементов нет. Напишите что-нибудь выше и нажмите Enter.",
+        "inputPlaceholder": "Введите текст и нажмите Enter",
+        "editTitle": "Изменить элемент",
+        "modifyButton": "Изменить"
+    },
+    "itemCard": {
+        "enabled": "Включено",
+        "disabled": "Выключено",
+        "delete": "Удалить",
+        "edit": "Изменить",
+        "copy": "Копировать",
+        "noData": "Нет данных"
+    },
+    "objectEditor": {
+        "dialogTitle": "Изменение пар ключ-значение",
+        "noItems": "Нет элементов",
+        "noParams": "Нет параметров",
+        "presets": "Пресеты",
+        "newKeyLabel": "Имя ключа",
+        "valueTypeLabel": "Тип значения",
+        "keyExists": "Ключ уже существует",
+        "invalidJson": "Некорректный формат JSON",
+        "placeholders": {
+            "keyName": "Ключ",
+            "stringValue": "Строка",
+            "numberValue": "Число",
+            "jsonValue": "JSON"
+        }
+    },
+    "firstNotice": {
+        "title": "Первичная информация",
+        "loading": "Загрузка информации...",
+        "empty": {
+            "title": "Нет информации для отображения",
+            "subtitle": "Файл FIRST_NOTICE.md не найден или пуст."
+        }
+    }
+}

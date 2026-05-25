@@ -34,6 +34,8 @@ class StarRequestSubStage(Stage):
             handlers_parsed_params = {}
 
         for handler in activated_handlers:
+            if event.is_stopped():
+                break
             params = handlers_parsed_params.get(handler.handler_full_name, {})
             md = star_map.get(handler.handler_module_path)
             if not md:
@@ -46,6 +48,8 @@ class StarRequestSubStage(Stage):
                 wrapper = call_handler(event, handler.handler, **params)
                 async for ret in wrapper:
                     yield ret
+                if event.is_stopped():
+                    break
                 event.clear_result()  # 清除上一个 handler 的结果
             except Exception as e:
                 traceback_text = traceback.format_exc()

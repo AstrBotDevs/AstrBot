@@ -7,6 +7,7 @@ from sqlmodel import SQLModel
 
 from astrbot.core.db.po import (
     Attachment,
+    ChatUIProject,
     CommandConfig,
     CommandConflict,
     ConversationV2,
@@ -16,6 +17,8 @@ from astrbot.core.db.po import (
     PlatformSession,
     PlatformStat,
     Preference,
+    SessionProjectRelation,
+    WebChatThread,
 )
 from astrbot.core.knowledge_base.models import (
     KBDocument,
@@ -44,6 +47,9 @@ MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "preferences": Preference,
     "platform_message_history": PlatformMessageHistory,
     "platform_sessions": PlatformSession,
+    "webchat_threads": WebChatThread,
+    "chatui_projects": ChatUIProject,
+    "session_project_relations": SessionProjectRelation,
     "attachments": Attachment,
     "command_configs": CommandConfig,
     "command_conflicts": CommandConflict,

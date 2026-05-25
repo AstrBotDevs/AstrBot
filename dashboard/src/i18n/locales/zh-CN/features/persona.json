@@ -21,6 +21,8 @@
   "form": {
     "personaId": "人格 ID",
     "systemPrompt": "系统提示词",
+    "customErrorMessage": "自定义报错回复信息（可选）",
+    "customErrorMessageHelp": "当该人格的 LLM 请求失败（例如连接失败）时，优先发送这条报错回复；留空则发送默认报错信息。",
     "presetDialogs": "预设对话",
     "presetDialogsHelp": "添加一些预设的对话来帮助机器人更好地理解角色设定。",
     "userMessage": "用户消息",
@@ -34,6 +36,7 @@
     "mcpServersQuickSelect": "MCP 服务器快速选择",
     "searchTools": "搜索工具",
     "selectedTools": "已选择的工具",
+    "builtinToolDisabledHint": "暂不支持在这里启用和停用内置工具，请在配置文件中启用和停用工具对应的配置项。",
     "noToolsAvailable": "暂无可用工具",
     "noToolsFound": "未找到匹配的工具",
     "loadingTools": "正在加载工具...",

@@ -7,7 +7,6 @@ import psutil
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_path
-from astrbot.core.utils.io import download_file
 
 from .zip_updator import ReleaseInfo, RepoZipUpdator
 
@@ -18,8 +17,8 @@ class AstrBotUpdator(RepoZipUpdator):
     功能包括检查更新、下载更新文件、解压缩更新文件等
     """
 
-    def __init__(self, repo_mirror: str = "") -> None:
-        super().__init__(repo_mirror)
+    def __init__(self, repo_mirror: str = "", verify: str | bool | None = None) -> None:
+        super().__init__(repo_mirror, verify=verify)
         self.MAIN_PATH = get_astrbot_path()
         self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
 
@@ -144,12 +143,21 @@ class AstrBotUpdator(RepoZipUpdator):
     async def get_releases(self) -> list:
         return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
 
-    async def update(self, reboot=False, latest=True, version=None, proxy="") -> None:
+    async def update(
+        self,
+        reboot=False,
+        latest=True,
+        version=None,
+        proxy="",
+        progress_callback=None,
+    ) -> None:
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
 
         if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
-            raise Exception("不支持更新此方式启动的AstrBot")  # 避免版本管理混乱
+            raise Exception(
+                "Error: You are running AstrBot via CLI, please use `pip` or `uv tool upgrade` to update AstrBot."
+            )  # 避免版本管理混乱
 
         if latest:
             latest_version = update_data[0]["tag_name"]
@@ -174,7 +182,11 @@ class AstrBotUpdator(RepoZipUpdator):
             file_url = f"{proxy}/{file_url}"
 
         try:
-            await download_file(file_url, "temp.zip")
+            await self._download_file(
+                file_url,
+                "temp.zip",
+                progress_callback=progress_callback,
+            )
             logger.info("下载 AstrBot Core 更新文件完成，正在执行解压...")
             self.unzip_file("temp.zip", self.MAIN_PATH)
         except BaseException as e:

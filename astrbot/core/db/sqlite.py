@@ -23,8 +23,10 @@ from astrbot.core.db.po import (
     PlatformSession,
     PlatformStat,
     Preference,
+    ProviderStat,
     SessionProjectRelation,
     SQLModel,
+    WebChatThread,
 )
 from astrbot.core.db.po import (
     Platform as DeprecatedPlatformStat,
@@ -32,8 +34,8 @@ from astrbot.core.db.po import (
 from astrbot.core.db.po import (
     Stats as DeprecatedStats,
 )
+from astrbot.core.sentinels import NOT_GIVEN
 
-NOT_GIVEN = T.TypeVar("NOT_GIVEN")
 TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
 
@@ -58,6 +60,8 @@ class SQLiteDatabase(BaseDatabase):
             # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
             await self._ensure_persona_folder_columns(conn)
             await self._ensure_persona_skills_column(conn)
+            await self._ensure_persona_custom_error_message_column(conn)
+            await self._ensure_platform_message_history_checkpoint_column(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -91,6 +95,36 @@ class SQLiteDatabase(BaseDatabase):
 
         if "skills" not in columns:
             await conn.execute(text("ALTER TABLE personas ADD COLUMN skills JSON"))
+
+    async def _ensure_persona_custom_error_message_column(self, conn) -> None:
+        """确保 personas 表有 custom_error_message 列。"""
+        result = await conn.execute(text("PRAGMA table_info(personas)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "custom_error_message" not in columns:
+            await conn.execute(
+                text("ALTER TABLE personas ADD COLUMN custom_error_message TEXT")
+            )
+
+    async def _ensure_platform_message_history_checkpoint_column(self, conn) -> None:
+        """Ensure platform_message_history has llm_checkpoint_id."""
+        result = await conn.execute(text("PRAGMA table_info(platform_message_history)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "llm_checkpoint_id" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE platform_message_history "
+                    "ADD COLUMN llm_checkpoint_id VARCHAR DEFAULT NULL"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_platform_message_history_llm_checkpoint_id "
+                    "ON platform_message_history (llm_checkpoint_id)"
+                )
+            )
 
     # ====
     # Platform Statistics
@@ -157,6 +191,51 @@ class SQLiteDatabase(BaseDatabase):
                 {"start_time": start_time},
             )
             return list(result.scalars().all())
+
+    async def insert_provider_stat(
+        self,
+        *,
+        umo: str,
+        provider_id: str,
+        provider_model: str | None = None,
+        conversation_id: str | None = None,
+        status: str = "completed",
+        stats: dict | None = None,
+        agent_type: str = "internal",
+    ) -> ProviderStat:
+        """Insert a provider stat record for a single agent response."""
+        stats = stats or {}
+        token_usage = stats.get("token_usage", {})
+
+        token_input_other = int(token_usage.get("input_other", 0) or 0)
+        token_input_cached = int(token_usage.get("input_cached", 0) or 0)
+        token_output = int(token_usage.get("output", 0) or 0)
+
+        start_time = float(stats.get("start_time", 0.0) or 0.0)
+        end_time = float(stats.get("end_time", 0.0) or 0.0)
+        time_to_first_token = float(stats.get("time_to_first_token", 0.0) or 0.0)
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                record = ProviderStat(
+                    agent_type=agent_type,
+                    status=status,
+                    umo=umo,
+                    conversation_id=conversation_id,
+                    provider_id=provider_id,
+                    provider_model=provider_model,
+                    token_input_other=token_input_other,
+                    token_input_cached=token_input_cached,
+                    token_output=token_output,
+                    start_time=start_time,
+                    end_time=end_time,
+                    time_to_first_token=time_to_first_token,
+                )
+                session.add(record)
+                await session.flush()
+                await session.refresh(record)
+                return record
 
     # ====
     # Conversation Management
@@ -442,6 +521,7 @@ class SQLiteDatabase(BaseDatabase):
         content,
         sender_id=None,
         sender_name=None,
+        llm_checkpoint_id=None,
     ):
         """Insert a new platform message history record."""
         async with self.get_db() as session:
@@ -453,9 +533,45 @@ class SQLiteDatabase(BaseDatabase):
                     content=content,
                     sender_id=sender_id,
                     sender_name=sender_name,
+                    llm_checkpoint_id=llm_checkpoint_id,
                 )
                 session.add(new_history)
                 return new_history
+
+    async def update_platform_message_history(
+        self,
+        message_id: int,
+        content: dict | None = None,
+        llm_checkpoint_id: str | None = None,
+    ) -> None:
+        """Update a platform message history record."""
+        values = {}
+        if content is not None:
+            values["content"] = content
+        if llm_checkpoint_id is not None:
+            values["llm_checkpoint_id"] = llm_checkpoint_id
+        if not values:
+            return
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    update(PlatformMessageHistory)
+                    .where(PlatformMessageHistory.id == message_id)
+                    .values(**values)
+                )
+
+    async def delete_platform_message_history_by_id(self, message_id: int) -> None:
+        """Delete a platform message history record by ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(PlatformMessageHistory).where(
+                        PlatformMessageHistory.id == message_id
+                    )
+                )
 
     async def delete_platform_message_offset(
         self,
@@ -510,6 +626,136 @@ class SQLiteDatabase(BaseDatabase):
             )
             result = await session.execute(query)
             return result.scalar_one_or_none()
+
+    async def create_webchat_thread(
+        self,
+        creator: str,
+        parent_session_id: str,
+        parent_message_id: int,
+        base_checkpoint_id: str,
+        selected_text: str,
+    ) -> WebChatThread:
+        """Create a WebChat side thread."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                thread = WebChatThread(
+                    creator=creator,
+                    parent_session_id=parent_session_id,
+                    parent_message_id=parent_message_id,
+                    base_checkpoint_id=base_checkpoint_id,
+                    selected_text=selected_text,
+                )
+                session.add(thread)
+                await session.flush()
+                await session.refresh(thread)
+                return thread
+
+    async def get_webchat_thread_by_id(
+        self,
+        thread_id: str,
+    ) -> WebChatThread | None:
+        """Get a WebChat side thread by thread_id."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(WebChatThread).where(WebChatThread.thread_id == thread_id)
+            )
+            return result.scalar_one_or_none()
+
+    async def get_webchat_threads_by_parent_session(
+        self,
+        parent_session_id: str,
+        creator: str | None = None,
+    ) -> list[WebChatThread]:
+        """Get side threads for a parent WebChat session."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(WebChatThread).where(
+                WebChatThread.parent_session_id == parent_session_id
+            )
+            if creator is not None:
+                query = query.where(WebChatThread.creator == creator)
+            query = query.order_by(WebChatThread.created_at)
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
+    async def get_webchat_thread_by_parent_message_and_text(
+        self,
+        parent_session_id: str,
+        parent_message_id: int,
+        selected_text: str,
+        creator: str | None = None,
+    ) -> WebChatThread | None:
+        """Get an existing side thread for the same selected text."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(WebChatThread).where(
+                WebChatThread.parent_session_id == parent_session_id,
+                WebChatThread.parent_message_id == parent_message_id,
+                WebChatThread.selected_text == selected_text,
+            )
+            if creator is not None:
+                query = query.where(WebChatThread.creator == creator)
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def delete_webchat_thread(self, thread_id: str) -> None:
+        """Delete a WebChat side thread."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(WebChatThread).where(WebChatThread.thread_id == thread_id)
+                )
+
+    async def delete_webchat_threads_by_parent_session(
+        self,
+        parent_session_id: str,
+    ) -> list[str]:
+        """Delete side threads for a parent WebChat session."""
+        threads = await self.get_webchat_threads_by_parent_session(parent_session_id)
+        thread_ids = [thread.thread_id for thread in threads]
+        if not thread_ids:
+            return []
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(WebChatThread).where(
+                        col(WebChatThread.thread_id).in_(thread_ids)
+                    )
+                )
+        return thread_ids
+
+    async def delete_webchat_threads_by_parent_message_ids(
+        self,
+        parent_session_id: str,
+        parent_message_ids: list[int],
+    ) -> list[str]:
+        """Delete side threads linked to parent message IDs."""
+        if not parent_message_ids:
+            return []
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(WebChatThread.thread_id).where(
+                    WebChatThread.parent_session_id == parent_session_id,
+                    col(WebChatThread.parent_message_id).in_(parent_message_ids),
+                )
+            )
+            thread_ids = list(result.scalars().all())
+        if not thread_ids:
+            return []
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(WebChatThread).where(
+                        col(WebChatThread.thread_id).in_(thread_ids)
+                    )
+                )
+        return thread_ids
 
     async def insert_attachment(self, path, type, mime_type):
         """Insert a new attachment record."""
@@ -675,6 +921,7 @@ class SQLiteDatabase(BaseDatabase):
         begin_dialogs=None,
         tools=None,
         skills=None,
+        custom_error_message=None,
         folder_id=None,
         sort_order=0,
     ):
@@ -688,6 +935,7 @@ class SQLiteDatabase(BaseDatabase):
                     begin_dialogs=begin_dialogs or [],
                     tools=tools,
                     skills=skills,
+                    custom_error_message=custom_error_message,
                     folder_id=folder_id,
                     sort_order=sort_order,
                 )
@@ -719,6 +967,7 @@ class SQLiteDatabase(BaseDatabase):
         begin_dialogs=None,
         tools=NOT_GIVEN,
         skills=NOT_GIVEN,
+        custom_error_message=NOT_GIVEN,
     ):
         """Update a persona's system prompt or begin dialogs."""
         async with self.get_db() as session:
@@ -734,6 +983,8 @@ class SQLiteDatabase(BaseDatabase):
                     values["tools"] = tools
                 if skills is not NOT_GIVEN:
                     values["skills"] = skills
+                if custom_error_message is not NOT_GIVEN:
+                    values["custom_error_message"] = custom_error_message
                 if not values:
                     return None
                 query = query.values(**values)
@@ -1400,6 +1651,21 @@ class SQLiteDatabase(BaseDatabase):
             )
             result = await session.execute(query)
             return result.scalar_one_or_none()
+
+    async def get_platform_sessions_by_ids(
+        self, session_ids: list[str]
+    ) -> list[PlatformSession]:
+        """Get platform sessions by IDs."""
+        if not session_ids:
+            return []
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(PlatformSession).where(
+                col(PlatformSession.session_id).in_(session_ids)
+            )
+            result = await session.execute(query)
+            return list(result.scalars().all())
 
     async def get_platform_sessions_by_creator(
         self,

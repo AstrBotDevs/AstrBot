@@ -1,6 +1,6 @@
 <template>
-    <v-card class="persona-card" :class="{ 'dragging': isDragging }" rounded="lg" @click="$emit('view')" elevation="1" hover
-        draggable="true" @dragstart="handleDragStart" @dragend="handleDragEnd">
+    <v-card class="persona-card" :class="{ 'dragging': isDragging }" rounded="lg" variant="outlined" @click="$emit('view')"
+        elevation="0" draggable="true" @dragstart="handleDragStart" @dragend="handleDragEnd">
         <v-card-title class="d-flex justify-space-between align-center">
             <div class="text-truncate ml-2">{{ persona.persona_id }}</div>
             <v-menu offset-y>
@@ -85,6 +85,7 @@ import { useModuleI18n } from '@/i18n/composables';
 interface Persona {
     persona_id: string;
     system_prompt: string;
+    custom_error_message?: string | null;
     begin_dialogs?: string[] | null;
     tools?: string[] | null;
     skills?: string[] | null;
@@ -147,9 +148,15 @@ export default defineComponent({
 
 <style scoped>
 .persona-card {
+    background: rgb(var(--v-theme-surface));
     height: 100%;
     cursor: grab;
-    transition: all 0.2s ease;
+    transition: background-color 0.16s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.persona-card:hover,
+.persona-card:focus-within {
+    background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
 .persona-card:active {
@@ -159,10 +166,6 @@ export default defineComponent({
 .persona-card.dragging {
     opacity: 0.5;
     transform: scale(0.95);
-}
-
-.persona-card:hover {
-    transform: translateY(-2px);
 }
 
 .system-prompt-preview {

@@ -5,16 +5,19 @@
 
 import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from astrbot import logger
 from astrbot.core.db.vec_db.base import Result
-from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.rank_fusion import RankFusion
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseRetriever
 from astrbot.core.provider.provider import RerankProvider
 
 from ..kb_helper import KBHelper
+
+if TYPE_CHECKING:
+    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 
 @dataclass
@@ -170,26 +173,31 @@ class RetrievalManager:
         first_rerank = None
         for kb_id in kb_ids:
             vec_db = kb_options[kb_id]["vec_db"]
-            if not isinstance(vec_db, FaissVecDB):
-                logger.warning(f"vec_db for kb_id {kb_id} is not FaissVecDB")
+            rerank_provider = (
+                getattr(vec_db, "rerank_provider", None) if vec_db else None
+            )
+            if rerank_provider is None:
                 continue
 
             rerank_pi = kb_options[kb_id]["rerank_provider_id"]
             if (
                 vec_db
-                and vec_db.rerank_provider
+                and rerank_provider
                 and rerank_pi
-                and rerank_pi == vec_db.rerank_provider.meta().id
+                and rerank_pi == rerank_provider.meta().id
             ):
-                first_rerank = vec_db.rerank_provider
+                first_rerank = rerank_provider
                 break
         if first_rerank and retrieval_results:
-            retrieval_results = await self._rerank(
-                query=query,
-                results=retrieval_results,
-                top_k=top_m_final,
-                rerank_provider=first_rerank,
-            )
+            try:
+                retrieval_results = await self._rerank(
+                    query=query,
+                    results=retrieval_results,
+                    top_k=top_m_final,
+                    rerank_provider=first_rerank,
+                )
+            except Exception as e:
+                logger.warning(f"Rerank 执行失败，已跳过重排序并使用融合结果: {e}")
 
         return retrieval_results[:top_m_final]
 
@@ -229,10 +237,10 @@ class RetrievalManager:
 
                 all_results.extend(vec_results)
             except Exception as e:
-                from astrbot.core import logger
-
-                logger.warning(f"知识库 {kb_id} 稠密检索失败: {e}")
-                continue
+                logger.error(f"知识库 {kb_id} 稠密检索失败: {e}", exc_info=True)
+                if len(kb_ids) == 1:
+                    raise RuntimeError(f"知识库 {kb_id} 稠密检索失败: {e}") from e
+                # multi-KB: skip the faulty KB and continue
 
         # 按相似度排序并返回 top_k
         all_results.sort(key=lambda x: x.similarity, reverse=True)

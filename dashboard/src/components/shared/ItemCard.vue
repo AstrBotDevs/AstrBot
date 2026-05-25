@@ -1,5 +1,5 @@
 <template>
-  <v-card class="item-card hover-elevation" style="padding: 4px;" elevation="0">
+  <v-card class="item-card hover-elevation" style="padding: 4px;" :variant="variant" elevation="0">
     <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
       <span class="text-h2 text-truncate" :title="getItemTitle()">{{ getItemTitle() }}</span>
       <v-tooltip location="top">
@@ -10,7 +10,7 @@
             density="compact"
             :model-value="getItemEnabled()"
             :loading="loading"
-            :disabled="loading"
+            :disabled="loading || disableToggle"
             v-bind="props"
             @update:model-value="toggleEnabled"
           ></v-switch>
@@ -29,7 +29,7 @@
       color="error"
       size="small"
       rounded="xl"
-      :disabled="loading"
+      :disabled="loading || disableDelete"
       @click="$emit('delete', item)"
     >
       {{ t('core.common.itemCard.delete') }}
@@ -108,6 +108,18 @@ export default {
     showEditButton: {
       type: Boolean,
       default: true
+    },
+    disableToggle: {
+      type: Boolean,
+      default: false
+    },
+    disableDelete: {
+      type: Boolean,
+      default: false
+    },
+    variant: {
+      type: String,
+      default: undefined
     }
   },
   emits: ['toggle-enabled', 'delete', 'edit', 'copy'],
@@ -127,17 +139,20 @@ export default {
 
 <style scoped>
 .item-card {
+  background: rgb(var(--v-theme-surface));
   position: relative;
   border-radius: 18px;
-  transition: all 0.3s ease;
+  transition: background-color 0.16s ease, transform 0.3s ease;
   overflow: hidden;
   min-height: 220px;
+  height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
 
 .hover-elevation:hover {
+  background: rgba(var(--v-theme-on-surface), 0.04);
   transform: translateY(-2px);
 }
 

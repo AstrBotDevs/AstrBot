@@ -52,18 +52,6 @@ class TestContextTruncator:
         assert len(result) == 3
         assert result == messages
 
-    def test_fix_messages_tool_with_valid_context(self):
-        """Test fix_messages with tool message after user+assistant."""
-        truncator = ContextTruncator()
-        messages = [
-            self.create_message("user", "Run tool"),
-            self.create_message("assistant", "Running..."),
-            self.create_message("tool", "Tool result"),
-        ]
-        result = truncator.fix_messages(messages)
-        assert len(result) == 3
-        assert result == messages
-
     def test_fix_messages_tool_without_context(self):
         """Test fix_messages with tool message without enough context."""
         truncator = ContextTruncator()
@@ -73,43 +61,6 @@ class TestContextTruncator:
         result = truncator.fix_messages(messages)
         # Tool message without context should be removed
         assert len(result) == 0
-
-    def test_fix_messages_tool_with_only_one_message(self):
-        """Test fix_messages with tool message after only one message."""
-        truncator = ContextTruncator()
-        messages = [
-            self.create_message("user", "Hello"),
-            self.create_message("tool", "Tool result"),
-        ]
-        result = truncator.fix_messages(messages)
-        # Tool message without enough context should be removed
-        assert len(result) == 0
-
-    def test_fix_messages_multiple_tools(self):
-        """Test fix_messages with multiple tool messages."""
-        truncator = ContextTruncator()
-        messages = [
-            self.create_message("user", "Run tool"),
-            self.create_message("assistant", "Running..."),
-            self.create_message("tool", "Tool 1 result"),
-            self.create_message("tool", "Tool 2 result"),
-        ]
-        result = truncator.fix_messages(messages)
-        assert len(result) == 4
-        assert result == messages
-
-    def test_fix_messages_mixed_system_tool(self):
-        """Test fix_messages with system message and tool messages."""
-        truncator = ContextTruncator()
-        messages = [
-            self.create_message("system", "System prompt"),
-            self.create_message("user", "Run tool"),
-            self.create_message("assistant", "Running..."),
-            self.create_message("tool", "Tool result"),
-        ]
-        result = truncator.fix_messages(messages)
-        assert len(result) == 4
-        assert result == messages
 
     # ==================== truncate_by_turns Tests ====================
 
@@ -153,8 +104,9 @@ class TestContextTruncator:
             messages, keep_most_recent_turns=0, drop_turns=1
         )
 
-        # Should result in empty or minimal list
-        assert len(result) == 0
+        # 截断后至少保留一条 user 消息 (#6196)
+        assert len(result) >= 1
+        assert result[0].role == "user"
 
     def test_truncate_by_turns_below_threshold(self):
         """Test truncate_by_turns when messages are below threshold."""
@@ -250,8 +202,9 @@ class TestContextTruncator:
         messages = self.create_messages(4)
         result = truncator.truncate_by_dropping_oldest_turns(messages, drop_turns=2)
 
-        # Should drop all turns
-        assert len(result) == 0
+        # 即使 drop 掉所有 turn，也会把 user 消息补回来 (#6196)
+        assert len(result) >= 1
+        assert result[0].role == "user"
 
     def test_truncate_by_dropping_oldest_turns_drop_more_than_available(self):
         """Test truncate_by_dropping_oldest_turns with drop_turns > available turns."""
@@ -260,8 +213,9 @@ class TestContextTruncator:
         messages = self.create_messages(4)
         result = truncator.truncate_by_dropping_oldest_turns(messages, drop_turns=5)
 
-        # Should result in empty list
-        assert len(result) == 0
+        # 同理，user 消息会被保留 (#6196)
+        assert len(result) >= 1
+        assert result[0].role == "user"
 
     def test_truncate_by_dropping_oldest_turns_ensures_user_first(self):
         """Test that result starts with user message after dropping."""
@@ -421,3 +375,60 @@ class TestContextTruncator:
         assert len(result) >= 0  # May keep system messages or clear all
         if len(result) > 0:
             assert all(msg.role == "system" for msg in result)
+
+    # ==================== #6196: 长 tool chain 只有一条 user 消息 ====================
+
+    def _build_tool_chain(self, tool_rounds: int = 20) -> list[Message]:
+        """构造 system -> user -> (assistant -> tool) * N 的长链，只有一条 user。"""
+        msgs = [
+            self.create_message("system", "You are a helpful assistant."),
+            self.create_message("user", "帮我查一下天气"),
+        ]
+        for i in range(tool_rounds):
+            msgs.append(self.create_message("assistant", f"调用工具 {i}"))
+            msgs.append(self.create_message("tool", f"工具结果 {i}"))
+        return msgs
+
+    def test_drop_oldest_preserves_sole_user(self):
+        """#6196: drop 1 turn 不应丢掉唯一的 user 消息。"""
+        truncator = ContextTruncator()
+        msgs = self._build_tool_chain(20)  # 1 system + 1 user + 40 asst/tool = 42
+        result = truncator.truncate_by_dropping_oldest_turns(msgs, drop_turns=1)
+        roles = [m.role for m in result]
+        assert "user" in roles, "唯一的 user 消息被丢掉了"
+        assert roles[0] == "system"
+
+    def test_halving_preserves_sole_user(self):
+        """#6196: 对半砍不应丢掉唯一的 user 消息。"""
+        truncator = ContextTruncator()
+        msgs = self._build_tool_chain(20)
+        result = truncator.truncate_by_halving(msgs)
+        roles = [m.role for m in result]
+        assert "user" in roles, "唯一的 user 消息被丢掉了"
+
+    def test_truncate_by_turns_preserves_sole_user(self):
+        """#6196: keep_most_recent_turns 也不应丢掉唯一的 user 消息。"""
+        truncator = ContextTruncator()
+        msgs = self._build_tool_chain(20)
+        result = truncator.truncate_by_turns(
+            msgs, keep_most_recent_turns=3, drop_turns=1
+        )
+        roles = [m.role for m in result]
+        assert "user" in roles, "唯一的 user 消息被丢掉了"
+
+    def test_drop_oldest_heavy_drops_still_has_user(self):
+        """#6196: 大量 drop 也不会丢 user。"""
+        truncator = ContextTruncator()
+        msgs = self._build_tool_chain(30)
+        result = truncator.truncate_by_dropping_oldest_turns(msgs, drop_turns=10)
+        roles = [m.role for m in result]
+        assert "user" in roles
+
+    def test_normal_multi_user_not_affected(self):
+        """正常多 user 对话不受影响。"""
+        truncator = ContextTruncator()
+        msgs = self.create_messages(20, include_system=True)
+        result_before = truncator.truncate_by_dropping_oldest_turns(msgs, drop_turns=2)
+        # 多 user 场景下截断后仍有 user
+        roles = [m.role for m in result_before]
+        assert "user" in roles

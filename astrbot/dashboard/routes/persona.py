@@ -5,6 +5,7 @@ from quart import request
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.sentinels import NOT_GIVEN
 
 from .route import Response, Route, RouteContext
 
@@ -58,6 +59,7 @@ class PersonaRoute(Route):
                             "begin_dialogs": persona.begin_dialogs or [],
                             "tools": persona.tools,
                             "skills": persona.skills,
+                            "custom_error_message": persona.custom_error_message,
                             "folder_id": persona.folder_id,
                             "sort_order": persona.sort_order,
                             "created_at": persona.created_at.isoformat()
@@ -98,6 +100,7 @@ class PersonaRoute(Route):
                         "begin_dialogs": persona.begin_dialogs or [],
                         "tools": persona.tools,
                         "skills": persona.skills,
+                        "custom_error_message": persona.custom_error_message,
                         "folder_id": persona.folder_id,
                         "sort_order": persona.sort_order,
                         "created_at": persona.created_at.isoformat()
@@ -123,6 +126,7 @@ class PersonaRoute(Route):
             begin_dialogs = data.get("begin_dialogs", [])
             tools = data.get("tools")
             skills = data.get("skills")
+            custom_error_message = data.get("custom_error_message")
             folder_id = data.get("folder_id")  # None 表示根目录
             sort_order = data.get("sort_order", 0)
 
@@ -131,6 +135,11 @@ class PersonaRoute(Route):
 
             if not system_prompt:
                 return Response().error("系统提示词不能为空").__dict__
+
+            if custom_error_message is not None:
+                if not isinstance(custom_error_message, str):
+                    return Response().error("自定义报错回复信息必须是字符串").__dict__
+                custom_error_message = custom_error_message.strip() or None
 
             # 验证 begin_dialogs 格式
             if begin_dialogs and len(begin_dialogs) % 2 != 0:
@@ -146,6 +155,7 @@ class PersonaRoute(Route):
                 begin_dialogs=begin_dialogs if begin_dialogs else None,
                 tools=tools if tools else None,
                 skills=skills if skills else None,
+                custom_error_message=custom_error_message,
                 folder_id=folder_id,
                 sort_order=sort_order,
             )
@@ -161,6 +171,7 @@ class PersonaRoute(Route):
                             "begin_dialogs": persona.begin_dialogs or [],
                             "tools": persona.tools or [],
                             "skills": persona.skills or [],
+                            "custom_error_message": persona.custom_error_message,
                             "folder_id": persona.folder_id,
                             "sort_order": persona.sort_order,
                             "created_at": persona.created_at.isoformat()
@@ -187,11 +198,23 @@ class PersonaRoute(Route):
             persona_id = data.get("persona_id")
             system_prompt = data.get("system_prompt")
             begin_dialogs = data.get("begin_dialogs")
+            has_tools = "tools" in data
             tools = data.get("tools")
+            has_skills = "skills" in data
             skills = data.get("skills")
+            has_custom_error_message = "custom_error_message" in data
+            custom_error_message = data.get("custom_error_message")
 
             if not persona_id:
                 return Response().error("缺少必要参数: persona_id").__dict__
+
+            if has_custom_error_message:
+                if custom_error_message is not None and not isinstance(
+                    custom_error_message, str
+                ):
+                    return Response().error("自定义报错回复信息必须是字符串").__dict__
+                if isinstance(custom_error_message, str):
+                    custom_error_message = custom_error_message.strip() or None
 
             # 验证 begin_dialogs 格式
             if begin_dialogs is not None and len(begin_dialogs) % 2 != 0:
@@ -201,13 +224,19 @@ class PersonaRoute(Route):
                     .__dict__
                 )
 
-            await self.persona_mgr.update_persona(
-                persona_id=persona_id,
-                system_prompt=system_prompt,
-                begin_dialogs=begin_dialogs,
-                tools=tools,
-                skills=skills,
-            )
+            update_kwargs = {
+                "persona_id": persona_id,
+                "system_prompt": system_prompt,
+                "begin_dialogs": begin_dialogs,
+            }
+            if has_tools:
+                update_kwargs["tools"] = tools
+            if has_skills:
+                update_kwargs["skills"] = skills
+            if has_custom_error_message:
+                update_kwargs["custom_error_message"] = custom_error_message
+
+            await self.persona_mgr.update_persona(**update_kwargs)
 
             return Response().ok({"message": "人格更新成功"}).__dict__
         except ValueError as e:
@@ -387,8 +416,10 @@ class PersonaRoute(Route):
             data = await request.get_json()
             folder_id = data.get("folder_id")
             name = data.get("name")
-            parent_id = data.get("parent_id")
-            description = data.get("description")
+            parent_id = data.get("parent_id") if "parent_id" in data else NOT_GIVEN
+            description = (
+                data.get("description") if "description" in data else NOT_GIVEN
+            )
             sort_order = data.get("sort_order")
 
             if not folder_id:

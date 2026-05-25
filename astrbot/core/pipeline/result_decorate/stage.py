@@ -5,7 +5,7 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
-from astrbot.core.message.components import At, File, Image, Node, Plain, Record, Reply
+from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -209,7 +209,7 @@ class ResultDecorateStage(Stage):
                 "dingtalk",
             ]:
                 if (
-                    self.only_llm_result and result.is_llm_result()
+                    self.only_llm_result and result.is_model_result()
                 ) or not self.only_llm_result:
                     new_chain = []
                     for comp in result.chain:
@@ -275,8 +275,23 @@ class ResultDecorateStage(Stage):
                 and event.get_extra("_llm_reasoning_content")
             ):
                 # inject reasoning content to chain
-                reasoning_content = event.get_extra("_llm_reasoning_content")
-                result.chain.insert(0, Plain(f"🤔 思考: {reasoning_content}\n"))
+                reasoning_content = str(event.get_extra("_llm_reasoning_content"))
+                if event.get_platform_name() == "lark":
+                    result.chain.insert(
+                        0,
+                        Json(
+                            data={
+                                "type": "lark_collapsible_panel_reasoning",
+                                "title": "💭 Thinking",
+                                "expanded": False,
+                                "content": reasoning_content,
+                            },
+                        ),
+                    )
+                else:
+                    result.chain.insert(
+                        0, Plain(f"🤔 思考: {reasoning_content}\n\n────\n")
+                    )
 
             if should_tts and tts_provider:
                 new_chain = []
@@ -353,7 +368,7 @@ class ResultDecorateStage(Stage):
                         return
                     if time.time() - render_start > 3:
                         logger.warning(
-                            "文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。",
+                            "文本转图片耗时超过了 3 秒，如果觉得很慢可以在 WebUI 中关闭文本转图片模式。",
                         )
                     if url:
                         if url.startswith("http"):
@@ -383,8 +398,11 @@ class ResultDecorateStage(Stage):
                     )
                     result.chain = [node]
 
-            has_plain = any(isinstance(item, Plain) for item in result.chain)
-            if has_plain:
+            # at 回复 / 引用回复仅适用于纯文本或图文消息
+            can_decorate = all(
+                isinstance(item, (Plain, Image)) for item in result.chain
+            )
+            if can_decorate:
                 # at 回复
                 if (
                     self.reply_with_mention
@@ -399,5 +417,4 @@ class ResultDecorateStage(Stage):
 
                 # 引用回复
                 if self.reply_with_quote:
-                    if not any(isinstance(item, File) for item in result.chain):
-                        result.chain.insert(0, Reply(id=event.message_obj.message_id))
+                    result.chain.insert(0, Reply(id=event.message_obj.message_id))

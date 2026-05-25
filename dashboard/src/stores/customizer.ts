@@ -1,16 +1,15 @@
 import { defineStore } from 'pinia';
 import config from '@/config';
 
-export const useCustomizerStore = defineStore({
-  id: 'customizer',
+export const useCustomizerStore = defineStore("customizer", {
   state: () => ({
     Sidebar_drawer: config.Sidebar_drawer,
     Customizer_drawer: config.Customizer_drawer,
     mini_sidebar: config.mini_sidebar,
-    fontTheme: "Poppins",
+    fontTheme: "Noto Sans SC",
     uiTheme: config.uiTheme,
     inputBg: config.inputBg,
-    viewMode: (localStorage.getItem('viewMode') as 'bot' | 'chat') || 'bot' // 'bot' 或 'chat'
+    chatSidebarOpen: false // chat mode mobile sidebar state
   }),
 
   getters: {},
@@ -28,9 +27,12 @@ export const useCustomizerStore = defineStore({
       this.uiTheme = payload;
       localStorage.setItem("uiTheme", payload);
     },
-    SET_VIEW_MODE(payload: 'bot' | 'chat') {
-      this.viewMode = payload;
-      localStorage.setItem("viewMode", payload);
+
+    TOGGLE_CHAT_SIDEBAR() {
+      this.chatSidebarOpen = !this.chatSidebarOpen;
+    },
+    SET_CHAT_SIDEBAR(payload: boolean) {
+      this.chatSidebarOpen = payload;
     },
   }
 });

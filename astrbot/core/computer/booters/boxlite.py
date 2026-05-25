@@ -4,7 +4,7 @@ from typing import Any
 
 import aiohttp
 import boxlite
-from shipyard.filesystem import FileSystemComponent as ShipyardFileSystemComponent
+from shipyard import FileSystemComponent as ShipyardFileSystemComponent
 from shipyard.python import PythonComponent as ShipyardPythonComponent
 from shipyard.shell import ShellComponent as ShipyardShellComponent
 
@@ -12,6 +12,7 @@ from astrbot.api import logger
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
+from .shipyard import ShipyardFileSystemWrapper
 
 
 class MockShipyardSandboxClient:
@@ -64,6 +65,10 @@ class MockShipyardSandboxClient:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(url, data=data) as response:
                     if response.status == 200:
+                        logger.info(
+                            "[Computer] File uploaded to Boxlite sandbox: %s",
+                            remote_path,
+                        )
                         return {
                             "success": True,
                             "message": "File uploaded successfully",
@@ -146,11 +151,6 @@ class BoxliteBooter(ComputerBooter):
         self.mocked = MockShipyardSandboxClient(
             sb_url=f"http://127.0.0.1:{random_port}"
         )
-        self._fs = ShipyardFileSystemComponent(
-            client=self.mocked,  # type: ignore
-            ship_id=self.box.id,
-            session_id=session_id,
-        )
         self._python = ShipyardPythonComponent(
             client=self.mocked,  # type: ignore
             ship_id=self.box.id,
@@ -160,6 +160,14 @@ class BoxliteBooter(ComputerBooter):
             client=self.mocked,  # type: ignore
             ship_id=self.box.id,
             session_id=session_id,
+        )
+        self._ship_fs = ShipyardFileSystemComponent(
+            client=self.mocked,  # type: ignore
+            ship_id=self.box.id,
+            session_id=session_id,
+        )
+        self._fs = ShipyardFileSystemWrapper(
+            _shipyard_fs=self._ship_fs, _shipyard_shell=self._shell
         )
 
         await self.mocked.wait_healthy(self.box.id, session_id)
