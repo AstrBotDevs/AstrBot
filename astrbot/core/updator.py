@@ -6,6 +6,7 @@ import psutil
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.config.update_config import UpdateConfig
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
 from .zip_updator import ReleaseInfo, RepoZipUpdator
@@ -20,7 +21,8 @@ class AstrBotUpdator(RepoZipUpdator):
     def __init__(self, repo_mirror: str = "", verify: str | bool | None = None) -> None:
         super().__init__(repo_mirror, verify=verify)
         self.MAIN_PATH = get_astrbot_path()
-        self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
+        self._update_config = UpdateConfig()
+        self.ASTRBOT_RELEASE_API = self._update_config.get_core_release_api_url()
 
     def terminate_child_processes(self) -> None:
         """终止当前进程的所有子进程
@@ -174,12 +176,24 @@ class AstrBotUpdator(RepoZipUpdator):
         else:
             if len(str(version)) != 40:
                 raise Exception("commit hash 长度不正确，应为 40")
-            file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/{version}.zip"
+            file_url = self._update_config.get_github_archive_url(version)
+
+        # 如果 zipball_url 是相对路径（自建服务器可能返回），补全为绝对 URL
+        if file_url.startswith("/"):
+            from urllib.parse import urlparse
+
+            parsed = urlparse(self.ASTRBOT_RELEASE_API)
+            base_url = f"{parsed.scheme}://{parsed.netloc}"
+            file_url = f"{base_url}{file_url}"
+            logger.info(f"检测到相对路径 zipball_url，已补全为: {file_url}")
+
         logger.info(f"准备更新至指定版本的 AstrBot Core: {version}")
 
-        if proxy:
-            proxy = proxy.removesuffix("/")
-            file_url = f"{proxy}/{file_url}"
+        # 使用传入的 proxy 或配置中的 proxy
+        effective_proxy = proxy or self._update_config.get_effective_proxy_url()
+        if effective_proxy:
+            effective_proxy = effective_proxy.removesuffix("/")
+            file_url = f"{effective_proxy}/{file_url}"
 
         try:
             await self._download_file(
