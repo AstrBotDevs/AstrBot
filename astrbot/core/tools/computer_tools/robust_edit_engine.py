@@ -49,30 +49,18 @@ async def _get_lock(path: str) -> asyncio.Lock:
 
 def _normalize_line_endings(text: str) -> str:
     """
-    Normalize line endings in text.
+    Normalize actual CRLF line endings to LF.
 
-    Handles both actual CRLF (\r\n) and escaped CRLF (\\r\\n) sequences.
-    The escaped version may appear when LLM sends \\r\\n in the tool argument.
+    ONLY handles real carriage-return + newline sequences (\\r\\n bytes).
+    Does NOT interpret escape sequences — literal \\n in file content
+    (e.g. Python string literals) must be preserved as-is.
+
+    Escape sequence handling for search strings is done by the
+    _escape_normalized_replacer in the replacer chain.
     """
-    # First handle escaped CRLF/LF (\r\n -> \n, \n -> \n)
-    # These are literal backslash sequences that the LLM might send
-    text = text.replace("\\r\\n", "\n")
-    text = text.replace("\\n", "\n")
-    text = text.replace("\\r", "\r")
-    # Then handle actual CRLF
-    text = text.replace("\r\n", "\n")
-    return text
+    return text.replace("\r\n", "\n")
 
 
-def _normalize_escapes(text: str) -> str:
-    """
-    Normalize common escape sequences in text.
-
-    This applies _unescape to convert literal escape sequences (like \\t)
-    into actual control characters. It complements _normalize_line_endings
-    which only handles newline-related sequences.
-    """
-    return _unescape(text)
 
 
 def _detect_line_ending(text: str) -> Literal["\n", "\r\n"]:
@@ -581,17 +569,17 @@ async def edit_file(
             old_content = raw_bytes.decode(encoding)
             original_ending = _detect_line_ending(old_content)
 
-            # Normalize for matching
-            # First apply escape normalization (\t -> tab, etc.)
-            normalized_old = _normalize_escapes(old_string)
-            normalized_new = _normalize_escapes(new_string)
-            # Then normalize line endings
-            normalized_old = _normalize_line_endings(normalized_old)
-            normalized_new = _normalize_line_endings(normalized_new)
+            # Normalize for matching: ONLY normalize actual CRLF line endings.
+            # Escape sequence handling (\n vs actual newline, \t vs tab, etc.)
+            # is deferred to the _escape_normalized_replacer in the replacer chain.
+            # We must NOT call _normalize_escapes here — it would convert literal
+            # \n in search strings to actual newlines, preventing matching of
+            # literal \n in file content (e.g. Python string literals).
+            normalized_old = _normalize_line_endings(old_string)
+            normalized_new = _normalize_line_endings(new_string)
 
             # Normalize file content to LF for matching (replacers work on LF)
             normalized_content = _normalize_line_endings(old_content)
-
             # Perform replacement
             new_content, replacements = robust_replace(
                 normalized_content, normalized_old, normalized_new, replace_all=replace_all
