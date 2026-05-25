@@ -85,7 +85,7 @@
                 <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}</p>
                 <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
                 <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
-                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.epub,.xls,.xlsx"
+                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
                   @change="handleFileSelect" />
               </div>
 
@@ -709,6 +709,7 @@ const getFileIcon = (fileType: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'mdi-file-pdf-box'
   if (type.includes('epub')) return 'mdi-book-open-page-variant'
+  if (type.includes('rst') || type.includes('adoc')) return 'mdi-file-document-outline'
   if (type.includes('md') || type.includes('markdown')) return 'mdi-language-markdown'
   if (type.includes('txt')) return 'mdi-file-document-outline'
   if (type.includes('url')) return 'mdi-link-variant'
@@ -719,6 +720,7 @@ const getFileColor = (fileType: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'error'
   if (type.includes('epub')) return 'warning'
+  if (type.includes('rst') || type.includes('adoc')) return 'success'
   if (type.includes('md')) return 'info'
   if (type.includes('txt')) return 'success'
   if (type.includes('url')) return 'primary'
