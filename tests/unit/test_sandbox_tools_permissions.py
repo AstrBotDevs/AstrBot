@@ -650,19 +650,18 @@ async def test_keep_alive_sandbox_tool_renews_current_sandbox(monkeypatch):
         async def renew_current_sandbox_lease(
             self, session_id, ttl_seconds=None, context=None
         ):
-            calls.append((session_id, ttl_seconds))
+            calls.append((session_id, ttl_seconds, context))
             return {"sandbox_id": "sandbox-1", "lease_expires_at": 123.0}
 
     monkeypatch.setattr(
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await KeepAliveSandboxTool().call(
-        _member_context_without_admin_requirement(), ttl_seconds=3600
-    )
+    context = _member_context_without_admin_requirement()
+    result = await KeepAliveSandboxTool().call(context, ttl_seconds=3600)
 
     assert "sandbox-1" in str(result)
-    assert calls == [("session-a", 3600)]
+    assert calls == [("session-a", 3600, context.context.context)]
 
 
 @pytest.mark.asyncio

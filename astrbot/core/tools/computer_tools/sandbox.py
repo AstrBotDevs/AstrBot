@@ -473,7 +473,7 @@ class KeepAliveSandboxTool(FunctionTool):
         session_id = context.context.event.unified_msg_origin
         try:
             sandbox = await _sandbox_manager().renew_current_sandbox_lease(
-                session_id, ttl_seconds=ttl_seconds, context=context.context
+                session_id, ttl_seconds=ttl_seconds, context=context.context.context
             )
         except Exception as e:
             detail = str(e) or type(e).__name__
