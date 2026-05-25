@@ -7,7 +7,6 @@ except ImportError as e:
 import os
 import shutil
 import tempfile
-import uuid
 
 import numpy as np
 
@@ -18,45 +17,41 @@ import numpy as np
 # 本模块通过"纯 ASCII 临时文件桥接"规避此问题。
 
 
+def _needs_bridge(path: str) -> bool:
+    """判断是否需要 ASCII 临时文件桥接。"""
+    return os.name == "nt" and not path.isascii()
+
+
 def _safe_temp_dir() -> str:
     """返回保证纯 ASCII 且可写的临时目录，用于 Faiss I/O 桥接。
 
     优先级:
-    1. %%SystemRoot%%\\Temp（Windows 系统临时目录）
+    1. %SystemRoot%\\Temp（Windows 系统临时目录）
     2. tempfile.gettempdir()（当其为纯 ASCII 时）
-    3. 当前工作目录
-    4. 非 Windows 平台使用 tempfile.gettempdir()
+    3. 非 Windows 平台使用 tempfile.gettempdir()
     """
     if os.name == "nt":
-        candidates = []
         root = os.environ.get("SystemRoot", r"C:\Windows")
-        candidates.append(os.path.join(root, "Temp"))
-        candidates.append(tempfile.gettempdir())
-        try:
-            candidates.append(os.getcwd())
-        except OSError:
-            pass
+        temp_dir = os.path.join(root, "Temp")
+        if temp_dir.isascii() and os.path.isdir(temp_dir) and os.access(temp_dir, os.W_OK):
+            return temp_dir
 
-        for d in candidates:
-            if d.isascii() and os.path.isdir(d) and os.access(d, os.W_OK):
-                return d
+        tmp = tempfile.gettempdir()
+        if tmp.isascii():
+            return tmp
 
         raise OSError(
-            f"_safe_temp_dir: 无法找到可写的纯 ASCII 临时目录。"
-            f"检查过: {candidates}"
+            "_safe_temp_dir: 无法找到可写的纯 ASCII 临时目录。"
+            f" 检查过 SystemRoot\\Temp={temp_dir}, gettempdir={tmp}"
         )
 
     return tempfile.gettempdir()
 
 
 def _make_temp_file(prefix: str) -> str:
-    """创建用于 Faiss 桥接的唯一临时文件，返回路径。"""
+    """创建用于 Faiss 桥接的临时文件，返回路径。"""
     safe_dir = _safe_temp_dir()
-    fd, path = tempfile.mkstemp(
-        prefix=f"{prefix}_{uuid.uuid4().hex[:8]}_",
-        suffix=".faiss",
-        dir=safe_dir,
-    )
+    fd, path = tempfile.mkstemp(prefix=f"{prefix}_", suffix=".faiss", dir=safe_dir)
     os.close(fd)
     return path
 
@@ -78,7 +73,8 @@ class EmbeddingStorage:
         try:
             return faiss.read_index(path)
         except RuntimeError:
-            pass
+            if not _needs_bridge(path):
+                raise
 
         tmp = _make_temp_file("_faiss_read")
         try:
@@ -97,6 +93,10 @@ class EmbeddingStorage:
         dirname = os.path.dirname(path)
         if dirname:
             os.makedirs(dirname, exist_ok=True)
+
+        if not _needs_bridge(path):
+            faiss.write_index(index, path)
+            return
 
         tmp = _make_temp_file("_faiss_write")
         try:
@@ -136,15 +136,29 @@ class EmbeddingStorage:
     async def search(self, vector: np.ndarray, k: int) -> tuple:
         """搜索向量"""
         assert self.index is not None, "FAISS index is not initialized."
+        if vector.ndim != 1:
+            raise ValueError(
+                f"查询向量必须是 1 维, 实际维度: {vector.ndim}。"
+                " 如需批量搜索请使用 Faiss 原生 API。"
+            )
+        if vector.shape[0] != self.dimension:
+            raise ValueError(
+                f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
+            )
         distances, indices = self.index.search(vector.reshape(1, -1), k)
         return distances, indices
 
     async def delete(self, ids: list[int]) -> None:
-        """删除向量"""
+        """删除向量
+
+        删除不存在的 ID 时 Faiss 会抛 RuntimeError。
+        由于 remove_ids 为幂等操作，此处忽略该错误。
+        """
         assert self.index is not None, "FAISS index is not initialized."
         try:
             self.index.remove_ids(np.array(ids, dtype=np.int64))
         except RuntimeError:
+            # 幂等：删除已不存在的 ID，安全忽略
             pass
         await self.save_index()
 
