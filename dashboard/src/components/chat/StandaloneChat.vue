@@ -6,7 +6,9 @@
       </div>
 
       <div v-else-if="!activeMessages.length" class="standalone-state">
-        <div class="welcome-title">{{ welcomeTitle ? welcomeTitle : tm("welcome.title") }}</div>
+        <div class="welcome-title">
+          {{ welcomeTitle ? welcomeTitle : tm("welcome.title") }}
+        </div>
       </div>
 
       <div v-else class="message-list">
@@ -95,12 +97,12 @@ import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
 
 const props = withDefaults(
   defineProps<{
-    configId?: string | null,
-    widgetModel?: boolean,
-    apiPackage?: Record<string, string> | null,
-    apiPackageData?: Record<string, string> | null,
-    attachmentEnabled?: boolean,
-    welcomeTitle?: string,
+    configId?: string | null;
+    widgetModel?: boolean;
+    apiPackage?: Record<string, string> | null;
+    apiPackageData?: Record<string, string> | null;
+    attachmentEnabled?: boolean;
+    welcomeTitle?: string;
   }>(),
   {
     configId: "default",
@@ -108,8 +110,8 @@ const props = withDefaults(
     apiPackage: null,
     apiPackageData: null,
     attachmentEnabled: true,
-    welcomeTitle: '',
-  }
+    welcomeTitle: "",
+  },
 );
 
 setCustomComponents("chat-message", {
@@ -132,7 +134,7 @@ const imagePreview = reactive({ visible: false, url: "" });
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
 
 if (props.widgetModel) {
-  currSessionId.value = props.apiPackageData?.session_id ?? '';
+  currSessionId.value = props.apiPackageData?.session_id ?? "";
 }
 
 const {
@@ -155,6 +157,7 @@ const {
   sending,
   activeMessages,
   isSessionRunning,
+  messageContent,
   createLocalExchange,
   sendMessageStream,
   stopSession,
@@ -182,11 +185,11 @@ onMounted(async () => {
     initializing.value = true;
     chatWidgetSetApiPackage(props.apiPackage ?? {});
     widgetSetApiPackage(props.apiPackage ?? {});
-    loadSessionMessages(props.apiPackageData?.session_id ?? '')
-    .then()
-    .finally(() => {
-      initializing.value = false
-    });
+    loadSessionMessages(props.apiPackageData?.session_id ?? "")
+      .then()
+      .finally(() => {
+        initializing.value = false;
+      });
   }
 });
 
@@ -236,10 +239,10 @@ async function sendCurrentMessage() {
     sessionId,
     messageId,
     parts,
-    transport: props.widgetModel ? 'sse' : transportMode.value,
+    transport: props.widgetModel ? "sse" : transportMode.value,
     enableStreaming: enableStreaming.value,
-    selectedProvider: props.widgetModel ? '' : (selection?.providerId || ""),
-    selectedModel: props.widgetModel ? '' : (selection?.modelName || ""),
+    selectedProvider: props.widgetModel ? "" : selection?.providerId || "",
+    selectedModel: props.widgetModel ? "" : selection?.modelName || "",
     botRecord,
   });
   // 等半秒后再清理，有些浏览器清理太快会导致图片显示异常
@@ -247,7 +250,7 @@ async function sendCurrentMessage() {
     draft.value = "";
     clearStaged({ revokeUrls: false });
     scrollToBottom();
-  }, 500)
+  }, 500);
 }
 
 function buildOutgoingParts(text: string): MessagePart[] {
