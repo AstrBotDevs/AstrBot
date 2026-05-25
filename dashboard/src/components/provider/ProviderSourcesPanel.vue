@@ -62,6 +62,8 @@
           variant="text"
           size="small"
           color="error"
+          :aria-label="tm('providerSources.delete')"
+          :title="tm('providerSources.delete')"
           @click.stop="deleteSelectedSource"
         ></v-btn>
 
@@ -140,6 +142,8 @@
             icon="mdi-delete-outline"
             variant="text"
             size="small"
+            :aria-label="tm('providerSources.delete')"
+            :title="tm('providerSources.delete')"
             @click.stop="emitDeleteSource(source)"
           ></v-btn>
         </div>
