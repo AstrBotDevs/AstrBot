@@ -1881,3 +1881,31 @@ async def test_mimo_reasoning_preserves_existing_reasoning_content():
         assert assistant["content"] == [{"type": "text", "text": "here is the answer"}]
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", MIMO_REASONING_MODELS)
+async def test_mimo_filter_preserves_reasoning_only_assistant_message(model: str):
+    """仅有 reasoning_content 的 assistant 消息不会被 _sanitize 过滤掉"""
+    provider = _make_provider()
+    try:
+        payloads = {
+            "model": model,
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "reasoning_content": "thinking about the answer...",
+                },
+                {"role": "user", "content": "world"},
+            ],
+        }
+
+        provider._sanitize_assistant_messages(payloads)
+
+        messages = payloads["messages"]
+        assert len(messages) == 3, "含 reasoning_content 的消息不应被过滤"
+        assert messages[1]["reasoning_content"] == "thinking about the answer..."
+    finally:
+        await provider.terminate()
