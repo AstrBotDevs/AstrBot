@@ -23,6 +23,7 @@
     "tabs": {
       "release": "😊 Release"
     },
+    "advancedSettings": "Advanced settings",
     "updateToLatest": "Update to Latest Version",
     "preRelease": "Pre-release",
     "preReleaseWarning": {
@@ -45,7 +46,19 @@
       "switch": "Switch"
     },
     "releaseNotes": {
-      "title": "Release Notes"
+      "title": "Release Notes",
+      "latestLabel": "Latest version"
+    },
+    "progress": {
+      "target": "Target version: ",
+      "preparing": "Preparing update...",
+      "dashboard": "Download WebUI",
+      "core": "Download project code",
+      "dependencies": "Updating dependencies...",
+      "restart": "Preparing restart...",
+      "restarting": "Restarting AstrBot",
+      "completed": "Update complete",
+      "failed": "Update failed"
     },
     "redirectConfirm": {
       "title": "Leaving AstrBot",
@@ -75,6 +88,7 @@
       "currentVersion": "Current Version",
       "hasNewVersion": "New version available!",
       "isLatest": "Already the latest version.",
+      "fallback": "Use this to re-download the WebUI if the full update path fails.",
       "downloadAndUpdate": "Download and Update"
     }
   },

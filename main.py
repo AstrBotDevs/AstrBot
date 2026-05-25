@@ -23,7 +23,9 @@ from astrbot.core.utils.astrbot_path import (  # noqa: E402
 )
 from astrbot.core.utils.io import (  # noqa: E402
     download_dashboard,
+    get_bundled_dashboard_dist_path,
     get_dashboard_version,
+    should_use_bundled_dashboard_dist,
 )
 
 # 将父目录添加到 sys.path
@@ -77,6 +79,13 @@ async def check_dashboard_files(webui_dir: str | None = None):
     data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
     if os.path.exists(data_dist_path):
         v = await get_dashboard_version()
+        if should_use_bundled_dashboard_dist(data_dist_path, VERSION):
+            bundled_dist = get_bundled_dashboard_dist_path()
+            logger.info(
+                "Using bundled WebUI because data/dist is older than core version v%s.",
+                VERSION,
+            )
+            return str(bundled_dist)
         if v is not None:
             # 存在文件
             if v == f"v{VERSION}":

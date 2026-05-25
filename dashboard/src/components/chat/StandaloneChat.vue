@@ -84,6 +84,7 @@ import { useMediaHandling } from "@/composables/useMediaHandling";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import {
   useMessages,
+  type ChatRecord,
   type MessagePart,
   type TransportMode,
 } from "@/composables/useMessages";
@@ -226,6 +227,11 @@ async function sendCurrentMessage() {
   const selection = inputRef.value?.getCurrentSelection();
   const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
 
+  draft.value = "";
+  clearStaged({ revokeUrls: false });
+  scrollToBottom();
+  await focusChatInput();
+
   sendMessageStream({
     sessionId,
     messageId,
@@ -283,6 +289,77 @@ function scrollToBottom() {
     container.scrollTop = container.scrollHeight;
     shouldStickToBottom.value = true;
   });
+}
+
+async function focusChatInput() {
+  await nextTick();
+  window.requestAnimationFrame(() => {
+    inputRef.value?.focusInput();
+  });
+}
+
+function messageRefs(message: ChatRecord) {
+  const refs = messageContent(message).refs;
+  if (refs && typeof refs === "object" && Array.isArray(refs.used)) {
+    return refs as { used?: Array<Record<string, unknown>> };
+  }
+  return null;
+}
+
+function partUrl(part: MessagePart) {
+  if (part.embedded_url) return part.embedded_url;
+  if (part.embedded_file?.url) return part.embedded_file.url;
+  if (part.attachment_id)
+    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
+      part.attachment_id,
+    )}`;
+  if (part.filename)
+    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+  return "";
+}
+
+function normalizeToolCall(tool: Record<string, unknown>) {
+  const normalized = { ...tool };
+  normalized.args = parseJsonSafe(normalized.args || normalized.arguments);
+  normalized.result = parseJsonSafe(normalized.result);
+  if (!normalized.ts) normalized.ts = Date.now() / 1000;
+  if (normalized.result && typeof normalized.result === "object") {
+    normalized.result = JSON.stringify(normalized.result, null, 2);
+  }
+  return normalized;
+}
+
+function isIPythonToolCall(tool: Record<string, unknown>) {
+  const name = String(tool.name || "").toLowerCase();
+  return name.includes("python") || name.includes("ipython");
+}
+
+function toolCallStatusText(tool: Record<string, unknown>) {
+  if (tool.finished_ts) return tm("toolStatus.done");
+  return tm("toolStatus.running");
+}
+
+function formatJson(value: unknown) {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value ?? "");
+  }
+}
+
+function parseJsonSafe(value: unknown) {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function openImage(url: string) {
+  imagePreview.url = url;
+  imagePreview.visible = true;
 }
 
 function closeImage() {
