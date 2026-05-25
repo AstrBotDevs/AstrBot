@@ -26,14 +26,23 @@ from .webchat_queue_mgr import WebChatQueueMgr, webchat_queue_mgr
 
 
 class QueueListener:
-    def __init__(self, webchat_queue_mgr: WebChatQueueMgr, callback: Callable) -> None:
+    def __init__(
+        self,
+        webchat_queue_mgr: WebChatQueueMgr,
+        callback: Callable,
+        stop_event: asyncio.Event,
+    ) -> None:
         self.webchat_queue_mgr = webchat_queue_mgr
         self.callback = callback
+        self.stop_event = stop_event
 
     async def run(self) -> None:
         """Register callback and keep adapter task alive."""
         self.webchat_queue_mgr.set_listener(self.callback)
-        await asyncio.Event().wait()
+        try:
+            await self.stop_event.wait()
+        finally:
+            await self.webchat_queue_mgr.clear_listener()
 
 
 @register_platform_adapter("webchat", "webchat")
@@ -56,6 +65,8 @@ class WebChatAdapter(Platform):
             id="webchat",
             support_proactive_message=False,
         )
+        self._shutdown_event = asyncio.Event()
+        self._webchat_queue_mgr = webchat_queue_mgr
 
     async def send_by_session(
         self,
@@ -184,7 +195,7 @@ class WebChatAdapter(Platform):
             abm = await self.convert_message(data)
             await self.handle_msg(abm)
 
-        bot = QueueListener(webchat_queue_mgr, callback)
+        bot = QueueListener(self._webchat_queue_mgr, callback, self._shutdown_event)
         return bot.run()
 
     def meta(self) -> PlatformMetadata:
@@ -209,5 +220,4 @@ class WebChatAdapter(Platform):
         self.commit_event(message_event)
 
     async def terminate(self) -> None:
-        # Do nothing
-        pass
+        self._shutdown_event.set()

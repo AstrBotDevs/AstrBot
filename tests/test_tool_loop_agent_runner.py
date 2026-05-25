@@ -90,6 +90,43 @@ class MockToolExecutor:
         return generator()
 
 
+class MockFailingProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        raise RuntimeError("primary provider failed")
+
+
+class MockErrProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        return LLMResponse(
+            role="err",
+            completion_text="primary provider returned error",
+        )
+
+
+class MockAbortableStreamProvider(MockProvider):
+    async def text_chat_stream(self, **kwargs):
+        abort_signal = kwargs.get("abort_signal")
+        yield LLMResponse(
+            role="assistant",
+            completion_text="partial ",
+            is_chunk=True,
+        )
+        if abort_signal and abort_signal.is_set():
+            yield LLMResponse(
+                role="assistant",
+                completion_text="partial ",
+                is_chunk=False,
+            )
+            return
+        yield LLMResponse(
+            role="assistant",
+            completion_text="partial final",
+            is_chunk=False,
+        )
+
+
 class MockHooks(BaseAgentRunHooks):
     """模拟钩子函数"""
 
@@ -319,6 +356,99 @@ async def test_hooks_called_with_max_step(
     assert mock_hooks.agent_done_called, "on_agent_done应该被调用"
     assert mock_hooks.tool_start_called, "on_tool_start应该被调用"
     assert mock_hooks.tool_end_called, "on_tool_end应该被调用"
+
+
+@pytest.mark.asyncio
+async def test_fallback_provider_used_when_primary_raises(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    primary_provider = MockFailingProvider()
+    fallback_provider = MockProvider()
+    fallback_provider.should_call_tools = False
+
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback_provider],
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "assistant"
+    assert final_resp.completion_text == "这是我的最终回答"
+    assert primary_provider.call_count == 1
+    assert fallback_provider.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_fallback_provider_used_when_primary_returns_err(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    primary_provider = MockErrProvider()
+    fallback_provider = MockProvider()
+    fallback_provider.should_call_tools = False
+
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback_provider],
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "assistant"
+    assert final_resp.completion_text == "这是我的最终回答"
+    assert primary_provider.call_count == 1
+    assert fallback_provider.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_stop_signal_returns_aborted_and_persists_partial_message(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    provider = MockAbortableStreamProvider()
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=True,
+    )
+
+    step_iter = runner.step()
+    first_resp = await step_iter.__anext__()
+    assert first_resp.type == "streaming_delta"
+
+    runner.request_stop()
+
+    rest_responses = []
+    async for response in step_iter:
+        rest_responses.append(response)
+
+    assert any(resp.type == "aborted" for resp in rest_responses)
+    assert runner.was_aborted() is True
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "assistant"
+    assert final_resp.completion_text == "partial "
+    assert runner.run_context.messages[-1].role == "assistant"
 
 
 if __name__ == "__main__":

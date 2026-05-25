@@ -94,6 +94,7 @@
     "add": "Add",
     "empty": "No provider sources",
     "selectHint": "Please select a provider source",
+    "selectCreated": "Select created provider source",
     "save": "Save Configuration",
     "saveAndFetchModels": "Save and Fetch Models",
     "fetchModels": "Fetch Model List",

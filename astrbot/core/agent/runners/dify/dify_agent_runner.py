@@ -10,7 +10,7 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 
 from ...hooks import BaseAgentRunHooks
@@ -291,8 +291,8 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     return Comp.Image(file=item["url"], url=item["url"])
                 case "audio":
                     # 仅支持 wav
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    path = os.path.join(temp_dir, f"{item['filename']}.wav")
+                    temp_dir = get_astrbot_temp_path()
+                    path = os.path.join(temp_dir, f"dify_{item['filename']}.wav")
                     await download_file(item["url"], path)
                     return Comp.Image(file=item["url"], url=item["url"])
                 case "video":

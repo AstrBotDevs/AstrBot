@@ -12,7 +12,7 @@ from quart import websocket
 from astrbot import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from .route import Route, RouteContext
 
@@ -60,7 +60,7 @@ class LiveChatSession:
 
         # 组装 WAV 文件
         try:
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+            temp_dir = get_astrbot_temp_path()
             os.makedirs(temp_dir, exist_ok=True)
             audio_path = os.path.join(temp_dir, f"live_audio_{uuid.uuid4()}.wav")
 

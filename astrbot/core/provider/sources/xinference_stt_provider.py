@@ -7,7 +7,7 @@ from xinference_client.client.restful.async_restful_client import (
 )
 
 from astrbot.core import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.tencent_record_helper import (
     convert_to_pcm_wav,
     tencent_silk_to_wav,
@@ -130,11 +130,17 @@ class ProviderXinferenceSTT(STTProvider):
                 logger.info(
                     f"Audio requires conversion ({conversion_type}), using temporary files..."
                 )
-                temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+                temp_dir = get_astrbot_temp_path()
                 os.makedirs(temp_dir, exist_ok=True)
 
-                input_path = os.path.join(temp_dir, str(uuid.uuid4()))
-                output_path = os.path.join(temp_dir, str(uuid.uuid4()) + ".wav")
+                input_path = os.path.join(
+                    temp_dir,
+                    f"xinference_stt_{uuid.uuid4().hex[:8]}.input",
+                )
+                output_path = os.path.join(
+                    temp_dir,
+                    f"xinference_stt_{uuid.uuid4().hex[:8]}.wav",
+                )
                 temp_files.extend([input_path, output_path])
 
                 with open(input_path, "wb") as f:

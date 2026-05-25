@@ -70,7 +70,7 @@
               {{ tm('resources.title') }}
             </div>
             <v-row>
-              <v-col cols="12" sm="6">
+              <v-col cols="12" sm="4">
                 <!-- GitHub Card -->
                 <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column"
                   href="https://github.com/AstrBotDevs/AstrBot/" target="_blank">
@@ -84,7 +84,7 @@
                 </v-card>
               </v-col>
 
-              <v-col cols="12" sm="6">
+              <v-col cols="12" sm="4">
                 <!-- Docs Card -->
                 <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column" href="https://docs.astrbot.app"
                   target="_blank">
@@ -98,7 +98,36 @@
                 </v-card>
               </v-col>
 
+              <v-col cols="12" sm="4">
+                <!-- Afdian Card -->
+                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column"
+                  href="https://afdian.com/a/astrbot_team" target="_blank">
+                  <div class="d-flex align-center mb-3">
+                    <v-icon size="32" class="mr-3">mdi-hand-heart</v-icon>
+                    <span class="text-h6 font-weight-bold">{{ tm('resources.afdianTitle') }}</span>
+                  </div>
+                  <p class="text-body-2 text-medium-emphasis mb-0">
+                    {{ tm('resources.afdianDesc') }}
+                  </p>
+                </v-card>
+              </v-col>
+
             </v-row>
+          </v-card>
+        </v-col>
+      </v-row>
+
+      <v-row v-if="showAnnouncement" class="px-4 mb-4">
+        <v-col cols="12">
+          <v-card class="welcome-card pa-6" elevation="0" border>
+            <div class="mb-4 text-h3 font-weight-bold">
+              {{ tm('announcement.title') }}
+            </div>
+            <MarkdownRender
+              :content="welcomeAnnouncement"
+              :typewriter="false"
+              class="welcome-announcement-markdown markdown-content"
+            />
           </v-card>
         </v-col>
       </v-row>
@@ -115,12 +144,16 @@ import { computed, ref, watch, onMounted } from 'vue';
 import axios from 'axios';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
-import { useModuleI18n } from '@/i18n/composables';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useToast } from '@/utils/toast';
+import { MarkdownRender } from 'markstream-vue';
+import 'markstream-vue/index.css';
+import 'highlight.js/styles/github.css';
 
 type StepState = 'pending' | 'completed' | 'skipped';
 
 const { tm } = useModuleI18n('features/welcome');
+const { locale } = useI18n();
 const { success: showSuccess, error: showError } = useToast();
 
 const showAddPlatformDialog = ref(false);
@@ -134,6 +167,38 @@ const providerCountBeforeOpen = ref(0);
 
 const platformStepState = ref<StepState>('pending');
 const providerStepState = ref<StepState>('pending');
+const welcomeAnnouncementRaw = ref<unknown>(null);
+
+function resolveWelcomeAnnouncement(raw: unknown, currentLocale: string) {
+  if (typeof raw === 'string') {
+    return raw.trim();
+  }
+
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return '';
+  }
+
+  const localeMap = raw as Record<string, unknown>;
+  const normalized = currentLocale.replace('-', '_');
+  const preferredKeys =
+    normalized.startsWith('zh')
+      ? [normalized, 'zh_CN', 'zh-CN', 'zh', 'en_US', 'en-US', 'en']
+      : [normalized, 'en_US', 'en-US', 'en', 'zh_CN', 'zh-CN', 'zh'];
+
+  for (const key of preferredKeys) {
+    const value = localeMap[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return '';
+}
+
+const welcomeAnnouncement = computed(() =>
+  resolveWelcomeAnnouncement(welcomeAnnouncementRaw.value, locale.value)
+);
+const showAnnouncement = computed(() => welcomeAnnouncement.value.length > 0);
 
 const springFestivalDates: Record<number, string> = {
   2025: '01-29',
@@ -271,7 +336,19 @@ async function syncDefaultConfigProviderIfNeeded() {
   showSuccess(tm('onboard.providerDefaultUpdated', { id: targetProviderId }));
 }
 
+async function loadWelcomeAnnouncement() {
+  try {
+    const res = await axios.get('https://cloud.astrbot.app/api/v1/announcement');
+    welcomeAnnouncementRaw.value = res?.data?.data?.notice?.welcome_page ?? null;
+  } catch (e) {
+    welcomeAnnouncementRaw.value = null;
+    console.error(e);
+  }
+}
+
 onMounted(async () => {
+  await loadWelcomeAnnouncement();
+
   try {
     await loadPlatformConfigBase();
     if ((platformConfigData.value.platform || []).length > 0) {
@@ -348,5 +425,9 @@ watch(showProviderDialog, async (visible, wasVisible) => {
 
 .welcome-card {
   border-radius: 16px;
+}
+
+.welcome-announcement-markdown {
+  line-height: 1.7;
 }
 </style>

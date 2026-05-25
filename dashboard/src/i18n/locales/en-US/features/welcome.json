@@ -6,6 +6,9 @@
     "newYear": "Happy New Year!"
   },
   "subtitle": "You can complete the basic onboarding first. Platform and chat provider setup can both be skipped.",
+  "announcement": {
+    "title": "Announcement"
+  },
   "onboard": {
     "title": "Quick Onboarding",
     "subtitle": "Complete initialization directly on the welcome page.",
@@ -27,6 +30,8 @@
     "title": "Resources",
     "githubDesc": "Give us a Star!",
     "docsTitle": "Documentation",
-    "docsDesc": "Read the official AstrBot documentation."
+    "docsDesc": "Read the official AstrBot documentation.",
+    "afdianTitle": "Afdian",
+    "afdianDesc": "Support the AstrBot team on Afdian."
   }
 }

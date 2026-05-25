@@ -5,18 +5,26 @@ import os
 import sys
 from pathlib import Path
 
-from astrbot.core import LogBroker, LogManager, db_helper, logger
-from astrbot.core.config.default import VERSION
-from astrbot.core.initial_loader import InitialLoader
-from astrbot.core.utils.astrbot_path import (
+import runtime_bootstrap
+
+runtime_bootstrap.initialize_runtime_bootstrap()
+
+from astrbot.core import LogBroker, LogManager, db_helper, logger  # noqa: E402
+from astrbot.core.config.default import VERSION  # noqa: E402
+from astrbot.core.initial_loader import InitialLoader  # noqa: E402
+from astrbot.core.utils.astrbot_path import (  # noqa: E402
     get_astrbot_config_path,
     get_astrbot_data_path,
+    get_astrbot_knowledge_base_path,
     get_astrbot_plugin_path,
     get_astrbot_root,
     get_astrbot_site_packages_path,
     get_astrbot_temp_path,
 )
-from astrbot.core.utils.io import download_dashboard, get_dashboard_version
+from astrbot.core.utils.io import (  # noqa: E402
+    download_dashboard,
+    get_dashboard_version,
+)
 
 # 将父目录添加到 sys.path
 sys.path.append(Path(__file__).parent.as_posix())
@@ -48,6 +56,7 @@ def check_env() -> None:
     os.makedirs(get_astrbot_config_path(), exist_ok=True)
     os.makedirs(get_astrbot_plugin_path(), exist_ok=True)
     os.makedirs(get_astrbot_temp_path(), exist_ok=True)
+    os.makedirs(get_astrbot_knowledge_base_path(), exist_ok=True)
     os.makedirs(site_packages_path, exist_ok=True)
 
     # 针对问题 #181 的临时解决方案

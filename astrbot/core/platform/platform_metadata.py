@@ -24,3 +24,14 @@ class PlatformMetadata:
 
     module_path: str | None = None
     """注册该适配器的模块路径，用于插件热重载时清理"""
+    i18n_resources: dict[str, dict] | None = None
+    """国际化资源数据，如 {"zh-CN": {...}, "en-US": {...}}
+
+    参考 https://github.com/AstrBotDevs/AstrBot/pull/5045
+    """
+
+    config_metadata: dict | None = None
+    """配置项元数据，用于 WebUI 生成表单。对应 config_metadata.json 的内容
+
+    参考 https://github.com/AstrBotDevs/AstrBot/pull/5045
+    """

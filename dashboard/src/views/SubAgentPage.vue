@@ -1,155 +1,248 @@
 <template>
   <div class="subagent-page">
-    <div class="d-flex align-center justify-space-between mb-4">
+    <div class="d-flex align-center justify-space-between mb-6">
       <div>
-        <div class="d-flex align-center" style="gap: 8px;">
+        <div class="d-flex align-center gap-2 mb-1">
           <h2 class="text-h5 font-weight-bold">{{ tm('page.title') }}</h2>
-          <v-chip size="x-small" color="orange-darken-2" variant="tonal" label>{{ tm('page.beta') }}</v-chip>
+          <v-chip size="x-small" color="orange-darken-2" variant="tonal" label class="font-weight-bold">
+            {{ tm('page.beta') }}
+          </v-chip>
         </div>
         <div class="text-body-2 text-medium-emphasis">
           {{ tm('page.subtitle') }}
         </div>
       </div>
 
-      <div class="d-flex align-center" style="gap: 8px;">
-        <v-btn variant="tonal" color="primary" :loading="loading" @click="reload">{{ tm('actions.refresh') }}</v-btn>
-        <v-btn variant="flat" color="primary" :loading="saving" @click="save">{{ tm('actions.save') }}</v-btn>
+      <div class="d-flex align-center gap-2">
+        <v-btn
+          variant="text"
+          color="primary"
+          prepend-icon="mdi-refresh"
+          :loading="loading"
+          @click="reload"
+        >
+          {{ tm('actions.refresh') }}
+        </v-btn>
+        <v-btn
+          variant="flat"
+          color="primary"
+          prepend-icon="mdi-content-save"
+          :loading="saving"
+          @click="save"
+        >
+          {{ tm('actions.save') }}
+        </v-btn>
       </div>
     </div>
 
-    <v-card class="rounded-lg" variant="flat">
+    <!-- Global Settings Card -->
+    <v-card class="rounded-lg mb-6 border-thin" variant="flat" border>
       <v-card-text>
-        <v-row>
+        <div class="d-flex align-center justify-space-between">
+          <div>
+            <div class="text-subtitle-1 font-weight-bold mb-1">{{ tm('section.globalSettings') || 'Global Settings' }}</div>
+            <div class="text-caption text-medium-emphasis">
+              {{ mainStateDescription }}
+            </div>
+          </div>
+        </div>
+
+        <v-divider class="my-4" />
+
+        <v-row dense>
           <v-col cols="12" md="6">
             <v-switch
               v-model="cfg.main_enable"
               :label="tm('switches.enable')"
-              inset
               color="primary"
               hide-details
+              inset
               density="comfortable"
-            />
+            >
+              <template #label>
+                <div class="d-flex flex-column">
+                  <span class="text-body-2 font-weight-medium">{{ tm('switches.enable') }}</span>
+                  <span class="text-caption text-medium-emphasis">{{ tm('switches.enableHint') }}</span>
+                </div>
+              </template>
+            </v-switch>
           </v-col>
           <v-col cols="12" md="6">
             <v-switch
               v-model="cfg.remove_main_duplicate_tools"
               :disabled="!cfg.main_enable"
               :label="tm('switches.dedupe')"
-              inset
               color="primary"
               hide-details
+              inset
               density="comfortable"
-            />
+            >
+              <template #label>
+                <div class="d-flex flex-column">
+                  <span class="text-body-2 font-weight-medium">{{ tm('switches.dedupe') }}</span>
+                  <span class="text-caption text-medium-emphasis">{{ tm('switches.dedupeHint') }}</span>
+                </div>
+              </template>
+            </v-switch>
           </v-col>
         </v-row>
-
-        <div class="text-caption text-medium-emphasis mt-1">
-          {{ mainStateDescription }}
-        </div>
-
-        <div class="d-flex align-center justify-space-between mt-6 mb-2">
-          <div class="text-subtitle-1 font-weight-bold">{{ tm('section.title') }}</div>
-          <v-btn size="small" variant="tonal" color="primary" @click="addAgent">
-            {{ tm('actions.add') }}
-          </v-btn>
-        </div>
-
-        <v-expansion-panels variant="accordion" multiple>
-          <v-expansion-panel v-for="(agent, idx) in cfg.agents" :key="agent.__key">
-            <v-expansion-panel-title>
-              <div class="subagent-panel-title">
-                <div class="subagent-title-left">
-                  <v-chip :color="agent.enabled ? 'success' : 'grey'" size="small" variant="tonal">
-                    {{ agent.enabled ? tm('cards.statusEnabled') : tm('cards.statusDisabled') }}
-                  </v-chip>
-
-                  <div class="subagent-title-text">
-                    <div class="subagent-title-name">{{ agent.name || tm('cards.unnamed') }}</div>
-                    <div class="subagent-title-sub">
-                      {{ tm('cards.transferPrefix', { name: agent.name || '...' }) }}
-                    </div>
-                  </div>
-                </div>
-
-                <div class="subagent-title-right">
-                  <v-switch
-                    v-model="agent.enabled"
-                    inset
-                    color="primary"
-                    hide-details
-                    class="subagent-enabled-inline"
-                    @click.stop
-                  >
-                    <template #label>{{ tm('cards.switchLabel') }}</template>
-                  </v-switch>
-
-                  <v-btn size="small" variant="text" color="error" @click.stop="removeAgent(idx)">
-                    {{ tm('actions.delete') }}
-                  </v-btn>
-                </div>
-              </div>
-            </v-expansion-panel-title>
-
-            <v-expansion-panel-text>
-              <v-row class="subagent-grid">
-                <v-col cols="12" md="5">
-                  <v-text-field
-                    v-model="agent.name"
-                    :label="tm('form.nameLabel')"
-                    variant="outlined"
-                    density="comfortable"
-                    :hint="tm('form.nameHint')"
-                    persistent-hint
-                  />
-                </v-col>
-                <v-col cols="12" md="7" class="subagent-actions">
-                  <ProviderSelector
-                    v-model="agent.provider_id"
-                    provider-type="chat_completion"
-                    :label="tm('form.providerLabel')"
-                    :hint="tm('form.providerHint')"
-                    persistent-hint
-                    clearable
-                    class="subagent-provider"
-                  />
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-autocomplete
-                    v-model="agent.persona_id"
-                    :items="personaOptions"
-                    item-title="title"
-                    item-value="value"
-                    :label="tm('form.personaLabel')"
-                    variant="outlined"
-                    density="comfortable"
-                    clearable
-                    :loading="personaLoading"
-                    :disabled="personaLoading"
-                    :hint="tm('form.personaHint')"
-                    persistent-hint
-                  />
-                </v-col>
-
-                <v-col cols="12" md="6">
-                  <v-text-field
-                    v-model="agent.public_description"
-                    :label="tm('form.descriptionLabel')"
-                    variant="outlined"
-                    density="comfortable"
-                    :hint="tm('form.descriptionHint')"
-                    persistent-hint
-                  />
-                </v-col>
-              </v-row>
-
-            </v-expansion-panel-text>
-          </v-expansion-panel>
-        </v-expansion-panels>
       </v-card-text>
     </v-card>
 
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000">
+    <!-- Agents List Section -->
+    <div class="d-flex align-center justify-space-between mb-4">
+      <div class="d-flex align-center gap-2">
+        <v-icon icon="mdi-robot" color="primary" size="small" />
+        <div class="text-h6 font-weight-bold">{{ tm('section.title') }}</div>
+        <v-chip size="small" variant="tonal" color="primary" class="ml-2">
+          {{ cfg.agents.length }}
+        </v-chip>
+      </div>
+      <v-btn
+        prepend-icon="mdi-plus"
+        color="primary"
+        @click="addAgent"
+      >
+        {{ tm('actions.add') }}
+      </v-btn>
+    </div>
+
+    <v-expansion-panels variant="popout" class="subagent-panels">
+      <v-expansion-panel
+        v-for="(agent, idx) in cfg.agents"
+        :key="agent.__key"
+        elevation="0"
+        class="border-thin mb-2 rounded-lg"
+        :class="{ 'border-primary': agent.enabled }"
+      >
+        <v-expansion-panel-title class="py-3">
+          <div class="d-flex align-center w-100 gap-4">
+            <!-- Status Indicator -->
+            <v-badge
+              dot
+              :color="agent.enabled ? 'success' : 'grey'"
+              inline
+              class="mr-2"
+            />
+
+            <!-- Agent Info -->
+            <div class="d-flex flex-column flex-grow-1" style="min-width: 0;">
+              <div class="d-flex align-center gap-2">
+                <span class="text-subtitle-1 font-weight-bold text-truncate">
+                  {{ agent.name || tm('cards.unnamed') }}
+                </span>
+              </div>
+              <div class="text-caption text-medium-emphasis text-truncate">
+                {{ agent.public_description || tm('cards.noDescription') }}
+              </div>
+            </div>
+
+            <!-- Controls (stop propagation on clicks) -->
+            <div class="d-flex align-center gap-2 flex-shrink-0" @click.stop>
+              <v-switch
+                v-model="agent.enabled"
+                color="success"
+                hide-details
+                inset
+                density="compact"
+              />
+              <v-btn
+                icon="mdi-delete-outline"
+                variant="text"
+                color="error"
+                density="comfortable"
+                @click="removeAgent(idx)"
+              />
+            </div>
+          </div>
+        </v-expansion-panel-title>
+
+        <v-expansion-panel-text>
+          <v-divider class="mb-4" />
+          <v-row>
+            <!-- Left Column: Form -->
+            <v-col cols="12" md="6">
+              <div class="d-flex flex-column gap-4">
+                <v-text-field
+                  v-model="agent.name"
+                  :label="tm('form.nameLabel')"
+                  :rules="[v => !!v || tm('messages.nameRequired'), v => /^[a-z][a-z0-9_]*$/.test(v) || tm('messages.namePattern')]"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details="auto"
+                  prepend-inner-icon="mdi-account"
+                />
+
+                <div class="d-flex flex-column gap-1">
+                  <div class="text-caption text-medium-emphasis ml-1">{{ tm('form.providerLabel') }}</div>
+                  <v-card variant="outlined" class="pa-0 border-thin rounded bg-transparent" style="border-color: rgba(var(--v-border-color), var(--v-border-opacity));">
+                    <div class="pa-3">
+                      <ProviderSelector
+                        v-model="agent.provider_id"
+                        provider-type="chat_completion"
+                        variant="outlined"
+                        density="comfortable"
+                        clearable
+                      />
+                    </div>
+                  </v-card>
+                </div>
+
+                <div class="d-flex flex-column gap-1">
+                  <div class="text-caption text-medium-emphasis ml-1">{{ tm('form.personaLabel') }}</div>
+                  <v-card variant="outlined" class="pa-0 border-thin rounded bg-transparent" style="border-color: rgba(var(--v-border-color), var(--v-border-opacity));">
+                    <div class="pa-3">
+                      <PersonaSelector
+                        v-model="agent.persona_id"
+                      />
+                    </div>
+                  </v-card>
+                </div>
+
+                <v-textarea
+                  v-model="agent.public_description"
+                  :label="tm('form.descriptionLabel')"
+                  variant="outlined"
+                  density="comfortable"
+                  auto-grow
+                  hide-details="auto"
+                  prepend-inner-icon="mdi-text"
+                />
+              </div>
+            </v-col>
+
+            <!-- Right Column: Preview -->
+            <v-col cols="12" md="6">
+              <div class="h-100">
+                <div class="text-caption font-weight-bold text-medium-emphasis mb-2 ml-1">
+                  {{ tm('cards.personaPreview') }}
+                </div>
+                <PersonaQuickPreview
+                  :model-value="agent.persona_id"
+                  class="h-100"
+                />
+              </div>
+            </v-col>
+          </v-row>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+    </v-expansion-panels>
+
+    <!-- Empty State -->
+    <div v-if="cfg.agents.length === 0" class="d-flex flex-column align-center justify-center py-12 text-medium-emphasis">
+      <v-icon icon="mdi-robot-off" size="64" class="mb-4 opacity-50" />
+      <div class="text-h6">{{ tm('empty.title') }}</div>
+      <div class="text-body-2 mb-4">{{ tm('empty.subtitle') }}</div>
+      <v-btn color="primary" variant="tonal" @click="addAgent">
+        {{ tm('empty.action') }}
+      </v-btn>
+    </div>
+
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000" location="top">
       {{ snackbar.message }}
+      <template #actions>
+         <v-btn variant="text" @click="snackbar.show = false">{{ tm('actions.close') }}</v-btn>
+      </template>
     </v-snackbar>
   </div>
 </template>
@@ -158,9 +251,12 @@
 import { computed, onMounted, ref } from 'vue'
 import axios from 'axios'
 import ProviderSelector from '@/components/shared/ProviderSelector.vue'
+import PersonaSelector from '@/components/shared/PersonaSelector.vue'
+import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue'
 import { useModuleI18n } from '@/i18n/composables'
 
 type SubAgentItem = {
+
   __key: string
   name: string
   persona_id: string
@@ -195,9 +291,6 @@ const cfg = ref<SubAgentConfig>({
   remove_main_duplicate_tools: false,
   agents: []
 })
-
-const personaOptions = ref<{ title: string; value: string }[]>([])
-const personaLoading = ref(false)
 
 const mainStateDescription = computed(() =>
   cfg.value.main_enable ? tm('description.enabled') : tm('description.disabled')
@@ -241,24 +334,6 @@ async function loadConfig() {
     toast(e?.response?.data?.message || tm('messages.loadConfigFailed'), 'error')
   } finally {
     loading.value = false
-  }
-}
-
-async function loadPersonas() {
-  personaLoading.value = true
-  try {
-    const res = await axios.get('/api/persona/list')
-    if (res.data.status === 'ok') {
-      const list = Array.isArray(res.data.data) ? res.data.data : []
-      personaOptions.value = list.map((p: any) => ({
-        title: p.persona_id,
-        value: p.persona_id
-      }))
-    }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.loadPersonaFailed'), 'error')
-  } finally {
-    personaLoading.value = false
   }
 }
 
@@ -333,7 +408,7 @@ async function save() {
 }
 
 async function reload() {
-  await Promise.all([loadConfig(), loadPersonas()])
+  await Promise.all([loadConfig()])
 }
 
 onMounted(() => {
@@ -343,101 +418,21 @@ onMounted(() => {
 
 <style scoped>
 .subagent-page {
-  padding: 20px;
-  padding-top: 8px;
-  padding-bottom: 40px;
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-.subagent-panel-title {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.subagent-panels :deep(.v-expansion-panel-text__wrapper) {
+  padding: 16px;
+  padding-bottom: 42px;
 }
 
-.subagent-title-left {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.subagent-title-text {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.subagent-title-name {
-  font-weight: 600;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 520px;
-}
-
-.subagent-title-sub {
-  font-size: 12px;
-  opacity: 0.72;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 520px;
-}
-
-
-.subagent-title-right {
-  display: flex;
-  align-items: center;
+.gap-2 {
   gap: 8px;
 }
 
-.subagent-actions {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-}
-
-.subagent-provider {
-  flex: 1;
-  min-width: 260px;
-}
-
-.subagent-enabled-inline {
-  margin-right: 2px;
-}
-
-/* Keep the switch compact inside the expansion-panel title row. */
-.subagent-enabled-inline :deep(.v-input__details) {
-  display: none;
-}
-
-.subagent-enabled-inline :deep(.v-selection-control) {
-  min-height: 32px;
-}
-</style>
-
-<style>
-/*
-  Vuetify renders selected chips inside the input control and will grow the
-  field height as chips wrap. For subagent tool assignment this quickly becomes
-  unwieldy, so we cap the chip area height and allow scrolling.
-
-  Note: this must be a non-scoped style so it can reach Vuetify's internal
-  elements.
-*/
-.subagent-tools .v-field__input {
-  max-height: 160px;
-  overflow-y: auto;
-  align-content: flex-start;
-}
-
-/* Small breathing room so the scrollbar doesn't overlap chip close icons. */
-.subagent-tools .v-field__input {
-  padding-right: 6px;
+.gap-4 {
+  gap: 16px;
 }
 </style>

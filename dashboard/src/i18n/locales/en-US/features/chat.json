@@ -9,7 +9,8 @@
     "voice": "Voice Input",
     "recordingPrompt": "Recording, please speak...",
     "chatPrompt": "Let's chat!",
-    "dropToUpload": "Drop files to upload"
+    "dropToUpload": "Drop files to upload",
+    "stopGenerating": "Stop generating"
   },
   "message": {
     "user": "User",

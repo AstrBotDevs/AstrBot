@@ -6,6 +6,9 @@
     "newYear": "新年快乐！"
   },
   "subtitle": "可以先完成基础引导，平台和对话提供商都支持稍后再配置。",
+  "announcement": {
+    "title": "公告"
+  },
   "onboard": {
     "title": "快速引导",
     "subtitle": "欢迎页可直接完成初始化。",
@@ -27,6 +30,8 @@
     "title": "相关资源",
     "githubDesc": "给 AstrBot 点个 Star 吧！",
     "docsTitle": "文档",
-    "docsDesc": "查阅 AstrBot 的官方文档。"
+    "docsDesc": "查阅 AstrBot 的官方文档。",
+    "afdianTitle": "爱发电",
+    "afdianDesc": "通过爱发电支持 AstrBot 团队。"
   }
 }

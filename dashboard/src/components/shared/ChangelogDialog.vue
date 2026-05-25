@@ -151,7 +151,7 @@ getCurrentVersion();
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
-      <v-card-text>
+      <v-card-text class="pb-5">
         <!-- 版本选择器 -->
         <div class="mb-4">
           <v-select

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from astrbot.core import logger
 from astrbot.core.provider.manager import ProviderManager
+from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
 
 # from .chunking.fixed_size import FixedSizeChunker
 from .chunking.recursive import RecursiveCharacterChunker
@@ -13,7 +14,7 @@ from .retrieval.manager import RetrievalManager, RetrievalResult
 from .retrieval.rank_fusion import RankFusion
 from .retrieval.sparse_retriever import SparseRetriever
 
-FILES_PATH = "data/knowledge_base"
+FILES_PATH = get_astrbot_knowledge_base_path()
 DB_PATH = Path(FILES_PATH) / "kb.db"
 """Knowledge Base storage root directory"""
 CHUNKER = RecursiveCharacterChunker()
@@ -27,7 +28,7 @@ class KnowledgeBaseManager:
         self,
         provider_manager: ProviderManager,
     ) -> None:
-        Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         self.provider_manager = provider_manager
         self._session_deleted_callback_registered = False
 

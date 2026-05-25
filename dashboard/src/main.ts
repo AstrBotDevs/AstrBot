@@ -84,6 +84,10 @@ axios.interceptors.request.use((config) => {
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`;
   }
+  const locale = localStorage.getItem('astrbot-locale');
+  if (locale) {
+    config.headers['Accept-Language'] = locale;
+  }
   return config;
 });
 
@@ -97,6 +101,10 @@ window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
   const headers = new Headers(init?.headers || (typeof input !== 'string' && 'headers' in input ? (input as Request).headers : undefined));
   if (!headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
+  }
+  const locale = localStorage.getItem('astrbot-locale');
+  if (locale && !headers.has('Accept-Language')) {
+    headers.set('Accept-Language', locale);
   }
   return _origFetch(input, { ...init, headers });
 };

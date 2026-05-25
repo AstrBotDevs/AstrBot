@@ -1,42 +1,40 @@
 
-name: '🎉 功能建议'
+name: '🎉 Feature Request / 功能建议'
 title: "[Feature]"
-description: 提交建议帮助我们改进。
+description: Submit a suggestion to help us improve. / 提交建议帮助我们改进。
 labels: [ "enhancement" ]
 body:
   - type: markdown
     attributes:
       value: |
-        感谢您抽出时间提出新功能建议，请准确解释您的想法。
+        Thank you for taking the time to suggest a new feature! Please explain your idea clearly and accurately. / 感谢您抽出时间提出新功能建议，请准确解释您的想法。
 
   - type: textarea
     attributes:
-      label: 描述
-      description: 简短描述您的功能建议。
+      label: Description / 描述
+      description: Please describe the feature you want to be added in detail. / 请详细描述您希望添加的功能。
 
   - type: textarea
     attributes:
-      label: 使用场景
-      description: 你想要发生什么？
-      placeholder: >
-        一个清晰且具体的描述这个功能的使用场景。
+      label: Use Case / 使用场景
+      description: Please describe the use case for this feature. / 请描述这个功能的使用场景。
 
   - type: checkboxes
     attributes:
-      label: 你愿意提交PR吗?
+      label: Willing to Submit PR? / 是否愿意提交PR？
       description: >
-        这不是必须的，但我们欢迎您的贡献。
+        This is not required, but if you are willing to submit a PR to implement this feature, it would be greatly appreciated! / 这不是必需的，但如果您愿意提交 PR 来实现这个功能，我们将不胜感激！
       options:
-        - label: 是的, 我愿意提交PR!
+        - label: Yes, I am willing to submit a PR. / 是的，我愿意提交 PR。
 
   - type: checkboxes
     attributes:
       label: Code of Conduct
       options:
         - label: >
-            我已阅读并同意遵守该项目的 [行为准则](https://docs.github.com/zh/site-policy/github-terms/github-community-code-of-conduct)。
+            I have read and agree to abide by the project's [Code of Conduct](https://docs.github.com/zh/site-policy/github-terms/github-community-code-of-conduct). /
           required: true
 
   - type: markdown
     attributes:
-      value: "感谢您填写我们的表单！"
+      value: "Thank you for filling out our form!"

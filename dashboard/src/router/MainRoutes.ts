@@ -42,6 +42,14 @@ const MainRoutes = {
       component: () => import('@/views/ConfigPage.vue')
     },
     {
+      path: '/normal',
+      redirect: '/config#normal'
+    },
+    {
+      path: '/system',
+      redirect: '/config#system'
+    },
+    {
       name: 'Default',
       path: '/dashboard/default',
       component: () => import('@/views/dashboards/default/DefaultDashboard.vue')

@@ -1,3 +1,4 @@
+from .api_key import ApiKeyRoute
 from .auth import AuthRoute
 from .backup import BackupRoute
 from .chat import ChatRoute
@@ -9,6 +10,7 @@ from .cron import CronRoute
 from .file import FileRoute
 from .knowledge_base import KnowledgeBaseRoute
 from .log import LogRoute
+from .open_api import OpenApiRoute
 from .persona import PersonaRoute
 from .platform import PlatformRoute
 from .plugin import PluginRoute
@@ -21,6 +23,7 @@ from .tools import ToolsRoute
 from .update import UpdateRoute
 
 __all__ = [
+    "ApiKeyRoute",
     "AuthRoute",
     "BackupRoute",
     "ChatRoute",
@@ -32,6 +35,7 @@ __all__ = [
     "FileRoute",
     "KnowledgeBaseRoute",
     "LogRoute",
+    "OpenApiRoute",
     "PersonaRoute",
     "PlatformRoute",
     "PluginRoute",

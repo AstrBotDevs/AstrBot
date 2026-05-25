@@ -77,9 +77,7 @@ def log_connection_failure(
             f"代理地址: {effective_proxy}，错误: {error}"
         )
     else:
-        logger.error(
-            f"[{provider_label}] 网络连接失败 ({error_type})，未配置代理。错误: {error}"
-        )
+        logger.error(f"[{provider_label}] 网络连接失败 ({error_type})。错误: {error}")
 
 
 def create_proxy_client(

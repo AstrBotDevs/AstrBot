@@ -19,6 +19,7 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -30,7 +31,6 @@ from astrbot.core.utils.session_lock import session_lock_manager
 
 from .....astr_agent_run_util import run_agent, run_live_agent
 from ....context import PipelineContext, call_event_hook
-from ...stage import Stage
 
 
 class InternalAgentSubStage(Stage):
@@ -54,6 +54,7 @@ class InternalAgentSubStage(Stage):
         if isinstance(self.max_step, bool):  # workaround: #2622
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
+        self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
         self.show_reasoning = settings.get("display_reasoning_text", False)
         self.sanitize_context_by_modalities: bool = settings.get(
             "sanitize_context_by_modalities",
@@ -123,6 +124,7 @@ class InternalAgentSubStage(Stage):
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
+            max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
 
     async def process(
@@ -149,6 +151,7 @@ class InternalAgentSubStage(Stage):
 
             logger.debug("ready to request llm provider")
 
+            await event.send_typing()
             await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
@@ -190,6 +193,8 @@ class InternalAgentSubStage(Stage):
                 )
 
                 if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+                    if reset_coro:
+                        reset_coro.close()
                     return
 
                 # apply reset
@@ -236,6 +241,7 @@ class InternalAgentSubStage(Stage):
                                 tts_provider,
                                 self.max_step,
                                 self.show_tool_use,
+                                self.show_tool_call_result,
                                 show_reasoning=self.show_reasoning,
                             ),
                         ),
@@ -243,13 +249,16 @@ class InternalAgentSubStage(Stage):
                     yield
 
                     # 保存历史记录
-                    if not event.is_stopped() and agent_runner.done():
+                    if agent_runner.done() and (
+                        not event.is_stopped() or agent_runner.was_aborted()
+                    ):
                         await self._save_to_history(
                             event,
                             req,
                             agent_runner.get_final_llm_resp(),
                             agent_runner.run_context.messages,
                             agent_runner.stats,
+                            user_aborted=agent_runner.was_aborted(),
                         )
 
                 elif streaming_response and not stream_to_general:
@@ -262,6 +271,7 @@ class InternalAgentSubStage(Stage):
                                 agent_runner,
                                 self.max_step,
                                 self.show_tool_use,
+                                self.show_tool_call_result,
                                 show_reasoning=self.show_reasoning,
                             ),
                         ),
@@ -290,6 +300,7 @@ class InternalAgentSubStage(Stage):
                         agent_runner,
                         self.max_step,
                         self.show_tool_use,
+                        self.show_tool_call_result,
                         stream_to_general,
                         show_reasoning=self.show_reasoning,
                     ):
@@ -304,13 +315,14 @@ class InternalAgentSubStage(Stage):
                 )
 
                 # 检查事件是否被停止，如果被停止则不保存历史记录
-                if not event.is_stopped():
+                if not event.is_stopped() or agent_runner.was_aborted():
                     await self._save_to_history(
                         event,
                         req,
                         final_resp,
                         agent_runner.run_context.messages,
                         agent_runner.stats,
+                        user_aborted=agent_runner.was_aborted(),
                     )
 
             asyncio.create_task(
@@ -336,16 +348,29 @@ class InternalAgentSubStage(Stage):
         llm_response: LLMResponse | None,
         all_messages: list[Message],
         runner_stats: AgentStats | None,
+        user_aborted: bool = False,
     ) -> None:
-        if (
-            not req
-            or not req.conversation
-            or not llm_response
-            or llm_response.role != "assistant"
-        ):
+        if not req or not req.conversation:
             return
 
-        if not llm_response.completion_text and not req.tool_calls_result:
+        if not llm_response and not user_aborted:
+            return
+
+        if llm_response and llm_response.role != "assistant":
+            if not user_aborted:
+                return
+            llm_response = LLMResponse(
+                role="assistant",
+                completion_text=llm_response.completion_text or "",
+            )
+        elif llm_response is None:
+            llm_response = LLMResponse(role="assistant", completion_text="")
+
+        if (
+            not llm_response.completion_text
+            and not req.tool_calls_result
+            and not user_aborted
+        ):
             logger.debug("LLM 响应为空，不保存记录。")
             return
 
@@ -358,6 +383,14 @@ class InternalAgentSubStage(Stage):
             if message.role in ["assistant", "user"] and message._no_save:
                 continue
             message_to_save.append(message.model_dump())
+
+        # if user_aborted:
+        #     message_to_save.append(
+        #         Message(
+        #             role="assistant",
+        #             content="[User aborted this request. Partial output before abort was preserved.]",
+        #         ).model_dump()
+        #     )
 
         token_usage = None
         if runner_stats:

@@ -1,24 +1,4 @@
-"""日志系统, 用于支持核心组件和插件的日志记录, 提供了日志订阅功能
-
-const:
-    CACHED_SIZE: 日志缓存大小, 用于限制缓存的日志数量
-    log_color_config: 日志颜色配置, 定义了不同日志级别的颜色
-
-class:
-    LogBroker: 日志代理类, 用于缓存和分发日志消息
-    LogQueueHandler: 日志处理器, 用于将日志消息发送到 LogBroker
-    LogManager: 日志管理器, 用于创建和配置日志记录器
-
-function:
-    is_plugin_path: 检查文件路径是否来自插件目录
-    get_short_level_name: 将日志级别名称转换为四个字母的缩写
-
-工作流程:
-1. 通过 LogManager.GetLogger() 获取日志器, 配置了控制台输出和多个格式化过滤器
-2. 通过 set_queue_handler() 设置日志处理器, 将日志消息发送到 LogBroker
-3. logBroker 维护一个订阅者列表, 负责将日志分发给所有订阅者
-4. 订阅者可以使用 register() 方法注册到 LogBroker, 订阅日志流
-"""
+"""日志系统，统一将标准 logging 输出转发到 loguru。"""
 
 import asyncio
 import logging
@@ -27,54 +7,59 @@ import sys
 import time
 from asyncio import Queue
 from collections import deque
-from logging.handlers import RotatingFileHandler
+from typing import TYPE_CHECKING
 
-import colorlog
+from loguru import logger as _raw_loguru_logger
 
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-# 日志缓存大小
 CACHED_SIZE = 500
-# 日志颜色配置
-log_color_config = {
-    "DEBUG": "green",
-    "INFO": "bold_cyan",
-    "WARNING": "bold_yellow",
-    "ERROR": "red",
-    "CRITICAL": "bold_red",
-    "RESET": "reset",
-    "asctime": "green",
-}
+
+if TYPE_CHECKING:
+    from loguru import Record
 
 
-def is_plugin_path(pathname):
-    """检查文件路径是否来自插件目录
+class _RecordEnricherFilter(logging.Filter):
+    """为 logging.LogRecord 注入 AstrBot 日志字段。"""
 
-    Args:
-        pathname (str): 文件路径
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.plugin_tag = "[Plug]" if _is_plugin_path(record.pathname) else "[Core]"
+        record.short_levelname = _get_short_level_name(record.levelname)
+        record.astrbot_version_tag = (
+            f" [v{VERSION}]" if record.levelno >= logging.WARNING else ""
+        )
+        record.source_file = _build_source_file(record.pathname)
+        record.source_line = record.lineno
+        record.is_trace = record.name == "astrbot.trace"
+        return True
 
-    Returns:
-        bool: 如果路径来自插件目录，则返回 True，否则返回 False
 
-    """
+class _QueueAnsiColorFilter(logging.Filter):
+    """Attach ANSI color prefix for WebUI console rendering."""
+
+    _LEVEL_COLOR = {
+        "DEBUG": "\u001b[1;34m",
+        "INFO": "\u001b[1;36m",
+        "WARNING": "\u001b[1;33m",
+        "ERROR": "\u001b[31m",
+        "CRITICAL": "\u001b[1;31m",
+    }
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.ansi_prefix = self._LEVEL_COLOR.get(record.levelname, "\u001b[0m")
+        record.ansi_reset = "\u001b[0m"
+        return True
+
+
+def _is_plugin_path(pathname: str | None) -> bool:
     if not pathname:
         return False
-
     norm_path = os.path.normpath(pathname)
     return ("data/plugins" in norm_path) or ("astrbot/builtin_stars/" in norm_path)
 
 
-def get_short_level_name(level_name):
-    """将日志级别名称转换为四个字母的缩写
-
-    Args:
-        level_name (str): 日志级别名称, 如 "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
-
-    Returns:
-        str: 四个字母的日志级别缩写
-
-    """
+def _get_short_level_name(level_name: str) -> str:
     level_map = {
         "DEBUG": "DBUG",
         "INFO": "INFO",
@@ -85,44 +70,75 @@ def get_short_level_name(level_name):
     return level_map.get(level_name, level_name[:4].upper())
 
 
-class LogBroker:
-    """日志代理类, 用于缓存和分发日志消息
+def _build_source_file(pathname: str | None) -> str:
+    if not pathname:
+        return "unknown"
+    dirname = os.path.dirname(pathname)
+    return (
+        os.path.basename(dirname) + "." + os.path.basename(pathname).replace(".py", "")
+    )
 
-    发布-订阅模式
-    """
+
+def _patch_record(record: "Record") -> None:
+    extra = record["extra"]
+    extra.setdefault("plugin_tag", "[Core]")
+    extra.setdefault("short_levelname", _get_short_level_name(record["level"].name))
+    level_no = record["level"].no
+    extra.setdefault("astrbot_version_tag", f" [v{VERSION}]" if level_no >= 30 else "")
+    extra.setdefault("source_file", _build_source_file(record["file"].path))
+    extra.setdefault("source_line", record["line"])
+    extra.setdefault("is_trace", False)
+
+
+_loguru = _raw_loguru_logger.patch(_patch_record)
+
+
+class _LoguruInterceptHandler(logging.Handler):
+    """将 logging 记录转发到 loguru。"""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            level: str | int = _loguru.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        payload = {
+            "plugin_tag": getattr(record, "plugin_tag", "[Core]"),
+            "short_levelname": getattr(
+                record,
+                "short_levelname",
+                _get_short_level_name(record.levelname),
+            ),
+            "astrbot_version_tag": getattr(record, "astrbot_version_tag", ""),
+            "source_file": getattr(
+                record, "source_file", _build_source_file(record.pathname)
+            ),
+            "source_line": getattr(record, "source_line", record.lineno),
+            "is_trace": getattr(record, "is_trace", record.name == "astrbot.trace"),
+        }
+
+        _loguru.bind(**payload).opt(exception=record.exc_info).log(
+            level,
+            record.getMessage(),
+        )
+
+
+class LogBroker:
+    """日志代理类，用于缓存和分发日志消息。"""
 
     def __init__(self) -> None:
-        self.log_cache = deque(maxlen=CACHED_SIZE)  # 环形缓冲区, 保存最近的日志
-        self.subscribers: list[Queue] = []  # 订阅者列表
+        self.log_cache = deque(maxlen=CACHED_SIZE)
+        self.subscribers: list[Queue] = []
 
     def register(self) -> Queue:
-        """注册新的订阅者, 并给每个订阅者返回一个带有日志缓存的队列
-
-        Returns:
-            Queue: 订阅者的队列, 可用于接收日志消息
-
-        """
         q = Queue(maxsize=CACHED_SIZE + 10)
         self.subscribers.append(q)
         return q
 
     def unregister(self, q: Queue) -> None:
-        """取消订阅
-
-        Args:
-            q (Queue): 需要取消订阅的队列
-
-        """
         self.subscribers.remove(q)
 
     def publish(self, log_entry: dict) -> None:
-        """发布新日志到所有订阅者, 使用非阻塞方式投递, 避免一个订阅者阻塞整个系统
-
-        Args:
-            log_entry (dict): 日志消息, 包含日志级别和日志内容.
-                example: {"level": "INFO", "data": "This is a log message.", "time": "2023-10-01 12:00:00"}
-
-        """
         self.log_cache.append(log_entry)
         for q in self.subscribers:
             try:
@@ -132,23 +148,13 @@ class LogBroker:
 
 
 class LogQueueHandler(logging.Handler):
-    """日志处理器, 用于将日志消息发送到 LogBroker
-
-    继承自 logging.Handler
-    """
+    """日志处理器，用于将日志消息发送到 LogBroker。"""
 
     def __init__(self, log_broker: LogBroker) -> None:
         super().__init__()
         self.log_broker = log_broker
 
-    def emit(self, record) -> None:
-        """日志处理的入口方法, 接受一个日志记录, 转换为字符串后由 LogBroker 发布
-        这个方法会在每次日志记录时被调用
-
-        Args:
-            record (logging.LogRecord): 日志记录对象, 包含日志信息
-
-        """
+    def emit(self, record: logging.LogRecord) -> None:
         log_entry = self.format(record)
         self.log_broker.publish(
             {
@@ -160,117 +166,16 @@ class LogQueueHandler(logging.Handler):
 
 
 class LogManager:
-    """日志管理器, 用于创建和配置日志记录器
+    _LOGGER_HANDLER_FLAG = "_astrbot_loguru_handler"
+    _ENRICH_FILTER_FLAG = "_astrbot_enrich_filter"
 
-    提供了获取默认日志记录器logger和设置队列处理器的方法
-    """
-
-    _FILE_HANDLER_FLAG = "_astrbot_file_handler"
-    _TRACE_FILE_HANDLER_FLAG = "_astrbot_trace_file_handler"
-
-    @classmethod
-    def GetLogger(cls, log_name: str = "default"):
-        """获取指定名称的日志记录器logger
-
-        Args:
-            log_name (str): 日志记录器的名称, 默认为 "default"
-
-        Returns:
-            logging.Logger: 返回配置好的日志记录器
-
-        """
-        logger = logging.getLogger(log_name)
-        # 检查该logger或父级logger是否已经有处理器, 如果已经有处理器, 直接返回该logger, 避免重复配置
-        if logger.hasHandlers():
-            return logger
-        # 如果logger没有处理器
-        console_handler = logging.StreamHandler(
-            sys.stdout,
-        )  # 创建一个StreamHandler用于控制台输出
-        console_handler.setLevel(
-            logging.DEBUG,
-        )  # 将日志级别设置为DEBUG(最低级别, 显示所有日志), *如果插件没有设置级别, 默认为DEBUG
-
-        # 创建彩色日志格式化器, 输出日志格式为: [时间] [插件标签] [日志级别] [文件名:行号]: 日志消息
-        console_formatter = colorlog.ColoredFormatter(
-            fmt="%(log_color)s [%(asctime)s] %(plugin_tag)s [%(short_levelname)-4s]%(astrbot_version_tag)s [%(filename)s:%(lineno)d]: %(message)s %(reset)s",
-            datefmt="%H:%M:%S",
-            log_colors=log_color_config,
-        )
-
-        class PluginFilter(logging.Filter):
-            """插件过滤器类, 用于标记日志来源是插件还是核心组件"""
-
-            def filter(self, record) -> bool:
-                record.plugin_tag = (
-                    "[Plug]" if is_plugin_path(record.pathname) else "[Core]"
-                )
-                return True
-
-        class FileNameFilter(logging.Filter):
-            """文件名过滤器类, 用于修改日志记录的文件名格式
-            例如: 将文件路径 /path/to/file.py 转换为 file.<file> 格式
-            """
-
-            # 获取这个文件和父文件夹的名字：<folder>.<file> 并且去除 .py
-            def filter(self, record) -> bool:
-                dirname = os.path.dirname(record.pathname)
-                record.filename = (
-                    os.path.basename(dirname)
-                    + "."
-                    + os.path.basename(record.pathname).replace(".py", "")
-                )
-                return True
-
-        class LevelNameFilter(logging.Filter):
-            """短日志级别名称过滤器类, 用于将日志级别名称转换为四个字母的缩写"""
-
-            # 添加短日志级别名称
-            def filter(self, record) -> bool:
-                record.short_levelname = get_short_level_name(record.levelname)
-                return True
-
-        class AstrBotVersionTagFilter(logging.Filter):
-            """在 WARNING 及以上级别日志后追加当前 AstrBot 版本号。"""
-
-            def filter(self, record) -> bool:
-                if record.levelno >= logging.WARNING:
-                    record.astrbot_version_tag = f" [v{VERSION}]"
-                else:
-                    record.astrbot_version_tag = ""
-                return True
-
-        console_handler.setFormatter(console_formatter)  # 设置处理器的格式化器
-        logger.addFilter(PluginFilter())  # 添加插件过滤器
-        logger.addFilter(FileNameFilter())  # 添加文件名过滤器
-        logger.addFilter(LevelNameFilter())  # 添加级别名称过滤器
-        logger.addFilter(AstrBotVersionTagFilter())  # 追加版本号（WARNING 及以上）
-        logger.setLevel(logging.DEBUG)  # 设置日志级别为DEBUG
-        logger.addHandler(console_handler)  # 添加处理器到logger
-
-        return logger
-
-    @classmethod
-    def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker) -> None:
-        """设置队列处理器, 用于将日志消息发送到 LogBroker
-
-        Args:
-            logger (logging.Logger): 日志记录器
-            log_broker (LogBroker): 日志代理类, 用于缓存和分发日志消息
-
-        """
-        handler = LogQueueHandler(log_broker)
-        handler.setLevel(logging.DEBUG)
-        if logger.handlers:
-            handler.setFormatter(logger.handlers[0].formatter)
-        else:
-            # 为队列处理器设置相同格式的formatter
-            handler.setFormatter(
-                logging.Formatter(
-                    "[%(asctime)s] [%(short_levelname)s] %(plugin_tag)s[%(filename)s:%(lineno)d]: %(message)s",
-                ),
-            )
-        logger.addHandler(handler)
+    _configured = False
+    _console_sink_id: int | None = None
+    _file_sink_id: int | None = None
+    _trace_sink_id: int | None = None
+    _NOISY_LOGGER_LEVELS: dict[str, int] = {
+        "aiosqlite": logging.WARNING,
+    }
 
     @classmethod
     def _default_log_path(cls) -> str:
@@ -285,79 +190,147 @@ class LogManager:
         return os.path.join(get_astrbot_data_path(), configured_path)
 
     @classmethod
-    def _get_file_handlers(cls, logger: logging.Logger) -> list[logging.Handler]:
-        return [
-            handler
-            for handler in logger.handlers
-            if getattr(handler, cls._FILE_HANDLER_FLAG, False)
-        ]
+    def _setup_loguru(cls) -> None:
+        if cls._configured:
+            return
 
-    @classmethod
-    def _get_trace_file_handlers(cls, logger: logging.Logger) -> list[logging.Handler]:
-        return [
-            handler
-            for handler in logger.handlers
-            if getattr(handler, cls._TRACE_FILE_HANDLER_FLAG, False)
-        ]
-
-    @classmethod
-    def _remove_file_handlers(cls, logger: logging.Logger) -> None:
-        for handler in cls._get_file_handlers(logger):
-            logger.removeHandler(handler)
-            try:
-                handler.close()
-            except Exception:
-                pass
-
-    @classmethod
-    def _remove_trace_file_handlers(cls, logger: logging.Logger) -> None:
-        for handler in cls._get_trace_file_handlers(logger):
-            logger.removeHandler(handler)
-            try:
-                handler.close()
-            except Exception:
-                pass
-
-    @classmethod
-    def _add_file_handler(
-        cls,
-        logger: logging.Logger,
-        file_path: str,
-        max_mb: int | None = None,
-        backup_count: int = 3,
-        trace: bool = False,
-    ) -> None:
-        os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
-        max_bytes = 0
-        if max_mb and max_mb > 0:
-            max_bytes = max_mb * 1024 * 1024
-        if max_bytes > 0:
-            file_handler = RotatingFileHandler(
-                file_path,
-                maxBytes=max_bytes,
-                backupCount=backup_count,
-                encoding="utf-8",
-            )
-        else:
-            file_handler = logging.FileHandler(file_path, encoding="utf-8")
-        file_handler.setLevel(logger.level)
-        if trace:
-            formatter = logging.Formatter(
-                "[%(asctime)s] %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        else:
-            formatter = logging.Formatter(
-                "[%(asctime)s] %(plugin_tag)s [%(short_levelname)s]%(astrbot_version_tag)s [%(filename)s:%(lineno)d]: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        file_handler.setFormatter(formatter)
-        setattr(
-            file_handler,
-            cls._TRACE_FILE_HANDLER_FLAG if trace else cls._FILE_HANDLER_FLAG,
-            True,
+        _loguru.remove()
+        cls._console_sink_id = _loguru.add(
+            sys.stdout,
+            level="DEBUG",
+            colorize=True,
+            filter=lambda record: not record["extra"].get("is_trace", False),
+            format=(
+                "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
+                "<level>[{extra[short_levelname]}]</level>{extra[astrbot_version_tag]} "
+                "[{extra[source_file]}:{extra[source_line]}]: <level>{message}</level>"
+            ),
         )
-        logger.addHandler(file_handler)
+        cls._configured = True
+
+    @classmethod
+    def _setup_root_bridge(cls) -> None:
+        root_logger = logging.getLogger()
+
+        has_handler = any(
+            getattr(handler, cls._LOGGER_HANDLER_FLAG, False)
+            for handler in root_logger.handlers
+        )
+        if not has_handler:
+            handler = _LoguruInterceptHandler()
+            setattr(handler, cls._LOGGER_HANDLER_FLAG, True)
+            root_logger.addHandler(handler)
+        root_logger.setLevel(logging.DEBUG)
+        for name, level in cls._NOISY_LOGGER_LEVELS.items():
+            logging.getLogger(name).setLevel(level)
+
+    @classmethod
+    def _ensure_logger_enricher_filter(cls, logger: logging.Logger) -> None:
+        has_filter = any(
+            getattr(existing_filter, cls._ENRICH_FILTER_FLAG, False)
+            for existing_filter in logger.filters
+        )
+        if not has_filter:
+            enrich_filter = _RecordEnricherFilter()
+            setattr(enrich_filter, cls._ENRICH_FILTER_FLAG, True)
+            logger.addFilter(enrich_filter)
+
+    @classmethod
+    def _ensure_logger_intercept_handler(cls, logger: logging.Logger) -> None:
+        has_handler = any(
+            getattr(handler, cls._LOGGER_HANDLER_FLAG, False)
+            for handler in logger.handlers
+        )
+        if not has_handler:
+            handler = _LoguruInterceptHandler()
+            setattr(handler, cls._LOGGER_HANDLER_FLAG, True)
+            logger.addHandler(handler)
+
+    @classmethod
+    def GetLogger(cls, log_name: str = "default") -> logging.Logger:
+        cls._setup_loguru()
+        cls._setup_root_bridge()
+
+        logger = logging.getLogger(log_name)
+        cls._ensure_logger_enricher_filter(logger)
+        cls._ensure_logger_intercept_handler(logger)
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+        return logger
+
+    @classmethod
+    def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker) -> None:
+        cls._ensure_logger_enricher_filter(logger)
+
+        for handler in logger.handlers:
+            if isinstance(handler, LogQueueHandler):
+                return
+
+        handler = LogQueueHandler(log_broker)
+        handler.setLevel(logging.DEBUG)
+        handler.addFilter(_QueueAnsiColorFilter())
+        handler.setFormatter(
+            logging.Formatter(
+                "%(ansi_prefix)s[%(asctime)s.%(msecs)03d] %(plugin_tag)s [%(short_levelname)s]%(astrbot_version_tag)s "
+                "[%(source_file)s:%(source_line)d]: %(message)s%(ansi_reset)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            ),
+        )
+        logger.addHandler(handler)
+
+    @classmethod
+    def _remove_sink(cls, sink_id: int | None) -> None:
+        if sink_id is None:
+            return
+        try:
+            _loguru.remove(sink_id)
+        except ValueError:
+            pass
+
+    @classmethod
+    def _add_file_sink(
+        cls,
+        *,
+        file_path: str,
+        level: int,
+        max_mb: int | None,
+        backup_count: int,
+        trace: bool,
+    ) -> int:
+        os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
+        rotation = f"{max_mb} MB" if max_mb and max_mb > 0 else None
+        retention = (
+            backup_count if rotation and backup_count and backup_count > 0 else None
+        )
+        if trace:
+            return _loguru.add(
+                file_path,
+                level="INFO",
+                format="[{time:YYYY-MM-DD HH:mm:ss.SSS}] {message}",
+                encoding="utf-8",
+                rotation=rotation,
+                retention=retention,
+                enqueue=True,
+                filter=lambda record: record["extra"].get("is_trace", False),
+            )
+
+        logging_level_name = logging.getLevelName(level)
+        if isinstance(logging_level_name, int):
+            logging_level_name = "INFO"
+        return _loguru.add(
+            file_path,
+            level=logging_level_name,
+            format=(
+                "[{time:YYYY-MM-DD HH:mm:ss.SSS}] {extra[plugin_tag]} "
+                "[{extra[short_levelname]}]{extra[astrbot_version_tag]} "
+                "[{extra[source_file]}:{extra[source_line]}]: {message}"
+            ),
+            encoding="utf-8",
+            rotation=rotation,
+            retention=retention,
+            enqueue=True,
+            filter=lambda record: not record["extra"].get("is_trace", False),
+        )
 
     @classmethod
     def configure_logger(
@@ -366,13 +339,6 @@ class LogManager:
         config: dict | None,
         override_level: str | None = None,
     ) -> None:
-        """根据配置设置日志级别和文件日志。
-
-        Args:
-            logger: 需要配置的 logger
-            config: 配置字典
-            override_level: 若提供，将覆盖配置中的日志级别
-        """
         if not config:
             return
 
@@ -383,7 +349,6 @@ class LogManager:
             except Exception:
                 logger.setLevel(logging.INFO)
 
-        # 兼容旧版嵌套配置
         if "log_file" in config:
             file_conf = config.get("log_file") or {}
             enable_file = bool(file_conf.get("enable", False))
@@ -394,27 +359,25 @@ class LogManager:
             file_path = config.get("log_file_path")
             max_mb = config.get("log_file_max_mb")
 
-        file_path = cls._resolve_log_path(file_path)
+        cls._remove_sink(cls._file_sink_id)
+        cls._file_sink_id = None
 
-        existing = cls._get_file_handlers(logger)
         if not enable_file:
-            cls._remove_file_handlers(logger)
             return
 
-        # 如果已有文件处理器且路径一致，则仅同步级别
-        if existing:
-            handler = existing[0]
-            base = getattr(handler, "baseFilename", "")
-            if base and os.path.abspath(base) == os.path.abspath(file_path):
-                handler.setLevel(logger.level)
-                return
-            cls._remove_file_handlers(logger)
-
-        cls._add_file_handler(logger, file_path, max_mb=max_mb)
+        try:
+            cls._file_sink_id = cls._add_file_sink(
+                file_path=cls._resolve_log_path(file_path),
+                level=logger.level,
+                max_mb=max_mb,
+                backup_count=3,
+                trace=False,
+            )
+        except Exception as e:
+            logger.error(f"Failed to add file sink: {e}")
 
     @classmethod
     def configure_trace_logger(cls, config: dict | None) -> None:
-        """为 trace 事件配置独立的文件日志，不向控制台输出。"""
         if not config:
             return
 
@@ -429,28 +392,22 @@ class LogManager:
             path = path or legacy.get("trace_path")
             max_mb = max_mb or legacy.get("trace_max_mb")
 
-        if not enable:
-            trace_logger = logging.getLogger("astrbot.trace")
-            cls._remove_trace_file_handlers(trace_logger)
-            return
-
-        file_path = cls._resolve_log_path(path or "logs/astrbot.trace.log")
         trace_logger = logging.getLogger("astrbot.trace")
+        cls._ensure_logger_enricher_filter(trace_logger)
+        cls._ensure_logger_intercept_handler(trace_logger)
         trace_logger.setLevel(logging.INFO)
         trace_logger.propagate = False
 
-        existing = cls._get_trace_file_handlers(trace_logger)
-        if existing:
-            handler = existing[0]
-            base = getattr(handler, "baseFilename", "")
-            if base and os.path.abspath(base) == os.path.abspath(file_path):
-                handler.setLevel(trace_logger.level)
-                return
-            cls._remove_trace_file_handlers(trace_logger)
+        cls._remove_sink(cls._trace_sink_id)
+        cls._trace_sink_id = None
 
-        cls._add_file_handler(
-            trace_logger,
-            file_path,
+        if not enable:
+            return
+
+        cls._trace_sink_id = cls._add_file_sink(
+            file_path=cls._resolve_log_path(path or "logs/astrbot.trace.log"),
+            level=logging.INFO,
             max_mb=max_mb,
+            backup_count=3,
             trace=True,
         )

@@ -4,6 +4,7 @@ import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref, computed } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
+import PersonaQuickPreview from './PersonaQuickPreview.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 
@@ -19,6 +20,10 @@ const props = defineProps({
   metadataKey: {
     type: String,
     required: true
+  },
+  searchKeyword: {
+    type: String,
+    default: ''
   }
 })
 
@@ -124,16 +129,27 @@ function saveEditedContent() {
 }
 
 function shouldShowItem(itemMeta, itemKey) {
-  if (!itemMeta?.condition) {
-    return true
-  }
-  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
-    const actualValue = getValueBySelector(props.iterable, conditionKey)
-    if (actualValue !== expectedValue) {
-      return false
+  if (itemMeta?.condition) {
+    for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
+      const actualValue = getValueBySelector(props.iterable, conditionKey)
+      if (actualValue !== expectedValue) {
+        return false
+      }
     }
   }
-  return true
+
+  const keyword = String(props.searchKeyword || '').trim().toLowerCase()
+  if (!keyword) {
+    return true
+  }
+
+  const searchableText = [
+    itemKey,
+    translateIfKey(itemMeta?.description || ''),
+    translateIfKey(itemMeta?.hint || '')
+  ].join(' ').toLowerCase()
+
+  return searchableText.includes(keyword)
 }
 
 // 检查最外层的 object 是否应该显示
@@ -148,7 +164,10 @@ function shouldShowSection() {
       return false
     }
   }
-  return true
+
+  const sectionItems = props.metadata?.[props.metadataKey]?.items || {}
+  const hasVisibleItems = Object.entries(sectionItems).some(([itemKey, itemMeta]) => shouldShowItem(itemMeta, itemKey))
+  return hasVisibleItems
 }
 
 function hasVisibleItemsAfter(items, currentIndex) {
@@ -254,6 +273,16 @@ function getSpecialSubtype(value) {
                   </v-chip>
                 </div>
               </div>
+            </v-col>
+          </v-row>
+
+          <!-- Default Persona Quick Preview 全宽显示区域 -->
+          <v-row
+            v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona' && itemKey === 'provider_settings.default_personality'"
+            class="persona-preview-row"
+          >
+            <v-col cols="12" class="persona-preview-display">
+              <PersonaQuickPreview :model-value="createSelectorModel(itemKey).value" />
             </v-col>
           </v-row>
         </template>
@@ -415,6 +444,15 @@ function getSpecialSubtype(value) {
   padding: 0 8px;
 }
 
+.persona-preview-row {
+  margin: 16px;
+  margin-top: 0;
+}
+
+.persona-preview-display {
+  padding: 0 8px;
+}
+
 .selected-plugins-full-width {
   background-color: rgba(var(--v-theme-primary), 0.05);
   border: 1px solid rgba(var(--v-theme-primary), 0.1);
@@ -436,9 +474,13 @@ function getSpecialSubtype(value) {
   }
 
   .property-info,
-  .type-indicator,
+  .type-indicator {
+    padding: 4px 8px;
+  }
+
   .config-input {
-    padding: 4px;
+    padding-left: 24px;
+    padding-right: 24px;
   }
 }
 </style>

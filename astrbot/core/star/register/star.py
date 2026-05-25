@@ -1,6 +1,6 @@
 import warnings
 
-from astrbot.core.star import StarMetadata, star_map
+from astrbot.core.star.star import StarMetadata, star_map
 
 _warned_register_star = False
 

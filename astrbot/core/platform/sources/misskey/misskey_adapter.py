@@ -21,7 +21,7 @@ try:
 except Exception:
     magic = None
 
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from .misskey_event import MisskeyPlatformEvent
 from .misskey_utils import (
@@ -498,7 +498,7 @@ class MisskeyPlatformAdapter(Platform):
                 finally:
                     # 清理临时文件
                     if local_path and isinstance(local_path, str):
-                        data_temp = os.path.join(get_astrbot_data_path(), "temp")
+                        data_temp = get_astrbot_temp_path()
                         if local_path.startswith(data_temp) and os.path.exists(
                             local_path,
                         ):

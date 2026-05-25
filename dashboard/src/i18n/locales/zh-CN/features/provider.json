@@ -95,6 +95,7 @@
     "add": "新增",
     "empty": "暂无提供商源",
     "selectHint": "请选择一个提供商源",
+    "selectCreated": "选择已创建的提供商源",
     "save": "保存配置",
     "saveAndFetchModels": "保存并获取模型",
     "fetchModels": "获取模型列表",
