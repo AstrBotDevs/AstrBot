@@ -128,9 +128,9 @@ DEFAULT_CONFIG = {
             "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "4. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent": 6,
+        "llm_compress_keep_recent": 10,
         "llm_compress_provider_id": "",
-        "max_context_length": 25,
+        "max_context_length": 50,
         "dequeue_context_length": 10,
         "streaming_response": False,
         "show_tool_use_status": False,
@@ -220,21 +220,6 @@ DEFAULT_CONFIG = {
         "image_caption": False,
         "image_caption_provider_id": "",
         "history_tool_result_truncate": True,
-        "ltm_compaction_strategy": "truncate",
-        "ltm_max_rounds": 80,
-        "ltm_truncate_drop_rounds": 50,
-        "ltm_summary_trigger_rounds": 80,
-        "ltm_summary_keep_recent_rounds": 30,
-        "ltm_summary_provider_id": "",
-        "ltm_summary_prompt": (
-            "Merge the older conversation rounds below into the existing "
-            "group-chat memory summary. "
-            "Preserve: user identities (names, nicknames, roles), recurring topics, "
-            "decisions made, preferences expressed, and unresolved tasks or questions. "
-            "Drop: transient greetings, small talk, and redundant confirmations. "
-            "Keep the summary concise and factual. "
-            "Output only the updated summary text, with no preamble or meta-commentary."
-        ),
         "active_reply": {
             "enable": False,
             "method": "possibility_reply",
@@ -4136,61 +4121,6 @@ CONFIG_METADATA_3 = {
                         "description": "截断历史工具输出",
                         "type": "bool",
                         "hint": "仅影响群聊 LTM 历史轮，不影响当前工具调用轮的完整推理。",
-                    },
-                    "provider_ltm_settings.ltm_compaction_strategy": {
-                        "description": "LTM 上下文压缩策略",
-                        "type": "string",
-                        "options": ["truncate", "llm_summary"],
-                        "hint": "truncate: 按轮截断; llm_summary: 调用 LLM 做长期摘要。",
-                    },
-                    "provider_ltm_settings.ltm_max_rounds": {
-                        "description": "LTM 最大保留轮数",
-                        "type": "int",
-                        "hint": "truncate 策略生效时的截断上限，默认 80。",
-                        "condition": {
-                            "provider_ltm_settings.ltm_compaction_strategy": "truncate",
-                        },
-                    },
-                    "provider_ltm_settings.ltm_truncate_drop_rounds": {
-                        "description": "截断时丢弃轮数",
-                        "type": "int",
-                        "hint": "truncate 策略触发截断时，从前面丢弃多少轮。默认 50。",
-                        "condition": {
-                            "provider_ltm_settings.ltm_compaction_strategy": "truncate",
-                        },
-                    },
-                    "provider_ltm_settings.ltm_summary_trigger_rounds": {
-                        "description": "摘要触发轮数",
-                        "type": "int",
-                        "hint": "超过多少轮时触发 LLM 摘要压缩，默认 80。",
-                        "condition": {
-                            "provider_ltm_settings.ltm_compaction_strategy": "llm_summary",
-                        },
-                    },
-                    "provider_ltm_settings.ltm_summary_keep_recent_rounds": {
-                        "description": "摘要时保留最近轮数",
-                        "type": "int",
-                        "hint": "llm_summary 策略下保留最近 N 轮精确上下文，默认 30。",
-                        "condition": {
-                            "provider_ltm_settings.ltm_compaction_strategy": "llm_summary",
-                        },
-                    },
-                    "provider_ltm_settings.ltm_summary_provider_id": {
-                        "description": "LTM 摘要模型",
-                        "type": "string",
-                        "_special": "select_provider",
-                        "hint": "llm_summary 策略使用的模型，留空使用当前聊天模型。",
-                        "condition": {
-                            "provider_ltm_settings.ltm_compaction_strategy": "llm_summary",
-                        },
-                    },
-                    "provider_ltm_settings.ltm_summary_prompt": {
-                        "description": "LTM 摘要提示词",
-                        "type": "string",
-                        "hint": "llm_summary 策略的自定义摘要 prompt，不更改以使用内置默认。",
-                        "condition": {
-                            "provider_ltm_settings.ltm_compaction_strategy": "llm_summary",
-                        },
                     },
                     "provider_ltm_settings.active_reply.enable": {
                         "description": "主动回复",

@@ -4,7 +4,6 @@ import json
 import random
 import uuid
 from collections import defaultdict, deque
-from typing import Any
 
 from astrbot import logger
 from astrbot.api import star
@@ -12,6 +11,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import LLMResponse, Provider, ProviderRequest
+from astrbot.core.agent.context.round_utils import rounds_to_text, split_into_rounds
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 """
@@ -30,7 +30,6 @@ MAX_MSGS_PER_USER_SEGMENT = 50
 MAX_CHARS_PER_USER_SEGMENT = 3000
 MAX_RAW_BYTES = 500_000  # 500KB / 群
 DEFAULT_HISTORY_TOOL_RESULT_MAX_CHARS = 8192
-SUMMARY_RETRY_COOLDOWN = 5  # 轮数：LLM 摘要失败后等待多少轮再重试
 
 TOOL_CALL_PREFIX = "<T:CALL>"
 TOOL_RES_PREFIX = "<T:RES"
@@ -60,9 +59,6 @@ class LongTermMemory:
 
         self.summaries: dict[str, str] = defaultdict(str)
         """LLM summary 策略下每个群聊的长期摘要文本。"""
-
-        self._summary_next_retry: dict[str, int] = defaultdict(int)
-        """LLM 摘要失败后，下次允许重试的 rounds 数下限（冷却期内跳过）。"""
 
         self._summary_in_progress: set[str] = set()
         """正在生成 LLM summary 的 session，防止重复触发。"""
@@ -186,7 +182,6 @@ class LongTermMemory:
             self._raw_cursor.pop(umo, None)
             self._persisted_tool_call_ids.pop(umo, None)
             self._persisted_tool_result_ids.pop(umo, None)
-            self._summary_next_retry.pop(umo, None)
             self.summaries.pop(umo, None)
             self._locks.pop(umo, None)
             self._summary_in_progress.discard(umo)
@@ -379,14 +374,17 @@ class LongTermMemory:
                 self.contexts[umo].extend(new_segs)
                 self._raw_cursor[umo] = len(raw_list)
 
-            # Detect compaction need
-            strategy = cfg.get("ltm_compaction_strategy", "truncate")
-            rounds = _split_into_rounds(self.contexts[umo])
+            # Detect compaction need — unified with provider_settings
+            provider_cfg = self.context.get_config(umo=umo).get("provider_settings", {})
+            strategy = provider_cfg.get(
+                "context_limit_reached_strategy", "truncate_by_turns"
+            )
+            max_rounds = provider_cfg.get("max_context_length", 50)
+            rounds = split_into_rounds(self.contexts[umo])
 
-            if strategy == "llm_summary":
-                trigger = cfg.get("ltm_summary_trigger_rounds", 80)
-                if len(rounds) > trigger and umo not in self._summary_in_progress:
-                    provider_id = cfg.get("ltm_summary_provider_id", "")
+            if strategy == "llm_compress":
+                if len(rounds) > max_rounds and umo not in self._summary_in_progress:
+                    provider_id = provider_cfg.get("llm_compress_provider_id", "")
                     if provider_id:
                         provider = self.context.get_provider_by_id(provider_id)
                     else:
@@ -398,31 +396,25 @@ class LongTermMemory:
                             provider_id or "(auto)",
                         )
                     else:
-                        next_retry = self._summary_next_retry.get(umo, 0)
-                        if len(rounds) < next_retry:
-                            logger.debug(
-                                "LTM summary 冷却中 (umo=%s, rounds=%d, 允许=%d)",
-                                umo,
-                                len(rounds),
-                                next_retry,
-                            )
-                        else:
-                            keep_recent = cfg.get("ltm_summary_keep_recent_rounds", 30)
-                            old_rounds = rounds[:-keep_recent]
-                            recent_rounds = rounds[-keep_recent:]
-                            if old_rounds:
-                                self._summary_in_progress.add(umo)
-                                compact_ctx = {
-                                    "provider": provider,
-                                    "prompt": cfg.get("ltm_summary_prompt", ""),
-                                    "old_rounds": old_rounds,
-                                    "recent_rounds": recent_rounds,
-                                    "existing_summary": self.summaries.get(umo, ""),
-                                    "snapshot_round_count": len(rounds),
-                                }
+                        keep_recent = provider_cfg.get("llm_compress_keep_recent", 10)
+                        old_rounds = (
+                            rounds[:-keep_recent] if keep_recent > 0 else rounds
+                        )
+                        recent_rounds = rounds[-keep_recent:] if keep_recent > 0 else []
+                        if old_rounds:
+                            self._summary_in_progress.add(umo)
+                            compact_ctx = {
+                                "provider": provider,
+                                "prompt": provider_cfg.get(
+                                    "llm_compress_instruction", ""
+                                ),
+                                "old_rounds": old_rounds,
+                                "recent_rounds": recent_rounds,
+                                "existing_summary": self.summaries.get(umo, ""),
+                                "snapshot_round_count": len(rounds),
+                            }
             else:
-                max_rounds = cfg.get("ltm_max_rounds", 80)
-                drop_rounds = cfg.get("ltm_truncate_drop_rounds", 50)
+                drop_rounds = provider_cfg.get("dequeue_context_length", 10)
                 if len(rounds) > max_rounds:
                     safe_drop = min(drop_rounds, len(rounds) - 1)
                     kept = rounds[safe_drop:]
@@ -469,7 +461,7 @@ class LongTermMemory:
         if not ctx.get("old_rounds"):
             return None
 
-        old_text = _rounds_to_text(ctx["old_rounds"])
+        old_text = rounds_to_text(ctx["old_rounds"])
         existing_summary = ctx["existing_summary"]
 
         instruction = ctx["prompt"] or (
@@ -523,19 +515,25 @@ class LongTermMemory:
         """
         summary_text = ctx.get("summary_text")
         if not summary_text:
-            current_rounds = _split_into_rounds(self.contexts[umo])
-            self._summary_next_retry[umo] = len(current_rounds) + SUMMARY_RETRY_COOLDOWN
+            # LLM summary failed — truncate fallback
+            current_rounds = split_into_rounds(self.contexts[umo])
+            provider_cfg = self.context.get_config(umo=umo).get("provider_settings", {})
+            max_rounds = provider_cfg.get("max_context_length", 50)
+            drop_rounds = provider_cfg.get("dequeue_context_length", 10)
+            if len(current_rounds) > max_rounds:
+                safe_drop = min(drop_rounds, len(current_rounds) - 1)
+                kept = current_rounds[safe_drop:]
+                self.contexts[umo] = [seg for rnd in kept for seg in rnd]
             return
 
         self.summaries[umo] = summary_text
         # Merge: snapshot recent rounds + rounds added during summary generation
-        current_rounds = _split_into_rounds(self.contexts[umo])
+        current_rounds = split_into_rounds(self.contexts[umo])
         snapshot_count = ctx["snapshot_round_count"]
         new_rounds = current_rounds[snapshot_count:]
         self.contexts[umo] = [seg for rnd in ctx["recent_rounds"] for seg in rnd] + [
             seg for rnd in new_rounds for seg in rnd
         ]
-        self._summary_next_retry.pop(umo, None)
 
     # =========================================================================
     # 裁剪
@@ -735,37 +733,5 @@ def _truncate_user_segment(
 
 
 # =============================================================================
-# _split_into_rounds — LTM compaction helper
+# 解析 helper
 # =============================================================================
-
-
-def _split_into_rounds(contexts: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
-    """Split a flat contexts list into logical rounds.
-
-    A round begins at a ``user`` segment and includes all subsequent
-    ``assistant`` / ``tool`` segments until the next ``user`` segment.
-    """
-    rounds: list[list[dict[str, Any]]] = []
-    current: list[dict[str, Any]] = []
-    for seg in contexts:
-        if seg.get("role") == "user" and current:
-            rounds.append(current)
-            current = []
-        current.append(seg)
-    if current:
-        rounds.append(current)
-    return rounds
-
-
-def _rounds_to_text(rounds: list[list[dict[str, Any]]]) -> str:
-    """Render rounds into a plain-text string for LLM summarisation."""
-    lines: list[str] = []
-    for i, rnd in enumerate(rounds, 1):
-        lines.append(f"--- Round {i} ---")
-        for seg in rnd:
-            role = seg.get("role", "?")
-            content = seg.get("content") or seg.get("tool_calls") or ""
-            if isinstance(content, list):
-                content = json.dumps(content, ensure_ascii=False)
-            lines.append(f"[{role}] {content}")
-    return "\n".join(lines)

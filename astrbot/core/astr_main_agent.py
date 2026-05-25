@@ -150,14 +150,14 @@ class MainAgentBuildConfig:
     """The strategy to handle context length limit reached."""
     llm_compress_instruction: str = ""
     """The instruction for compression in llm_compress strategy."""
-    llm_compress_keep_recent: int = 6
+    llm_compress_keep_recent: int = 10
     """The number of most recent turns to keep during llm_compress strategy."""
     llm_compress_provider_id: str = ""
     """The provider ID for the LLM used in context compression."""
-    max_context_length: int = -1
+    max_context_length: int = 50
     """The maximum number of turns to keep in context. -1 means no limit.
     This enforce max turns before compression"""
-    dequeue_context_length: int = 1
+    dequeue_context_length: int = 10
     """The number of oldest turns to remove when context length limit is reached."""
     fallback_max_context_tokens: int = 128000
     """Fallback max context tokens. When max_context_tokens is 0 and the model is not in LLM_METADATAS, use this value."""
@@ -1149,6 +1149,12 @@ def _get_compress_provider(
             "指定的上下文压缩模型 %s 不可用",
             config.llm_compress_provider_id,
         )
+    # fallback: use current chat provider for this session
+    if event:
+        try:
+            return plugin_context.get_using_provider(umo=event.unified_msg_origin)
+        except ValueError:
+            pass
     return None
 
 
