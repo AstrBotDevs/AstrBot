@@ -86,13 +86,6 @@ class LongTermMemory:
         image_caption_provider_id = ltm_cfg.get("image_caption_provider_id")
         image_caption = ltm_cfg["image_caption"] and bool(image_caption_provider_id)
         history_tool_result_truncate = ltm_cfg.get("history_tool_result_truncate", True)
-        history_tool_result_max_chars = int(
-            ltm_cfg.get(
-                "history_tool_result_max_chars",
-                DEFAULT_HISTORY_TOOL_RESULT_MAX_CHARS,
-            )
-            or DEFAULT_HISTORY_TOOL_RESULT_MAX_CHARS
-        )
         active_reply = ltm_cfg["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
         ar_method = active_reply["method"]
@@ -109,20 +102,11 @@ class LongTermMemory:
         )
         ltm_summary_provider_id = ltm_cfg.get("ltm_summary_provider_id", "")
         ltm_summary_prompt = ltm_cfg.get("ltm_summary_prompt", "")
-        ltm_max_msgs_per_user_segment = int(
-            ltm_cfg.get("ltm_max_msgs_per_user_segment", MAX_MSGS_PER_USER_SEGMENT)
-            or MAX_MSGS_PER_USER_SEGMENT
-        )
-        ltm_max_chars_per_user_segment = int(
-            ltm_cfg.get("ltm_max_chars_per_user_segment", MAX_CHARS_PER_USER_SEGMENT)
-            or MAX_CHARS_PER_USER_SEGMENT
-        )
         return {
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
             "image_caption_provider_id": image_caption_provider_id,
             "history_tool_result_truncate": history_tool_result_truncate,
-            "history_tool_result_max_chars": max(1, history_tool_result_max_chars),
             "enable_active_reply": enable_active_reply,
             "ar_method": ar_method,
             "ar_possibility": ar_possibility,
@@ -135,11 +119,6 @@ class LongTermMemory:
             "ltm_summary_keep_recent_rounds": max(1, ltm_summary_keep_recent_rounds),
             "ltm_summary_provider_id": ltm_summary_provider_id,
             "ltm_summary_prompt": ltm_summary_prompt,
-            "ltm_raw_records_max_bytes": ltm_cfg.get(
-                "ltm_raw_records_max_bytes", MAX_RAW_BYTES
-            ),
-            "ltm_max_msgs_per_user_segment": max(1, ltm_max_msgs_per_user_segment),
-            "ltm_max_chars_per_user_segment": max(1, ltm_max_chars_per_user_segment),
         }
 
     # =========================================================================
@@ -257,9 +236,7 @@ class LongTermMemory:
             final_message = "".join(parts)
             logger.debug(f"ltm | {umo} | {final_message}")
             self.raw_records[umo].append(final_message)
-            self._trim_raw_records(
-                umo, max_bytes=cfg.get("ltm_raw_records_max_bytes", MAX_RAW_BYTES)
-            )
+            self._trim_raw_records(umo, max_bytes=MAX_RAW_BYTES)
 
     # =========================================================================
     # LLM 请求前（on_llm_request 钩子 → decorate_llm_req 调用）
@@ -276,8 +253,6 @@ class LongTermMemory:
             if umo not in self.raw_records:
                 return
 
-            cfg = self.cfg(event)
-
             raw_list = list(self.raw_records[umo])
             cursor = self._raw_cursor[umo]
             new_raw = raw_list[cursor:prompt_idx] if prompt_idx > cursor else []
@@ -285,8 +260,8 @@ class LongTermMemory:
             if new_raw:
                 new_segs = _build_segments(
                     new_raw,
-                    max_msgs=cfg["ltm_max_msgs_per_user_segment"],
-                    max_chars=cfg["ltm_max_chars_per_user_segment"],
+                    max_msgs=MAX_MSGS_PER_USER_SEGMENT,
+                    max_chars=MAX_CHARS_PER_USER_SEGMENT,
                 )
                 self.contexts[umo].extend(new_segs)
                 self._raw_cursor[umo] = prompt_idx
@@ -379,7 +354,7 @@ class LongTermMemory:
                     )
                     if cfg["history_tool_result_truncate"]:
                         content = _truncate_tool_result_for_history(
-                            content, cfg["history_tool_result_max_chars"]
+                            content, DEFAULT_HISTORY_TOOL_RESULT_MAX_CHARS
                         )
                     self.raw_records[umo].append(
                         f"<T:RES id={msg.tool_call_id}>{content}</T:RES>"
@@ -398,8 +373,8 @@ class LongTermMemory:
             if remaining:
                 new_segs = _build_segments(
                     remaining,
-                    max_msgs=cfg["ltm_max_msgs_per_user_segment"],
-                    max_chars=cfg["ltm_max_chars_per_user_segment"],
+                    max_msgs=MAX_MSGS_PER_USER_SEGMENT,
+                    max_chars=MAX_CHARS_PER_USER_SEGMENT,
                 )
                 self.contexts[umo].extend(new_segs)
                 self._raw_cursor[umo] = len(raw_list)
@@ -456,7 +431,7 @@ class LongTermMemory:
             if not compact_ctx:
                 self._trim_raw_records(
                     umo,
-                    max_bytes=cfg.get("ltm_raw_records_max_bytes", MAX_RAW_BYTES),
+                    max_bytes=MAX_RAW_BYTES,
                 )
 
         # === Phase 2: LLM summary (NO LOCK) ===
@@ -477,7 +452,7 @@ class LongTermMemory:
                 self._apply_llm_summary(umo, compact_ctx)
                 self._trim_raw_records(
                     umo,
-                    max_bytes=cfg.get("ltm_raw_records_max_bytes", MAX_RAW_BYTES),
+                    max_bytes=MAX_RAW_BYTES,
                 )
                 self._summary_in_progress.discard(umo)
 

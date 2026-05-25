@@ -220,7 +220,6 @@ DEFAULT_CONFIG = {
         "image_caption": False,
         "image_caption_provider_id": "",
         "history_tool_result_truncate": True,
-        "history_tool_result_max_chars": 8192,
         "ltm_compaction_strategy": "truncate",
         "ltm_max_rounds": 80,
         "ltm_truncate_drop_rounds": 50,
@@ -236,13 +235,6 @@ DEFAULT_CONFIG = {
             "Keep the summary concise and factual. "
             "Output only the updated summary text, with no preamble or meta-commentary."
         ),
-        "ltm_raw_records_max_bytes": 500000,
-        # When building user segments, both limits are active simultaneously:
-        # whichever cap is hit first (by count or by chars) stops accumulation.
-        # At least one message is always retained even if it alone exceeds the
-        # character limit.
-        "ltm_max_msgs_per_user_segment": 50,
-        "ltm_max_chars_per_user_segment": 3000,
         "active_reply": {
             "enable": False,
             "method": "possibility_reply",
@@ -4145,14 +4137,6 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "仅影响群聊 LTM 历史轮，不影响当前工具调用轮的完整推理。",
                     },
-                    "provider_ltm_settings.history_tool_result_max_chars": {
-                        "description": "历史工具输出截断上限",
-                        "type": "int",
-                        "hint": "单条工具输出写入群聊历史时的最大字符数，默认 8192。",
-                        "condition": {
-                            "provider_ltm_settings.history_tool_result_truncate": True,
-                        },
-                    },
                     "provider_ltm_settings.ltm_compaction_strategy": {
                         "description": "LTM 上下文压缩策略",
                         "type": "string",
@@ -4207,21 +4191,6 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_ltm_settings.ltm_compaction_strategy": "llm_summary",
                         },
-                    },
-                    "provider_ltm_settings.ltm_raw_records_max_bytes": {
-                        "description": "Raw Records 最大内存字节",
-                        "type": "int",
-                        "hint": "每个群聊允许 raw_records 占用的最大字节数，默认 500000 (500KB)。",
-                    },
-                    "provider_ltm_settings.ltm_max_msgs_per_user_segment": {
-                        "description": "用户段最大消息数",
-                        "type": "int",
-                        "hint": "两次 @bot 之间积累的群聊消息合并为一个 user segment 时，最多保留多少条，默认 50。与字符上限同时生效，先到先停，至少保留一条。",
-                    },
-                    "provider_ltm_settings.ltm_max_chars_per_user_segment": {
-                        "description": "用户段最大字符数",
-                        "type": "int",
-                        "hint": "两次 @bot 之间积累的群聊消息合并为一个 user segment 时，最多保留多少字符，默认 3000。与条数上限同时生效，先到先停，至少保留一条。",
                     },
                     "provider_ltm_settings.active_reply.enable": {
                         "description": "主动回复",
