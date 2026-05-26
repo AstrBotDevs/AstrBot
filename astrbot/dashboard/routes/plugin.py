@@ -1,15 +1,17 @@
 import asyncio
 import hashlib
 import json
+import mimetypes
 import os
 import ssl
 import traceback
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 import aiohttp
 import certifi
-from quart import request
+from quart import abort, request, send_file
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
@@ -33,6 +35,7 @@ from .route import Response, Route, RouteContext
 PLUGIN_UPDATE_CONCURRENCY = (
     3  # limit concurrent updates to avoid overwhelming plugin sources
 )
+PLUGIN_ASSET_MIME_PREFIX = "image/"
 
 
 @dataclass
@@ -65,6 +68,7 @@ class PluginRoute(Route):
             "/plugin/reload-failed": ("POST", self.reload_failed_plugins),
             "/plugin/reload": ("POST", self.reload_plugins),
             "/plugin/readme": ("GET", self.get_plugin_readme),
+            "/plugin/asset": ("GET", self.get_plugin_asset),
             "/plugin/changelog": ("GET", self.get_plugin_changelog),
             "/plugin/source/get": ("GET", self.get_custom_source),
             "/plugin/source/save": ("POST", self.save_custom_source),
@@ -85,6 +89,55 @@ class PluginRoute(Route):
         }
 
         self._logo_cache = {}
+
+    def _get_plugin_dir(self, plugin_name: str) -> Path | None:
+        plugin_obj = self.plugin_manager.context.get_registered_star(plugin_name)
+        if not plugin_obj or not plugin_obj.root_dir_name:
+            return None
+
+        if plugin_obj.reserved:
+            root_path = self.plugin_manager.reserved_plugin_path
+        else:
+            root_path = self.plugin_manager.plugin_store_path
+        return Path(root_path) / plugin_obj.root_dir_name
+
+    def _resolve_plugin_asset_path(
+        self,
+        plugin_name: str,
+        asset_path: str,
+    ) -> Path | None:
+        plugin_dir = self._get_plugin_dir(plugin_name)
+        if not plugin_dir:
+            return None
+
+        root = plugin_dir.resolve(strict=False)
+        target = (root / asset_path).resolve(strict=False)
+        try:
+            target.relative_to(root)
+        except ValueError:
+            return None
+        return target
+
+    async def get_plugin_asset(self):
+        plugin_name = request.args.get("name")
+        asset_path = request.args.get("path")
+
+        if not plugin_name or not asset_path:
+            return abort(404)
+
+        try:
+            target = self._resolve_plugin_asset_path(plugin_name, asset_path)
+            if not target or not target.is_file():
+                return abort(404)
+
+            mimetype, _ = mimetypes.guess_type(target.name)
+            if not mimetype or not mimetype.startswith(PLUGIN_ASSET_MIME_PREFIX):
+                return abort(404)
+
+            return await send_file(str(target), mimetype=mimetype)
+        except (OSError, RuntimeError):
+            logger.warning(f"插件资源访问失败: {plugin_name}/{asset_path}")
+            return abort(404)
 
     async def check_plugin_compatibility(self):
         try:

@@ -15,7 +15,6 @@ from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
     MockPluginBuilder,
-    MockPluginConfig,
     create_mock_updater_install,
     create_mock_updater_update,
 )
@@ -145,9 +144,7 @@ async def test_plugins(
     monkeypatch.setattr(
         core_lifecycle_td.plugin_manager.updator, "install", mock_install
     )
-    monkeypatch.setattr(
-        core_lifecycle_td.plugin_manager.updator, "update", mock_update
-    )
+    monkeypatch.setattr(core_lifecycle_td.plugin_manager.updator, "update", mock_update)
 
     try:
         # 插件安装
@@ -158,7 +155,9 @@ async def test_plugins(
         )
         assert response.status_code == 200
         data = await response.get_json()
-        assert data["status"] == "ok", f"安装失败: {data.get('message', 'unknown error')}"
+        assert data["status"] == "ok", (
+            f"安装失败: {data.get('message', 'unknown error')}"
+        )
 
         # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)
@@ -199,6 +198,97 @@ async def test_plugins(
     finally:
         # 清理测试插件
         builder.cleanup(test_plugin_name)
+
+
+@pytest.mark.asyncio
+async def test_plugin_asset_api(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
+    builder = MockPluginBuilder(plugin_store_path)
+
+    test_plugin_name = "test_plugin_asset"
+    plugin_dir = builder.create(test_plugin_name)
+    try:
+        success, error = await core_lifecycle_td.plugin_manager.load(
+            specified_dir_name=test_plugin_name
+        )
+        assert success, error
+
+        assets_dir = plugin_dir / "assets"
+        assets_dir.mkdir(exist_ok=True)
+        image_content = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+            b"\x00\x00\x00\x01\x00\x00\x00\x01"
+            b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+        )
+        (assets_dir / "demo.png").write_bytes(image_content)
+        (assets_dir / "demo.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+        (assets_dir / "demo.webp").write_bytes(b"RIFF\x00\x00\x00\x00WEBP")
+        (assets_dir / "demo.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+            encoding="utf-8",
+        )
+        (assets_dir / "note.txt").write_text("not an image", encoding="utf-8")
+
+        token = authenticated_header["Authorization"].removeprefix("Bearer ")
+        response = await test_client.get(
+            "/api/plugin/asset",
+            query_string={
+                "name": test_plugin_name,
+                "path": "assets/demo.png",
+                "token": token,
+            },
+        )
+        assert response.status_code == 200
+        assert response.content_type.startswith("image/png")
+        assert await response.get_data() == image_content
+
+        for image_name in ("demo.jpg", "demo.webp", "demo.svg"):
+            response = await test_client.get(
+                "/api/plugin/asset",
+                query_string={
+                    "name": test_plugin_name,
+                    "path": f"assets/{image_name}",
+                    "token": token,
+                },
+            )
+            assert response.status_code == 200
+            assert response.content_type.startswith("image/")
+
+        response = await test_client.get(
+            "/api/plugin/asset",
+            query_string={"name": test_plugin_name, "path": "assets/demo.png"},
+        )
+        assert response.status_code == 401
+
+        response = await test_client.get(
+            "/api/plugin/asset",
+            query_string={
+                "name": test_plugin_name,
+                "path": "../metadata.yaml",
+                "token": token,
+            },
+        )
+        assert response.status_code == 404
+
+        response = await test_client.get(
+            "/api/plugin/asset",
+            query_string={
+                "name": test_plugin_name,
+                "path": "assets/note.txt",
+                "token": token,
+            },
+        )
+        assert response.status_code == 404
+    finally:
+        try:
+            await core_lifecycle_td.plugin_manager.uninstall_plugin(test_plugin_name)
+        except Exception:
+            builder.cleanup(test_plugin_name)
 
 
 @pytest.mark.asyncio

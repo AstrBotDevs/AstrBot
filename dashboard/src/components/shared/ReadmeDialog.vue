@@ -53,6 +53,47 @@ onUnmounted(() => {
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
 });
 
+function isRemoteImageSrc(src) {
+  const value = (src || "").trim().toLowerCase();
+  return (
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("//") ||
+    value.startsWith("data:") ||
+    value.startsWith("blob:")
+  );
+}
+
+function getPluginAssetSrc(src) {
+  if (!props.pluginName) return src;
+
+  const value = (src || "").trim();
+  if (!value || value.startsWith("#") || isRemoteImageSrc(value)) return src;
+  if (value.startsWith("/api/")) return src;
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(value)) return src;
+
+  const normalizedValue = value.startsWith("/") ? value.slice(1) : value;
+  const pathEnd = normalizedValue.search(/[?#]/);
+  const rawPath =
+    pathEnd === -1 ? normalizedValue : normalizedValue.slice(0, pathEnd);
+  if (!rawPath) return src;
+
+  let decodedPath = rawPath;
+  try {
+    decodedPath = decodeURI(rawPath);
+  } catch (err) {
+    decodedPath = rawPath;
+  }
+
+  const params = new URLSearchParams({
+    name: props.pluginName,
+    path: decodedPath,
+  });
+  const token = localStorage.getItem("token");
+  if (token) params.set("token", token);
+  return `/api/plugin/asset?${params.toString()}`;
+}
+
 // 渲染后的 HTML
 const renderedHtml = computed(() => {
   // 强制依赖 locale，确保语言切换时重新渲染
@@ -160,6 +201,11 @@ const renderedHtml = computed(() => {
       link.setAttribute("target", "_blank");
       link.setAttribute("rel", "noopener noreferrer");
     }
+  });
+  tempDiv.querySelectorAll("img").forEach((img) => {
+    const src = img.getAttribute("src");
+    const assetSrc = getPluginAssetSrc(src);
+    if (assetSrc && assetSrc !== src) img.setAttribute("src", assetSrc);
   });
 
   return tempDiv.innerHTML;

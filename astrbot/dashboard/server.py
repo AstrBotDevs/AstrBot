@@ -205,8 +205,12 @@ class AstrBotDashboard:
         ]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return None
+
         # 声明 JWT
-        token = request.headers.get("Authorization")
+        if request.path == "/api/plugin/asset":
+            token = request.args.get("token") or request.headers.get("Authorization")
+        else:
+            token = request.headers.get("Authorization")
         if not token:
             r = jsonify(Response().error("未授权").__dict__)
             r.status_code = 401
