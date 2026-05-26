@@ -123,7 +123,9 @@ class PlatformManager:
                     return
 
             logger.info(
-                f"载入 {platform_config['type']}({platform_config['id']}) 平台适配器 ...",
+                "Loading IM platform adapter %s(%s) ...",
+                platform_config["type"],
+                platform_config["id"],
             )
             match platform_config["type"]:
                 case "aiocqhttp":
@@ -170,6 +172,10 @@ class PlatformManager:
                     from .sources.misskey.misskey_adapter import (
                         MisskeyPlatformAdapter,  # noqa: F401
                     )
+                case "weixin_oc":
+                    from .sources.weixin_oc.weixin_oc_adapter import (
+                        WeixinOCAdapter,  # noqa: F401
+                    )
                 case "slack":
                     from .sources.slack.slack_adapter import SlackAdapter  # noqa: F401
                 case "satori":
@@ -184,6 +190,10 @@ class PlatformManager:
                     from .sources.kook.kook_adapter import (
                         KookPlatformAdapter,  # noqa: F401
                     )
+                case "mattermost":
+                    from .sources.mattermost.mattermost_adapter import (
+                        MattermostPlatformAdapter,  # noqa: F401
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
                 f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",
@@ -193,7 +203,7 @@ class PlatformManager:
 
         if platform_config["type"] not in platform_cls_map:
             logger.error(
-                f"未找到适用于 {platform_config['type']}({platform_config['id']}) 平台适配器，请检查是否已经安装或者名称填写错误",
+                f"Platform adapter not found: {platform_config['type']}({platform_config['id']}).",
             )
             return
         cls_type = platform_cls_map[platform_config["type"]]

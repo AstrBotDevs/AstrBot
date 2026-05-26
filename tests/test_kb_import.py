@@ -8,9 +8,17 @@ from quart import Quart
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
+from astrbot.core.utils.auth_password import (
+    hash_dashboard_password,
+    hash_legacy_dashboard_password,
+)
+from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
 from astrbot.dashboard.server import AstrBotDashboard
+
+_TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -44,6 +52,24 @@ async def core_lifecycle_td(tmp_path_factory):
 
     # kb_manager.get_kb.return_value = kb_helper # Removed this line as it's handled above
     core_lifecycle.kb_manager = kb_manager
+    generated_password = getattr(
+        core_lifecycle.astrbot_config,
+        "_generated_dashboard_password",
+        None,
+    )
+    dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
+    if not generated_password:
+        core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
+            hash_dashboard_password(dashboard_password)
+        )
+        core_lifecycle.astrbot_config["dashboard"]["password"] = (
+            hash_legacy_dashboard_password(dashboard_password)
+        )
+    object.__setattr__(
+        core_lifecycle,
+        "_dashboard_plain_password",
+        dashboard_password,
+    )
 
     try:
         yield core_lifecycle
@@ -64,6 +90,16 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
     return server.app
 
 
+def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
+    generated_password = getattr(core_lifecycle_td, "_dashboard_plain_password", None)
+    if generated_password:
+        return generated_password
+    password = core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"]
+    if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
+        return "astrbot"
+    return password
+
+
 @pytest_asyncio.fixture(scope="module")
 async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     """Handles login and returns an authenticated header."""
@@ -72,7 +108,7 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            "password": _resolve_dashboard_password(core_lifecycle_td),
         },
     )
     data = await response.get_json()
@@ -87,6 +123,9 @@ async def test_import_documents(
 ):
     """Tests the import documents functionality."""
     test_client = app.test_client()
+    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    kb_helper.upload_document.reset_mock()
+    kb_helper.upload_document.side_effect = None
 
     # Test data
     import_data = {
@@ -129,7 +168,6 @@ async def test_import_documents(
     assert result["failed_count"] == 0
 
     # Verify kb_helper.upload_document was called correctly
-    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
     assert kb_helper.upload_document.call_count == 2
 
     # Check first call arguments
@@ -144,6 +182,48 @@ async def test_import_documents(
     args2, kwargs2 = call_args_list[1]
     assert kwargs2["file_name"] == "test_file_2.md"
     assert kwargs2["pre_chunked_text"] == ["chunk3", "chunk4", "chunk5"]
+
+
+@pytest.mark.asyncio
+async def test_import_documents_returns_friendly_failure_message(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    kb_helper.upload_document.reset_mock()
+    kb_helper.upload_document.side_effect = KnowledgeBaseUploadError(
+        stage="embedding",
+        user_message=(
+            "向量化失败：嵌入模型返回的向量数量与文本分块数量不一致（期望 2，实际 1）。"
+        ),
+        details={"expected_contents": 2, "actual_vectors": 1},
+    )
+
+    route = KnowledgeBaseRoute.__new__(KnowledgeBaseRoute)
+    route.upload_progress = {}
+    route.upload_tasks = {}
+
+    await KnowledgeBaseRoute._background_import_task(
+        route,
+        task_id="task-1",
+        kb_helper=kb_helper,
+        documents=[{"file_name": "broken.txt", "chunks": ["chunk1", "chunk2"]}],
+        batch_size=32,
+        tasks_limit=3,
+        max_retries=3,
+    )
+
+    assert route.upload_tasks["task-1"]["status"] == "completed"
+    result = route.upload_tasks["task-1"]["result"]
+    assert result["success_count"] == 0
+    assert result["failed_count"] == 1
+    assert result["failed"][0]["file_name"] == "broken.txt"
+    assert result["failed"][0]["error"].startswith("broken.txt:")
+    assert "向量化失败" in result["failed"][0]["error"]
+    assert "期望 2，实际 1" in result["failed"][0]["error"]
+    assert "not same nb of vectors as ids" not in result["failed"][0]["error"]
+    assert kb_helper.upload_document.await_count == 1
+
+    kb_helper.upload_document.side_effect = None
 
 
 @pytest.mark.asyncio

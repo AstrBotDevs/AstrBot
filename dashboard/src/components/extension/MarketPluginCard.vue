@@ -1,9 +1,11 @@
 <script setup>
-import { ref, computed } from "vue";
+import { computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const { tm } = useModuleI18n("features/extension");
+const { pluginShortDesc } = usePluginI18n();
 
 const props = defineProps({
   plugin: {
@@ -20,7 +22,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["install"]);
+const emit = defineEmits(["install", "open"]);
 
 const normalizePlatformList = (platforms) => {
   if (!Array.isArray(platforms)) return [];
@@ -31,8 +33,16 @@ const platformDisplayList = computed(() =>
   normalizePlatformList(props.plugin?.support_platforms),
 );
 
+const cardDescription = computed(() =>
+  pluginShortDesc(props.plugin, props.plugin?.short_desc || props.plugin?.desc || ""),
+);
+
 const handleInstall = (plugin) => {
   emit("install", plugin);
+};
+
+const handleOpen = () => {
+  emit("open", props.plugin);
 };
 
 </script>
@@ -40,70 +50,26 @@ const handleInstall = (plugin) => {
 <template>
   <v-card
     class="rounded-lg d-flex flex-column plugin-card"
+    variant="outlined"
     elevation="0"
-    style="height: 13rem; position: relative"
+    :ripple="false"
+    @click="handleOpen"
   >
-    <v-chip
-      v-if="plugin?.pinned"
-      color="warning"
-      size="x-small"
-      label
-      style="
-        position: absolute;
-        right: 8px;
-        top: 8px;
-        z-index: 10;
-        height: 20px;
-        font-weight: bold;
-      "
-    >
-      {{ tm("market.recommended") }}
-    </v-chip>
 
     <v-card-text
-      style="
-        padding: 12px;
-        padding-bottom: 8px;
-        display: flex;
-        gap: 12px;
-        width: 100%;
-        flex: 1;
-        overflow: hidden;
-      "
+      class="plugin-card-content"
     >
-      <div style="flex-shrink: 0">
+      <div class="plugin-cover">
         <img
           :src="plugin?.logo || defaultPluginIcon"
           :alt="plugin.name"
-          style="
-            height: 75px;
-            width: 75px;
-            border-radius: 8px;
-            object-fit: cover;
-          "
+          class="plugin-cover__image"
         />
       </div>
 
-      <div
-        style="
-          flex: 1;
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-        "
-      >
-        <div
-          class="font-weight-bold"
-          style="
-            margin-bottom: 4px;
-            line-height: 1.3;
-            font-size: 1.2rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          "
-        >
-          <span style="overflow: hidden; text-overflow: ellipsis">
+      <div class="plugin-info">
+        <div class="d-flex align-center plugin-title-row">
+          <div class="font-weight-bold plugin-title">
             {{
               plugin.display_name?.length
                 ? plugin.display_name
@@ -111,10 +77,28 @@ const handleInstall = (plugin) => {
                 ? plugin.name
                 : plugin.trimmedName
             }}
-          </span>
+          </div>
+          <v-chip
+            v-if="plugin?.pinned"
+            color="warning"
+            size="x-small"
+            label
+            class="market-recommended-chip"
+          >
+            {{ tm("market.recommended") }}
+          </v-chip>
+          <v-chip
+            v-if="plugin?.astrbot_compatible === false"
+            color="error"
+            size="x-small"
+            label
+            class="market-incompatible-chip"
+          >
+            {{ tm("status.incompatible") }}
+          </v-chip>
         </div>
 
-        <div class="d-flex align-center" style="gap: 4px; margin-bottom: 6px">
+        <div class="d-flex align-center plugin-meta">
           <v-icon
             icon="mdi-account"
             size="x-small"
@@ -149,47 +133,8 @@ const handleInstall = (plugin) => {
             {{ plugin.author }}
           </span>
           <div
-            class="d-flex align-center text-subtitle-2 ml-2"
-            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-          >
-            <v-icon
-              icon="mdi-source-branch"
-              size="x-small"
-              style="margin-right: 2px"
-            ></v-icon>
-            <span>{{ plugin.version }}</span>
-          </div>
-        </div>
-
-        <div class="text-caption plugin-description">
-          {{ plugin.desc }}
-        </div>
-
-        <div
-          v-if="plugin.astrbot_version || platformDisplayList.length"
-          class="d-flex align-center flex-wrap"
-          style="gap: 4px; margin-top: 4px; margin-bottom: 4px"
-        >
-          <v-chip
-            v-if="plugin.astrbot_version"
-            size="x-small"
-            color="secondary"
-            variant="outlined"
-            style="height: 20px"
-          >
-            AstrBot: {{ plugin.astrbot_version }}
-          </v-chip>
-          <PluginPlatformChip
-            :platforms="plugin.support_platforms"
-            size="x-small"
-            :chip-style="{ height: '20px' }"
-          />
-        </div>
-
-        <div class="d-flex align-center" style="gap: 8px; margin-top: auto">
-          <div
             v-if="plugin.stars !== undefined"
-            class="d-flex align-center text-subtitle-2"
+            class="d-flex align-center text-subtitle-2 ml-2"
             style="color: rgba(var(--v-theme-on-surface), 0.7)"
           >
             <v-icon
@@ -199,19 +144,13 @@ const handleInstall = (plugin) => {
             ></v-icon>
             <span>{{ plugin.stars }}</span>
           </div>
-          <div
-            v-if="plugin.updated_at"
-            class="d-flex align-center text-subtitle-2"
-            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-          >
-            <v-icon
-              icon="mdi-clock-outline"
-              size="x-small"
-              style="margin-right: 2px"
-            ></v-icon>
-            <span>{{ new Date(plugin.updated_at).toLocaleString() }}</span>
-          </div>
         </div>
+
+        <div class="text-caption plugin-description">
+          {{ cardDescription }}
+        </div>
+
+        <div class="plugin-stats"></div>
       </div>
     </v-card-text>
 
@@ -219,36 +158,16 @@ const handleInstall = (plugin) => {
       style="gap: 6px; padding: 8px 12px; padding-top: 0"
       @click.stop
     >
-      <v-chip
-        v-for="tag in plugin.tags?.slice(0, 2)"
-        :key="tag"
-        :color="tag === 'danger' ? 'error' : 'primary'"
-        label
-        size="x-small"
-        style="height: 20px"
+      <div
+        v-if="platformDisplayList.length"
+        class="plugin-badges"
       >
-        {{ tag === "danger" ? tm("tags.danger") : tag }}
-      </v-chip>
-      <v-menu v-if="plugin.tags && plugin.tags.length > 2" open-on-hover offset-y>
-        <template v-slot:activator="{ props: menuProps }">
-          <v-chip
-            v-bind="menuProps"
-            color="grey"
-            label
-            size="x-small"
-            style="height: 20px; cursor: pointer"
-          >
-            +{{ plugin.tags.length - 2 }}
-          </v-chip>
-        </template>
-        <v-list density="compact">
-          <v-list-item v-for="tag in plugin.tags.slice(2)" :key="tag">
-            <v-chip :color="tag === 'danger' ? 'error' : 'primary'" label size="small">
-              {{ tag === "danger" ? tm("tags.danger") : tag }}
-            </v-chip>
-          </v-list-item>
-        </v-list>
-      </v-menu>
+        <PluginPlatformChip
+          :platforms="plugin.support_platforms"
+          size="x-small"
+          :chip-style="{ height: '20px' }"
+        />
+      </div>
       <v-spacer></v-spacer>
       <v-btn
         v-if="plugin?.repo"
@@ -274,24 +193,134 @@ const handleInstall = (plugin) => {
       >
         {{ tm("buttons.install") }}
       </v-btn>
-      <v-chip v-else color="success" size="x-small" label style="height: 20px">
+      <v-btn
+        v-else
+        color="success"
+        size="small"
+        variant="flat"
+        disabled
+        class="market-action-btn"
+        style="height: 32px"
+      >
         ✓ {{ tm("status.installed") }}
-      </v-chip>
+      </v-btn>
     </v-card-actions>
   </v-card>
 </template>
 
 <style scoped>
+.plugin-card {
+  background: rgb(var(--v-theme-surface));
+  cursor: pointer;
+  transition: background-color 0.16s ease;
+}
+
+.plugin-card:hover,
+.plugin-card:focus-within {
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+
+.plugin-card :deep(.v-card__overlay),
+.plugin-card :deep(.v-ripple__container) {
+  display: none;
+}
+
+.plugin-card-content {
+  padding: 12px;
+  padding-bottom: 8px;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  width: 100%;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.plugin-cover {
+  flex-shrink: 0;
+  width: 76px;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.plugin-cover__image {
+  width: 76px;
+  height: 76px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.plugin-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.plugin-title-row {
+  margin-bottom: 4px;
+  gap: 8px;
+}
+
+.market-recommended-chip {
+  flex-shrink: 0;
+  font-weight: bold;
+  height: 20px;
+}
+
+.market-incompatible-chip {
+  flex-shrink: 0;
+  font-weight: 700;
+  height: 20px;
+}
+
+.plugin-title {
+  line-height: 1.3;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plugin-meta {
+  gap: 4px;
+  margin-bottom: 6px;
+  flex-wrap: nowrap;
+}
+
 .plugin-description {
   color: rgba(var(--v-theme-on-surface), 0.6);
   line-height: 1.3;
   margin-bottom: 6px;
   flex: 1;
-  overflow-y: hidden;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  min-height: calc(1.3em * 2);
+  max-height: calc(1.3em * 2);
 }
 
-.plugin-card:hover .plugin-description {
-  overflow-y: auto;
+.plugin-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.plugin-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
 }
 
 .plugin-description::-webkit-scrollbar {

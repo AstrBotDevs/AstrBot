@@ -1,4 +1,13 @@
-/* 自定义滚动条样式 - 紫色主题 */
+/* 自定义滚动条样式 - 跟随主题 */
+
+:root {
+  --astrbot-scrollbar-track: rgba(var(--v-theme-primary), 0.08);
+  --astrbot-scrollbar-thumb: rgba(var(--v-theme-primary), 0.72);
+  --astrbot-scrollbar-thumb-hover: rgba(var(--v-theme-primary), 0.84);
+  --astrbot-scrollbar-thumb-active: rgba(var(--v-theme-primary), 0.94);
+  --astrbot-scrollbar-thumb-border: rgba(var(--v-theme-surface), 0.5);
+  --astrbot-scrollbar-thumb-shadow: rgba(var(--v-theme-primary), 0.32);
+}
 
 /* 全局滚动条样式 */
 ::-webkit-scrollbar {
@@ -7,50 +16,29 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--astrbot-scrollbar-track);
   border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(160, 60, 254, 0.75);
+  background: var(--astrbot-scrollbar-thumb);
   border-radius: 5px;
   transition: all 0.3s ease;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--astrbot-scrollbar-thumb-border);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(147, 51, 234, 0.85);
+  background: var(--astrbot-scrollbar-thumb-hover);
   transform: scale(1.05);
-  box-shadow: 0 2px 8px rgba(147, 51, 234, 0.3);
+  box-shadow: 0 2px 8px var(--astrbot-scrollbar-thumb-shadow);
 }
 
 ::-webkit-scrollbar-thumb:active {
-  background: rgba(147, 51, 234, 0.95);
+  background: var(--astrbot-scrollbar-thumb-active);
 }
 
 ::-webkit-scrollbar-corner {
   background: transparent;
-}
-
-/* 深色主题滚动条样式 */
-.v-theme--PurpleThemeDark {
-  ::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: rgba(192, 132, 252, 0.75);
-    border: 1px solid rgba(0, 0, 0, 0.2);
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: rgba(192, 132, 252, 0.85);
-    box-shadow: 0 2px 8px rgba(192, 132, 252, 0.4);
-  }
-
-  ::-webkit-scrollbar-thumb:active {
-    background: rgba(192, 132, 252, 0.95);
-  }
 }
 
 /* 细滚动条变体 */
@@ -61,14 +49,8 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(147, 51, 234, 0.75);
+    background: var(--astrbot-scrollbar-thumb);
     border: none;
-  }
-}
-
-.v-theme--PurpleThemeDark .thin-scrollbar {
-  ::-webkit-scrollbar-thumb {
-    background: rgba(192, 132, 252, 0.75);
   }
 }
 
@@ -79,33 +61,18 @@
   }
 
   ::-webkit-scrollbar-track {
-    background: rgba(147, 51, 234, 0.08);
+    background: var(--astrbot-scrollbar-track);
     border-radius: 4px;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(147, 51, 234, 0.75);
+    background: var(--astrbot-scrollbar-thumb);
     border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--astrbot-scrollbar-thumb-border);
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(147, 51, 234, 0.85);
-  }
-}
-
-.v-theme--PurpleThemeDark .chat-scrollbar {
-  ::-webkit-scrollbar-track {
-    background: rgba(192, 132, 252, 0.08);
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: rgba(192, 132, 252, 0.75);
-    border: 1px solid rgba(0, 0, 0, 0.1);
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: rgba(192, 132, 252, 0.85);
+    background: var(--astrbot-scrollbar-thumb-hover);
   }
 }
 
@@ -123,11 +90,7 @@
 /* Firefox 兼容性 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(147, 51, 234, 0.75) rgba(0, 0, 0, 0.05);
-}
-
-.v-theme--PurpleThemeDark * {
-  scrollbar-color: rgba(192, 132, 252, 0.75) rgba(255, 255, 255, 0.05);
+  scrollbar-color: var(--astrbot-scrollbar-thumb) var(--astrbot-scrollbar-track);
 }
 
 /* 平滑滚动 */

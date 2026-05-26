@@ -14,19 +14,23 @@
         </div>
 
         <!-- 选择对话框 -->
-        <v-dialog v-model="dialog" max-width="1000px" min-width="800px">
+        <v-dialog
+            v-model="dialog"
+            :max-width="isCompactLayout ? '96vw' : '1000px'"
+            :min-width="isCompactLayout ? undefined : '800px'"
+        >
             <v-card class="selector-dialog-card">
-                <v-card-title class="dialog-title d-flex align-center py-4 px-5">
+                <v-card-title class="dialog-title d-flex align-center" :class="isCompactLayout ? 'py-3 px-4' : 'py-4 px-5'">
                     <v-icon class="mr-3" color="primary">mdi-account-circle</v-icon>
                     <span>{{ labels.dialogTitle || '选择项目' }}</span>
                 </v-card-title>
 
                 <v-divider />
 
-                <v-card-text class="pa-0" style="height: 600px; max-height: 80vh; overflow: hidden;">
+                <v-card-text class="pa-0 selector-content">
                     <div class="selector-layout">
                         <!-- 左侧文件夹树 -->
-                        <div class="folder-sidebar">
+                        <div v-if="!isCompactLayout" class="folder-sidebar">
                             <div class="sidebar-header pa-3 pb-2">
                                 <span class="text-caption text-medium-emphasis font-weight-medium">
                                     <v-icon size="small" class="mr-1">mdi-folder-multiple</v-icon>
@@ -58,6 +62,20 @@
 
                         <!-- 右侧项目列表 -->
                         <div class="items-panel">
+                            <div v-if="isCompactLayout" class="mobile-folder-bar px-4 py-2">
+                                <v-btn icon="mdi-arrow-left" size="small" variant="text"
+                                    :disabled="currentFolderId === null" @click="navigateToParentFolder" />
+                                <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-home"
+                                    @click="navigateToFolder(null)">
+                                    {{ labels.rootFolder || '根目录' }}
+                                </v-btn>
+                                <span class="text-caption text-medium-emphasis text-truncate mobile-folder-label">
+                                    {{ currentFolderLabel }}
+                                </span>
+                            </div>
+
+                            <v-divider v-if="isCompactLayout" />
+
                             <!-- 面包屑导航 -->
                             <div class="breadcrumb-bar px-4 py-3">
                                 <v-breadcrumbs :items="breadcrumbItems" density="compact" class="pa-0">
@@ -245,6 +263,18 @@ export default defineComponent({
         };
     },
     computed: {
+        isCompactLayout(): boolean {
+            return this.$vuetify.display.smAndDown;
+        },
+
+        currentFolderLabel(): string {
+            if (this.currentFolderId === null) {
+                return this.labels.rootFolder || '根目录';
+            }
+            const currentFolder = this.breadcrumbPath[this.breadcrumbPath.length - 1];
+            return currentFolder?.name || this.labels.rootFolder || '根目录';
+        },
+
         displayValue(): string {
             if (this.displayValueFormatter) {
                 return this.displayValueFormatter(this.modelValue);
@@ -332,6 +362,20 @@ export default defineComponent({
             this.$emit('navigate', folderId);
         },
 
+        navigateToParentFolder() {
+            if (this.currentFolderId === null) {
+                return;
+            }
+
+            if (this.breadcrumbPath.length <= 1) {
+                this.navigateToFolder(null);
+                return;
+            }
+
+            const parent = this.breadcrumbPath[this.breadcrumbPath.length - 2];
+            this.navigateToFolder(parent?.folder_id ?? null);
+        },
+
         findFolderInTree(folderId: string): FolderTreeNode | null {
             const findNode = (nodes: FolderTreeNode[]): FolderTreeNode | null => {
                 for (const node of nodes) {
@@ -414,6 +458,13 @@ export default defineComponent({
 .selector-layout {
     display: flex;
     height: 100%;
+    min-width: 0;
+}
+
+.selector-content {
+    height: 600px;
+    max-height: 80vh;
+    overflow: hidden;
 }
 
 .folder-sidebar {
@@ -450,6 +501,18 @@ export default defineComponent({
 
 .items-content {
     background-color: transparent;
+    min-width: 0;
+}
+
+.mobile-folder-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mobile-folder-label {
+    min-width: 0;
+    flex: 1;
 }
 
 .tree-list {
@@ -517,22 +580,28 @@ export default defineComponent({
     background-color: rgba(var(--v-theme-primary), 0.08);
 }
 
-@media (max-width: 600px) {
+@media (max-width: 960px) {
     .selector-layout {
         flex-direction: column;
         height: auto;
-        max-height: 500px;
+        max-height: none;
     }
 
-    .folder-sidebar {
-        width: 100%;
-        border-right: none;
-        border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-        max-height: 150px;
+    .selector-content {
+        max-height: 76vh;
     }
 
     .items-list {
-        max-height: 300px;
+        min-height: 0;
+    }
+
+    .breadcrumb-bar {
+        overflow-x: auto;
+    }
+
+    .breadcrumb-bar :deep(.v-breadcrumbs) {
+        flex-wrap: nowrap;
+        min-width: max-content;
     }
 }
 </style>

@@ -10,6 +10,33 @@ from astrbot.core import logger
 SSE_MAX_BUFFER_CHARS = 1_048_576
 
 
+class DeerFlowAPIError(Exception):
+    def __init__(
+        self,
+        *,
+        operation: str,
+        status: int,
+        body: str,
+        url: str,
+        thread_id: str | None = None,
+    ) -> None:
+        self.operation = operation
+        self.status = status
+        self.body = body
+        self.url = url
+        self.thread_id = thread_id
+
+        message = (
+            f"DeerFlow {operation} failed: status={status}, url={url}, body={body}"
+        )
+        if thread_id is not None:
+            message = (
+                f"DeerFlow {operation} failed: thread_id={thread_id}, "
+                f"status={status}, url={url}, body={body}"
+            )
+        super().__init__(message)
+
+
 def _normalize_sse_newlines(text: str) -> str:
     """Normalize CRLF/CR to LF so SSE block splitting works reliably."""
     return text.replace("\r\n", "\n").replace("\r", "\n")
@@ -152,10 +179,32 @@ class DeerFlowAPIClient:
         ) as resp:
             if resp.status not in (200, 201):
                 text = await resp.text()
-                raise Exception(
-                    f"DeerFlow create thread failed: {resp.status}. {text}",
+                raise DeerFlowAPIError(
+                    operation="create thread",
+                    status=resp.status,
+                    body=text,
+                    url=url,
                 )
             return await resp.json()
+
+    async def delete_thread(self, thread_id: str, timeout: float = 20) -> None:
+        session = self._get_session()
+        url = f"{self.api_base}/api/threads/{thread_id}"
+        async with session.delete(
+            url,
+            headers=self.headers,
+            timeout=timeout,
+            proxy=self.proxy,
+        ) as resp:
+            if resp.status not in (200, 202, 204, 404):
+                text = await resp.text()
+                raise DeerFlowAPIError(
+                    operation="delete thread",
+                    status=resp.status,
+                    body=text,
+                    url=url,
+                    thread_id=thread_id,
+                )
 
     async def stream_run(
         self,
@@ -200,8 +249,12 @@ class DeerFlowAPIClient:
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
-                raise Exception(
-                    f"DeerFlow runs/stream request failed: {resp.status}. {text}",
+                raise DeerFlowAPIError(
+                    operation="runs/stream request",
+                    status=resp.status,
+                    body=text,
+                    url=url,
+                    thread_id=thread_id,
                 )
             async for event in _stream_sse(resp):
                 yield event

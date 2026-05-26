@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import docstring_parser
 
@@ -14,9 +14,6 @@ from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.provider.func_tool_manager import PY_TO_JSON_TYPE, SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
-
-if TYPE_CHECKING:
-    from astrbot.core.astr_agent_context import AstrAgentContext
 
 from ..filter.command import CommandFilter
 from ..filter.command_group import CommandGroupFilter
@@ -278,7 +275,11 @@ def register_platform_adapter_type(
     """注册一个 PlatformAdapterType"""
 
     def decorator(awaitable):
-        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
+        handler_md = get_handler_or_create(
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
+        )
         handler_md.event_filters.append(
             PlatformAdapterTypeFilter(platform_adapter_type),
         )
@@ -287,7 +288,7 @@ def register_platform_adapter_type(
     return decorator
 
 
-def register_regex(regex: str, **kwargs):
+def register_regex(regex: str | re.Pattern, **kwargs):
     """注册一个 Regex"""
 
     def decorator(awaitable):
@@ -302,7 +303,9 @@ def register_regex(regex: str, **kwargs):
     return decorator
 
 
-def register_permission_type(permission_type: PermissionType, raise_error: bool = True):
+def register_permission_type(
+    permission_type: PermissionType, raise_error: bool = True, **kwargs
+):
     """注册一个 PermissionType
 
     Args:
@@ -312,7 +315,11 @@ def register_permission_type(permission_type: PermissionType, raise_error: bool 
     """
 
     def decorator(awaitable):
-        handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
+        handler_md = get_handler_or_create(
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
+        )
         handler_md.event_filters.append(
             PermissionTypeFilter(permission_type, raise_error),
         )
@@ -425,11 +432,11 @@ def register_on_llm_request(**kwargs):
     from astrbot.api.provider import ProviderRequest
 
     @on_llm_request()
-    async def test(self, event: AstrMessageEvent, request: ProviderRequest) -> None:
-        request.system_prompt += "你是一个猫娘..."
+    async def test(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
+        req.system_prompt += "你是一个猫娘..."
     ```
 
-    请务必接收两个参数：event, request
+    请务必接收两个参数：event, req
 
     """
 
@@ -458,6 +465,64 @@ def register_on_llm_response(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(awaitable, EventType.OnLLMResponseEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_agent_begin(**kwargs):
+    """当 Agent 开始运行时的事件
+
+    Examples:
+    ```py
+    from astrbot.core.agent.run_context import ContextWrapper
+    from astrbot.core.astr_agent_context import AstrAgentContext
+
+    @on_agent_begin()
+    async def test(
+        self,
+        event: AstrMessageEvent,
+        run_context: ContextWrapper[AstrAgentContext],
+    ) -> None:
+        ...
+    ```
+
+    请务必接收两个参数：event, run_context
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnAgentBeginEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_agent_done(**kwargs):
+    """当 Agent 运行完成后的事件
+
+    Examples:
+    ```py
+    from astrbot.core.agent.run_context import ContextWrapper
+    from astrbot.core.astr_agent_context import AstrAgentContext
+    from astrbot.api.provider import LLMResponse
+
+    @on_agent_done()
+    async def test(
+        self,
+        event: AstrMessageEvent,
+        run_context: ContextWrapper[AstrAgentContext],
+        response: LLMResponse,
+    ) -> None:
+        ...
+    ```
+
+    请务必接收三个参数：event, run_context, response
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnAgentDoneEvent, **kwargs)
         return awaitable
 
     return decorator
@@ -619,7 +684,7 @@ class RegisteringAgent:
         kwargs["registering_agent"] = self
         return register_llm_tool(*args, **kwargs)
 
-    def __init__(self, agent: Agent[AstrAgentContext]) -> None:
+    def __init__(self, agent: Agent[Any]) -> None:
         self._agent = agent
 
 
@@ -627,7 +692,7 @@ def register_agent(
     name: str,
     instruction: str,
     tools: list[str | FunctionTool] | None = None,
-    run_hooks: BaseAgentRunHooks[AstrAgentContext] | None = None,
+    run_hooks: BaseAgentRunHooks[Any] | None = None,
 ):
     """注册一个 Agent
 
@@ -641,12 +706,12 @@ def register_agent(
     tools_ = tools or []
 
     def decorator(awaitable: Callable[..., Awaitable[Any]]):
-        AstrAgent = Agent[AstrAgentContext]
+        AstrAgent = Agent[Any]
         agent = AstrAgent(
             name=name,
             instructions=instruction,
             tools=tools_,
-            run_hooks=run_hooks or BaseAgentRunHooks[AstrAgentContext](),
+            run_hooks=run_hooks or BaseAgentRunHooks[Any](),
         )
         handoff_tool = HandoffTool(agent=agent)
         handoff_tool.handler = awaitable

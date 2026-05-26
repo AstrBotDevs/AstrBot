@@ -37,12 +37,21 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             "minimax-is-timber-weight",
             False,
         )
-        self.timber_weight: list[dict[str, str | int]] = json.loads(
-            provider_config.get(
-                "minimax-timber-weight",
-                '[{"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}]',
-            ),
-        )
+        default_timber_weight = [
+            {"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}
+        ]
+        raw_timber_weight = provider_config.get("minimax-timber-weight", "")
+        if not raw_timber_weight:
+            self.timber_weight = default_timber_weight
+        else:
+            try:
+                self.timber_weight = json.loads(raw_timber_weight)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "MiniMax TTS 权重配置解析失败，将使用默认值。 raw_value: %s",
+                    raw_timber_weight,
+                )
+                self.timber_weight = default_timber_weight
 
         self.voice_setting: dict = {
             "speed": provider_config.get("minimax-voice-speed", 1.0),
@@ -65,7 +74,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         self.audio_setting: dict = {
             "sample_rate": 32000,
             "bitrate": 128000,
-            "format": "mp3",
+            "format": "wav",
         }
 
         self.concat_base_url: str = f"{self.api_base}?GroupId={self.group_id}"
@@ -147,12 +156,20 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
-        path = os.path.join(temp_dir, f"minimax_tts_api_{uuid.uuid4()}.mp3")
+        path = os.path.join(temp_dir, f"minimax_tts_api_{uuid.uuid4()}.wav")
 
         try:
             # 直接将异步生成器传递给 _audio_play 方法
             audio_stream = self._call_tts_stream(text)
             audio = await self._audio_play(audio_stream)
+
+            # 检查音频数据是否为空
+            if not audio or len(audio) == 0:
+                raise Exception(
+                    "MiniMax TTS API returned empty audio data. "
+                    "Please verify your configuration, especially the 'group_id' parameter. "
+                    "You can find your group_id in Account Management -> Basic Information on the MiniMax platform."
+                )
 
             # 结果保存至文件
             with open(path, "wb") as file:
@@ -161,4 +178,4 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             return path
 
         except aiohttp.ClientError as e:
-            raise e
+            raise Exception(f"MiniMax TTS API request failed: {e!s}")

@@ -172,6 +172,9 @@ def try_capture_follow_up(event: AstrMessageEvent) -> FollowUpCapture | None:
     if not active_sender_id or active_sender_id != sender_id:
         return None
 
+    if runner_event.get_extra("agent_stop_requested"):
+        return None
+
     ticket = runner.follow_up(message_text=_event_follow_up_text(event))
     if not ticket:
         return None

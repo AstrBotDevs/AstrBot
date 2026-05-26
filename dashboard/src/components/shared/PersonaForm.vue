@@ -90,31 +90,52 @@
                                     <div v-if="filteredTools.length > 0" class="tools-selection">
                                         <v-virtual-scroll :items="filteredTools" height="300" item-height="72">
                                             <template v-slot:default="{ item }">
-                                                <v-list-item :key="item.name" density="comfortable"
-                                                    @click="toggleTool(item.name)">
-                                                    <template v-slot:prepend>
-                                                        <v-checkbox-btn :model-value="isToolSelected(item.name)"
-                                                            @click.stop="toggleTool(item.name)" />
+                                                <v-tooltip
+                                                    :disabled="!isBuiltinTool(item)"
+                                                    location="top"
+                                                >
+                                                    <template v-slot:activator="{ props: tooltipProps }">
+                                                        <div v-bind="tooltipProps">
+                                                            <v-list-item
+                                                                :key="item.name"
+                                                                density="comfortable"
+                                                                :disabled="isBuiltinTool(item)"
+                                                                @click="toggleTool(item.name)"
+                                                            >
+                                                                <template v-slot:prepend>
+                                                                    <v-checkbox-btn
+                                                                        v-if="!isBuiltinTool(item)"
+                                                                        :model-value="isToolSelected(item.name)"
+                                                                        @click.stop="toggleTool(item.name)"
+                                                                    />
+                                                                    <div
+                                                                        v-else
+                                                                        class="builtin-tool-checkbox-placeholder"
+                                                                    />
+                                                                </template>
+
+                                                                <v-list-item-title>
+                                                                    {{ item.name }}
+
+                                                                    <v-chip v-if="item.origin" size="x-small" color="info" class="mr-2"
+                                                                        variant="tonal">
+                                                                        {{ item.origin }}
+                                                                    </v-chip>
+                                                                    <v-chip v-if="item.origin_name" size="x-small" color="info"
+                                                                        variant="outlined">
+                                                                        {{ item.origin_name }}
+                                                                    </v-chip>
+
+                                                                </v-list-item-title>
+
+                                                                <v-list-item-subtitle v-if="item.description">
+                                                                    {{ truncateText(item.description, 100) }}
+                                                                </v-list-item-subtitle>
+                                                            </v-list-item>
+                                                        </div>
                                                     </template>
-
-                                                    <v-list-item-title>
-                                                        {{ item.name }}
-
-                                                        <v-chip v-if="item.origin" size="x-small" color="info" class="mr-2"
-                                                            variant="tonal">
-                                                            {{ item.origin }}
-                                                        </v-chip>
-                                                        <v-chip v-if="item.origin_name" size="x-small" color="info"
-                                                            variant="outlined">
-                                                            {{ item.origin_name }}
-                                                        </v-chip>
-
-                                                    </v-list-item-title>
-
-                                                    <v-list-item-subtitle v-if="item.description">
-                                                        {{ truncateText(item.description, 100) }}
-                                                    </v-list-item-subtitle>
-                                                </v-list-item>
+                                                    <span>{{ tm('form.builtinToolDisabledHint') }}</span>
+                                                </v-tooltip>
                                             </template>
                                         </v-virtual-scroll>
                                     </div>
@@ -155,11 +176,26 @@
                                         </h4>
                                         <div v-if="Array.isArray(personaForm.tools) && personaForm.tools.length > 0"
                                             class="d-flex flex-wrap ga-1" style="max-height: 100px; overflow-y: auto;">
-                                            <v-chip v-for="toolName in personaForm.tools" :key="toolName" size="small"
-                                                color="primary" variant="tonal" closable
-                                                @click:close="removeTool(toolName)">
-                                                {{ toolName }}
-                                            </v-chip>
+                                            <v-tooltip
+                                                v-for="toolName in personaForm.tools"
+                                                :key="toolName"
+                                                :disabled="!isBuiltinToolName(toolName)"
+                                                location="top"
+                                            >
+                                                <template v-slot:activator="{ props: tooltipProps }">
+                                                    <v-chip
+                                                        v-bind="tooltipProps"
+                                                        size="small"
+                                                        color="primary"
+                                                        variant="tonal"
+                                                        :closable="!isBuiltinToolName(toolName)"
+                                                        @click:close="removeTool(toolName)"
+                                                    >
+                                                        {{ toolName }}
+                                                    </v-chip>
+                                                </template>
+                                                <span>{{ tm('form.builtinToolDisabledHint') }}</span>
+                                            </v-tooltip>
                                         </div>
                                         <div v-else class="text-body-2 text-medium-emphasis">
                                             {{ tm('form.noToolsSelected') }}
@@ -712,6 +748,9 @@ export default {
         },
 
         toggleTool(toolName) {
+            if (this.isBuiltinToolName(toolName)) {
+                return;
+            }
             // 如果当前是全选状态，需要先转换为具体的工具列表
             if (this.personaForm.tools === null) {
                 // 如果是全选状态，点击某个工具表示要取消选择该工具
@@ -735,6 +774,9 @@ export default {
         },
 
         removeTool(toolName) {
+            if (this.isBuiltinToolName(toolName)) {
+                return;
+            }
             // 如果当前是全选状态，需要先转换为具体的工具列表
             if (this.personaForm.tools === null) {
                 // 创建一个包含所有工具的数组，然后移除指定工具
@@ -782,6 +824,14 @@ export default {
         truncateText(text, maxLength) {
             if (!text) return '';
             return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+        },
+
+        isBuiltinTool(tool) {
+            return tool?.origin === 'builtin' || tool?.readonly === true;
+        },
+
+        isBuiltinToolName(toolName) {
+            return this.availableTools.some(tool => tool.name === toolName && this.isBuiltinTool(tool));
         },
 
         getDialogRules(index) {
@@ -857,6 +907,12 @@ export default {
 .tools-selection {
     max-height: 300px;
     overflow-y: auto;
+}
+
+.builtin-tool-checkbox-placeholder {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
 }
 
 .skills-selection {

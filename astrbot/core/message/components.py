@@ -64,7 +64,6 @@ class ComponentType(str, Enum):
     Music = "Music"
     Json = "Json"
     Unknown = "Unknown"
-    WechatEmoji = "WechatEmoji"  # Wechat 下的 emoji 表情包
 
 
 class BaseMessageComponent(BaseModel):
@@ -91,15 +90,14 @@ class BaseMessageComponent(BaseModel):
 class Plain(BaseMessageComponent):
     type: ComponentType = ComponentType.Plain
     text: str
-    convert: bool | None = True
 
     def __init__(self, text: str, convert: bool = True, **_) -> None:
         super().__init__(text=text, convert=convert, **_)
 
-    def toDict(self):
-        return {"type": "text", "data": {"text": self.text.strip()}}
+    def toDict(self) -> dict:
+        return {"type": "text", "data": {"text": self.text}}
 
-    async def to_dict(self):
+    async def to_dict(self) -> dict:
         return {"type": "text", "data": {"text": self.text}}
 
 
@@ -114,15 +112,11 @@ class Face(BaseMessageComponent):
 class Record(BaseMessageComponent):
     type: ComponentType = ComponentType.Record
     file: str | None = ""
-    magic: bool | None = False
     url: str | None = ""
-    cache: bool | None = True
-    proxy: bool | None = True
-    timeout: int | None = 0
     # Original text content (e.g. TTS source text), used as caption in fallback scenarios
     text: str | None = None
     # 额外
-    path: str | None
+    path: str | None = None
 
     def __init__(self, file: str | None, **_) -> None:
         for k in _:
@@ -224,7 +218,6 @@ class Video(BaseMessageComponent):
     type: ComponentType = ComponentType.Video
     file: str
     cover: str | None = ""
-    c: int | None = 2
     # 额外
     path: str | None = ""
 
@@ -401,14 +394,9 @@ class Image(BaseMessageComponent):
     type: ComponentType = ComponentType.Image
     file: str | None = ""
     _type: str | None = ""
-    subType: int | None = 0
     url: str | None = ""
-    cache: bool | None = True
-    id: int | None = 40000
-    c: int | None = 2
     # 额外
     path: str | None = ""
-    file_unique: str | None = ""  # 某些平台可能有图片缓存的唯一标识
 
     def __init__(self, file: str | None, **_) -> None:
         super().__init__(file=file, **_)
@@ -699,21 +687,24 @@ class File(BaseMessageComponent):
 
         if self.url:
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    logger.warning(
-                        "不可以在异步上下文中同步等待下载! "
-                        "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
-                        "请使用 await get_file() 代替直接获取 <File>.file 字段",
-                    )
-                    return ""
-                # 等待下载完成
-                loop.run_until_complete(self._download_file())
+                # 检查是否有正在运行的 event loop
+                asyncio.get_running_loop()
+                logger.warning(
+                    "不可以在异步上下文中同步等待下载! "
+                    "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
+                    "请使用 await get_file() 代替直接获取 <File>.file 字段",
+                )
+                return ""
+            except RuntimeError:
+                # 没有运行中的 event loop，可以同步执行
+                try:
+                    # 使用 asyncio.run 安全地创建和关闭事件循环
+                    asyncio.run(self._download_file())
+                except Exception:
+                    logger.exception("文件下载失败")
 
                 if self.file_ and os.path.exists(self.file_):
                     return os.path.abspath(self.file_)
-            except Exception as e:
-                logger.error(f"文件下载失败: {e}")
 
         return ""
 
@@ -836,16 +827,6 @@ class File(BaseMessageComponent):
         }
 
 
-class WechatEmoji(BaseMessageComponent):
-    type: ComponentType = ComponentType.WechatEmoji
-    md5: str | None = ""
-    md5_len: int | None = 0
-    cdnurl: str | None = ""
-
-    def __init__(self, **_) -> None:
-        super().__init__(**_)
-
-
 ComponentTypes = {
     # Basic Message Segments
     "plain": Plain,
@@ -871,5 +852,4 @@ ComponentTypes = {
     "nodes": Nodes,
     "json": Json,
     "unknown": Unknown,
-    "WechatEmoji": WechatEmoji,
 }

@@ -58,7 +58,7 @@ def test_list_skills_merges_local_and_sandbox_cache(monkeypatch, tmp_path: Path)
     assert by_name["custom-local"].description == "local description"
     assert by_name["custom-local"].path == "skills/custom-local/SKILL.md"
     assert by_name["python-sandbox"].description == "ship built-in"
-    assert by_name["python-sandbox"].path == "/workspace/skills/python-sandbox/SKILL.md"
+    assert by_name["python-sandbox"].path == "/app/skills/python-sandbox/SKILL.md"
 
 
 def test_sandbox_cached_skill_respects_active_and_display_path(

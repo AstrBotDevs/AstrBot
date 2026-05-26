@@ -18,7 +18,11 @@ from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queu
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
 from .api_key import ALL_OPEN_API_SCOPES
-from .chat import ChatRoute
+from .chat import (
+    BotMessageAccumulator,
+    ChatRoute,
+    collect_plain_text_from_message_parts,
+)
 from .route import Response, Route, RouteContext
 
 
@@ -40,7 +44,10 @@ class OpenApiRoute(Route):
             "/v1/chat": ("POST", self.chat_send),
             "/v1/chat/sessions": ("GET", self.get_chat_sessions),
             "/v1/configs": ("GET", self.get_chat_configs),
-            "/v1/file": ("POST", self.upload_file),
+            "/v1/file": [
+                ("POST", self.openapi_upload_file),
+                ("GET", self.openapi_get_file),
+            ],
             "/v1/im/message": ("POST", self.send_message),
             "/v1/im/bots": ("GET", self.get_bots),
         }
@@ -360,10 +367,7 @@ class OpenApiRoute(Route):
                 }
             )
 
-            accumulated_parts = []
-            accumulated_text = ""
-            accumulated_reasoning = ""
-            tool_calls = {}
+            message_accumulator = BotMessageAccumulator()
             agent_stats = {}
             refs = {}
             while True:
@@ -399,68 +403,56 @@ class OpenApiRoute(Route):
                 await websocket.send_json(result)
 
                 if msg_type == "plain":
-                    if chain_type == "tool_call":
-                        tool_call = json.loads(result_text)
-                        tool_calls[tool_call.get("id")] = tool_call
-                        if accumulated_text:
-                            accumulated_parts.append(
-                                {"type": "plain", "text": accumulated_text}
-                            )
-                            accumulated_text = ""
-                    elif chain_type == "tool_call_result":
-                        tcr = json.loads(result_text)
-                        tc_id = tcr.get("id")
-                        if tc_id in tool_calls:
-                            tool_calls[tc_id]["result"] = tcr.get("result")
-                            tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
-                            accumulated_parts.append(
-                                {"type": "tool_call", "tool_calls": [tool_calls[tc_id]]}
-                            )
-                            tool_calls.pop(tc_id, None)
-                    elif chain_type == "reasoning":
-                        accumulated_reasoning += result_text
-                    elif streaming:
-                        accumulated_text += result_text
-                    else:
-                        accumulated_text = result_text
+                    message_accumulator.add_plain(
+                        result_text,
+                        chain_type=chain_type,
+                        streaming=streaming,
+                    )
                 elif msg_type == "image":
                     filename = str(result_text).replace("[IMAGE]", "")
                     part = await self.chat_route._create_attachment_from_file(
                         filename, "image"
                     )
-                    if part:
-                        accumulated_parts.append(part)
+                    message_accumulator.add_attachment(part)
                 elif msg_type == "record":
                     filename = str(result_text).replace("[RECORD]", "")
                     part = await self.chat_route._create_attachment_from_file(
                         filename, "record"
                     )
-                    if part:
-                        accumulated_parts.append(part)
+                    message_accumulator.add_attachment(part)
                 elif msg_type == "file":
                     filename = str(result_text).replace("[FILE]", "")
                     part = await self.chat_route._create_attachment_from_file(
                         filename, "file"
                     )
-                    if part:
-                        accumulated_parts.append(part)
+                    message_accumulator.add_attachment(part)
                 elif msg_type == "video":
                     filename = str(result_text).replace("[VIDEO]", "")
                     part = await self.chat_route._create_attachment_from_file(
                         filename, "video"
                     )
-                    if part:
-                        accumulated_parts.append(part)
+                    message_accumulator.add_attachment(part)
 
+                should_save = False
                 if msg_type == "end":
-                    break
-                if (streaming and msg_type == "complete") or not streaming:
-                    if chain_type in ("tool_call", "tool_call_result"):
-                        continue
+                    should_save = bool(
+                        message_accumulator.has_content() or refs or agent_stats
+                    )
+                elif (streaming and msg_type == "complete") or not streaming:
+                    if chain_type not in ("tool_call", "tool_call_result"):
+                        should_save = True
+
+                if should_save:
+                    message_parts_to_save = message_accumulator.build_message_parts(
+                        include_pending_tool_calls=True
+                    )
+                    plain_text = collect_plain_text_from_message_parts(
+                        message_parts_to_save
+                    )
                     try:
                         refs = self.chat_route._extract_web_search_refs(
-                            accumulated_text,
-                            accumulated_parts,
+                            plain_text,
+                            message_parts_to_save,
                         )
                     except Exception as e:
                         logger.exception(
@@ -470,9 +462,7 @@ class OpenApiRoute(Route):
 
                     saved_record = await self.chat_route._save_bot_message(
                         session_id,
-                        accumulated_text,
-                        accumulated_parts,
-                        accumulated_reasoning,
+                        message_parts_to_save,
                         agent_stats,
                         refs,
                     )
@@ -489,11 +479,11 @@ class OpenApiRoute(Route):
                                 "session_id": session_id,
                             }
                         )
-                    accumulated_parts = []
-                    accumulated_text = ""
-                    accumulated_reasoning = ""
+                    message_accumulator = BotMessageAccumulator()
                     agent_stats = {}
                     refs = {}
+                if msg_type == "end":
+                    break
         except Exception as e:
             logger.exception(f"Open API WS chat failed: {e}", exc_info=True)
             await self._send_chat_ws_error(
@@ -534,8 +524,11 @@ class OpenApiRoute(Route):
         except Exception as e:
             logger.debug("Open API WS connection closed: %s", e)
 
-    async def upload_file(self):
+    async def openapi_upload_file(self):
         return await self.chat_route.post_file()
+
+    async def openapi_get_file(self):
+        return await self.chat_route.get_attachment()
 
     async def get_chat_sessions(self):
         username, username_err = self._resolve_open_username(

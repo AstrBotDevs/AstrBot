@@ -25,6 +25,16 @@ from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
 from astrbot.core.utils.metrics import Metric
 
 
+def _is_gif(path: str) -> bool:
+    if path.lower().endswith(".gif"):
+        return True
+    try:
+        with open(path, "rb") as f:
+            return f.read(6) in (b"GIF87a", b"GIF89a")
+    except OSError:
+        return False
+
+
 class TelegramPlatformEvent(AstrMessageEvent):
     # Telegram 的最大消息长度限制
     MAX_MESSAGE_LENGTH = 4096
@@ -94,6 +104,30 @@ class TelegramPlatformEvent(AstrMessageEvent):
             text = text[split_point:].lstrip()
 
         return chunks
+
+    @classmethod
+    async def _send_text_chunks(
+        cls,
+        client: ExtBot,
+        text: str,
+        payload: dict[str, Any],
+    ) -> None:
+        """按 Telegram 限制切分文本后逐段发送。"""
+        for chunk in cls._split_message(text):
+            try:
+                markdown_text = telegramify_markdown.markdownify(
+                    chunk,
+                )
+                await client.send_message(
+                    text=markdown_text,
+                    parse_mode="MarkdownV2",
+                    **cast(Any, payload),
+                )
+            except (ValueError, BadRequest) as e:
+                logger.warning(
+                    f"Failed to convert message to Markdown，using normal text: {e!s}"
+                )
+                await client.send_message(text=chunk, **cast(Any, payload))
 
     @classmethod
     async def _send_chat_action(
@@ -273,26 +307,16 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 if at_user_id and not at_flag:
                     i.text = f"@{at_user_id} {i.text}"
                     at_flag = True
-                chunks = cls._split_message(i.text)
-                for chunk in chunks:
-                    try:
-                        md_text = telegramify_markdown.markdownify(
-                            chunk,
-                            normalize_whitespace=False,
-                        )
-                        await client.send_message(
-                            text=md_text,
-                            parse_mode="MarkdownV2",
-                            **cast(Any, payload),
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"MarkdownV2 send failed: {e}. Using plain text instead.",
-                        )
-                        await client.send_message(text=chunk, **cast(Any, payload))
+                await cls._send_text_chunks(client, i.text, payload)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
-                await client.send_photo(photo=image_path, **cast(Any, payload))
+                if _is_gif(image_path):
+                    send_coro = client.send_animation
+                    media_kwarg = {"animation": image_path}
+                else:
+                    send_coro = client.send_photo
+                    media_kwarg = {"photo": image_path}
+                await send_coro(**media_kwarg, **cast(Any, payload))
             elif isinstance(i, File):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)
@@ -374,6 +398,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             message_thread_id: 可选，目标消息线程 ID
             parse_mode: 可选，消息文本的解析模式
         """
+        if not text or not text.strip():
+            return
+
         kwargs: dict[str, Any] = {}
         if message_thread_id:
             kwargs["message_thread_id"] = int(message_thread_id)
@@ -407,12 +434,20 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 on_text(i.text)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
+                if _is_gif(image_path):
+                    action = ChatAction.UPLOAD_VIDEO
+                    send_coro = self.client.send_animation
+                    media_kwarg = {"animation": image_path}
+                else:
+                    action = ChatAction.UPLOAD_PHOTO
+                    send_coro = self.client.send_photo
+                    media_kwarg = {"photo": image_path}
                 await self._send_media_with_action(
                     self.client,
-                    ChatAction.UPLOAD_PHOTO,
-                    self.client.send_photo,
+                    action,
+                    send_coro,
                     user_name=user_name,
-                    photo=image_path,
+                    **media_kwarg,
                     **cast(Any, payload),
                 )
             elif isinstance(i, File):
@@ -453,19 +488,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     async def _send_final_segment(self, delta: str, payload: dict[str, Any]) -> None:
         """将累积文本作为 MarkdownV2 真实消息发送，失败时回退到纯文本。"""
-        try:
-            markdown_text = telegramify_markdown.markdownify(
-                delta,
-                normalize_whitespace=False,
-            )
-            await self.client.send_message(
-                text=markdown_text,
-                parse_mode="MarkdownV2",
-                **cast(Any, payload),
-            )
-        except Exception as e:
-            logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
-            await self.client.send_message(text=delta, **cast(Any, payload))
+        await self._send_text_chunks(self.client, delta, payload)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         message_thread_id = None
@@ -537,7 +560,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         try:
                             md = telegramify_markdown.markdownify(
                                 draft_text,
-                                normalize_whitespace=False,
                             )
                             await self._send_message_draft(
                                 user_name,
@@ -626,7 +648,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
         # 发送初始 typing 状态
         await self._ensure_typing(user_name, message_thread_id)
-        last_chat_action_time = asyncio.get_event_loop().time()
+        last_chat_action_time = asyncio.get_running_loop().time()
 
         def _append_text(t: str) -> None:
             nonlocal delta
@@ -657,11 +679,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
             # 编辑或发送消息
             if message_id and len(delta) <= self.MAX_MESSAGE_LENGTH:
-                current_time = asyncio.get_event_loop().time()
+                current_time = asyncio.get_running_loop().time()
                 time_since_last_edit = current_time - last_edit_time
 
                 if time_since_last_edit >= throttle_interval:
-                    current_time = asyncio.get_event_loop().time()
+                    current_time = asyncio.get_running_loop().time()
                     if current_time - last_chat_action_time >= chat_action_interval:
                         await self._ensure_typing(user_name, message_thread_id)
                         last_chat_action_time = current_time
@@ -674,9 +696,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         current_content = delta
                     except Exception as e:
                         logger.warning(f"编辑消息失败(streaming): {e!s}")
-                    last_edit_time = asyncio.get_event_loop().time()
+                    last_edit_time = asyncio.get_running_loop().time()
             else:
-                current_time = asyncio.get_event_loop().time()
+                current_time = asyncio.get_running_loop().time()
                 if current_time - last_chat_action_time >= chat_action_interval:
                     await self._ensure_typing(user_name, message_thread_id)
                     last_chat_action_time = current_time
@@ -688,14 +710,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 except Exception as e:
                     logger.warning(f"发送消息失败(streaming): {e!s}")
                 message_id = msg.message_id
-                last_edit_time = asyncio.get_event_loop().time()
+                last_edit_time = asyncio.get_running_loop().time()
 
         try:
             if delta and current_content != delta:
                 try:
                     markdown_text = telegramify_markdown.markdownify(
                         delta,
-                        normalize_whitespace=False,
                     )
                     await self.client.edit_message_text(
                         text=markdown_text,

@@ -1,12 +1,13 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import delete, event, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from sqlmodel import col, desc
 
 from astrbot.core import logger
-from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 from astrbot.core.knowledge_base.models import (
     BaseKBModel,
     KBDocument,
@@ -14,6 +15,22 @@ from astrbot.core.knowledge_base.models import (
     KnowledgeBase,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
+
+if TYPE_CHECKING:
+    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+
+
+def _configure_sqlite_connection(dbapi_connection, connection_record) -> None:
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA cache_size=20000")
+        cursor.execute("PRAGMA temp_store=MEMORY")
+        cursor.execute("PRAGMA mmap_size=134217728")
+        cursor.execute("PRAGMA optimize")
+    finally:
+        cursor.close()
 
 
 class KBSQLiteDatabase:
@@ -37,8 +54,12 @@ class KBSQLiteDatabase:
         self.engine = create_async_engine(
             self.DATABASE_URL,
             echo=False,
-            pool_pre_ping=True,
-            pool_recycle=3600,
+            poolclass=NullPool,
+        )
+        event.listen(
+            self.engine.sync_engine,
+            "connect",
+            _configure_sqlite_connection,
         )
 
         # 创建会话工厂
@@ -296,7 +317,7 @@ class KBSQLiteDatabase:
 
         return metadata_map
 
-    async def delete_document_by_id(self, doc_id: str, vec_db: FaissVecDB) -> None:
+    async def delete_document_by_id(self, doc_id: str, vec_db: "FaissVecDB") -> None:
         """删除单个文档及其相关数据"""
         # 在知识库表中删除
         async with self.get_db() as session, session.begin():
@@ -324,7 +345,7 @@ class KBSQLiteDatabase:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def update_kb_stats(self, kb_id: str, vec_db: FaissVecDB) -> None:
+    async def update_kb_stats(self, kb_id: str, vec_db: "FaissVecDB") -> None:
         """更新知识库统计信息"""
         chunk_cnt = await vec_db.count_documents()
 

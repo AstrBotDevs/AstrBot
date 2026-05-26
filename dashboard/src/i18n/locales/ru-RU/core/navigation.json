@@ -1,0 +1,49 @@
+﻿{
+    "welcome": "Добро пожаловать",
+    "dashboard": "Статистика",
+    "platforms": "Боты",
+    "providers": "Провайдеры моделей",
+    "commands": "Команды",
+    "persona": "Персонажи",
+    "subagent": "Субагенты",
+    "toolUse": "Инструменты MCP",
+    "extension": "Плагины",
+    "extensionTabs": {
+        "installed": "Плагины AstrBot",
+        "market": "Магазин плагинов",
+        "mcp": "Серверы MCP",
+        "skills": "Навыки",
+        "components": "Управление поведением"
+    },
+    "config": "Конфигурация",
+    "chat": "Чат",
+    "cron": "Запланированные задачи",
+    "conversation": "Данные диалогов",
+    "sessionManagement": "Пользовательские правила",
+    "console": "Логи платформы",
+    "trace": "Трассировка",
+    "alkaid": "Alkaid Lab",
+    "knowledgeBase": "База знаний",
+    "about": "О программе",
+    "settings": "Настройки",
+    "changelog": "Журнал изменений",
+    "documentation": "Документация",
+    "faq": "FAQ",
+    "github": "GitHub",
+    "drag": "Перетащить",
+    "groups": {
+        "more": "Дополнительно"
+    },
+    "changelogDialog": {
+        "title": "Журнал изменений",
+        "loading": "Загрузка...",
+        "error": "Ошибка загрузки",
+        "notFound": "Журнал изменений для этой версии не найден",
+        "selectVersion": "Выберите версию",
+        "current": "Текущая"
+    },
+    "configTabs": {
+        "normal": "Обычная конфигурация",
+        "system": "Системная конфигурация"
+    }
+}

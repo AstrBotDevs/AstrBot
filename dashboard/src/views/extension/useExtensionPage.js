@@ -1,43 +1,19 @@
 import axios from "axios";
-import { pinyin } from "pinyin-pro";
 import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
 import { resolveErrorMessage } from "@/utils/errorUtils";
 import { getSelectedGitHubProxy } from "@/utils/githubProxy";
+import {
+  buildSearchQuery,
+  matchesPluginSearch,
+  normalizeStr,
+  toInitials,
+  toPinyinText,
+} from "@/utils/pluginSearch";
+import { getValidHashTab, replaceTabRoute } from "@/utils/hashRouteTabs.mjs";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useDisplay } from "vuetify";
-
-const useRandomPluginsDisplay = ({ activeTab, marketSearch, currentPage }) => {
-  const showRandomPlugins = ref(true);
-
-  const toggleRandomPluginsVisibility = () => {
-    showRandomPlugins.value = !showRandomPlugins.value;
-  };
-
-  const collapseRandomPlugins = () => {
-    showRandomPlugins.value = false;
-  };
-
-  watch(marketSearch, () => {
-    if (activeTab.value === "market") {
-      collapseRandomPlugins();
-    }
-  });
-
-  watch(currentPage, (newPage, oldPage) => {
-    if (newPage === oldPage) return;
-    if (activeTab.value !== "market") return;
-    collapseRandomPlugins();
-  });
-
-  return {
-    showRandomPlugins,
-    toggleRandomPluginsVisibility,
-    collapseRandomPlugins,
-  };
-};
 
 const buildFailedPluginItems = (raw) => {
   return Object.entries(raw || {}).map(([dirName, info]) => {
@@ -55,15 +31,12 @@ const buildFailedPluginItems = (raw) => {
 };
 
 export const useExtensionPage = () => {
-  
-  
   const commonStore = useCommonStore();
   const { t } = useI18n();
   const { tm } = useModuleI18n("features/extension");
   const router = useRouter();
   const route = useRoute();
-  const { width } = useDisplay();
-  
+
   // 检查指令冲突并提示
   const conflictDialog = reactive({
     show: false,
@@ -86,21 +59,16 @@ export const useExtensionPage = () => {
   const handleConflictConfirm = () => {
     activeTab.value = "commands";
   };
-  
+
   const fileInput = ref(null);
   const activeTab = ref("installed");
   const validTabs = ["installed", "market", "mcp", "skills", "components"];
   const isValidTab = (tab) => validTabs.includes(tab);
-  const getLocationHash = () =>
-    typeof window !== "undefined" ? window.location.hash : "";
-  const extractTabFromHash = (hash) => {
-    const lastHashIndex = (hash || "").lastIndexOf("#");
-    if (lastHashIndex === -1) return "";
-    return hash.slice(lastHashIndex + 1);
-  };
+  const getLocationHash = () => route.hash || "";
+  const extractTabFromHash = (hash) => getValidHashTab(hash, validTabs);
   const syncTabFromHash = (hash) => {
     const tab = extractTabFromHash(hash);
-    if (isValidTab(tab)) {
+    if (tab) {
       activeTab.value = tab;
       return true;
     }
@@ -110,16 +78,7 @@ export const useExtensionPage = () => {
     data: [],
     message: "",
   });
-  
-  // 从 localStorage 恢复显示系统插件的状态，默认为 false（隐藏）
-  const getInitialShowReserved = () => {
-    if (typeof window !== "undefined" && window.localStorage) {
-      const saved = localStorage.getItem("showReservedPlugins");
-      return saved === "true";
-    }
-    return false;
-  };
-  const showReserved = ref(getInitialShowReserved());
+
   const snack_message = ref("");
   const snack_show = ref(false);
   const snack_success = ref("success");
@@ -127,6 +86,7 @@ export const useExtensionPage = () => {
   const extension_config = reactive({
     metadata: {},
     config: {},
+    i18n: {},
   });
   const pluginMarketData = ref([]);
   const loadingDialog = reactive({
@@ -135,50 +95,46 @@ export const useExtensionPage = () => {
     statusCode: 0, // 0: loading, 1: success, 2: error,
     result: "",
   });
-  const showPluginInfoDialog = ref(false);
-  const selectedPlugin = ref({});
   const curr_namespace = ref("");
+  const currentConfigPlugin = ref("");
   const updatingAll = ref(false);
-  
+
   const readmeDialog = reactive({
     show: false,
     pluginName: "",
     repoUrl: null,
   });
-  
+
   // 强制更新确认对话框
   const forceUpdateDialog = reactive({
     show: false,
     extensionName: "",
   });
-  
+
+  const updateConfirmDialog = reactive({
+    show: false,
+    extensionName: "",
+    forceUpdate: false,
+  });
+
   // 更新全部插件确认对话框
   const updateAllConfirmDialog = reactive({
     show: false,
   });
-  
+
   // 插件更新日志对话框（复用 ReadmeDialog）
   const changelogDialog = reactive({
     show: false,
     pluginName: "",
     repoUrl: null,
   });
-  
-  // 新增变量支持列表视图
-  // 从 localStorage 恢复显示模式，默认为 false（卡片视图）
-  const getInitialListViewMode = () => {
-    if (typeof window !== "undefined" && window.localStorage) {
-      return localStorage.getItem("pluginListViewMode") === "true";
-    }
-    return false;
-  };
-  const isListView = ref(getInitialListViewMode());
+
   const pluginSearch = ref("");
   const loading_ = ref(false);
-  
+
   // 分页相关
   const currentPage = ref(1);
-  
+
   // 危险插件确认对话框
   const dangerConfirmDialog = ref(false);
   const selectedDangerPlugin = ref(null);
@@ -188,17 +144,17 @@ export const useExtensionPage = () => {
     compatible: true,
     message: "",
   });
-  
+
   // AstrBot 版本范围不兼容警告对话框
   const versionCompatibilityDialog = reactive({
     show: false,
     message: "",
   });
-  
+
   // 卸载插件确认对话框（列表模式用）
   const showUninstallDialog = ref(false);
   const uninstallTarget = ref(null);
-  
+
   // 自定义插件源相关
   const showSourceDialog = ref(false);
   const showSourceManagerDialog = ref(false);
@@ -210,7 +166,7 @@ export const useExtensionPage = () => {
   const sourceToRemove = ref(null);
   const editingSource = ref(false);
   const originalSourceUrl = ref("");
-  
+
   // 插件市场相关
   const extension_url = ref("");
   const dialog = ref(false);
@@ -223,171 +179,178 @@ export const useExtensionPage = () => {
   const sortBy = ref("default"); // default, stars, author, updated
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
-  const {
-    showRandomPlugins,
-    toggleRandomPluginsVisibility,
-    collapseRandomPlugins,
-  } = useRandomPluginsDisplay({
-    activeTab,
-    marketSearch,
-    currentPage,
-  });
-  
-  // 插件市场拼音搜索
-  const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
-  const toPinyinText = (s) =>
-    pinyin(s ?? "", { toneType: "none" })
-      .toLowerCase()
-      .replace(/\s+/g, "");
-  const toInitials = (s) =>
-    pinyin(s ?? "", { pattern: "first", toneType: "none" })
-      .toLowerCase()
-      .replace(/\s+/g, "");
-  const marketCustomFilter = (value, query, item) => {
-    const q = normalizeStr(query);
-    if (!q) return true;
-  
-    const candidates = new Set();
-    if (value != null) candidates.add(String(value));
-    if (item?.name) candidates.add(String(item.name));
-    if (item?.trimmedName) candidates.add(String(item.trimmedName));
-    if (item?.display_name) candidates.add(String(item.display_name));
-    if (item?.desc) candidates.add(String(item.desc));
-    if (item?.author) candidates.add(String(item.author));
-  
-    for (const v of candidates) {
-      const nv = normalizeStr(v);
-      if (nv.includes(q)) return true;
-      const pv = toPinyinText(v);
-      if (pv.includes(q)) return true;
-      const iv = toInitials(v);
-      if (iv.includes(q)) return true;
-    }
-    return false;
-  };
-  
-  const plugin_handler_info_headers = computed(() => [
-    { title: tm("table.headers.eventType"), key: "event_type_h" },
-    { title: tm("table.headers.description"), key: "desc", maxWidth: "250px" },
-    { title: tm("table.headers.specificType"), key: "type" },
-    { title: tm("table.headers.trigger"), key: "cmd" },
-  ]);
-  
-  // 插件表格的表头定义
-  const showAuthorColumn = computed(() => width.value >= 1280);
-  const pluginHeaders = computed(() => {
-    const headers = [
-      {
-        title: tm("table.headers.name"),
-        key: "name",
-        width: showAuthorColumn.value ? "24%" : "26%",
-      },
-      {
-        title: tm("table.headers.description"),
-        key: "desc",
-        width: showAuthorColumn.value ? "32%" : "36%",
-      },
-      {
-        title: tm("table.headers.version"),
-        key: "version",
-        width: showAuthorColumn.value ? "12%" : "14%",
-      },
-    ];
+  const marketCategoryFilter = ref("all");
 
-    if (showAuthorColumn.value) {
-      headers.push({
-        title: tm("table.headers.author"),
-        key: "author",
-        width: "10%",
+  // 插件市场拼音搜索
+
+  const normalizeMarketCategory = (rawCategory) => {
+    const normalized = String(rawCategory || "")
+      .trim()
+      .toLowerCase();
+    if (!normalized) {
+      return "other";
+    }
+    return normalized.replace(/[\s-]+/g, "_");
+  };
+
+  const getMarketCategoryLabel = (key, rawCategory = "") => {
+    const fallbackMap = {
+      all: "All",
+      ai_tools: "AI Tools",
+      entertainment: "Entertainment",
+      productivity: "Productivity",
+      integrations: "Integrations",
+      utilities: "Utilities",
+      other: "Other",
+    };
+    const i18nKey = `market.categories.${key}`;
+    const translated = tm(i18nKey);
+    if (translated && !translated.includes("[MISSING:")) {
+      return translated;
+    }
+    if (fallbackMap[key]) {
+      return fallbackMap[key];
+    }
+    const normalizedRaw = String(rawCategory || "").trim();
+    if (normalizedRaw) {
+      return normalizedRaw;
+    }
+    return key
+      .split(/[_-]+/)
+      .filter(Boolean)
+      .map((part) => part[0].toUpperCase() + part.slice(1))
+      .join(" ");
+  };
+
+  const marketCategoryMeta = computed(() => {
+    const categories = new Map();
+
+    for (const plugin of pluginMarketData.value) {
+      const categoryKey = normalizeMarketCategory(plugin?.category);
+      const categoryData = categories.get(categoryKey);
+      if (categoryData) {
+        categoryData.count += 1;
+        continue;
+      }
+      categories.set(categoryKey, {
+        count: 1,
+        rawLabel: String(plugin?.category || "").trim(),
       });
     }
 
-    headers.push({
-      title: tm("table.headers.actions"),
-      key: "actions",
-      sortable: false,
-      width: showAuthorColumn.value ? "22%" : "24%",
-    });
-
-    return headers;
+    return categories;
   });
-  
+
+  const marketCategoryCounts = computed(() => {
+    const counts = { all: pluginMarketData.value.length };
+    for (const [
+      categoryKey,
+      categoryData,
+    ] of marketCategoryMeta.value.entries()) {
+      counts[categoryKey] = categoryData.count;
+    }
+    return counts;
+  });
+
+  const marketCategoryItems = computed(() => {
+    const items = [
+      {
+        value: "all",
+        label: getMarketCategoryLabel("all"),
+        count: marketCategoryCounts.value.all || 0,
+      },
+    ];
+
+    for (const [
+      categoryKey,
+      categoryData,
+    ] of marketCategoryMeta.value.entries()) {
+      items.push({
+        value: categoryKey,
+        label: getMarketCategoryLabel(categoryKey, categoryData.rawLabel),
+        count: categoryData.count,
+      });
+    }
+
+    return items;
+  });
+
   // 过滤要显示的插件
   const filteredExtensions = computed(() => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
-    if (!showReserved.value) {
-      return data.filter((ext) => !ext.reserved);
-    }
     return data;
   });
-  
-  const sortPluginsByName = (plugins) => {
+
+  const compareInstalledPluginNames = (left, right) =>
+    normalizeStr(left?.name ?? "").localeCompare(
+      normalizeStr(right?.name ?? ""),
+      undefined,
+      {
+        sensitivity: "base",
+      },
+    );
+
+  const compareInstalledFallback = (left, right) => {
+    const reservedDiff =
+      Number(!!left.plugin?.reserved) - Number(!!right.plugin?.reserved);
+    if (reservedDiff !== 0) {
+      return reservedDiff;
+    }
+
+    const nameCompare = compareInstalledPluginNames(left.plugin, right.plugin);
+    return nameCompare !== 0 ? nameCompare : left.index - right.index;
+  };
+
+  const sortInstalledPlugins = (plugins) => {
     return plugins
-      .map((plugin, index) => ({ plugin, index }))
-      .sort((a, b) => {
-        const nameA = String(a.plugin?.name ?? "");
-        const nameB = String(b.plugin?.name ?? "");
-        const nameCompare = nameA.localeCompare(nameB, undefined, {
-          sensitivity: "base",
-        });
-        if (nameCompare !== 0) {
-          return nameCompare;
-        }
-        return a.index - b.index;
-      })
+      .map((plugin, index) => ({
+        plugin,
+        index,
+      }))
+      .sort(compareInstalledFallback)
       .map((item) => item.plugin);
   };
 
   // 通过搜索过滤插件
   const filteredPlugins = computed(() => {
-    const plugins = filteredExtensions.value;
-    let filtered = plugins;
+    const query = buildSearchQuery(pluginSearch.value);
+    const filtered = query
+      ? filteredExtensions.value.filter((plugin) =>
+          matchesPluginSearch(plugin, query),
+        )
+      : filteredExtensions.value;
 
-    if (pluginSearch.value) {
-      const search = pluginSearch.value.toLowerCase();
-      filtered = plugins.filter((plugin) => {
-        const pluginName = (plugin.name ?? "").toLowerCase();
-        const pluginDesc = (plugin.desc ?? "").toLowerCase();
-        const pluginAuthor = (plugin.author ?? "").toLowerCase();
-        const supportPlatforms = Array.isArray(plugin.support_platforms)
-          ? plugin.support_platforms.join(" ").toLowerCase()
-          : "";
-        const astrbotVersion = (plugin.astrbot_version ?? "").toLowerCase();
-
-        return (
-          pluginName.includes(search) ||
-          pluginDesc.includes(search) ||
-          pluginAuthor.includes(search) ||
-          supportPlatforms.includes(search) ||
-          astrbotVersion.includes(search)
-        );
-      });
-    }
-
-    return sortPluginsByName([...filtered]);
+    return sortInstalledPlugins(filtered);
   });
-  
+
   // 过滤后的插件市场数据（带搜索）
   const filteredMarketPlugins = computed(() => {
-    if (!debouncedMarketSearch.value) {
-      return pluginMarketData.value;
-    }
-  
-    const search = debouncedMarketSearch.value.toLowerCase();
-    return pluginMarketData.value.filter((plugin) => {
-      // 使用自定义过滤器
-      return (
-        marketCustomFilter(plugin.name, search, plugin) ||
-        marketCustomFilter(plugin.desc, search, plugin) ||
-        marketCustomFilter(plugin.author, search, plugin)
+    const query = buildSearchQuery(debouncedMarketSearch.value);
+    const targetCategory = normalizeMarketCategory(marketCategoryFilter.value);
+    const shouldFilterByCategory = marketCategoryFilter.value !== "all";
+    if (!query) {
+      if (!shouldFilterByCategory) {
+        return pluginMarketData.value;
+      }
+      return pluginMarketData.value.filter(
+        (plugin) =>
+          normalizeMarketCategory(plugin?.category) === targetCategory,
       );
+    }
+
+    return pluginMarketData.value.filter((plugin) => {
+      const matchesSearch = matchesPluginSearch(plugin, query);
+      const matchesCategory = shouldFilterByCategory
+        ? normalizeMarketCategory(plugin?.category) === targetCategory
+        : true;
+      return matchesSearch && matchesCategory;
     });
   });
-  
+
   // 所有插件列表，推荐插件排在前面
   const sortedPlugins = computed(() => {
     let plugins = [...filteredMarketPlugins.value];
-  
+
     // 根据排序选项排序
     if (sortBy.value === "stars") {
       // 按 star 数排序
@@ -417,28 +380,33 @@ export const useExtensionPage = () => {
       const notPinned = plugins.filter((plugin) => !plugin?.pinned);
       return [...pinned, ...notPinned];
     }
-  
+
     return plugins;
   });
-  
+
   const RANDOM_PLUGINS_COUNT = 3;
-  
+
   const randomPlugins = computed(() => {
     const allPlugins = pluginMarketData.value;
     if (allPlugins.length === 0) return [];
-  
-    const pluginsByName = new Map(allPlugins.map((plugin) => [plugin.name, plugin]));
+
+    const pluginsByName = new Map(
+      allPlugins.map((plugin) => [plugin.name, plugin]),
+    );
     const selected = randomPluginNames.value
       .map((name) => pluginsByName.get(name))
       .filter(Boolean);
-  
+
     if (selected.length > 0) {
       return selected;
     }
-  
-    return allPlugins.slice(0, Math.min(RANDOM_PLUGINS_COUNT, allPlugins.length));
+
+    return allPlugins.slice(
+      0,
+      Math.min(RANDOM_PLUGINS_COUNT, allPlugins.length),
+    );
   });
-  
+
   const shufflePlugins = (plugins) => {
     const shuffled = [...plugins];
     for (let i = shuffled.length - 1; i > 0; i -= 1) {
@@ -447,118 +415,115 @@ export const useExtensionPage = () => {
     }
     return shuffled;
   };
-  
+
   const refreshRandomPlugins = () => {
     const shuffled = shufflePlugins(pluginMarketData.value);
     randomPluginNames.value = shuffled
       .slice(0, Math.min(RANDOM_PLUGINS_COUNT, shuffled.length))
       .map((plugin) => plugin.name);
   };
-  
+
   // 分页计算属性
   const displayItemsPerPage = 9; // 固定每页显示9个卡片（3行）
-  
+
   const totalPages = computed(() => {
     return Math.ceil(sortedPlugins.value.length / displayItemsPerPage);
   });
-  
+
   const paginatedPlugins = computed(() => {
     const start = (currentPage.value - 1) * displayItemsPerPage;
     const end = start + displayItemsPerPage;
     return sortedPlugins.value.slice(start, end);
   });
-  
+
   const updatableExtensions = computed(() => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
     return data.filter((ext) => ext.has_update);
   });
-  
+
   // 方法
-  const toggleShowReserved = () => {
-    showReserved.value = !showReserved.value;
-    // 保存到 localStorage
-    if (typeof window !== "undefined" && window.localStorage) {
-      localStorage.setItem("showReservedPlugins", showReserved.value.toString());
-    }
-  };
-  
   const toast = (message, success) => {
     snack_message.value = message;
     snack_show.value = true;
     snack_success.value = success;
   };
-  
+
   const resetLoadingDialog = () => {
     loadingDialog.show = false;
     loadingDialog.title = tm("dialogs.loading.title");
     loadingDialog.statusCode = 0;
     loadingDialog.result = "";
   };
-  
+
   const onLoadingDialogResult = (statusCode, result, timeToClose = 2000) => {
     loadingDialog.statusCode = statusCode;
     loadingDialog.result = result;
     if (timeToClose === -1) return;
     setTimeout(resetLoadingDialog, timeToClose);
   };
-  
+
   const failedPluginsDict = ref({});
   const failedPluginItems = computed(() =>
     buildFailedPluginItems(failedPluginsDict.value),
   );
-  
-  const getExtensions = async () => {
-    loading_.value = true;
+
+  const getExtensions = async ({ withLoading = true } = {}) => {
+    if (withLoading) {
+      loading_.value = true;
+    }
     try {
-      const res = await axios.get("/api/plugin/get");   
+      const res = await axios.get("/api/plugin/get");
       Object.assign(extension_data, res.data);
-      
-      const failRes = await axios.get("/api/plugin/source/get-failed-plugins");    
+
+      const failRes = await axios.get("/api/plugin/source/get-failed-plugins");
       failedPluginsDict.value = failRes.data.data || {};
-      
+
       checkUpdate();
     } catch (err) {
       toast(err, "error");
     } finally {
-      loading_.value = false;
+      if (withLoading) {
+        loading_.value = false;
+      }
     }
   };
-  
+
   const handleReloadAllFailed = async () => {
-      const dirNames = Object.keys(failedPluginsDict.value);
-      if (dirNames.length === 0) {
-          toast("没有需要重载的失败插件", "info");
-          return;
-      }
-  
-      loading_.value = true;
-      try {
-          const promises = dirNames.map(dir => 
-              axios.post("/api/plugin/reload-failed", { dir_name: dir })
-          );
-          await Promise.all(promises);
-          
-          toast("已尝试重载所有失败插件", "success");
-          
-          // 清空 message 关闭对话框
-          extension_data.message = "";
-          
-          // 刷新列表
-          await getExtensions();
-          
-      } catch (e) {
-          console.error("重载失败:", e);
-          toast("批量重载过程中出现错误", "error");
-      } finally {
-          loading_.value = false;
-      }
+    const dirNames = Object.keys(failedPluginsDict.value);
+    if (dirNames.length === 0) {
+      toast("没有需要重载的失败插件", "info");
+      return;
+    }
+
+    loading_.value = true;
+    try {
+      const promises = dirNames.map((dir) =>
+        axios.post("/api/plugin/reload-failed", { dir_name: dir }),
+      );
+      await Promise.all(promises);
+
+      toast("已尝试重载所有失败插件", "success");
+
+      // 清空 message 关闭对话框
+      extension_data.message = "";
+
+      // 刷新列表
+      await getExtensions();
+    } catch (e) {
+      console.error("重载失败:", e);
+      toast("批量重载过程中出现错误", "error");
+    } finally {
+      loading_.value = false;
+    }
   };
 
   const reloadFailedPlugin = async (dirName) => {
     if (!dirName) return;
 
     try {
-      const res = await axios.post("/api/plugin/reload-failed", { dir_name: dirName });
+      const res = await axios.post("/api/plugin/reload-failed", {
+        dir_name: dirName,
+      });
       if (res.data.status === "error") {
         toast(res.data.message || tm("messages.reloadFailed"), "error");
         return;
@@ -592,8 +557,16 @@ export const useExtensionPage = () => {
       ? "/api/plugin/uninstall-failed"
       : "/api/plugin/uninstall";
     const payload = isFailed
-      ? { dir_name: target.id, delete_config: deleteConfig, delete_data: deleteData }
-      : { name: target.id, delete_config: deleteConfig, delete_data: deleteData };
+      ? {
+          dir_name: target.id,
+          delete_config: deleteConfig,
+          delete_data: deleteData,
+        }
+      : {
+          name: target.id,
+          delete_config: deleteConfig,
+          delete_data: deleteData,
+        };
 
     toast(`${tm("messages.uninstalling")} ${target.id}`, "primary");
 
@@ -622,25 +595,57 @@ export const useExtensionPage = () => {
     if (!dirName) return;
     uninstall({ kind: "failed", id: dirName }, { skipConfirm: false });
   };
-  
+
+  const normalizeInstallUrl = (value) =>
+    String(value || "")
+      .trim()
+      .replace(/\/+$/, "");
+
+  const isGithubRepoUrl = (value) =>
+    /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+(?:\.git)?(?:\/tree\/[^/\s]+)?$/i.test(
+      normalizeInstallUrl(value),
+    );
+
+  const getInstalledExtensionByName = (extensionName) => {
+    const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+    return data.find((extension) => extension.name === extensionName) || null;
+  };
+
+  const findMarketPluginForExtension = (extension) => {
+    if (!extension) return null;
+    const repo = normalizeInstallUrl(extension.repo).toLowerCase();
+    return (
+      pluginMarketData.value.find(
+        (plugin) =>
+          repo &&
+          normalizeInstallUrl(plugin?.repo).toLowerCase() === repo,
+      ) ||
+      pluginMarketData.value.find((plugin) => plugin.name === extension.name) ||
+      null
+    );
+  };
+
+  const getUpdateDownloadUrl = (extension) =>
+    String(findMarketPluginForExtension(extension)?.download_url || "").trim();
+
   const checkUpdate = () => {
     const onlinePluginsMap = new Map();
     const onlinePluginsNameMap = new Map();
-  
+
     pluginMarketData.value.forEach((plugin) => {
       if (plugin.repo) {
         onlinePluginsMap.set(plugin.repo.toLowerCase(), plugin);
       }
       onlinePluginsNameMap.set(plugin.name, plugin);
     });
-  
+
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
     data.forEach((extension) => {
       const repoKey = extension.repo?.toLowerCase();
       const onlinePlugin = repoKey ? onlinePluginsMap.get(repoKey) : null;
       const onlinePluginByName = onlinePluginsNameMap.get(extension.name);
       const matchedPlugin = onlinePlugin || onlinePluginByName;
-  
+
       if (matchedPlugin) {
         extension.online_version = matchedPlugin.version;
         extension.has_update =
@@ -651,7 +656,7 @@ export const useExtensionPage = () => {
       }
     });
   };
-  
+
   const uninstallExtension = async (
     extensionName,
     optionsOrSkipConfirm = false,
@@ -670,7 +675,7 @@ export const useExtensionPage = () => {
       { ...(optionsOrSkipConfirm || {}), skipConfirm: true },
     );
   };
-  
+
   // 处理卸载确认对话框的确认事件
   const handleUninstallConfirm = async (options) => {
     const target = uninstallTarget.value;
@@ -683,32 +688,58 @@ export const useExtensionPage = () => {
       showUninstallDialog.value = false;
     }
   };
-  
+
+  const openUpdateConfirmDialog = (extensionName, forceUpdate = false) => {
+    updateConfirmDialog.extensionName = extensionName;
+    updateConfirmDialog.forceUpdate = forceUpdate;
+    updateConfirmDialog.show = true;
+  };
+
+  const closeUpdateConfirmDialog = () => {
+    updateConfirmDialog.show = false;
+    updateConfirmDialog.extensionName = "";
+    updateConfirmDialog.forceUpdate = false;
+  };
+
   const updateExtension = async (extension_name, forceUpdate = false) => {
-    // 查找插件信息
-    const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
-    const ext = data.find((e) => e.name === extension_name);
-  
+    const ext = getInstalledExtensionByName(extension_name);
+
     // 如果没有检测到更新且不是强制更新，则弹窗确认
     if (!ext?.has_update && !forceUpdate) {
       forceUpdateDialog.extensionName = extension_name;
       forceUpdateDialog.show = true;
       return;
     }
-  
+
+    openUpdateConfirmDialog(extension_name, forceUpdate);
+  };
+
+  const confirmUpdatePlugin = async () => {
+    const extensionName = updateConfirmDialog.extensionName;
+    const ext = getInstalledExtensionByName(extensionName);
+    if (!extensionName || !ext) {
+      closeUpdateConfirmDialog();
+      return;
+    }
+
+    const downloadUrl = getUpdateDownloadUrl(ext);
+    closeUpdateConfirmDialog();
     loadingDialog.title = tm("status.loading");
+    loadingDialog.statusCode = 0;
+    loadingDialog.result = "";
     loadingDialog.show = true;
     try {
       const res = await axios.post("/api/plugin/update", {
-        name: extension_name,
-        proxy: getSelectedGitHubProxy(),
+        name: extensionName,
+        download_url: downloadUrl,
+        proxy: downloadUrl ? "" : getSelectedGitHubProxy(),
       });
-  
+
       if (res.data.status === "error") {
         onLoadingDialogResult(2, res.data.message, -1);
         return;
       }
-  
+
       Object.assign(extension_data, res.data);
       onLoadingDialogResult(1, res.data.message);
       setTimeout(async () => {
@@ -716,10 +747,10 @@ export const useExtensionPage = () => {
         try {
           await getExtensions();
           toast(tm("messages.refreshSuccess"), "success");
-  
+
           // 更新完成后弹出更新日志
           viewChangelog({
-            name: extension_name,
+            name: extensionName,
             repo: ext?.repo || null,
           });
         } catch (error) {
@@ -732,47 +763,60 @@ export const useExtensionPage = () => {
       toast(err, "error");
     }
   };
-  
+
   // 确认强制更新
   // 显示更新全部插件确认对话框
   const showUpdateAllConfirm = () => {
-    if (updatableExtensions.value.length === 0) return;
+    if (updatableExtensions.value.length === 0) {
+      toast(tm("messages.noUpdatesAvailable"), "info");
+      return;
+    }
     updateAllConfirmDialog.show = true;
   };
-  
+
   // 确认更新全部插件
   const confirmUpdateAll = () => {
     updateAllConfirmDialog.show = false;
     updateAllExtensions();
   };
-  
+
   // 取消更新全部插件
   const cancelUpdateAll = () => {
     updateAllConfirmDialog.show = false;
   };
-  
+
   const confirmForceUpdate = () => {
     const name = forceUpdateDialog.extensionName;
     forceUpdateDialog.show = false;
     forceUpdateDialog.extensionName = "";
-    updateExtension(name, true);
+    openUpdateConfirmDialog(name, true);
   };
-  
+
   const updateAllExtensions = async () => {
-    if (updatingAll.value || updatableExtensions.value.length === 0) return;
+    if (updatingAll.value) return;
+    if (updatableExtensions.value.length === 0) {
+      toast(tm("messages.noUpdatesAvailable"), "info");
+      return;
+    }
     updatingAll.value = true;
     loadingDialog.title = tm("status.loading");
     loadingDialog.statusCode = 0;
     loadingDialog.result = "";
     loadingDialog.show = true;
-  
+
     const targets = updatableExtensions.value.map((ext) => ext.name);
+    const downloadUrls = Object.fromEntries(
+      updatableExtensions.value
+        .map((ext) => [ext.name, getUpdateDownloadUrl(ext)])
+        .filter(([, downloadUrl]) => downloadUrl),
+    );
     try {
       const res = await axios.post("/api/plugin/update-all", {
         names: targets,
+        download_urls: downloadUrls,
         proxy: getSelectedGitHubProxy(),
       });
-  
+
       if (res.data.status === "error") {
         onLoadingDialogResult(
           2,
@@ -785,7 +829,7 @@ export const useExtensionPage = () => {
         );
         return;
       }
-  
+
       const results = res.data.data?.results || [];
       const failures = results.filter((r) => r.status !== "ok");
       try {
@@ -795,7 +839,7 @@ export const useExtensionPage = () => {
           err.response?.data?.message || err.message || String(err);
         failures.push({ name: "refresh", status: "error", message: errorMsg });
       }
-  
+
       if (failures.length === 0) {
         onLoadingDialogResult(1, tm("messages.updateAllSuccess"));
       } else {
@@ -803,17 +847,20 @@ export const useExtensionPage = () => {
           failed: failures.length,
           total: targets.length,
         });
-        const detail = failures.map((f) => `${f.name}: ${f.message}`).join("\n");
+        const detail = failures
+          .map((f) => `${f.name}: ${f.message}`)
+          .join("\n");
         onLoadingDialogResult(2, `${failureText}\n${detail}`, -1);
       }
     } catch (err) {
-      const errorMsg = err.response?.data?.message || err.message || String(err);
+      const errorMsg =
+        err.response?.data?.message || err.message || String(err);
       onLoadingDialogResult(2, errorMsg, -1);
     } finally {
       updatingAll.value = false;
     }
   };
-  
+
   const pluginOn = async (extension) => {
     try {
       const res = await axios.post("/api/plugin/on", { name: extension.name });
@@ -823,13 +870,13 @@ export const useExtensionPage = () => {
       }
       toast(res.data.message, "success");
       await getExtensions();
-  
+
       await checkAndPromptConflicts();
     } catch (err) {
       toast(err, "error");
     }
   };
-  
+
   const pluginOff = async (extension) => {
     try {
       const res = await axios.post("/api/plugin/off", { name: extension.name });
@@ -843,9 +890,10 @@ export const useExtensionPage = () => {
       toast(err, "error");
     }
   };
-  
+
   const openExtensionConfig = async (extension_name) => {
     curr_namespace.value = extension_name;
+    currentConfigPlugin.value = extension_name;
     configDialog.value = true;
     try {
       const res = await axios.get(
@@ -853,11 +901,12 @@ export const useExtensionPage = () => {
       );
       extension_config.metadata = res.data.data.metadata;
       extension_config.config = res.data.data.config;
+      extension_config.i18n = res.data.data.i18n || {};
     } catch (err) {
       toast(err, "error");
     }
   };
-  
+
   const updateConfig = async () => {
     try {
       const res = await axios.post(
@@ -870,19 +919,25 @@ export const useExtensionPage = () => {
         toast(res.data.message, "error");
       }
       configDialog.value = false;
+      currentConfigPlugin.value = "";
       extension_config.metadata = {};
       extension_config.config = {};
+      extension_config.i18n = {};
       getExtensions();
     } catch (err) {
       toast(err, "error");
     }
   };
-  
+
   const showPluginInfo = (plugin) => {
-    selectedPlugin.value = plugin;
-    showPluginInfoDialog.value = true;
+    if (!plugin?.name) return;
+    router.push({
+      name: "ExtensionDetails",
+      params: { pluginId: plugin.name },
+      hash: "#plugin-components",
+    });
   };
-  
+
   const reloadPlugin = async (plugin_name) => {
     try {
       const res = await axios.post("/api/plugin/reload", { name: plugin_name });
@@ -896,20 +951,64 @@ export const useExtensionPage = () => {
       toast(resolveErrorMessage(err, tm("messages.reloadFailed")), "error");
     }
   };
-  
+
   const viewReadme = (plugin) => {
     readmeDialog.pluginName = plugin.name;
     readmeDialog.repoUrl = plugin.repo;
     readmeDialog.show = true;
   };
-  
+
   // 查看更新日志
   const viewChangelog = (plugin) => {
     changelogDialog.pluginName = plugin.name;
     changelogDialog.repoUrl = plugin.repo;
     changelogDialog.show = true;
   };
-  
+
+  const resetInstallDialogState = () => {
+    selectedMarketInstallPlugin.value = null;
+    extension_url.value = "";
+    upload_file.value = null;
+    uploadTab.value = "file";
+    installCompat.checked = false;
+    installCompat.compatible = true;
+    installCompat.message = "";
+  };
+
+  const openInstallDialog = () => {
+    resetInstallDialogState();
+    dialog.value = true;
+  };
+
+  const closeInstallDialog = () => {
+    dialog.value = false;
+    resetInstallDialogState();
+  };
+
+  const selectedInstallDownloadUrl = computed(() => {
+    const plugin = selectedInstallPlugin.value;
+    const downloadUrl = String(plugin?.download_url || "").trim();
+    if (!downloadUrl) return "";
+    if (
+      normalizeInstallUrl(plugin?.repo) !==
+      normalizeInstallUrl(extension_url.value)
+    ) {
+      return "";
+    }
+    return downloadUrl;
+  });
+
+  const selectedInstallSourceUrl = computed(
+    () =>
+      selectedInstallDownloadUrl.value ||
+      String(extension_url.value || "").trim(),
+  );
+
+  const installUsesGithubSource = computed(
+    () =>
+      !selectedInstallDownloadUrl.value && isGithubRepoUrl(extension_url.value),
+  );
+
   // 为表格视图创建一个处理安装插件的函数
   const handleInstallPlugin = async (plugin) => {
     if (plugin.tags && plugin.tags.includes("danger")) {
@@ -918,29 +1017,31 @@ export const useExtensionPage = () => {
     } else {
       selectedMarketInstallPlugin.value = plugin;
       extension_url.value = plugin.repo;
+      upload_file.value = null;
       dialog.value = true;
       uploadTab.value = "url";
     }
   };
-  
+
   // 确认安装危险插件
   const confirmDangerInstall = () => {
     if (selectedDangerPlugin.value) {
       selectedMarketInstallPlugin.value = selectedDangerPlugin.value;
       extension_url.value = selectedDangerPlugin.value.repo;
+      upload_file.value = null;
       dialog.value = true;
       uploadTab.value = "url";
     }
     dangerConfirmDialog.value = false;
     selectedDangerPlugin.value = null;
   };
-  
+
   // 取消安装危险插件
   const cancelDangerInstall = () => {
     dangerConfirmDialog.value = false;
     selectedDangerPlugin.value = null;
   };
-  
+
   // 自定义插件源管理方法
   const loadCustomSources = async () => {
     try {
@@ -954,14 +1055,14 @@ export const useExtensionPage = () => {
       console.warn("Failed to load custom sources:", e);
       customSources.value = [];
     }
-  
+
     // 加载当前选中的插件源
     const currentSource = localStorage.getItem("selectedPluginSource");
     if (currentSource) {
       selectedSource.value = currentSource;
     }
   };
-  
+
   const saveCustomSources = async () => {
     try {
       const res = await axios.post("/api/plugin/source/save", {
@@ -974,7 +1075,7 @@ export const useExtensionPage = () => {
       toast(e, "error");
     }
   };
-  
+
   const addCustomSource = () => {
     showSourceManagerDialog.value = false;
     editingSource.value = false;
@@ -983,12 +1084,12 @@ export const useExtensionPage = () => {
     sourceUrl.value = "";
     showSourceDialog.value = true;
   };
-  
+
   const openSourceManagerDialog = async () => {
     await loadCustomSources();
     showSourceManagerDialog.value = true;
   };
-  
+
   const selectPluginSource = (sourceUrl) => {
     selectedSource.value = sourceUrl;
     if (sourceUrl) {
@@ -999,7 +1100,7 @@ export const useExtensionPage = () => {
     // 重新加载插件市场数据
     refreshPluginMarket();
   };
-  
+
   const sourceSelectItems = computed(() => [
     { title: tm("market.defaultSource"), value: "__default__" },
     ...customSources.value.map((source) => ({
@@ -1007,7 +1108,7 @@ export const useExtensionPage = () => {
       value: source.url,
     })),
   ]);
-  
+
   const editCustomSource = (source) => {
     if (!source) return;
     showSourceManagerDialog.value = false;
@@ -1017,21 +1118,21 @@ export const useExtensionPage = () => {
     sourceUrl.value = source.url;
     showSourceDialog.value = true;
   };
-  
+
   const removeCustomSource = (source) => {
     if (!source) return;
     showSourceManagerDialog.value = false;
     sourceToRemove.value = source;
     showRemoveSourceDialog.value = true;
   };
-  
+
   const confirmRemoveSource = () => {
     if (sourceToRemove.value) {
       customSources.value = customSources.value.filter(
         (s) => s.url !== sourceToRemove.value.url,
       );
       saveCustomSources();
-  
+
       // 如果删除的是当前选中的源，切换到默认源
       if (selectedSource.value === sourceToRemove.value.url) {
         selectedSource.value = null;
@@ -1039,21 +1140,21 @@ export const useExtensionPage = () => {
         // 重新加载插件市场数据
         refreshPluginMarket();
       }
-  
+
       toast(tm("market.sourceRemoved"), "success");
       showRemoveSourceDialog.value = false;
       sourceToRemove.value = null;
     }
   };
-  
+
   const saveCustomSource = () => {
     const normalizedUrl = sourceUrl.value.trim();
-  
+
     if (!sourceName.value.trim() || !normalizedUrl) {
       toast(tm("messages.fillSourceNameAndUrl"), "error");
       return;
     }
-  
+
     // 检查URL格式
     try {
       new URL(normalizedUrl);
@@ -1061,7 +1162,7 @@ export const useExtensionPage = () => {
       toast(tm("messages.invalidUrl"), "error");
       return;
     }
-  
+
     if (editingSource.value) {
       // 编辑模式：更新现有源
       const index = customSources.value.findIndex(
@@ -1072,7 +1173,7 @@ export const useExtensionPage = () => {
           name: sourceName.value.trim(),
           url: normalizedUrl,
         };
-  
+
         // 如果编辑的是当前选中的源，更新选中源
         if (selectedSource.value === originalSourceUrl.value) {
           selectedSource.value = normalizedUrl;
@@ -1087,19 +1188,21 @@ export const useExtensionPage = () => {
         toast(tm("market.sourceExists"), "error");
         return;
       }
-  
+
       customSources.value.push({
         name: sourceName.value.trim(),
         url: normalizedUrl,
       });
     }
-  
+
     saveCustomSources();
     toast(
-      editingSource.value ? tm("market.sourceUpdated") : tm("market.sourceAdded"),
+      editingSource.value
+        ? tm("market.sourceUpdated")
+        : tm("market.sourceAdded"),
       "success",
     );
-  
+
     // 重置表单
     sourceName.value = "";
     sourceUrl.value = "";
@@ -1107,7 +1210,7 @@ export const useExtensionPage = () => {
     originalSourceUrl.value = "";
     showSourceDialog.value = false;
   };
-  
+
   // 插件市场显示完整插件名称
   const trimExtensionName = () => {
     pluginMarketData.value.forEach((plugin) => {
@@ -1121,24 +1224,26 @@ export const useExtensionPage = () => {
       }
     });
   };
-  
+
   const checkAlreadyInstalled = () => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
     const installedRepos = new Set(data.map((ext) => ext.repo?.toLowerCase()));
-    const installedNames = new Set(data.map((ext) => ext.name));
+    const installedNames = new Set(
+      data.map((ext) => normalizeStr(ext.name).replace(/_/g, "-")),
+    ); //统一格式，以防下面的匹配不生效
     const installedByRepo = new Map(
       data
         .filter((ext) => ext.repo)
         .map((ext) => [ext.repo.toLowerCase(), ext]),
     );
     const installedByName = new Map(data.map((ext) => [ext.name, ext]));
-  
+
     for (let i = 0; i < pluginMarketData.value.length; i++) {
       const plugin = pluginMarketData.value[i];
       const matchedInstalled =
         (plugin.repo && installedByRepo.get(plugin.repo.toLowerCase())) ||
         installedByName.get(plugin.name);
-  
+
       // 兜底：市场源未提供字段时，回填本地已安装插件中的元数据，便于在市场页直接展示
       if (matchedInstalled) {
         if (
@@ -1152,12 +1257,12 @@ export const useExtensionPage = () => {
           plugin.astrbot_version = matchedInstalled.astrbot_version;
         }
       }
-  
+
       plugin.installed =
         installedRepos.has(plugin.repo?.toLowerCase()) ||
-        installedNames.has(plugin.name);
+        installedNames.has(normalizeStr(plugin.name).replace(/_/g, "-")); //统一格式，防止匹配失败
     }
-  
+
     let installed = [];
     let notInstalled = [];
     for (let i = 0; i < pluginMarketData.value.length; i++) {
@@ -1169,7 +1274,126 @@ export const useExtensionPage = () => {
     }
     pluginMarketData.value = notInstalled.concat(installed);
   };
-  
+
+  const normalizeAstrBotVersionSpec = (value) => String(value || "").trim();
+
+  const normalizeVersionParts = (value) => {
+    const version = String(value || "")
+      .trim()
+      .replace(/^v/i, "")
+      .split(/[+-]/)[0];
+    const parts = version.split(".").map((part) => {
+      const match = part.match(/^\d+/);
+      return match ? Number.parseInt(match[0], 10) : 0;
+    });
+    return parts.length ? parts : [0];
+  };
+
+  const compareVersions = (left, right) => {
+    const leftParts = normalizeVersionParts(left);
+    const rightParts = normalizeVersionParts(right);
+    const length = Math.max(leftParts.length, rightParts.length, 3);
+    for (let i = 0; i < length; i += 1) {
+      const leftPart = leftParts[i] || 0;
+      const rightPart = rightParts[i] || 0;
+      if (leftPart > rightPart) return 1;
+      if (leftPart < rightPart) return -1;
+    }
+    return 0;
+  };
+
+  const getCompatibleReleaseUpperBound = (version) => {
+    const parts = normalizeVersionParts(version);
+    if (parts.length <= 2) {
+      return `${(parts[0] || 0) + 1}.0`;
+    }
+    return `${parts[0] || 0}.${(parts[1] || 0) + 1}.0`;
+  };
+
+  const checkVersionConstraint = (currentVersion, constraint) => {
+    const match = constraint.match(/^(<=|>=|==|!=|~=|<|>|=)\s*(.+)$/);
+    if (!match) return null;
+
+    const [, operator, targetVersion] = match;
+    const normalizedTarget = targetVersion.trim();
+    if (!normalizedTarget) return null;
+    if (!/^v?\d+/.test(normalizedTarget)) return null;
+
+    if (operator === "~=") {
+      return (
+        compareVersions(currentVersion, normalizedTarget) >= 0 &&
+        compareVersions(
+          currentVersion,
+          getCompatibleReleaseUpperBound(normalizedTarget),
+        ) < 0
+      );
+    }
+
+    const comparison = compareVersions(currentVersion, normalizedTarget);
+    if (operator === ">" || operator === ">=") {
+      return operator === ">" ? comparison > 0 : comparison >= 0;
+    }
+    if (operator === "<" || operator === "<=") {
+      return operator === "<" ? comparison < 0 : comparison <= 0;
+    }
+    if (operator === "!=") return comparison !== 0;
+    return comparison === 0;
+  };
+
+  const checkAstrBotVersionCompatibility = (versionSpec, currentVersion) => {
+    const normalizedSpec = normalizeAstrBotVersionSpec(versionSpec);
+    if (!normalizedSpec) {
+      return { checked: false, compatible: true, message: "" };
+    }
+    if (!currentVersion) {
+      return { checked: false, compatible: true, message: "" };
+    }
+
+    const constraints = normalizedSpec
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (!constraints.length) {
+      return { checked: false, compatible: true, message: "" };
+    }
+
+    for (const constraint of constraints) {
+      const compatible = checkVersionConstraint(currentVersion, constraint);
+      if (compatible === null) {
+        return {
+          checked: true,
+          compatible: false,
+          message:
+            "Invalid astrbot_version. Use a PEP 440 range, e.g. >=4.16,<5.",
+        };
+      }
+      if (!compatible) {
+        return {
+          checked: true,
+          compatible: false,
+          message: `AstrBot ${currentVersion} does not satisfy plugin astrbot_version: ${normalizedSpec}`,
+        };
+      }
+    }
+
+    return { checked: true, compatible: true, message: "" };
+  };
+
+  const annotateMarketCompatibility = async () => {
+    const currentVersion =
+      commonStore.astrbotVersion ||
+      (await commonStore.fetchAstrBotVersion().catch(() => ""));
+    pluginMarketData.value.forEach((plugin) => {
+      const result = checkAstrBotVersionCompatibility(
+        plugin?.astrbot_version,
+        currentVersion,
+      );
+      plugin.astrbot_compat_checked = result.checked;
+      plugin.astrbot_compatible = result.compatible;
+      plugin.astrbot_compat_message = result.message;
+    });
+  };
+
   const showVersionCompatibilityWarning = (message) => {
     versionCompatibilityDialog.message = message;
     versionCompatibilityDialog.show = true;
@@ -1179,36 +1403,35 @@ export const useExtensionPage = () => {
     try {
       await getExtensions();
     } catch (error) {
-      console.debug("Failed to refresh extensions after install failure:", error);
+      console.debug(
+        "Failed to refresh extensions after install failure:",
+        error,
+      );
     }
   };
-  
+
   const continueInstallIgnoringVersionWarning = async () => {
     versionCompatibilityDialog.show = false;
     await newExtension(true);
   };
-  
+
   const cancelInstallOnVersionWarning = () => {
     versionCompatibilityDialog.show = false;
   };
 
-  const handleInstallResponse = async (resData, { toastStatus = false } = {}) => {
+  const handleInstallResponse = async (resData) => {
     if (
       resData.status === "warning" &&
       resData.data?.warning_type === "astrbot_version_incompatible"
     ) {
-      onLoadingDialogResult(2, resData.message, -1);
+      toast(resData.message, "warning");
       showVersionCompatibilityWarning(resData.message);
       await refreshExtensionsAfterInstallFailure();
       return false;
     }
 
-    if (toastStatus) {
-      toast(resData.message, resData.status === "ok" ? "success" : "error");
-    }
-
     if (resData.status === "error") {
-      onLoadingDialogResult(2, resData.message, -1);
+      toast(resData.message, "error");
       await refreshExtensionsAfterInstallFailure();
       return false;
     }
@@ -1230,7 +1453,8 @@ export const useExtensionPage = () => {
 
     return axios.post("/api/plugin/install", {
       url: extension_url.value,
-      proxy: getSelectedGitHubProxy(),
+      download_url: selectedInstallDownloadUrl.value,
+      proxy: selectedInstallDownloadUrl.value ? "" : getSelectedGitHubProxy(),
       ignore_version_check: ignoreVersionCheck,
     });
   };
@@ -1242,9 +1466,11 @@ export const useExtensionPage = () => {
       extension_url.value = "";
     }
 
-    onLoadingDialogResult(1, resData.message);
+    toast(resData.message, "success");
     dialog.value = false;
+    selectedMarketInstallPlugin.value = null;
     await getExtensions();
+    checkAlreadyInstalled();
 
     viewReadme({
       name: resData.data.name,
@@ -1253,61 +1479,47 @@ export const useExtensionPage = () => {
 
     await checkAndPromptConflicts();
   };
-  
+
   const newExtension = async (ignoreVersionCheck = false) => {
     if (extension_url.value === "" && upload_file.value === null) {
       toast(tm("messages.fillUrlOrFile"), "error");
       return;
     }
-  
+
     if (extension_url.value !== "" && upload_file.value !== null) {
       toast(tm("messages.dontFillBoth"), "error");
       return;
     }
-    loading_.value = true;
-    loadingDialog.title = tm("status.loading");
-    loadingDialog.show = true;
-
     const source = upload_file.value !== null ? "file" : "url";
-    toast(
-      source === "file"
-        ? tm("messages.installing")
-        : tm("messages.installingFromUrl") + " " + extension_url.value,
-      "primary",
-    );
+    loading_.value = true;
 
     try {
       const res = await performInstallRequest({ source, ignoreVersionCheck });
       loading_.value = false;
 
-      const canContinue = await handleInstallResponse(res.data, {
-        toastStatus: source === "url",
-      });
+      const canContinue = await handleInstallResponse(res.data);
       if (!canContinue) return;
 
       await finalizeSuccessfulInstall(res.data, source);
     } catch (err) {
       loading_.value = false;
       const message = resolveErrorMessage(err, tm("messages.installFailed"));
-      if (source === "url") {
-        toast(message, "error");
-      }
-      onLoadingDialogResult(2, message, -1);
+      toast(message, "error");
       await refreshExtensionsAfterInstallFailure();
     }
   };
-  
+
   const normalizePlatformList = (platforms) => {
     if (!Array.isArray(platforms)) return [];
     return platforms.filter((item) => typeof item === "string");
   };
-  
+
   const getPlatformDisplayList = (platforms) => {
     return normalizePlatformList(platforms).map((platformId) =>
       getPlatformDisplayName(platformId),
     );
   };
-  
+
   const resolveSelectedInstallPlugin = () => {
     if (
       selectedMarketInstallPlugin.value &&
@@ -1315,38 +1527,65 @@ export const useExtensionPage = () => {
     ) {
       return selectedMarketInstallPlugin.value;
     }
-    return pluginMarketData.value.find((plugin) => plugin.repo === extension_url.value) || null;
+    return (
+      pluginMarketData.value.find(
+        (plugin) => plugin.repo === extension_url.value,
+      ) || null
+    );
   };
-  
+
   const selectedInstallPlugin = computed(() => resolveSelectedInstallPlugin());
-  
+
+  const selectedUpdateExtension = computed(() =>
+    getInstalledExtensionByName(updateConfirmDialog.extensionName),
+  );
+
+  const selectedUpdateMarketPlugin = computed(() =>
+    findMarketPluginForExtension(selectedUpdateExtension.value),
+  );
+
+  const selectedUpdateDownloadUrl = computed(() =>
+    String(selectedUpdateMarketPlugin.value?.download_url || "").trim(),
+  );
+
+  const selectedUpdateSourceUrl = computed(
+    () =>
+      selectedUpdateDownloadUrl.value ||
+      String(selectedUpdateExtension.value?.repo || "").trim(),
+  );
+
+  const updateUsesGithubSource = computed(
+    () =>
+      !selectedUpdateDownloadUrl.value &&
+      isGithubRepoUrl(selectedUpdateSourceUrl.value),
+  );
+
   const checkInstallCompatibility = async () => {
     installCompat.checked = false;
     installCompat.compatible = true;
     installCompat.message = "";
-  
+
     const plugin = selectedInstallPlugin.value;
     if (!plugin?.astrbot_version || uploadTab.value !== "url") {
       return;
     }
-  
-    try {
-      const res = await axios.post("/api/plugin/check-compat", {
-        astrbot_version: plugin.astrbot_version,
-      });
-      if (res.data.status === "ok") {
-        installCompat.checked = true;
-        installCompat.compatible = !!res.data.data?.compatible;
-        installCompat.message = res.data.data?.message || "";
-      }
-    } catch (err) {
-      console.debug("Failed to check plugin compatibility:", err);
-    }
+
+    const currentVersion =
+      commonStore.astrbotVersion ||
+      (await commonStore.fetchAstrBotVersion().catch(() => ""));
+    const result = checkAstrBotVersionCompatibility(
+      plugin.astrbot_version,
+      currentVersion,
+    );
+    installCompat.checked = result.checked;
+    installCompat.compatible = result.compatible;
+    installCompat.message = result.message;
   };
-  
+
   // 刷新插件市场数据
   const refreshPluginMarket = async () => {
     refreshingMarket.value = true;
+    loading_.value = true;
     try {
       // 强制刷新插件市场数据
       const data = await commonStore.getPluginCollections(
@@ -1356,48 +1595,41 @@ export const useExtensionPage = () => {
       pluginMarketData.value = data;
       trimExtensionName();
       checkAlreadyInstalled();
+      await annotateMarketCompatibility();
       checkUpdate();
       refreshRandomPlugins();
       currentPage.value = 1; // 重置到第一页
-  
+
       toast(tm("messages.refreshSuccess"), "success");
     } catch (err) {
       toast(tm("messages.refreshFailed") + " " + err, "error");
     } finally {
       refreshingMarket.value = false;
+      loading_.value = false;
     }
   };
-  
+
   // 生命周期
   onMounted(async () => {
     if (!syncTabFromHash(getLocationHash())) {
-      if (typeof window !== "undefined") {
-        window.location.hash = `#${activeTab.value}`;
-      }
+      await replaceTabRoute(router, route, activeTab.value);
     }
-    await getExtensions();
-  
-    // 加载自定义插件源
-    loadCustomSources();
-  
-    // 检查是否有 open_config 参数
-    let urlParams;
-    if (window.location.hash) {
-      // For hash mode (#/path?param=value)
-      const hashQuery = window.location.hash.split("?")[1] || "";
-      urlParams = new URLSearchParams(hashQuery);
-    } else {
-      // For history mode (/path?param=value)
-      urlParams = new URLSearchParams(window.location.search);
-    }
-    console.log("URL Parameters:", urlParams.toString());
-    const plugin_name = urlParams.get("open_config");
-    if (plugin_name) {
-      console.log(`Opening config for plugin: ${plugin_name}`);
-      openExtensionConfig(plugin_name);
-    }
-  
+    loading_.value = true;
     try {
+      await getExtensions({ withLoading: false });
+
+      // 加载自定义插件源
+      loadCustomSources();
+
+      // 检查是否有 open_config 参数
+      const plugin_name = Array.isArray(route.query.open_config)
+        ? route.query.open_config[0]
+        : route.query.open_config;
+      if (plugin_name) {
+        console.log(`Opening config for plugin: ${plugin_name}`);
+        openExtensionConfig(plugin_name);
+      }
+
       const data = await commonStore.getPluginCollections(
         false,
         selectedSource.value,
@@ -1405,13 +1637,16 @@ export const useExtensionPage = () => {
       pluginMarketData.value = data;
       trimExtensionName();
       checkAlreadyInstalled();
+      await annotateMarketCompatibility();
       checkUpdate();
       refreshRandomPlugins();
     } catch (err) {
       toast(tm("messages.getMarketDataFailed") + " " + err, "error");
+    } finally {
+      loading_.value = false;
     }
   });
-  
+
   // 处理语言切换事件，重新加载插件配置以获取插件的 i18n 数据
   const handleLocaleChange = () => {
     // 如果配置对话框是打开的，重新加载当前插件的配置
@@ -1419,36 +1654,29 @@ export const useExtensionPage = () => {
       openExtensionConfig(currentConfigPlugin.value);
     }
   };
-  
+
   // 监听语言切换事件
   window.addEventListener("astrbot-locale-changed", handleLocaleChange);
-  
+
   // 清理事件监听器
   onUnmounted(() => {
     window.removeEventListener("astrbot-locale-changed", handleLocaleChange);
   });
-  
+
   // 搜索防抖处理
   let searchDebounceTimer = null;
   watch(marketSearch, (newVal) => {
     if (searchDebounceTimer) {
       clearTimeout(searchDebounceTimer);
     }
-  
+
     searchDebounceTimer = setTimeout(() => {
       debouncedMarketSearch.value = newVal;
       // 搜索时重置到第一页
       currentPage.value = 1;
     }, 300); // 300ms 防抖延迟
   });
-  
-  // 监听显示模式变化并保存到 localStorage
-  watch(isListView, (newVal) => {
-    if (typeof window !== "undefined" && window.localStorage) {
-      localStorage.setItem("pluginListViewMode", String(newVal));
-    }
-  });
-  
+
   watch(
     [() => dialog.value, () => extension_url.value, () => uploadTab.value],
     async ([dialogOpen, _, currentUploadTab]) => {
@@ -1456,34 +1684,47 @@ export const useExtensionPage = () => {
         installCompat.checked = false;
         installCompat.compatible = true;
         installCompat.message = "";
+        if (!dialogOpen) {
+          selectedMarketInstallPlugin.value = null;
+        }
         return;
       }
       await checkInstallCompatibility();
     },
   );
-  
+
   watch(
-    () => route.fullPath,
-    () => {
-      const tab = extractTabFromHash(getLocationHash());
-      if (isValidTab(tab) && tab !== activeTab.value) {
+    () => route.hash,
+    (newHash) => {
+      const tab = extractTabFromHash(newHash);
+      if (tab && tab !== activeTab.value) {
         activeTab.value = tab;
       }
     },
   );
-  
+
   watch(activeTab, (newTab) => {
     if (!isValidTab(newTab)) return;
-    const currentTab = extractTabFromHash(getLocationHash());
-    if (currentTab === newTab) return;
-    const hash = getLocationHash();
-    const lastHashIndex = hash.lastIndexOf("#");
-    const nextHash =
-      lastHashIndex > 0 ? `${hash.slice(0, lastHashIndex)}#${newTab}` : `#${newTab}`;
-    if (typeof window !== "undefined") {
-      window.location.hash = nextHash;
+    if (route.hash === `#${newTab}`) return;
+    void replaceTabRoute(router, route, newTab);
+  });
+
+  watch(marketCategoryFilter, () => {
+    if (activeTab.value === "market") {
+      currentPage.value = 1;
     }
   });
+
+  watch(
+    marketCategoryItems,
+    (newItems) => {
+      const validValues = new Set(newItems.map((item) => item.value));
+      if (!validValues.has(marketCategoryFilter.value)) {
+        marketCategoryFilter.value = "all";
+      }
+    },
+    { immediate: true },
+  );
 
   return {
     commonStore,
@@ -1503,8 +1744,6 @@ export const useExtensionPage = () => {
     extractTabFromHash,
     syncTabFromHash,
     extension_data,
-    getInitialShowReserved,
-    showReserved,
     snack_message,
     snack_show,
     snack_success,
@@ -1512,19 +1751,19 @@ export const useExtensionPage = () => {
     extension_config,
     pluginMarketData,
     loadingDialog,
-    showPluginInfoDialog,
-    selectedPlugin,
     curr_namespace,
     updatingAll,
     readmeDialog,
     forceUpdateDialog,
+    updateConfirmDialog,
     updateAllConfirmDialog,
     changelogDialog,
-    getInitialListViewMode,
-    isListView,
     pluginSearch,
     loading_,
     currentPage,
+    marketCategoryFilter,
+    marketCategoryItems,
+    marketCategoryCounts,
     dangerConfirmDialog,
     selectedDangerPlugin,
     selectedMarketInstallPlugin,
@@ -1553,13 +1792,9 @@ export const useExtensionPage = () => {
     sortBy,
     sortOrder,
     randomPluginNames,
-    showRandomPlugins,
     normalizeStr,
     toPinyinText,
     toInitials,
-    marketCustomFilter,
-    plugin_handler_info_headers,
-    pluginHeaders,
     filteredExtensions,
     filteredPlugins,
     filteredMarketPlugins,
@@ -1568,13 +1803,10 @@ export const useExtensionPage = () => {
     randomPlugins,
     shufflePlugins,
     refreshRandomPlugins,
-    toggleRandomPluginsVisibility,
-    collapseRandomPlugins,
     displayItemsPerPage,
     totalPages,
     paginatedPlugins,
     updatableExtensions,
-    toggleShowReserved,
     toast,
     resetLoadingDialog,
     onLoadingDialogResult,
@@ -1589,6 +1821,8 @@ export const useExtensionPage = () => {
     requestUninstallFailedPlugin,
     handleUninstallConfirm,
     updateExtension,
+    closeUpdateConfirmDialog,
+    confirmUpdatePlugin,
     showUpdateAllConfirm,
     confirmUpdateAll,
     cancelUpdateAll,
@@ -1602,6 +1836,8 @@ export const useExtensionPage = () => {
     reloadPlugin,
     viewReadme,
     viewChangelog,
+    openInstallDialog,
+    closeInstallDialog,
     handleInstallPlugin,
     confirmDangerInstall,
     cancelDangerInstall,
@@ -1625,6 +1861,14 @@ export const useExtensionPage = () => {
     getPlatformDisplayList,
     resolveSelectedInstallPlugin,
     selectedInstallPlugin,
+    selectedInstallDownloadUrl,
+    selectedInstallSourceUrl,
+    installUsesGithubSource,
+    selectedUpdateExtension,
+    selectedUpdateMarketPlugin,
+    selectedUpdateDownloadUrl,
+    selectedUpdateSourceUrl,
+    updateUsesGithubSource,
     checkInstallCompatibility,
     refreshPluginMarket,
     handleLocaleChange,
