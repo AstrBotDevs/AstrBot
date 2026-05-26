@@ -80,7 +80,7 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 1. 停止 AstrBot。
 2. 删除 AstrBot 的 `data` 目录下的 `dist` 文件夹，即 `AstrBot/data/dist`。
 3. 重新启动 AstrBot。
-4. 访问管理面板后按 `Ctrl+Shift+R` 或 `Ctrl+F5` 强制刷新页面。
+4. 访问管理面板后按 `Ctrl+Shift+R` 或 `Ctrl+F5`（macOS 用户请按 `Cmd+Shift+R`）强制刷新页面。
 
 重启后，AstrBot 会重新加载或下载匹配当前版本的 WebUI 文件。
 
