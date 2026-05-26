@@ -57,6 +57,11 @@ class AstrBotConfig(dict):
         object.__setattr__(self, "default_config", default_config)
         object.__setattr__(self, "schema", schema)
 
+        # Track config file state to detect external modifications
+        # (e.g. CLI password updates) and preserve them across saves.
+        object.__setattr__(self, "_last_config_mtime_ns", None)
+        object.__setattr__(self, "_dashboard_auth_snapshot", {})
+
         if schema:
             default_config = self._config_schema_to_default_config(schema)
 
@@ -109,7 +114,8 @@ class AstrBotConfig(dict):
         self._remember_file_state()
 
     def _get_dashboard_auth_state(self, conf: dict | None = None) -> dict:
-        dashboard_conf = (conf or self).get("dashboard")
+        base = conf if conf is not None else self
+        dashboard_conf = base.get("dashboard")
         if not isinstance(dashboard_conf, dict):
             return {}
         return {
@@ -130,8 +136,29 @@ class AstrBotConfig(dict):
             self._get_dashboard_auth_state(),
         )
 
+    @staticmethod
+    def _merge_dashboard_auth(
+        loaded_auth_state: dict,
+        current_auth_state: dict,
+        disk_auth_state: dict,
+    ) -> dict:
+        """Return the auth state to apply to ``self["dashboard"]``.
+
+        Merge policy: when the on-disk auth state differs from what we
+        loaded and the in-memory state has *not* been changed locally,
+        apply the on-disk values so external updates (e.g. CLI password
+        changes) are not overwritten by a subsequent ``save_config()``.
+        """
+        if not disk_auth_state or disk_auth_state == loaded_auth_state:
+            return current_auth_state
+        if current_auth_state != loaded_auth_state:
+            return current_auth_state
+        merged = current_auth_state.copy()
+        merged.update(disk_auth_state)
+        return merged
+
     def _preserve_external_dashboard_auth_changes(self) -> None:
-        last_mtime_ns = getattr(self, "_last_config_mtime_ns", None)
+        last_mtime_ns = self._last_config_mtime_ns
         if last_mtime_ns is None:
             return
         try:
@@ -147,15 +174,13 @@ class AstrBotConfig(dict):
         except (OSError, json.JSONDecodeError):
             return
 
-        disk_auth_state = self._get_dashboard_auth_state(disk_conf)
-        loaded_auth_state = getattr(self, "_dashboard_auth_snapshot", {})
-        current_auth_state = self._get_dashboard_auth_state()
-        if (
-            disk_auth_state
-            and disk_auth_state != loaded_auth_state
-            and current_auth_state == loaded_auth_state
-        ):
-            self["dashboard"].update(disk_auth_state)
+        merged = self._merge_dashboard_auth(
+            self._dashboard_auth_snapshot,
+            self._get_dashboard_auth_state(),
+            self._get_dashboard_auth_state(disk_conf),
+        )
+        if merged != self._get_dashboard_auth_state():
+            self.setdefault("dashboard", {}).update(merged)
 
     def _reset_generated_dashboard_password(self, conf: dict) -> None:
         generated_password = self._resolve_initial_dashboard_password()
