@@ -276,6 +276,18 @@
         "fallback_max_context_tokens": {
           "description": "Fallback context window size",
           "hint": "When max_context_tokens is 0 and the model is not in built-in metadata, use this value as the context window size. Default: 128000."
+        },
+        "context_limit_type": {
+          "description": "Compression Trigger Mode",
+          "labels": [
+            "By Percentage (Model Window × 82%)",
+            "By Fixed Token Threshold"
+          ],
+          "hint": "\"By Percentage\" is the default behavior. \"By Fixed Token Threshold\" allows setting an absolute token count as the trigger point."
+        },
+        "compression_token_threshold": {
+          "description": "Token Trigger Threshold",
+          "hint": "Effective when trigger mode is set to \"By Fixed Token Threshold\". Compression triggers when the current context token count reaches this value."
         }
       }
     },

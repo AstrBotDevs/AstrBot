@@ -220,6 +220,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_compress_provider: Provider | None = None,
         # truncate by turns compressor
         truncate_turns: int = 1,
+        # token-threshold compression
+        context_limit_type: str = "turn",
+        compression_token_threshold: int = 4000,
         # customize
         custom_token_counter: TokenCounter | None = None,
         custom_compressor: ContextCompressor | None = None,
@@ -236,6 +239,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.llm_compress_keep_recent = llm_compress_keep_recent
         self.llm_compress_provider = llm_compress_provider
         self.truncate_turns = truncate_turns
+        self.context_limit_type = context_limit_type
+        self.compression_token_threshold = compression_token_threshold
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
         self.tool_result_overflow_dir = tool_result_overflow_dir
@@ -250,6 +255,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # enforce max turns before compression
             enforce_max_turns=self.enforce_max_turns,
             truncate_turns=self.truncate_turns,
+            context_limit_type=self.context_limit_type,
+            compression_token_threshold=self.compression_token_threshold,
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
             llm_compress_provider=self.llm_compress_provider,

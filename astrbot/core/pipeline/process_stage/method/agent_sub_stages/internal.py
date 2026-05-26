@@ -111,6 +111,10 @@ class InternalAgentSubStage(Stage):
         self.fallback_max_context_tokens: int = settings.get(
             "fallback_max_context_tokens", 128000
         )
+        self.context_limit_type: str = settings.get("context_limit_type", "turn")
+        self.compression_token_threshold: int = settings.get(
+            "compression_token_threshold", 4000
+        )
 
         self.llm_safety_mode = settings.get("llm_safety_mode", True)
         self.safety_mode_strategy = settings.get(
@@ -141,6 +145,8 @@ class InternalAgentSubStage(Stage):
             max_context_length=self.max_context_length,
             dequeue_context_length=self.dequeue_context_length,
             fallback_max_context_tokens=self.fallback_max_context_tokens,
+            context_limit_type=self.context_limit_type,
+            compression_token_threshold=self.compression_token_threshold,
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,

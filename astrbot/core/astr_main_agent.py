@@ -161,6 +161,10 @@ class MainAgentBuildConfig:
     """The number of oldest turns to remove when context length limit is reached."""
     fallback_max_context_tokens: int = 128000
     """Fallback max context tokens. When max_context_tokens is 0 and the model is not in LLM_METADATAS, use this value."""
+    context_limit_type: str = "turn"
+    """Compression trigger mode: "turn" uses model context window × 0.82 rate; "token" uses an absolute token threshold."""
+    compression_token_threshold: int = 4000
+    """When context_limit_type is "token", compression triggers when total tokens >= this threshold."""
     llm_safety_mode: bool = True
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
@@ -1473,6 +1477,8 @@ async def build_main_agent(
         llm_compress_provider=_get_compress_provider(config, plugin_context),
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
+        context_limit_type=config.context_limit_type,
+        compression_token_threshold=config.compression_token_threshold,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=_get_fallback_chat_providers(
             provider, plugin_context, config.provider_settings
