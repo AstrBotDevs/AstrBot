@@ -46,9 +46,10 @@
             </v-radio-group>
         </div>
     </v-expand-transition>
-    <div v-if="showReadmeImageSetting" class="mt-3">
+    <div v-if="showReadmeImageSetting" class="readme-image-source mt-3">
         <v-switch
             v-model="readmeImageUseGitHub"
+            class="readme-image-source-switch"
             color="primary"
             density="compact"
             hide-details="true"
@@ -233,8 +234,32 @@ export default {
 }
 </script>
 
-<style>
-.v-label {
+<style scoped>
+:deep(.v-label) {
     font-size: 0.875rem;
+}
+
+.readme-image-source {
+    max-width: 100%;
+    overflow: visible;
+    padding-left: 10px;
+}
+
+.readme-image-source-switch {
+    overflow: visible;
+}
+
+.readme-image-source-switch :deep(.v-selection-control) {
+    min-height: 32px;
+    overflow: visible;
+}
+
+.readme-image-source-switch :deep(.v-selection-control__wrapper) {
+    overflow: visible;
+}
+
+.readme-image-source-switch :deep(.v-label) {
+    line-height: 1.35;
+    white-space: normal;
 }
 </style>
