@@ -97,6 +97,16 @@
     "subtitle": "添加一个新的子代理以开始",
     "action": "创建第一个 Agent"
   },
+  "dag": {
+    "orchestrationMode": "编排方式",
+    "orchestrationModeHint": "选择子代理任务的编排模式。「默认」由LLM手动逐个委派；「DAG 编排」使用有向无环图进行管理。",
+    "maxNodes": "DAG 最大任务节点数",
+    "maxNodesHint": "单个 DAG 编排中允许的最大任务节点数量",
+    "maxParallel": "DAG 单层最大并行数",
+    "maxParallelHint": "每层节点的最大并行数，若节点数超出并行数，会分批处理",
+    "maxInjectLength": "DAG 前置结果注入长度",
+    "maxInjectLengthHint": "将前置任务结果注入到后继任务上下文时的最大字符数，超出部分截断"
+  },
   "enhancedSwitches": {
     "enable": "启用动态子代理",
     "enableHint": "启用动态子代理创建、管理和回收能力。开启后主Agent可在运行时通过create_subagent等工具动态创建子代理。与静态子代理编排可同时存在",

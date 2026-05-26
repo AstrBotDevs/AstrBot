@@ -1054,6 +1054,7 @@ async def _apply_subagent_manager_tools(
             CREATE_SUBAGENT_TOOL,
             LIST_SUBAGENTS_TOOL,
             MANAGE_SUBAGENT_PROTECTION_TOOL,
+            ORCHESTRATE_TASKS_TOOL,
             REMOVE_SUBAGENT_TOOL,
             VIEW_SHARED_CONTEXT_TOOL,
             WAIT_FOR_SUBAGENT_TOOL,
@@ -1065,7 +1066,7 @@ async def _apply_subagent_manager_tools(
         history_enabled = orch_cfg.get("history_enabled", True)
         shared_context_enabled = orch_cfg.get("shared_context_enabled", False)
         SubAgentManager.configure(
-            max_subagent_count=dynamic_cfg.get("max_dynamic_subagent_count", 3),
+            max_subagent_count=dynamic_cfg.get("max_subagent_count", 3),
             auto_cleanup_per_turn=dynamic_cfg.get("auto_cleanup_per_turn", True),
             shared_context_enabled=shared_context_enabled,
             shared_context_maxlen=orch_cfg.get("shared_context_maxlen", 300),
@@ -1077,6 +1078,7 @@ async def _apply_subagent_manager_tools(
             rule_prompt=dynamic_cfg.get("rule_prompt", ""),
             time_prompt_enabled=orch_cfg.get("time_prompt_enabled", True),
             timezone=cfg.get("timezone", None),
+            dag_enabled=orch_cfg.get("dag_enabled", False),
         )
 
         # Enable subagent history and shared context if configured
@@ -1092,6 +1094,10 @@ async def _apply_subagent_manager_tools(
         # Register dynamic subagent management tools (only when dynamic creation is enabled)
         # Always register `wait_for_subagent` for better background task running
         req.func_tool.add_tool(WAIT_FOR_SUBAGENT_TOOL)
+        # Register DAG orchestration tool if enabled
+        dag_cfg = orch_cfg.get("dag_enabled", True)
+        if dag_cfg:
+            req.func_tool.add_tool(ORCHESTRATE_TASKS_TOOL)
         if enable_dynamic:
             req.func_tool.add_tool(CREATE_SUBAGENT_TOOL)
             req.func_tool.add_tool(REMOVE_SUBAGENT_TOOL)

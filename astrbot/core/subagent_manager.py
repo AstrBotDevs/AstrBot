@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from astrbot import logger
 from astrbot.core.agent.agent import Agent
@@ -20,6 +21,9 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.astr_main_agent_resources import LLM_SAFETY_MODE_SYSTEM_PROMPT
 from astrbot.core.star.star import star_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
+
+if TYPE_CHECKING:
+    from astrbot.core.subagent_dag import DAGExecutionContext
 
 
 @dataclass
@@ -69,6 +73,8 @@ class SubAgentSession:
     background_task_counters: dict = field(default_factory=dict)
     subagent_traces: dict = field(default_factory=dict)  # {agent_name: TraceSpan}
     last_activity_at: float = field(default_factory=time.time)  # 最后活跃时间戳
+    active_dag: DAGExecutionContext | None = None  # 当前活跃的 DAG
+    dag_history: list[DAGExecutionContext] = field(default_factory=list)  # 完成的 DAG
 
 
 class SubAgentManager:
@@ -90,12 +96,14 @@ class SubAgentManager:
         "remove_subagent",
         "list_subagents",
         "wait_for_subagent",
+        "orchestrate_tasks",
         "view_shared_context",
     }
     _tools_inherent: set[str] = {
         "astrbot_execute_shell",
         "astrbot_execute_python",
     }
+    _dag_enabled: bool = False  # 是否启用 DAG 编排
     _session_timeout_seconds = (
         1800  # 会话存活时间。若有会话的subagent闲置时间超过该值，自动清理
     )
@@ -123,14 +131,17 @@ Create sub-agents ONLY when:
 | Instruction | Input → Process → Output (step-by-step) |
 | Tools | **Minimum necessary only** |
 
-### 2. Delegate
+### 2. Manual Delegate
 - Sequential: `transfer_to_*(...)` — block until return
 - Parallel: `transfer_to_*(..., background_task=True)` → `wait_for_subagent(name, timeout=secs)`
 
-### 3. Collect & Cleanup
+### 3. Collect
 - Merge independent outputs by concatenation
 - Resolve conflicts by preferring explicit data over inference
 {_SUBAGENT_AUTOCLEAN_PROMPT}"""
+    _DAG_GUIDE_PROMPT = """## DAG Orchestration
+DAG Orchestration automatically delegate subagents. When you have 2+ independent tasks that can run in parallel, or tasks with clear dependencies, prefer to use `orchestrate_tasks` to declare them all at once.
+"""
 
     @classmethod
     def build_task_router_prompt(cls, session_id: str):
@@ -142,6 +153,9 @@ Create sub-agents ONLY when:
             cls._HEADER_TEMPLATE,
             cls._CREATE_GUIDE_PROMPT,
         ]
+        if cls._dag_enabled:
+            parts.append(cls._DAG_GUIDE_PROMPT)
+
         return "\n".join(parts) + "\n"
 
     @classmethod
@@ -159,6 +173,7 @@ Create sub-agents ONLY when:
         rule_prompt: str = "",
         time_prompt_enabled: bool = True,
         timezone: str | None = None,
+        dag_enabled: bool = False,
         **kwargs,
     ) -> None:
         """Configure SubAgentManager settings"""
@@ -172,6 +187,7 @@ Create sub-agents ONLY when:
         cls._rule_prompt = rule_prompt
         cls._time_prompt_enabled = time_prompt_enabled
         cls._timezone = timezone
+        cls._dag_enabled = dag_enabled
         if tools_inherent is None:
             cls._tools_inherent = {
                 "astrbot_execute_shell",
@@ -188,6 +204,7 @@ Create sub-agents ONLY when:
                 "remove_subagent",
                 "list_subagents",
                 "wait_for_subagent",
+                "orchestrate_tasks",
                 "view_shared_context",
             }
         else:
@@ -226,6 +243,11 @@ Create sub-agents ONLY when:
         if not session:
             return {"status": "no_session", "cleaned": []}
 
+        # If DAG is currently running, do NOT clean subagents
+        dag_ctx = cls.get_active_dag(session_id)
+        if dag_ctx and dag_ctx.status == "RUNNING":
+            return {"status": "dag_running", "cleaned": []}
+
         cleaned = []
         for name in list(session.subagents.keys()):
             if name not in session.protected_agents:
@@ -237,7 +259,7 @@ Create sub-agents ONLY when:
             if not session.subagents and not session.protected_agents:
                 # 所有subagent都被清理，清除公共上下文
                 cls.clear_shared_context(session_id)
-                logger.debug(
+                logger.info(
                     "[SubAgent:SharedContext] All subagents cleaned, cleared shared context"
                 )
             else:
@@ -249,9 +271,14 @@ Create sub-agents ONLY when:
         if not session.subagents and not session.protected_agents:
             cls._sessions.pop(session_id, None)
 
+        # Move completed/failed DAG to history
+        dag_ctx = cls.get_active_dag(session_id)
+        if dag_ctx and dag_ctx.status in ("COMPLETED", "FAILED", "CANCELLED"):
+            session.dag_history.append(dag_ctx)
+            session.active_dag = None
+
         # 每轮结束时顺便清理全局过期会话
         cls.cleanup_expired_sessions()
-
         return {"status": "cleaned", "cleaned_agents": cleaned}
 
     @classmethod
@@ -704,18 +731,43 @@ Create sub-agents ONLY when:
         time_prompt = f"# Current Time\n{current_time}\n"
         return time_prompt
 
+    _TASK_STATUS_PROMPT = (
+        "# Task Status Reporting\n"
+        "At the end of your task, self-audit before giving your final answer.\n"
+        "## SUCCESS — use only when ALL of these are true:\n"
+        "- Every tool call succeeded; no unexpected error or empty result\n"
+        "- Your output directly answers the task you were assigned\n"
+        "- You are confident the result is accurate, not a guess or placeholder\n"
+        "- If you created files: ensure they exist on disk, and their content is correct and complete\n"
+        "If all pass, put this EXACT line FIRST, then your result:\n"
+        "[TASK RESULT: SUCCESS]\n"
+        "## FAILURE — use if ANY tool failed, or you cannot complete the task:\n"
+        "[TASK RESULT: FAILURE]\n"
+        "[FAILURE REASON: <one-line explanation>]\n"
+        "## Reporting Marker Rules\n"
+        "- The marker MUST be exactly `[TASK RESULT: SUCCESS]` or `[TASK RESULT: FAILURE]` — do not change it\n"
+        "- The marker MUST be on its own line, at the very top of your response\n"
+        "- When uncertain between success and failure, choose failure\n"
+    )
+
     @classmethod
     def _build_rule_prompt(cls) -> str:
-        if cls._rule_prompt:
-            return cls._rule_prompt
-        return (
-            "# Behavior Rules\n"
-            "## Safety\n"
-            f"{LLM_SAFETY_MODE_SYSTEM_PROMPT}"
-            "## Output Guidelines\n"
-            "- If output is long, save it to file. Summarize in your response and provide the file path.\n"
-            "- Mark all generated code/documents with your name and timestamp (if given).\n"
+        base = (
+            cls._rule_prompt
+            if cls._rule_prompt
+            else (
+                "# Behavior Rules\n"
+                "## Safety\n"
+                f"{LLM_SAFETY_MODE_SYSTEM_PROMPT}"
+                "## Output Guidelines\n"
+                "- If output is long, save it to file. Summarize in your response and provide the file path.\n"
+                "- Mark all generated code/documents with your name and timestamp (if given).\n"
+            )
         )
+        if cls._dag_enabled:
+            return base + cls._TASK_STATUS_PROMPT
+        else:
+            return base
 
     @classmethod
     def cleanup_shared_context_by_agent(cls, session_id: str, agent_name: str) -> None:
@@ -1002,6 +1054,9 @@ Create sub-agents ONLY when:
 
     @classmethod
     async def cleanup_session(cls, session_id: str) -> dict:
+        # Cancel active DAG first
+        cls.cancel_dag(session_id)
+
         session = cls._sessions.pop(session_id, None)
         if not session:
             return {"status": "not_found", "cleaned_agents": []}
@@ -1010,6 +1065,56 @@ Create sub-agents ONLY when:
             for name in cleaned:
                 logger.info("[SubAgent:Cleanup] Cleaned: %s", name)
             return {"status": "cleaned", "cleaned_agents": cleaned}
+
+    @classmethod
+    def register_dag(cls, session_id: str, dag_ctx: DAGExecutionContext) -> None:
+        """Register a DAG execution context with the session."""
+        session = cls._get_or_create_session(session_id)
+        session.active_dag = dag_ctx
+        logger.info(
+            "[SubAgent:DAG] Registered DAG %s for session %s with %d nodes",
+            dag_ctx.dag_id,
+            session_id,
+            len(dag_ctx.nodes),
+        )
+
+    @classmethod
+    def get_active_dag(cls, session_id: str) -> DAGExecutionContext | None:
+        """Get the active DAG for a session, or None."""
+        session = cls.get_session(session_id)
+        if not session:
+            return None
+        return session.active_dag
+
+    @classmethod
+    def cancel_dag(cls, session_id: str) -> dict:
+        """Cancel the active DAG, aborting all non-terminal nodes."""
+        session = cls.get_session(session_id)
+        if not session or not session.active_dag:
+            return {"status": "no_active_dag"}
+
+        dag_ctx = session.active_dag
+        cancelled = 0
+        for node in dag_ctx.nodes.values():
+            if node.status.value in ("RUNNING", "READY", "PENDING"):
+                node.status = type(node.status).SKIPPED
+                cancelled += 1
+
+        dag_ctx.status = "CANCELLED"
+        dag_ctx.completed_at = time.time()
+        session.dag_history.append(dag_ctx)
+        session.active_dag = None
+
+        logger.info(
+            "[SubAgent:DAG] Cancelled DAG %s: %d nodes aborted",
+            dag_ctx.dag_id,
+            cancelled,
+        )
+        return {
+            "status": "cancelled",
+            "dag_id": dag_ctx.dag_id,
+            "cancelled_nodes": cancelled,
+        }
 
     @classmethod
     def remove_subagent(cls, session_id: str, agent_name: str) -> str:

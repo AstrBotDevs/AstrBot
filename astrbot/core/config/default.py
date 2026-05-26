@@ -206,7 +206,7 @@ DEFAULT_CONFIG = {
         "agents": [],
         "dynamic_agents": {
             "enabled": False,
-            "max_dynamic_subagent_count": 3,
+            "max_subagent_count": 5,
             "auto_cleanup_per_turn": True,
             "rule_prompt": (
                 "# Behavior Rules\n"
@@ -223,6 +223,7 @@ DEFAULT_CONFIG = {
                 "remove_subagent",
                 "list_subagents",
                 "wait_for_subagent",
+                "orchestrate_tasks",
                 "broadcast_shared_context",
                 "view_shared_context",
             ],
@@ -234,6 +235,10 @@ DEFAULT_CONFIG = {
         "shared_context_maxlen": 300,
         "subagent_history_maxlen": 300,
         "execution_timeout": 1200,
+        "dag_enabled": False,
+        "dag_max_nodes": 10,
+        "dag_max_parallel": 5,
+        "dag_max_inject_length": 4000,
     },
     "provider_stt_settings": {
         "enable": False,

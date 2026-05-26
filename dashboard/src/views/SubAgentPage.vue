@@ -57,6 +57,81 @@
             </div>
           </div>
 
+          <!-- 编排方式 -->
+          <div class="setting-card">
+            <div class="setting-card-head">
+              <div>
+                <div class="setting-title">{{ tm('dag.orchestrationMode') }}</div>
+                <div class="setting-subtitle">{{ tm('dag.orchestrationModeHint') }}</div>
+              </div>
+              <v-select
+                v-model="orchestrationMode"
+                :items="orchestrationModeOptions"
+                density="compact"
+                variant="outlined"
+                style="width: 160px;"
+                hide-details
+              />
+            </div>
+          </div>
+
+          <!-- DAG 编排设置 (条件展开) -->
+          <template v-if="dagCfg.dag_enabled">
+            <div class="setting-card">
+              <div class="setting-card-head">
+                <div>
+                  <div class="setting-title">{{ tm('dag.maxNodes') }}</div>
+                  <div class="setting-subtitle">{{ tm('dag.maxNodesHint') }}</div>
+                </div>
+                <v-text-field
+                  v-model.number="dagCfg.dag_max_nodes"
+                  type="number"
+                  density="compact"
+                  variant="outlined"
+                  style="width: 120px;"
+                  hide-details
+                  :rules="[v => v >= 1 || 'Min 1']"
+                />
+              </div>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-card-head">
+                <div>
+                  <div class="setting-title">{{ tm('dag.maxParallel') }}</div>
+                  <div class="setting-subtitle">{{ tm('dag.maxParallelHint') }}</div>
+                </div>
+                <v-text-field
+                  v-model.number="dagCfg.dag_max_parallel"
+                  type="number"
+                  density="compact"
+                  variant="outlined"
+                  style="width: 120px;"
+                  hide-details
+                  :rules="[v => v >= 1 || 'Min 1']"
+                />
+              </div>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-card-head">
+                <div>
+                  <div class="setting-title">{{ tm('dag.maxInjectLength') }}</div>
+                  <div class="setting-subtitle">{{ tm('dag.maxInjectLengthHint') }}</div>
+                </div>
+                <v-text-field
+                  v-model.number="dagCfg.dag_max_inject_length"
+                  type="number"
+                  density="compact"
+                  variant="outlined"
+                  style="width: 120px;"
+                  hide-details
+                  :rules="[v => v >= 100 || 'Min 100']"
+                />
+              </div>
+            </div>
+          </template>
+
           <!-- 启用历史记忆 -->
           <div class="setting-card">
             <div class="setting-card-head">
@@ -419,7 +494,7 @@
                     <div class="setting-subtitle">{{ tm('enhancedFields.maxSubagentCountHint') }}</div>
                   </div>
                   <v-text-field
-                    v-model.number="dynamicCfg.max_dynamic_subagent_count"
+                    v-model.number="dynamicCfg.max_subagent_count"
                     type="number"
                     :rules="[v => v >= 1 || 'Minimum 1']"
                     density="compact"
@@ -687,7 +762,7 @@ type SubAgentConfig = {
 
 type DynamicAgentsConfig = {
   enabled: boolean
-  max_dynamic_subagent_count: number
+  max_subagent_count: number
   auto_cleanup_per_turn: boolean
   rule_prompt: string
   tools_blacklist: string[]
@@ -706,6 +781,13 @@ type SubAgentOrchestratorConfig = {
   subagent_history_maxlen: number
   execution_timeout: number
   time_prompt_enabled: boolean
+}
+
+type DAGConfig = {
+  dag_enabled: boolean
+  dag_max_nodes: number
+  dag_max_parallel: number
+  dag_max_inject_length: number
 }
 
 type AvailableTool = {
@@ -798,7 +880,7 @@ const cfg = ref<SubAgentConfig>({
 
 const dynamicCfg = ref<DynamicAgentsConfig>({
   enabled: false,
-  max_dynamic_subagent_count: 3,
+  max_subagent_count: 3,
   auto_cleanup_per_turn: true,
   rule_prompt: '',
   tools_blacklist: [...DEFAULT_BLACKLIST],
@@ -814,13 +896,32 @@ const rootCfg = ref({
   time_prompt_enabled: true
 })
 
+const dagCfg = ref<DAGConfig>({
+  dag_enabled: false,
+  dag_max_nodes: 10,
+  dag_max_parallel: 5,
+  dag_max_inject_length: 4000
+})
+
+const orchestrationModeOptions = [
+  { title: '默认', value: 'default' },
+  { title: 'DAG 编排', value: 'dag' }
+]
+
+const orchestrationMode = computed({
+  get: () => dagCfg.value.dag_enabled ? 'dag' : 'default',
+  set: (val: string) => {
+    dagCfg.value.dag_enabled = val === 'dag'
+  }
+})
+
 const mainStateDescription = computed(() =>
   cfg.value.main_enable ? tm('description.enabled') : tm('description.disabled')
 )
 
 const hasUnsavedChanges = computed(() => {
   if (!hasLoaded.value) return false
-  const currentSnapshot = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value)
+  const currentSnapshot = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value, dagCfg.value)
   return currentSnapshot !== initialSnapshot.value
 })
 
@@ -852,7 +953,7 @@ function normalizeDynamicAgents(raw: any): DynamicAgentsConfig {
   const inherent = Array.isArray(src?.tools_inherent) ? src.tools_inherent : null
   return {
     enabled: !!src?.enabled,
-    max_dynamic_subagent_count: Number(src?.max_dynamic_subagent_count) || 3,
+    max_subagent_count: Number(src?.max_subagent_count) || 3,
     auto_cleanup_per_turn: src?.auto_cleanup_per_turn !== false,
     rule_prompt: (src?.rule_prompt ?? '').toString(),
     tools_blacklist: blacklist !== null ? blacklist : [...DEFAULT_BLACKLIST],
@@ -872,7 +973,17 @@ function normalizeRootConfig(raw: any) {
   }
 }
 
-function serializeFullConfig(config: SubAgentConfig, dynamic: DynamicAgentsConfig, root: any): string {
+function normalizeDagConfig(raw: any): DAGConfig {
+  const orchData = raw?.subagent_orchestrator || raw || {}
+  return {
+    dag_enabled: orchData?.dag_enabled === true,
+    dag_max_nodes: Number(orchData?.dag_max_nodes) || 10,
+    dag_max_parallel: Number(orchData?.dag_max_parallel) || 5,
+    dag_max_inject_length: Number(orchData?.dag_max_inject_length) || 4000
+  }
+}
+
+function serializeFullConfig(config: SubAgentConfig, dynamic: DynamicAgentsConfig, root: any, dag: DAGConfig): string {
   return JSON.stringify({
     main_enable: config.main_enable,
     remove_main_duplicate_tools: config.remove_main_duplicate_tools,
@@ -886,7 +997,7 @@ function serializeFullConfig(config: SubAgentConfig, dynamic: DynamicAgentsConfi
     })),
     dynamic_agents: {
       enabled: dynamic.enabled,
-      max_dynamic_subagent_count: dynamic.max_dynamic_subagent_count,
+      max_subagent_count: dynamic.max_subagent_count,
       auto_cleanup_per_turn: dynamic.auto_cleanup_per_turn,
       rule_prompt: dynamic.rule_prompt,
       tools_blacklist: dynamic.tools_blacklist,
@@ -897,7 +1008,11 @@ function serializeFullConfig(config: SubAgentConfig, dynamic: DynamicAgentsConfi
     shared_context_maxlen: root.shared_context_maxlen,
     subagent_history_maxlen: root.subagent_history_maxlen,
     execution_timeout: root.execution_timeout,
-    time_prompt_enabled: root.time_prompt_enabled
+    time_prompt_enabled: root.time_prompt_enabled,
+    dag_enabled: dag.dag_enabled,
+    dag_max_nodes: dag.dag_max_nodes,
+    dag_max_parallel: dag.dag_max_parallel,
+    dag_max_inject_length: dag.dag_max_inject_length
   })
 }
 
@@ -927,8 +1042,9 @@ async function loadConfig() {
       cfg.value = normalizeConfig(data.subagent_orchestrator || data)
       dynamicCfg.value = normalizeDynamicAgents(data.subagent_orchestrator || data)
       rootCfg.value = normalizeRootConfig(data.subagent_orchestrator || data)
+      dagCfg.value = normalizeDagConfig(data.subagent_orchestrator || data)
       expandedAgents.value = Object.fromEntries(cfg.value.agents.map((agent) => [agent.__key, false]))
-      initialSnapshot.value = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value)
+      initialSnapshot.value = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value, dagCfg.value)
       hasLoaded.value = true
     } else {
       toast(res.data.message || tm('messages.loadConfigFailed'), 'error')
@@ -1013,7 +1129,7 @@ async function save() {
       })),
       dynamic_agents: {
         enabled: dynamicCfg.value.enabled,
-        max_dynamic_subagent_count: dynamicCfg.value.max_dynamic_subagent_count,
+        max_subagent_count: dynamicCfg.value.max_subagent_count,
         auto_cleanup_per_turn: dynamicCfg.value.auto_cleanup_per_turn,
         rule_prompt: dynamicCfg.value.rule_prompt,
         tools_blacklist: dynamicCfg.value.tools_blacklist,
@@ -1024,13 +1140,16 @@ async function save() {
       shared_context_maxlen: rootCfg.value.shared_context_maxlen,
       subagent_history_maxlen: rootCfg.value.subagent_history_maxlen,
       execution_timeout: rootCfg.value.execution_timeout,
-      time_prompt_enabled: rootCfg.value.time_prompt_enabled
+      time_prompt_enabled: rootCfg.value.time_prompt_enabled,
+      dag_enabled: dagCfg.value.dag_enabled,
+      dag_max_nodes: dagCfg.value.dag_max_nodes,
+      dag_max_parallel: dagCfg.value.dag_max_parallel,
+      dag_max_inject_length: dagCfg.value.dag_max_inject_length
     }
 
     const res = await axios.post('/api/subagent/config', payload)
     if (res.data.status === 'ok') {
-      initialSnapshot.value = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value)
-      hasLoaded.value = true
+      initialSnapshot.value = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value, dagCfg.value)
       toast(res.data.message || tm('messages.saveSuccess'), 'success')
     } else {
       toast(res.data.message || tm('messages.saveFailed'), 'error')
