@@ -3,11 +3,13 @@ import hashlib
 import json
 import mimetypes
 import os
+import re
 import ssl
 import traceback
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 import aiohttp
 import certifi
@@ -36,6 +38,8 @@ PLUGIN_UPDATE_CONCURRENCY = (
     3  # limit concurrent updates to avoid overwhelming plugin sources
 )
 PLUGIN_ASSET_MIME_PREFIX = "image/"
+GITHUB_DEFAULT_BRANCH_REF = "HEAD"
+GITHUB_REPO_PART_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
 @dataclass
@@ -89,6 +93,39 @@ class PluginRoute(Route):
         }
 
         self._logo_cache = {}
+
+    def _parse_github_repo_url(self, repo_url: str | None) -> tuple[str, str] | None:
+        if not repo_url:
+            return None
+
+        parsed = urlparse(repo_url.strip())
+        if parsed.scheme not in ("http", "https"):
+            return None
+        if parsed.netloc.lower() != "github.com":
+            return None
+
+        parts = [part for part in parsed.path.strip("/").split("/") if part]
+        if len(parts) < 2:
+            return None
+
+        owner = parts[0]
+        repo = parts[1].removesuffix(".git")
+        if not owner or not repo:
+            return None
+        if not GITHUB_REPO_PART_PATTERN.fullmatch(owner):
+            return None
+        if not GITHUB_REPO_PART_PATTERN.fullmatch(repo):
+            return None
+
+        return owner, repo
+
+    def _build_github_raw_base(self, repo_url: str | None) -> str | None:
+        repo_info = self._parse_github_repo_url(repo_url)
+        if not repo_info:
+            return None
+
+        owner, repo = repo_info
+        return f"https://github.com/{owner}/{repo}/raw/{GITHUB_DEFAULT_BRANCH_REF}"
 
     def _get_plugin_dir(self, plugin_name: str) -> Path | None:
         plugin_obj = self.plugin_manager.context.get_registered_star(plugin_name)
@@ -766,12 +803,7 @@ class PluginRoute(Route):
             logger.warning("插件名称为空")
             return Response().error("插件名称不能为空").__dict__
 
-        plugin_obj = None
-        for plugin in self.plugin_manager.context.get_all_stars():
-            if plugin.name == plugin_name:
-                plugin_obj = plugin
-                break
-
+        plugin_obj = self.plugin_manager.context.get_registered_star(plugin_name)
         if not plugin_obj:
             logger.warning(f"插件 {plugin_name} 不存在")
             return Response().error(f"插件 {plugin_name} 不存在").__dict__
@@ -780,34 +812,28 @@ class PluginRoute(Route):
             logger.warning(f"插件 {plugin_name} 目录不存在")
             return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
 
-        if plugin_obj.reserved:
-            plugin_dir = os.path.join(
-                self.plugin_manager.reserved_plugin_path,
-                plugin_obj.root_dir_name,
-            )
-        else:
-            plugin_dir = os.path.join(
-                self.plugin_manager.plugin_store_path,
-                plugin_obj.root_dir_name,
-            )
-
-        if not os.path.isdir(plugin_dir):
+        plugin_dir = self._get_plugin_dir(plugin_name)
+        if not plugin_dir or not plugin_dir.is_dir():
             logger.warning(f"无法找到插件目录: {plugin_dir}")
             return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
 
-        readme_path = os.path.join(plugin_dir, "README.md")
-
-        if not os.path.isfile(readme_path):
+        readme_path = plugin_dir / "README.md"
+        if not readme_path.is_file():
             logger.warning(f"插件 {plugin_name} 没有README文件")
             return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
 
         try:
-            with open(readme_path, encoding="utf-8") as f:
-                readme_content = f.read()
+            readme_content = readme_path.read_text(encoding="utf-8")
 
             return (
                 Response()
-                .ok({"content": readme_content}, "成功获取README内容")
+                .ok(
+                    {
+                        "content": readme_content,
+                        "github_raw_base": self._build_github_raw_base(plugin_obj.repo),
+                    },
+                    "成功获取README内容",
+                )
                 .__dict__
             )
         except Exception as e:

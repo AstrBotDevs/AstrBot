@@ -13,7 +13,11 @@
       "testConnection": "Test Connection",
       "available": "Available",
       "unavailable": "Unavailable",
-      "custom": "Custom"
+      "custom": "Custom",
+      "readmeImages": {
+        "useGitHub": "Load plugin README images from GitHub",
+        "hint": "Images load from the local plugin directory by default. When enabled, AstrBot uses the plugin repository's default branch and applies the GitHub proxy if it is enabled."
+      }
     }
   },
   "theme": {

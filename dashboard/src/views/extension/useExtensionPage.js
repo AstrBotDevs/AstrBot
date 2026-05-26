@@ -4,6 +4,7 @@ import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
 import { resolveErrorMessage } from "@/utils/errorUtils";
+import { getSelectedGitHubProxy } from "@/utils/githubProxy";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
@@ -62,13 +63,6 @@ export const useExtensionPage = () => {
   const router = useRouter();
   const route = useRoute();
   const { width } = useDisplay();
-  
-  const getSelectedGitHubProxy = () => {
-    if (typeof window === "undefined" || !window.localStorage) return "";
-    return localStorage.getItem("githubProxyRadioValue") === "1"
-      ? localStorage.getItem("selectedGitHubProxy") || ""
-      : "";
-  };
   
   // 检查指令冲突并提示
   const conflictDialog = reactive({

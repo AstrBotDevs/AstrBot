@@ -292,6 +292,78 @@ async def test_plugin_asset_api(
 
 
 @pytest.mark.asyncio
+async def test_plugin_readme_github_raw_base(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
+    builder = MockPluginBuilder(plugin_store_path)
+
+    test_plugin_name = "test_plugin_readme_github"
+    repo_url = f"https://github.com/test/{test_plugin_name}.git"
+    builder.create(test_plugin_name, repo=repo_url)
+    try:
+        success, error = await core_lifecycle_td.plugin_manager.load(
+            specified_dir_name=test_plugin_name
+        )
+        assert success, error
+
+        response = await test_client.get(
+            "/api/plugin/readme",
+            query_string={"name": test_plugin_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["github_raw_base"] == (
+            f"https://github.com/test/{test_plugin_name}/raw/HEAD"
+        )
+        assert "/main" not in data["data"]["github_raw_base"]
+    finally:
+        try:
+            await core_lifecycle_td.plugin_manager.uninstall_plugin(test_plugin_name)
+        except Exception:
+            builder.cleanup(test_plugin_name)
+
+
+@pytest.mark.asyncio
+async def test_plugin_readme_github_raw_base_ignores_non_github_repo(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
+    builder = MockPluginBuilder(plugin_store_path)
+
+    test_plugin_name = "test_plugin_readme_non_github"
+    builder.create(test_plugin_name, repo="https://git.example.com/test/plugin")
+    try:
+        success, error = await core_lifecycle_td.plugin_manager.load(
+            specified_dir_name=test_plugin_name
+        )
+        assert success, error
+
+        response = await test_client.get(
+            "/api/plugin/readme",
+            query_string={"name": test_plugin_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["github_raw_base"] is None
+    finally:
+        try:
+            await core_lifecycle_td.plugin_manager.uninstall_plugin(test_plugin_name)
+        except Exception:
+            builder.cleanup(test_plugin_name)
+
+
+@pytest.mark.asyncio
 async def test_commands_api(app: Quart, authenticated_header: dict):
     """Tests the command management API endpoints."""
     test_client = app.test_client()

@@ -655,7 +655,7 @@ const {
                 </v-alert>
               </div>
 
-              <ProxySelector></ProxySelector>
+              <ProxySelector :show-readme-image-setting="false"></ProxySelector>
             </div>
           </v-window-item>
         </v-window>

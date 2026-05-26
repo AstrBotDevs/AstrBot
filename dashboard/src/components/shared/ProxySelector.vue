@@ -46,14 +46,37 @@
             </v-radio-group>
         </div>
     </v-expand-transition>
+    <div v-if="showReadmeImageSetting" class="mt-3">
+        <v-switch
+            v-model="readmeImageUseGitHub"
+            color="primary"
+            density="compact"
+            hide-details="true"
+            :label="tm('network.proxySelector.readmeImages.useGitHub')">
+        </v-switch>
+        <div class="text-caption text-medium-emphasis mt-1">
+            {{ tm('network.proxySelector.readmeImages.hint') }}
+        </div>
+    </div>
 </template>
 
 
 <script>
 import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
+import {
+    PLUGIN_README_IMAGE_SOURCE,
+    getPluginReadmeImageSource,
+    setPluginReadmeImageSource
+} from '@/utils/githubProxy';
 
 export default {
+    props: {
+        showReadmeImageSetting: {
+            type: Boolean,
+            default: true,
+        },
+    },
     setup() {
         const { tm } = useModuleI18n('features/settings');
         return { tm };
@@ -72,7 +95,20 @@ export default {
             loadingTestingConnection: false,
             testingProxies: {},
             proxyStatus: {},
+            readmeImageSource: PLUGIN_README_IMAGE_SOURCE.LOCAL,
             initializing: true,
+        }
+    },
+    computed: {
+        readmeImageUseGitHub: {
+            get() {
+                return this.readmeImageSource === PLUGIN_README_IMAGE_SOURCE.GITHUB;
+            },
+            set(value) {
+                this.readmeImageSource = value
+                    ? PLUGIN_README_IMAGE_SOURCE.GITHUB
+                    : PLUGIN_README_IMAGE_SOURCE.LOCAL;
+            }
         }
     },
     methods: {
@@ -136,6 +172,7 @@ export default {
         const savedRadio = localStorage.getItem('githubProxyRadioValue') || "0";
         const savedControl = String(localStorage.getItem('githubProxyRadioControl') || "0");
 
+        this.readmeImageSource = getPluginReadmeImageSource();
         this.radioValue = savedRadio;
         this.githubProxyRadioControl = savedControl;
 
@@ -185,6 +222,12 @@ export default {
             if (normalizedVal !== "-1") {
                 this.selectedGitHubProxy = this.getProxyByControl(normalizedVal);
             }
+        },
+        readmeImageSource: function (newVal) {
+            if (this.initializing) {
+                return;
+            }
+            setPluginReadmeImageSource(newVal);
         }
     }
 }

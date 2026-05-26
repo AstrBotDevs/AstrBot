@@ -1,11 +1,16 @@
 <script setup>
-import { ref, watch, computed, onUnmounted } from "vue";
+import { ref, watch, computed, onMounted, onUnmounted } from "vue";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
 import axios from "axios";
 import DOMPurify from "dompurify";
 import "highlight.js/styles/github-dark.css";
 import { useI18n } from "@/i18n/composables";
+import {
+  PLUGIN_README_IMAGE_SOURCE_CHANGED_EVENT,
+  buildGitHubProxyUrl,
+  isPluginReadmeGitHubImageSource,
+} from "@/utils/githubProxy";
 
 // 1. 在 setup 作用域创建 MarkdownIt 实例
 const md = new MarkdownIt({
@@ -48,9 +53,28 @@ const loading = ref(false);
 const isEmpty = ref(false);
 const copyFeedbackTimer = ref(null);
 const lastRequestId = ref(0);
+const githubRawBase = ref(null);
+const readmeImageSourceVersion = ref(0);
 
 onUnmounted(() => {
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
+  if (typeof window !== "undefined") {
+    window.removeEventListener(
+      PLUGIN_README_IMAGE_SOURCE_CHANGED_EVENT,
+      handleReadmeImageSourceChanged,
+    );
+  }
+});
+
+function handleReadmeImageSourceChanged() {
+  readmeImageSourceVersion.value += 1;
+}
+
+onMounted(() => {
+  window.addEventListener(
+    PLUGIN_README_IMAGE_SOURCE_CHANGED_EVENT,
+    handleReadmeImageSourceChanged,
+  );
 });
 
 function isRemoteImageSrc(src) {
@@ -62,6 +86,16 @@ function isRemoteImageSrc(src) {
     value.startsWith("data:") ||
     value.startsWith("blob:")
   );
+}
+
+function normalizeGitHubAssetPath(decodedPath) {
+  const segments = [];
+  for (const segment of decodedPath.split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") return null;
+    segments.push(segment);
+  }
+  return segments.length ? segments.join("/") : null;
 }
 
 function getPluginAssetSrc(src) {
@@ -85,6 +119,18 @@ function getPluginAssetSrc(src) {
     decodedPath = rawPath;
   }
 
+  const suffix = pathEnd === -1 ? "" : normalizedValue.slice(pathEnd);
+  if (githubRawBase.value && isPluginReadmeGitHubImageSource()) {
+    const githubPath = normalizeGitHubAssetPath(decodedPath);
+    if (!githubPath) return src;
+
+    const encodedPath = githubPath
+      .split("/")
+      .map((part) => encodeURIComponent(part))
+      .join("/");
+    return buildGitHubProxyUrl(`${githubRawBase.value}/${encodedPath}${suffix}`);
+  }
+
   const params = new URLSearchParams({
     name: props.pluginName,
     path: decodedPath,
@@ -97,7 +143,7 @@ function getPluginAssetSrc(src) {
 // 渲染后的 HTML
 const renderedHtml = computed(() => {
   // 强制依赖 locale，确保语言切换时重新渲染
-  const _ = locale?.value;
+  const _ = `${locale?.value}:${readmeImageSourceVersion.value}`;
   if (!content.value) return "";
 
   // 设置 fence 规则，直接使用当前作用域的 t 函数
@@ -261,6 +307,7 @@ async function fetchContent() {
   content.value = null;
   error.value = null;
   isEmpty.value = false;
+  githubRawBase.value = null;
 
   try {
     let params;
@@ -273,7 +320,9 @@ async function fetchContent() {
     if (requestId !== lastRequestId.value) return;
 
     if (res.data.status === "ok") {
-      if (res.data.data.content) content.value = res.data.data.content;
+      const data = res.data.data || {};
+      if (data.github_raw_base) githubRawBase.value = data.github_raw_base;
+      if (data.content) content.value = data.content;
       else isEmpty.value = true;
     } else {
       error.value = res.data.message;
