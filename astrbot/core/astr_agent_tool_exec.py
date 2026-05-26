@@ -385,7 +385,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         subagent_trace.record(
             "subagent_execution_begin",
             agent_name=agent_name,
-            input_preview=input_[:500] if input_ else None,
+            input=input_ if input_ else None,
             image_count=len(image_urls),
             tools=[t.name for t in toolset] if toolset else [],
             max_steps=agent_max_step,
@@ -414,7 +414,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             "subagent_system_prompt",
             agent_name=agent_name,
             prompt_length=len(subagent_system_prompt),
-            prompt_preview=subagent_system_prompt[:300]
+            prompt=subagent_system_prompt
             if subagent_system_prompt
             else None,
         )
@@ -480,7 +480,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         subagent_trace.record(
             "subagent_execution_complete",
             agent_name=agent_name,
-            result_preview=llm_resp.completion_text[:500]
+            result=llm_resp.completion_text
             if hasattr(llm_resp, "completion_text") and llm_resp.completion_text
             else None,
             result_length=len(llm_resp.completion_text)
@@ -883,7 +883,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         while True:
             try:
                 if (
-                    tool.name == "wait_for_subagent"
+                    tool.name == "wait_for_subagent" or tool.name == "orchestrate_tasks"
                 ):  # wait工具有自己的超时，避免受到tool_call_timeout影响
                     resp = await asyncio.wait_for(
                         anext(wrapper),

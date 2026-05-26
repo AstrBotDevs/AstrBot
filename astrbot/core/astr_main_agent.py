@@ -1035,6 +1035,7 @@ async def _apply_subagent_manager_tools(
             CREATE_SUBAGENT_TOOL,
             LIST_SUBAGENTS_TOOL,
             MANAGE_SUBAGENT_PROTECTION_TOOL,
+            ORCHESTRATE_TASKS_TOOL,
             REMOVE_SUBAGENT_TOOL,
             VIEW_SHARED_CONTEXT_TOOL,
             WAIT_FOR_SUBAGENT_TOOL,
@@ -1073,6 +1074,10 @@ async def _apply_subagent_manager_tools(
         # Register dynamic subagent management tools (only when dynamic creation is enabled)
         # Always register `wait_for_subagent` for better background task running
         req.func_tool.add_tool(WAIT_FOR_SUBAGENT_TOOL)
+        # Register DAG orchestration tool if enabled
+        dag_cfg = orch_cfg.get("dag_enabled", True)
+        if dag_cfg:
+            req.func_tool.add_tool(ORCHESTRATE_TASKS_TOOL)
         if enable_dynamic:
             req.func_tool.add_tool(CREATE_SUBAGENT_TOOL)
             req.func_tool.add_tool(REMOVE_SUBAGENT_TOOL)

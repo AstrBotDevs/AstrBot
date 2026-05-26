@@ -11,9 +11,17 @@ import os
 import platform
 import re
 import time
+import uuid
 from dataclasses import dataclass, field
 
+from astrbot import logger
 from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.subagent_dag import (
+    DAGExecutionContext,
+    DAGNodeStatus,
+    DAGTaskNode,
+    SubAgentDAGEngine,
+)
 from astrbot.core.subagent_manager import (
     SubAgentConfig,
     SubAgentManager,
@@ -547,6 +555,269 @@ parameter
 
         target = f"Task {task_id}"
         return f"Timeout! SubAgent '{subagent_name}' has not finished '{target}' in {timeout}s. The task may be still running. You can continue waiting by `wait_for_subagent` again."
+
+
+@dataclass
+class OrchestrateTasksTool(FunctionTool):
+    """Orchestrate multiple subagent tasks with DAG dependency management."""
+
+    name: str = "orchestrate_tasks"
+    description: str = (
+        "Orchestrate multiple subagent tasks with automatic dependency management."
+        "  Define tasks with their dependencies and the orchestrator will:"
+        " (1) Automatically determine which tasks can run in parallel,"
+        " (2) Execute dependent tasks sequentially in waves,"
+        " (3) Auto-inject predecessor results as context for successor tasks,"
+        " (4) Aggregate all results into a single summary."
+        "  Use this when you have 2+ subtasks where some produce output that others"
+        " consume. For simple single-agent delegation, use transfer_to_* directly."
+    )
+
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "tasks": {
+                    "type": "array",
+                    "description": "List of tasks to orchestrate with dependencies",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "description": "Unique task ID, e.g. 'step1'",
+                            },
+                            "agent": {
+                                "type": "string",
+                                "description": "Target subagent name",
+                            },
+                            "prompt": {
+                                "type": "string",
+                                "description": "Task description for the subagent",
+                            },
+                            "depends_on": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": (
+                                    "IDs of tasks that must complete first. "
+                                    "Results auto-injected as context."
+                                ),
+                            },
+                        },
+                        "required": ["id", "agent", "prompt"],
+                    },
+                },
+                "max_parallel": {
+                    "type": "integer",
+                    "default": 5,
+                    "minimum": 1,
+                    "maximum": 10,
+                    "description": "Maximum concurrent subagents",
+                },
+            },
+            "required": ["tasks"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> str:
+        tasks_data = kwargs.get("tasks", [])
+        max_parallel = kwargs.get("max_parallel", 5)
+        session_id = context.context.event.unified_msg_origin
+
+        if not tasks_data:
+            return "Error: At least one task is required."
+
+        cfg = self._get_dag_config(context)
+        max_nodes = cfg.get("dag_max_nodes", 10)
+        cfg_max_parallel = cfg.get("dag_max_parallel", 5)
+
+        if len(tasks_data) > max_nodes:
+            return f"Error: Maximum {max_nodes} tasks per DAG. Got {len(tasks_data)}."
+
+        max_parallel = min(max_parallel, cfg_max_parallel)
+
+        active_dag = SubAgentManager.get_active_dag(session_id)
+        if active_dag and active_dag.status == "RUNNING":
+            completed = sum(
+                1
+                for n in active_dag.nodes.values()
+                if n.status == DAGNodeStatus.COMPLETED
+            )
+            return (
+                f"Error: A DAG is already running for this session "
+                f"(dag_id={active_dag.dag_id[:8]}..., "
+                f"{completed}/{len(active_dag.nodes)} completed)."
+            )
+
+        session = SubAgentManager.get_session(session_id)
+        if not session:
+            return "Error: No session found. Create subagents first."
+
+        nodes: list[DAGTaskNode] = []
+        for t in tasks_data:
+            agent_name = t.get("agent", "")
+            if agent_name not in session.subagents:
+                available = list(session.subagents.keys())
+                return (
+                    f"Error: SubAgent '{agent_name}' not found. Available: {available}"
+                )
+            node = DAGTaskNode(
+                id=t["id"],
+                agent_name=agent_name,
+                prompt=t["prompt"],
+                depends_on=t.get("depends_on", []),
+            )
+            nodes.append(node)
+
+        valid, error = SubAgentDAGEngine.validate_dag(nodes)
+        if not valid:
+            return f"Error: Invalid DAG — {error}"
+
+        topo_layers = SubAgentDAGEngine._kahn_sort(nodes)
+
+        node_map = {n.id: n for n in nodes}
+        adj: dict[str, set[str]] = {n.id: set() for n in nodes}
+        rev_adj: dict[str, set[str]] = {n.id: set() for n in nodes}
+        for n in nodes:
+            for dep in n.depends_on:
+                adj[dep].add(n.id)
+                rev_adj[n.id].add(dep)
+
+        dag_ctx = DAGExecutionContext(
+            dag_id=uuid.uuid4().hex[:12],
+            session_id=session_id,
+            nodes=node_map,
+            adjacency=adj,
+            reverse_adjacency=rev_adj,
+            topo_layers=topo_layers,
+            fail_fast=True,
+            max_parallel=max_parallel,
+            created_at=time.time(),
+        )
+
+        SubAgentManager.register_dag(session_id, dag_ctx)
+
+        # Build launch callback that actually triggers subagent execution
+        tool_context = context  # ContextWrapper[AstrAgentContext]
+
+        async def _launch_dag_node(node, _sid, injected_context, task_id):
+            import mcp.types as _mcp_types
+
+            session = SubAgentManager.get_session(_sid)
+            if not session or node.agent_name not in session.handoff_tools:
+                logger.error(f"[SubAgent:DAG] No handoff tool for {node.agent_name}")
+                SubAgentManager.store_subagent_result(
+                    _sid,
+                    node.agent_name,
+                    False,
+                    "",
+                    task_id=task_id,
+                    error=f"No handoff for {node.agent_name}",
+                    execution_time=0.0,
+                )
+                return
+
+            handoff = session.handoff_tools[node.agent_name]
+            prompt = node.prompt
+            if injected_context:
+                ctx_text = injected_context[0]["content"]
+                prompt = ctx_text + "Your task:" + chr(10) + prompt
+
+            try:
+                from astrbot.core.astr_agent_tool_exec import (
+                    FunctionToolExecutor,
+                )
+
+                result_text = ""
+                async for r in FunctionToolExecutor._execute_handoff(
+                    tool=handoff,
+                    run_context=tool_context,
+                    input=prompt,
+                ):
+                    if isinstance(r, _mcp_types.CallToolResult):
+                        for c in r.content:
+                            if isinstance(c, _mcp_types.TextContent):
+                                result_text += c.text + chr(10)
+
+                # Detect task status from subagent output.
+                # Priority: 1) XML task_status  2) error: prefix  3) empty
+                success = True
+                stripped = result_text.strip()
+                status_match = re.search(
+                    r"<task_status>\s*<result>\s*(SUCCESS|FAILURE)\s*</result>",
+                    stripped,
+                )
+                if status_match:
+                    success = status_match.group(1) == "SUCCESS"
+                elif not stripped or stripped.lower().startswith("error:"):
+                    success = False
+
+                SubAgentManager.store_subagent_result(
+                    _sid,
+                    node.agent_name,
+                    success,
+                    result_text,
+                    task_id=task_id,
+                    execution_time=0.0,
+                )
+            except Exception as e:
+                logger.error(f"[SubAgent:DAG] Launch error for {node.agent_name}: {e}")
+                SubAgentManager.store_subagent_result(
+                    _sid,
+                    node.agent_name,
+                    False,
+                    "",
+                    task_id=task_id,
+                    error=str(e),
+                    execution_time=0.0,
+                )
+
+        try:
+            result = await SubAgentDAGEngine.execute_dag(
+                ctx=dag_ctx,
+                session_id=session_id,
+                launch_fn=_launch_dag_node,
+            )
+            dag_ctx.status = "COMPLETED" if result["failed"] == 0 else "FAILED"
+            dag_ctx.completed_at = time.time()
+
+            session = SubAgentManager.get_session(session_id)
+            if session:
+                session.dag_history.append(dag_ctx)
+                session.active_dag = None
+
+            return result["formatted"]
+
+        except Exception as e:
+            logger.error(f"[SubAgent:DAG] Execution error: {e}", exc_info=True)
+            dag_ctx.status = "FAILED"
+            dag_ctx.completed_at = time.time()
+            session = SubAgentManager.get_session(session_id)
+            if session:
+                session.dag_history.append(dag_ctx)
+                session.active_dag = None
+            return f"Error: DAG execution failed — {e}"
+
+    @staticmethod
+    def _get_dag_config(context) -> dict:
+        try:
+            ctx = context.context.context
+            cfg = ctx.get_config(umo=context.context.event.unified_msg_origin)
+            orch_cfg = cfg.get("subagent_orchestrator", {})
+            return {
+                "dag_max_nodes": orch_cfg.get("dag_max_nodes", 10),
+                "dag_max_parallel": orch_cfg.get("dag_max_parallel", 5),
+                "dag_max_inject_length": orch_cfg.get("dag_max_inject_length", 4000),
+            }
+        except Exception:
+            return {
+                "dag_max_nodes": 10,
+                "dag_max_parallel": 5,
+                "dag_max_inject_length": 4000,
+            }
+
+
+ORCHESTRATE_TASKS_TOOL = OrchestrateTasksTool()
 
 
 # Tool instances
