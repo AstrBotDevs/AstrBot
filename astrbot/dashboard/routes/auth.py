@@ -38,7 +38,7 @@ DEFAULT_PASSWORD_LOGIN_FAILURE_MESSAGE = (
     "随机强密码。请使用日志中提供的的初始密码来登录。了解更多："
     "https://docs.astrbot.app/faq.html"
 )
-LEGACY_PASSWORD_LOGIN_FAILURE_MESSAGE = (
+INVALID_CREDENTIALS_LOGIN_FAILURE_MESSAGE = (
     "Incorrect username or password. If you cannot log in after upgrading "
     "AstrBot even though the password is correct, see "
     "https://docs.astrbot.app/en/faq.html\n\n"
@@ -188,9 +188,7 @@ class AuthRoute(Route):
         await asyncio.sleep(3)
         if req_password == "astrbot":
             return Response().error(DEFAULT_PASSWORD_LOGIN_FAILURE_MESSAGE).__dict__
-        if is_legacy_dashboard_password(password):
-            return Response().error(LEGACY_PASSWORD_LOGIN_FAILURE_MESSAGE).__dict__
-        return Response().error("用户名或密码错误").__dict__
+        return Response().error(INVALID_CREDENTIALS_LOGIN_FAILURE_MESSAGE).__dict__
 
     async def logout(self):
         response = await make_response(
