@@ -37,6 +37,7 @@ export function getProviderIcon(type) {
     'mimo': 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg',
     'xiaomi': 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg',
     'xiaomi-token-plan': 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg',
+    'stepfun': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/stepfun-color.svg',
     '302ai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.53.0/icons/ai302-color.svg',
     'microsoft': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/microsoft.svg',
     'vllm': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/vllm.svg',
