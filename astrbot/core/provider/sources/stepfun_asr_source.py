@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import uuid
@@ -173,7 +174,8 @@ async def prepare_audio_input(
         source_path = converted_path
         audio_type = "wav"
 
-    encoded_audio = base64.b64encode(source_path.read_bytes()).decode("utf-8")
+    raw_audio = await asyncio.to_thread(source_path.read_bytes)
+    encoded_audio = base64.b64encode(raw_audio).decode("utf-8")
     return encoded_audio, build_audio_format(audio_type), cleanup_paths
 
 
