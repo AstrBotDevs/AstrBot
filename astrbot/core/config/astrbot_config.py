@@ -1,3 +1,4 @@
+import copy
 import enum
 import json
 import logging
@@ -16,6 +17,14 @@ from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
 logger = logging.getLogger("astrbot")
+_DASHBOARD_AUTH_KEYS = {
+    "username",
+    "password",
+    "pbkdf2_password",
+    "password_storage_upgraded",
+    "password_change_required",
+    "jwt_secret",
+}
 
 
 class RateLimitStrategy(enum.Enum):
@@ -97,6 +106,56 @@ class AstrBotConfig(dict):
             self.save_config()
 
         self.update(conf)
+        self._remember_file_state()
+
+    def _get_dashboard_auth_state(self, conf: dict | None = None) -> dict:
+        dashboard_conf = (conf or self).get("dashboard")
+        if not isinstance(dashboard_conf, dict):
+            return {}
+        return {
+            key: copy.deepcopy(dashboard_conf.get(key))
+            for key in _DASHBOARD_AUTH_KEYS
+            if key in dashboard_conf
+        }
+
+    def _remember_file_state(self) -> None:
+        try:
+            mtime_ns = os.stat(self.config_path).st_mtime_ns
+        except OSError:
+            mtime_ns = None
+        object.__setattr__(self, "_last_config_mtime_ns", mtime_ns)
+        object.__setattr__(
+            self,
+            "_dashboard_auth_snapshot",
+            self._get_dashboard_auth_state(),
+        )
+
+    def _preserve_external_dashboard_auth_changes(self) -> None:
+        last_mtime_ns = getattr(self, "_last_config_mtime_ns", None)
+        if last_mtime_ns is None:
+            return
+        try:
+            current_mtime_ns = os.stat(self.config_path).st_mtime_ns
+        except OSError:
+            return
+        if current_mtime_ns == last_mtime_ns:
+            return
+
+        try:
+            with open(self.config_path, encoding="utf-8-sig") as f:
+                disk_conf = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return
+
+        disk_auth_state = self._get_dashboard_auth_state(disk_conf)
+        loaded_auth_state = getattr(self, "_dashboard_auth_snapshot", {})
+        current_auth_state = self._get_dashboard_auth_state()
+        if (
+            disk_auth_state
+            and disk_auth_state != loaded_auth_state
+            and current_auth_state == loaded_auth_state
+        ):
+            self["dashboard"].update(disk_auth_state)
 
     def _reset_generated_dashboard_password(self, conf: dict) -> None:
         generated_password = self._resolve_initial_dashboard_password()
@@ -220,8 +279,10 @@ class AstrBotConfig(dict):
         """
         if replace_config:
             self.update(replace_config)
+        self._preserve_external_dashboard_auth_changes()
         with open(self.config_path, "w", encoding="utf-8-sig") as f:
             json.dump(self, f, indent=2, ensure_ascii=False)
+        self._remember_file_state()
 
     def __getattr__(self, item):
         try:
