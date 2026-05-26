@@ -110,12 +110,40 @@ class DocumentStorage:
             {"table_name": Document.__tablename__},
         )
         if result.scalar_one_or_none() is not None:
+            await self._ensure_doc_id_unique_index(executor)
             return
 
         create_table = CreateTable(Document.__table__, if_not_exists=True)  # type: ignore[attr-defined]
 
         await executor.execute(
             text(str(create_table.compile(dialect=sqlite.dialect())))
+        )
+        await self._ensure_doc_id_unique_index(executor)
+
+    async def _ensure_doc_id_unique_index(self, executor) -> None:
+        duplicate_result = await executor.execute(
+            text(
+                """
+                SELECT doc_id
+                FROM documents
+                GROUP BY doc_id
+                HAVING COUNT(*) > 1
+                LIMIT 1
+                """,
+            ),
+        )
+        if duplicate_result.scalar_one_or_none() is not None:
+            logger.warning(
+                "Skipping documents.doc_id unique index migration because duplicate "
+                f"doc_id values already exist in {self.db_path}.",
+            )
+            return
+
+        await executor.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "idx_documents_doc_id_unique ON documents(doc_id)",
+            ),
         )
 
     async def _initialize_fts5(self, executor) -> None:

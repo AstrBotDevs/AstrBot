@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from deprecated import deprecated
+from sqlalchemy import event
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -28,6 +29,19 @@ from astrbot.core.db.po import (
     Stats,
     WebChatThread,
 )
+
+
+def _configure_sqlite_connection(dbapi_connection, connection_record) -> None:
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA cache_size=20000")
+        cursor.execute("PRAGMA temp_store=MEMORY")
+        cursor.execute("PRAGMA mmap_size=134217728")
+        cursor.execute("PRAGMA optimize")
+    finally:
+        cursor.close()
 
 
 @dataclass
@@ -59,6 +73,12 @@ class BaseDatabase(abc.ABC):
             self.DATABASE_URL,
             **engine_kwargs,
         )
+        if is_sqlite:
+            event.listen(
+                self.engine.sync_engine,
+                "connect",
+                _configure_sqlite_connection,
+            )
         self.AsyncSessionLocal = async_sessionmaker(
             self.engine,
             class_=AsyncSession,

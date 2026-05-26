@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import delete, event, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from sqlmodel import col, desc
@@ -18,6 +18,19 @@ from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
 
 if TYPE_CHECKING:
     from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+
+
+def _configure_sqlite_connection(dbapi_connection, connection_record) -> None:
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA cache_size=20000")
+        cursor.execute("PRAGMA temp_store=MEMORY")
+        cursor.execute("PRAGMA mmap_size=134217728")
+        cursor.execute("PRAGMA optimize")
+    finally:
+        cursor.close()
 
 
 class KBSQLiteDatabase:
@@ -42,6 +55,11 @@ class KBSQLiteDatabase:
             self.DATABASE_URL,
             echo=False,
             poolclass=NullPool,
+        )
+        event.listen(
+            self.engine.sync_engine,
+            "connect",
+            _configure_sqlite_connection,
         )
 
         # 创建会话工厂
