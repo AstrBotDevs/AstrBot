@@ -1,9 +1,13 @@
+import json
+
 from sqlalchemy import case, func, select
 from sqlmodel import col
 
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core import logger
+from astrbot.core.agent.context.token_counter import EstimateTokenCounter
+from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
     DEERFLOW_PROVIDER_TYPE,
@@ -12,6 +16,7 @@ from astrbot.core.agent.runners.deerflow.constants import (
 from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.active_event_registry import active_event_registry
+from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
 from .utils.rst_scene import RstScene
 
@@ -142,8 +147,8 @@ class ConversationCommands:
         if required_perm == "admin" and message.role != "admin":
             message.set_result(
                 MessageEventResult().message(
-                    f"Reset command requires admin permission in {scene.name} scenario, "
-                    f"you (ID {message.get_sender_id()}) are not admin, cannot perform this action.",
+                    f"在{scene.name}场景下，重置命令需要管理员权限，"
+                    f"您 (ID {message.get_sender_id()}) 不是管理员，无法执行此操作。",
                 ),
             )
             return
@@ -157,14 +162,14 @@ class ConversationCommands:
                 agent_runner_type,
             )
             message.set_result(
-                MessageEventResult().message("✅ Conversation reset successfully.")
+                MessageEventResult().message("✅ 会话重置成功。")
             )
             return
 
         if not self.context.get_using_provider(umo):
             message.set_result(
                 MessageEventResult().message(
-                    "😕 Cannot find any LLM provider. Configure one first."
+                    "😕 未找到任何 LLM Provider，请先配置。"
                 ),
             )
             return
@@ -174,7 +179,7 @@ class ConversationCommands:
         if not cid:
             message.set_result(
                 MessageEventResult().message(
-                    "😕 You are not in a conversation. Use /new to create one.",
+                    "😕 您当前不在任何会话中，请使用 /new 创建一个。",
                 ),
             )
             return
@@ -187,7 +192,19 @@ class ConversationCommands:
             [],
         )
 
-        ret = "✅ Conversation reset successfully."
+        ret = "✅ 会话重置成功。"
+
+        # 清理该会话下的所有 subagent
+        try:
+            from astrbot.core.subagent_manager import SubAgentManager
+
+            cleanup_result = await SubAgentManager.cleanup_session(umo)
+            if cleanup_result["status"] == "cleaned":
+                cleaned_count = len(cleanup_result["cleaned_agents"])
+                if cleaned_count > 0:
+                    ret += f" 🧹 同时清理了 {cleaned_count} 个子智能体: {', '.join(cleanup_result['cleaned_agents'])}。"
+        except Exception as e:
+            logger.warning(f"[SubAgent] Failed to cleanup subagents on /reset: {e}")
 
         # 清理该会话下的所有 subagent
         try:
@@ -222,13 +239,13 @@ class ConversationCommands:
         if stopped_count > 0:
             message.set_result(
                 MessageEventResult().message(
-                    f"✅ Requested to stop {stopped_count} running tasks."
+                    f"✅ 已请求停止 {stopped_count} 个运行中的任务。"
                 )
             )
             return
 
         message.set_result(
-            MessageEventResult().message("✅ No running tasks in the current session.")
+            MessageEventResult().message("✅ 当前会话中没有运行中的任务。")
         )
 
     async def new_conv(self, message: AstrMessageEvent) -> None:
@@ -243,7 +260,7 @@ class ConversationCommands:
                 agent_runner_type,
             )
             message.set_result(
-                MessageEventResult().message("✅ New conversation created.")
+                MessageEventResult().message("✅ 新对话已创建。")
             )
             return
 
@@ -259,19 +276,96 @@ class ConversationCommands:
 
         message.set_result(
             MessageEventResult().message(
-                f"✅ Switched to new conversation: {cid[:4]}。"
+                f"✅ 已切换到新对话: {cid[:4]}。"
             ),
         )
 
-    async def stats(self, message: AstrMessageEvent) -> None:
-        """Show token usage statistics for the current conversation."""
+    async def cmd_context(self, message: AstrMessageEvent) -> None:
+        """显示当前会话上下文窗口的 token 占用情况"""
         umo = message.unified_msg_origin
         cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
 
         if not cid:
             message.set_result(
                 MessageEventResult().message(
-                    "❌ You are not in a conversation. Use /new to create one."
+                    "\u274c 当前不在任何会话中。使用 /new 创建一个。"
+                ),
+            )
+            return
+
+        conv = await self.context.conversation_manager.get_conversation(umo, cid)
+        if not conv:
+            message.set_result(
+                MessageEventResult().message("\u274c 无法获取会话信息。")
+            )
+            return
+
+        # 获取当前 provider 及 max_context_tokens
+        provider = self.context.get_using_provider(umo)
+        if not provider:
+            message.set_result(
+                MessageEventResult().message("\u274c 未配置 LLM Provider。")
+            )
+            return
+
+        model_name = provider.get_model() or "unknown"
+        max_tokens = provider.provider_config.get("max_context_tokens", 0)
+        if max_tokens <= 0:
+            model_info = LLM_METADATAS.get(model_name)
+            if model_info:
+                max_tokens = model_info["limit"]["context"]
+            else:
+                max_tokens = 128000
+
+        # 解析 history 为 Message 列表并估算 token
+        raw_history = json.loads(conv.history) if conv.history else []
+        messages = [Message(**msg) for msg in raw_history]
+
+        counter = EstimateTokenCounter()
+        trusted = conv.token_usage if messages else 0
+        estimated = counter.count_tokens(messages, trusted_token_usage=trusted)
+
+        # 计算使用率 + 进度条
+        usage_pct = (estimated / max_tokens * 100) if max_tokens > 0 else 0
+        bar_width = 20
+        filled = int(bar_width * min(usage_pct, 100) / 100)
+        bar = "\u2588" * filled + "\u2591" * (bar_width - filled)
+
+        if usage_pct < 50:
+            level = "\U0001f7e2 充裕"
+            hint = ""
+        elif usage_pct < 75:
+            level = "\U0001f7e1 适中"
+            hint = ""
+        else:
+            level = "\U0001f534 紧张"
+            hint = "\U0001f4a1 上下文即将用尽，建议发送 /reset 重置或 /new 新建会话。如果继续会话，将在用量超过 82% 时进行自动压缩。"
+
+        ret = [
+            f"\U0001f4ca 上下文占用 (会话: {cid[:8]}...)",
+            f"模型: {model_name}",
+            f"占用: {estimated:,} / {max_tokens:,} tokens",
+            f"使用率: {usage_pct:.1f}%  [{bar}]",
+            f"状态: {level}",
+        ]
+        if hint:
+            ret.append(hint)
+        if trusted > 0:
+            ret.append("\U0001f4a1 精度: 基于 LLM 返回的精确值")
+        elif messages:
+            ret.append("\U0001f4a1 精度: 本地字符估算 (仅供参考)")
+
+        message.set_result(MessageEventResult().message("\n".join(ret)))
+
+    async def stats(self, message: AstrMessageEvent) -> None:
+        """显示当前会话的 Token 用量统计。"""
+        umo = message.unified_msg_origin
+        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
+
+        if not cid:
+            message.set_result(
+                MessageEventResult().message(
+                    "❌ 您当前不在任何会话中，请使用 /new 创建一个。"
                 ),
             )
             return
@@ -302,7 +396,7 @@ class ConversationCommands:
         if stats.record_count == 0:
             message.set_result(
                 MessageEventResult().message(
-                    "📊 No stats available for this conversation yet."
+                    "📊 该会话暂无统计数据。"
                 ),
             )
             return
@@ -313,11 +407,11 @@ class ConversationCommands:
         total_tokens = total_input_other + total_input_cached + total_output
 
         ret = (
-            f"📊 Conversation Token usage (ID: {cid[:8]}...)\n"
-            f"Total:          {total_tokens:,}\n"
-            f"Input (cached): {total_input_cached:,}\n"
-            f"Input (other):  {total_input_other:,}\n"
-            f"Output:         {total_output:,}\n"
+            f"📊 会话 Token 用量 (ID: {cid[:8]}...)\n"
+            f"总计:              {total_tokens:,}\n"
+            f"输入 (缓存命中):    {total_input_cached:,}\n"
+            f"输入 (其他):        {total_input_other:,}\n"
+            f"输出:              {total_output:,}\n"
         )
 
         message.set_result(MessageEventResult().message(ret))

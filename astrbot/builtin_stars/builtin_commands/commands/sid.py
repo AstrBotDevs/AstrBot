@@ -20,17 +20,17 @@ class SIDCommand:
         ret = (
             f"UMO: 「{sid}」\n"
             f"UID: 「{user_id}」\n"
-            "*Use UMO to set whitelist and configure routing, use UID to set admin list(UMO 可用于设置白名单和配置文件路由，UID 可用于设置管理员列表)\n\n"
-            f"Your session information:\n"
+            "*UMO 可用于设置白名单和配置文件路由，UID 可用于设置管理员列表\n\n"
+            f"您的会话信息:\n"
             f"Bot ID: 「{umo_platform}」\n"
-            f"Message Type: 「{umo_msg_type}」\n"
-            f"Session ID: 「{umo_session_id}」\n\n"
+            f"消息类型: 「{umo_msg_type}」\n"
+            f"会话 ID: 「{umo_session_id}」\n\n"
         )
 
         if (
             self.context.get_config()["platform_settings"]["unique_session"]
             and event.get_group_id()
         ):
-            ret += f"\n\nThe group's ID: 「{event.get_group_id()}」. Set this ID to whitelist to allow the entire group."
+            ret += f"\n\n群组 ID: 「{event.get_group_id()}」。将此 ID 设为白名单可允许整个群组使用。"
 
         event.set_result(MessageEventResult().message(ret).use_t2i(False))

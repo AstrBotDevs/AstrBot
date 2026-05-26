@@ -10,6 +10,6 @@ class AdminCommands:
 
     async def update_dashboard(self, event: AstrMessageEvent) -> None:
         """更新管理面板"""
-        await event.send(MessageChain().message("⏳ Updating dashboard..."))
+        await event.send(MessageChain().message("⏳ 正在更新管理面板..."))
         await download_dashboard(version=f"v{VERSION}", latest=False)
-        await event.send(MessageChain().message("✅ Dashboard updated successfully."))
+        await event.send(MessageChain().message("✅ 管理面板更新成功。"))
