@@ -467,10 +467,6 @@
         "description": "微信客服账号名",
         "hint": "如果填写此项，即代表你将使用企业微信客服，而不是企业微信应用。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取。"
       },
-      "lark_bot_name": {
-        "description": "飞书机器人的名字",
-        "hint": "请务必填写正确，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。"
-      },
       "lark_connection_mode": {
         "description": "订阅方式",
         "labels": [

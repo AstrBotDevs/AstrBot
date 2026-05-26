@@ -162,6 +162,11 @@
       "failed": "Connection failed, please refresh the page"
     }
   },
+  "commandSuggestion": {
+    "navigate": "Navigate",
+    "select": "Select",
+    "close": "Close"
+  },
   "errors": {
     "sendMessageFailed": "Failed to send message, please try again",
     "createSessionFailed": "Failed to create session, please refresh the page"
