@@ -740,15 +740,28 @@ class OrchestrateTasksTool(FunctionTool):
                                 result_text += c.text + chr(10)
 
                 # Detect task status from subagent output.
-                # Priority: 1) XML task_status  2) error: prefix  3) empty
+                # Priority: 1) [TASK RESULT: ...] marker  2) error: prefix  3) empty
                 success = True
+                error_reason = None
                 stripped = result_text.strip()
                 status_match = re.search(
-                    r"<task_status>\s*<result>\s*(SUCCESS|FAILURE)\s*</result>",
+                    r"\[TASK\s*RESULT\s*:\s*(SUCCESS|FAILURE)\]",
                     stripped,
+                    re.IGNORECASE,
                 )
                 if status_match:
-                    success = status_match.group(1) == "SUCCESS"
+                    success = status_match.group(1).upper() == "SUCCESS"
+                    if not success:
+                        # Extract failure reason for concise error reporting
+                        reason_match = re.search(
+                            r"\[FAILURE\s*REASON\s*:\s*(.+?)\]",
+                            stripped,
+                            re.IGNORECASE,
+                        )
+                        if reason_match:
+                            error_reason = reason_match.group(1).strip()
+                        else:
+                            error_reason = "No reason provided"
                 elif not stripped or stripped.lower().startswith("error:"):
                     success = False
 
@@ -759,6 +772,7 @@ class OrchestrateTasksTool(FunctionTool):
                     result_text,
                     task_id=task_id,
                     execution_time=0.0,
+                    error=error_reason,
                 )
             except Exception as e:
                 logger.error(f"[SubAgent:DAG] Launch error for {node.agent_name}: {e}")
@@ -776,6 +790,7 @@ class OrchestrateTasksTool(FunctionTool):
             result = await SubAgentDAGEngine.execute_dag(
                 ctx=dag_ctx,
                 session_id=session_id,
+                max_inject_length=cfg.get("dag_max_inject_length", 4000),
                 launch_fn=_launch_dag_node,
             )
             dag_ctx.status = "COMPLETED" if result["failed"] == 0 else "FAILED"

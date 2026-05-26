@@ -244,6 +244,7 @@ class SubAgentDAGEngine:
                     else:
                         node.status = DAGNodeStatus.FAILED
                         node.error = result.error or "Unknown error"
+                        node.result = result.result or ""
                     return
 
                 session = SubAgentManager.get_session(session_id)
@@ -406,9 +407,9 @@ def _format_dag_result(
                     f"  ✓ {nid} ({node.agent_name}) — {node.execution_time:.1f}s"
                 )
                 if node.result:
-                    preview = node.result[:300]
-                    if len(node.result) > 300:
-                        preview += "..."
+                    preview = node.result[:1000]
+                    if len(node.result) > 1000:
+                        preview += "...[truncated]"
                     lines.append(f"     {preview}")
             elif node.status == DAGNodeStatus.FAILED:
                 lines.append(
@@ -417,6 +418,11 @@ def _format_dag_result(
                 )
                 if node.error:
                     lines.append(f"     Error: {node.error}")
+                if node.result:
+                    preview = node.result[:1000]
+                    if len(node.result) > 1000:
+                        preview += "...[truncated]"
+                    lines.append(f"     Output: {preview}")
             elif node.status == DAGNodeStatus.SKIPPED:
                 lines.append(
                     f"  ⊘ {nid} ({node.agent_name}) — skipped (dependency failed)"

@@ -259,7 +259,7 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
             if not session.subagents and not session.protected_agents:
                 # 所有subagent都被清理，清除公共上下文
                 cls.clear_shared_context(session_id)
-                logger.debug(
+                logger.info(
                     "[SubAgent:SharedContext] All subagents cleaned, cleared shared context"
                 )
             else:
@@ -279,7 +279,6 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
 
         # 每轮结束时顺便清理全局过期会话
         cls.cleanup_expired_sessions()
-
         return {"status": "cleaned", "cleaned_agents": cleaned}
 
     @classmethod
@@ -734,27 +733,21 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
 
     _TASK_STATUS_PROMPT = (
         "# Task Status Reporting\n"
-        "At the end of your task, you MUST self-audit before reporting status.\n"
-        "\n"
-        "SUCCESS protocol — verify ALL:\n"
-        "- No tool returned an error or empty result unexpectedly\n"
-        "- The output directly answers the task prompt\n"
-        "- You are confident the result is not a guess or placeholder\n"
-        "- If files were created: they exist on disk and their content is "
-        "correct and complete enough for another agent to continue the work\n"
-        "<task_status><result>SUCCESS</result></task_status>\n"
-        "\n"
-        "FAILURE protocol — if ANY tool failed or you cannot complete:\n"
-        "<task_status><result>FAILURE</result>"
-        "<reason>specific reason</reason></task_status>\n"
-        "\n"
-        "Common mistakes to avoid:\n"
-        "- Do NOT report SUCCESS when a command returned an error\n"
-        "- Do NOT report SUCCESS when you only completed part of the task\n"
-        "- Do NOT report SUCCESS when generated files are missing or incomplete\n"
-        "- Do NOT guess status — if uncertain, use FAILURE\n"
-        "\n"
-        "Put the XML block first, then your result or error details.\n"
+        "At the end of your task, self-audit before giving your final answer.\n"
+        "## SUCCESS — use only when ALL of these are true:\n"
+        "- Every tool call succeeded; no unexpected error or empty result\n"
+        "- Your output directly answers the task you were assigned\n"
+        "- You are confident the result is accurate, not a guess or placeholder\n"
+        "- If you created files: ensure they exist on disk, and their content is correct and complete\n"
+        "If all pass, put this EXACT line FIRST, then your result:\n"
+        "[TASK RESULT: SUCCESS]\n"
+        "## FAILURE — use if ANY tool failed, or you cannot complete the task:\n"
+        "[TASK RESULT: FAILURE]\n"
+        "[FAILURE REASON: <one-line explanation>]\n"
+        "## Reporting Marker Rules\n"
+        "- The marker MUST be exactly `[TASK RESULT: SUCCESS]` or `[TASK RESULT: FAILURE]` — do not change it\n"
+        "- The marker MUST be on its own line, at the very top of your response\n"
+        "- When uncertain between success and failure, choose failure\n"
     )
 
     @classmethod
@@ -771,7 +764,10 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
                 "- Mark all generated code/documents with your name and timestamp (if given).\n"
             )
         )
-        return base + cls._TASK_STATUS_PROMPT
+        if cls._dag_enabled:
+            return base + cls._TASK_STATUS_PROMPT
+        else:
+            return base
 
     @classmethod
     def cleanup_shared_context_by_agent(cls, session_id: str, agent_name: str) -> None:
