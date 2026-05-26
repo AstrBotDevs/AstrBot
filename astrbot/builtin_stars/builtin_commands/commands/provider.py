@@ -128,7 +128,7 @@ class ProviderCommands:
 
             if reachability_check_enabled and (llms or ttss or stts):
                 await event.send(
-                    MessageEventResult().message("👀 Testing provider reachability...")
+                    MessageEventResult().message("👀 正在测试 Provider 可达性...")
                 )
 
             llm_data, tts_data, stt_data = await asyncio.gather(
@@ -177,24 +177,24 @@ class ProviderCommands:
                         line += " 👈"
                     parts.append(line + "\n")
 
-            parts.append("\nUse /provider <idx> to switch LLM providers.")
+            parts.append("\n使用 /provider <idx> 切换 LLM Provider。")
             ret = "".join(parts)
 
             if ttss:
-                ret += "\nUse /provider tts <idx> to switch TTS providers."
+                ret += "\n使用 /provider tts <idx> 切换 TTS Provider。"
             if stts:
-                ret += "\nUse /provider stt <idx> to switch STT providers."
+                ret += "\n使用 /provider stt <idx> 切换 STT Provider。"
 
             event.set_result(MessageEventResult().message(ret))
         elif idx == "tts":
             if idx2 is None:
                 event.set_result(
-                    MessageEventResult().message("Please enter the index.")
+                    MessageEventResult().message("请输入序号。")
                 )
                 return
             if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
                 event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
+                    MessageEventResult().message("❌ 无效的 Provider 序号。")
                 )
                 return
             provider = self.context.get_all_tts_providers()[idx2 - 1]
@@ -205,17 +205,17 @@ class ProviderCommands:
                 umo=umo,
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message(f"✅ 已成功切换到 {id_}.")
             )
         elif idx == "stt":
             if idx2 is None:
                 event.set_result(
-                    MessageEventResult().message("Please enter the index.")
+                    MessageEventResult().message("请输入序号。")
                 )
                 return
             if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
                 event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
+                    MessageEventResult().message("❌ 无效的 Provider 序号。")
                 )
                 return
             provider = self.context.get_all_stt_providers()[idx2 - 1]
@@ -226,12 +226,12 @@ class ProviderCommands:
                 umo=umo,
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message(f"✅ 已成功切换到 {id_}.")
             )
         elif isinstance(idx, int):
             if idx > len(self.context.get_all_providers()) or idx < 1:
                 event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
+                    MessageEventResult().message("❌ 无效的 Provider 序号。")
                 )
                 return
             provider = self.context.get_all_providers()[idx - 1]
@@ -242,7 +242,7 @@ class ProviderCommands:
                 umo=umo,
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message(f"✅ 已成功切换到 {id_}.")
             )
         else:
-            event.set_result(MessageEventResult().message("❌ Invalid parameter."))
+            event.set_result(MessageEventResult().message("❌ 无效的参数。"))

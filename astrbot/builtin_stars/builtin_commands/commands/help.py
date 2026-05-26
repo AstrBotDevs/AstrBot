@@ -77,7 +77,7 @@ class HelpCommand:
         commands_section = (
             "\n".join(command_lines)
             if command_lines
-            else "No enabled built-in commands."
+            else "没有已启用的内置指令。"
         )
 
         msg_parts = [
