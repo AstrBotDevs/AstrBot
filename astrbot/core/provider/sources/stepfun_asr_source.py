@@ -2,7 +2,7 @@ import base64
 import json
 import uuid
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 
@@ -64,13 +64,24 @@ def build_headers(api_key: str) -> dict[str, str]:
     return headers
 
 
+def sanitize_proxy_url(proxy: str) -> str:
+    try:
+        parsed = urlparse(proxy)
+        if "@" not in parsed.netloc:
+            return proxy
+        sanitized_netloc = parsed.netloc.split("@", 1)[1]
+        return urlunparse(parsed._replace(netloc=sanitized_netloc))
+    except Exception:
+        return "<redacted>"
+
+
 def create_http_client(timeout: int | None, proxy: str) -> httpx.AsyncClient:
     client_kwargs: dict[str, object] = {
         "timeout": timeout,
         "follow_redirects": True,
     }
     if proxy:
-        logger.info("[StepFun ASR] Using proxy: %s", proxy)
+        logger.info("[StepFun ASR] Using proxy: %s", sanitize_proxy_url(proxy))
         client_kwargs["proxy"] = proxy
     return httpx.AsyncClient(**client_kwargs)
 
@@ -179,7 +190,8 @@ def cleanup_files(paths: list[Path]) -> None:
 
 
 def _iter_sse_payloads(content: str):
-    for event in content.split("\n\n"):
+    normalized_content = content.replace("\r\n", "\n")
+    for event in normalized_content.split("\n\n"):
         data_lines = []
         for line in event.splitlines():
             if line.startswith("data:"):
@@ -229,6 +241,8 @@ def parse_sse_transcription(content: str) -> str:
         try:
             data = json.loads(payload)
         except json.JSONDecodeError:
+            continue
+        if not isinstance(data, dict):
             continue
 
         event_type = str(data.get("type") or data.get("event") or "")
