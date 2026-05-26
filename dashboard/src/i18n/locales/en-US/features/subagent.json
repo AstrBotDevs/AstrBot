@@ -97,6 +97,16 @@
     "subtitle": "Add a new subagent to get started",
     "action": "Create First Agent"
   },
+  "dag": {
+    "orchestrationMode": "Orchestration Mode",
+    "orchestrationModeHint": "Choose the orchestration mode for subagent tasks. \"Default\" lets the LLM delegate tasks one by one manually; \"DAG Orchestration\" uses a directed acyclic graph (DAG) to manage task dependencies and parallel execution.",
+    "maxNodes": "DAG Max Task Nodes",
+    "maxNodesHint": "Maximum number of task nodes allowed in a single DAG orchestration",
+    "maxParallel": "DAG Max Parallel Per Layer",
+    "maxParallelHint": "Maximum parallel tasks per layer. If the layer has more nodes than the limit, they will be processed in batches",
+    "maxInjectLength": "DAG Predecessor Result Injection Length",
+    "maxInjectLengthHint": "Maximum character count when injecting predecessor task results into successor task context. Excess content will be truncated"
+  },
   "enhancedSwitches": {
     "enable": "Enable Dynamic Subagents",
     "enableHint": "Enable dynamic subagent creation and management. When enabled, the main LLM can dynamically create subagents at runtime using create_subagent tools. Can coexist with static subagent orchestration.",

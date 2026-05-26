@@ -40,7 +40,7 @@ class SubAgentRoute(Route):
                     "agents": [],
                     "dynamic_agents": {
                         "enabled": False,
-                        "max_dynamic_subagent_count": 3,
+                        "max_subagent_count": 3,
                         "auto_cleanup_per_turn": True,
                         "tools_blacklist": [],
                         "tools_inherent": [],
@@ -68,7 +68,7 @@ class SubAgentRoute(Route):
             dyn = data["dynamic_agents"]
             if isinstance(dyn, dict):
                 dyn.setdefault("enabled", False)
-                dyn.setdefault("max_dynamic_subagent_count", 3)
+                dyn.setdefault("max_subagent_count", 3)
                 dyn.setdefault("auto_cleanup_per_turn", True)
                 dyn.setdefault("tools_blacklist", [])
                 dyn.setdefault("tools_inherent", [])

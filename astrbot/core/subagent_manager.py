@@ -103,6 +103,7 @@ class SubAgentManager:
         "astrbot_execute_shell",
         "astrbot_execute_python",
     }
+    _dag_enabled: bool = False  # 是否启用 DAG 编排
     _session_timeout_seconds = (
         1800  # 会话存活时间。若有会话的subagent闲置时间超过该值，自动清理
     )
@@ -130,14 +131,17 @@ Create sub-agents ONLY when:
 | Instruction | Input → Process → Output (step-by-step) |
 | Tools | **Minimum necessary only** |
 
-### 2. Delegate
+### 2. Manual Delegate
 - Sequential: `transfer_to_*(...)` — block until return
 - Parallel: `transfer_to_*(..., background_task=True)` → `wait_for_subagent(name, timeout=secs)`
 
-### 3. Collect & Cleanup
+### 3. Collect
 - Merge independent outputs by concatenation
 - Resolve conflicts by preferring explicit data over inference
 {_SUBAGENT_AUTOCLEAN_PROMPT}"""
+    _DAG_GUIDE_PROMPT = """## DAG Orchestration
+DAG Orchestration automatically delegate subagents. When you have 2+ independent tasks that can run in parallel, or tasks with clear dependencies, prefer to use `orchestrate_tasks` to declare them all at once.
+"""
 
     @classmethod
     def build_task_router_prompt(cls, session_id: str):
@@ -149,6 +153,9 @@ Create sub-agents ONLY when:
             cls._HEADER_TEMPLATE,
             cls._CREATE_GUIDE_PROMPT,
         ]
+        if cls._dag_enabled:
+            parts.append(cls._DAG_GUIDE_PROMPT)
+
         return "\n".join(parts) + "\n"
 
     @classmethod
@@ -166,6 +173,7 @@ Create sub-agents ONLY when:
         rule_prompt: str = "",
         time_prompt_enabled: bool = True,
         timezone: str | None = None,
+        dag_enabled: bool = False,
         **kwargs,
     ) -> None:
         """Configure SubAgentManager settings"""
@@ -179,6 +187,7 @@ Create sub-agents ONLY when:
         cls._rule_prompt = rule_prompt
         cls._time_prompt_enabled = time_prompt_enabled
         cls._timezone = timezone
+        cls._dag_enabled = dag_enabled
         if tools_inherent is None:
             cls._tools_inherent = {
                 "astrbot_execute_shell",

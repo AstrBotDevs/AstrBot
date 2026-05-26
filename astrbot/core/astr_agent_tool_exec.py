@@ -414,9 +414,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             "subagent_system_prompt",
             agent_name=agent_name,
             prompt_length=len(subagent_system_prompt),
-            prompt=subagent_system_prompt
-            if subagent_system_prompt
-            else None,
+            prompt=subagent_system_prompt if subagent_system_prompt else None,
         )
 
         # 构建子代理的追加内容
