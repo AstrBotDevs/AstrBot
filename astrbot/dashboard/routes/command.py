@@ -44,9 +44,11 @@ class CommandRoute(Route):
             acm = getattr(self.core_lifecycle, "astrbot_config_mgr", None)
             if acm and config_id in acm.confs:
                 wake_prefix = acm.confs[config_id].get("wake_prefix", wake_prefix)
-        return Response().ok(
-            {"items": commands, "summary": summary, "wake_prefix": wake_prefix}
-        ).__dict__
+        return (
+            Response()
+            .ok({"items": commands, "summary": summary, "wake_prefix": wake_prefix})
+            .__dict__
+        )
 
     async def get_conflicts(self):
         conflicts = await list_command_conflicts()
