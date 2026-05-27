@@ -229,6 +229,30 @@ class PluginRoute(Route):
             return default
         return locale
 
+    @staticmethod
+    def _get_request_theme() -> str | None:
+        theme = request.args.get("theme", "").strip()
+        return theme if theme in ("dark", "light") else None
+
+    @staticmethod
+    def _apply_theme_to_html(html: str, theme: str) -> str:
+        html = re.sub(
+            r"(<html\b[^>]*?)>",
+            rf'\1 data-theme="{theme}">',
+            html,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+        meta_tag = f'<meta name="color-scheme" content="{theme}">'
+        head_match = re.search(r"<head\b[^>]*>", html, re.IGNORECASE)
+        if head_match:
+            html = html.replace(
+                head_match.group(0), f"{head_match.group(0)}{meta_tag}", 1
+            )
+        else:
+            html = html.replace("<html", f"<html><head>{meta_tag}</head>", 1)
+        return html
+
     def _get_plugin_page_initial_context(self) -> dict | None:
         asset_token = request.args.get("asset_token", "").strip()
         if not asset_token:
@@ -277,7 +301,7 @@ class PluginRoute(Route):
             self._get_by_path(locale_data, f"pages.{page_name}.title") or page_name
         )
 
-        theme = request.args.get("theme", "").strip()
+        theme = self._get_request_theme()
 
         return {
             "pluginName": plugin.name,
@@ -286,7 +310,7 @@ class PluginRoute(Route):
             "pageTitle": page_title,
             "locale": locale,
             "i18n": plugin_i18n,
-            "isDark": theme == "dark",
+            "isDark": theme == "dark" if theme else False,
         }
 
     @staticmethod
@@ -593,34 +617,9 @@ class PluginRoute(Route):
                 return match.group(0)
 
         rewritten_html = _HTML_ASSET_ATTR_RE.sub(replace_attr, html_text)
-        theme = (extra_query_params or {}).get("theme", "")
-        if theme in ("dark", "light"):
-            rewritten_html = re.sub(
-                r"(<html\b[^>]*?)>",
-                rf'\1 data-theme="{theme}">',
-                rewritten_html,
-                count=1,
-                flags=re.IGNORECASE,
-            )
-            color_scheme_meta = (
-                f'<meta name="color-scheme" content="{theme}">'
-            )
-            if re.search(r"<head\b", rewritten_html, re.IGNORECASE):
-                rewritten_html = re.sub(
-                    r"(<head\b[^>]*>)",
-                    rf"\1\n    {color_scheme_meta}",
-                    rewritten_html,
-                    count=1,
-                    flags=re.IGNORECASE,
-                )
-            elif re.search(r"<html\b", rewritten_html, re.IGNORECASE):
-                rewritten_html = re.sub(
-                    r"(<html\b[^>]*?>)",
-                    rf"\1\n  <head>\n    {color_scheme_meta}\n  </head>",
-                    rewritten_html,
-                    count=1,
-                    flags=re.IGNORECASE,
-                )
+        theme = (extra_query_params or {}).get("theme")
+        if theme:
+            rewritten_html = self._apply_theme_to_html(rewritten_html, theme)
         if "/api/plugin/page/bridge-sdk.js" not in rewritten_html:
             bridge_tag = f'<script src="{self._get_plugin_page_bridge_sdk_url(extra_query_params)}"></script>'
             if "</body>" in rewritten_html:
@@ -808,8 +807,8 @@ class PluginRoute(Route):
             )
         if asset_token:
             params["asset_token"] = asset_token
-        theme = request.args.get("theme", "").strip()
-        if theme in ("dark", "light"):
+        theme = self._get_request_theme()
+        if theme:
             params["theme"] = theme
         return params or None
 
