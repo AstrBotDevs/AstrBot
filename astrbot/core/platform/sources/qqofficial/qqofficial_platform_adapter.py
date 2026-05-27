@@ -203,6 +203,14 @@ class QQOfficialPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
+        message_chains = QQOfficialMessageEvent._split_message_chain_by_media(
+            message_chain
+        )
+        if len(message_chains) > 1:
+            for split_message_chain in message_chains:
+                await self._send_by_session_common(session, split_message_chain)
+            return
+
         (
             plain_text,
             image_base64,
