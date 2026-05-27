@@ -655,6 +655,9 @@ class ProviderOpenAIOfficial(Provider):
         llm_response = LLMResponse("assistant", is_chunk=True)
 
         state = ChatCompletionStreamState()
+        streamed_text_parts: list[str] = []
+        streamed_reasoning_parts: list[str] = []
+        latest_usage = None
 
         async for chunk in stream:
             choice = chunk.choices[0] if chunk.choices else None
@@ -688,20 +691,24 @@ class ProviderOpenAIOfficial(Provider):
             llm_response.completion_text = ""
             if reasoning is not None:
                 llm_response.reasoning_content = reasoning
+                streamed_reasoning_parts.append(reasoning)
                 _y = True
             if delta and delta.content:
                 # Don't strip streaming chunks to preserve spaces between words
                 completion_text = self._normalize_content(delta.content, strip=False)
+                streamed_text_parts.append(completion_text)
                 llm_response.result_chain = MessageChain(
                     chain=[Comp.Plain(completion_text)],
                 )
                 _y = True
             if chunk.usage:
                 llm_response.usage = self._extract_usage(chunk.usage)
+                latest_usage = llm_response.usage
             elif choice and (choice_usage := getattr(choice, "usage", None)):
                 # Workaround for some providers that only return usage in choices[].usage, e.g. MoonshotAI
                 # See https://github.com/AstrBotDevs/AstrBot/issues/6614
                 llm_response.usage = self._extract_usage(choice_usage)
+                latest_usage = llm_response.usage
                 state.current_completion_snapshot.usage = choice_usage
             if _y:
                 yield llm_response
@@ -712,8 +719,15 @@ class ProviderOpenAIOfficial(Provider):
             yield llm_response
         except Exception as e:
             logger.error("get_final_completion error: " + str(e))
-            # 流式内容已通过 yield 发出，记录错误后正常结束即可
-            return
+            if streamed_text_parts or streamed_reasoning_parts:
+                yield LLMResponse(
+                    "assistant",
+                    completion_text="".join(streamed_text_parts),
+                    reasoning_content="".join(streamed_reasoning_parts) or None,
+                    usage=latest_usage,
+                )
+                return
+            raise
 
     def _extract_reasoning_content(
         self,

@@ -1326,6 +1326,65 @@ async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_query_stream_yields_final_response_when_final_completion_parse_fails(
+    monkeypatch,
+):
+    provider = _make_provider()
+    try:
+        chunks = [
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "content": "hello",
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            )
+        ]
+
+        async def fake_stream():
+            for chunk in chunks:
+                yield chunk
+
+        async def fake_create(**kwargs):
+            return fake_stream()
+
+        async def fake_parse_completion(completion, tools):
+            raise EmptyModelOutputError("final completion was empty")
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        monkeypatch.setattr(provider, "_parse_openai_completion", fake_parse_completion)
+
+        responses = [
+            response
+            async for response in provider._query_stream(
+                payloads={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": "hello"}],
+                },
+                tools=None,
+            )
+        ]
+
+        assert len(responses) == 2
+        assert responses[0].is_chunk
+        assert not responses[-1].is_chunk
+        assert responses[-1].completion_text == "hello"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_query_filters_empty_assistant_message_without_tool_calls(monkeypatch):
     """Test that empty assistant messages without tool_calls are filtered out."""
     provider = _make_provider()
