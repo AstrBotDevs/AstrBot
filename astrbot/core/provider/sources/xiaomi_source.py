@@ -14,20 +14,7 @@ XIAOMI_MODELS = [
 
 @register_provider_adapter(
     "xiaomi_chat_completion",
-    "Xiaomi API 提供商适配器 (OpenAI 兼容)",
-    default_config_tmpl={
-        "id": "xiaomi",
-        "provider": "xiaomi",
-        "type": "xiaomi_chat_completion",
-        "provider_type": "chat_completion",
-        "enable": True,
-        "key": [],
-        "api_base": "https://api.xiaomimimo.com/v1",
-        "timeout": 120,
-        "proxy": "",
-        "custom_headers": {},
-        "custom_extra_body": {"temperature": 1, "top_p": 0.95},
-    },
+    "Xiaomi API 提供商适配器 (OpenAI 兼容)"
 )
 class ProviderXiaomi(ProviderOpenAIOfficial):
     """Xiaomi provider using OpenAI-compatible API.
