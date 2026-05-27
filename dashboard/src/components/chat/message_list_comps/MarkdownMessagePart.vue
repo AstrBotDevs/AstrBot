@@ -5,6 +5,9 @@
       :content="content"
       :custom-html-tags="customHtmlTags"
       :is-dark="isDark"
+      :final="!isStreaming"
+      :smooth-streaming="isStreaming ? 'auto' : false"
+      :fade="false"
       :typewriter="false"
       :max-live-nodes="0"
     />
@@ -20,6 +23,7 @@ const props = defineProps<{
   refs: { used?: Array<Record<string, unknown>> } | null;
   isDark: boolean;
   customHtmlTags: string[];
+  isStreaming?: boolean;
 }>();
 
 const isDarkRef = computed(() => props.isDark);

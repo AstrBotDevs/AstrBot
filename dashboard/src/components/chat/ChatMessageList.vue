@@ -168,6 +168,7 @@
                         :refs="resolvedMessageRefs(msg)"
                         :is-dark="isDark"
                         :custom-html-tags="customMarkdownTags"
+                        :is-streaming="isMessageStreaming(msg, msgIndex)"
                         @open-thread="emit('openThread', $event)"
                       />
                     </div>
@@ -178,6 +179,7 @@
                       :refs="resolvedMessageRefs(msg)"
                       :is-dark="isDark"
                       :custom-html-tags="customMarkdownTags"
+                      :is-streaming="isMessageStreaming(msg, msgIndex)"
                     />
 
                     <button

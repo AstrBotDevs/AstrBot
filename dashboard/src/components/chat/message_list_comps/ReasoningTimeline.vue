@@ -22,8 +22,12 @@
           v-if="entry.kind === 'think'"
           :content="entry.think || ''"
           class="reasoning-text markdown-content"
+          :final="!isStreaming"
+          :smooth-streaming="isStreaming ? 'auto' : false"
+          :fade="false"
           :typewriter="false"
           :is-dark="isDark"
+          :max-live-nodes="0"
         />
 
         <div v-else-if="entry.tool" class="reasoning-tool-call-block">
@@ -68,6 +72,7 @@ const props = defineProps<{
   parts?: MessagePart[];
   reasoning?: string;
   isDark?: boolean;
+  isStreaming?: boolean;
 }>();
 
 const { tm } = useModuleI18n("features/chat");

@@ -55,8 +55,8 @@ importers:
         specifier: ^14.1.1
         version: 14.1.1
       markstream-vue:
-        specifier: ^0.0.6
-        version: 0.0.6(katex@0.16.28)(mermaid@11.12.2)(shiki@3.22.0)(stream-markdown@0.0.13(shiki@3.22.0))(stream-monaco@0.0.17(monaco-editor@0.52.2))(vue-i18n@11.2.8(vue@3.3.4))(vue@3.3.4)
+        specifier: 1.0.1-beta.1
+        version: 1.0.1-beta.1(katex@0.16.28)(mermaid@11.12.2)(stream-markdown@0.0.15(shiki@3.22.0)(vue@3.3.4))(vue-i18n@11.2.8(vue@3.3.4))(vue@3.3.4)
       mermaid:
         specifier: ^11.12.2
         version: 11.12.2
@@ -76,8 +76,8 @@ importers:
         specifier: ^3.20.0
         version: 3.22.0
       stream-markdown:
-        specifier: ^0.0.13
-        version: 0.0.13(shiki@3.22.0)
+        specifier: ^0.0.15
+        version: 0.0.15(shiki@3.22.0)(vue@3.3.4)
       vee-validate:
         specifier: 4.11.3
         version: 4.11.3(vue@3.3.4)
@@ -207,6 +207,9 @@ packages:
 
   '@cacheable/utils@2.4.0':
     resolution: {integrity: sha512-PeMMsqjVq+bF0WBsxFBxr/WozBJiZKY0rUojuaCoIaKnEl3Ju1wfEwS+SV1DU/cSe8fqHIPiYJFif8T3MVt4cQ==}
+
+  '@chenglou/pretext@0.0.5':
+    resolution: {integrity: sha512-A8GZN10REdFGsyuiUgLV8jjPDDFMg5GmgxGWV0I3igxBOnzj+jgz2VMmVD7g+SFyoctfeqHFxbNatKSzVRWtRg==}
 
   '@chevrotain/cst-dts-gen@11.0.3':
     resolution: {integrity: sha512-BvIKpRLeS/8UbfxXxgC33xOumsacaeCKAjAeLyOn7Pcp95HiRbrpl14S+9vaZLolnbssPIUuiUd8IvgkRyt6NQ==}
@@ -397,14 +400,14 @@ packages:
     resolution: {integrity: sha512-ZSjtmelB7IJfWD2Fvb7+Z+ChTIKWq6kjda95fLcQKNS5aheVHn4IkfgRQE3sIIzTcSLwLcLZUD9UBt+V7+h+Pw==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
-  '@floating-ui/core@1.7.4':
-    resolution: {integrity: sha512-C3HlIdsBxszvm5McXlB8PeOEWfBhcGBTZGkGlWc2U0KFY5IwG5OQEuQ8rq52DZmcHDlPLd+YFBK+cZcytwIFWg==}
+  '@floating-ui/core@1.7.5':
+    resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
 
-  '@floating-ui/dom@1.7.5':
-    resolution: {integrity: sha512-N0bD2kIPInNHUHehXhMke1rBGs1dwqvC9O9KYMyyjK7iXt7GAhnro7UlcuYcGdS/yYOlq0MAVgrow8IbWJwyqg==}
+  '@floating-ui/dom@1.7.6':
+    resolution: {integrity: sha512-9gZSAI5XM36880PPMm//9dfiEngYoC6Am2izES1FF406YFsjvyBMmeJ2g4SAju3xWwtuynNRFL2s9hgxpLI5SQ==}
 
-  '@floating-ui/utils@0.2.10':
-    resolution: {integrity: sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==}
+  '@floating-ui/utils@0.2.11':
+    resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
 
   '@guolao/vue-monaco-editor@1.6.0':
     resolution: {integrity: sha512-w2IiJ6eJGGeuIgCK6EKZOAfhHTTUB5aZwslzwGbZ5e89Hb4avx6++GkLTW8p84Sng/arFMjLPPxSBI56cFudyQ==}
@@ -655,9 +658,6 @@ packages:
 
   '@shikijs/langs@3.22.0':
     resolution: {integrity: sha512-x/42TfhWmp6H00T6uwVrdTJGKgNdFbrEdhaDwSR5fd5zhQ1Q46bHq9EO61SCEWJR0HY7z2HNDMaBZp8JRmKiIA==}
-
-  '@shikijs/monaco@3.22.0':
-    resolution: {integrity: sha512-4Bi/Gr5+ZVGmILq4ksyWtNbylfHxYB0BDMLR76UsaKOkWNJ/1w+c2s7bIjYnBNydyLVRlp28qntqEvB9EaJu3g==}
 
   '@shikijs/themes@3.22.0':
     resolution: {integrity: sha512-o+tlOKqsr6FE4+mYJG08tfCFDS+3CG20HbldXeVoyP+cYSUxDhrFf3GPjE60U55iOkkjbpY2uC3It/eeja35/g==}
@@ -1203,9 +1203,6 @@ packages:
 
   ajv@8.18.0:
     resolution: {integrity: sha512-PlXPeEWMXMZ7sPYOHqmDyCJzcfNrUr3fGNKtezX14ykXOEIvyK81d+qydx89KY5O71FKMPaQ2vBfBFI5NHR63A==}
-
-  alien-signals@2.0.8:
-    resolution: {integrity: sha512-844G1VLkk0Pe2SJjY0J8vp8ADI73IM4KliNu2OGlYzWpO28NexEUvjHTcFjFX3VXoiUtwTbHxLNI9ImkcoBqzA==}
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -2109,8 +2106,8 @@ packages:
   markdown-it-task-checkbox@1.0.6:
     resolution: {integrity: sha512-7pxkHuvqTOu3iwVGmDPeYjQg+AIS9VQxzyLP9JCg9lBjgPAJXGEkChK6A2iFuj3tS0GV3HG2u5AMNhcQqwxpJw==}
 
-  markdown-it-ts@0.0.3:
-    resolution: {integrity: sha512-nZpRTJj4S6bN0I5wsNBtgzDKx+HYBBSsvKjGdYw7/tPdrzfo3gUTt3ZbeAjPGeZaC6a4LFi4JdhTVeLm3F6TIQ==}
+  markdown-it-ts@1.0.0:
+    resolution: {integrity: sha512-hQT/yCYryC3jNs2wJ35R4m1zKcBxNuFaKCGzwpmq2OuMXMNbUK1oTwCxONIjy5lXWWG1UCNbGXe1nbTiWbH/iA==}
     engines: {node: '>=18'}
 
   markdown-it@14.1.1:
@@ -2122,25 +2119,28 @@ packages:
     engines: {node: '>= 20'}
     hasBin: true
 
-  markstream-vue@0.0.6:
-    resolution: {integrity: sha512-5YrpNrTRdbO0YvKPx2sNu4pq+y+UZ1CPbf9Znoydt3ZL7c7zfBhmViCij+VmAmBrr3VLAgD2HToU8PAtuWySxg==}
+  markstream-core@1.0.0:
+    resolution: {integrity: sha512-V39W0rPgJ5Yj/XEl11LaKQxX9dYOI34RL729Zoi9oyy/Y6z6H+PJOsBFktu7gU9ZZxCsevWMb/Re2LgSKbWfRg==}
+
+  markstream-vue@1.0.1-beta.1:
+    resolution: {integrity: sha512-45br3sbOQirIg0tmPMWRmdWk/vLE5aJtVx7cvLaa3e+klyYpILzQ7c4eOMq2EZkQTVewJhZHUVc2FTj+ujUJPg==}
     peerDependencies:
       '@antv/infographic': ^0.2.3
+      '@terrastruct/d2': '>=0.1.33'
       katex: '>=0.16.22'
       mermaid: '>=11'
-      shiki: ^3.13.0
-      stream-markdown: '>=0.0.13'
-      stream-monaco: '>=0.0.17'
+      stream-markdown: '>=0.0.15'
+      stream-monaco: '>=0.0.41'
       vue: '>=3.0.0'
       vue-i18n: '>=9'
     peerDependenciesMeta:
       '@antv/infographic':
         optional: true
+      '@terrastruct/d2':
+        optional: true
       katex:
         optional: true
       mermaid:
-        optional: true
-      shiki:
         optional: true
       stream-markdown:
         optional: true
@@ -2601,6 +2601,20 @@ packages:
     engines: {node: '>=4'}
     hasBin: true
 
+  shiki-stream@0.1.4:
+    resolution: {integrity: sha512-4pz6JGSDmVTTkPJ/ueixHkFAXY4ySCc+unvCaDZV7hqq/sdJZirRxgIXSuNSKgiFlGTgRR97sdu2R8K55sPsrw==}
+    peerDependencies:
+      react: ^19.0.0
+      solid-js: ^1.9.0
+      vue: ^3.2.0
+    peerDependenciesMeta:
+      react:
+        optional: true
+      solid-js:
+        optional: true
+      vue:
+        optional: true
+
   shiki@3.22.0:
     resolution: {integrity: sha512-LBnhsoYEe0Eou4e1VgJACes+O6S6QC0w71fCSp5Oya79inkwkm15gQ1UF6VtQ8j/taMDh79hAB49WUk8ALQW3g==}
 
@@ -2625,19 +2639,13 @@ packages:
   state-local@1.0.7:
     resolution: {integrity: sha512-HTEHMNieakEnoe33shBYcZ7NX83ACUjCu8c40iOGEZsngj9zRnkqS9j1pqQPXwobB0ZcVTk27REb7COQ0UR59w==}
 
-  stream-markdown-parser@0.0.59-beta.3:
-    resolution: {integrity: sha512-F++KEcHsXeWjKLKw8id6L1JVqQH22fslEZRNbt1NAMUwr8KTI/vOE3UuXYGnJDyXt0yv5JXbO4KdXrvMlWM0qQ==}
+  stream-markdown-parser@1.0.0:
+    resolution: {integrity: sha512-uOYQ8G9YFFtGM726fK77O/mJPYrwYHPy0DKBtk7bCPmkf06XwDVSOAFRTo2FsXnZ3vAaPBtxOgNGJ0CGieBcSQ==}
 
-  stream-markdown@0.0.13:
-    resolution: {integrity: sha512-XYhBEtKA76L6q3Uegvu8QOiUDAV4bfF1TcP3rot8eK0AR1+WGHBB6IfT9GJeLFJ7+qZgrH+WxQp/8lZ6CXjeeg==}
+  stream-markdown@0.0.15:
+    resolution: {integrity: sha512-1WlzjZUb9W5BWZYMKCr2/exPVh5P7HIhHzkcYZczkXm0upiuN4zEddwjdckL+WSQWGGlv9bboXCqcTYCEgqexw==}
     peerDependencies:
       shiki: '>=3.13.0'
-
-  stream-monaco@0.0.17:
-    resolution: {integrity: sha512-xpMiFAQEDLxRjNOXobomP9vEJmv5tWU8oN54+SHqL+eeHMNugU7fpmUIqZRSh53p+a/ZYt+DE75jgHwlKOXEuQ==}
-    hasBin: true
-    peerDependencies:
-      monaco-editor: ^0.52.2
 
   string-width@4.2.3:
     resolution: {integrity: sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==}
@@ -3116,6 +3124,8 @@ snapshots:
       hashery: 1.5.0
       keyv: 5.6.0
 
+  '@chenglou/pretext@0.0.5': {}
+
   '@chevrotain/cst-dts-gen@11.0.3':
     dependencies:
       '@chevrotain/gast': 11.0.3
@@ -3234,16 +3244,16 @@ snapshots:
 
   '@eslint/js@8.48.0': {}
 
-  '@floating-ui/core@1.7.4':
+  '@floating-ui/core@1.7.5':
     dependencies:
-      '@floating-ui/utils': 0.2.10
+      '@floating-ui/utils': 0.2.11
 
-  '@floating-ui/dom@1.7.5':
+  '@floating-ui/dom@1.7.6':
     dependencies:
-      '@floating-ui/core': 1.7.4
-      '@floating-ui/utils': 0.2.10
+      '@floating-ui/core': 1.7.5
+      '@floating-ui/utils': 0.2.11
 
-  '@floating-ui/utils@0.2.10': {}
+  '@floating-ui/utils@0.2.11': {}
 
   '@guolao/vue-monaco-editor@1.6.0(monaco-editor@0.52.2)(vue@3.3.4)':
     dependencies:
@@ -3437,13 +3447,6 @@ snapshots:
   '@shikijs/langs@3.22.0':
     dependencies:
       '@shikijs/types': 3.22.0
-
-  '@shikijs/monaco@3.22.0':
-    dependencies:
-      '@shikijs/core': 3.22.0
-      '@shikijs/types': 3.22.0
-      '@shikijs/vscode-textmate': 10.0.2
-    optional: true
 
   '@shikijs/themes@3.22.0':
     dependencies:
@@ -4135,9 +4138,6 @@ snapshots:
       fast-uri: 3.1.0
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
-
-  alien-signals@2.0.8:
-    optional: true
 
   ansi-regex@5.0.1: {}
 
@@ -5086,8 +5086,10 @@ snapshots:
 
   markdown-it-task-checkbox@1.0.6: {}
 
-  markdown-it-ts@0.0.3:
+  markdown-it-ts@1.0.0:
     dependencies:
+      '@types/linkify-it': 5.0.0
+      '@types/mdurl': 2.0.0
       entities: 4.5.0
       linkify-it: 5.0.0
       mdurl: 2.0.0
@@ -5105,17 +5107,19 @@ snapshots:
 
   marked@16.4.2: {}
 
-  markstream-vue@0.0.6(katex@0.16.28)(mermaid@11.12.2)(shiki@3.22.0)(stream-markdown@0.0.13(shiki@3.22.0))(stream-monaco@0.0.17(monaco-editor@0.52.2))(vue-i18n@11.2.8(vue@3.3.4))(vue@3.3.4):
+  markstream-core@1.0.0: {}
+
+  markstream-vue@1.0.1-beta.1(katex@0.16.28)(mermaid@11.12.2)(stream-markdown@0.0.15(shiki@3.22.0)(vue@3.3.4))(vue-i18n@11.2.8(vue@3.3.4))(vue@3.3.4):
     dependencies:
-      '@floating-ui/dom': 1.7.5
-      stream-markdown-parser: 0.0.59-beta.3
+      '@chenglou/pretext': 0.0.5
+      '@floating-ui/dom': 1.7.6
+      markstream-core: 1.0.0
+      stream-markdown-parser: 1.0.0
       vue: 3.3.4
     optionalDependencies:
       katex: 0.16.28
       mermaid: 11.12.2
-      shiki: 3.22.0
-      stream-markdown: 0.0.13(shiki@3.22.0)
-      stream-monaco: 0.0.17(monaco-editor@0.52.2)
+      stream-markdown: 0.0.15(shiki@3.22.0)(vue@3.3.4)
       vue-i18n: 11.2.8(vue@3.3.4)
 
   math-intrinsics@1.1.0: {}
@@ -5610,6 +5614,12 @@ snapshots:
       interpret: 1.4.0
       rechoir: 0.6.2
 
+  shiki-stream@0.1.4(vue@3.3.4):
+    dependencies:
+      '@shikijs/core': 3.22.0
+    optionalDependencies:
+      vue: 3.3.4
+
   shiki@3.22.0:
     dependencies:
       '@shikijs/core': 3.22.0
@@ -5636,7 +5646,7 @@ snapshots:
 
   state-local@1.0.7: {}
 
-  stream-markdown-parser@0.0.59-beta.3:
+  stream-markdown-parser@1.0.0:
     dependencies:
       markdown-it-container: 4.0.0
       markdown-it-footnote: 4.0.0
@@ -5645,19 +5655,16 @@ snapshots:
       markdown-it-sub: 2.0.0
       markdown-it-sup: 2.0.0
       markdown-it-task-checkbox: 1.0.6
-      markdown-it-ts: 0.0.3
+      markdown-it-ts: 1.0.0
 
-  stream-markdown@0.0.13(shiki@3.22.0):
+  stream-markdown@0.0.15(shiki@3.22.0)(vue@3.3.4):
     dependencies:
       shiki: 3.22.0
-
-  stream-monaco@0.0.17(monaco-editor@0.52.2):
-    dependencies:
-      '@shikijs/monaco': 3.22.0
-      alien-signals: 2.0.8
-      monaco-editor: 0.52.2
-      shiki: 3.22.0
-    optional: true
+      shiki-stream: 0.1.4(vue@3.3.4)
+    transitivePeerDependencies:
+      - react
+      - solid-js
+      - vue
 
   string-width@4.2.3:
     dependencies:
