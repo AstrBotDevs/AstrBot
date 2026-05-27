@@ -1082,7 +1082,9 @@ async def test_plugin_page_bridge_sdk_includes_is_dark_when_theme_param_provided
     assert '"isDark": true' in dark_js
 
     # theme=light → isDark: false
-    light_response = await anonymous_client.get(bridge_sdk_url.group(1) + "&theme=light")
+    light_response = await anonymous_client.get(
+        bridge_sdk_url.group(1) + "&theme=light"
+    )
     assert light_response.status_code == 200
     light_js = (await light_response.get_data()).decode("utf-8")
     assert '"isDark": false' in light_js
@@ -1094,7 +1096,9 @@ async def test_plugin_page_bridge_sdk_includes_is_dark_when_theme_param_provided
     assert '"isDark": false' in base_js
 
     # invalid theme value → should NOT be treated as dark
-    invalid_response = await anonymous_client.get(bridge_sdk_url.group(1) + "&theme=invalid")
+    invalid_response = await anonymous_client.get(
+        bridge_sdk_url.group(1) + "&theme=invalid"
+    )
     assert invalid_response.status_code == 200
     invalid_js = (await invalid_response.get_data()).decode("utf-8")
     assert '"isDark": false' in invalid_js
