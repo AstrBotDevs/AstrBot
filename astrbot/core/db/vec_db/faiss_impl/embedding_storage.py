@@ -33,7 +33,11 @@ def _safe_temp_dir() -> str:
     if os.name == "nt":
         root = os.environ.get("SystemRoot", r"C:\Windows")
         temp_dir = os.path.join(root, "Temp")
-        if temp_dir.isascii() and os.path.isdir(temp_dir) and os.access(temp_dir, os.W_OK):
+        if (
+            temp_dir.isascii()
+            and os.path.isdir(temp_dir)
+            and os.access(temp_dir, os.W_OK)
+        ):
             return temp_dir
 
         tmp = tempfile.gettempdir()
