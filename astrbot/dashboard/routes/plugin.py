@@ -593,6 +593,32 @@ class PluginRoute(Route):
                 return match.group(0)
 
         rewritten_html = _HTML_ASSET_ATTR_RE.sub(replace_attr, html_text)
+        theme = (extra_query_params or {}).get("theme", "")
+        if theme in ("dark", "light"):
+            rewritten_html = re.sub(
+                r"(<html\b[^>]*?)>",
+                rf'\1 data-theme="{theme}">',
+                rewritten_html,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+            color_scheme_meta = (
+                f'<meta name="color-scheme" content="{theme}">'
+            )
+            if "<head>" in rewritten_html:
+                rewritten_html = rewritten_html.replace(
+                    "<head>",
+                    f"<head>\n    {color_scheme_meta}",
+                    1,
+                )
+            elif re.search(r"<html\b", rewritten_html, re.IGNORECASE):
+                rewritten_html = re.sub(
+                    r"(<html\b[^>]*?>)",
+                    rf"\1\n  <head>\n    {color_scheme_meta}\n  </head>",
+                    rewritten_html,
+                    count=1,
+                    flags=re.IGNORECASE,
+                )
         if "/api/plugin/page/bridge-sdk.js" not in rewritten_html:
             bridge_tag = f'<script src="{self._get_plugin_page_bridge_sdk_url(extra_query_params)}"></script>'
             if "</body>" in rewritten_html:
