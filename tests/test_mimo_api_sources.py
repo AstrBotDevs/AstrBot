@@ -129,6 +129,39 @@ def test_mimo_tts_seed_text_is_not_prepended_to_assistant_content():
         asyncio.run(provider.terminate())
 
 
+def test_mimo_tts_voicedesign_model_omits_voice_param():
+    """voice design 模型不应包含 audio.voice 参数"""
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts-voicedesign",
+            "mimo-tts-seed-text": "",
+        }
+    )
+    try:
+        payload = provider._build_payload("hello")
+        assert "voice" not in payload["audio"]
+        assert payload["audio"]["format"] == "wav"
+    finally:
+        asyncio.run(provider.terminate())
+
+
+def test_mimo_tts_regular_model_includes_voice_param():
+    """普通 TTS 模型应包含 audio.voice 参数"""
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts",
+            "mimo-tts-voice": "custom_voice",
+            "mimo-tts-seed-text": "",
+        }
+    )
+    try:
+        payload = provider._build_payload("hello")
+        assert payload["audio"]["voice"] == "custom_voice"
+        assert payload["audio"]["format"] == "wav"
+    finally:
+        asyncio.run(provider.terminate())
+
+
 def test_mimo_headers_use_single_authorization_method():
     assert build_headers("test-key") == {
         "Content-Type": "application/json",
