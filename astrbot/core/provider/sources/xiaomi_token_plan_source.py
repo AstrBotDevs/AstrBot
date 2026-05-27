@@ -14,21 +14,7 @@ XIAOMI_TOKEN_PLAN_MODELS = [
 
 @register_provider_adapter(
     "xiaomi_token_plan",
-    "Xiaomi Token Plan 提供商适配器",
-    default_config_tmpl={
-        "id": "xiaomi-token-plan",
-        "provider": "xiaomi-token-plan",
-        "type": "xiaomi_token_plan",
-        "provider_type": "chat_completion",
-        "enable": True,
-        "key": [],
-        "api_base": "https://token-plan-cn.xiaomimimo.com/anthropic",
-        "timeout": 120,
-        "proxy": "",
-        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
-        "custom_extra_body": {"temperature": 1, "top_p": 0.95},
-        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
-    },
+    "Xiaomi Token Plan 提供商适配器"
 )
 class ProviderXiaomiTokenPlan(ProviderAnthropic):
     """Xiaomi Token Plan provider.
