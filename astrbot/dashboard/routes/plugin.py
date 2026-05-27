@@ -1268,6 +1268,7 @@ class PluginRoute(Route):
             logo_url = None
             if plugin.logo_path:
                 logo_url = await self.get_plugin_logo_token(plugin.logo_path)
+            pages = await self._discover_plugin_pages(plugin)
             _t = {
                 "name": plugin.name,
                 "repo": "" if plugin.repo is None else plugin.repo,
@@ -1283,6 +1284,7 @@ class PluginRoute(Route):
                 "astrbot_version": plugin.astrbot_version,
                 "installed_at": self._get_plugin_installed_at(plugin),
                 "i18n": plugin.i18n,
+                "pages": [p.name for p in pages],
             }
             # 检查是否为全空的幽灵插件
             if not any(
