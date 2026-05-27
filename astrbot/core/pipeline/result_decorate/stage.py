@@ -245,8 +245,9 @@ class ResultDecorateStage(Stage):
                             for seg in split_response:
                                 if self.content_cleanup_rule:
                                     seg = re.sub(self.content_cleanup_rule, "", seg)
-                                if seg.strip():
-                                    new_chain.append(Plain(seg.strip()))
+                                seg = seg.strip()
+                                if seg:
+                                    new_chain.append(Plain(seg))
                         else:
                             # 非 Plain 类型的消息段不分段
                             new_chain.append(comp)
