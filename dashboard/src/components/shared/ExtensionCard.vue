@@ -38,7 +38,12 @@ const emit = defineEmits([
   "view-readme",
   "view-changelog",
   "toggle-pin",
+  "open-webui",
 ]);
+
+const hasPages = computed(() => {
+  return Array.isArray(props.extension?.pages) && props.extension.pages.length > 0;
+});
 
 const showUninstallDialog = ref(false);
 
@@ -128,6 +133,10 @@ const viewChangelog = () => {
 
 const togglePin = () => {
   emit("toggle-pin", props.extension);
+};
+
+const openWebui = () => {
+  emit("open-webui", props.extension);
 };
 
 </script>
@@ -318,6 +327,20 @@ const togglePin = () => {
               variant="tonal"
               color="info"
               @click.stop="viewReadme"
+            ></v-btn>
+          </template>
+        </v-tooltip>
+
+        <v-tooltip v-if="hasPages" location="top" :text="tm('buttons.openWebui')">
+          <template v-slot:activator="{ props: actionProps }">
+            <v-btn
+              v-bind="actionProps"
+              icon="mdi-monitor-dashboard"
+              size="small"
+              variant="tonal"
+              color="primary"
+              :disabled="!extension.activated"
+              @click.stop="openWebui"
             ></v-btn>
           </template>
         </v-tooltip>

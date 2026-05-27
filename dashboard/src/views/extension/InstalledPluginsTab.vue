@@ -152,6 +152,18 @@ const openPluginDetail = (extension) => {
   });
 };
 
+const openPluginWebui = (extension) => {
+  const pages = extension?.pages;
+  if (!Array.isArray(pages) || pages.length === 0 || !extension?.name) return;
+  router.push({
+    name: "PluginPage",
+    params: {
+      pluginName: extension.name,
+      pageName: pages[0],
+    },
+  });
+};
+
 const pinnedExtensionNames = ref(readPinnedExtensions());
 
 const pinnedExtensionOrder = computed(() => {
@@ -344,6 +356,7 @@ const togglePinnedExtension = (extension) => {
               @view-handlers="showPluginInfo(extension)"
               @view-readme="viewReadme(extension)"
               @view-changelog="viewChangelog(extension)"
+              @open-webui="openPluginWebui(extension)"
             >
             </ExtensionCard>
           </v-col>
