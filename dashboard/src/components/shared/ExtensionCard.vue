@@ -339,6 +339,7 @@ const openWebui = () => {
               size="small"
               variant="tonal"
               color="primary"
+              :disabled="!extension.activated"
               @click.stop="openWebui"
             ></v-btn>
           </template>
