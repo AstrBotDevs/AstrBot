@@ -61,6 +61,7 @@ class _AuthRateLimiter:
         self.refill_rate = refill_rate
         self.tokens = float(capacity)
         self.last_refill = time.monotonic()
+        self.last_accessed = time.monotonic()
         self.lock = asyncio.Lock()
 
     async def acquire(self) -> bool:
@@ -69,13 +70,51 @@ class _AuthRateLimiter:
             elapsed = now - self.last_refill
             self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
             self.last_refill = now
+            self.last_accessed = now
             if self.tokens >= 1:
                 self.tokens -= 1
                 return True
             return False
 
 
-_rate_limiters: dict[str, _AuthRateLimiter] = {}
+class _RateLimiterRegistry:
+    """Per-IP token-bucket rate limiter registry. Idle entries expire after 1 hour."""
+
+    _ENTRY_TTL: float = 3600.0
+    _INTERVAL: float = 1800.0
+
+    def __init__(self) -> None:
+        self._limiters: dict[str, _AuthRateLimiter] = {}
+        self._last_eviction = time.monotonic()
+
+    def get_or_create(
+        self, key: str, capacity: int, refill_rate: float
+    ) -> _AuthRateLimiter:
+        self._evict_expired()
+        limiter = self._limiters.get(key)
+        if limiter is None:
+            limiter = _AuthRateLimiter(capacity=capacity, refill_rate=refill_rate)
+            self._limiters[key] = limiter
+        return limiter
+
+    def _evict_expired(self) -> None:
+        now = time.monotonic()
+        if now - self._last_eviction < self._INTERVAL:
+            return
+        self._last_eviction = now
+        cutoff = now - self._ENTRY_TTL
+        stale = [k for k, v in self._limiters.items() if v.last_accessed < cutoff]
+        for k in stale:
+            del self._limiters[k]
+
+    def clear(self) -> None:
+        self._limiters.clear()
+
+    def __len__(self) -> int:
+        return len(self._limiters)
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._limiters
 
 
 class _AddrWithPort(Protocol):
@@ -215,6 +254,7 @@ class AstrBotDashboard:
                 # Fall back to expected user path (will fail gracefully later)
                 self.data_path = os.path.abspath(user_dist)
 
+        self._rate_limiter_registry = _RateLimiterRegistry()
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
         APP = self.app  # noqa
         self.app.config["MAX_CONTENT_LENGTH"] = (
@@ -344,12 +384,9 @@ class AstrBotDashboard:
                     max_burst = 3
                 refill_rate = 1.0 / average_interval
                 client_ip = self._get_request_client_ip(request)
-                limiter = _rate_limiters.get(client_ip)
-                if limiter is None:
-                    limiter = _AuthRateLimiter(
-                        capacity=max_burst, refill_rate=refill_rate
-                    )
-                    _rate_limiters[client_ip] = limiter
+                limiter = self._rate_limiter_registry.get_or_create(
+                    client_ip, capacity=max_burst, refill_rate=refill_rate
+                )
                 if not await limiter.acquire():
                     r = jsonify(
                         Response()

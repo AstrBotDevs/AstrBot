@@ -18,7 +18,6 @@ import pytest_asyncio
 from quart import Quart, jsonify
 from werkzeug.datastructures import FileStorage
 
-import astrbot.dashboard.server as dashboard_server
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -208,6 +207,7 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
     shutdown_event = asyncio.Event()
     # The db instance is already part of the core_lifecycle_td
     server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    server.app._dashboard_server = server  # expose for test cleanup
     return server.app
 
 
@@ -363,34 +363,35 @@ async def test_auth_login_secure_cookie_override(
 
 
 @pytest.mark.asyncio
-async def test_auth_rate_limit_uses_client_ip_bucket_across_paths(
+async def test_auth_rate_limit_uses_same_bucket_across_paths(
     app: Quart,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    """Same client IP shares a rate-limit bucket across different auth endpoints."""
     monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
-    dashboard_server._rate_limiters.clear()
-    original_value = core_lifecycle_td.astrbot_config["dashboard"].get(
-        "trust_proxy_headers", False
-    )
-    core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = True
+    app._dashboard_server._rate_limiter_registry.clear()
+    cfg = core_lifecycle_td.astrbot_config["dashboard"]
+    rl_original = cfg.get("auth_rate_limit", {})
+    tp_original = cfg.get("trust_proxy_headers", False)
+    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["trust_proxy_headers"] = True
 
     try:
-        test_client = app.test_client()
-        headers = {"X-Forwarded-For": "198.51.100.10"}
-        await test_client.post(
-            "/api/auth/login",
-            json={"username": "wrong", "password": "wrong"},
-            headers=headers,
+        client = app.test_client()
+        h = {"X-Forwarded-For": "198.51.100.10"}
+        r1 = await client.post(
+            "/api/auth/login", json={"username": "u", "password": "p"}, headers=h
         )
-        await test_client.post("/api/auth/totp/setup", json={}, headers=headers)
+        assert r1.status_code != 429, "first request from IP should not be rate limited"
 
-        assert len(dashboard_server._rate_limiters) == 1
-        assert "198.51.100.10" in dashboard_server._rate_limiters
-    finally:
-        core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = (
-            original_value
+        r2 = await client.post("/api/auth/totp/setup", json={}, headers=h)
+        assert r2.status_code == 429, (
+            "second request from same IP should be rate limited"
         )
+    finally:
+        cfg["auth_rate_limit"] = rl_original
+        cfg["trust_proxy_headers"] = tp_original
 
 
 @pytest.mark.asyncio
@@ -399,33 +400,42 @@ async def test_auth_rate_limit_separates_different_client_ips(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    """Different client IPs have independent rate-limit buckets."""
     monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
-    dashboard_server._rate_limiters.clear()
-    original_value = core_lifecycle_td.astrbot_config["dashboard"].get(
-        "trust_proxy_headers", False
-    )
-    core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = True
+    app._dashboard_server._rate_limiter_registry.clear()
+    cfg = core_lifecycle_td.astrbot_config["dashboard"]
+    rl_original = cfg.get("auth_rate_limit", {})
+    tp_original = cfg.get("trust_proxy_headers", False)
+    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["trust_proxy_headers"] = True
 
     try:
-        test_client = app.test_client()
-        await test_client.post(
+        client = app.test_client()
+        r_a = await client.post(
             "/api/auth/login",
-            json={"username": "wrong", "password": "wrong"},
+            json={"username": "u", "password": "p"},
             headers={"X-Forwarded-For": "198.51.100.10"},
         )
-        await test_client.post(
+        assert r_a.status_code != 429
+
+        r_b = await client.post(
             "/api/auth/login",
-            json={"username": "wrong", "password": "wrong"},
-            headers={"X-Forwarded-For": "198.51.100.11"},
+            json={"username": "u", "password": "p"},
+            headers={"X-Forwarded-For": "198.51.100.10"},
+        )
+        assert r_b.status_code == 429, (
+            "second request from same IP should be rate limited"
         )
 
-        assert len(dashboard_server._rate_limiters) == 2
-        assert "198.51.100.10" in dashboard_server._rate_limiters
-        assert "198.51.100.11" in dashboard_server._rate_limiters
-    finally:
-        core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = (
-            original_value
+        r_c = await client.post(
+            "/api/auth/login",
+            json={"username": "u", "password": "p"},
+            headers={"X-Forwarded-For": "198.51.100.11"},
         )
+        assert r_c.status_code != 429, "different IP has its own bucket"
+    finally:
+        cfg["auth_rate_limit"] = rl_original
+        cfg["trust_proxy_headers"] = tp_original
 
 
 @pytest.mark.asyncio
@@ -434,33 +444,35 @@ async def test_auth_rate_limit_ignores_proxy_headers_by_default(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    """When trust_proxy_headers is False, all proxy-spoofed IPs fall back to the connection IP."""
     monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
-    dashboard_server._rate_limiters.clear()
-    original_value = core_lifecycle_td.astrbot_config["dashboard"].get(
-        "trust_proxy_headers", False
-    )
-    core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = False
+    app._dashboard_server._rate_limiter_registry.clear()
+    cfg = core_lifecycle_td.astrbot_config["dashboard"]
+    rl_original = cfg.get("auth_rate_limit", {})
+    tp_original = cfg.get("trust_proxy_headers", False)
+    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["trust_proxy_headers"] = False
 
     try:
-        test_client = app.test_client()
-        await test_client.post(
+        client = app.test_client()
+        r1 = await client.post(
             "/api/auth/login",
-            json={"username": "wrong", "password": "wrong"},
+            json={"username": "u", "password": "p"},
             headers={"X-Forwarded-For": "198.51.100.20"},
         )
-        await test_client.post(
+        assert r1.status_code != 429
+
+        r2 = await client.post(
             "/api/auth/login",
-            json={"username": "wrong", "password": "wrong"},
+            json={"username": "u", "password": "p"},
             headers={"X-Forwarded-For": "198.51.100.21"},
         )
-
-        assert len(dashboard_server._rate_limiters) == 1
-        assert "198.51.100.20" not in dashboard_server._rate_limiters
-        assert "198.51.100.21" not in dashboard_server._rate_limiters
-    finally:
-        core_lifecycle_td.astrbot_config["dashboard"]["trust_proxy_headers"] = (
-            original_value
+        assert r2.status_code == 429, (
+            "same connection IP, same bucket despite proxy headers"
         )
+    finally:
+        cfg["auth_rate_limit"] = rl_original
+        cfg["trust_proxy_headers"] = tp_original
 
 
 @pytest.mark.asyncio
