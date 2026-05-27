@@ -50,6 +50,10 @@ from astrbot.core.provider.provider import Provider
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
+from ..context.constants import (
+    DEFAULT_COMPRESSION_TOKEN_THRESHOLD,
+    DEFAULT_CONTEXT_LIMIT_TYPE,
+)
 from ..context.manager import ContextManager
 from ..context.token_counter import EstimateTokenCounter, TokenCounter
 from ..hooks import BaseAgentRunHooks
@@ -221,8 +225,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # truncate by turns compressor
         truncate_turns: int = 1,
         # token-threshold compression
-        context_limit_type: str = "turn",
-        compression_token_threshold: int = 4000,
+        context_limit_type: str = DEFAULT_CONTEXT_LIMIT_TYPE,
+        compression_token_threshold: int = DEFAULT_COMPRESSION_TOKEN_THRESHOLD,
         # customize
         custom_token_counter: TokenCounter | None = None,
         custom_compressor: ContextCompressor | None = None,

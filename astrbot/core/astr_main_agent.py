@@ -12,6 +12,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from astrbot.core import logger
+from astrbot.core.agent.context.constants import (
+    DEFAULT_COMPRESSION_TOKEN_THRESHOLD,
+    DEFAULT_CONTEXT_LIMIT_TYPE,
+)
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
@@ -161,9 +165,9 @@ class MainAgentBuildConfig:
     """The number of oldest turns to remove when context length limit is reached."""
     fallback_max_context_tokens: int = 128000
     """Fallback max context tokens. When max_context_tokens is 0 and the model is not in LLM_METADATAS, use this value."""
-    context_limit_type: str = "turn"
+    context_limit_type: str = DEFAULT_CONTEXT_LIMIT_TYPE
     """Compression trigger mode: "turn" uses model context window × 0.82 rate; "token" uses an absolute token threshold."""
-    compression_token_threshold: int = 4000
+    compression_token_threshold: int = DEFAULT_COMPRESSION_TOKEN_THRESHOLD
     """When context_limit_type is "token", compression triggers when total tokens >= this threshold."""
     llm_safety_mode: bool = True
     """This will inject healthy and safe system prompt into the main agent,

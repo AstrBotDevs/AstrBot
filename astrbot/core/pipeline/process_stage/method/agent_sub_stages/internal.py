@@ -6,6 +6,10 @@ from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot.core import db_helper, logger
+from astrbot.core.agent.context.constants import (
+    DEFAULT_COMPRESSION_TOKEN_THRESHOLD,
+    DEFAULT_CONTEXT_LIMIT_TYPE,
+)
 from astrbot.core.agent.message import (
     CheckpointData,
     CheckpointMessageSegment,
@@ -111,9 +115,11 @@ class InternalAgentSubStage(Stage):
         self.fallback_max_context_tokens: int = settings.get(
             "fallback_max_context_tokens", 128000
         )
-        self.context_limit_type: str = settings.get("context_limit_type", "turn")
+        self.context_limit_type: str = settings.get(
+            "context_limit_type", DEFAULT_CONTEXT_LIMIT_TYPE
+        )
         self.compression_token_threshold: int = settings.get(
-            "compression_token_threshold", 4000
+            "compression_token_threshold", DEFAULT_COMPRESSION_TOKEN_THRESHOLD
         )
 
         self.llm_safety_mode = settings.get("llm_safety_mode", True)

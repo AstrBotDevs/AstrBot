@@ -3,6 +3,7 @@ from astrbot import logger
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
+from .constants import CONTEXT_LIMIT_TYPE_TOKEN
 from .token_counter import EstimateTokenCounter
 from .truncator import ContextTruncator
 
@@ -63,11 +64,10 @@ class ContextManager:
             result = messages
 
             # 1. 基于轮次的截断 (Enforce max turns)
-            # Skip turn-based truncation in token mode to avoid conflicts with absolute token threshold
-            if (
-                self.config.context_limit_type != "token"
-                and self.config.enforce_max_turns != -1
-            ):
+            # Enforce max turns independently of the compression trigger mode.
+            # This provides a hard cap on conversation history, preventing
+            # pathological long-turn histories even under token-based compression.
+            if self.config.enforce_max_turns != -1:
                 result = self.truncator.truncate_by_turns(
                     result,
                     keep_most_recent_turns=self.config.enforce_max_turns,
@@ -80,14 +80,16 @@ class ContextManager:
                     result, trusted_token_usage
                 )
 
-                if self.config.context_limit_type == "token":
+                if self.config.context_limit_type == CONTEXT_LIMIT_TYPE_TOKEN:
                     if (
                         self._has_compressible_messages(result)
                         and total_tokens >= self.config.compression_token_threshold
                     ):
                         result = await self._run_compression(result, total_tokens)
                 else:
-                    if self.compressor.should_compress(
+                    if self._has_compressible_messages(
+                        result
+                    ) and self.compressor.should_compress(
                         result, total_tokens, self.config.max_context_tokens
                     ):
                         result = await self._run_compression(result, total_tokens)
@@ -118,7 +120,7 @@ class ContextManager:
         tokens_after_summary = self.token_counter.count_tokens(messages)
 
         # calculate compress rate
-        if self.config.context_limit_type == "token":
+        if self.config.context_limit_type == CONTEXT_LIMIT_TYPE_TOKEN:
             denominator = self.config.compression_token_threshold
         else:
             denominator = self.config.max_context_tokens
@@ -132,7 +134,7 @@ class ContextManager:
         )
 
         # last check
-        if self.config.context_limit_type == "token":
+        if self.config.context_limit_type == CONTEXT_LIMIT_TYPE_TOKEN:
             if (
                 self._has_compressible_messages(messages)
                 and tokens_after_summary >= self.config.compression_token_threshold
@@ -142,7 +144,9 @@ class ContextManager:
                 )
                 messages = self.truncator.truncate_by_halving(messages)
         else:
-            if self.compressor.should_compress(
+            if self._has_compressible_messages(
+                messages
+            ) and self.compressor.should_compress(
                 messages, tokens_after_summary, self.config.max_context_tokens
             ):
                 logger.info(
