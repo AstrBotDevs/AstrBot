@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import ipaddress
 import logging
 import os
 import socket
@@ -13,6 +14,8 @@ import psutil
 from flask.json.provider import DefaultJSONProvider
 from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
+from hypercorn.logging import AccessLogAtoms
+from hypercorn.logging import Logger as HypercornLogger
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
 from werkzeug.exceptions import MethodNotAllowed, NotFound
@@ -123,6 +126,53 @@ def _parse_env_bool(value: str | None, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+class _ProxyAwareHypercornLogger(HypercornLogger):
+    @staticmethod
+    def _get_request_log_host(request_scope) -> str | None:
+        forwarded_for = None
+        real_ip = None
+        for raw_name, raw_value in request_scope.get("headers", []):
+            header_name = raw_name.decode("latin1").lower()
+            if header_name == "x-forwarded-for":
+                forwarded_for = raw_value.decode("latin1")
+            elif header_name == "x-real-ip":
+                real_ip = raw_value.decode("latin1")
+
+            if forwarded_for is not None and real_ip is not None:
+                break
+
+        forwarded_for = str(forwarded_for or "").strip()
+        if forwarded_for:
+            first_ip = forwarded_for.split(",", 1)[0].strip()
+            if first_ip and first_ip.lower() != "unknown":
+                try:
+                    return str(ipaddress.ip_address(first_ip))
+                except ValueError:
+                    pass
+
+        real_ip = str(real_ip or "").strip()
+        if real_ip and real_ip.lower() != "unknown":
+            try:
+                return str(ipaddress.ip_address(real_ip))
+            except ValueError:
+                pass
+
+        client = request_scope.get("client")
+        if not client:
+            return None
+        host = str(client[0]).strip()
+        if host:
+            return host
+        return None
+
+    def atoms(self, request, response, request_time):
+        atoms = AccessLogAtoms(request, response, request_time)
+        client_host = self._get_request_log_host(request)
+        if client_host:
+            atoms["h"] = client_host
+        return atoms
 
 
 class AstrBotJSONProvider(DefaultJSONProvider):
@@ -293,7 +343,7 @@ class AstrBotDashboard:
                 if max_burst <= 0:
                     max_burst = 3
                 refill_rate = 1.0 / average_interval
-                client_ip = self._get_request_client_ip()
+                client_ip = self._get_request_client_ip(request)
                 limiter = _rate_limiters.get(client_ip)
                 if limiter is None:
                     limiter = _AuthRateLimiter(
@@ -358,24 +408,33 @@ class AstrBotDashboard:
             r.status_code = 401
             return r
 
-    def _get_request_client_ip(self) -> str:
-        trust_proxy_headers = bool(
-            self.config.get("dashboard", {}).get("trust_proxy_headers", False)
-        )
-        if trust_proxy_headers:
-            forwarded_for = request.headers.get("X-Forwarded-For", "").strip()
+    def _get_request_client_ip(self, current_request) -> str:
+        if bool(self.config.get("dashboard", {}).get("trust_proxy_headers", False)):
+            forwarded_for = str(
+                current_request.headers.get("X-Forwarded-For", "")
+            ).strip()
             if forwarded_for:
                 first_ip = forwarded_for.split(",", 1)[0].strip()
                 if first_ip and first_ip.lower() != "unknown":
-                    return first_ip
+                    try:
+                        return str(ipaddress.ip_address(first_ip))
+                    except ValueError:
+                        pass
 
-            real_ip = request.headers.get("X-Real-IP", "").strip()
+            real_ip = str(current_request.headers.get("X-Real-IP", "")).strip()
             if real_ip and real_ip.lower() != "unknown":
-                return real_ip
+                try:
+                    return str(ipaddress.ip_address(real_ip))
+                except ValueError:
+                    pass
 
-        remote_addr = request.remote_addr
+        remote_addr = str(current_request.remote_addr or "").strip()
         if remote_addr:
-            return str(remote_addr)
+            try:
+                return str(ipaddress.ip_address(remote_addr))
+            except ValueError:
+                pass
+
         return "unknown"
 
     @staticmethod
@@ -613,6 +672,8 @@ class AstrBotDashboard:
         # 配置 Hypercorn
         config = HyperConfig()
         config.bind = [f"{host}:{port}"]
+        if bool(self.config.get("dashboard", {}).get("trust_proxy_headers", False)):
+            config.logger_class = _ProxyAwareHypercornLogger
         if ssl_enable:
             config.certfile = resolved_ssl_config["certfile"]
             config.keyfile = resolved_ssl_config["keyfile"]
