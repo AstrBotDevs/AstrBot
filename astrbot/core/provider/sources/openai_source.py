@@ -550,8 +550,9 @@ class ProviderOpenAIOfficial(Provider):
 
             content = msg.get("content")
             tool_calls = msg.get("tool_calls")
+            reasoning_content = msg.get("reasoning_content")
 
-            if _is_empty(content) and not tool_calls:
+            if _is_empty(content) and not tool_calls and not reasoning_content:
                 logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
                 continue
 
@@ -1015,6 +1016,16 @@ class ProviderOpenAIOfficial(Provider):
             model in deepseek_reasoning_models
             or "api.deepseek.com" in self.client.base_url.host
         )
+        # MiMo 推理模型（MiMo-V2.5-Pro / MiMo-V2.5 / MiMo-V2-Pro / MiMo-V2-Omni / MiMo-V2-Flash）
+        # 要求 assistant 历史消息必须回传 reasoning_content，否则返回 400
+        mimo_reasoning_models = {
+            "mimo-v2.5-pro",
+            "mimo-v2.5",
+            "mimo-v2-pro",
+            "mimo-v2-omni",
+            "mimo-v2-flash",
+        }
+        is_mimo_reasoning = model in mimo_reasoning_models
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list
@@ -1041,6 +1052,15 @@ class ProviderOpenAIOfficial(Provider):
             ):
                 # DeepSeek v4 reasoning models require the field on assistant
                 # history messages, even when the reasoning content is empty.
+                message["reasoning_content"] = ""
+
+            if (
+                message.get("role") == "assistant"
+                and is_mimo_reasoning
+                and "reasoning_content" not in message
+            ):
+                # MiMo 推理模型要求 assistant 历史消息回传 reasoning_content，
+                # 缺失时 API 返回 400。参见 MiMo 官方文档。
                 message["reasoning_content"] = ""
 
             # Gemini 的 function_response 要求 google.protobuf.Struct（即 JSON 对象），
