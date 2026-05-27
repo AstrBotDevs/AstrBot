@@ -12,7 +12,9 @@ export const useCustomizerStore = defineStore("customizer", {
     chatSidebarOpen: false // chat mode mobile sidebar state
   }),
 
-  getters: {},
+  getters: {
+    isDark: (state) => state.uiTheme === 'PurpleThemeDark',
+  },
   actions: {
     SET_SIDEBAR_DRAWER() {
       this.Sidebar_drawer = !this.Sidebar_drawer;
