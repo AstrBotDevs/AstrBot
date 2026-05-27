@@ -605,11 +605,13 @@ class PluginRoute(Route):
             color_scheme_meta = (
                 f'<meta name="color-scheme" content="{theme}">'
             )
-            if "<head>" in rewritten_html:
-                rewritten_html = rewritten_html.replace(
-                    "<head>",
-                    f"<head>\n    {color_scheme_meta}",
-                    1,
+            if re.search(r"<head\b", rewritten_html, re.IGNORECASE):
+                rewritten_html = re.sub(
+                    r"(<head\b[^>]*>)",
+                    rf"\1\n    {color_scheme_meta}",
+                    rewritten_html,
+                    count=1,
+                    flags=re.IGNORECASE,
                 )
             elif re.search(r"<html\b", rewritten_html, re.IGNORECASE):
                 rewritten_html = re.sub(
