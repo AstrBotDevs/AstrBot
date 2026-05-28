@@ -1198,6 +1198,10 @@
         "description": "关闭思考模式",
         "hint": "关闭 Ollama 思考模式。"
       },
+      "force_tool_call_reasoning_content": {
+        "description": "工具调用历史强制保留思考内容",
+        "hint": "部分兼容 OpenAI 的模型服务在启用思考模式后，要求 assistant 工具调用历史包含 reasoning_content。"
+      },
       "custom_extra_body": {
         "description": "自定义请求体参数",
         "hint": "用于在请求时添加额外的参数，如 temperature, top_p, max_tokens, reasoning_effort 等。",
