@@ -1249,11 +1249,7 @@ export const useExtensionPage = () => {
     );
     // 使用 marketplace_name 创建映射，用于市场匹配
     const installedByName = new Map(data.map((ext) => [ext.marketplace_name || ext.name, ext]));
-    const installedRepos = new Set(installedByRepo.keys());
-    const installedNames = new Set(
-      data.map((ext) => normalizeStr(ext.name).replace(/_/g, "-")),
-    ); //统一格式，以防下面的匹配不生效
-
+    
     for (let i = 0; i < pluginMarketData.value.length; i++) {
       const plugin = pluginMarketData.value[i];
       const matchedInstalled =
