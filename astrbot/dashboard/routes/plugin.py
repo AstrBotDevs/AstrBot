@@ -236,21 +236,33 @@ class PluginRoute(Route):
 
     @staticmethod
     def _apply_theme_to_html(html: str, theme: str) -> str:
+        def _replace_html_tag(m: re.Match) -> str:
+            attrs = m.group(1) or ""
+            attrs = re.sub(
+                r'\s+data-theme\s*=\s*["\'][^"\']*["\']',
+                "",
+                attrs,
+                flags=re.IGNORECASE,
+            )
+            return f'<html{attrs} data-theme="{theme}">'
+
         html = re.sub(
-            r"\s+data-theme\s*=\s*[\"'][^\"']*[\"']",
+            r"<html(\b[^>]*)>",
+            _replace_html_tag,
+            html,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+
+        meta_tag = f'<meta name="color-scheme" content="{theme}">'
+
+        html = re.sub(
+            r'<meta\s[^>]*name\s*=\s*["\']color-scheme["\'][^>]*>',
             "",
             html,
-            count=1,
             flags=re.IGNORECASE,
         )
-        html = re.sub(
-            r"(<html\b[^>]*?)>",
-            rf'\1 data-theme="{theme}">',
-            html,
-            count=1,
-            flags=re.IGNORECASE,
-        )
-        meta_tag = f'<meta name="color-scheme" content="{theme}">'
+
         head_match = re.search(r"<head\b[^>]*>", html, re.IGNORECASE)
         if head_match:
             html = html.replace(
@@ -258,7 +270,7 @@ class PluginRoute(Route):
             )
         else:
             html = re.sub(
-                r"(<html\b[^>]*?>)",
+                r"(<html\b[^>]*>)",
                 rf"\1<head>{meta_tag}</head>",
                 html,
                 count=1,
@@ -630,7 +642,7 @@ class PluginRoute(Route):
                 return match.group(0)
 
         rewritten_html = _HTML_ASSET_ATTR_RE.sub(replace_attr, html_text)
-        theme = (extra_query_params or {}).get("theme")
+        theme = self._get_request_theme()
         if theme:
             rewritten_html = self._apply_theme_to_html(rewritten_html, theme)
         if "/api/plugin/page/bridge-sdk.js" not in rewritten_html:

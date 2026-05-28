@@ -13,7 +13,7 @@ export const useCustomizerStore = defineStore("customizer", {
   }),
 
   getters: {
-    isDark: (state) => state.uiTheme?.endsWith('Dark') ?? false,
+    isDark: (state) => state.uiTheme === 'PurpleThemeDark',
   },
   actions: {
     SET_SIDEBAR_DRAWER() {
