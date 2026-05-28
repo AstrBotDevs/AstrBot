@@ -8,6 +8,7 @@ from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
+from astrbot.core.agent.message import ContentPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
@@ -34,11 +35,28 @@ class _ModelsProviderStub:
         return self._models
 
 
+class _OpenCodeGoDelegateStub:
+    def __init__(self):
+        self.stream_kwargs: dict[str, object] | None = None
+
+    async def text_chat_stream(self, **kwargs):
+        self.stream_kwargs = kwargs
+        yield SimpleNamespace(role="assistant")
+
+
 class _OpenCodeGoUnitProvider(ProviderOpenCodeGo):
     openai_provider: _ModelsProviderStub
 
     def __init__(self, models: list[str]):
         self.openai_provider = _ModelsProviderStub(models)
+        self.model_name = "kimi-k2.6"
+
+
+class _OpenCodeGoStreamUnitProvider(ProviderOpenCodeGo):
+    openai_provider: _OpenCodeGoDelegateStub
+
+    def __init__(self, delegate: _OpenCodeGoDelegateStub):
+        self.openai_provider = delegate
         self.model_name = "kimi-k2.6"
 
 
@@ -479,6 +497,25 @@ def test_opencode_go_delegate_config_defaults_force_reasoning_content_only_when_
     config = provider._build_delegate_config(model="kimi-k2.6")
 
     assert config["force_tool_call_reasoning_content"] is False
+
+
+@pytest.mark.asyncio
+async def test_opencode_go_text_chat_stream_forwards_extra_user_content_parts():
+    delegate = _OpenCodeGoDelegateStub()
+    provider = _OpenCodeGoStreamUnitProvider(delegate)
+    extra_parts: list[ContentPart] = [TextPart(text="extra context")]
+
+    responses = [
+        response
+        async for response in provider.text_chat_stream(
+            prompt="hello",
+            extra_user_content_parts=extra_parts,
+        )
+    ]
+
+    assert responses
+    assert delegate.stream_kwargs is not None
+    assert delegate.stream_kwargs["extra_user_content_parts"] is extra_parts
 
 
 @pytest.mark.asyncio

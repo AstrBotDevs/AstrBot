@@ -132,6 +132,7 @@ class ProviderOpenCodeGo(Provider):
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
@@ -145,6 +146,7 @@ class ProviderOpenCodeGo(Provider):
             system_prompt=system_prompt,
             tool_calls_result=tool_calls_result,
             model=self._resolve_model(model),
+            extra_user_content_parts=extra_user_content_parts,
             tool_choice=tool_choice,
             **kwargs,
         ):

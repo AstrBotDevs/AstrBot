@@ -517,7 +517,6 @@ class ProviderOpenAIOfficial(Provider):
 
     def _requires_tool_call_reasoning_content(
         self,
-        payloads: dict,
         extra_body: dict[str, Any],
     ) -> bool:
         thinking = extra_body.get("thinking")
@@ -534,7 +533,7 @@ class ProviderOpenAIOfficial(Provider):
         payloads: dict,
         extra_body: dict[str, Any],
     ) -> None:
-        if not self._requires_tool_call_reasoning_content(payloads, extra_body):
+        if not self._requires_tool_call_reasoning_content(extra_body):
             return
 
         messages = payloads.get("messages")
@@ -1280,6 +1279,7 @@ class ProviderOpenAIOfficial(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
+        extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
@@ -1292,6 +1292,7 @@ class ProviderOpenAIOfficial(Provider):
             system_prompt,
             tool_calls_result,
             model=model,
+            extra_user_content_parts=extra_user_content_parts,
             **kwargs,
         )
         if func_tool and not func_tool.empty():
