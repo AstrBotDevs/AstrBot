@@ -739,8 +739,6 @@ class PluginManager:
         try:
             metadata = self._load_plugin_metadata(plugin_path=plugin_dir_path)
             if metadata:
-                p_name = (metadata.name or "unknown").lower().replace("/", "_")
-                p_author = (metadata.author or "unknown").lower().replace("/", "_")
                 record.update(
                     {
                         "name": metadata.name,
@@ -752,7 +750,7 @@ class PluginManager:
                         "display_name": metadata.display_name,
                         "support_platforms": metadata.support_platforms,
                         "astrbot_version": metadata.astrbot_version,
-                        "plugin_id": f"{p_author}/{p_name}",
+                        "plugin_id": metadata.compute_plugin_id(),
                     }
                 )
         except Exception as metadata_error:
@@ -1016,13 +1014,11 @@ class PluginManager:
 
                     logger.info(metadata)
                     metadata.config = plugin_config
-                    p_name = (metadata.name or "unknown").lower().replace("/", "_")
-                    p_author = (metadata.author or "unknown").lower().replace("/", "_")
-                    plugin_id = f"{p_author}/{p_name}"
-                    metadata.plugin_id = plugin_id
+                    plugin_id = metadata.plugin_id
 
-                    # 在实例化前注入类属性，保证插件 __init__ 可读取这些值
+                    # inject class attributes before instantiation so __init__ can read them
                     if metadata.star_cls_type:
+                        p_author, p_name = plugin_id.split("/")
                         setattr(metadata.star_cls_type, "name", p_name)
                         setattr(metadata.star_cls_type, "author", p_author)
                         setattr(metadata.star_cls_type, "plugin_id", plugin_id)
