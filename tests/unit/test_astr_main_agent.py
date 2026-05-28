@@ -1086,6 +1086,61 @@ class TestBuildMainAgent:
         assert result is not None
 
     @pytest.mark.asyncio
+    async def test_build_main_agent_skips_caption_when_main_provider_supports_images(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test image-capable chat providers receive quoted images directly."""
+        module = ama
+        mock_image = Image(file="file:///tmp/quoted.jpg")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[Plain(text="quoted text"), mock_image],
+            sender_nickname="",
+            message_str="quoted text",
+        )
+        mock_event.message_obj.message = [Plain(text="Hello"), mock_reply]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch.object(
+                Image,
+                "convert_to_file_path",
+                AsyncMock(return_value="/tmp/quoted.jpg"),
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    provider_settings={
+                        "default_image_caption_provider_id": "caption-provider",
+                    },
+                ),
+                provider=mock_provider,
+            )
+
+        assert result is not None
+        assert result.provider_request.image_urls == ["/tmp/quoted.jpg"]
+        assert not any(
+            "Image Caption" in part.text or "<image_caption>" in part.text
+            for part in result.provider_request.extra_user_content_parts
+        )
+        mock_provider.text_chat.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_build_main_agent_uses_image_fallback_provider(
         self, mock_event, mock_context
     ):
