@@ -786,10 +786,19 @@ async def _process_quote_message(
             prov = None
             path = None
             compress_path = None
+            if not img_cap_prov_id:
+                # When img_cap_prov_id is not configured, skip image captioning logic
+                # to allow multimodal main provider to handle the image directly.
+                # This avoids the issue where the main model processes the image twice:
+                # once for captioning (text_chat) and once for actual response.
+                logger.debug(
+                    "No dedicated image caption provider configured. "
+                    "Skipping quote image captioning to avoid multimodal double-call."
+                )
             if img_cap_prov_id:
                 prov = plugin_context.get_provider_by_id(img_cap_prov_id)
-            if prov is None:
-                prov = plugin_context.get_using_provider(event.unified_msg_origin)
+                if prov is None:
+                    prov = plugin_context.get_using_provider(event.unified_msg_origin)
 
             if prov and isinstance(prov, Provider):
                 path = await image_seg.convert_to_file_path()
