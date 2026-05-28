@@ -752,6 +752,7 @@ async def _process_quote_message(
     plugin_context: Context,
     quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
     config: MainAgentBuildConfig | None = None,
+    main_provider_supports_image: bool = False,
 ) -> None:
     quote = None
     for comp in event.message_obj.message:
@@ -781,24 +782,23 @@ async def _process_quote_message(
                 image_seg = comp
                 break
 
-    if image_seg:
+    if image_seg and main_provider_supports_image:
+        logger.debug(
+            "Skipping quote image captioning because the main provider supports image input."
+        )
+    elif image_seg and not img_cap_prov_id:
+        logger.debug(
+            "No dedicated image caption provider configured. "
+            "Skipping quote image captioning."
+        )
+    elif image_seg:
         try:
             prov = None
             path = None
             compress_path = None
-            if not img_cap_prov_id:
-                # When img_cap_prov_id is not configured, skip image captioning logic
-                # to allow multimodal main provider to handle the image directly.
-                # This avoids the issue where the main model processes the image twice:
-                # once for captioning (text_chat) and once for actual response.
-                logger.debug(
-                    "No dedicated image caption provider configured. "
-                    "Skipping quote image captioning to avoid multimodal double-call."
-                )
-            if img_cap_prov_id:
-                prov = plugin_context.get_provider_by_id(img_cap_prov_id)
-                if prov is None:
-                    prov = plugin_context.get_using_provider(event.unified_msg_origin)
+            prov = plugin_context.get_provider_by_id(img_cap_prov_id)
+            if prov is None:
+                prov = plugin_context.get_using_provider(event.unified_msg_origin)
 
             if prov and isinstance(prov, Provider):
                 path = await image_seg.convert_to_file_path()
@@ -885,6 +885,7 @@ async def _decorate_llm_request(
     req: ProviderRequest,
     plugin_context: Context,
     config: MainAgentBuildConfig,
+    provider: Provider | None = None,
 ) -> None:
     cfg = config.provider_settings or plugin_context.get_config(
         umo=event.unified_msg_origin
@@ -892,11 +893,15 @@ async def _decorate_llm_request(
 
     _apply_prompt_prefix(req, cfg)
 
+    main_provider_supports_image = provider is not None and _provider_supports_modality(
+        provider, "image"
+    )
+
     if req.conversation:
         await _ensure_persona_and_skills(req, cfg, plugin_context, event)
 
         img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
-        if img_cap_prov_id and req.image_urls:
+        if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
             await _ensure_img_caption(
                 event,
                 req,
@@ -914,6 +919,7 @@ async def _decorate_llm_request(
         plugin_context,
         quoted_message_settings,
         config,
+        main_provider_supports_image=main_provider_supports_image,
     )
 
     tz = config.timezone
@@ -1427,7 +1433,7 @@ async def build_main_agent(
         else:
             return None
 
-    await _decorate_llm_request(event, req, plugin_context, config)
+    await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
 
     await _apply_kb(event, req, plugin_context, config)
 
