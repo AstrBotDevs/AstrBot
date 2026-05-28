@@ -335,7 +335,7 @@ class PluginRoute(Route):
             "pageTitle": page_title,
             "locale": locale,
             "i18n": plugin_i18n,
-            "isDark": theme == "dark" if theme else False,
+            "isDark": theme == "dark",
         }
 
     @staticmethod
@@ -824,18 +824,22 @@ class PluginRoute(Route):
         plugin_name: str,
         page_name: str,
     ) -> dict[str, str] | None:
-        params: dict[str, str] = {}
         asset_token = request.args.get("asset_token", "").strip()
         if not asset_token:
             asset_token = (
                 self._issue_plugin_page_asset_token(plugin_name, page_name) or ""
             )
+        theme = self._get_request_theme()
+
+        if not asset_token and not theme:
+            return None
+
+        params: dict[str, str] = {}
         if asset_token:
             params["asset_token"] = asset_token
-        theme = self._get_request_theme()
         if theme:
             params["theme"] = theme
-        return params or None
+        return params
 
     @staticmethod
     async def _plugin_page_error_response(status_code: int, message: str):
