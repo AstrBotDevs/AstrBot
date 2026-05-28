@@ -242,7 +242,7 @@ const batchImportPreviewCount = computed(() => {
 watch(() => props.modelValue, (newValue) => {
   localItems.value = [...(newValue || [])]
   
-  // 自动清理只包含空字符串的数组
+  // 自动清理只包含空字符串或纯空格的条目（纯空格在配置中无意义，此过滤为预期兜底行为）
   if (newValue && newValue.length > 0) {
     const filtered = newValue.filter(item => typeof item === 'string' ? item.trim() !== '' : true)
     if (filtered.length !== newValue.length) {
