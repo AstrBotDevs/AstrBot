@@ -652,8 +652,8 @@ export const useExtensionPage = () => {
       const repoKey = extension.repo ? normalizeInstallUrl(extension.repo).toLowerCase() : undefined;
       const onlinePlugin = repoKey ? onlinePluginsMap.get(repoKey) : null;
       
-      // 使用 marketplace_name 进行市场匹配（已统一为减号格式）
-      const normalizedExtensionName = normalizeStr(extension.marketplace_name || extension.name);
+      // 使用 marketplace_name 进行市场匹配（后端已统一为减号格式）
+      const normalizedExtensionName = normalizeStr(extension.marketplace_name);
       const onlinePluginByName = onlinePluginsNameMap.get(normalizedExtensionName);
       
       const matchedPlugin = onlinePlugin || onlinePluginByName;
@@ -1239,16 +1239,21 @@ export const useExtensionPage = () => {
 
   const checkAlreadyInstalled = () => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
-    const installedRepos = new Set(data.map((ext) => ext.repo?.toLowerCase()));
-    // 使用 marketplace_name 进行市场匹配（已统一为减号格式）
-    const installedNames = new Set(data.map((ext) => normalizeStr(ext.marketplace_name || ext.name)));
+    // repo 匹配：两边统一使用 normalizeInstallUrl
+    const installedRepos = new Set(
+      data
+        .filter((ext) => ext.repo)
+        .map((ext) => normalizeInstallUrl(ext.repo).toLowerCase()),
+    );
+    // 使用 marketplace_name 进行市场匹配（后端已统一为减号格式）
+    const installedNames = new Set(data.map((ext) => normalizeStr(ext.marketplace_name)));
+    // 创建映射用于查询已安装插件的详细信息
     const installedByRepo = new Map(
       data
         .filter((ext) => ext.repo)
         .map((ext) => [normalizeInstallUrl(ext.repo).toLowerCase(), ext]),
     );
-    // 使用 marketplace_name 创建映射，用于市场匹配
-    const installedByName = new Map(data.map((ext) => [ext.marketplace_name || ext.name, ext]));
+    const installedByName = new Map(data.map((ext) => [ext.marketplace_name, ext]));
     
     for (let i = 0; i < pluginMarketData.value.length; i++) {
       const plugin = pluginMarketData.value[i];
@@ -1271,7 +1276,7 @@ export const useExtensionPage = () => {
       }
 
       plugin.installed =
-        installedRepos.has(plugin.repo?.toLowerCase()) ||
+        installedRepos.has(normalizeInstallUrl(plugin.repo).toLowerCase()) ||
         installedNames.has(normalizeStr(plugin.name));
     }
 
