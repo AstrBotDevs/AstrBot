@@ -107,6 +107,7 @@
     "docsEmpty": "暂无文档",
     "changelogTitle": "更新日志",
     "changelogEmpty": "暂无更新日志",
+    "subCommandsCount": "{count} 个子指令",
     "handlerGroups": {
       "page": "页面",
       "skill": "技能",

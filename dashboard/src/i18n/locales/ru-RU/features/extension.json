@@ -107,6 +107,7 @@
         "docsEmpty": "Документация отсутствует",
         "changelogTitle": "Журнал изменений",
         "changelogEmpty": "Журнал изменений отсутствует",
+        "subCommandsCount": "{count} подкоманд",
         "handlerGroups": {
             "page": "Pages",
             "skill": "Skills",
