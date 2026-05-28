@@ -47,6 +47,16 @@ sudo ./AstrbotScript.sh
 
 __仓库地址：[railgun19457/AstrbotScript](https://github.com/railgun19457/AstrbotScript)__
 
+## Linux_MacOS_Termux综合部署脚本
+本脚本是一个综合性的系统管理脚本(可能存在一些bug)
+脚本包含了很多其他实用工具
+详细参考:
+[nasyt233/nasyt-linux-tool](https://github.com/nasyt233/nasyt-linux-tool)
+安装脚本
+```bash
+bash -c "$(curl -L nasyt.hoha.top/shell/nasyt_install.sh)"
+```
+
 ## AstrBot Android 部署
 
 参考 [zz6zz666/AstrBot-Android-App](https://github.com/zz6zz666/AstrBot-Android-App)
