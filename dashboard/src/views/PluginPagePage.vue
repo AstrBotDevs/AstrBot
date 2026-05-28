@@ -38,6 +38,7 @@ const localizedPageTitle = computed(() =>
   ),
 );
 const getIframeWindow = () => iframeRef.value?.contentWindow || null;
+const themeParam = computed(() => customizer.isDark ? "dark" : "light");
 
 const toPostMessageData = (value, fallback = null) => {
   try {
@@ -436,8 +437,8 @@ const loadPluginPage = async () => {
     plugin.value = pluginData;
     page.value = pageEntry;
     const contentUrl = new URL(pageEntry.content_path, window.location.origin);
-    contentUrl.searchParams.set('theme', customizer.isDark ? 'dark' : 'light');
-    iframeSrc.value = contentUrl.pathname + contentUrl.search;
+    contentUrl.searchParams.set('theme', themeParam.value);
+    iframeSrc.value = contentUrl.pathname + contentUrl.search + contentUrl.hash;
   } catch (error) {
     errorMessage.value =
       error?.response?.data?.message ||
