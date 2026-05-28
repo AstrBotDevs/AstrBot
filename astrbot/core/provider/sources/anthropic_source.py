@@ -343,14 +343,10 @@ class ProviderAnthropic(Provider):
         if tool_choice == "tool":
             # {"type": "tool"} 必须配合 name 字段指定具体工具
             # 纯字符串 "tool" 无法指定工具名，回退为 auto
-            logger.warning(
-                "tool_choice='tool' 无法指定工具名，已回退为 'auto'"
-            )
+            logger.warning("tool_choice='tool' 无法指定工具名，已回退为 'auto'")
             return {"type": "auto"}
 
-        logger.warning(
-            f"未知的 tool_choice 值: {tool_choice}，已回退为 'auto'"
-        )
+        logger.warning(f"未知的 tool_choice 值: {tool_choice}，已回退为 'auto'")
         return {"type": "auto"}
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
