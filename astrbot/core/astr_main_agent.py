@@ -788,8 +788,8 @@ async def _process_quote_message(
             compress_path = None
             if img_cap_prov_id:
                 prov = plugin_context.get_provider_by_id(img_cap_prov_id)
-            if prov is None:
-                prov = plugin_context.get_using_provider(event.unified_msg_origin)
+                if prov is None:
+                    prov = plugin_context.get_using_provider(event.unified_msg_origin)
 
             if prov and isinstance(prov, Provider):
                 path = await image_seg.convert_to_file_path()
