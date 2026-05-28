@@ -237,6 +237,13 @@ class PluginRoute(Route):
     @staticmethod
     def _apply_theme_to_html(html: str, theme: str) -> str:
         html = re.sub(
+            r"\s+data-theme\s*=\s*[\"'][^\"']*[\"']",
+            "",
+            html,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+        html = re.sub(
             r"(<html\b[^>]*?)>",
             rf'\1 data-theme="{theme}">',
             html,
@@ -250,7 +257,13 @@ class PluginRoute(Route):
                 head_match.group(0), f"{head_match.group(0)}{meta_tag}", 1
             )
         else:
-            html = html.replace("<html", f"<html><head>{meta_tag}</head>", 1)
+            html = re.sub(
+                r"(<html\b[^>]*?>)",
+                rf"\1<head>{meta_tag}</head>",
+                html,
+                count=1,
+                flags=re.IGNORECASE,
+            )
         return html
 
     def _get_plugin_page_initial_context(self) -> dict | None:
