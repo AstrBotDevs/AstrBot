@@ -782,14 +782,32 @@ async def _process_quote_message(
                 break
 
     if image_seg:
+        prov = None
+        path = None
+        compress_path = None
         try:
-            prov = None
-            path = None
-            compress_path = None
             if img_cap_prov_id:
                 prov = plugin_context.get_provider_by_id(img_cap_prov_id)
-            if prov is None:
-                prov = plugin_context.get_using_provider(event.unified_msg_origin)
+            else:
+                # No dedicated caption provider configured; check if the
+                # main chat model supports image input natively.
+                main_prov = plugin_context.get_using_provider(
+                    event.unified_msg_origin
+                )
+                if main_prov and isinstance(main_prov, Provider):
+                    modalities = main_prov.provider_config.get("modalities", [])
+                    if (
+                        isinstance(modalities, list)
+                        and "image" in modalities
+                    ):
+                        # The main model is multimodal and the original image
+                        # has already been appended to req.image_urls by
+                        # build_main_agent, so skip the extra captioning call.
+                        content_parts.append("[Image in quoted message]")
+                        prov = None
+                    else:
+                        # Fallback: main model does not support images.
+                        prov = main_prov
 
             if prov and isinstance(prov, Provider):
                 path = await image_seg.convert_to_file_path()
@@ -797,18 +815,30 @@ async def _process_quote_message(
                     path,
                     config.provider_settings if config else None,
                 )
-                if path and _is_generated_compressed_image_path(path, compress_path):
+                if path and _is_generated_compressed_image_path(
+                    path, compress_path
+                ):
                     event.track_temporary_local_file(compress_path)
+
+                cfg = config.provider_settings if config else {}
+                img_cap_prompt = cfg.get(
+                    "image_caption_prompt",
+                    "Please describe the image content.",
+                )
                 llm_resp = await prov.text_chat(
-                    prompt="Please describe the image content.",
+                    prompt=img_cap_prompt,
                     image_urls=[compress_path],
                 )
                 if llm_resp.completion_text:
                     content_parts.append(
-                        f"[Image Caption in quoted message]: {llm_resp.completion_text}"
+                        f"[Image Caption in quoted message]: "
+                        f"{llm_resp.completion_text}"
                     )
-            else:
-                logger.warning("No provider found for image captioning in quote.")
+            elif img_cap_prov_id:
+                logger.warning(
+                    "Configured image caption provider %s not found for quote.",
+                    img_cap_prov_id,
+                )
         except BaseException as exc:
             logger.error("处理引用图片失败: %s", exc)
         finally:
@@ -820,7 +850,9 @@ async def _process_quote_message(
                 try:
                     os.remove(compress_path)
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("Fail to remove temporary compressed image: %s", exc)
+                    logger.warning(
+                        "Fail to remove temporary compressed image: %s", exc
+                    )
 
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
