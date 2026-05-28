@@ -205,8 +205,9 @@ const isSingleItemMode = computed(() => (props.modelValue?.length ?? 0) <= 1 && 
 const singleItemValue = computed({
   get: () => props.modelValue?.[0] ?? '',
   set: (value) => {
-    // 如果值为空或只有空白字符，emit 空数组
-    if (value.trim() === '') {
+    // 仅当值为完全空字符串（未输入任何字符）时清空数组，
+    // 允许包含空格（如 "hello world"）以及纯空格（如 " "）通过
+    if (value === '') {
       emit('update:modelValue', [])
       return
     }
