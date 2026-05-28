@@ -1308,7 +1308,6 @@ class PluginRoute(Route):
             ):
                 continue
             _plugin_resp.append(_t)
-            _plugin_resp.append(_t)
         return (
             Response()
             .ok(_plugin_resp, message=self.plugin_manager.failed_plugin_info)
