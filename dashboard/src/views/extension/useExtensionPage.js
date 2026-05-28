@@ -640,7 +640,7 @@ export const useExtensionPage = () => {
 
     pluginMarketData.value.forEach((plugin) => {
       if (plugin.repo) {
-        onlinePluginsMap.set(plugin.repo.toLowerCase(), plugin);
+        onlinePluginsMap.set(normalizeInstallUrl(plugin.repo).toLowerCase(), plugin);
       }
       const normalizedName = normalizeStr(plugin.name);
       onlinePluginsNameMap.set(normalizedName, plugin);
@@ -649,7 +649,7 @@ export const useExtensionPage = () => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
     
     data.forEach((extension) => {
-      const repoKey = extension.repo?.toLowerCase();
+      const repoKey = extension.repo ? normalizeInstallUrl(extension.repo).toLowerCase() : undefined;
       const onlinePlugin = repoKey ? onlinePluginsMap.get(repoKey) : null;
       
       // 使用 marketplace_name 进行市场匹配（已统一为减号格式）
@@ -1245,15 +1245,19 @@ export const useExtensionPage = () => {
     const installedByRepo = new Map(
       data
         .filter((ext) => ext.repo)
-        .map((ext) => [ext.repo.toLowerCase(), ext]),
+        .map((ext) => [normalizeInstallUrl(ext.repo).toLowerCase(), ext]),
     );
     // 使用 marketplace_name 创建映射，用于市场匹配
     const installedByName = new Map(data.map((ext) => [ext.marketplace_name || ext.name, ext]));
+    const installedRepos = new Set(installedByRepo.keys());
+    const installedNames = new Set(
+      data.map((ext) => normalizeStr(ext.name).replace(/_/g, "-")),
+    ); //统一格式，以防下面的匹配不生效
 
     for (let i = 0; i < pluginMarketData.value.length; i++) {
       const plugin = pluginMarketData.value[i];
       const matchedInstalled =
-        (plugin.repo && installedByRepo.get(plugin.repo.toLowerCase())) ||
+        (plugin.repo && installedByRepo.get(normalizeInstallUrl(plugin.repo).toLowerCase())) ||
         installedByName.get(plugin.name);
 
       // 兜底：市场源未提供字段时，回填本地已安装插件中的元数据，便于在市场页直接展示

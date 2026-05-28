@@ -93,6 +93,7 @@
   "providerSources": {
     "title": "Provider Sources",
     "add": "Add",
+    "delete": "Delete provider source",
     "empty": "No provider sources",
     "selectHint": "Please select a provider source",
     "selectCreated": "Select created provider source",
