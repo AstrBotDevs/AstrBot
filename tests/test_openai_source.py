@@ -462,6 +462,25 @@ def test_opencode_go_resolve_model_strips_prefix_and_rejects_messages_only_model
         provider._resolve_model("opencode-go/minimax-m2.5")
 
 
+def test_opencode_go_delegate_config_defaults_force_reasoning_content_only_when_absent():
+    provider = ProviderOpenCodeGo.__new__(ProviderOpenCodeGo)
+    provider.provider_config = {"model": "opencode-go/kimi-k2.6"}
+    provider.api_base = "https://example.test/v1"
+
+    config = provider._build_delegate_config(model="kimi-k2.6")
+
+    assert config["force_tool_call_reasoning_content"] is True
+
+    provider.provider_config = {
+        "model": "opencode-go/kimi-k2.6",
+        "force_tool_call_reasoning_content": False,
+    }
+
+    config = provider._build_delegate_config(model="kimi-k2.6")
+
+    assert config["force_tool_call_reasoning_content"] is False
+
+
 @pytest.mark.asyncio
 async def test_handle_api_error_content_moderated_without_images_raises():
     provider = _make_provider(

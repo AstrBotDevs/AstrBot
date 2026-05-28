@@ -43,7 +43,7 @@ class ProviderOpenCodeGo(Provider):
         config = dict(self.provider_config)
         config["api_base"] = self.api_base
         config["model"] = model
-        config["force_tool_call_reasoning_content"] = True
+        config.setdefault("force_tool_call_reasoning_content", True)
         return config
 
     @classmethod
