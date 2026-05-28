@@ -431,6 +431,16 @@ class _FakeToolSet:
         return False
 
 
+class _EmptyToolSet:
+    """模拟空工具列表的 ToolSet，用于验证无工具时不设置 tool_choice"""
+
+    def get_func_desc_anthropic_style(self):
+        return []
+
+    def empty(self):
+        return True
+
+
 class _FakeMessages:
     """模拟 AsyncAnthropic.messages 命名空间"""
 
@@ -585,3 +595,19 @@ async def test_tool_choice_no_tools_skips_tool_choice(monkeypatch):
     )
 
     assert "tool_choice" not in _capture_payloads_create.last_kwargs
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_empty_tool_list_skips_tool_choice(monkeypatch):
+    """ToolSet 存在但工具列表为空时，不应设置 tools 和 tool_choice"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    await provider.text_chat(
+        prompt="hello",
+        func_tool=_EmptyToolSet(),
+        tool_choice="any",
+    )
+
+    kwargs = _capture_payloads_create.last_kwargs
+    assert "tools" not in kwargs
+    assert "tool_choice" not in kwargs
