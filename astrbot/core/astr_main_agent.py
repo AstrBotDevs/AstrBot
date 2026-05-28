@@ -782,16 +782,18 @@ async def _process_quote_message(
                 break
 
     if image_seg:
-        try:
-            prov = None
-            path = None
-            compress_path = None
-            if img_cap_prov_id:
+        if not img_cap_prov_id:
+            # When img_cap_prov_id is not configured, skip image captioning logic
+            # to allow multimodal main provider to handle the image directly.
+            # This avoids the issue where the main model processes the image twice:
+            # once for captioning (text_chat) and once for actual response.
+            logger.debug(
+                "No dedicated image caption provider configured. "
+                "Skipping quote image captioning to avoid multimodal double-call."
+            )
+        else:
+            try:
                 prov = plugin_context.get_provider_by_id(img_cap_prov_id)
-            if prov is None:
-                prov = plugin_context.get_using_provider(event.unified_msg_origin)
-
-            if prov and isinstance(prov, Provider):
                 path = await image_seg.convert_to_file_path()
                 compress_path = await _compress_image_for_provider(
                     path,
@@ -807,20 +809,18 @@ async def _process_quote_message(
                     content_parts.append(
                         f"[Image Caption in quoted message]: {llm_resp.completion_text}"
                     )
-            else:
-                logger.warning("No provider found for image captioning in quote.")
-        except BaseException as exc:
-            logger.error("处理引用图片失败: %s", exc)
-        finally:
-            if (
-                compress_path
-                and compress_path != path
-                and os.path.exists(compress_path)
-            ):
-                try:
-                    os.remove(compress_path)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Fail to remove temporary compressed image: %s", exc)
+            except BaseException as exc:
+                logger.error("处理引用图片失败: %s", exc)
+            finally:
+                if (
+                    compress_path
+                    and compress_path != path
+                    and os.path.exists(compress_path)
+                ):
+                    try:
+                        os.remove(compress_path)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Fail to remove temporary compressed image: %s", exc)
 
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
