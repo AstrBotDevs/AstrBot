@@ -183,8 +183,60 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ret_id = getattr(ret, "id", None)
         return str(ret_id) if ret_id is not None else None
 
+    @staticmethod
+    def _split_message_chain_by_media(message: MessageChain) -> list[MessageChain]:
+        chunks: list[MessageChain] = []
+        current_chain = []
+        current_has_media = False
+
+        for component in message.chain:
+            is_media = isinstance(component, Image | Record | Video | File)
+            if is_media and current_has_media:
+                chunks.append(
+                    MessageChain(
+                        chain=current_chain,
+                        use_t2i_=message.use_t2i_,
+                        type=message.type,
+                    )
+                )
+                current_chain = []
+                current_has_media = False
+
+            current_chain.append(component)
+            current_has_media = current_has_media or is_media
+
+        if current_chain or not message.chain:
+            chunks.append(
+                MessageChain(
+                    chain=current_chain,
+                    use_t2i_=message.use_t2i_,
+                    type=message.type,
+                )
+            )
+
+        return chunks
+
     async def _post_send(self, stream: dict | None = None):
         if not self.send_buffer:
+            return None
+
+        message_chains = self._split_message_chain_by_media(self.send_buffer)
+        stream_for_chain = stream if len(message_chains) == 1 else None
+
+        ret = None
+        for message_chain in message_chains:
+            ret = await self._post_send_one(message_chain, stream_for_chain)
+
+        self.send_buffer = None
+
+        return ret
+
+    async def _post_send_one(
+        self,
+        message_to_send: MessageChain,
+        stream: dict | None = None,
+    ):
+        if not message_to_send:
             return None
 
         source = self.message_obj.raw_message
@@ -207,10 +259,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             video_file_source,
             file_source,
             file_name,
-        ) = await QQOfficialMessageEvent._parse_to_qqofficial(self.send_buffer)
+        ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
-        if stream and (image_base64 or record_file_path):
+        if stream and (
+            image_base64 or record_file_path or video_file_source or file_source
+        ):
             logger.debug("[QQOfficial] 检测到富媒体，降级为非流式发送。")
             stream = None
 
@@ -416,9 +470,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             case _:
                 pass
 
-        await super().send(self.send_buffer)
-
-        self.send_buffer = None
+        await super().send(message_to_send)
 
         return ret
 
