@@ -110,7 +110,7 @@
         <div v-if="hasTemplateSchema" class="mt-4">
           <v-divider class="mb-3"></v-divider>
           <div class="text-caption text-grey mb-2">{{ t('core.common.objectEditor.presets') }}</div>
-          <div v-for="(template, templateKey) in templateSchema" :key="templateKey" class="template-field" :class="{ 'template-field-inactive': !isTemplateKeyAdded(templateKey) }">
+          <div v-for="(template, templateKey) in templateSchema" :key="templateKey" class="template-field" :class="{ 'template-field-disabled': isTemplateKeyDisabled(templateKey) }">
             <v-row no-gutters align="center" class="mb-2">
               <v-col cols="4">
                 <div class="d-flex flex-column">
@@ -118,7 +118,7 @@
                   <span v-if="template.hint" class="text-caption text-grey" style="font-size: 0.7rem;">{{ resolveTemplateText(templateKey, 'hint', template.hint) }}</span>
                 </div>
               </v-col>
-              <v-col cols="7" class="pl-2 d-flex align-center justify-end">
+              <v-col cols="6" class="pl-2 d-flex align-center justify-end">
                 <v-text-field
                   v-if="template.type === 'string'"
                   :model-value="getTemplateValue(templateKey)"
@@ -126,6 +126,7 @@
                   density="compact"
                   variant="outlined"
                   hide-details
+                  :disabled="isTemplateKeyDisabled(templateKey)"
                   :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
                 ></v-text-field>
                 <div v-else-if="template.type === 'number' || template.type === 'float' || template.type === 'int'" class="d-flex align-center ga-4 flex-grow-1">
@@ -139,6 +140,7 @@
                     color="primary"
                     density="compact"
                     hide-details
+                    :disabled="isTemplateKeyDisabled(templateKey)"
                     class="flex-grow-1"
                   ></v-slider>
                   <v-text-field
@@ -148,6 +150,7 @@
                     density="compact"
                     variant="outlined"
                     hide-details
+                    :disabled="isTemplateKeyDisabled(templateKey)"
                     :placeholder="t('core.common.objectEditor.placeholders.numberValue')"
                     :style="template.slider ? 'max-width: 120px;' : ''"
                   ></v-text-field>
@@ -158,20 +161,39 @@
                   @update:model-value="updateTemplateValue(templateKey, $event)"
                   density="compact"
                   hide-details
+                  :disabled="isTemplateKeyDisabled(templateKey)"
                   color="primary"
                 ></v-switch>
               </v-col>
-              <v-col cols="1" class="pl-2">
-                <v-btn
-                  v-if="isTemplateKeyAdded(templateKey)"
-                  icon
-                  variant="text"
-                  size="small"
-                  color="error"
-                  @click="removeTemplateKey(templateKey)"
-                >
-                  <v-icon>mdi-close</v-icon>
-                </v-btn>
+              <v-col cols="2" class="pl-2 d-flex align-center justify-end">
+                <v-tooltip :text="t('core.common.objectEditor.resetToDefault')" location="top">
+                  <template v-slot:activator="{ props: tooltipProps }">
+                    <v-btn
+                      v-bind="tooltipProps"
+                      icon
+                      variant="text"
+                      size="small"
+                      :disabled="!isTemplateValueModified(templateKey)"
+                      @click="resetTemplateKey(templateKey)"
+                    >
+                      <v-icon>mdi-restore</v-icon>
+                    </v-btn>
+                  </template>
+                </v-tooltip>
+                <v-tooltip :text="isTemplateKeyDisabled(templateKey) ? t('core.common.objectEditor.enableParam') : t('core.common.objectEditor.disableParam')" location="top">
+                  <template v-slot:activator="{ props: tooltipProps }">
+                    <v-checkbox
+                      v-bind="tooltipProps"
+                      :model-value="!isTemplateKeyDisabled(templateKey)"
+                      @update:model-value="toggleTemplateKeyDisabled(templateKey)"
+                      density="compact"
+                      hide-details
+                      color="success"
+                      :disabled="nonDisableableKeys.includes(templateKey)"
+                      class="ma-0 pa-0"
+                    ></v-checkbox>
+                  </template>
+                </v-tooltip>
               </v-col>
             </v-row>
           </div>
@@ -277,6 +299,10 @@ const newKey = ref('')
 const newValueType = ref('string')
 const nextPairId = ref(0)
 
+// Disabled keys tracking
+const localDisabledKeys = ref([])
+const originalDisabledKeys = ref([])
+
 // Template schema support
 const templateSchema = computed(() => {
   return props.itemMeta?.template_schema || {}
@@ -286,9 +312,19 @@ const hasTemplateSchema = computed(() => {
   return Object.keys(templateSchema.value).length > 0
 })
 
-// 计算要显示的键名
+// Default disabled keys from metadata
+const defaultDisabledKeys = computed(() => {
+  return props.itemMeta?.default_disabled_keys || []
+})
+
+// Keys that cannot be disabled
+const nonDisableableKeys = computed(() => {
+  return props.itemMeta?.non_disableable_keys || []
+})
+
+// 计算要显示的键名 (exclude _disabled_keys from display)
 const displayKeys = computed(() => {
-  return Object.keys(props.modelValue).slice(0, props.maxDisplayItems)
+  return Object.keys(props.modelValue).filter(k => k !== '_disabled_keys').slice(0, props.maxDisplayItems)
 })
 
 // 分离模板字段和普通字段
@@ -318,7 +354,23 @@ function createPair({ key, value, type, slider, template, jsonError = '', _origi
 function initializeLocalKeyValuePairs() {
   localKeyValuePairs.value = []
   nextPairId.value = 0
+
+  // Initialize disabled keys from modelValue or defaults
+  const existingDisabled = props.modelValue?._disabled_keys
+  if (Array.isArray(existingDisabled)) {
+    localDisabledKeys.value = existingDisabled.filter(k => !nonDisableableKeys.value.includes(k))
+  } else if (Object.keys(props.modelValue || {}).filter(k => k !== '_disabled_keys').length === 0 && defaultDisabledKeys.value.length > 0) {
+    // New/empty config: use default disabled keys
+    localDisabledKeys.value = defaultDisabledKeys.value.filter(k => !nonDisableableKeys.value.includes(k))
+  } else {
+    localDisabledKeys.value = []
+  }
+  originalDisabledKeys.value = [...localDisabledKeys.value]
+
   for (const [key, value] of Object.entries(props.modelValue)) {
+    // Skip the internal _disabled_keys field
+    if (key === '_disabled_keys') continue
+
     let _type = (typeof value) === 'object' ? 'json':(typeof value)
     let _value = _type === 'json' ? JSON.stringify(value) : value
 
@@ -431,6 +483,43 @@ function isTemplateKeyAdded(templateKey) {
   return localKeyValuePairs.value.some(pair => pair.key === templateKey)
 }
 
+function isTemplateKeyDisabled(templateKey) {
+  return localDisabledKeys.value.includes(templateKey)
+}
+
+function isTemplateValueModified(templateKey) {
+  const template = templateSchema.value[templateKey]
+  if (!template || template.default === undefined) return false
+  const pair = localKeyValuePairs.value.find(p => p.key === templateKey)
+  if (!pair) return false
+  const type = template.type || 'string'
+  if (type === 'number' || type === 'float' || type === 'int') {
+    const pairNum = Number(pair.value)
+    const defaultNum = Number(template.default)
+    if (isNaN(pairNum) && isNaN(defaultNum)) return false
+    return pairNum !== defaultNum
+  }
+  return String(pair.value) !== String(template.default)
+}
+
+function toggleTemplateKeyDisabled(templateKey) {
+  const index = localDisabledKeys.value.indexOf(templateKey)
+  if (index >= 0) {
+    // Enable: remove from disabled list
+    localDisabledKeys.value.splice(index, 1)
+  } else {
+    // Disable: add to disabled list
+    localDisabledKeys.value.push(templateKey)
+  }
+}
+
+function resetTemplateKey(templateKey) {
+  const template = templateSchema.value[templateKey]
+  if (template && template.default !== undefined) {
+    updateTemplateValue(templateKey, template.default)
+  }
+}
+
 function getTemplateValue(templateKey) {
   const pair = localKeyValuePairs.value.find(pair => pair.key === templateKey)
   if (pair) {
@@ -496,28 +585,24 @@ function confirmDialog() {
         break
       case 'float':
       case 'number':
-        // 尝试转换为数字，如果失败则保持原值（或设为默认值0）
         convertedValue = Number(pair.value)
-        // 可选：检查是否为有效数字，无效则设为0或报错
-        // if (isNaN(convertedValue)) convertedValue = 0;
         break
       case 'bool':
       case 'boolean':
-        // 布尔值通常由 v-switch 正确处理，但为保险起见可以显式转换
-        // 注意：在 JavaScript 中，只有严格的 false, 0, '', null, undefined, NaN 会被转换为 false
-        // 这里直接赋值 pair.value 应该是安全的，因为 v-model 绑定的就是布尔值
-        // convertedValue = Boolean(pair.value)
         break
       case 'json':
         convertedValue = JSON.parse(pair.value)
         break
       case 'string':
       default:
-        // 默认转换为字符串
         convertedValue = String(pair.value)
         break
     }
     updatedValue[pair.key] = convertedValue
+  }
+  // Store disabled keys in the value if there are any
+  if (localDisabledKeys.value.length > 0) {
+    updatedValue['_disabled_keys'] = [...localDisabledKeys.value]
   }
   emit('update:modelValue', updatedValue)
   dialog.value = false
@@ -526,6 +611,7 @@ function confirmDialog() {
 function cancelDialog() {
   // Reset to original state
   localKeyValuePairs.value = originalKeyValuePairs.value.map(pair => ({ ...pair }))
+  localDisabledKeys.value = [...originalDisabledKeys.value]
   dialog.value = false
 }
 
@@ -550,7 +636,7 @@ function resolveTemplateText(templateKey, attr, fallback) {
   transition: opacity 0.2s;
 }
 
-.template-field-inactive {
-  opacity: 0.8;
+.template-field-disabled {
+  opacity: 0.5;
 }
 </style>

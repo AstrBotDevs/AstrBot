@@ -115,6 +115,9 @@
         "valueTypeLabel": "Тип значения",
         "keyExists": "Ключ уже существует",
         "invalidJson": "Некорректный формат JSON",
+        "resetToDefault": "Сбросить по умолчанию",
+        "disableParam": "Отключить инъекцию",
+        "enableParam": "Включить инъекцию",
         "placeholders": {
             "keyName": "Ключ",
             "stringValue": "Строка",

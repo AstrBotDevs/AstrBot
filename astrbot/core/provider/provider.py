@@ -74,6 +74,24 @@ class Provider(AbstractProvider):
         super().__init__(provider_config)
         self.provider_settings = provider_settings
 
+    def get_effective_custom_extra_body(self) -> dict:
+        """Get custom_extra_body with disabled keys filtered out.
+
+        Returns the custom_extra_body dict excluding any keys that are
+        listed in the _disabled_keys metadata field within the dict.
+        """
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        if not isinstance(custom_extra_body, dict):
+            return {}
+        disabled_keys = custom_extra_body.get("_disabled_keys", [])
+        if not isinstance(disabled_keys, list):
+            disabled_keys = []
+        return {
+            k: v
+            for k, v in custom_extra_body.items()
+            if k != "_disabled_keys" and k not in disabled_keys
+        }
+
     @abc.abstractmethod
     def get_current_key(self) -> str:
         raise NotImplementedError

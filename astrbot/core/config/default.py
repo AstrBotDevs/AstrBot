@@ -2027,7 +2027,7 @@ CONFIG_METADATA_2 = {
                                 "description": "温度参数",
                                 "hint": "控制输出的随机性，范围通常为 0-2。值越高越随机。",
                                 "type": "float",
-                                "default": 0.6,
+                                "default": 1.0,
                                 "slider": {"min": 0, "max": 2, "step": 0.1},
                             },
                             "top_p": {
@@ -2035,7 +2035,7 @@ CONFIG_METADATA_2 = {
                                 "description": "Top-p 采样",
                                 "hint": "核采样参数，范围通常为 0-1。控制模型考虑的概率质量。",
                                 "type": "float",
-                                "default": 1.0,
+                                "default": 0.95,
                                 "slider": {"min": 0, "max": 1, "step": 0.01},
                             },
                             "max_tokens": {
@@ -2046,6 +2046,11 @@ CONFIG_METADATA_2 = {
                                 "default": 8192,
                             },
                         },
+                        "default_disabled_keys": [
+                            "temperature",
+                            "top_p",
+                            "max_tokens",
+                        ],
                     },
                     "provider": {
                         "type": "string",

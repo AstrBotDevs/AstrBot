@@ -115,6 +115,9 @@
     "valueTypeLabel": "Value type",
     "keyExists": "Key already exists",
     "invalidJson": "Invalid JSON format",
+    "resetToDefault": "Reset to default",
+    "disableParam": "Disable injection",
+    "enableParam": "Enable injection",
     "placeholders": {
       "keyName": "Key",
       "stringValue": "String value",

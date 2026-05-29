@@ -46,6 +46,12 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
         schema.provider.items[key].invisible = true
       }
     }
+
+    // Anthropic requires max_tokens - mark it as non-disableable
+    if (sourceType === 'anthropic_chat_completion' && schema.provider.items.custom_extra_body) {
+      schema.provider.items.custom_extra_body.non_disableable_keys = ['max_tokens']
+    }
+
     return schema
   })
 
