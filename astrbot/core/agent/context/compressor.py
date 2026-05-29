@@ -17,14 +17,16 @@ if TYPE_CHECKING:
 
 from ..context.truncator import ContextTruncator
 
-# Maximum number of characters to preserve from the tail of summarized messages.
-PRESERVE_TAIL_CHARS = 10000
+# Default number of characters to preserve from the tail of summarized messages.
+DEFAULT_PRESERVE_TAIL_CHARS = 10000
 
 
 def extract_text_from_messages(messages: list[Message]) -> str:
     """Extract text content from a list of messages into a single string.
 
     Each message is formatted as "[role]: content" for readability.
+    Only text content is extracted; tool_calls are intentionally omitted
+    as they are verbose and already covered by the LLM-generated summary.
 
     Args:
         messages: The messages to extract text from.
@@ -183,6 +185,7 @@ class LLMSummaryCompressor:
         keep_recent: int = 4,
         instruction_text: str | None = None,
         compression_threshold: float = 0.82,
+        preserve_tail_chars: int = DEFAULT_PRESERVE_TAIL_CHARS,
     ) -> None:
         """Initialize the LLM summary compressor.
 
@@ -191,10 +194,13 @@ class LLMSummaryCompressor:
             keep_recent: The number of latest messages to keep (default: 4).
             instruction_text: Custom instruction for summary generation.
             compression_threshold: The compression trigger threshold (default: 0.82).
+            preserve_tail_chars: Maximum characters to preserve from the tail of
+                summarized messages (default: 10000). Set to 0 to disable.
         """
         self.provider = provider
         self.keep_recent = keep_recent
         self.compression_threshold = compression_threshold
+        self.preserve_tail_chars = preserve_tail_chars
 
         self.instruction_text = instruction_text or (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
@@ -259,9 +265,11 @@ class LLMSummaryCompressor:
         # Extract the tail of the original conversation text to preserve recent details.
         # This ensures the compressed context retains both a high-level summary
         # and the most recent raw conversation from the summarized portion.
-        tail_text = extract_text_from_messages(messages_to_summarize)
-        if len(tail_text) > PRESERVE_TAIL_CHARS:
-            tail_text = tail_text[-PRESERVE_TAIL_CHARS:]
+        tail_text = ""
+        if self.preserve_tail_chars > 0:
+            tail_text = extract_text_from_messages(messages_to_summarize)
+            if len(tail_text) > self.preserve_tail_chars:
+                tail_text = "..." + tail_text[-self.preserve_tail_chars :]
 
         # build result
         result = []
