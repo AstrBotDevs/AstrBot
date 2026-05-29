@@ -238,7 +238,7 @@ class ProviderGoogleGenAI(Provider):
         if not tool_list:
             tool_list = None
 
-        # 检查是否已经存在原生工具（搜索/代码执行/URL上下文）
+        # 1. 检查是否已经存在原生工具（搜索/代码执行/URL上下文）
         has_native_before = tool_list and any(
             getattr(t, "google_search", None)
             or getattr(t, "code_execution", None)
@@ -246,13 +246,14 @@ class ProviderGoogleGenAI(Provider):
             for t in tool_list
         )
 
-        # 判断是否为 Gemini 3 或更新的模型（只有新模型支持多工具混合编排）
+        # 2. 判断是否为 Gemini 3 或更新的模型
         is_gemini_3_or_later = any(
             model_name.startswith(p) for p in ("gemini-3-", "gemini-3.")
         )
 
+        # 3. 追加自定义工具的逻辑（全文件仅保留这一处）
         if tools and (func_desc := tools.get_func_desc_google_genai_style()):
-            # 如果是老模型且开启了原生搜索等，则自动忽略自定义工具，防止模型报错死锁
+            # 如果是老模型且已开启原生工具，强制忽略自定义插件，保障不崩溃
             if not is_gemini_3_or_later and has_native_before:
                 logger.warning(
                     "当前模型不支持多工具混合编排。已启用原生工具，自定义函数工具将被忽略"
@@ -270,7 +271,7 @@ class ProviderGoogleGenAI(Provider):
         tool_config = None
         has_func_decl = tool_list and any(t.function_declarations for t in tool_list)
 
-        # 再次确认最终的工具链中是否有原生工具
+        # 4. 再次确认最终工具链
         has_native_tool = tool_list and any(
             getattr(t, "google_search", None)
             or getattr(t, "code_execution", None)
@@ -287,7 +288,7 @@ class ProviderGoogleGenAI(Provider):
                         else types.FunctionCallingConfigMode.AUTO
                     )
                 ),
-                # 只有在支持混合编排的 Gemini 3+ 模型上，才向谷歌端声明注入此开关
+                # 仅针对 Gemini 3+ 模型注入混合编排开关
                 include_server_side_tool_invocations=True
                 if (has_native_tool and is_gemini_3_or_later)
                 else None,
@@ -400,6 +401,13 @@ class ProviderGoogleGenAI(Provider):
                 self.provider_config.get("gm_native_search", False),
             ],
         )
+
+        # 判断当前请求的模型是否为 Gemini 3+
+        model_name = payloads.get("model", self.get_model())
+        is_gemini_3_or_later = any(
+            str(model_name).startswith(p) for p in ("gemini-3-", "gemini-3.")
+        )
+
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
 
@@ -453,8 +461,10 @@ class ProviderGoogleGenAI(Provider):
                     )
                     append_or_extend(gemini_contents, parts, types.ModelContent)
 
-                # 允许在开启搜索时还原工具历史
-                elif "tool_calls" in message:
+                # 只有 Gemini 3 系列及以后或未开启原生工具时，才允许还原函数调用历史
+                elif (
+                    is_gemini_3_or_later or not native_tool_enabled
+                ) and "tool_calls" in message:
                     parts = []
                     for tool in message["tool_calls"]:
                         # 兼容历史或异常日志中的非 JSON arguments，避免重放工具历史时报错
@@ -508,7 +518,7 @@ class ProviderGoogleGenAI(Provider):
                     append_or_extend(gemini_contents, parts, types.ModelContent)
 
             # 移除了 and not native_tool_enabled 限制
-            elif role == "tool":
+            elif role == "tool" and (is_gemini_3_or_later or not native_tool_enabled):
                 func_name = message.get("name") or message.get("tool_call_id")
                 tool_call_id = message.get("tool_call_id")
 
