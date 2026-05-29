@@ -97,7 +97,8 @@ async def test_ltm_on_req_llm_skips_after_session_cleared(conversation_manager, 
         ltm.session_chats.pop(origin, None)
         parts = origin.split(":")
         if len(parts) >= 3 and parts[1] == "GroupMessage":
-            group_key = f"{parts[0]}:GroupMessage:{parts[2]}"
+            group_id = parts[2].split("%")[-1]
+            group_key = f"{parts[0]}:GroupMessage:{group_id}"
             ltm.session_chats.pop(group_key, None)
 
     conversation_manager.register_on_session_deleted(_clear_ltm_session)
