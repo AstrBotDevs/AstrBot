@@ -1,9 +1,9 @@
-﻿"""Tests for skill self-authoring tools (CreateSkillZipTool, InstallSkillFromZipTool)."""
+"""Tests for skill self-authoring tools (CreateSkillZipTool, InstallSkillFromZipTool)."""
+
 from __future__ import annotations
 
 import asyncio
 import zipfile
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -15,7 +15,6 @@ from astrbot.core.tools.computer_tools.skill_tools import (
     InstallSkillFromZipTool,
     _resolve_temp_path,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -30,7 +29,9 @@ def _make_context(role: str = "admin", runtime: str = "local") -> ContextWrapper
         "computer_use_require_admin": True,
     }
     cfg = {"provider_settings": provider_settings}
-    event = SimpleNamespace(role=role, unified_msg_origin="test_umo", get_sender_id=lambda: "test_user_id")
+    event = SimpleNamespace(
+        role=role, unified_msg_origin="test_umo", get_sender_id=lambda: "test_user_id"
+    )
     inner_context = SimpleNamespace(
         get_config=lambda umo: cfg,
         event=event,
@@ -47,6 +48,7 @@ def _make_context(role: str = "admin", runtime: str = "local") -> ContextWrapper
 def test_resolve_temp_path_rejects_absolute():
     # Use a platform-appropriate absolute path
     import os
+
     abs_path = "C:/Windows/System32/evil.zip" if os.name == "nt" else "/etc/passwd"
     with pytest.raises(ValueError, match="Invalid filename"):
         _resolve_temp_path(True, abs_path)

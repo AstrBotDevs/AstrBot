@@ -1,4 +1,4 @@
-﻿"""Skill self-authoring tools for local runtime.
+"""Skill self-authoring tools for local runtime.
 
 These tools allow the LLM to create, package, and install skills
 in local mode. The existing neo_skills.py tools only work in
@@ -61,6 +61,7 @@ def _resolve_temp_path(local_env: bool, filename: str) -> Path:
         return Path(get_astrbot_temp_path()) / filename
     except Exception:
         import tempfile
+
         return Path(tempfile.gettempdir()) / filename
 
 
@@ -147,8 +148,7 @@ class CreateSkillZipTool(FunctionTool):
 
             if zip_path.exists() and not overwrite:
                 return (
-                    "Error: Zip file already exists. "
-                    "Set overwrite=true to replace it."
+                    "Error: Zip file already exists. Set overwrite=true to replace it."
                 )
 
             # Pack the skill directory into a zip
