@@ -242,9 +242,9 @@ class ProviderGoogleGenAI(Provider):
         has_func_decl = tool_list and any(t.function_declarations for t in tool_list)
         # 判断是否同时启用了原生工具
         has_native_tool = tool_list and any(
-            getattr(t, "google_search", None) 
-            or getattr(t, "code_execution", None) 
-            or getattr(t, "url_context", None) 
+            getattr(t, "google_search", None)
+            or getattr(t, "code_execution", None)
+            or getattr(t, "url_context", None)
             for t in tool_list
         )
 
@@ -258,7 +258,7 @@ class ProviderGoogleGenAI(Provider):
                     )
                 ),
                 # 如果混合启用了原生工具与自定义工具，则向谷歌申明此开关
-                include_server_side_tool_invocations=True if has_native_tool else None
+                include_server_side_tool_invocations=True if has_native_tool else None,
             )
 
         # oper thinking config
@@ -432,7 +432,11 @@ class ProviderGoogleGenAI(Provider):
                             parsed_args = raw_args
                         else:
                             try:
-                                parsed_args = json.loads(raw_args) if raw_args is not None else None
+                                parsed_args = (
+                                    json.loads(raw_args)
+                                    if raw_args is not None
+                                    else None
+                                )
                             except (TypeError, json.JSONDecodeError):
                                 parsed_args = raw_args
 
@@ -440,9 +444,13 @@ class ProviderGoogleGenAI(Provider):
                             name=tool["function"]["name"],
                             args=parsed_args,
                         )
-                        
+
                         # 还原 Assistant 历史消息里工具调用的唯一 ID，并用 hasattr 确保向后兼容性
-                        if "id" in tool and part.function_call and hasattr(part.function_call, "id"):
+                        if (
+                            "id" in tool
+                            and part.function_call
+                            and hasattr(part.function_call, "id")
+                        ):
                             part.function_call.id = tool["id"]
 
                         # we should set thought_signature back to part if exists
@@ -471,9 +479,11 @@ class ProviderGoogleGenAI(Provider):
             elif role == "tool":
                 func_name = message.get("name") or message.get("tool_call_id")
                 tool_call_id = message.get("tool_call_id")
-                
+
                 if not func_name:
-                    logger.warning("跳过一条缺失 name 和 tool_call_id 的非法工具响应记录")
+                    logger.warning(
+                        "跳过一条缺失 name 和 tool_call_id 的非法工具响应记录"
+                    )
                     continue
 
                 part = types.Part.from_function_response(
@@ -483,9 +493,13 @@ class ProviderGoogleGenAI(Provider):
                         "content": message["content"],
                     },
                 )
-                
+
                 # 使用 hasattr 检查保护此赋值，以确保向后兼容性
-                if tool_call_id and part.function_response and hasattr(part.function_response, "id"):
+                if (
+                    tool_call_id
+                    and part.function_response
+                    and hasattr(part.function_response, "id")
+                ):
                     part.function_response.id = tool_call_id
 
                 parts = [part]
@@ -795,15 +809,23 @@ class ProviderGoogleGenAI(Provider):
                     llm_response,
                     validate_output=False,
                 )
-                
+
                 # 如果在这个 chunk 之前已经有流式文本被累积了，则把它强行塞回消息链的最前端
-                if accumulated_text and llm_response.result_chain and hasattr(llm_response.result_chain, 'chain'):
-                    llm_response.result_chain.chain.insert(0, Comp.Plain(accumulated_text))
-                
+                if (
+                    accumulated_text
+                    and llm_response.result_chain
+                    and hasattr(llm_response.result_chain, "chain")
+                ):
+                    llm_response.result_chain.chain.insert(
+                        0, Comp.Plain(accumulated_text)
+                    )
+
                 # 同样，如果之前已经累积了推理（思考）文本，也需要保留，确保对话历史中不会中断丢失
                 if accumulated_reasoning:
                     if llm_response.reasoning_content:
-                        llm_response.reasoning_content = accumulated_reasoning + llm_response.reasoning_content
+                        llm_response.reasoning_content = (
+                            accumulated_reasoning + llm_response.reasoning_content
+                        )
                     else:
                         llm_response.reasoning_content = accumulated_reasoning
 
