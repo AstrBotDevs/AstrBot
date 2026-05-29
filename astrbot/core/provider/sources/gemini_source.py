@@ -227,36 +227,13 @@ class ProviderGoogleGenAI(Provider):
                         "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包",
                     )
 
-        # 将自定义工具追加进 tool_list
         if tools and (func_desc := tools.get_func_desc_google_genai_style()):
-            if tool_list is None:
-                tool_list = []
-            tool_list.append(
-                types.Tool(function_declarations=func_desc["function_declarations"])
-            )
+            # 判断是否为明确不支持多工具组合的 legacy 模型
+            is_legacy_model = any(p in model_name for p in ("gemini-1", "gemini-2"))
 
-        if not tool_list:
-            tool_list = None
-
-        # 1. 检查是否已经存在原生工具（搜索/代码执行/URL上下文）
-        has_native_before = tool_list and any(
-            getattr(t, "google_search", None)
-            or getattr(t, "code_execution", None)
-            or getattr(t, "url_context", None)
-            for t in tool_list
-        )
-
-        # 2. 判断是否为 Gemini 3 或更新的模型
-        is_gemini_3_or_later = any(
-            model_name.startswith(p) for p in ("gemini-3-", "gemini-3.")
-        )
-
-        # 3. 追加自定义工具的逻辑（全文件仅保留这一处）
-        if tools and (func_desc := tools.get_func_desc_google_genai_style()):
-            # 如果是老模型且已开启原生工具，强制忽略自定义插件，保障不崩溃
-            if not is_gemini_3_or_later and has_native_before:
+            if tool_list and is_legacy_model:
                 logger.warning(
-                    "当前模型不支持多工具混合编排。已启用原生工具，自定义函数工具将被忽略"
+                    f"模型 {model_name} 不支持原生工具与自定义函数工具共存，本地函数工具将被忽略"
                 )
             else:
                 if tool_list is None:
@@ -271,7 +248,7 @@ class ProviderGoogleGenAI(Provider):
         tool_config = None
         has_func_decl = tool_list and any(t.function_declarations for t in tool_list)
 
-        # 4. 再次确认最终工具链
+        # 使用 getattr 防御性获取属性，防止旧版本 SDK 抛出 AttributeError
         has_native_tool = tool_list and any(
             getattr(t, "google_search", None)
             or getattr(t, "code_execution", None)
@@ -288,10 +265,7 @@ class ProviderGoogleGenAI(Provider):
                         else types.FunctionCallingConfigMode.AUTO
                     )
                 ),
-                # 仅针对 Gemini 3+ 模型注入混合编排开关
-                include_server_side_tool_invocations=True
-                if (has_native_tool and is_gemini_3_or_later)
-                else None,
+                include_server_side_tool_invocations=True if has_native_tool else None,
             )
 
         # oper thinking config
@@ -402,11 +376,12 @@ class ProviderGoogleGenAI(Provider):
             ],
         )
 
-        # 判断当前请求的模型是否为 Gemini 3+
-        model_name = payloads.get("model", self.get_model())
-        is_gemini_3_or_later = any(
-            str(model_name).startswith(p) for p in ("gemini-3-", "gemini-3.")
+        # 检测是否为不支持工具共存的旧模型（1.x 和 2.x 系列）
+        is_legacy_model = any(
+            p in payloads.get("model", "") for p in ("gemini-1", "gemini-2")
         )
+        # 只有在“是旧模型”且“开启了原生工具”的特殊情况下，才需要对历史插件记录进行隐藏拦截
+        should_hide_custom_tool_history = is_legacy_model and native_tool_enabled
 
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
@@ -461,10 +436,8 @@ class ProviderGoogleGenAI(Provider):
                     )
                     append_or_extend(gemini_contents, parts, types.ModelContent)
 
-                # 只有 Gemini 3 系列及以后或未开启原生工具时，才允许还原函数调用历史
-                elif (
-                    is_gemini_3_or_later or not native_tool_enabled
-                ) and "tool_calls" in message:
+                # 如果是旧模型且开启了原生工具，则隐藏插件历史防止 400 错误；Gemini 3+ 则放行
+                elif "tool_calls" in message and not should_hide_custom_tool_history:
                     parts = []
                     for tool in message["tool_calls"]:
                         # 兼容历史或异常日志中的非 JSON arguments，避免重放工具历史时报错
@@ -517,8 +490,8 @@ class ProviderGoogleGenAI(Provider):
                     parts = [types.Part.from_text(text=" ")]
                     append_or_extend(gemini_contents, parts, types.ModelContent)
 
-            # 移除了 and not native_tool_enabled 限制
-            elif role == "tool" and (is_gemini_3_or_later or not native_tool_enabled):
+            # 如果是旧模型且开启了原生工具，则隐藏插件响应历史防止 400 错误；Gemini 3+ 则放行
+            elif role == "tool" and not should_hide_custom_tool_history:
                 func_name = message.get("name") or message.get("tool_call_id")
                 tool_call_id = message.get("tool_call_id")
 
