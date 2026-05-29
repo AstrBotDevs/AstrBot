@@ -311,6 +311,9 @@ class AuthRoute(Route):
     async def _delayed_restart(self, delay: float = 1.0) -> None:
         """Delay briefly to let the HTTP response finish, then restart."""
         await asyncio.sleep(delay)
+        if self.core_lifecycle is None:
+            logger.warning("core_lifecycle is not available, skipping auto-restart.")
+            return
         try:
             await self.core_lifecycle.restart()
         except Exception as e:
