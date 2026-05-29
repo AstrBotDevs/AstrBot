@@ -242,7 +242,9 @@ class ProviderGoogleGenAI(Provider):
         has_func_decl = tool_list and any(t.function_declarations for t in tool_list)
         # 判断是否同时启用了原生工具
         has_native_tool = tool_list and any(
-            t.google_search or t.code_execution or getattr(t, "url_context", None) 
+            getattr(t, "google_search", None) 
+            or getattr(t, "code_execution", None) 
+            or getattr(t, "url_context", None) 
             for t in tool_list
         )
 
@@ -423,15 +425,29 @@ class ProviderGoogleGenAI(Provider):
                 elif "tool_calls" in message:
                     parts = []
                     for tool in message["tool_calls"]:
+                        # 兼容历史或异常日志中的非 JSON arguments，避免重放工具历史时报错
+                        raw_args = tool.get("function", {}).get("arguments")
+                        parsed_args = None
+                        if isinstance(raw_args, (dict, list)):
+                            parsed_args = raw_args
+                        else:
+                            try:
+                                parsed_args = json.loads(raw_args) if raw_args is not None else None
+                            except (TypeError, json.JSONDecodeError):
+                                parsed_args = raw_args
+
                         part = types.Part.from_function_call(
                             name=tool["function"]["name"],
-                            args=json.loads(tool["function"]["arguments"]),
+                            args=parsed_args,
                         )
-                        # 还原 Assistant 历史消息里工具调用的唯一 ID
-                        if "id" in tool and part.function_call:
+                        
+                        # 还原 Assistant 历史消息里工具调用的唯一 ID，并用 hasattr 确保向后兼容性
+                        if "id" in tool and part.function_call and hasattr(part.function_call, "id"):
                             part.function_call.id = tool["id"]
 
                         # we should set thought_signature back to part if exists
+                        # for more info about thought_signature, see:
+                        # https://ai.google.dev/gemini-api/docs/thought-signatures
                         if "extra_content" in tool and tool["extra_content"]:
                             ts_bs64 = (
                                 tool["extra_content"]
@@ -451,10 +467,15 @@ class ProviderGoogleGenAI(Provider):
                     parts = [types.Part.from_text(text=" ")]
                     append_or_extend(gemini_contents, parts, types.ModelContent)
 
+            # 移除了 and not native_tool_enabled 限制
             elif role == "tool":
                 func_name = message.get("name") or message.get("tool_call_id")
                 tool_call_id = message.get("tool_call_id")
                 
+                if not func_name:
+                    logger.warning("跳过一条缺失 name 和 tool_call_id 的非法工具响应记录")
+                    continue
+
                 part = types.Part.from_function_response(
                     name=func_name,
                     response={
@@ -462,8 +483,9 @@ class ProviderGoogleGenAI(Provider):
                         "content": message["content"],
                     },
                 )
-                # 将本地执行完毕的响应结果绑定上对应的验证 ID，送回给 Gemini 强校验
-                if tool_call_id and part.function_response:
+                
+                # 使用 hasattr 检查保护此赋值，以确保向后兼容性
+                if tool_call_id and part.function_response and hasattr(part.function_response, "id"):
                     part.function_response.id = tool_call_id
 
                 parts = [part]
@@ -774,10 +796,16 @@ class ProviderGoogleGenAI(Provider):
                     validate_output=False,
                 )
                 
-                # 如果在这个 chunk 之前已经有流式文本被累积了
-                # 则把它强行塞回消息链的最前端，确保历史记录不丢失这段文本
+                # 如果在这个 chunk 之前已经有流式文本被累积了，则把它强行塞回消息链的最前端
                 if accumulated_text and llm_response.result_chain and hasattr(llm_response.result_chain, 'chain'):
                     llm_response.result_chain.chain.insert(0, Comp.Plain(accumulated_text))
+                
+                # 同样，如果之前已经累积了推理（思考）文本，也需要保留，确保对话历史中不会中断丢失
+                if accumulated_reasoning:
+                    if llm_response.reasoning_content:
+                        llm_response.reasoning_content = accumulated_reasoning + llm_response.reasoning_content
+                    else:
+                        llm_response.reasoning_content = accumulated_reasoning
 
                 llm_response.id = chunk.response_id
                 if chunk.usage_metadata:
