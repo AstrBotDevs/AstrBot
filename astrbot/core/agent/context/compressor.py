@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from ..message import Message
+from ..message import Message, TextPart
 
 if TYPE_CHECKING:
     from astrbot import logger
@@ -16,6 +16,35 @@ if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
 
 from ..context.truncator import ContextTruncator
+
+# Maximum number of characters to preserve from the tail of summarized messages.
+PRESERVE_TAIL_CHARS = 10000
+
+
+def extract_text_from_messages(messages: list[Message]) -> str:
+    """Extract text content from a list of messages into a single string.
+
+    Each message is formatted as "[role]: content" for readability.
+
+    Args:
+        messages: The messages to extract text from.
+
+    Returns:
+        A concatenated string of all text content.
+    """
+    parts: list[str] = []
+    for msg in messages:
+        if msg.content is None:
+            continue
+        if isinstance(msg.content, str):
+            parts.append(f"[{msg.role}]: {msg.content}")
+        elif isinstance(msg.content, list):
+            text_segments = [
+                part.text for part in msg.content if isinstance(part, TextPart)
+            ]
+            if text_segments:
+                parts.append(f"[{msg.role}]: {''.join(text_segments)}")
+    return "\n".join(parts)
 
 
 @runtime_checkable
@@ -227,14 +256,29 @@ class LLMSummaryCompressor:
             logger.warning("LLM context compression returned an empty summary.")
             return messages
 
+        # Extract the tail of the original conversation text to preserve recent details.
+        # This ensures the compressed context retains both a high-level summary
+        # and the most recent raw conversation from the summarized portion.
+        tail_text = extract_text_from_messages(messages_to_summarize)
+        if len(tail_text) > PRESERVE_TAIL_CHARS:
+            tail_text = tail_text[-PRESERVE_TAIL_CHARS:]
+
         # build result
         result = []
         result.extend(system_messages)
 
+        compressed_content = (
+            f"Our previous history conversation summary:\n{summary_content}"
+        )
+        if tail_text:
+            compressed_content += (
+                f"\n\n---\nRecent conversation details before compression:\n{tail_text}"
+            )
+
         result.append(
             Message(
                 role="user",
-                content=f"Our previous history conversation summary: {summary_content}",
+                content=compressed_content,
             )
         )
         result.append(
