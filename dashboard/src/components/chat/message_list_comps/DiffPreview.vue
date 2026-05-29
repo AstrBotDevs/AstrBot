@@ -44,7 +44,7 @@
         class="diff-hunk"
       >
         <div class="hunk-header">
-          @@ {{ hunk.header }} @@
+          {{ hunk.header }}
         </div>
         <div
           v-for="(line, li) in hunk.lines"
@@ -201,7 +201,7 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
       newNo = parseInt(hunkMatch[3], 10);
 
       currentHunk = {
-        header: rawLine.replace(/^@@\s+/, "").replace(/\s+@@.*$/, "").trim(),
+        header: rawLine,
         lines: [],
       };
       continue;

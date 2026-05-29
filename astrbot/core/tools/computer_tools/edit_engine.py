@@ -551,7 +551,7 @@ async def edit_file(
     - Preserves BOM if present
     - Returns unified diff of changes
     """
-    lock = await get_file_lock(path)
+    lock = get_file_lock(path)
     async with lock:
         try:
             # Read file
