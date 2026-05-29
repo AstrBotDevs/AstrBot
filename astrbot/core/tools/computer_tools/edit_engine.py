@@ -29,7 +29,7 @@ _locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictio
 _locks_lock = asyncio.Lock()
 
 
-async def _get_lock(path: str) -> asyncio.Lock:
+async def get_file_lock(path: str) -> asyncio.Lock:
     """Get or create an asyncio.Lock for the given file path."""
     resolved = str(Path(path).resolve())
     async with _locks_lock:
@@ -553,7 +553,7 @@ async def edit_file(
     - Preserves BOM if present
     - Returns unified diff of changes
     """
-    lock = await _get_lock(path)
+    lock = await get_file_lock(path)
     async with lock:
         try:
             # Read file
