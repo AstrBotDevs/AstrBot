@@ -92,4 +92,5 @@ class PipelineScheduler:
 
             logger.debug("pipeline 执行完毕。")
         finally:
+            event.cleanup_temporary_local_files()
             active_event_registry.unregister(event)

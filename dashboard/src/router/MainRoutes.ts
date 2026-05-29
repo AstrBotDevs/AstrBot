@@ -1,4 +1,7 @@
-import { EXTENSION_ROUTE_NAME } from './routeConstants.mjs';
+import {
+  EXTENSION_DETAILS_ROUTE_NAME,
+  EXTENSION_ROUTE_NAME
+} from './routeConstants.mjs';
 
 const MainRoutes = {
   path: '/main',
@@ -21,6 +24,16 @@ const MainRoutes = {
     {
       name: EXTENSION_ROUTE_NAME,
       path: '/extension',
+      component: () => import('@/views/ExtensionPage.vue')
+    },
+    {
+      name: 'PluginPage',
+      path: '/plugin-page/:pluginName/:pageName',
+      component: () => import('@/views/PluginPagePage.vue')
+    },
+    {
+      name: EXTENSION_DETAILS_ROUTE_NAME,
+      path: '/extension/:pluginId',
       component: () => import('@/views/ExtensionPage.vue')
     },
     {
@@ -52,9 +65,9 @@ const MainRoutes = {
       redirect: '/config#system'
     },
     {
-      name: 'Default',
+      name: 'Stats',
       path: '/dashboard/default',
-      component: () => import('@/views/dashboards/default/DefaultDashboard.vue')
+      component: () => import('@/views/stats/StatsPage.vue')
     },
     {
       name: 'Conversation',

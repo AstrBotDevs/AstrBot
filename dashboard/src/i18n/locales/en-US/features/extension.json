@@ -43,6 +43,9 @@
     "viewInfo": "Handlers",
     "viewDocs": "Documentation",
     "viewRepo": "Repository",
+    "openPages": "Pages",
+    "openPage": "Open",
+    "openWebui": "Open Plugin UI",
     "close": "Close",
     "save": "Save",
     "saveAndClose": "Save and Close",
@@ -52,6 +55,8 @@
     "selectFile": "Select File",
     "refresh": "Refresh",
     "updateAll": "Update All",
+    "pin": "Pin",
+    "unpin": "Unpin",
     "deleteSource": "Delete Source",
     "reshuffle": "Shuffle Again"
   },
@@ -61,7 +66,8 @@
     "system": "System",
     "loading": "Loading...",
     "installed": "Installed",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "incompatible": "Incompatible"
   },
   "tooltips": {
     "enable": "Click to Enable",
@@ -91,11 +97,55 @@
   },
   "empty": {
     "noPlugins": "No Extensions",
-    "noPluginsDesc": "Try installing extensions or showing system extensions"
+    "noPluginsDesc": "Try installing extensions or adjusting the search"
+  },
+  "detail": {
+    "contents": "Plugin Handlers",
+    "noContents": "No handlers",
+    "notFound": "Plugin not found",
+    "docsTitle": "Documentation",
+    "docsEmpty": "No documentation",
+    "changelogTitle": "Changelog",
+    "changelogEmpty": "No changelog",
+    "subCommandsCount": "{count} sub-commands",
+    "handlerGroups": {
+      "page": "Pages",
+      "skill": "Skills",
+      "command": "Commands / Command Groups",
+      "llm_tool": "LLM Tools",
+      "listener": "Event Listeners",
+      "hook": "Hooks",
+      "commands": "Commands / Command Groups",
+      "hooks": "Hooks",
+      "functionTools": "Function Tools",
+      "eventListeners": "Event Listeners"
+    },
+    "info": {
+      "title": "Info",
+      "version": "Version",
+      "author": "Author",
+      "category": "Category",
+      "stars": "Stars",
+      "tags": "Tags",
+      "astrbotVersion": "AstrBot Version Requirement",
+      "supportPlatforms": "Supported Platforms",
+      "authorWebsite": "Author Website",
+      "repository": "Repository"
+    }
   },
   "market": {
     "recommended": "🥳 Recommended",
     "allPlugins": "📦 All Extensions",
+    "category": "Category",
+    "categories": {
+      "all": "All",
+      "ai_tools": "AI Tools",
+      "entertainment": "Entertainment",
+      "productivity": "Productivity",
+      "integrations": "Integrations",
+      "utilities": "Utilities",
+      "other": "Other"
+    },
     "showFullName": "Full Name",
     "devDocs": "Extension Development Docs",
     "submitRepo": "Submit Extension Repository",
@@ -120,8 +170,6 @@
     "sourceExists": "This source already exists",
     "installPlugin": "Install Plugin",
     "randomPlugins": "🎲 Random Plugins",
-    "showRandomPlugins": "Show Random Plugins",
-    "hideRandomPlugins": "Hide Random Plugins",
     "sourceSafetyWarning": "Even with the default source, plugin stability and security cannot be fully guaranteed. Please verify carefully before use."
   },
   "sort": {
@@ -164,7 +212,16 @@
       "title": "Install Extension",
       "fromFile": "Install from File",
       "fromUrl": "Install from URL",
-      "supportPlatformsCount": "Supports {count} Platforms"
+      "supportPlatformsCount": "Supports {count} Platforms",
+      "sectionTitle": "Install",
+      "downloadSource": "The plugin package will be installed from:",
+      "githubSecurityWarning": "AstrBot cannot guarantee the safety of plugins downloaded from GitHub. Install only if you trust the plugin source."
+    },
+    "update": {
+      "title": "Update Extension",
+      "sectionTitle": "Update",
+      "downloadSource": "The update package will be installed from:",
+      "confirm": "Confirm Update"
     },
     "danger_warning": {
       "title": "Dangerous Plugin Warning",
@@ -212,9 +269,14 @@
     "supportedFormats": "Supports .zip extension files",
     "updateAllSuccess": "All upgradable extensions have been updated!",
     "updateAllFailed": "{failed} of {total} extensions failed to update:",
+    "noUpdatesAvailable": "No extensions have updates available",
     "fillSourceNameAndUrl": "Please fill in the complete source name and URL",
     "invalidUrl": "Please enter a valid URL",
-    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data"
+    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
+    "pluginNotFound": "Plugin not found",
+    "pluginDisabled": "This plugin is disabled. Enable it before opening its page.",
+    "pluginPageNotFound": "Plugin page not found",
+    "pluginPageLoadFailed": "Failed to load the plugin page"
   },
   "upload": {
     "fromFile": "Install from File",
@@ -232,7 +294,7 @@
     "emptyHint": "Upload a Skills zip to get started",
     "uploadDialogTitle": "Upload Skills",
     "uploadHint": "Upload multiple zip skill packages or drag them in. The system validates the structure automatically and shows a result for each file.",
-    "structureRequirement": "The most common failure is an invalid archive structure. Each zip must contain exactly one top-level folder such as `skillname/`, and that folder must include `SKILL.md`.",
+    "structureRequirement": "The archive supports multiple skills folders.",
     "abilityMultiple": "Upload multiple zip files at once",
     "abilityValidate": "Validate `SKILL.md` automatically",
     "abilitySkip": "Automatically skip duplicate files.",
@@ -316,8 +378,20 @@
     "sourceLocalOnly": "Local Skill",
     "sourceSandboxOnly": "Sandbox Preset Skill",
     "sourceBoth": "Local + Sandbox",
+    "sourcePlugin": "Plugin: {plugin}",
     "sandboxDiscoveryPending": "Sandbox preset skills have not been discovered yet. Start at least one sandbox session to populate this list.",
-    "sandboxPresetReadonly": "Sandbox preset skills are read-only here. You cannot delete or enable/disable them from Local Skills."
+    "sandboxPresetReadonly": "Sandbox preset skills are read-only here. You cannot delete or enable/disable them from Local Skills.",
+    "pluginReadonly": "Plugin-provided skills are managed by their plugin. They cannot be deleted or downloaded from Local Skills.",
+    "openEditor": "View/Edit",
+    "editorTitle": "Edit Skill",
+    "editorLoadFailed": "Failed to load Skill file",
+    "editorSaveFailed": "Failed to save Skill file",
+    "editorSaveSuccess": "Saved successfully",
+    "saveFile": "Save file",
+    "readonly": "Read-only",
+    "unsaved": "Unsaved",
+    "noFileSelected": "No file selected",
+    "discardChanges": "This file has unsaved changes. Discard them?"
   },
   "card": {
     "actions": {

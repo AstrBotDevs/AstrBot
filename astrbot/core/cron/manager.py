@@ -22,6 +22,12 @@ if TYPE_CHECKING:
     from astrbot.core.star.context import Context
 
 
+class CronJobSchedulingError(Exception):
+    """Raised when a cron job fails to be scheduled."""
+
+    pass
+
+
 class CronJobManager:
     """Central scheduler for BasicCronJob and ActiveAgentCronJob."""
 
@@ -59,7 +65,10 @@ class CronJobManager:
                     job.job_id,
                 )
                 continue
-            self._schedule_job(job)
+            try:
+                self._schedule_job(job)
+            except CronJobSchedulingError:
+                continue  # Error already logged in _schedule_job
 
     async def add_basic_job(
         self,
@@ -181,12 +190,15 @@ class CronJobManager:
                     job.job_id, next_run_time=self._get_next_run_time(job.job_id)
                 )
             )
-        except Exception as e:
-            logger.error(f"Failed to schedule cron job {job.job_id}: {e!s}")
+        except (ValueError, TypeError) as e:
+            logger.exception("Failed to schedule cron job %s", job.job_id)
+            raise CronJobSchedulingError(str(e)) from e
 
     def _get_next_run_time(self, job_id: str):
         aps_job = self.scheduler.get_job(job_id)
-        return aps_job.next_run_time if aps_job else None
+        if not aps_job or aps_job.next_run_time is None:
+            return None
+        return aps_job.next_run_time.astimezone(timezone.utc)
 
     async def _run_job(self, job_id: str) -> None:
         job = await self.db.get_cron_job(job_id)
@@ -250,6 +262,7 @@ class CronJobManager:
                 "run_at": (
                     job.payload.get("run_at") if isinstance(job.payload, dict) else None
                 ),
+                "session": session_str,
             },
             "cron_payload": payload,
         }
@@ -275,8 +288,8 @@ class CronJobManager:
         )
         from astrbot.core.astr_main_agent_resources import (
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
-            SEND_MESSAGE_TO_USER_TOOL,
         )
+        from astrbot.core.tools.message_tools import SendMessageToUserTool
 
         try:
             session = (
@@ -307,8 +320,11 @@ class CronJobManager:
         if cron_payload.get("origin", "tool") == "api":
             cron_event.role = "admin"
 
+        tool_call_timeout = cfg.get("provider_settings", {}).get(
+            "tool_call_timeout", 120
+        )
         config = MainAgentBuildConfig(
-            tool_call_timeout=3600,
+            tool_call_timeout=tool_call_timeout,
             llm_safety_mode=False,
             streaming_response=False,
         )
@@ -339,7 +355,9 @@ class CronJobManager:
         )
         if not req.func_tool:
             req.func_tool = ToolSet()
-        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+        req.func_tool.add_tool(
+            self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
+        )
 
         result = await build_main_agent(
             event=cron_event, plugin_context=self.ctx, config=config, req=req

@@ -31,7 +31,7 @@ class botClient(Client):
     async def on_group_at_message_create(
         self, message: botpy.message.GroupMessage
     ) -> None:
-        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
         )
@@ -42,7 +42,7 @@ class botClient(Client):
 
     # 收到频道消息
     async def on_at_message_create(self, message: botpy.message.Message) -> None:
-        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
         )
@@ -55,7 +55,7 @@ class botClient(Client):
     async def on_direct_message_create(
         self, message: botpy.message.DirectMessage
     ) -> None:
-        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
         )
@@ -65,7 +65,7 @@ class botClient(Client):
 
     # 收到 C2C 消息
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
-        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
         )
@@ -75,15 +75,20 @@ class botClient(Client):
 
     def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.remember_session_message_id(abm.session_id, abm.message_id)
-        self.platform.commit_event(
-            QQOfficialWebhookMessageEvent(
-                abm.message_str,
-                abm,
-                self.platform.meta(),
-                abm.session_id,
-                self,
-            ),
+        event = QQOfficialWebhookMessageEvent(
+            abm.message_str,
+            abm,
+            self.platform.meta(),
+            abm.session_id,
+            self,
         )
+        # Populate extra fields cached from the raw webhook payload
+        webhook_helper = getattr(self.platform, "webhook_helper", None)
+        if webhook_helper and abm.message_id:
+            extra_data = webhook_helper.pop_extra_data(abm.message_id)
+            for key, val in extra_data.items():
+                event.set_extra(key, val)
+        self.platform.commit_event(event)
 
 
 @register_platform_adapter("qq_official_webhook", "QQ 机器人官方 API 适配器(Webhook)")
@@ -194,4 +199,4 @@ class QQOfficialWebhookPlatformAdapter(Platform):
                     f"Exception occurred during QQOfficialWebhook server shutdown: {exc}",
                     exc_info=True,
                 )
-        logger.info("QQ 机器人官方 API 适配器已经被优雅地关闭")
+        logger.info("QQ 机器人官方 API 适配器已经被关闭")

@@ -1,39 +1,57 @@
 {
+  "header": {
+    "eyebrow": "Subagent Orchestration"
+  },
   "page": {
-    "title": "SubAgent 编排",
+    "title": "子代理编排",
     "beta": "实验性",
-    "subtitle": "主 LLM 可直接使用自身工具，也可通过 handoff 分派给各个 SubAgent。"
+    "subtitle": "主代理可直接使用自身工具，也可将部分任务委派给各个子代理，完成更复杂的任务，避免主代理上下文过长。"
   },
   "actions": {
     "refresh": "刷新",
     "save": "保存",
-    "add": "新增 SubAgent",
+    "add": "新增子代理",
+    "expand": "展开设置",
+    "collapse": "收起设置",
     "delete": "删除",
     "close": "关闭"
   },
+  "overview": {
+    "totalAgents": "子代理总数",
+    "totalAgentsNote": "当前已配置的子代理数量",
+    "enabledAgents": "启用中的 Agent",
+    "enabledAgentsNote": "会参与 handoff 编排的子代理",
+    "mainOrchestration": "主编排状态",
+    "boundPersonas": "已绑定 Persona",
+    "boundPersonasNote": "完成角色绑定的子代理数量"
+  },
   "switches": {
-    "enable": "启用 SubAgent 编排",
+    "enable": "启用子代理编排",
     "enableHint": "启用子代理功能",
-    "dedupe": "主 LLM 去重重复工具（与 SubAgent 重叠的工具将被隐藏）",
-    "dedupeHint": "从主代理中移除重复工具"
+    "dedupe": "主 LLM 去重重复工具（与子代理重叠的工具将被隐藏）",
+    "dedupeHint": "从主代理中移除与子代理重复的工具"
   },
   "description": {
-    "disabled": "不启动：SubAgent 关闭；主 LLM 按 persona 规则挂载工具（默认全部），并直接调用。",
-    "enabled": "启动：主 LLM 会保留自身工具并挂载 transfer_to_* 委派工具。若开启“去重重复工具”，与 SubAgent 指定的工具重叠部分会从主 LLM 工具集中移除。"
+    "disabled": "未启动子代理编排功能。",
+    "enabled": "子代理将作为工具放在主代理的工具集中，主代理会在适当的时机调用子代理完成任务。"
   },
   "section": {
-    "title": "SubAgents 配置",
-    "globalSettings": "全局设置"
+    "title": "子代理配置",
+    "subtitle": "为主代理配置可委派的子代理、人格与描述信息",
+    "globalSettings": "全局设置",
+    "agentSetup": "Agent 设置"
   },
   "cards": {
     "statusEnabled": "启用",
     "statusDisabled": "停用",
-    "unnamed": "未命名 SubAgent",
+    "unnamed": "未命名子代理",
     "transferPrefix": "transfer_to_{name}",
     "switchLabel": "启用",
     "previewTitle": "预览：主 LLM 将看到的 handoff 工具",
     "personaChip": "Persona: {id}",
-    "noDescription": "暂无描述"
+    "noDescription": "暂无描述",
+    "personaPreview": "人格预览",
+    "previewHint": "这里展示当前所选 Persona 的预览，便于确认 handoff 目标。"
   },
   "form": {
     "nameLabel": "Agent 名称（用于 transfer_to_{name}）",
@@ -41,7 +59,7 @@
     "providerLabel": "Chat Provider（可选）",
     "providerHint": "留空表示跟随全局默认 provider。",
     "personaLabel": "选择人格设定",
-    "personaHint": "SubAgent 将直接继承所选 Persona 的系统设定与工具。在人格设定页管理和新建人格。",
+    "personaHint": "子代理 将直接继承所选 Persona 的系统设定与工具。在人格设定页管理和新建人格。",
     "personaPreview": "人格预览",
     "descriptionLabel": "对主 LLM 的描述（用于决定是否 handoff）",
     "descriptionHint": "这段会作为 transfer_to_* 工具的描述给主 LLM 看，建议简短明确。"
@@ -49,17 +67,20 @@
   "messages": {
     "loadConfigFailed": "获取配置失败",
     "loadPersonaFailed": "获取 Persona 列表失败",
-    "nameMissing": "存在未填写名称的 SubAgent",
-    "nameInvalid": "SubAgent 名称不合法：仅允许英文小写字母/数字/下划线，且需以字母开头",
-    "nameDuplicate": "SubAgent 名称重复：{name}",
-    "personaMissing": "SubAgent {name} 未选择 Persona",
+    "unsavedChangesNotice": "当前页面有未保存修改，请在离开前保存。",
+    "unsavedChangesLeaveConfirm": "当前页面有未保存修改，离开后将丢失这些更改。是否继续离开？",
+    "unsavedChangesReloadConfirm": "当前页面有未保存修改，刷新配置会丢失这些更改。是否继续刷新？",
+    "nameMissing": "存在未填写名称的子代理",
+    "nameInvalid": "子代理名称不合法：仅允许英文小写字母/数字/下划线，且需以字母开头",
+    "nameDuplicate": "子代理名称重复：{name}",
+    "personaMissing": "子代理 {name} 未选择 Persona",
     "saveSuccess": "保存成功",
     "saveFailed": "保存失败",
     "nameRequired": "名称必填",
     "namePattern": "仅支持小写字母、数字和下划线"
   },
   "empty": {
-    "title": "未配置 SubAgent",
+    "title": "未配置子代理",
     "subtitle": "添加一个新的子代理以开始",
     "action": "创建第一个 Agent"
   }

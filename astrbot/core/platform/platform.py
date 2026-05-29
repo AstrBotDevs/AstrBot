@@ -1,4 +1,5 @@
 import abc
+import asyncio
 import uuid
 from asyncio import Queue
 from collections.abc import Coroutine
@@ -142,7 +143,9 @@ class Platform(abc.ABC):
 
         异步方法。
         """
-        await Metric.upload(msg_event_tick=1, adapter_name=self.meta().name)
+        asyncio.create_task(
+            Metric.upload(msg_event_tick=1, adapter_name=self.meta().name)
+        )
 
     def commit_event(self, event: AstrMessageEvent) -> None:
         """提交一个事件到事件队列。"""

@@ -28,6 +28,7 @@ import os
 import sys
 import uuid
 from enum import Enum
+from pathlib import Path, PurePosixPath
 
 if sys.version_info >= (3, 14):
     from pydantic import BaseModel
@@ -64,7 +65,6 @@ class ComponentType(str, Enum):
     Music = "Music"
     Json = "Json"
     Unknown = "Unknown"
-    WechatEmoji = "WechatEmoji"  # Wechat 下的 emoji 表情包
 
 
 class BaseMessageComponent(BaseModel):
@@ -91,7 +91,6 @@ class BaseMessageComponent(BaseModel):
 class Plain(BaseMessageComponent):
     type: ComponentType = ComponentType.Plain
     text: str
-    convert: bool | None = True
 
     def __init__(self, text: str, convert: bool = True, **_) -> None:
         super().__init__(text=text, convert=convert, **_)
@@ -114,15 +113,11 @@ class Face(BaseMessageComponent):
 class Record(BaseMessageComponent):
     type: ComponentType = ComponentType.Record
     file: str | None = ""
-    magic: bool | None = False
     url: str | None = ""
-    cache: bool | None = True
-    proxy: bool | None = True
-    timeout: int | None = 0
     # Original text content (e.g. TTS source text), used as caption in fallback scenarios
     text: str | None = None
     # 额外
-    path: str | None
+    path: str | None = None
 
     def __init__(self, file: str | None, **_) -> None:
         for k in _:
@@ -224,7 +219,6 @@ class Video(BaseMessageComponent):
     type: ComponentType = ComponentType.Video
     file: str
     cover: str | None = ""
-    c: int | None = 2
     # 额外
     path: str | None = ""
 
@@ -401,14 +395,9 @@ class Image(BaseMessageComponent):
     type: ComponentType = ComponentType.Image
     file: str | None = ""
     _type: str | None = ""
-    subType: int | None = 0
     url: str | None = ""
-    cache: bool | None = True
-    id: int | None = 40000
-    c: int | None = 2
     # 额外
     path: str | None = ""
-    file_unique: str | None = ""  # 某些平台可能有图片缓存的唯一标识
 
     def __init__(self, file: str | None, **_) -> None:
         super().__init__(file=file, **_)
@@ -674,6 +663,19 @@ class Unknown(BaseMessageComponent):
     text: str
 
 
+def _sanitize_file_component_name(name: str | None) -> str:
+    if not name:
+        return "file"
+
+    normalized = str(name).replace("\\", "/")
+    basename = PurePosixPath(normalized).name.replace("\x00", "").strip()
+    for char in ':*?"<>|':
+        basename = basename.replace(char, "_")
+    if basename in {"", ".", ".."}:
+        return "file"
+    return basename
+
+
 class File(BaseMessageComponent):
     """文件消息段"""
 
@@ -785,15 +787,18 @@ class File(BaseMessageComponent):
         """下载文件"""
         if not self.url:
             raise ValueError("Download failed: No URL provided in File component.")
-        download_dir = get_astrbot_temp_path()
+        download_dir = Path(get_astrbot_temp_path())
+        download_dir.mkdir(parents=True, exist_ok=True)
         if self.name:
-            name, ext = os.path.splitext(self.name)
+            safe_name = _sanitize_file_component_name(self.name)
+            name = Path(safe_name).stem
+            ext = Path(safe_name).suffix
             filename = f"fileseg_{name}_{uuid.uuid4().hex[:8]}{ext}"
         else:
             filename = f"fileseg_{uuid.uuid4().hex}"
-        file_path = os.path.join(download_dir, filename)
-        await download_file(self.url, file_path)
-        self.file_ = os.path.abspath(file_path)
+        file_path = download_dir / filename
+        await download_file(self.url, str(file_path))
+        self.file_ = str(file_path.resolve())
 
     async def register_to_file_service(self) -> str:
         """将文件注册到文件服务。
@@ -839,16 +844,6 @@ class File(BaseMessageComponent):
         }
 
 
-class WechatEmoji(BaseMessageComponent):
-    type: ComponentType = ComponentType.WechatEmoji
-    md5: str | None = ""
-    md5_len: int | None = 0
-    cdnurl: str | None = ""
-
-    def __init__(self, **_) -> None:
-        super().__init__(**_)
-
-
 ComponentTypes = {
     # Basic Message Segments
     "plain": Plain,
@@ -874,5 +869,4 @@ ComponentTypes = {
     "nodes": Nodes,
     "json": Json,
     "unknown": Unknown,
-    "WechatEmoji": WechatEmoji,
 }

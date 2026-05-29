@@ -46,6 +46,10 @@ class QQOfficialWebhook:
         self.event_queue = event_queue
         self.platform = platform
         self.shutdown_event = asyncio.Event()
+
+        # Cache for extra fields extracted from raw webhook payloads, keyed by message id
+        self._extra_data_cache: dict[str, dict] = {}
+
         # Deduplication cache for webhook retry callbacks.
         self._seen_event_ids: dict[str, float] = {}
         self._dedup_ttl: int = 60  # seconds
@@ -90,6 +94,10 @@ class QQOfficialWebhook:
         }
         return response
 
+    def pop_extra_data(self, message_id: str) -> dict:
+        """Pop and return extra fields cached from the raw webhook payload for a given message ID."""
+        return self._extra_data_cache.pop(message_id, {})
+
     async def callback(self):
         """内部服务器的回调入口"""
         return await self.handle_callback(quart.request)
@@ -122,6 +130,7 @@ class QQOfficialWebhook:
         if opcode == 13:
             # validation
             signed = await self.webhook_validation(cast(dict, data))
+            logger.debug(f"webhook validation response: {signed}")
             return signed
 
         event_id = msg.get("id")
@@ -142,10 +151,24 @@ class QQOfficialWebhook:
 
         if not stopped and event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
             event = msg["t"].lower()
+            # Extract extra fields from raw payload before botpy parses and discards them
+            if data:
+                msg_id = data.get("id")
+                if msg_id:
+                    author = data.get("author") or {}
+                    extra: dict = {}
+                    if union_openid := author.get("union_openid"):
+                        extra["union_openid"] = union_openid
+                    if message_scene := data.get("message_scene"):
+                        extra["message_scene"] = message_scene
+                    if extra:
+                        self._extra_data_cache[msg_id] = extra
             try:
                 func = self._connection.parser[event]
             except KeyError:
                 logger.error("_parser unknown event %s.", event)
+                if data:
+                    self._extra_data_cache.pop(data.get("id", ""), None)
             else:
                 func(msg)
 

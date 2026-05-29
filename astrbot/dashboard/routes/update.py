@@ -1,4 +1,5 @@
 import traceback
+import uuid
 
 from quart import request
 
@@ -24,6 +25,7 @@ class UpdateRoute(Route):
         super().__init__(context)
         self.routes = {
             "/update/check": ("GET", self.check_update),
+            "/update/progress": ("GET", self.get_update_progress),
             "/update/releases": ("GET", self.get_releases),
             "/update/do": ("POST", self.update_project),
             "/update/dashboard": ("POST", self.update_dashboard),
@@ -32,7 +34,103 @@ class UpdateRoute(Route):
         }
         self.astrbot_updator = astrbot_updator
         self.core_lifecycle = core_lifecycle
+        self.update_progress: dict[str, dict] = {}
         self.register_routes()
+
+    def _init_update_progress(self, progress_id: str, version: str) -> None:
+        self.update_progress[progress_id] = {
+            "id": progress_id,
+            "status": "running",
+            "stage": "preparing",
+            "version": version or "latest",
+            "message": "正在准备更新...",
+            "overall_percent": 0,
+            "stages": {
+                "dashboard": self._empty_stage("pending"),
+                "core": self._empty_stage("pending"),
+            },
+        }
+
+    @staticmethod
+    def _empty_stage(status: str = "pending") -> dict:
+        return {
+            "status": status,
+            "downloaded": 0,
+            "total": 0,
+            "percent": 0,
+            "speed": 0,
+        }
+
+    def _set_update_stage(
+        self,
+        progress_id: str,
+        stage: str,
+        status: str,
+        message: str,
+        overall_percent: int | None = None,
+    ) -> None:
+        progress = self.update_progress.get(progress_id)
+        if not progress:
+            return
+        progress["stage"] = stage
+        progress["message"] = message
+        progress["stages"].setdefault(stage, self._empty_stage())
+        progress["stages"][stage]["status"] = status
+        if overall_percent is not None:
+            progress["overall_percent"] = overall_percent
+
+    @staticmethod
+    def _normalize_percent(value) -> int:
+        try:
+            percent = float(value or 0)
+        except (TypeError, ValueError):
+            return 0
+        if percent <= 1:
+            percent *= 100
+        return max(0, min(100, int(percent)))
+
+    def _make_progress_callback(
+        self,
+        progress_id: str,
+        stage: str,
+        stage_start: int,
+        stage_weight: int,
+    ):
+        def _callback(payload: dict) -> None:
+            progress = self.update_progress.get(progress_id)
+            if not progress:
+                return
+            stage_percent = self._normalize_percent(payload.get("percent"))
+            progress["stage"] = stage
+            progress["stages"][stage] = {
+                "status": "running" if stage_percent < 100 else "done",
+                "downloaded": payload.get("downloaded", 0),
+                "total": payload.get("total", 0),
+                "percent": stage_percent,
+                "speed": payload.get("speed", 0),
+            }
+            progress["overall_percent"] = min(
+                99,
+                stage_start + int(stage_percent * stage_weight / 100),
+            )
+
+        return _callback
+
+    async def get_update_progress(self):
+        progress_id = request.args.get("id", "")
+        if not progress_id:
+            return Response().error("缺少参数 id。").__dict__
+        progress = self.update_progress.get(progress_id)
+        if not progress:
+            return (
+                Response()
+                .ok(
+                    {"id": progress_id, "status": "idle"},
+                    "没有正在进行的更新。",
+                )
+                .__dict__
+            )
+        return Response().ok(progress).__dict__
 
     async def do_migration(self):
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
@@ -89,6 +187,7 @@ class UpdateRoute(Route):
         data = await request.json
         version = data.get("version", "")
         reboot = data.get("reboot", True)
+        progress_id = data.get("progress_id") or uuid.uuid4().hex
         if version == "" or version == "latest":
             latest = True
             version = ""
@@ -99,33 +198,112 @@ class UpdateRoute(Route):
         if proxy:
             proxy = proxy.removesuffix("/")
 
+        self._init_update_progress(progress_id, version)
         try:
+            self._set_update_stage(
+                progress_id,
+                "dashboard",
+                "running",
+                "正在下载 WebUI...",
+                0,
+            )
+            await download_dashboard(
+                latest=latest,
+                version=version,
+                proxy=proxy,
+                progress_callback=self._make_progress_callback(
+                    progress_id,
+                    "dashboard",
+                    0,
+                    45,
+                ),
+            )
+            self._set_update_stage(
+                progress_id,
+                "dashboard",
+                "done",
+                "WebUI 下载完成。",
+                45,
+            )
+
+            self._set_update_stage(
+                progress_id,
+                "core",
+                "running",
+                "正在下载 AstrBot 项目代码...",
+                45,
+            )
             await self.astrbot_updator.update(
                 latest=latest,
                 version=version,
                 proxy=proxy,
+                progress_callback=self._make_progress_callback(
+                    progress_id,
+                    "core",
+                    45,
+                    45,
+                ),
+            )
+            self._set_update_stage(
+                progress_id,
+                "core",
+                "done",
+                "项目代码下载完成。",
+                90,
             )
 
-            try:
-                await download_dashboard(latest=latest, version=version, proxy=proxy)
-            except Exception as e:
-                logger.error(f"下载管理面板文件失败: {e}。")
-
             # pip 更新依赖
+            self._set_update_stage(
+                progress_id,
+                "dependencies",
+                "running",
+                "正在更新依赖...",
+                92,
+            )
             logger.info("更新依赖中...")
             try:
                 await pip_installer.install(requirements_path="requirements.txt")
             except Exception as e:
                 logger.error(f"更新依赖失败: {e}")
+            self._set_update_stage(
+                progress_id,
+                "dependencies",
+                "done",
+                "依赖更新完成。",
+                96,
+            )
 
             if reboot:
+                self._set_update_stage(
+                    progress_id,
+                    "restart",
+                    "running",
+                    "更新成功，正在准备重启...",
+                    98,
+                )
                 await self.core_lifecycle.restart()
+                self.update_progress[progress_id].update(
+                    {
+                        "status": "success",
+                        "stage": "done",
+                        "message": "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。",
+                        "overall_percent": 100,
+                    },
+                )
                 ret = (
                     Response()
                     .ok(None, "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。")
                     .__dict__
                 )
                 return ret, 200, CLEAR_SITE_DATA_HEADERS
+            self.update_progress[progress_id].update(
+                {
+                    "status": "success",
+                    "stage": "done",
+                    "message": "更新成功，AstrBot 将在下次启动时应用新的代码。",
+                    "overall_percent": 100,
+                },
+            )
             ret = (
                 Response()
                 .ok(None, "更新成功，AstrBot 将在下次启动时应用新的代码。")
@@ -133,6 +311,12 @@ class UpdateRoute(Route):
             )
             return ret, 200, CLEAR_SITE_DATA_HEADERS
         except Exception as e:
+            self.update_progress[progress_id].update(
+                {
+                    "status": "error",
+                    "message": e.__str__(),
+                },
+            )
             logger.error(f"/api/update_project: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
 

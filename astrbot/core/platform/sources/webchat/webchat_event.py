@@ -34,6 +34,7 @@ class WebChatMessageEvent(AstrMessageEvent):
         message: MessageChain | None,
         session_id: str,
         streaming: bool = False,
+        emit_complete: bool = False,
     ) -> str | None:
         request_id = str(message_id)
         conversation_id = _extract_conversation_id(session_id)
@@ -126,6 +127,17 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
             else:
                 logger.debug(f"webchat 忽略: {comp.type}")
+
+        if emit_complete:
+            await web_chat_back_queue.put(
+                {
+                    "type": "complete",
+                    "data": data,
+                    "streaming": streaming,
+                    "chain_type": message.type,
+                    "message_id": message_id,
+                },
+            )
 
         return data
 

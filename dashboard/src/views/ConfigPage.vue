@@ -44,39 +44,41 @@
       <v-slide-y-transition mode="out-in">
         <div v-if="(selectedConfigID || isSystemConfig) && fetched" :key="configContentKey" class="config-content" style="width: 100%;">
           <!-- 可视化编辑 -->
-          <AstrBotCoreConfigWrapper 
-            :metadata="metadata" 
+          <AstrBotCoreConfigWrapper
+            :metadata="metadata"
             :config_data="config_data"
             :search-keyword="configSearchKeyword"
           />
-
-          <v-tooltip :text="tm('actions.save')" location="left">
-            <template v-slot:activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
-                color="darkprimary" @click="updateConfig">
-              </v-btn>
-            </template>
-          </v-tooltip>
-
-          <v-tooltip :text="tm('codeEditor.title')" location="left">
-            <template v-slot:activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
-                @click="configToString(); codeEditorDialog = true">
-              </v-btn>
-            </template>
-          </v-tooltip>
-
-          <v-tooltip text="测试当前配置" location="left" v-if="!isSystemConfig">
-            <template v-slot:activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-chat-processing" size="x-large" 
-                style="position: fixed; right: 52px; bottom: 196px;" color="secondary"
-                @click="openTestChat">
-              </v-btn>
-            </template>
-          </v-tooltip>
-
         </div>
       </v-slide-y-transition>
+
+      <!-- 浮动按钮放在 transition 外部 -->
+      <template v-if="(selectedConfigID || isSystemConfig) && fetched">
+        <v-tooltip :text="tm('actions.save')" location="left">
+          <template v-slot:activator="{ props }">
+            <v-btn v-bind="props" icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
+              color="darkprimary" @click="updateConfig">
+            </v-btn>
+          </template>
+        </v-tooltip>
+
+        <v-tooltip :text="tm('codeEditor.title')" location="left">
+          <template v-slot:activator="{ props }">
+            <v-btn v-bind="props" icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
+              @click="configToString(); codeEditorDialog = true">
+            </v-btn>
+          </template>
+        </v-tooltip>
+
+        <v-tooltip text="测试当前配置" location="left" v-if="!isSystemConfig">
+          <template v-slot:activator="{ props }">
+            <v-btn v-bind="props" icon="mdi-chat-processing" size="x-large"
+              style="position: fixed; right: 52px; bottom: 196px;" color="secondary"
+              @click="openTestChat">
+            </v-btn>
+          </template>
+        </v-tooltip>
+      </template>
 
     </div>
   </div>
@@ -126,11 +128,15 @@
         <!-- Config List -->
         <v-list lines="two">
           <v-list-item v-for="config in configInfoList" :key="config.id" :title="config.name">
-            <template v-slot:append v-if="config.id !== 'default'">
+            <template v-slot:append>
               <div class="d-flex align-center" style="gap: 8px;">
+                <v-btn icon="mdi-content-copy" size="small" variant="text" color="primary"
+                  @click="startCopyConfig(config)"></v-btn>
                 <v-btn icon="mdi-pencil" size="small" variant="text" color="warning"
+                  v-if="config.id !== 'default'"
                   @click="startEditConfig(config)"></v-btn>
                 <v-btn icon="mdi-delete" size="small" variant="text" color="error"
+                  v-if="config.id !== 'default'"
                   @click="confirmDeleteConfig(config)"></v-btn>
               </div>
             </template>
@@ -141,7 +147,7 @@
         <v-divider v-if="showConfigForm" class="my-6"></v-divider>
 
         <div v-if="showConfigForm">
-          <h3 class="mb-4">{{ isEditingConfig ? tm('configManagement.editConfig') : tm('configManagement.newConfig') }}</h3>
+          <h3 class="mb-4">{{ configFormTitle }}</h3>
 
           <h4>{{ tm('configManagement.configName') }}</h4>
 
@@ -151,7 +157,7 @@
           <div class="d-flex justify-end mt-4" style="gap: 8px;">
             <v-btn variant="text" @click="cancelConfigForm">{{ tm('buttons.cancel') }}</v-btn>
             <v-btn color="primary" @click="saveConfigForm"
-              :disabled="!configFormData.name">
+              :disabled="isConfigFormSaveDisabled">
               {{ isEditingConfig ? tm('buttons.update') : tm('buttons.create') }}
             </v-btn>
           </div>
@@ -297,6 +303,19 @@ export default {
     selectedConfigInfo() {
       return this.configInfoList.find(info => info.id === this.selectedConfigID) || {};
     },
+    configFormTitle() {
+      if (this.isEditingConfig) {
+        return this.tm('configManagement.editConfig');
+      }
+      if (this.isCopyingConfig) {
+        return this.tm('configManagement.copyConfig');
+      }
+      return this.tm('configManagement.newConfig');
+    },
+    isConfigFormSaveDisabled() {
+      const isNameEmpty = !this.normalizeConfigName(this.configFormData.name);
+      return isNameEmpty || (this.isCopyingConfig && !this.copySourceConfigId);
+    },
     configSelectItems() {
       const items = [...this.configInfoList];
       items.push({
@@ -343,6 +362,7 @@ export default {
       configManageDialog: false,
       showConfigForm: false,
       isEditingConfig: false,
+      isCopyingConfig: false,
       config_data_has_changed: false,
       config_data_str: "",
       config_data: {
@@ -371,6 +391,7 @@ export default {
         name: '',
       },
       editingConfigId: null,
+      copySourceConfigId: '',
 
       // 测试聊天
       testChatDrawer: false,
@@ -567,9 +588,9 @@ export default {
         this.save_message_snack = true;
       }
     },
-    createNewConfig() {
+    createNewConfig(configName) {
       axios.post('/api/config/abconf/new', {
-        name: this.configFormData.name
+        name: configName
       }).then((res) => {
         if (res.data.status === "ok") {
           this.save_message = res.data.message;
@@ -587,6 +608,24 @@ export default {
         this.save_message = this.tm('configManagement.createFailed');
         this.save_message_snack = true;
         this.save_message_success = "error";
+      });
+    },
+    normalizeConfigName(name) {
+      return typeof name === 'string' ? name.trim() : '';
+    },
+    hasDuplicateConfigName(name, excludeId = null) {
+      const normalizedName = this.normalizeConfigName(name);
+      if (!normalizedName) {
+        return false;
+      }
+      return this.configInfoList.some((config) => {
+        if (!config || !config.name) {
+          return false;
+        }
+        if (excludeId && config.id === excludeId) {
+          return false;
+        }
+        return this.normalizeConfigName(config.name) === normalizedName;
       });
     },
     async onConfigSelect(value) {
@@ -638,44 +677,91 @@ export default {
         }
       }
     },
+    setConfigFormState({ mode = 'create', config = null, visible = true } = {}) {
+      this.showConfigForm = visible;
+      this.isEditingConfig = mode === 'edit';
+      this.isCopyingConfig = mode === 'copy';
+      this.editingConfigId = this.isEditingConfig && config ? config.id : null;
+      this.copySourceConfigId = this.isCopyingConfig && config ? config.id : '';
+
+      let name = '';
+      if (this.isEditingConfig && config) {
+        name = config.name || '';
+      } else if (this.isCopyingConfig && config) {
+        name = `${config.name || ''}-copy`;
+      }
+      this.configFormData = { name };
+    },
     startCreateConfig() {
-      this.showConfigForm = true;
-      this.isEditingConfig = false;
-      this.configFormData = {
-        name: '',
-      };
-      this.editingConfigId = null;
+      this.setConfigFormState({ mode: 'create' });
     },
     startEditConfig(config) {
-      this.showConfigForm = true;
-      this.isEditingConfig = true;
-      this.editingConfigId = config.id;
-
-      this.configFormData = {
-        name: config.name || '',
-      };
+      this.setConfigFormState({ mode: 'edit', config });
+    },
+    startCopyConfig(config) {
+      this.setConfigFormState({ mode: 'copy', config });
     },
     cancelConfigForm() {
-      this.showConfigForm = false;
-      this.isEditingConfig = false;
-      this.editingConfigId = null;
-      this.configFormData = {
-        name: '',
-      };
+      this.setConfigFormState({ visible: false });
     },
     saveConfigForm() {
-      if (!this.configFormData.name) {
+      const normalizedName = this.normalizeConfigName(this.configFormData.name);
+      if (!normalizedName) {
         this.save_message = this.tm('configManagement.pleaseEnterName');
         this.save_message_snack = true;
         this.save_message_success = "error";
         return;
       }
-
-      if (this.isEditingConfig) {
-        this.updateConfigInfo();
-      } else {
-        this.createNewConfig();
+      const excludeId = this.isEditingConfig ? this.editingConfigId : null;
+      if (this.hasDuplicateConfigName(normalizedName, excludeId)) {
+        this.save_message = this.tm('configManagement.nameExists');
+        this.save_message_snack = true;
+        this.save_message_success = "error";
+        return;
       }
+      this.configFormData.name = normalizedName;
+      if (this.isEditingConfig) {
+        this.updateConfigInfo(normalizedName);
+      } else if (this.isCopyingConfig) {
+        this.copyConfig(normalizedName);
+      } else {
+        this.createNewConfig(normalizedName);
+      }
+    },
+    copyConfig(configName) {
+      axios.get('/api/config/abconf', {
+        params: { id: this.copySourceConfigId }
+      }).then((res) => {
+        const sourceConfig = res.data?.data?.config;
+        if (!sourceConfig) {
+          this.save_message = this.tm('configManagement.copyFailed');
+          this.save_message_snack = true;
+          this.save_message_success = "error";
+          return;
+        }
+        return axios.post('/api/config/abconf/new', {
+          name: configName,
+          config: sourceConfig
+        });
+      }).then((res) => {
+        if (!res) return;
+        if (res.data.status === "ok") {
+          this.save_message = res.data.message;
+          this.save_message_snack = true;
+          this.save_message_success = "success";
+          this.getConfigInfoList(res.data.data.conf_id);
+          this.cancelConfigForm();
+        } else {
+          this.save_message = res.data.message;
+          this.save_message_snack = true;
+          this.save_message_success = "error";
+        }
+      }).catch((err) => {
+        console.error(err);
+        this.save_message = err?.response?.data?.message || this.tm('configManagement.copyFailed');
+        this.save_message_snack = true;
+        this.save_message_success = "error";
+      });
     },
     async confirmDeleteConfig(config) {
       const message = this.tm('configManagement.confirmDelete').replace('{name}', config.name);
@@ -706,10 +792,10 @@ export default {
         this.save_message_success = "error";
       });
     },
-    updateConfigInfo() {
+    updateConfigInfo(configName) {
       axios.post('/api/config/abconf/update', {
         id: this.editingConfigId,
-        name: this.configFormData.name
+        name: configName
       }).then((res) => {
         if (res.data.status === "ok") {
           this.save_message = res.data.message;

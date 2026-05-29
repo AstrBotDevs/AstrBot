@@ -169,7 +169,7 @@ class TestApplySandboxToolsConditional:
 class TestResolveProfile:
     """Test smart profile selection logic."""
 
-    def _make_booter(self, profile: str = "python-default"):
+    def _make_booter(self, profile: str = ""):
         from astrbot.core.computer.booters.shipyard_neo import ShipyardNeoBooter
 
         return ShipyardNeoBooter(
@@ -187,8 +187,16 @@ class TestResolveProfile:
         assert result == "browser-python"
 
     @pytest.mark.asyncio
+    async def test_user_specified_default_profile_honoured(self):
+        """User explicitly sets python-default → use it directly."""
+        booter = self._make_booter(profile="python-default")
+        client = SimpleNamespace()  # list_profiles should NOT be called
+        result = await booter._resolve_profile(client)
+        assert result == "python-default"
+
+    @pytest.mark.asyncio
     async def test_selects_browser_profile(self):
-        """When multiple profiles available, prefer one with browser."""
+        """When profile is empty, prefer an available profile with browser."""
 
         async def _mock_list_profiles():
             return SimpleNamespace(

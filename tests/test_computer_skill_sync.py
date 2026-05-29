@@ -2,8 +2,21 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import cast
 
 from astrbot.core.computer import computer_client
+from astrbot.core.computer.booters.base import ComputerBooter
+
+
+def _extract_embedded_python(command: str) -> str:
+    start_marker = "$PYBIN - <<'PY'\n"
+    end_marker = "\nPY"
+    start = command.find(start_marker)
+    assert start != -1
+    start += len(start_marker)
+    end = command.rfind(end_marker)
+    assert end != -1
+    return command[start:end]
 
 
 class _FakeShell:
@@ -34,10 +47,14 @@ class _FakeBooter:
         return {"success": True}
 
 
-def test_sync_skills_keeps_builtin_skills_when_local_is_empty(monkeypatch, tmp_path: Path):
+def test_sync_skills_keeps_builtin_skills_when_local_is_empty(
+    monkeypatch, tmp_path: Path
+):
     skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
     temp_root = tmp_path / "temp"
     skills_root.mkdir(parents=True, exist_ok=True)
+    plugins_root.mkdir(parents=True, exist_ok=True)
     temp_root.mkdir(parents=True, exist_ok=True)
 
     captured = {"skills": None}
@@ -48,6 +65,10 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(monkeypatch, tmp_p
     monkeypatch.setattr(
         "astrbot.core.computer.computer_client.get_astrbot_skills_path",
         lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_plugin_path",
+        lambda: str(plugins_root),
     )
     monkeypatch.setattr(
         "astrbot.core.computer.computer_client.get_astrbot_temp_path",
@@ -61,7 +82,7 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(monkeypatch, tmp_p
     booter = _FakeBooter(
         '{"skills":[{"name":"python-sandbox","description":"ship","path":"skills/python-sandbox/SKILL.md"}]}'
     )
-    asyncio.run(computer_client._sync_skills_to_sandbox(booter))
+    asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
 
     assert booter.uploads == []
     assert any(cmd == "rm -f skills/skills.zip" for cmd in booter.shell.commands)
@@ -106,7 +127,7 @@ def test_sync_skills_uses_managed_strategy_instead_of_wiping_all(
     booter = _FakeBooter(
         '{"skills":[{"name":"custom-agent-skill","description":"","path":"skills/custom-agent-skill/SKILL.md"}]}'
     )
-    asyncio.run(computer_client._sync_skills_to_sandbox(booter))
+    asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
 
     assert len(booter.uploads) == 1
     assert booter.uploads[0][1] == "skills/skills.zip"
@@ -121,3 +142,67 @@ def test_sync_skills_uses_managed_strategy_instead_of_wiping_all(
         }
     ]
 
+
+def test_sync_skills_includes_plugin_provided_skills(
+    monkeypatch,
+    tmp_path: Path,
+):
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    temp_root = tmp_path / "temp"
+    skills_root.mkdir(parents=True, exist_ok=True)
+    temp_root.mkdir(parents=True, exist_ok=True)
+    plugin_skill_dir = plugins_root / "astrbot_plugin_demo" / "skills" / "demo-skill"
+    plugin_skill_dir.mkdir(parents=True)
+    plugin_skill_dir.joinpath("SKILL.md").write_text("# demo", encoding="utf-8")
+
+    captured = {"skills": None}
+
+    def _fake_set_cache(self, skills):
+        captured["skills"] = skills
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+        lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_plugin_path",
+        lambda: str(plugins_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.SkillManager.set_sandbox_skills_cache",
+        _fake_set_cache,
+    )
+
+    booter = _FakeBooter(
+        '{"skills":[{"name":"demo-skill","description":"","path":"skills/demo-skill/SKILL.md"}]}'
+    )
+    asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
+
+    assert len(booter.uploads) == 1
+    assert booter.uploads[0][1] == "skills/skills.zip"
+    assert captured["skills"] == [
+        {
+            "name": "demo-skill",
+            "description": "",
+            "path": "skills/demo-skill/SKILL.md",
+        }
+    ]
+
+
+def test_build_scan_command_frontmatter_newline_is_escaped_literal():
+    command = computer_client._build_scan_command()
+    script = _extract_embedded_python(command)
+
+    assert 'frontmatter = "\\n".join(lines[1:end_idx])' in script
+
+
+def test_build_scan_command_embedded_python_is_syntax_valid():
+    command = computer_client._build_scan_command()
+    script = _extract_embedded_python(command)
+
+    compile(script, "<scan_script>", "exec")
