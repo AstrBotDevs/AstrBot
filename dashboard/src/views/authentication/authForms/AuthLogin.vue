@@ -61,17 +61,19 @@ function closeForgotDialog() {
 
 function submitForgotStep1() {
   forgotError.value = '';
-  if (!forgotCode.value || forgotCode.value.length !== 6) {
+  const trimmedCode = forgotCode.value.trim();
+  if (!trimmedCode || trimmedCode.length !== 6) {
     forgotError.value = t('forgotPassword.codeInvalid');
     return;
   }
+  forgotCode.value = trimmedCode;
   showForgotDialog.value = false;
   showConfirmDialog.value = true;
 }
 
 function closeConfirmDialog() {
   showConfirmDialog.value = false;
-  forgotCode.value = '';
+  showForgotDialog.value = true;
 }
 
 async function confirmReset() {

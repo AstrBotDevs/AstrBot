@@ -271,7 +271,10 @@ class AuthRoute(Route):
             return Response().error("Invalid request payload").__dict__
 
         code = post_data.get("code", "")
-        if not isinstance(code, str) or len(code) != 6:
+        if not isinstance(code, str):
+            return Response().error("确认码格式不正确").__dict__
+        code = code.strip()
+        if len(code) != 6:
             return Response().error("确认码格式不正确").__dict__
 
         if self._reset_code is None:
