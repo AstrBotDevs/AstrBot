@@ -247,12 +247,16 @@ class ProviderGoogleGenAI(Provider):
         )
 
         # 判断是否为 Gemini 3 或更新的模型（只有新模型支持多工具混合编排）
-        is_gemini_3_or_later = any(model_name.startswith(p) for p in ("gemini-3-", "gemini-3."))
+        is_gemini_3_or_later = any(
+            model_name.startswith(p) for p in ("gemini-3-", "gemini-3.")
+        )
 
         if tools and (func_desc := tools.get_func_desc_google_genai_style()):
             # 如果是老模型且开启了原生搜索等，则自动忽略自定义工具，防止模型报错死锁
             if not is_gemini_3_or_later and has_native_before:
-                logger.warning("当前模型不支持多工具混合编排。已启用原生工具，自定义函数工具将被忽略")
+                logger.warning(
+                    "当前模型不支持多工具混合编排。已启用原生工具，自定义函数工具将被忽略"
+                )
             else:
                 if tool_list is None:
                     tool_list = []
@@ -265,7 +269,7 @@ class ProviderGoogleGenAI(Provider):
 
         tool_config = None
         has_func_decl = tool_list and any(t.function_declarations for t in tool_list)
-        
+
         # 再次确认最终的工具链中是否有原生工具
         has_native_tool = tool_list and any(
             getattr(t, "google_search", None)
@@ -284,7 +288,9 @@ class ProviderGoogleGenAI(Provider):
                     )
                 ),
                 # 只有在支持混合编排的 Gemini 3+ 模型上，才向谷歌端声明注入此开关
-                include_server_side_tool_invocations=True if (has_native_tool and is_gemini_3_or_later) else None
+                include_server_side_tool_invocations=True
+                if (has_native_tool and is_gemini_3_or_later)
+                else None,
             )
 
         # oper thinking config
