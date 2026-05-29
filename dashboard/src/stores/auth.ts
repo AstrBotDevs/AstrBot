@@ -109,6 +109,30 @@ export const useAuthStore = defineStore("auth", {
         return false;
       }
     },
+    async forgotPasswordInit(): Promise<void> {
+      try {
+        const res = await axios.post('/api/auth/forgot-password/init');
+        if (res.data.status === 'error') {
+          return Promise.reject(res.data.message);
+        }
+        return Promise.resolve();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    },
+    async forgotPassword(code: string): Promise<void> {
+      try {
+        const res = await axios.post('/api/auth/forgot-password', {
+          code: code
+        });
+        if (res.data.status === 'error') {
+          return Promise.reject(res.data.message);
+        }
+        return Promise.resolve();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    },
     logout() {
       this.username = '';
       localStorage.removeItem('user');

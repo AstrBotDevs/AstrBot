@@ -158,7 +158,7 @@ class AstrBotDashboard:
         self.cr = ConfigRoute(self.context, core_lifecycle)
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
         self.sfr = StaticFileRoute(self.context)
-        self.ar = AuthRoute(self.context, db)
+        self.ar = AuthRoute(self.context, db, core_lifecycle)
         self.api_key_route = ApiKeyRoute(self.context, db)
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
         self.open_api_route = OpenApiRoute(
@@ -251,6 +251,8 @@ class AstrBotDashboard:
             "/api/auth/logout",
             "/api/auth/setup-status",
             "/api/auth/setup",
+            "/api/auth/forgot-password",
+            "/api/auth/forgot-password/init",
         }
         allowed_endpoint_prefixes = [
             "/api/file",

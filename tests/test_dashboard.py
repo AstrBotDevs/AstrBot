@@ -357,6 +357,159 @@ async def test_auth_login_secure_cookie_override(
 
 
 @pytest.mark.asyncio
+async def test_forgot_password_rejects_without_init(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    """Forgot-password endpoint should reject requests without prior init."""
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/auth/forgot-password",
+        json={"code": "ABCDEF"},
+    )
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_rejects_wrong_code(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    """Forgot-password endpoint should reject incorrect confirmation code."""
+    test_client = app.test_client()
+    # Init first to set a code
+    init_response = await test_client.post("/api/auth/forgot-password/init")
+    init_data = await init_response.get_json()
+    assert init_data["status"] == "ok"
+
+    response = await test_client.post(
+        "/api/auth/forgot-password",
+        json={"code": "WRONG1"},
+    )
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_creates_flag_file(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """Forgot-password endpoint should create the flag file when code is correct."""
+
+    # Use a temporary flag file to avoid side effects
+    tmp_flag = str(tmp_path / ".reset_dashboard_password")
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.auth.DASHBOARD_RESET_FLAG_FILE",
+        tmp_flag,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.config.astrbot_config.DASHBOARD_RESET_FLAG_FILE",
+        tmp_flag,
+    )
+
+    # Mock restart to avoid actually restarting the test process
+    restart_called = False
+
+    async def mock_restart():
+        nonlocal restart_called
+        restart_called = True
+
+    monkeypatch.setattr(core_lifecycle_td, "restart", mock_restart)
+
+    test_client = app.test_client()
+
+    # Step 1: Init to get a confirmation code
+    init_response = await test_client.post("/api/auth/forgot-password/init")
+    init_data = await init_response.get_json()
+    assert init_data["status"] == "ok"
+
+    # Extract the code from the auth route instance via the view function
+    from astrbot.dashboard.routes.auth import AuthRoute
+
+    auth_route_instance = None
+    for endpoint, view_func in app.view_functions.items():
+        if hasattr(view_func, "__self__") and isinstance(view_func.__self__, AuthRoute):
+            auth_route_instance = view_func.__self__
+            break
+
+    assert auth_route_instance is not None
+    code = auth_route_instance._reset_code
+    assert code is not None and len(code) == 6
+
+    # Step 2: Confirm with the correct code
+    response = await test_client.post(
+        "/api/auth/forgot-password",
+        json={"code": code},
+    )
+    data = await response.get_json()
+    print("DEBUG response:", data)
+    assert data["status"] == "ok"
+    assert os.path.exists(tmp_flag)
+    with open(tmp_flag, encoding="utf-8") as f:
+        assert f.read() == "1"
+    # Wait a bit for the delayed restart coroutine to run
+    await asyncio.sleep(1.5)
+    assert restart_called
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_flag_file_triggers_reset_on_startup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A flag file present at startup should trigger password reset."""
+    from astrbot.core.config.astrbot_config import (
+        AstrBotConfig,
+    )
+
+    tmp_flag = str(tmp_path / ".reset_dashboard_password")
+    monkeypatch.setattr(
+        "astrbot.core.config.astrbot_config.DASHBOARD_RESET_FLAG_FILE",
+        tmp_flag,
+    )
+
+    # Create the flag file
+    with open(tmp_flag, "w", encoding="utf-8") as f:
+        f.write("1")
+
+    # Create a minimal config with an existing password
+    config_path = str(tmp_path / "cmd_config.json")
+    existing_password = hash_dashboard_password("OldPassword123")
+    config_data = {
+        "dashboard": {
+            "username": "astrbot",
+            "pbkdf2_password": existing_password,
+            "password": hash_legacy_dashboard_password("OldPassword123"),
+            "password_storage_upgraded": True,
+            "password_change_required": False,
+        }
+    }
+    import json
+
+    with open(config_path, "w", encoding="utf-8-sig") as f:
+        json.dump(config_data, f)
+
+    # Initialize config; it should detect the flag and reset the password
+    # Provide a default_config containing dashboard so check_config_integrity
+    # does not strip the existing dashboard section.
+    minimal_default = {"dashboard": {}}
+    cfg = AstrBotConfig(config_path=config_path, default_config=minimal_default)
+
+    # The password should have been reset (new hash != old hash)
+    new_hash = cfg["dashboard"]["pbkdf2_password"]
+    assert new_hash != existing_password
+    assert cfg["dashboard"]["password_change_required"] is True
+    # Flag file should be consumed and removed
+    assert not os.path.exists(tmp_flag)
+    # The generated plain password should be accessible
+    assert getattr(cfg, "_generated_dashboard_password", None) is not None
+
+
+@pytest.mark.asyncio
 async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
     app: Quart,
     core_lifecycle_td: AstrBotCoreLifecycle,

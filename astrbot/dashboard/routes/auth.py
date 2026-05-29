@@ -1,12 +1,15 @@
 import asyncio
 import datetime
 import os
+import random
+import time
 
 import jwt
 from quart import current_app, g, jsonify, make_response, request
 
 from astrbot import logger
 from astrbot.core import DEMO_MODE
+from astrbot.core.config.astrbot_config import DASHBOARD_RESET_FLAG_FILE
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
     is_legacy_dashboard_password,
@@ -48,9 +51,15 @@ LEGACY_PASSWORD_LOGIN_FAILURE_MESSAGE = (
 
 
 class AuthRoute(Route):
-    def __init__(self, context: RouteContext, db) -> None:
+    def __init__(self, context: RouteContext, db, core_lifecycle=None) -> None:
         super().__init__(context)
         self.db = db
+        self.core_lifecycle = core_lifecycle
+        # Password reset confirmation code state
+        self._reset_code: str | None = None
+        self._reset_code_expiry: float = 0.0
+        # Rate limiting: list of recent attempt timestamps
+        self._reset_attempts: list[float] = []
         self.routes = {
             "/auth/login": ("POST", self.login),
             "/auth/logout": ("POST", self.logout),
@@ -58,8 +67,29 @@ class AuthRoute(Route):
             "/auth/setup": ("POST", self.setup),
             "/auth/setup-authenticated": ("POST", self.setup_authenticated),
             "/auth/account/edit": ("POST", self.edit_account),
+            "/auth/forgot-password": ("POST", self.forgot_password),
+            "/auth/forgot-password/init": ("POST", self.forgot_password_init),
         }
         self.register_routes()
+
+    def _generate_reset_code(self) -> str:
+        """Generate a 6-digit alphanumeric confirmation code."""
+        return "".join(random.choices("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", k=6))
+
+    def _is_rate_limited(
+        self, max_attempts: int = 3, window_seconds: float = 300.0
+    ) -> bool:
+        """Check if the forgot-password endpoint is rate-limited."""
+        now = time.time()
+        # Keep only attempts within the time window
+        self._reset_attempts = [
+            t for t in self._reset_attempts if now - t < window_seconds
+        ]
+        return len(self._reset_attempts) >= max_attempts
+
+    def _record_attempt(self) -> None:
+        """Record a forgot-password attempt timestamp."""
+        self._reset_attempts.append(time.time())
 
     async def setup_status(self):
         return (
@@ -198,6 +228,82 @@ class AuthRoute(Route):
         )
         self._clear_dashboard_jwt_cookie(response)
         return response
+
+    async def forgot_password_init(self):
+        """Generate a confirmation code and print it to the terminal."""
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        if self._is_rate_limited():
+            return Response().error("请求过于频繁，请 5 分钟后再试").__dict__
+
+        self._record_attempt()
+        code = self._generate_reset_code()
+        self._reset_code = code
+        self._reset_code_expiry = time.time() + 300.0  # 5 minutes
+
+        logger.info(
+            "Password reset requested. Confirmation code: %s "
+            "(valid for 5 minutes). Enter this code in the WebUI to proceed.",
+            code,
+        )
+        return (
+            Response().ok(None, "确认码已生成，请查看终端日志获取 6 位确认码").__dict__
+        )
+
+    async def forgot_password(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        post_data = await request.json
+        if not isinstance(post_data, dict):
+            return Response().error("Invalid request payload").__dict__
+
+        code = post_data.get("code", "")
+        if not isinstance(code, str) or len(code) != 6:
+            return Response().error("确认码格式不正确").__dict__
+
+        if self._reset_code is None:
+            return Response().error("请先点击忘记密码获取确认码").__dict__
+
+        if time.time() > self._reset_code_expiry:
+            self._reset_code = None
+            return Response().error("确认码已过期，请重新获取").__dict__
+
+        if code.upper() != self._reset_code.upper():
+            return Response().error("确认码不正确").__dict__
+
+        # Clear the code after successful validation
+        self._reset_code = None
+
+        try:
+            with open(DASHBOARD_RESET_FLAG_FILE, "w", encoding="utf-8") as f:
+                f.write("1")
+        except OSError as e:
+            logger.error(f"Failed to create password reset flag file: {e}")
+            return Response().error("创建重置标记失败，请检查文件权限").__dict__
+
+        # Trigger restart asynchronously so the HTTP response can be sent first
+        if self.core_lifecycle is not None:
+            asyncio.create_task(self._delayed_restart())
+
+        return Response().ok(None, "密码重置请求已接受，AstrBot 即将重启").__dict__
+
+    async def _delayed_restart(self, delay: float = 1.0) -> None:
+        """Delay briefly to let the HTTP response finish, then restart."""
+        await asyncio.sleep(delay)
+        try:
+            await self.core_lifecycle.restart()
+        except Exception as e:
+            logger.error(f"Auto-restart after password reset failed: {e}")
 
     async def edit_account(self):
         if DEMO_MODE:

@@ -15,6 +15,10 @@ from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
+DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_DASHBOARD_RESET_PASSWORD"
+DASHBOARD_RESET_FLAG_FILE = os.path.join(
+    get_astrbot_data_path(), ".reset_dashboard_password"
+)
 logger = logging.getLogger("astrbot")
 
 
@@ -76,13 +80,21 @@ class AstrBotConfig(dict):
             )
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
+        dashboard_reset_requested = self._is_dashboard_password_reset_requested()
         if (
             "dashboard" in conf
             and isinstance(conf["dashboard"], dict)
-            and not conf["dashboard"].get("pbkdf2_password")
-            and not conf["dashboard"].get("password")
+            and (
+                dashboard_reset_requested
+                or (
+                    not conf["dashboard"].get("pbkdf2_password")
+                    and not conf["dashboard"].get("password")
+                )
+            )
         ):
             self._reset_generated_dashboard_password(conf)
+            if dashboard_reset_requested:
+                os.environ[DASHBOARD_RESET_PASSWORD_ENV] = "0"
             has_new = True
         elif (
             "dashboard" in conf
@@ -118,6 +130,12 @@ class AstrBotConfig(dict):
             "_generated_dashboard_password_change_required",
             True,
         )
+        # Consume and remove the flag file after successful reset
+        if os.path.exists(DASHBOARD_RESET_FLAG_FILE):
+            try:
+                os.remove(DASHBOARD_RESET_FLAG_FILE)
+            except OSError:
+                logger.warning("Failed to remove dashboard reset flag file.")
 
     @staticmethod
     def _resolve_initial_dashboard_password() -> str:
@@ -126,6 +144,19 @@ class AstrBotConfig(dict):
             return generate_dashboard_password()
         validate_dashboard_password(env_password)
         return env_password
+
+    @staticmethod
+    def _is_dashboard_password_reset_requested() -> bool:
+        env_requested = os.environ.get(
+            DASHBOARD_RESET_PASSWORD_ENV, ""
+        ).strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        flag_requested = os.path.exists(DASHBOARD_RESET_FLAG_FILE)
+        return env_requested or flag_requested
 
     def _config_schema_to_default_config(self, schema: dict) -> dict:
         """将 Schema 转换成 Config"""
