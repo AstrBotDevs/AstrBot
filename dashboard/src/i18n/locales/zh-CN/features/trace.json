@@ -1,10 +1,10 @@
 {
   "title": "追踪",
-  "autoScroll": {
-    "enabled": "自动滚动：开",
-    "disabled": "自动滚动：关"
-  },
-  "hint": "当前仅记录部分 AstrBot 主 Agent 的模型调用路径，后续会不断完善。",
+  "hint": "全链路追踪：Pipeline 阶段、LLM 调用、工具调用、插件处理器。",
   "recording": "记录中",
-  "paused": "已暂停"
+  "paused": "已暂停",
+  "clearAll": "清空记录",
+  "clearConfirm": "将永久删除所有 Trace 记录，确定继续？",
+  "cancel": "取消",
+  "confirm": "确认"
 }
