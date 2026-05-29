@@ -9,7 +9,7 @@ Implements 9 fallback replacers to handle LLM-generated edits that may have:
 - block-level fuzzy matching via Levenshtein similarity
 
 Author: AstrBot Agent Harness Development Expert
-Date: 2026-05-18 (refactored)
+Date: 2026-05-18 (initial), 2026-05-28 (merged robust_edit + robust_edit_engine)
 """
 
 from __future__ import annotations
@@ -534,7 +534,7 @@ class EditResult:
 
 
 # ---------------------------------------------------------------------------
-# Async file edit with locking and line-ending preservation
+# Async file edit with locking and line-ending preservation (local runtime)
 # ---------------------------------------------------------------------------
 
 
@@ -551,7 +551,7 @@ async def edit_file(
 
     Features:
     - File-level asyncio lock prevents concurrent edits
-    - Preserves original line endings (\n vs \r\n)
+    - Preserves original line endings (\\n vs \\r\\n)
     - Preserves BOM if present
     - Returns unified diff of changes
     """
@@ -570,9 +570,6 @@ async def edit_file(
             # Normalize for matching: ONLY normalize actual CRLF line endings.
             # Escape sequence handling (\n vs actual newline, \t vs tab, etc.)
             # is deferred to the _escape_normalized_replacer in the replacer chain.
-            # We must NOT call _normalize_escapes here — it would convert literal
-            # \n in search strings to actual newlines, preventing matching of
-            # literal \n in file content (e.g. Python string literals).
             normalized_old = _normalize_line_endings(old_string)
             normalized_new = _normalize_line_endings(new_string)
 
@@ -600,11 +597,10 @@ async def edit_file(
             await asyncio.to_thread(_write_file_bytes, path, write_bytes)
 
             # Generate unified diff
-            diff = _generate_unified_diff(
+            diff = build_unified_diff(
                 path,
-                old_content.splitlines(keepends=True),
-                path,
-                new_content.splitlines(keepends=True),
+                old_content,
+                new_content,
             )
 
             return EditResult(
@@ -634,20 +630,24 @@ def _write_file_bytes(path: str, data: bytes) -> None:
         f.write(data)
 
 
-def _generate_unified_diff(
+# ---------------------------------------------------------------------------
+# Public diff helper
+# ---------------------------------------------------------------------------
+
+
+def build_unified_diff(
     old_path: str,
-    old_lines: list[str],
-    new_path: str,
-    new_lines: list[str],
+    old_content: str,
+    new_content: str,
 ) -> str:
-    """Generate a compact unified diff."""
+    """Generate a unified diff between two content strings."""
     diff = list(
         difflib.unified_diff(
-            old_lines,
-            new_lines,
+            old_content.splitlines(),
+            new_content.splitlines(),
             fromfile=old_path,
-            tofile=new_path,
+            tofile=old_path,
             lineterm="",
         )
     )
-    return "".join(diff)
+    return "\n".join(diff)
