@@ -73,6 +73,7 @@ class ConversationManager:
             created_at=created_at,
             updated_at=updated_at,
             token_usage=conv_v2.token_usage,
+            is_reset=conv_v2.is_reset,
         )
 
     async def new_conversation(
@@ -82,11 +83,13 @@ class ConversationManager:
         content: list[dict] | None = None,
         title: str | None = None,
         persona_id: str | None = None,
+        is_reset: bool = False,
     ) -> str:
         """新建对话，并将当前会话的对话转移到新对话.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
+            is_reset (bool): 标记此对话是否由 reset 命令创建。
         Returns:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
 
@@ -104,6 +107,7 @@ class ConversationManager:
             content=content,
             title=title,
             persona_id=persona_id,
+            is_reset=is_reset,
         )
         self.session_conversations[unified_msg_origin] = conv.conversation_id
         await sp.session_put(unified_msg_origin, "sel_conv_id", conv.conversation_id)
