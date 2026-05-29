@@ -511,7 +511,7 @@ class FileEditTool(FunctionTool):
                     context.context.context,
                     umo,
                 )
-                lock = await get_file_lock(normalized_path)
+                lock = get_file_lock(normalized_path)
                 async with lock:
                     read_result = await sb.fs.read_file(path=normalized_path)
                     if not read_result.get("success", False):

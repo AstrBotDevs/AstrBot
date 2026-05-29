@@ -26,18 +26,16 @@ Replacer = Callable[[str, str], Iterator[str]]
 # File-level locks to prevent concurrent edits on the same file.
 # Use WeakValueDictionary so locks for deleted files can be garbage-collected.
 _locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
-_locks_lock = asyncio.Lock()
 
 
-async def get_file_lock(path: str) -> asyncio.Lock:
+def get_file_lock(path: str) -> asyncio.Lock:
     """Get or create an asyncio.Lock for the given file path."""
     resolved = str(Path(path).resolve())
-    async with _locks_lock:
-        lock = _locks.get(resolved)
-        if lock is None:
-            lock = asyncio.Lock()
-            _locks[resolved] = lock
-        return lock
+    lock = _locks.get(resolved)
+    if lock is None:
+        lock = asyncio.Lock()
+        _locks[resolved] = lock
+    return lock
 
 
 # ---------------------------------------------------------------------------

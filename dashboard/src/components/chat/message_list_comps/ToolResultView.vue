@@ -53,15 +53,11 @@
 
     <!-- ── fallback ────────────────────────────────────────────── -->
     <template v-else>
-      <div class="result-status" :class="resultOk ? 'success' : 'error'">
+      <div v-if="resultText.length < 120 && !resultText.includes('\n')" class="result-status" :class="resultOk ? 'success' : 'error'">
         <v-icon size="16">{{ resultOk ? 'mdi-check-circle' : 'mdi-alert-circle' }}</v-icon>
         <span>{{ resultText }}</span>
       </div>
-    </template>
-
-    <!-- ── fallback ────────────────────────────────────────────── -->
-    <template v-else>
-      <pre class="result-raw">{{ formattedResult }}</pre>
+      <pre v-else class="result-raw">{{ formattedResult }}</pre>
     </template>
   </div>
 </template>

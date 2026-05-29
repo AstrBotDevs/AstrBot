@@ -36,7 +36,7 @@
           >
             <span class="args-key">{{ entry.icon }}{{ entry.key }}</span>
             <span class="args-value">{{ entry.display }}</span>
-            <span v-if="entry.long && !expandedArgs.has(i)" class="args-expand-hint">…</span>
+            <span v-if="entry.long && !expandedArgs[i]" class="args-expand-hint">…</span>
           </div>
           <div
             v-if="argEntries.length > maxVisibleArgs"
@@ -139,20 +139,21 @@ const toolCallIcon = computed(() => {
 
 const maxVisibleArgs = 5;
 const showAllArgs = ref(false);
-const expandedArgs = reactive(new Set());
+const expandedArgs = reactive({});
 
 const argEntries = computed(() => {
   const args = props.toolCall.args;
   if (!args || typeof args !== "object") return [];
-  return Object.entries(args).map(([key, value]) => {
+  return Object.entries(args).map(([key, value], index) => {
     const raw = value === null || value === undefined ? "—" : String(value);
     const long = raw.length > 60;
+    const isExpanded = !!expandedArgs[index];
     return {
       key,
       raw,
       long,
       icon: argIcon(key),
-      display: long ? raw.slice(0, 60) : raw,
+      display: long && !isExpanded ? raw.slice(0, 60) : raw,
     };
   });
 });
