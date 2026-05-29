@@ -67,6 +67,7 @@
           :max-lines="25"
           :collapsible="false"
         />
+        <div v-if="editToolNotice" class="edit-tool-notice">{{ editToolNotice }}</div>
       </div>
 
       <div
@@ -200,23 +201,36 @@ const isEditTool = computed(
   () => props.toolCall.name === "astrbot_file_edit_tool",
 );
 
+// Strip [SYSTEM NOTICE] suffix from the raw result for all edit tool computed properties.
+const editToolCleanResult = computed(() => {
+  const raw = props.toolCall.result ?? "";
+  const idx = raw.search(/\[SYSTEM NOTICE\]/i);
+  return idx < 0 ? raw : raw.slice(0, idx).trim();
+});
+
+const editToolNotice = computed(() => {
+  const raw = props.toolCall.result ?? "";
+  const idx = raw.search(/\[SYSTEM NOTICE\]/i);
+  return idx < 0 ? null : raw.slice(idx).trim();
+});
+
 const editToolDiff = computed(() => {
   if (!isEditTool.value) return "";
-  const raw = props.toolCall.result ?? "";
+  const raw = editToolCleanResult.value;
   const match = raw.match(/```diff\s*\n?([\s\S]*?)```/);
   return match ? match[1] : raw;
 });
 
 const editToolFilePath = computed(() => {
   if (!isEditTool.value) return "";
-  const raw = props.toolCall.result ?? "";
+  const raw = editToolCleanResult.value;
   const match = raw.match(/^Edited\s+(.+?)\./m);
   return match ? match[1] : "";
 });
 
 const editToolSummary = computed(() => {
   if (!isEditTool.value) return "";
-  const raw = props.toolCall.result ?? "";
+  const raw = editToolCleanResult.value;
   const lines = raw.split("\n");
   const statusParts = [];
   for (const line of lines) {
@@ -334,6 +348,19 @@ onUnmounted(() => {
   margin-top: 8px;
   padding-left: 26px;
   animation: fadeIn 0.2s ease-in-out;
+}
+
+.edit-tool-notice {
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .tool-call-detail-row {

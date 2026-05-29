@@ -5,7 +5,7 @@
   >
     <!-- Summary header — always visible, clickable to toggle -->
     <button
-      v-if="summary || filePath || statsText"
+      v-if="summary || filePath || statsAdds || statsDels"
       type="button"
       class="diff-header"
       @click="toggleCollapsed"
@@ -15,7 +15,10 @@
         <span v-if="filePath" class="diff-file-path">{{ filePath }}</span>
       </div>
       <div class="diff-header-right">
-        <span v-if="statsText" class="diff-stats">{{ statsText }}</span>
+        <template v-if="statsAdds || statsDels">
+          <span v-if="statsAdds" class="diff-stats diff-stats-add">+{{ statsAdds }}</span>
+          <span v-if="statsDels" class="diff-stats diff-stats-del">−{{ statsDels }}</span>
+        </template>
         <v-icon
           v-if="collapsible"
           size="18"
@@ -151,17 +154,24 @@ const collapsedOverflow = computed(() => {
 
 // ── Stats ──────────────────────────────────────────────────────────
 
-const statsText = computed(() => {
+const statsAdds = computed(() => {
   let adds = 0;
-  let dels = 0;
   for (const hunk of parsedHunks.value) {
     for (const line of hunk.lines) {
       if (line.type === "add") adds++;
+    }
+  }
+  return adds || null;
+});
+
+const statsDels = computed(() => {
+  let dels = 0;
+  for (const hunk of parsedHunks.value) {
+    for (const line of hunk.lines) {
       if (line.type === "del") dels++;
     }
   }
-  if (adds === 0 && dels === 0) return "";
-  return `+${adds} −${dels}`;
+  return dels || null;
 });
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -349,8 +359,24 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
   font-size: 11px;
   font-weight: 600;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  color: rgba(var(--v-theme-on-surface), 0.55);
   white-space: nowrap;
+}
+
+.diff-stats-add {
+  color: #2da44e;
+  margin-right: 4px;
+}
+
+.diff-preview.is-dark .diff-stats-add {
+  color: #57ab5a;
+}
+
+.diff-stats-del {
+  color: #cf222e;
+}
+
+.diff-preview.is-dark .diff-stats-del {
+  color: #f47067;
 }
 
 .diff-chevron {
