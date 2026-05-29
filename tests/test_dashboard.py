@@ -392,6 +392,41 @@ async def test_forgot_password_rejects_wrong_code(
 
 
 @pytest.mark.asyncio
+async def test_forgot_password_code_expires_after_three_wrong_attempts(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    """Confirmation code should be invalidated after 3 wrong attempts."""
+    test_client = app.test_client()
+    init_response = await test_client.post("/api/auth/forgot-password/init")
+    assert (await init_response.get_json())["status"] == "ok"
+
+    # First wrong attempt
+    r1 = await test_client.post("/api/auth/forgot-password", json={"code": "WRONG1"})
+    d1 = await r1.get_json()
+    assert d1["status"] == "error"
+    assert "还可以尝试" in d1["message"]
+
+    # Second wrong attempt
+    r2 = await test_client.post("/api/auth/forgot-password", json={"code": "WRONG2"})
+    d2 = await r2.get_json()
+    assert d2["status"] == "error"
+    assert "还可以尝试" in d2["message"]
+
+    # Third wrong attempt — code invalidated
+    r3 = await test_client.post("/api/auth/forgot-password", json={"code": "WRONG3"})
+    d3 = await r3.get_json()
+    assert d3["status"] == "error"
+    assert "错误次数过多" in d3["message"]
+
+    # Fourth attempt — no code available
+    r4 = await test_client.post("/api/auth/forgot-password", json={"code": "WRONG4"})
+    d4 = await r4.get_json()
+    assert d4["status"] == "error"
+    assert "请先点击忘记密码" in d4["message"]
+
+
+@pytest.mark.asyncio
 async def test_forgot_password_creates_flag_file(
     app: Quart,
     core_lifecycle_td: AstrBotCoreLifecycle,

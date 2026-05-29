@@ -1,7 +1,7 @@
 import asyncio
 import datetime
 import os
-import random
+import secrets
 import time
 
 import jwt
@@ -58,6 +58,7 @@ class AuthRoute(Route):
         # Password reset confirmation code state
         self._reset_code: str | None = None
         self._reset_code_expiry: float = 0.0
+        self._reset_failed_attempts: int = 0
         # Rate limiting: list of recent attempt timestamps
         self._reset_attempts: list[float] = []
         self.routes = {
@@ -74,13 +75,14 @@ class AuthRoute(Route):
 
     def _generate_reset_code(self) -> str:
         """Generate a 6-digit alphanumeric confirmation code."""
-        return "".join(random.choices("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", k=6))
+        charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        return "".join(secrets.choice(charset) for _ in range(6))
 
     def _is_rate_limited(
         self, max_attempts: int = 3, window_seconds: float = 300.0
     ) -> bool:
         """Check if the forgot-password endpoint is rate-limited."""
-        now = time.time()
+        now = time.monotonic()
         # Keep only attempts within the time window
         self._reset_attempts = [
             t for t in self._reset_attempts if now - t < window_seconds
@@ -89,7 +91,7 @@ class AuthRoute(Route):
 
     def _record_attempt(self) -> None:
         """Record a forgot-password attempt timestamp."""
-        self._reset_attempts.append(time.time())
+        self._reset_attempts.append(time.monotonic())
 
     async def setup_status(self):
         return (
@@ -244,7 +246,8 @@ class AuthRoute(Route):
         self._record_attempt()
         code = self._generate_reset_code()
         self._reset_code = code
-        self._reset_code_expiry = time.time() + 300.0  # 5 minutes
+        self._reset_code_expiry = time.monotonic() + 300.0  # 5 minutes
+        self._reset_failed_attempts = 0
 
         logger.info(
             "Password reset requested. Confirmation code: %s "
@@ -274,12 +277,17 @@ class AuthRoute(Route):
         if self._reset_code is None:
             return Response().error("请先点击忘记密码获取确认码").__dict__
 
-        if time.time() > self._reset_code_expiry:
+        if time.monotonic() > self._reset_code_expiry:
             self._reset_code = None
             return Response().error("确认码已过期，请重新获取").__dict__
 
         if code.upper() != self._reset_code.upper():
-            return Response().error("确认码不正确").__dict__
+            self._reset_failed_attempts += 1
+            if self._reset_failed_attempts >= 3:
+                self._reset_code = None
+                return Response().error("确认码错误次数过多，已失效，请重新获取").__dict__
+            remaining = 3 - self._reset_failed_attempts
+            return Response().error(f"确认码不正确，还可以尝试 {remaining} 次").__dict__
 
         # Clear the code after successful validation
         self._reset_code = None
@@ -293,7 +301,7 @@ class AuthRoute(Route):
 
         # Trigger restart asynchronously so the HTTP response can be sent first
         if self.core_lifecycle is not None:
-            asyncio.create_task(self._delayed_restart())
+            self._restart_task = asyncio.create_task(self._delayed_restart())
 
         return Response().ok(None, "密码重置请求已接受，AstrBot 即将重启").__dict__
 

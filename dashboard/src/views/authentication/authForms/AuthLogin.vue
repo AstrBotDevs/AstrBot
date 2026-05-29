@@ -99,7 +99,8 @@ async function pollForRestart() {
     await new Promise((resolve) => setTimeout(resolve, interval));
     attempts++;
     try {
-      await fetch('/api/auth/setup-status', { method: 'GET', signal: AbortSignal.timeout(3000) });
+      const res = await fetch('/api/auth/setup-status', { method: 'GET', signal: AbortSignal.timeout(3000) });
+      if (!res.ok) throw new Error('Server not ready');
       restartPending.value = false;
       window.location.reload();
       return;
