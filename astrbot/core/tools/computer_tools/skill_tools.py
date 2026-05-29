@@ -1,4 +1,4 @@
-"""Skill self-authoring tools for local runtime.
+﻿"""Skill self-authoring tools for local runtime.
 
 These tools allow the LLM to create, package, and install skills
 in local mode. The existing neo_skills.py tools only work in
@@ -12,7 +12,7 @@ Prerequisites for use:
 
 Alternatively, since ``SkillManager.list_skills()`` auto-discovers any
 directory containing SKILL.md under ``data/skills/`` on every request,
-steps 2-3 are optional for immediate local use — but are useful for
+steps 2-3 are optional for immediate local use 鈥?but are useful for
 distribution, backup, or reinstall workflows.
 """
 
@@ -44,18 +44,24 @@ def _resolve_temp_path(local_env: bool, filename: str) -> Path:
     """Return temp directory path, consistent across local/sandbox runtimes.
 
     Raises ValueError if *filename* would escape the temp directory
-    (e.g. contains ``..`` components).
+    (e.g. contains ``..`` components or is absolute).
     """
     # Reject directory-traversal attempts
     clean = Path(filename)
     if clean.is_absolute() or ".." in clean.parts:
         raise ValueError(f"Invalid filename: {filename!r}")
 
-    if local_env:
-        from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+    from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
+    if local_env:
         return Path(get_astrbot_temp_path()) / filename
-    return Path(f"/tmp/{filename}")
+    # Sandbox runtime: use the same AstrBot temp path when available,
+    # falling back to /tmp only on POSIX systems.
+    try:
+        return Path(get_astrbot_temp_path()) / filename
+    except Exception:
+        import tempfile
+        return Path(tempfile.gettempdir()) / filename
 
 
 def _is_within(path: Path, root: Path) -> bool:
@@ -117,7 +123,7 @@ class CreateSkillZipTool(FunctionTool):
 
         try:
             from astrbot.core.skills.skill_manager import (
-                _normalize_skill_markdown_path,
+                find_skill_markdown,
             )
             from astrbot.core.utils.astrbot_path import (
                 get_astrbot_skills_path,
@@ -129,9 +135,9 @@ class CreateSkillZipTool(FunctionTool):
             if not skill_dir.exists() or not skill_dir.is_dir():
                 return f"Error: Skill directory not found: {skill_dir}"
 
-            skill_md = _normalize_skill_markdown_path(skill_dir)
+            skill_md = find_skill_markdown(skill_dir)
             if skill_md is None:
-                return f"Error: No SKILL.md found in {skill_dir}"
+                return "Error: No SKILL.md found in the skill directory."
 
             try:
                 zip_path = _resolve_temp_path(local_env, f"{skill_name}.zip")
@@ -141,7 +147,7 @@ class CreateSkillZipTool(FunctionTool):
 
             if zip_path.exists() and not overwrite:
                 return (
-                    f"Error: Zip file already exists at {zip_path}. "
+                    "Error: Zip file already exists. "
                     "Set overwrite=true to replace it."
                 )
 
@@ -153,11 +159,14 @@ class CreateSkillZipTool(FunctionTool):
                         arcname = Path(skill_name) / file_path.relative_to(skill_dir)
                         zf.write(str(file_path), str(arcname))
 
-            return f"Skill '{skill_name}' packaged successfully: {zip_path}"
+            return f"Skill '{skill_name}' packaged successfully."
 
-        except Exception as e:
+        except ValueError as e:
+            logger.warning("Validation error in create_skill_zip: %s", e)
+            return f"Error: {e}"
+        except Exception:
             logger.exception("Error creating skill zip")
-            return f"Error creating skill zip: {type(e).__name__}: {e}"
+            return "Error: Failed to create skill zip. Check logs for details."
 
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
@@ -236,12 +245,10 @@ class InstallSkillFromZipTool(FunctionTool):
                     Path(get_astrbot_skills_path()),
                 ]
                 if not local_env:
+                    # Sandbox runtime uses /tmp as its temp dir
                     allowed_roots.append(Path("/tmp"))
                 if not any(_is_within(resolved, root) for root in allowed_roots):
-                    return (
-                        "Error: Absolute zip_path must be inside the temp or "
-                        "skills directory for security."
-                    )
+                    return "Error: Absolute zip_path must be inside the temp or skills directory."
             else:
                 try:
                     resolved = _resolve_temp_path(local_env, zip_path)
@@ -249,7 +256,7 @@ class InstallSkillFromZipTool(FunctionTool):
                     return f"Error: {ve}"
 
             if not resolved.exists():
-                return f"Error: ZIP file not found: {resolved}"
+                return "Error: ZIP file not found."
 
             skill_manager = SkillManager()
             installed = skill_manager.install_skill_from_zip(
@@ -260,6 +267,9 @@ class InstallSkillFromZipTool(FunctionTool):
 
             return f"Successfully installed skill(s): {installed}"
 
-        except Exception as e:
+        except ValueError as e:
+            logger.warning("Validation error in install_skill_from_zip: %s", e)
+            return f"Error: {e}"
+        except Exception:
             logger.exception("Error installing skill from zip")
-            return f"Error installing skill from zip: {type(e).__name__}: {e}"
+            return "Error: Failed to install skill from zip. Check logs for details."

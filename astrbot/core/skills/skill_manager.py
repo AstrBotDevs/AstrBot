@@ -94,6 +94,10 @@ def _normalize_skill_markdown_path(
     return canonical
 
 
+# Public alias so external modules don't depend on the private name.
+find_skill_markdown = _normalize_skill_markdown_path
+
+
 @dataclass
 class SkillInfo:
     name: str
