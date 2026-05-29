@@ -107,6 +107,7 @@
     "docsEmpty": "No documentation",
     "changelogTitle": "Changelog",
     "changelogEmpty": "No changelog",
+    "subCommandsCount": "{count} sub-commands",
     "handlerGroups": {
       "page": "Pages",
       "skill": "Skills",

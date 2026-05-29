@@ -1281,7 +1281,8 @@ class PluginRoute(Route):
         for plugin, logo_url, pages in results:
             _t = {
                 "name": plugin.name,
-                "repo": "" if plugin.repo is None else plugin.repo,
+                "marketplace_name": (plugin.name or "").replace("_", "-"),
+                "repo": "" if plugin.repo is None else str(plugin.repo),
                 "author": plugin.author,
                 "desc": plugin.desc,
                 "version": plugin.version,
@@ -1308,7 +1309,6 @@ class PluginRoute(Route):
             ):
                 continue
             _plugin_resp.append(_t)
-            _plugin_resp.append(_t)
         return (
             Response()
             .ok(_plugin_resp, message=self.plugin_manager.failed_plugin_info)
@@ -1333,7 +1333,8 @@ class PluginRoute(Route):
                 .ok(
                     {
                         "name": plugin.name,
-                        "repo": "" if plugin.repo is None else plugin.repo,
+                        "marketplace_name": (plugin.name or "").replace("_", "-"),
+                        "repo": "" if plugin.repo is None else str(plugin.repo),
                         "author": plugin.author,
                         "desc": plugin.desc,
                         "version": plugin.version,
@@ -1385,6 +1386,7 @@ class PluginRoute(Route):
                 "i18n_key": page["i18n_key"],
                 "description": "Plugin Page entry",
                 "plugin_name": plugin.name,
+                "plugin_marketplace_name": (plugin.name or "").replace("_", "-"),
             }
             for page in pages
         ]
