@@ -23,6 +23,12 @@ class LongTermMemory:
         self.session_chats = defaultdict(list)
         """记录群成员的群聊记录"""
 
+    def _group_key(self, event: AstrMessageEvent) -> str:
+        """获取群级别的 key，不受 unique_session 影响"""
+        if event.get_message_type() == MessageType.GROUP_MESSAGE and event.get_group_id():
+            return f"{event.get_platform_id()}:GroupMessage:{event.get_group_id()}"
+        return event.unified_msg_origin
+
     def cfg(self, event: AstrMessageEvent):
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         try:
@@ -58,9 +64,10 @@ class LongTermMemory:
 
     async def remove_session(self, event: AstrMessageEvent) -> int:
         cnt = 0
-        if event.unified_msg_origin in self.session_chats:
-            cnt = len(self.session_chats[event.unified_msg_origin])
-            del self.session_chats[event.unified_msg_origin]
+        group_key = self._group_key(event)
+        if group_key in self.session_chats:
+            cnt = len(self.session_chats[group_key])
+            del self.session_chats[group_key]
         return cnt
 
     async def get_image_caption(
@@ -143,17 +150,19 @@ class LongTermMemory:
                     parts.append(f" [At: {comp.name}]")
 
             final_message = "".join(parts)
-            logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
-            self.session_chats[event.unified_msg_origin].append(final_message)
-            if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:
-                self.session_chats[event.unified_msg_origin].pop(0)
+            group_key = self._group_key(event)
+            logger.debug(f"ltm | {group_key} | {final_message}")
+            self.session_chats[group_key].append(final_message)
+            if len(self.session_chats[group_key]) > cfg["max_cnt"]:
+                self.session_chats[group_key].pop(0)
 
     async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
         """当触发 LLM 请求前，调用此方法修改 req"""
-        if event.unified_msg_origin not in self.session_chats:
+        group_key = self._group_key(event)
+        if group_key not in self.session_chats:
             return
 
-        chats_str = "\n---\n".join(self.session_chats[event.unified_msg_origin])
+        chats_str = "\n---\n".join(self.session_chats[group_key])
 
         cfg = self.cfg(event)
         if cfg["enable_active_reply"]:
@@ -174,15 +183,16 @@ class LongTermMemory:
     async def after_req_llm(
         self, event: AstrMessageEvent, llm_resp: LLMResponse
     ) -> None:
-        if event.unified_msg_origin not in self.session_chats:
+        group_key = self._group_key(event)
+        if group_key not in self.session_chats:
             return
 
         if llm_resp.completion_text:
             final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {llm_resp.completion_text}"
             logger.debug(
-                f"Recorded AI response: {event.unified_msg_origin} | {final_message}"
+                f"Recorded AI response: {group_key} | {final_message}"
             )
-            self.session_chats[event.unified_msg_origin].append(final_message)
+            self.session_chats[group_key].append(final_message)
             cfg = self.cfg(event)
-            if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:
-                self.session_chats[event.unified_msg_origin].pop(0)
+            if len(self.session_chats[group_key]) > cfg["max_cnt"]:
+                self.session_chats[group_key].pop(0)

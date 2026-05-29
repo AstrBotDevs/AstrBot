@@ -33,6 +33,18 @@ class Main(star.Star):
         self.ltm = None
         try:
             self.ltm = LongTermMemory(self.context.astrbot_config_mgr, self.context)
+
+            async def _clear_ltm_session(umo: str) -> None:
+                self.ltm.session_chats.pop(umo, None)
+                # Also clear group-level key for unique_session scenarios
+                parts = umo.split(":")
+                if len(parts) >= 3 and parts[1] == "GroupMessage":
+                    group_key = f"{parts[0]}:GroupMessage:{parts[2]}"
+                    self.ltm.session_chats.pop(group_key, None)
+
+            self.context.conversation_manager.register_on_session_deleted(
+                _clear_ltm_session
+            )
         except BaseException as e:
             logger.error(f"聊天增强 err: {e}")
 

@@ -1315,6 +1315,14 @@ class ConfigRoute(Route):
         try:
             save_config(self.config, self.config, is_core=True)
             await self.core_lifecycle.platform_manager.terminate_platform(platform_id)
+            convs = await self.core_lifecycle.db.get_conversations(
+                platform_id=platform_id
+            )
+            for conv in convs:
+                await self.core_lifecycle.conversation_manager.delete_conversation(
+                    unified_msg_origin=conv.user_id,
+                    conversation_id=conv.conversation_id,
+                )
         except Exception as e:
             return Response().error(str(e)).__dict__
         return Response().ok(None, "删除平台配置成功~").__dict__
