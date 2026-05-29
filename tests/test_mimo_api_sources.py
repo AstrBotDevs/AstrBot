@@ -268,3 +268,106 @@ def _fake_post(response):
         return response
 
     return _post
+
+
+def test_mimo_tts_v2_5_style_uses_parentheses():
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts",
+            "mimo-tts-style-prompt": "开心",
+            "mimo-tts-dialect": "四川话",
+            "mimo-tts-seed-text": "",
+        }
+    )
+    try:
+        payload = provider._build_payload("hello")
+        assert payload["messages"][0]["content"] == "（开心 四川话）hello"
+    finally:
+        asyncio.run(provider.terminate())
+
+
+def test_mimo_tts_v2_5_singing_uses_parentheses():
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts",
+            "mimo-tts-style-prompt": "唱歌 开心",
+            "mimo-tts-dialect": "",
+        }
+    )
+    try:
+        payload = provider._build_payload("歌词")
+        assert payload["messages"][1]["content"] == "（唱歌）歌词"
+    finally:
+        asyncio.run(provider.terminate())
+
+
+def test_mimo_tts_voicedesign_uses_custom_user_prompt():
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts-voicedesign",
+            "mimo-tts-user-prompt": "用活泼的声音",
+            "mimo-tts-seed-text": "",
+        }
+    )
+    try:
+        payload = provider._build_payload("hello")
+        assert payload["messages"][0] == {
+            "role": "user",
+            "content": "用活泼的声音",
+        }
+    finally:
+        asyncio.run(provider.terminate())
+
+
+def test_mimo_tts_voicedesign_seed_text_used_when_no_user_prompt():
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts-voicedesign",
+            "mimo-tts-user-prompt": "",
+            "mimo-tts-seed-text": "fallback seed",
+        }
+    )
+    try:
+        payload = provider._build_payload("hello")
+        assert payload["messages"][0] == {
+            "role": "user",
+            "content": "fallback seed",
+        }
+    finally:
+        asyncio.run(provider.terminate())
+
+
+def test_mimo_tts_voiceclone_uses_voice_audio(monkeypatch, tmp_path):
+    audio_file = tmp_path / "test.wav"
+    audio_file.write_bytes(b"fake audio data")
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts-voiceclone",
+            "mimo-tts-voice-audio-path": str(audio_file),
+            "mimo-tts-seed-text": "",
+        }
+    )
+    try:
+        payload = provider._build_payload("hello")
+        import base64
+
+        expected_b64 = base64.b64encode(b"fake audio data").decode("utf-8")
+        assert payload["audio"]["voice"] == f"data:audio/wav;base64,{expected_b64}"
+    finally:
+        asyncio.run(provider.terminate())
+
+
+def test_mimo_tts_voiceclone_falls_back_to_voice_when_no_audio():
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts-voiceclone",
+            "mimo-tts-voice": "preset_voice",
+            "mimo-tts-voice-audio-path": "",
+            "mimo-tts-seed-text": "",
+        }
+    )
+    try:
+        payload = provider._build_payload("hello")
+        assert payload["audio"]["voice"] == "preset_voice"
+    finally:
+        asyncio.run(provider.terminate())

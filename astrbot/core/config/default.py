@@ -1627,6 +1627,8 @@ CONFIG_METADATA_2 = {
                         "mimo-tts-style-prompt": "",
                         "mimo-tts-dialect": "",
                         "mimo-tts-seed-text": "Hello, MiMo, have you had lunch?",
+                        "mimo-tts-user-prompt": "",
+                        "mimo-tts-voice-audio-path": "",
                         "timeout": "20",
                         "proxy": "",
                     },
@@ -2590,17 +2592,27 @@ CONFIG_METADATA_2 = {
                     "mimo-tts-style-prompt": {
                         "description": "风格提示词",
                         "type": "string",
-                        "hint": "会以 <style>...</style> 标签形式添加到待合成文本开头，用于控制语速、情绪、角色或风格，例如 开心、变快、孙悟空、悄悄话。可留空。",
+                        "hint": "用于控制语速、情绪、角色或风格，例如 开心、变快、孙悟空、悄悄话。v2 系列会以 <style>...</style> 标签拼接到文本开头，v2.5 系列会以（...）括号形式拼接。可留空。",
                     },
                     "mimo-tts-dialect": {
                         "description": "方言",
                         "type": "string",
-                        "hint": "会与风格提示词一起写入开头的 <style>...</style> 标签中，例如 东北话、四川话、河南话、粤语。可留空。",
+                        "hint": "与风格提示词一起拼接到文本开头，例如 东北话、四川话、河南话、粤语。v2 系列使用 <style> 标签，v2.5 系列使用（）括号。可留空。",
                     },
                     "mimo-tts-seed-text": {
                         "description": "种子文本",
                         "type": "string",
                         "hint": "作为可选的 user 消息发送，用于辅助调节语气和风格，不会拼接到待合成文本中。",
+                    },
+                    "mimo-tts-user-prompt": {
+                        "description": "用户提示词",
+                        "type": "string",
+                        "hint": "自定义 user 角色消息。使用 voicedesign 模型时为必填项，用于通过自然语言描述音色。其他模型可留空（优先级高于种子文本）。",
+                    },
+                    "mimo-tts-voice-audio-path": {
+                        "description": "克隆音频文件路径",
+                        "type": "string",
+                        "hint": "voiceclone 模型的待模拟音频文件的本地路径，例如 /path/to/audio.wav。仅 voiceclone 模型需要填写。",
                     },
                     "fishaudio-tts-character": {
                         "description": "character",
