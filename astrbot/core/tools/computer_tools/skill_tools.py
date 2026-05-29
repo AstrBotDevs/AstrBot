@@ -16,6 +16,8 @@ steps 2-3 are optional for immediate local use —but are useful for
 distribution, backup, or reinstall workflows.
 """
 
+__all__ = ["CreateSkillZipTool", "InstallSkillFromZipTool"]
+
 import logging
 import os
 import re
