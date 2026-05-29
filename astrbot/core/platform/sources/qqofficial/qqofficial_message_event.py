@@ -217,8 +217,84 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ret_id = getattr(ret, "id", None)
         return str(ret_id) if ret_id is not None else None
 
+    @staticmethod
+    def _has_keyboard(message: MessageChain) -> bool:
+        return any(isinstance(seg, (QQCKeyboard, QQCButton)) for seg in message.chain)
+
+    @classmethod
+    def _should_inline_images(cls, message: MessageChain) -> bool:
+        """带 keyboard 时强制 markdown，图片会被转成 markdown 内联语法，
+        因此不应被当作需要拆分的媒体。但若链中还有二进制媒体（语音/视频/文件），
+        这些仍需独立成条，此时退回常规拆分以保持「每条至多一个二进制媒体」不变式。"""
+        if not cls._has_keyboard(message):
+            return False
+        has_binary_media = any(
+            isinstance(seg, Record | Video | File) for seg in message.chain
+        )
+        return not has_binary_media
+
+    @staticmethod
+    def _split_message_chain_by_media(
+        message: MessageChain, inline_images: bool = False
+    ) -> list[MessageChain]:
+        chunks: list[MessageChain] = []
+        current_chain = []
+        current_has_media = False
+
+        for component in message.chain:
+            is_media = isinstance(component, Image | Record | Video | File)
+            # 图片将被内联进 markdown（与 keyboard 共存），不触发拆分
+            if inline_images and isinstance(component, Image):
+                is_media = False
+            if is_media and current_has_media:
+                chunks.append(
+                    MessageChain(
+                        chain=current_chain,
+                        use_t2i_=message.use_t2i_,
+                        type=message.type,
+                    )
+                )
+                current_chain = []
+                current_has_media = False
+
+            current_chain.append(component)
+            current_has_media = current_has_media or is_media
+
+        if current_chain or not message.chain:
+            chunks.append(
+                MessageChain(
+                    chain=current_chain,
+                    use_t2i_=message.use_t2i_,
+                    type=message.type,
+                )
+            )
+
+        return chunks
+
     async def _post_send(self, stream: dict | None = None):
         if not self.send_buffer:
+            return None
+
+        message_chains = self._split_message_chain_by_media(
+            self.send_buffer,
+            inline_images=self._should_inline_images(self.send_buffer),
+        )
+        stream_for_chain = stream if len(message_chains) == 1 else None
+
+        ret = None
+        for message_chain in message_chains:
+            ret = await self._post_send_one(message_chain, stream_for_chain)
+
+        self.send_buffer = None
+
+        return ret
+
+    async def _post_send_one(
+        self,
+        message_to_send: MessageChain,
+        stream: dict | None = None,
+    ):
+        if not message_to_send:
             return None
 
         source = self.message_obj.raw_message
@@ -236,9 +312,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         # 先预扫消息链判断是否存在 keyboard / 裸按钮：有的话强制 markdown，
         # 并让 _parse_to_qqofficial 把图片转成 markdown 语法以便共存。
+        # use_markdown_ 从 send_buffer（拆分前的原始链）读取，拆分出的 chunk 不携带该标记。
         use_md = getattr(self.send_buffer, "use_markdown_", None)
         has_keyboard_component = any(
-            isinstance(seg, (QQCKeyboard, QQCButton)) for seg in self.send_buffer.chain
+            isinstance(seg, (QQCKeyboard, QQCButton)) for seg in message_to_send.chain
         )
         if has_keyboard_component and use_md is False:
             logger.warning("[QQOfficial] 检测到 QQC 按钮组件，自动启用 markdown 模式")
@@ -255,12 +332,14 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             file_name,
             keyboard_payload,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(
-            self.send_buffer,
+            message_to_send,
             convert_image_to_markdown=convert_img,
         )
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
-        if stream and (image_base64 or record_file_path):
+        if stream and (
+            image_base64 or record_file_path or video_file_source or file_source
+        ):
             logger.debug("[QQOfficial] 检测到富媒体，降级为非流式发送。")
             stream = None
 
@@ -537,9 +616,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         if media_overrides_keyboard and keyboard_payload:
             await self._send_keyboard_followup(source, plain_text, keyboard_payload)
 
-        await super().send(self.send_buffer)
-
-        self.send_buffer = None
+        await super().send(message_to_send)
 
         return ret
 

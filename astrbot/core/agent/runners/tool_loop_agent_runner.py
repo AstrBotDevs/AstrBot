@@ -816,8 +816,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
             if self.tool_schema_mode == "skills_like":
-                llm_resp, _ = await self._resolve_tool_exec(llm_resp)
-                if not llm_resp.tools_call_name:
+                requery_resp, _ = await self._resolve_tool_exec(llm_resp)
+                if not requery_resp.tools_call_name:
+                    llm_resp = requery_resp
                     logger.warning(
                         "skills_like tool re-query returned no tool calls; fallback to assistant response."
                     )
@@ -845,6 +846,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                     await self._complete_with_assistant_response(llm_resp)
                     return
+                else:
+                    llm_resp.tools_call_name = requery_resp.tools_call_name
+                    llm_resp.tools_call_args = requery_resp.tools_call_args
+                    llm_resp.tools_call_ids = requery_resp.tools_call_ids
 
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
@@ -1022,6 +1027,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     func_tool = req.func_tool.get_tool(func_tool_name)
                     available_tools = req.func_tool.names()
 
+                #  Some API may return None for tools with no parameters
+                if func_tool_args is None:
+                    func_tool_args = {}
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
                 if not func_tool:
@@ -1293,7 +1301,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     model=self.req.model,
                     session_id=self.req.session_id,
                     extra_user_content_parts=self.req.extra_user_content_parts,
-                    tool_choice="required",
+                    # tool_choice="required",
                     abort_signal=self._abort_signal,
                 )
                 if requery_resp:
@@ -1319,7 +1327,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         model=self.req.model,
                         session_id=self.req.session_id,
                         extra_user_content_parts=self.req.extra_user_content_parts,
-                        tool_choice="required",
+                        # tool_choice="required",
                         abort_signal=self._abort_signal,
                     )
                     if repair_resp:

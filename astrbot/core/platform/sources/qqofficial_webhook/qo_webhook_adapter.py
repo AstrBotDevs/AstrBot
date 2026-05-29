@@ -110,6 +110,12 @@ class botClient(Client):
             abm.session_id,
             self,
         )
+        # Populate extra fields cached from the raw webhook payload
+        webhook_helper = getattr(self.platform, "webhook_helper", None)
+        if webhook_helper and abm.message_id:
+            extra_data = webhook_helper.pop_extra_data(abm.message_id)
+            for key, val in extra_data.items():
+                event.set_extra(key, val)
         self.platform.commit_event(event)
         return event
 

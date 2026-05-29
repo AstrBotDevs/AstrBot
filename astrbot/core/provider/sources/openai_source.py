@@ -441,7 +441,14 @@ class ProviderOpenAIOfficial(Provider):
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
-        return create_proxy_client("OpenAI", proxy)
+        httpx_module: Any = httpx
+        try:
+            from openai import _base_client as openai_base_client
+
+            httpx_module = getattr(openai_base_client, "httpx", httpx)
+        except ImportError:
+            pass
+        return create_proxy_client("OpenAI", proxy, httpx_module=httpx_module)
 
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
@@ -543,8 +550,9 @@ class ProviderOpenAIOfficial(Provider):
 
             content = msg.get("content")
             tool_calls = msg.get("tool_calls")
+            reasoning_content = msg.get("reasoning_content")
 
-            if _is_empty(content) and not tool_calls:
+            if _is_empty(content) and not tool_calls and not reasoning_content:
                 logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
                 continue
 
@@ -662,10 +670,16 @@ class ProviderOpenAIOfficial(Provider):
                     # Gemini and some OpenAI-compatible proxies omit this field
                     if not hasattr(tc, "index") or tc.index is None:
                         tc.index = idx
-            try:
-                state.handle_chunk(chunk)
-            except Exception as e:
-                logger.error("Saving chunk state error: " + str(e))
+            # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
+            # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
+            # refs: AstrBot#6689 / openai-python#5069 / #5047
+            # 例外：流末尾的 usage chunk（choices=[]，delta=None 但有 usage 数据）
+            # 需要传给 state，否则最终 completion 会丢失 usage 信息
+            if delta is not None or chunk.usage:
+                try:
+                    state.handle_chunk(chunk)
+                except Exception as e:
+                    logger.error("Saving chunk state error: " + str(e))
             # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)
@@ -693,10 +707,14 @@ class ProviderOpenAIOfficial(Provider):
             if _y:
                 yield llm_response
 
-        final_completion = state.get_final_completion()
-        llm_response = await self._parse_openai_completion(final_completion, tools)
-
-        yield llm_response
+        try:
+            final_completion = state.get_final_completion()
+            llm_response = await self._parse_openai_completion(final_completion, tools)
+            yield llm_response
+        except Exception as e:
+            logger.error("get_final_completion error: " + str(e))
+            # 流式内容已通过 yield 发出，记录错误后正常结束即可
+            return
 
     def _extract_reasoning_content(
         self,
@@ -894,6 +912,9 @@ class ProviderOpenAIOfficial(Provider):
                             args = {}
                     else:
                         args = tool_call.function.arguments
+                    # Some API may return None for tools with no parameters
+                    if args is None:
+                        args = {}
                     args_ls.append(args)
                     func_name_ls.append(tool_call.function.name)
                     tool_call_ids.append(tool_call.id)
@@ -995,6 +1016,16 @@ class ProviderOpenAIOfficial(Provider):
             model in deepseek_reasoning_models
             or "api.deepseek.com" in self.client.base_url.host
         )
+        # MiMo 推理模型（MiMo-V2.5-Pro / MiMo-V2.5 / MiMo-V2-Pro / MiMo-V2-Omni / MiMo-V2-Flash）
+        # 要求 assistant 历史消息必须回传 reasoning_content，否则返回 400
+        mimo_reasoning_models = {
+            "mimo-v2.5-pro",
+            "mimo-v2.5",
+            "mimo-v2-pro",
+            "mimo-v2-omni",
+            "mimo-v2-flash",
+        }
+        is_mimo_reasoning = model in mimo_reasoning_models
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list
@@ -1021,6 +1052,15 @@ class ProviderOpenAIOfficial(Provider):
             ):
                 # DeepSeek v4 reasoning models require the field on assistant
                 # history messages, even when the reasoning content is empty.
+                message["reasoning_content"] = ""
+
+            if (
+                message.get("role") == "assistant"
+                and is_mimo_reasoning
+                and "reasoning_content" not in message
+            ):
+                # MiMo 推理模型要求 assistant 历史消息回传 reasoning_content，
+                # 缺失时 API 返回 400。参见 MiMo 官方文档。
                 message["reasoning_content"] = ""
 
             # Gemini 的 function_response 要求 google.protobuf.Struct（即 JSON 对象），
@@ -1069,7 +1109,7 @@ class ProviderOpenAIOfficial(Provider):
                     image_fallback_used,
                 )
             raise e
-        if "maximum context length" in str(e):
+        if "maximum context length" in str(e) or "context length" in str(e).lower():
             logger.warning(
                 f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}",
             )
@@ -1128,8 +1168,8 @@ class ProviderOpenAIOfficial(Provider):
             or ("function" in str(e).lower() and "support" in str(e).lower())
         ):
             # openai, ollama, gemini openai, siliconcloud 的错误提示与 code 不统一，只能通过字符串匹配
-            logger.info(
-                f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。",
+            logger.warning(
+                f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。如需永久关闭，可前往 WebUI 中关闭工具调用。",
             )
             payloads.pop("tools", None)
             return (
@@ -1142,9 +1182,6 @@ class ProviderOpenAIOfficial(Provider):
                 image_fallback_used,
             )
         # logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
-
-        if "tool" in str(e).lower() and "support" in str(e).lower():
-            logger.error("疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
 
         if is_connection_error(e):
             proxy = self.provider_config.get("proxy", "")

@@ -32,7 +32,6 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 
 from ...register import register_platform_adapter
-from .components import QQCButton, QQCKeyboard
 from .qqofficial_message_event import QQOfficialMessageEvent
 
 # remove logger handler
@@ -249,10 +248,17 @@ class QQOfficialPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        use_md = getattr(message_chain, "use_markdown_", None)
-        has_keyboard = any(
-            isinstance(seg, (QQCKeyboard, QQCButton)) for seg in message_chain.chain
+        message_chains = QQOfficialMessageEvent._split_message_chain_by_media(
+            message_chain,
+            inline_images=QQOfficialMessageEvent._should_inline_images(message_chain),
         )
+        if len(message_chains) > 1:
+            for split_message_chain in message_chains:
+                await self._send_by_session_common(session, split_message_chain)
+            return
+
+        use_md = getattr(message_chain, "use_markdown_", None)
+        has_keyboard = QQOfficialMessageEvent._has_keyboard(message_chain)
         if has_keyboard and use_md is False:
             use_md = True
         convert_img = has_keyboard and use_md is not False
@@ -281,8 +287,9 @@ class QQOfficialPlatformAdapter(Platform):
         ):
             return
 
+        # 私聊主动推送不需要 msg_id，见 https://github.com/AstrBotDevs/AstrBot/issues/7904
         msg_id = self._session_last_message_id.get(session.session_id)
-        if not msg_id:
+        if not msg_id and session.message_type != MessageType.FRIEND_MESSAGE:
             logger.warning(
                 "[QQOfficial] No cached msg_id for session: %s, skip send_by_session",
                 session.session_id,

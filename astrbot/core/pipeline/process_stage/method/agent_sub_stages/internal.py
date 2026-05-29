@@ -14,6 +14,7 @@ from astrbot.core.agent.message import (
 )
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
+    LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
@@ -107,6 +108,9 @@ class InternalAgentSubStage(Stage):
         )
         if self.dequeue_context_length <= 0:
             self.dequeue_context_length = 1
+        self.fallback_max_context_tokens: int = settings.get(
+            "fallback_max_context_tokens", 128000
+        )
 
         self.llm_safety_mode = settings.get("llm_safety_mode", True)
         self.safety_mode_strategy = settings.get(
@@ -136,6 +140,7 @@ class InternalAgentSubStage(Stage):
             llm_compress_provider_id=self.llm_compress_provider_id,
             max_context_length=self.max_context_length,
             dequeue_context_length=self.dequeue_context_length,
+            fallback_max_context_tokens=self.fallback_max_context_tokens,
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,
@@ -146,6 +151,11 @@ class InternalAgentSubStage(Stage):
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
+
+    async def _send_llm_error_message(
+        self, event: AstrMessageEvent, message: object
+    ) -> None:
+        await event.send(MessageChain().message(str(message)))
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
@@ -215,6 +225,13 @@ class InternalAgentSubStage(Stage):
                     )
 
                     if build_result is None:
+                        if llm_error_message := event.get_extra(
+                            LLM_ERROR_MESSAGE_EXTRA_KEY
+                        ):
+                            await self._send_llm_error_message(
+                                event,
+                                llm_error_message,
+                            )
                         return
 
                     agent_runner = build_result.agent_runner
@@ -225,10 +242,12 @@ class InternalAgentSubStage(Stage):
                     api_base = provider.provider_config.get("api_base", "")
                     for host in decoded_blocked:
                         if host in api_base:
-                            logger.error(
-                                "Provider API base %s is blocked due to security reasons. Please use another ai provider.",
-                                api_base,
+                            error_message = (
+                                f"LLM 请求失败：Provider API base `{api_base}` "
+                                "因安全原因被拦截，请更换可用的 AI 提供商。"
                             )
+                            logger.error(error_message)
+                            await self._send_llm_error_message(event, error_message)
                             return
 
                     stream_to_general = (

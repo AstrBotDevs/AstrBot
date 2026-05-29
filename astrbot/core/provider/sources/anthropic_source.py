@@ -1,7 +1,7 @@
 import base64
 import json
 from collections.abc import AsyncGenerator
-from typing import Literal
+from typing import Any, Literal
 
 import anthropic
 import httpx
@@ -104,15 +104,35 @@ class ProviderAnthropic(Provider):
             api_key=self.chosen_api_key,
             timeout=self.timeout,
             base_url=self.base_url,
+            default_headers=self.custom_headers,
             http_client=self._create_http_client(provider_config),
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
-        """创建带代理的 HTTP 客户端，使用系统 SSL 证书"""
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+        """Create an HTTP client with optional proxy and system SSL trust store.
+
+        The Anthropic SDK validates ``http_client`` with
+        ``isinstance(..., httpx.AsyncClient)`` against its own ``httpx`` import.
+        When multiple ``httpx`` installations are present on ``sys.path``
+        (e.g. bundled Python + system Python), constructing the client from a
+        different ``httpx`` module makes that check fail. We therefore prefer
+        the SDK's own ``httpx`` module when available.
+        """
+        proxy = provider_config.get("proxy", "")
+        if not proxy:
+            return None
+        httpx_module: Any = httpx
+        try:
+            from anthropic import _base_client as anthropic_base_client
+
+            httpx_module = getattr(anthropic_base_client, "httpx", httpx)
+        except ImportError:
+            pass
         return create_proxy_client(
             "Anthropic",
-            provider_config.get("proxy", ""),
+            proxy,
             headers=self.custom_headers,
+            httpx_module=httpx_module,
         )
 
     def _apply_thinking_config(self, payloads: dict) -> None:
@@ -195,18 +215,37 @@ class ProviderAnthropic(Provider):
                     },
                 )
             elif message["role"] == "tool":
-                new_messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": message["tool_call_id"],
-                                "content": message["content"] or "<empty response>",
-                            },
-                        ],
-                    },
+                tool_result_block = {
+                    "type": "tool_result",
+                    "tool_use_id": message["tool_call_id"],
+                    "content": message["content"] or "<empty response>",
+                }
+                last_message = new_messages[-1] if new_messages else None
+                last_content = (
+                    last_message.get("content")
+                    if isinstance(last_message, dict)
+                    else None
                 )
+                can_append_to_previous_tool_results = (
+                    last_message is not None
+                    and last_message.get("role") == "user"
+                    and isinstance(last_content, list)
+                    and len(last_content) > 0
+                    and all(
+                        isinstance(block, dict) and block.get("type") == "tool_result"
+                        for block in last_content
+                    )
+                )
+
+                if can_append_to_previous_tool_results:
+                    last_content.append(tool_result_block)
+                else:
+                    new_messages.append(
+                        {
+                            "role": "user",
+                            "content": [tool_result_block],
+                        },
+                    )
             elif message["role"] == "user":
                 if isinstance(message.get("content"), list):
                     converted_content = []
@@ -572,7 +611,11 @@ class ProviderAnthropic(Provider):
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
-            payloads["system"] = system_prompt
+            payloads["system"] = (
+                [{"type": "text", "text": system_prompt}]
+                if isinstance(system_prompt, str)
+                else system_prompt
+            )
 
         llm_response = None
         try:
@@ -635,7 +678,11 @@ class ProviderAnthropic(Provider):
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
-            payloads["system"] = system_prompt
+            payloads["system"] = (
+                [{"type": "text", "text": system_prompt}]
+                if isinstance(system_prompt, str)
+                else system_prompt
+            )
 
         async for llm_response in self._query_stream(payloads, func_tool):
             yield llm_response

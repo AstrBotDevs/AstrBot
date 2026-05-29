@@ -108,14 +108,23 @@
         </div>
       </transition>
 
+      <CommandSuggestion
+        :visible="showCommandSuggestion"
+        :commands="filteredCommands"
+        :selected-index="selectedCommandIndex"
+        :is-dark="isDark"
+        @select="handleCommandSelect"
+        @update-selected-index="selectedCommandIndex = $event"
+      />
       <textarea
         ref="inputField"
         v-model="localPrompt"
         @keydown="handleKeyDown"
+        @input="handleInput"
         @compositionstart="handleCompositionStart"
         @compositionend="handleCompositionEnd"
         @compositioncancel="handleCompositionEnd"
-        @blur="clearCompositionState()"
+        @blur="handleBlur"
         :disabled="disabled"
         placeholder="Ask AstrBot..."
         class="chat-textarea"
@@ -312,10 +321,14 @@ import { useDisplay } from "vuetify";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { isComposingEnter } from "@/utils/imeInput.mjs";
+import axios from "axios";
+import type { CommandItem } from "@/components/extension/componentPanel/types";
 import ConfigSelector from "./ConfigSelector.vue";
 import ProviderModelMenu from "./ProviderModelMenu.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import CommandSuggestion from "./CommandSuggestion.vue";
 import type { Session } from "@/composables/useSessions";
+import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
 interface StagedFileInfo {
   attachment_id: string;
@@ -387,6 +400,126 @@ const isDragging = ref(false);
 const isComposing = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
 let dragLeaveTimeout: number | null = null;
+
+// 命令提示相关状态
+const allCommands = ref<CommandItem[]>([]);
+const showCommandSuggestion = ref(false);
+const selectedCommandIndex = ref(0);
+const commandSuggestionLoading = ref(false);
+const wakePrefixes = ref<string[]>(["/"]);
+const currentConfigId = ref((props.configId as string) || "default");
+
+/** 检查文本是否以任意一个唤醒词前缀开头 */
+function hasWakePrefix(text: string): boolean {
+  return wakePrefixes.value.some((p) => text.startsWith(p));
+}
+
+/** 去掉文本开头匹配的任意唤醒词前缀，返回剥离后的文本 */
+function stripWakePrefix(text: string): string {
+  let result = text;
+  for (const p of wakePrefixes.value) {
+    if (result.startsWith(p)) {
+      result = result.slice(p.length);
+      break; // 只剥离第一个匹配的前缀
+    }
+  }
+  return result;
+}
+
+function normalizeCommandSearchText(value: string) {
+  return stripWakePrefix(value.trim()).toLowerCase();
+}
+
+/** 从所有指令中展平获取启用的普通指令和子指令 */
+const enabledCommands = computed(() => {
+  const result: SuggestionCommand[] = [];
+  const seen = new Set<string>();
+  // 使用第一个唤醒词前缀作为指令的展示前缀
+  const displayPrefix = wakePrefixes.value[0] || "/";
+
+  function addCommand(cmd: CommandItem) {
+    if (!cmd.enabled) return;
+    if (cmd.type === "group") {
+      // 指令组本身不加入，但其子指令加入
+      cmd.sub_commands?.forEach(addCommand);
+      return;
+    }
+    // 统一添加唤醒词前缀（子命令的 effective_command 如 "music play" 需要变成 "/music play"）
+    const displayCmd = hasWakePrefix(cmd.effective_command)
+      ? cmd.effective_command
+      : `${displayPrefix}${cmd.effective_command}`;
+    if (!seen.has(displayCmd)) {
+      seen.add(displayCmd);
+      result.push({
+        handler_full_name: cmd.handler_full_name,
+        effective_command: displayCmd,
+        description: cmd.description,
+        plugin_display_name: cmd.plugin_display_name,
+        enabled: cmd.enabled,
+        reserved: cmd.reserved,
+      });
+    }
+    // 同时加入别名（别名也需要加上唤醒词前缀）
+    cmd.aliases?.forEach((alias) => {
+      const aliasBase = cmd.parent_signature
+        ? `${cmd.parent_signature} ${alias}`
+        : alias;
+      const aliasKey = hasWakePrefix(aliasBase)
+        ? aliasBase
+        : `${displayPrefix}${aliasBase}`;
+      if (!seen.has(aliasKey)) {
+        seen.add(aliasKey);
+        result.push({
+          handler_full_name: cmd.handler_full_name,
+          effective_command: aliasKey,
+          description: cmd.description,
+          plugin_display_name: cmd.plugin_display_name,
+          enabled: cmd.enabled,
+          reserved: cmd.reserved,
+        });
+      }
+    });
+  }
+
+  allCommands.value.forEach(addCommand);
+  return result;
+});
+
+function sortSystemPluginCommandsFirst(commands: SuggestionCommand[]) {
+  return [...commands].sort((a, b) => Number(b.reserved) - Number(a.reserved));
+}
+
+/** 根据当前输入过滤候选指令 */
+const filteredCommands = computed(() => {
+  const text = props.prompt;
+  if (!text || !hasWakePrefix(text)) return [];
+
+  const query = normalizeCommandSearchText(text);
+  if (!query) return sortSystemPluginCommandsFirst(enabledCommands.value);
+
+  const startsWithMatches: SuggestionCommand[] = [];
+  const containsMatches: SuggestionCommand[] = [];
+
+  for (const cmd of enabledCommands.value) {
+    const commandText = normalizeCommandSearchText(cmd.effective_command);
+    const pluginText = normalizeCommandSearchText(cmd.plugin_display_name || "");
+    const descriptionText = normalizeCommandSearchText(cmd.description || "");
+    const matchesCommand = commandText.includes(query);
+    const matchesMetadata =
+      pluginText.includes(query) || descriptionText.includes(query);
+
+    if (commandText.startsWith(query)) {
+      startsWithMatches.push(cmd);
+    } else if (matchesCommand || matchesMetadata) {
+      containsMatches.push(cmd);
+    }
+  }
+
+  return [
+    ...sortSystemPluginCommandsFirst(startsWithMatches),
+    ...sortSystemPluginCommandsFirst(containsMatches),
+  ];
+});
 
 const localPrompt = computed({
   get: () => props.prompt,
@@ -504,6 +637,36 @@ watch(localPrompt, () => {
 });
 
 function handleKeyDown(e: KeyboardEvent) {
+  // 命令提示激活时，拦截方向键和 Enter/Esc
+  if (showCommandSuggestion.value && filteredCommands.value.length > 0) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      selectedCommandIndex.value =
+        (selectedCommandIndex.value + 1) % filteredCommands.value.length;
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      selectedCommandIndex.value =
+        (selectedCommandIndex.value - 1 + filteredCommands.value.length) %
+        filteredCommands.value.length;
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const cmd = filteredCommands.value[selectedCommandIndex.value];
+      if (cmd) {
+        handleCommandSelect(cmd);
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      showCommandSuggestion.value = false;
+      return;
+    }
+  }
+
   const isEnter = e.key === "Enter";
   if (!isEnter) {
     // Ctrl+B 录音
@@ -541,6 +704,63 @@ function handleKeyDown(e: KeyboardEvent) {
       emit("send");
     }
     return;
+  }
+}
+
+/** 处理输入变化，控制命令提示显示 */
+function handleInput() {
+  const text = props.prompt;
+  if (text && hasWakePrefix(text) && !isComposing.value) {
+    showCommandSuggestion.value = filteredCommands.value.length > 0;
+    selectedCommandIndex.value = 0;
+  } else {
+    showCommandSuggestion.value = false;
+  }
+}
+
+/** 处理 blur 事件，延迟关闭命令提示以允许点击 */
+function handleBlur() {
+  clearCompositionState();
+  // 延迟关闭，避免点击候选项时面板已消失
+  setTimeout(() => {
+    showCommandSuggestion.value = false;
+  }, 200);
+}
+
+/** 选择命令，填入输入框 */
+function handleCommandSelect(cmd: SuggestionCommand) {
+  localPrompt.value = cmd.effective_command + " ";
+  showCommandSuggestion.value = false;
+  nextTick(() => {
+    inputField.value?.focus();
+    autoResize();
+  });
+}
+
+/** 获取指令列表 */
+async function fetchCommands() {
+  if (commandSuggestionLoading.value) return;
+  commandSuggestionLoading.value = true;
+  try {
+    const params: Record<string, string> = {};
+    const cid = currentConfigId.value;
+    if (cid && cid !== "default") {
+      params.config_id = cid;
+    }
+    const res = await axios.get("/api/commands", { params });
+    if (res.data.status === "ok") {
+      allCommands.value = res.data.data.items || [];
+      // 读取当前配置的唤醒词列表，用于指令候选的触发前缀
+      const prefixes: string[] = res.data.data.wake_prefix;
+      if (prefixes && prefixes.length > 0) {
+        wakePrefixes.value = prefixes;
+      }
+    }
+  } catch (err) {
+    // 静默失败，不影响聊天功能
+    console.warn("Failed to fetch commands for suggestion:", err);
+  } finally {
+    commandSuggestionLoading.value = false;
   }
 }
 
@@ -637,6 +857,11 @@ function handleConfigChange(payload: {
   const runnerType = (payload.agentRunnerType || "").toLowerCase();
   const isInternal = runnerType === "internal" || runnerType === "local";
   showProviderSelector.value = isInternal;
+  // 配置切换后重新获取指令列表和唤醒词
+  if (payload.configId && payload.configId !== currentConfigId.value) {
+    currentConfigId.value = payload.configId;
+    fetchCommands();
+  }
 }
 
 function getCurrentSelection() {
@@ -656,6 +881,8 @@ onMounted(() => {
     inputField.value.addEventListener("paste", handlePaste);
   }
   document.addEventListener("keyup", handleKeyUp);
+  // 预加载指令列表
+  fetchCommands();
 });
 
 onBeforeUnmount(() => {
