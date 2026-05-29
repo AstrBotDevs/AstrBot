@@ -59,6 +59,7 @@ from .edit_engine import (
     EditResult,
     build_unified_diff,
     edit_file,
+    get_file_lock,
     robust_replace,
 )
 from .util import (
@@ -483,7 +484,6 @@ class FileEditTool(FunctionTool):
         restricted = _is_restricted_env(context)
 
         try:
-            # ── path resolution ────────────────────────────────────
             if local_env:
                 normalized_path = _normalize_rw_path(
                     path,
@@ -498,13 +498,7 @@ class FileEditTool(FunctionTool):
             if not normalized_path:
                 raise ValueError("`path` must be a non-empty string.")
 
-            # ── execute edit ───────────────────────────────────────
             if local_env:
-                # Local: full robust edit engine
-                #   BOM preservation  ✅
-                #   CRLF preservation ✅
-                #   file-level lock   ✅
-                #   diff output       ✅
                 result = await edit_file(
                     path=normalized_path,
                     old_string=old,
@@ -513,58 +507,54 @@ class FileEditTool(FunctionTool):
                     encoding="utf-8",
                 )
             else:
-                # Sandbox: booter-mediated I/O + robust_replace
-                #   fuzzy matching   ✅
-                #   diff output      ✅
-                #   BOM/CRLF         handled by sandbox runtime
-                #   concurrency      handled by sandbox runtime
                 sb = await get_booter(
                     context.context.context,
                     umo,
                 )
+                lock = get_file_lock(normalized_path)
+                async with lock:
+                    read_result = await sb.fs.read_file(path=normalized_path)
+                    if not read_result.get("success", False):
+                        error_detail = str(read_result.get("error", "") or "").strip()
+                        return (
+                            "Error editing file: "
+                            f"{error_detail or 'unknown filesystem read error'}"
+                        )
 
-                read_result = await sb.fs.read_file(path=normalized_path)
-                if not read_result.get("success", False):
-                    error_detail = str(read_result.get("error", "") or "").strip()
-                    return (
-                        "Error editing file: "
-                        f"{error_detail or 'unknown filesystem read error'}"
+                    old_content = read_result.get("content", "")
+
+                    try:
+                        new_content, replacements = robust_replace(
+                            old_content,
+                            old,
+                            new,
+                            replace_all=replace_all,
+                        )
+                    except ValueError as exc:
+                        return f"Error editing file: {exc}"
+
+                    write_result = await sb.fs.write_file(
+                        path=normalized_path,
+                        content=new_content,
                     )
+                    if not write_result.get("success", False):
+                        error_detail = str(write_result.get("error", "") or "").strip()
+                        return (
+                            "Error editing file: "
+                            f"{error_detail or 'unknown filesystem write error'}"
+                        )
 
-                old_content = read_result.get("content", "")
-
-                try:
-                    new_content, replacements = robust_replace(
+                    diff = build_unified_diff(
+                        normalized_path,
                         old_content,
-                        old,
-                        new,
-                        replace_all=replace_all,
-                    )
-                except ValueError as exc:
-                    return f"Error editing file: {exc}"
-
-                write_result = await sb.fs.write_file(
-                    path=normalized_path,
-                    content=new_content,
-                )
-                if not write_result.get("success", False):
-                    error_detail = str(write_result.get("error", "") or "").strip()
-                    return (
-                        "Error editing file: "
-                        f"{error_detail or 'unknown filesystem write error'}"
+                        new_content,
                     )
 
-                diff = build_unified_diff(
-                    normalized_path,
-                    old_content,
-                    new_content,
-                )
-
-                result = EditResult(
-                    success=True,
-                    replacements=replacements,
-                    diff=diff,
-                )
+                    result = EditResult(
+                        success=True,
+                        replacements=replacements,
+                        diff=diff,
+                    )
 
             return _format_result(
                 normalized_path,

@@ -95,10 +95,7 @@ function onMouseUp() {
 }
 
 onBeforeUnmount(() => {
-  if (isResizing) {
-    document.removeEventListener("mousemove", onMouseMove);
-    document.removeEventListener("mouseup", onMouseUp);
-  }
+  onMouseUp();
 });
 </script>
 

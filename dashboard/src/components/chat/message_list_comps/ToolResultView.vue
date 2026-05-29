@@ -45,24 +45,30 @@
 
     <!-- ── execute_shell ───────────────────────────────────────── -->
     <template v-else-if="toolName === 'astrbot_execute_shell'">
-      <pre class="result-terminal" v-text="resultText"></pre>
-      <div v-if="shellExitCode != null" class="result-exit-code" :class="shellExitCode === 0 ? 'success' : 'error'">
-        Exit code: {{ shellExitCode }}
+      <div class="shell-result">
+        <div class="shell-row">
+          <span class="shell-label">Stdout</span>
+          <pre class="shell-value" v-text="shellStdout"></pre>
+        </div>
+        <div v-if="shellStderr" class="shell-row shell-stderr">
+          <span class="shell-label">Stderr</span>
+          <pre class="shell-value shell-stderr-text" v-text="shellStderr"></pre>
+        </div>
+        <div class="shell-row">
+          <span class="shell-label">Exit code</span>
+          <span class="shell-exit-code" :class="shellExitCodeVal === 0 ? 'success' : 'error'">{{ shellExitCodeVal }}</span>
+        </div>
       </div>
-    </template>
-
-    <!-- ── fallback ────────────────────────────────────────────── -->
-    <template v-else>
-      <div class="result-status" :class="resultOk ? 'success' : 'error'">
-        <v-icon size="16">{{ resultOk ? 'mdi-check-circle' : 'mdi-alert-circle' }}</v-icon>
-        <span>{{ resultText }}</span>
-      </div>
+      <div v-if="shellExtra" class="shell-extra-text">{{ shellExtra }}</div>
     </template>
 
     <!-- ── fallback ────────────────────────────────────────────── -->
     <template v-else>
       <pre class="result-raw">{{ formattedResult }}</pre>
     </template>
+
+    <!-- ── shared [SYSTEM NOTICE] suffix (exclude shell which handles it separately) ── -->
+    <div v-if="resultSuffix && toolName !== 'astrbot_execute_shell'" class="result-suffix">{{ resultSuffix }}</div>
   </div>
 </template>
 
@@ -135,7 +141,23 @@ const shikiReady = ref(false);
 
 // ── helpers ──────────────────────────────────────────────────────
 
-const resultText = computed(() => (props.result ?? "").trim());
+const rawResult = computed(() => (props.result ?? "").trim());
+
+// Strip [SYSTEM NOTICE] suffix for all non-shell templates.
+// Shell uses rawResult directly via brace-tracking in shellParsed.
+const resultText = computed(() => {
+  const text = rawResult.value;
+  const idx = text.search(/\[SYSTEM NOTICE\]/i);
+  if (idx < 0) return text;
+  return text.slice(0, idx).trim();
+});
+
+const resultSuffix = computed(() => {
+  const text = rawResult.value;
+  const idx = text.search(/\[SYSTEM NOTICE\]/i);
+  if (idx < 0) return null;
+  return text.slice(idx).trim();
+});
 
 const resultOk = computed(() => {
   const t = resultText.value.toLowerCase();
@@ -143,11 +165,11 @@ const resultOk = computed(() => {
 });
 
 const formattedResult = computed(() => {
-  if (!props.result) return "";
+  if (!resultText.value) return "";
   try {
-    return JSON.stringify(JSON.parse(props.result), null, 2);
+    return JSON.stringify(JSON.parse(resultText.value), null, 2);
   } catch {
-    return props.result;
+    return resultText.value;
   }
 });
 
@@ -273,9 +295,62 @@ const grepTruncated = computed(() => {
 
 // ── execute_shell ──────────────────────────────────────────────
 
-const shellExitCode = computed(() => {
-  return null; // Shell output doesn't include exit code in result string
-  // We could try to parse it but it's not reliable
+const shellParsed = computed(() => {
+  // Extract JSON from text that may have trailing non-JSON content (e.g. [SYSTEM NOTICE]).
+  const text = rawResult.value;
+  const start = text.indexOf("{");
+  if (start < 0) {
+    return { json: null, extra: text };
+  }
+  // Track brace depth to find the matching closing brace
+  let depth = 0;
+  let end = -1;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+  }
+  if (end < 0) {
+    return { json: null, extra: text };
+  }
+  const jsonStr = text.slice(start, end);
+  const extraStr = text.slice(end).trim();
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && typeof parsed === "object") {
+      return { json: parsed, extra: extraStr || null };
+    }
+  } catch {
+    // not valid JSON
+  }
+  return { json: null, extra: text };
+});
+
+const shellStdout = computed(() => {
+  if (shellParsed.value?.json && "stdout" in shellParsed.value.json) {
+    return shellParsed.value.json.stdout;
+  }
+  return resultText.value;
+});
+
+const shellStderr = computed(() => {
+  return shellParsed.value?.json?.stderr || "";
+});
+
+const shellExitCodeVal = computed(() => {
+  if (shellParsed.value?.json && "exit_code" in shellParsed.value.json) {
+    return shellParsed.value.json.exit_code;
+  }
+  return null;
+});
+
+const shellExtra = computed(() => {
+  return shellParsed.value?.extra || null;
 });
 
 </script>
@@ -362,21 +437,101 @@ const shellExitCode = computed(() => {
   line-height: inherit;
 }
 
-/* ── Terminal block ──────────────────────────────────────────── */
+/* ── Shell result ─────────────────────────────────────────── */
 
-.result-terminal {
-  margin: 0;
-  padding: 8px 10px;
+.shell-result {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.85);
-  color: #e0e0e0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11.5px;
+  overflow: hidden;
+}
+
+.shell-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 3px 8px;
+  font-size: 11px;
   line-height: 1.55;
+}
+
+.shell-row + .shell-row {
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.shell-label {
+  flex-shrink: 0;
+  width: 64px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  padding-right: 8px;
+}
+
+.shell-value {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.8);
   white-space: pre-wrap;
   word-break: break-all;
-  max-height: 300px;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
   overflow-y: auto;
+}
+
+.shell-stderr {
+  background: rgba(207, 34, 46, 0.04);
+}
+
+.shell-stderr-text {
+  color: #cf222e;
+}
+
+.shell-exit-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.shell-exit-code.success {
+  color: #2da44e;
+}
+
+.shell-exit-code.error {
+  color: #cf222e;
+}
+
+/* ── Terminal block (deprecated, shell now uses .shell-result) ── */
+.result-terminal-deprecated {}
+
+/* ── Shell extra text (e.g. [SYSTEM NOTICE]) ────────────── */
+
+.shell-extra-text {
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Shared [SYSTEM NOTICE] suffix for non-shell tools */
+.result-suffix {
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ── Status badge ────────────────────────────────────────────── */

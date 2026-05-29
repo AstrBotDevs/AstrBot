@@ -8,8 +8,6 @@ Implements 9 fallback replacers to handle LLM-generated edits that may have:
 - trailing/leading whitespace differences
 - block-level fuzzy matching via Levenshtein similarity
 
-Author: AstrBot Agent Harness Development Expert
-Date: 2026-05-18 (initial), 2026-05-28 (merged robust_edit + robust_edit_engine)
 """
 
 from __future__ import annotations
@@ -28,18 +26,16 @@ Replacer = Callable[[str, str], Iterator[str]]
 # File-level locks to prevent concurrent edits on the same file.
 # Use WeakValueDictionary so locks for deleted files can be garbage-collected.
 _locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
-_locks_lock = asyncio.Lock()
 
 
-async def _get_lock(path: str) -> asyncio.Lock:
+def get_file_lock(path: str) -> asyncio.Lock:
     """Get or create an asyncio.Lock for the given file path."""
     resolved = str(Path(path).resolve())
-    async with _locks_lock:
-        lock = _locks.get(resolved)
-        if lock is None:
-            lock = asyncio.Lock()
-            _locks[resolved] = lock
-        return lock
+    lock = _locks.get(resolved)
+    if lock is None:
+        lock = asyncio.Lock()
+        _locks[resolved] = lock
+    return lock
 
 
 # ---------------------------------------------------------------------------
@@ -242,14 +238,14 @@ def _block_anchor_replacer(content: str, find: str) -> Iterator[str]:
     search_block_size = len(search_lines)
 
     candidates: list[tuple[int, int]] = []
+    # Limit the search window for the last anchor to avoid matching unrelated lines far away
+    max_window = max(search_block_size * 2, search_block_size + 10)
     for i, line in enumerate(original_lines):
         if line.strip() != first_anchor:
             continue
-        for j in range(i + 2, len(original_lines)):
+        for j in range(i + 2, min(len(original_lines), i + max_window)):
             if original_lines[j].strip() == last_anchor:
                 candidates.append((i, j))
-                break
-
     if not candidates:
         return
 
@@ -555,7 +551,7 @@ async def edit_file(
     - Preserves BOM if present
     - Returns unified diff of changes
     """
-    lock = await _get_lock(path)
+    lock = get_file_lock(path)
     async with lock:
         try:
             # Read file
