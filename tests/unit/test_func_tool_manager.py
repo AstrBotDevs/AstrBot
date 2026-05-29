@@ -9,6 +9,8 @@ from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.tools.web_search_tools import (
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
+    KagiExtractWebPageTool,
+    KagiWebSearchTool,
 )
 
 
@@ -345,3 +347,15 @@ def test_firecrawl_tools_are_registered_as_builtin_tools():
     assert extract_tool.name == "firecrawl_extract_web_page"
     assert manager.is_builtin_tool("web_search_firecrawl") is True
     assert manager.is_builtin_tool("firecrawl_extract_web_page") is True
+
+
+def test_kagi_tools_are_registered_as_builtin_tools():
+    manager = FunctionToolManager()
+
+    search_tool = manager.get_builtin_tool(KagiWebSearchTool)
+    extract_tool = manager.get_builtin_tool(KagiExtractWebPageTool)
+
+    assert search_tool.name == "web_search_kagi"
+    assert extract_tool.name == "kagi_extract_web_page"
+    assert manager.is_builtin_tool("web_search_kagi") is True
+    assert manager.is_builtin_tool("kagi_extract_web_page") is True

@@ -21,6 +21,8 @@ WEB_SEARCH_TOOL_NAMES = [
     "web_search_brave",
     "web_search_firecrawl",
     "firecrawl_extract_web_page",
+    "web_search_kagi",
+    "kagi_extract_web_page",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -41,6 +43,10 @@ _FIRECRAWL_WEB_SEARCH_TOOL_CONFIG = {
 _BAIDU_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "baidu_ai_search",
+}
+_KAGI_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "kagi",
 }
 
 
@@ -76,6 +82,7 @@ _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
 _BRAVE_KEY_ROTATOR = _KeyRotator("websearch_brave_key", "Brave")
 _FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
+_KAGI_KEY_ROTATOR = _KeyRotator("websearch_kagi_key", "Kagi")
 
 
 def normalize_legacy_web_search_config(cfg) -> None:
@@ -99,6 +106,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
         "websearch_bocha_key",
         "websearch_brave_key",
         "websearch_firecrawl_key",
+        "websearch_kagi_key",
     ):
         value = provider_settings.get(setting_name)
         if isinstance(value, str):
@@ -803,10 +811,164 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
+async def _kagi_search(
+    provider_settings: dict,
+    payload: dict,
+) -> list[SearchResult]:
+    kagi_key = await _KAGI_KEY_ROTATOR.get(provider_settings)
+    headers = {
+        "Authorization": f"Bearer {kagi_key}",
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            "https://kagi.com/api/v1/search",
+            json=payload,
+            headers=headers,
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    f"Kagi search failed: {reason}, status: {response.status}",
+                )
+            data = await response.json()
+            body = data.get("data", {})
+            primary_results = body.get("search", [])
+            results: list[SearchResult] = []
+
+            for item in primary_results:
+                url = item.get("url", "")
+                if url == "":
+                    continue
+                results.append(
+                    SearchResult(
+                        title=item.get("title", ""),
+                        url=url,
+                        snippet=item.get("snippet", ""),
+                    )
+                )
+
+            return results
+
+
+async def _kagi_extract(provider_settings: dict, payload: dict) -> list[dict]:
+    kagi_key = await _KAGI_KEY_ROTATOR.get(provider_settings)
+    headers = {
+        "Authorization": f"Bearer {kagi_key}",
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            "https://kagi.com/api/v1/extract",
+            json=payload,
+            headers=headers,
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    f"Kagi extract failed: {reason}, status: {response.status}",
+                )
+            data = await response.json()
+            results: list[dict] = data.get("data", [])
+            if not results:
+                raise ValueError("Error: Kagi extract does not return any results.")
+            return results
+
+
+@builtin_tool(config=_KAGI_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class KagiWebSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "web_search_kagi"
+    description: str = (
+        "A web search tool based on Kagi Search API. Returns premium search results "
+        "re-ranked for accuracy. Supports lenses for scoped search."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "limit": {
+                    "type": "integer",
+                    "description": "Optional. Maximum number of results to return. Range: 1-1024.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_kagi_key", []):
+            return "Error: Kagi API key is not configured in AstrBot."
+
+        payload: dict = {
+            "query": kwargs["query"],
+        }
+
+        limit = kwargs.get("limit")
+        if limit is not None:
+            limit = max(1, min(1024, int(limit)))
+            payload["limit"] = limit
+
+        results = await _kagi_search(provider_settings, payload)
+        if not results:
+            return "Error: Kagi search does not return any results."
+        return _search_result_payload(results)
+
+
+@builtin_tool(config=_KAGI_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class KagiExtractWebPageTool(FunctionTool[AstrAgentContext]):
+    name: str = "kagi_extract_web_page"
+    description: str = (
+        "Extract the content of web pages as markdown using Kagi Extract API. "
+        "Accepts up to 10 URLs."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "urls": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Required. A list of URLs (up to 10) to extract content from.",
+                },
+            },
+            "required": ["urls"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_kagi_key", []):
+            return "Error: Kagi API key is not configured in AstrBot."
+
+        urls = kwargs.get("urls", [])
+        if not urls:
+            return "Error: urls must be a non-empty list."
+
+        pages = [{"url": url} for url in urls[:10]]
+        results = await _kagi_extract(provider_settings, {"pages": pages})
+        ret_ls = []
+        for result in results:
+            ret_ls.append(f"URL: {result.get('url', 'No URL')}")
+            markdown = result.get("markdown")
+            err = result.get("error")
+            if markdown:
+                ret_ls.append(f"Content: {markdown}")
+            elif err:
+                ret_ls.append(f"Error: {err}")
+        ret = "\n".join(ret_ls)
+        return ret or "Error: Kagi extract does not return any results."
+
+
 __all__ = [
     "BaiduWebSearchTool",
     "BochaWebSearchTool",
     "BraveWebSearchTool",
+    "KagiExtractWebPageTool",
+    "KagiWebSearchTool",
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
     "WEB_SEARCH_TOOL_NAMES",

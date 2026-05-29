@@ -331,6 +331,238 @@ async def test_firecrawl_scrape_raises_error_for_http_errors(monkeypatch):
     assert session.exited is True
 
 
+def test_normalize_legacy_web_search_config_migrates_kagi_key():
+    config = _FakeConfig({"provider_settings": {"websearch_kagi_key": "kagi-key"}})
+
+    tools.normalize_legacy_web_search_config(config)
+
+    assert config["provider_settings"]["websearch_kagi_key"] == ["kagi-key"]
+    assert config.saved is True
+
+
+@pytest.mark.asyncio
+async def test_kagi_search_maps_web_results(monkeypatch):
+    async def fake_kagi_search(provider_settings, payload):
+        assert provider_settings["websearch_kagi_key"] == ["kagi-key"]
+        assert payload == {"query": "AstrBot", "limit": 5}
+        return [
+            tools.SearchResult(
+                title="AstrBot",
+                url="https://example.com",
+                snippet="Search result",
+            )
+        ]
+
+    monkeypatch.setattr(tools, "_kagi_search", fake_kagi_search)
+    tool = tools.KagiWebSearchTool()
+    context = _context_with_provider_settings({"websearch_kagi_key": ["kagi-key"]})
+
+    result = await tool.call(context, query="AstrBot", limit=5)
+
+    parsed = json.loads(result)
+    assert parsed["results"][0]["url"] == "https://example.com"
+    assert parsed["results"][0]["snippet"] == "Search result"
+
+
+@pytest.mark.asyncio
+async def test_kagi_search_no_key_returns_error(monkeypatch):
+    tool = tools.KagiWebSearchTool()
+    context = _context_with_provider_settings({})
+
+    result = await tool.call(context, query="AstrBot")
+
+    assert result == "Error: Kagi API key is not configured in AstrBot."
+
+
+@pytest.mark.asyncio
+async def test_kagi_extract_returns_scraped_markdown(monkeypatch):
+    async def fake_kagi_extract(provider_settings, payload):
+        assert provider_settings["websearch_kagi_key"] == ["kagi-key"]
+        assert payload == {"pages": [{"url": "https://example.com"}]}
+        return [{"url": "https://example.com", "markdown": "# Example"}]
+
+    monkeypatch.setattr(tools, "_kagi_extract", fake_kagi_extract)
+    tool = tools.KagiExtractWebPageTool()
+    context = _context_with_provider_settings({"websearch_kagi_key": ["kagi-key"]})
+
+    result = await tool.call(context, urls=["https://example.com"])
+
+    assert result == "URL: https://example.com\nContent: # Example"
+
+
+@pytest.mark.asyncio
+async def test_kagi_extract_no_key_returns_error(monkeypatch):
+    tool = tools.KagiExtractWebPageTool()
+    context = _context_with_provider_settings({})
+
+    result = await tool.call(context, urls=["https://example.com"])
+
+    assert result == "Error: Kagi API key is not configured in AstrBot."
+
+
+@pytest.mark.asyncio
+async def test_kagi_search_uses_session_context(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(
+            status=200,
+            json_data={
+                "data": {
+                    "search": [
+                        {
+                            "title": "AstrBot",
+                            "url": "https://example.com",
+                            "snippet": "Search result",
+                        }
+                    ]
+                }
+            },
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    await tools._kagi_search(
+        {"websearch_kagi_key": ["kagi-key"]},
+        {"query": "AstrBot", "limit": 5},
+    )
+
+    assert session.trust_env is True
+    assert session.entered is True
+    assert session.exited is True
+    assert session.posted == {
+        "url": "https://kagi.com/api/v1/search",
+        "json": {"query": "AstrBot", "limit": 5},
+        "headers": {
+            "Authorization": "Bearer kagi-key",
+            "Content-Type": "application/json",
+        },
+    }
+
+
+
+@pytest.mark.asyncio
+async def test_kagi_search_collects_search_results_only(monkeypatch):
+    """Verify _kagi_search only reads from data.search."""
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(
+            status=200,
+            json_data={
+                "data": {
+                    "search": [
+                        {
+                            "title": "Result",
+                            "url": "https://example.com/result",
+                            "snippet": "Primary",
+                        }
+                    ],
+                }
+            },
+        )
+    )
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+    results = await tools._kagi_search(
+        {"websearch_kagi_key": ["kagi-key"]},
+        {"query": "test"},
+    )
+    assert len(results) == 1
+    assert results[0].url == "https://example.com/result"
+
+
+@pytest.mark.asyncio
+async def test_kagi_search_raises_error_for_http_errors(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(status=401, text_data="Unauthorized")
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(
+        Exception,
+        match="Kagi search failed: Unauthorized, status: 401",
+    ):
+        await tools._kagi_search(
+            {"websearch_kagi_key": ["kagi-key"]},
+            {"query": "AstrBot"},
+        )
+
+    assert session.trust_env is True
+    assert session.entered is True
+    assert session.exited is True
+
+
+@pytest.mark.asyncio
+async def test_kagi_extract_uses_session_context(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(
+            status=200,
+            json_data={
+                "data": [{"url": "https://example.com", "markdown": "# Example"}]
+            },
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._kagi_extract(
+        {"websearch_kagi_key": ["kagi-key"]},
+        {"pages": [{"url": "https://example.com"}]},
+    )
+
+    assert results == [{"url": "https://example.com", "markdown": "# Example"}]
+    assert session.trust_env is True
+    assert session.entered is True
+    assert session.exited is True
+    assert session.posted == {
+        "url": "https://kagi.com/api/v1/extract",
+        "json": {"pages": [{"url": "https://example.com"}]},
+        "headers": {
+            "Authorization": "Bearer kagi-key",
+            "Content-Type": "application/json",
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_kagi_extract_raises_error_for_http_errors(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(status=401, text_data="Unauthorized")
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(
+        Exception,
+        match="Kagi extract failed: Unauthorized, status: 401",
+    ):
+        await tools._kagi_extract(
+            {"websearch_kagi_key": ["kagi-key"]},
+            {"pages": [{"url": "https://example.com"}]},
+        )
+
+    assert session.trust_env is True
+    assert session.entered is True
+    assert session.exited is True
+
+
 class _FakeFirecrawlResponse:
     def __init__(self, status=200, json_data=None, text_data=""):
         self.status = status
