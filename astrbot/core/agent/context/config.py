@@ -2,6 +2,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .compressor import ContextCompressor
+from .constants import (
+    DEFAULT_COMPRESSION_TOKEN_THRESHOLD,
+    DEFAULT_CONTEXT_LIMIT_TYPE,
+)
 from .token_counter import TokenCounter
 
 if TYPE_CHECKING:
@@ -23,6 +27,10 @@ class ContextConfig:
     1. Enforce max turns truncation.
     2. Truncation by turns compression strategy.
     """
+    context_limit_type: str = DEFAULT_CONTEXT_LIMIT_TYPE
+    """Compression trigger mode: "turn" uses model context window × 0.82 rate; "token" uses an absolute token threshold."""
+    compression_token_threshold: int = DEFAULT_COMPRESSION_TOKEN_THRESHOLD
+    """When context_limit_type is "token", compression triggers when total tokens >= this threshold."""
     llm_compress_instruction: str | None = None
     """Instruction prompt for LLM-based compression."""
     llm_compress_keep_recent: int = 0

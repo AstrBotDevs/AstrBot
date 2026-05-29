@@ -2,6 +2,12 @@
 
 import os
 
+from astrbot.core.agent.context.constants import (
+    CONTEXT_LIMIT_TYPE_TOKEN,
+    CONTEXT_LIMIT_TYPE_TURN,
+    DEFAULT_COMPRESSION_TOKEN_THRESHOLD,
+    DEFAULT_CONTEXT_LIMIT_TYPE,
+)
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -132,6 +138,8 @@ DEFAULT_CONFIG = {
         "llm_compress_provider_id": "",
         "max_context_length": -1,
         "dequeue_context_length": 1,
+        "context_limit_type": DEFAULT_CONTEXT_LIMIT_TYPE,
+        "compression_token_threshold": DEFAULT_COMPRESSION_TOKEN_THRESHOLD,
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
@@ -3534,6 +3542,7 @@ CONFIG_METADATA_3 = {
                         "type": "int",
                         "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条，-1 为不限制",
                         "condition": {
+                            "provider_settings.context_limit_type": CONTEXT_LIMIT_TYPE_TURN,
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
@@ -3588,6 +3597,25 @@ CONFIG_METADATA_3 = {
                         "type": "int",
                         "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。",
                         "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_limit_type": {
+                        "description": "上下文压缩触发模式",
+                        "type": "string",
+                        "options": [CONTEXT_LIMIT_TYPE_TURN, CONTEXT_LIMIT_TYPE_TOKEN],
+                        "labels": ["按百分比（模型窗口 × 82%）", "按固定 Token 阈值"],
+                        "hint": '"按百分比"为默认行为：当上下文 Token 数超过模型窗口的 82% 时触发压缩。"按固定 Token 阈值"允许您设置一个绝对的 Token 数作为触发阈值，适用于需要更早触发压缩的场景。',
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compression_token_threshold": {
+                        "description": "Token 触发阈值",
+                        "type": "int",
+                        "hint": '当"上下文压缩触发模式"设为"按固定 Token 阈值"时生效。当前上下文 Token 数达到此值时触发压缩。',
+                        "condition": {
+                            "provider_settings.context_limit_type": CONTEXT_LIMIT_TYPE_TOKEN,
                             "provider_settings.agent_runner_type": "local",
                         },
                     },

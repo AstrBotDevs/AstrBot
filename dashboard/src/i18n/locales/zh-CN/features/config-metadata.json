@@ -278,6 +278,18 @@
         "fallback_max_context_tokens": {
           "description": "上下文窗口兜底值",
           "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。"
+        },
+        "context_limit_type": {
+          "description": "上下文压缩触发模式",
+          "labels": [
+            "按百分比（模型窗口 × 82%）",
+            "按固定 Token 阈值"
+          ],
+          "hint": "\"按百分比\"为默认行为。\"按固定 Token 阈值\"允许设置绝对的 Token 数作为触发阈值。"
+        },
+        "compression_token_threshold": {
+          "description": "Token 触发阈值",
+          "hint": "当触发模式为\"按固定 Token 阈值\"时生效，当前上下文 Token 数达到此值时触发压缩。"
         }
       }
     },
