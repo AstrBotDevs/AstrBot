@@ -240,14 +240,14 @@ def _block_anchor_replacer(content: str, find: str) -> Iterator[str]:
     search_block_size = len(search_lines)
 
     candidates: list[tuple[int, int]] = []
+    # Limit the search window for the last anchor to avoid matching unrelated lines far away
+    max_window = max(search_block_size * 2, search_block_size + 10)
     for i, line in enumerate(original_lines):
         if line.strip() != first_anchor:
             continue
-        for j in range(i + 2, len(original_lines)):
+        for j in range(i + 2, min(len(original_lines), i + max_window)):
             if original_lines[j].strip() == last_anchor:
                 candidates.append((i, j))
-                break
-
     if not candidates:
         return
 
