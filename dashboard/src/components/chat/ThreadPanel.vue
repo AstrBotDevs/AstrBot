@@ -1,6 +1,17 @@
 <template>
   <transition name="slide-left">
-    <aside v-if="modelValue && thread" class="thread-panel">
+    <aside
+      v-if="modelValue && thread"
+      ref="panelRef"
+      class="thread-panel"
+      :style="{ width: panelWidth + 'px' }"
+    >
+      <!-- Drag handle -->
+      <div
+        class="thread-panel-resizer"
+        @mousedown="startResize"
+      />
+
       <div class="thread-panel-header">
         <div class="thread-panel-title">{{ tm("thread.title") }}</div>
         <div class="thread-panel-actions">
@@ -55,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, ref, watch } from "vue";
 import axios from "axios";
 import {
   appendPlain,
@@ -107,6 +118,49 @@ watch(
 function close() {
   emit("update:modelValue", false);
 }
+
+// ── Drag resize ────────────────────────────────────────────────────
+
+const MIN_WIDTH = 280;
+const MAX_WIDTH = 800;
+const DEFAULT_WIDTH = 380;
+
+const panelWidth = ref(DEFAULT_WIDTH);
+const panelRef = ref<HTMLElement | null>(null);
+let isResizing = false;
+
+function startResize(e: MouseEvent) {
+  e.preventDefault();
+  isResizing = true;
+  document.body.style.cursor = "ew-resize";
+  document.body.style.userSelect = "none";
+  document.addEventListener("mousemove", onMouseMove);
+  document.addEventListener("mouseup", onMouseUp);
+}
+
+function onMouseMove(e: MouseEvent) {
+  if (!isResizing || !panelRef.value) return;
+  const rect = panelRef.value.parentElement?.getBoundingClientRect();
+  if (!rect) return;
+  const newWidth = rect.right - e.clientX;
+  panelWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth));
+}
+
+function onMouseUp() {
+  if (!isResizing) return;
+  isResizing = false;
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+  document.removeEventListener("mousemove", onMouseMove);
+  document.removeEventListener("mouseup", onMouseUp);
+}
+
+onBeforeUnmount(() => {
+  if (isResizing) {
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+  }
+});
 
 async function loadThread(threadId: string) {
   try {
@@ -337,7 +391,28 @@ function scrollToBottom() {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  position: relative;
 }
+
+/* ── Drag handle ──────────────────────────────────────────────── */
+
+.thread-panel-resizer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 10;
+  transition: background 0.15s ease;
+}
+
+.thread-panel-resizer:hover,
+.thread-panel-resizer:active {
+  background: rgba(var(--v-theme-primary), 0.2);
+}
+
+/* ── Transition ───────────────────────────────────────────────── */
 
 .slide-left-enter-active,
 .slide-left-leave-active {
@@ -444,6 +519,10 @@ function scrollToBottom() {
     width: 100vw;
     height: 100dvh;
     border-left: 0;
+  }
+
+  .thread-panel-resizer {
+    display: none;
   }
 
   .thread-panel-header {

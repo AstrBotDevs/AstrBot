@@ -23,26 +23,72 @@
         </code>
       </div>
 
-      <div class="tool-call-detail-row">
+      <!-- ── Args: key-value table ──────────────────────────── -->
+      <div v-if="argEntries.length" class="tool-call-detail-row">
         <span class="detail-label">Args:</span>
-        <pre class="detail-value detail-json">{{
-          JSON.stringify(toolCall.args, null, 2)
-        }}</pre>
+        <div class="args-table">
+          <div
+            v-for="(entry, i) in displayedArgEntries"
+            :key="i"
+            class="args-row"
+            :class="{ clickable: entry.long }"
+            @click="entry.long && toggleArgExpand(i)"
+          >
+            <span class="args-key">{{ entry.icon }}{{ entry.key }}</span>
+            <span class="args-value">{{ entry.display }}</span>
+            <span v-if="entry.long && !expandedArgs.has(i)" class="args-expand-hint">…</span>
+          </div>
+          <div
+            v-if="argEntries.length > maxVisibleArgs"
+            class="args-row args-more"
+            @click="showAllArgs = !showAllArgs"
+          >
+            <span class="args-key"></span>
+            <span class="args-value args-more-text">
+              {{ showAllArgs
+                ? 'Show fewer'
+                : `+${argEntries.length - maxVisibleArgs} more` }}
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div v-if="toolCall.result" class="tool-call-detail-row">
+      <!-- ── Result ────────────────────────────────────────── -->
+      <div
+        v-if="isEditTool && editToolDiff"
+        class="tool-call-detail-row"
+      >
         <span class="detail-label">Result:</span>
-        <pre class="detail-value detail-json detail-result">{{
-          formattedResult
-        }}</pre>
+        <DiffPreview
+          :content="editToolDiff"
+          :file-path="editToolFilePath"
+          :summary="editToolSummary"
+          :is-dark="isDark"
+          :max-lines="25"
+          :collapsible="false"
+        />
+      </div>
+
+      <div
+        v-else-if="toolCall.result"
+        class="tool-call-detail-row"
+      >
+        <span class="detail-label">Result:</span>
+        <ToolResultView
+          :tool-name="toolCall.name ?? ''"
+          :result="toolCall.result ?? ''"
+          :tool-args="toolCall.args"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
+import DiffPreview from "./DiffPreview.vue";
+import ToolResultView from "./ToolResultView.vue";
 
 const props = defineProps({
   toolCall: {
@@ -73,19 +119,113 @@ const elapsedTime = computed(() => {
 
 const displayToolName = computed(() => props.toolCall.name || "tool");
 
+// ── Icons ─────────────────────────────────────────────────────
+
 const toolCallIcon = computed(() => {
   const name = String(props.toolCall.name || "");
-  if (name === "astrbot_execute_ipython" || name === "astrbot_execute_python") {
-    return "mdi-code-json";
-  }
-  if (name.includes("web_search") || name.includes("tavily")) {
-    return "mdi-web";
-  }
-  if (name === "astrbot_execute_shell") {
-    return "mdi-console-line";
-  }
+  if (name === "astrbot_file_read_tool") return "mdi-file-document-outline";
+  if (name === "astrbot_file_write_tool") return "mdi-content-save-outline";
+  if (name === "astrbot_file_edit_tool") return "mdi-file-document-edit-outline";
+  if (name === "astrbot_grep_tool") return "mdi-magnify";
+  if (name === "astrbot_execute_shell") return "mdi-console-line";
+  if (name === "astrbot_execute_python" || name === "astrbot_execute_ipython") return "mdi-language-python";
+  if (name === "astrbot_upload_file") return "mdi-upload-outline";
+  if (name === "astrbot_download_file") return "mdi-download-outline";
+  if (name.includes("web_search") || name.includes("tavily")) return "mdi-web";
   return "mdi-wrench";
 });
+
+// ── Args display ──────────────────────────────────────────────
+
+const maxVisibleArgs = 5;
+const showAllArgs = ref(false);
+const expandedArgs = reactive(new Set());
+
+const argEntries = computed(() => {
+  const args = props.toolCall.args;
+  if (!args || typeof args !== "object") return [];
+  return Object.entries(args).map(([key, value]) => {
+    const raw = value === null || value === undefined ? "—" : String(value);
+    const long = raw.length > 60;
+    return {
+      key,
+      raw,
+      long,
+      icon: argIcon(key),
+      display: long ? raw.slice(0, 60) : raw,
+    };
+  });
+});
+
+const displayedArgEntries = computed(() => {
+  const entries = argEntries.value;
+  if (showAllArgs.value) return entries;
+  return entries.slice(0, maxVisibleArgs);
+});
+
+function argIcon(key) {
+  const k = key.toLowerCase();
+  if (k.includes("path") || k === "file" || k.includes("dir")) return "📁 ";
+  if (k.includes("content") || k === "old" || k === "new" || k === "text") return "📝 ";
+  if (k.includes("pattern") || k.includes("query") || k.includes("search")) return "🔍 ";
+  if (k.includes("command") || k.includes("cmd")) return "⚡ ";
+  if (k.includes("code") || k.includes("python")) return "🐍 ";
+  if (k.includes("replace_all")) return "🔄 ";
+  if (k.includes("offset") || k.includes("limit") || k.includes("result_limit")) return "#⃣ ";
+  return "";
+}
+
+function toggleArgExpand(index) {
+  const entry = argEntries.value[index];
+  if (!entry || !entry.long) return;
+  if (expandedArgs.has(index)) {
+    expandedArgs.delete(index);
+  } else {
+    expandedArgs.add(index);
+  }
+  // Update display
+  const displayed = displayedArgEntries.value;
+  for (let i = 0; i < displayed.length; i++) {
+    const e = argEntries.value.find((x) => x.key === displayed[i].key);
+    if (e && e.long) {
+      displayed[i].display = expandedArgs.has(i) ? e.raw : e.raw.slice(0, 60);
+    }
+  }
+}
+
+// ── file_edit_tool diff rendering ─────────────────────────────
+
+const isEditTool = computed(
+  () => props.toolCall.name === "astrbot_file_edit_tool",
+);
+
+const editToolDiff = computed(() => {
+  if (!isEditTool.value) return "";
+  const raw = props.toolCall.result ?? "";
+  const match = raw.match(/```diff\s*\n?([\s\S]*?)```/);
+  return match ? match[1] : raw;
+});
+
+const editToolFilePath = computed(() => {
+  if (!isEditTool.value) return "";
+  const raw = props.toolCall.result ?? "";
+  const match = raw.match(/^Edited\s+(.+?)\./m);
+  return match ? match[1] : "";
+});
+
+const editToolSummary = computed(() => {
+  if (!isEditTool.value) return "";
+  const raw = props.toolCall.result ?? "";
+  const lines = raw.split("\n");
+  const statusParts = [];
+  for (const line of lines) {
+    if (line.startsWith("Diff:") || line.startsWith("```")) break;
+    if (line.trim()) statusParts.push(line.trim());
+  }
+  return statusParts.join("\n");
+});
+
+// ── Duration ──────────────────────────────────────────────────
 
 const toolCallDuration = computed(() => {
   const startTime = Number(props.toolCall.ts);
@@ -94,16 +234,6 @@ const toolCallDuration = computed(() => {
     return formatDuration(Number(props.toolCall.finished_ts) - startTime);
   }
   return elapsedTime.value;
-});
-
-const formattedResult = computed(() => {
-  if (!props.toolCall.result) return "";
-  try {
-    const parsed = JSON.parse(props.toolCall.result);
-    return JSON.stringify(parsed, null, 2);
-  } catch {
-    return props.toolCall.result;
-  }
 });
 
 const formatDuration = (seconds) => {
@@ -226,11 +356,80 @@ onUnmounted(() => {
 .detail-value {
   font-size: 12px;
   color: rgba(var(--v-theme-on-surface), 0.8);
-  background-color: transparent;
-  padding: 0;
-  border-radius: 4px;
   word-break: break-all;
 }
+
+/* ── Args table ─────────────────────────────────────────────── */
+
+.args-table {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.args-row {
+  display: flex;
+  align-items: baseline;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.args-row + .args-row {
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.args-row.clickable {
+  cursor: pointer;
+}
+
+.args-row.clickable:hover {
+  background: rgba(var(--v-theme-on-surface), 0.03);
+}
+
+.args-key {
+  flex-shrink: 0;
+  width: 110px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 8px;
+}
+
+.args-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.8);
+  white-space: pre-wrap;
+  word-break: break-all;
+  min-width: 0;
+}
+
+.args-expand-hint {
+  color: rgba(var(--v-theme-on-surface), 0.35);
+  font-style: italic;
+  margin-left: 4px;
+}
+
+.args-more {
+  cursor: pointer;
+  background: rgba(var(--v-theme-on-surface), 0.02);
+}
+
+.args-more:hover {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.args-more-text {
+  color: rgba(var(--v-theme-on-surface), 0.45) !important;
+  font-style: italic;
+}
+
+/* ── Legacy detail rows ─────────────────────────────────────── */
 
 .detail-json {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -240,32 +439,12 @@ onUnmounted(() => {
   margin: 0;
 }
 
-.detail-result {
-  max-height: 300px;
-  background-color: transparent;
-}
-
 .animate-fade-in {
   animation: fadeIn 0.2s ease-in-out;
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 </style>

@@ -1,9 +1,12 @@
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import bash from "shiki/langs/bash.mjs";
+import c from "shiki/langs/c.mjs";
+import cpp from "shiki/langs/cpp.mjs";
 import css from "shiki/langs/css.mjs";
 import diff from "shiki/langs/diff.mjs";
 import dockerfile from "shiki/langs/dockerfile.mjs";
+import go from "shiki/langs/go.mjs";
 import html from "shiki/langs/html.mjs";
 import ini from "shiki/langs/ini.mjs";
 import java from "shiki/langs/java.mjs";
@@ -13,6 +16,7 @@ import jsx from "shiki/langs/jsx.mjs";
 import markdown from "shiki/langs/markdown.mjs";
 import powershell from "shiki/langs/powershell.mjs";
 import python from "shiki/langs/python.mjs";
+import rust from "shiki/langs/rust.mjs";
 import sql from "shiki/langs/sql.mjs";
 import tsx from "shiki/langs/tsx.mjs";
 import typescript from "shiki/langs/typescript.mjs";
@@ -26,9 +30,12 @@ import vitesseLight from "shiki/themes/vitesse-light.mjs";
 
 export const LIMITED_SHIKI_LANGUAGES = [
   ...bash,
+  ...c,
+  ...cpp,
   ...css,
   ...diff,
   ...dockerfile,
+  ...go,
   ...html,
   ...ini,
   ...java,
@@ -38,6 +45,7 @@ export const LIMITED_SHIKI_LANGUAGES = [
   ...markdown,
   ...powershell,
   ...python,
+  ...rust,
   ...sql,
   ...tsx,
   ...typescript,
@@ -57,10 +65,16 @@ const BUILT_IN_LANGUAGES = ["text", "plaintext", "plain"];
 
 export const LIMITED_SHIKI_LANGUAGE_ALIASES = {
   bat: "powershell",
+  "c++": "cpp",
+  cc: "cpp",
   cjs: "javascript",
   console: "bash",
   cts: "typescript",
+  cxx: "cpp",
   docker: "dockerfile",
+  golang: "go",
+  h: "c",
+  hpp: "cpp",
   htm: "html",
   js: "javascript",
   md: "markdown",
@@ -71,6 +85,7 @@ export const LIMITED_SHIKI_LANGUAGE_ALIASES = {
   ps1: "powershell",
   pwsh: "powershell",
   py: "python",
+  rs: "rust",
   shell: "bash",
   shellscript: "bash",
   sh: "bash",
