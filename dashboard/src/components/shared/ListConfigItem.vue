@@ -205,8 +205,9 @@ const isSingleItemMode = computed(() => (props.modelValue?.length ?? 0) <= 1 && 
 const singleItemValue = computed({
   get: () => props.modelValue?.[0] ?? '',
   set: (value) => {
-    // 如果值为空或只有空白字符，emit 空数组
-    if (value.trim() === '') {
+    // 仅当值为完全空字符串（未输入任何字符）时清空数组，
+    // 允许包含空格（如 "hello world"）以及纯空格（如 " "）通过
+    if (value === '') {
       emit('update:modelValue', [])
       return
     }
@@ -241,7 +242,7 @@ const batchImportPreviewCount = computed(() => {
 watch(() => props.modelValue, (newValue) => {
   localItems.value = [...(newValue || [])]
   
-  // 自动清理只包含空字符串的数组
+  // 自动清理只包含空字符串或纯空格的条目（纯空格在配置中无意义，此过滤为预期兜底行为）
   if (newValue && newValue.length > 0) {
     const filtered = newValue.filter(item => typeof item === 'string' ? item.trim() !== '' : true)
     if (filtered.length !== newValue.length) {
