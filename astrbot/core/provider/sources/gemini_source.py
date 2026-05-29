@@ -227,18 +227,25 @@ class ProviderGoogleGenAI(Provider):
                         "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包",
                     )
 
+        # 将自定义工具追加进 tool_list
+        if tools and (func_desc := tools.get_func_desc_google_genai_style()):
+            if tool_list is None:
+                tool_list = []
+            tool_list.append(
+                types.Tool(function_declarations=func_desc["function_declarations"])
+            )
+
         if not tool_list:
             tool_list = None
 
-        if tools and tool_list:
-            logger.warning("已启用原生工具，函数工具将被忽略")
-        elif tools and (func_desc := tools.get_func_desc_google_genai_style()):
-            tool_list = [
-                types.Tool(function_declarations=func_desc["function_declarations"]),
-            ]
-
         tool_config = None
         has_func_decl = tool_list and any(t.function_declarations for t in tool_list)
+        # 判断是否同时启用了原生工具
+        has_native_tool = tool_list and any(
+            t.google_search or t.code_execution or getattr(t, "url_context", None) 
+            for t in tool_list
+        )
+
         if has_func_decl:
             tool_config = types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(
@@ -247,7 +254,9 @@ class ProviderGoogleGenAI(Provider):
                         if tool_choice == "required"
                         else types.FunctionCallingConfigMode.AUTO
                     )
-                )
+                ),
+                # 如果混合启用了原生工具与自定义工具，则向谷歌申明此开关
+                include_server_side_tool_invocations=True if has_native_tool else None
             )
 
         # oper thinking config
@@ -410,16 +419,19 @@ class ProviderGoogleGenAI(Provider):
                     )
                     append_or_extend(gemini_contents, parts, types.ModelContent)
 
-                elif not native_tool_enabled and "tool_calls" in message:
+                # 允许在开启搜索时还原工具历史
+                elif "tool_calls" in message:
                     parts = []
                     for tool in message["tool_calls"]:
                         part = types.Part.from_function_call(
                             name=tool["function"]["name"],
                             args=json.loads(tool["function"]["arguments"]),
                         )
+                        # 还原 Assistant 历史消息里工具调用的唯一 ID
+                        if "id" in tool and part.function_call:
+                            part.function_call.id = tool["id"]
+
                         # we should set thought_signature back to part if exists
-                        # for more info about thought_signature, see:
-                        # https://ai.google.dev/gemini-api/docs/thought-signatures
                         if "extra_content" in tool and tool["extra_content"]:
                             ts_bs64 = (
                                 tool["extra_content"]
@@ -439,8 +451,10 @@ class ProviderGoogleGenAI(Provider):
                     parts = [types.Part.from_text(text=" ")]
                     append_or_extend(gemini_contents, parts, types.ModelContent)
 
-            elif role == "tool" and not native_tool_enabled:
-                func_name = message.get("name", message["tool_call_id"])
+            elif role == "tool":
+                func_name = message.get("name") or message.get("tool_call_id")
+                tool_call_id = message.get("tool_call_id")
+                
                 part = types.Part.from_function_response(
                     name=func_name,
                     response={
@@ -448,6 +462,9 @@ class ProviderGoogleGenAI(Provider):
                         "content": message["content"],
                     },
                 )
+                # 将本地执行完毕的响应结果绑定上对应的验证 ID，送回给 Gemini 强校验
+                if tool_call_id and part.function_response:
+                    part.function_response.id = tool_call_id
 
                 parts = [part]
                 append_or_extend(gemini_contents, parts, types.UserContent)
@@ -756,6 +773,12 @@ class ProviderGoogleGenAI(Provider):
                     llm_response,
                     validate_output=False,
                 )
+                
+                # 如果在这个 chunk 之前已经有流式文本被累积了
+                # 则把它强行塞回消息链的最前端，确保历史记录不丢失这段文本
+                if accumulated_text and llm_response.result_chain and hasattr(llm_response.result_chain, 'chain'):
+                    llm_response.result_chain.chain.insert(0, Comp.Plain(accumulated_text))
+
                 llm_response.id = chunk.response_id
                 if chunk.usage_metadata:
                     llm_response.usage = self._extract_usage(chunk.usage_metadata)
