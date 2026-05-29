@@ -94,12 +94,14 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
                 and isinstance(first_part.content, str)
             ):
                 # we assume system part is str
-                first_part.content += (
+                citation_prompt = (
                     "Always cite web search results you rely on. "
                     "Index is a unique identifier for each search result. "
                     "Use the exact citation format <ref>index</ref> (e.g. <ref>abcd.3</ref>) "
                     "after the sentence that uses the information. Do not invent citations."
                 )
+                if citation_prompt not in first_part.content:
+                    first_part.content += citation_prompt
 
 
 class EmptyAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
