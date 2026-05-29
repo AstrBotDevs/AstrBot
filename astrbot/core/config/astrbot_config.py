@@ -1,3 +1,4 @@
+import copy
 import enum
 import json
 import logging
@@ -16,6 +17,14 @@ from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
 logger = logging.getLogger("astrbot")
+_DASHBOARD_AUTH_KEYS = {
+    "username",
+    "password",
+    "pbkdf2_password",
+    "password_storage_upgraded",
+    "password_change_required",
+    "jwt_secret",
+}
 
 
 class RateLimitStrategy(enum.Enum):
@@ -47,6 +56,11 @@ class AstrBotConfig(dict):
         object.__setattr__(self, "config_path", config_path)
         object.__setattr__(self, "default_config", default_config)
         object.__setattr__(self, "schema", schema)
+
+        # Track config file state to detect external modifications
+        # (e.g. CLI password updates) and preserve them across saves.
+        object.__setattr__(self, "_last_config_mtime_ns", None)
+        object.__setattr__(self, "_dashboard_auth_snapshot", {})
 
         if schema:
             default_config = self._config_schema_to_default_config(schema)
@@ -97,6 +111,76 @@ class AstrBotConfig(dict):
             self.save_config()
 
         self.update(conf)
+        self._remember_file_state()
+
+    def _get_dashboard_auth_state(self, conf: dict | None = None) -> dict:
+        base = conf if conf is not None else self
+        dashboard_conf = base.get("dashboard")
+        if not isinstance(dashboard_conf, dict):
+            return {}
+        return {
+            key: copy.deepcopy(dashboard_conf.get(key))
+            for key in _DASHBOARD_AUTH_KEYS
+            if key in dashboard_conf
+        }
+
+    def _remember_file_state(self) -> None:
+        try:
+            mtime_ns = os.stat(self.config_path).st_mtime_ns
+        except OSError:
+            mtime_ns = None
+        object.__setattr__(self, "_last_config_mtime_ns", mtime_ns)
+        object.__setattr__(
+            self,
+            "_dashboard_auth_snapshot",
+            self._get_dashboard_auth_state(),
+        )
+
+    @staticmethod
+    def _merge_dashboard_auth(
+        loaded_auth_state: dict,
+        current_auth_state: dict,
+        disk_auth_state: dict,
+    ) -> dict:
+        """Return the auth state to apply to ``self["dashboard"]``.
+
+        Merge policy: when the on-disk auth state differs from what we
+        loaded and the in-memory state has *not* been changed locally,
+        apply the on-disk values so external updates (e.g. CLI password
+        changes) are not overwritten by a subsequent ``save_config()``.
+        """
+        if not disk_auth_state or disk_auth_state == loaded_auth_state:
+            return current_auth_state
+        if current_auth_state != loaded_auth_state:
+            return current_auth_state
+        merged = current_auth_state.copy()
+        merged.update(disk_auth_state)
+        return merged
+
+    def _preserve_external_dashboard_auth_changes(self) -> None:
+        last_mtime_ns = self._last_config_mtime_ns
+        if last_mtime_ns is None:
+            return
+        try:
+            current_mtime_ns = os.stat(self.config_path).st_mtime_ns
+        except OSError:
+            return
+        if current_mtime_ns == last_mtime_ns:
+            return
+
+        try:
+            with open(self.config_path, encoding="utf-8-sig") as f:
+                disk_conf = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return
+
+        merged = self._merge_dashboard_auth(
+            self._dashboard_auth_snapshot,
+            self._get_dashboard_auth_state(),
+            self._get_dashboard_auth_state(disk_conf),
+        )
+        if merged != self._get_dashboard_auth_state():
+            self.setdefault("dashboard", {}).update(merged)
 
     def _reset_generated_dashboard_password(self, conf: dict) -> None:
         generated_password = self._resolve_initial_dashboard_password()
@@ -220,8 +304,10 @@ class AstrBotConfig(dict):
         """
         if replace_config:
             self.update(replace_config)
+        self._preserve_external_dashboard_auth_changes()
         with open(self.config_path, "w", encoding="utf-8-sig") as f:
             json.dump(self, f, indent=2, ensure_ascii=False)
+        self._remember_file_state()
 
     def __getattr__(self, item):
         try:

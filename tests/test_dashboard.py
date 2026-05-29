@@ -35,7 +35,10 @@ from astrbot.dashboard.password_state import (
     set_password_change_required,
     set_password_storage_upgraded,
 )
-from astrbot.dashboard.routes.auth import DASHBOARD_JWT_COOKIE_NAME
+from astrbot.dashboard.routes.auth import (
+    DASHBOARD_JWT_COOKIE_NAME,
+    INVALID_CREDENTIALS_LOGIN_FAILURE_MESSAGE,
+)
 from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
@@ -307,6 +310,7 @@ async def test_auth_login(
     )
     data = await response.get_json()
     assert data["status"] == "error"
+    assert data["message"] == INVALID_CREDENTIALS_LOGIN_FAILURE_MESSAGE
 
     response = await test_client.post(
         "/api/auth/login",

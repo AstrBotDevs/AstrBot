@@ -10,6 +10,8 @@ from astrbot.core.config.default import DEFAULT_VALUE_MAP
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.utils.auth_password import (
     DEFAULT_DASHBOARD_PASSWORD,
+    hash_dashboard_password,
+    hash_legacy_dashboard_password,
     validate_dashboard_password,
     verify_dashboard_password,
 )
@@ -544,6 +546,55 @@ class TestConfigHotReload:
         )
 
         assert config2.platform_settings["unique_session"] is True
+
+    def test_save_preserves_external_dashboard_auth_changes(self, temp_config_path):
+        """Runtime config saves should not overwrite CLI-updated dashboard auth."""
+        original_password = "OriginalPass123"
+        external_password = "ExternalPass123"
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": hash_legacy_dashboard_password(original_password),
+                "pbkdf2_password": hash_dashboard_password(original_password),
+                "password_storage_upgraded": True,
+                "password_change_required": False,
+                "jwt_secret": "original-secret",
+            },
+            "provider_settings": {
+                "enable": True,
+                "default_provider_id": "",
+            },
+        }
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump(default_config, f)
+
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+        external_config = json.loads(json.dumps(default_config))
+        external_config["dashboard"]["username"] = "external-user"
+        external_config["dashboard"]["password"] = hash_legacy_dashboard_password(
+            external_password,
+        )
+        external_config["dashboard"]["pbkdf2_password"] = hash_dashboard_password(
+            external_password,
+        )
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump(external_config, f)
+
+        config["provider_settings"]["enable"] = False
+        config.save_config()
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            saved_config = json.load(f)
+
+        assert saved_config["provider_settings"]["enable"] is False
+        assert saved_config["dashboard"]["username"] == "external-user"
+        assert verify_dashboard_password(
+            saved_config["dashboard"]["pbkdf2_password"],
+            external_password,
+        )
 
 
 class TestConfigSchemaToDefault:
