@@ -12,7 +12,7 @@ Prerequisites for use:
 
 Alternatively, since ``SkillManager.list_skills()`` auto-discovers any
 directory containing SKILL.md under ``data/skills/`` on every request,
-steps 2-3 are optional for immediate local use 鈥?but are useful for
+steps 2-3 are optional for immediate local use —but are useful for
 distribution, backup, or reinstall workflows.
 """
 
@@ -159,7 +159,7 @@ class CreateSkillZipTool(FunctionTool):
                         arcname = Path(skill_name) / file_path.relative_to(skill_dir)
                         zf.write(str(file_path), str(arcname))
 
-            return f"Skill '{skill_name}' packaged successfully."
+            return f"Skill '{skill_name}' packaged successfully. Zip file: {zip_path}"
 
         except ValueError as e:
             logger.warning("Validation error in create_skill_zip: %s", e)
