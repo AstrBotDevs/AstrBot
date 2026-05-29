@@ -453,7 +453,18 @@ class ProviderGoogleGenAI(Provider):
                                     else None
                                 )
                             except (TypeError, json.JSONDecodeError):
-                                parsed_args = raw_args
+                                # 当 arguments 不是合法 JSON 时，记录详细告警并安全回退为空字典 {}，防止 downstream 校验崩溃
+                                tool_name = tool.get("function", {}).get("name")
+                                tool_id = tool.get("id")
+                                logger.warning(
+                                    "Gemini tool_call arguments JSON decode failed, "
+                                    "tool_name=%r, tool_id=%r, raw_args=%r; "
+                                    "falling back to empty dict.",
+                                    tool_name,
+                                    tool_id,
+                                    raw_args,
+                                )
+                                parsed_args = {}
 
                         part = types.Part.from_function_call(
                             name=tool["function"]["name"],
