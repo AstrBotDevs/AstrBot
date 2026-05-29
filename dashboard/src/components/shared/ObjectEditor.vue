@@ -324,6 +324,7 @@ const nonDisableableKeys = computed(() => {
 
 // 计算要显示的键名 (exclude _disabled_keys from display)
 const displayKeys = computed(() => {
+  if (!props.modelValue) return []
   return Object.keys(props.modelValue).filter(k => k !== '_disabled_keys').slice(0, props.maxDisplayItems)
 })
 
@@ -367,7 +368,7 @@ function initializeLocalKeyValuePairs() {
   }
   originalDisabledKeys.value = [...localDisabledKeys.value]
 
-  for (const [key, value] of Object.entries(props.modelValue)) {
+  for (const [key, value] of Object.entries(props.modelValue || {})) {
     // Skip the internal _disabled_keys field
     if (key === '_disabled_keys') continue
 

@@ -606,10 +606,7 @@ class ProviderGoogleGenAI(Provider):
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         """非流式请求 Gemini API"""
         # Merge effective custom_extra_body into payloads
-        custom_extra_body = self.get_effective_custom_extra_body()
-        for k, v in custom_extra_body.items():
-            if k not in payloads:
-                payloads[k] = v
+        payloads = self._merge_custom_extra_body(payloads)
 
         system_instruction = next(
             (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
@@ -701,10 +698,7 @@ class ProviderGoogleGenAI(Provider):
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
         # Merge effective custom_extra_body into payloads
-        custom_extra_body = self.get_effective_custom_extra_body()
-        for k, v in custom_extra_body.items():
-            if k not in payloads:
-                payloads[k] = v
+        payloads = self._merge_custom_extra_body(payloads)
 
         system_instruction = next(
             (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),

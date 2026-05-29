@@ -92,6 +92,17 @@ class Provider(AbstractProvider):
             if k != "_disabled_keys" and k not in disabled_keys
         }
 
+    def _merge_custom_extra_body(self, payloads: dict) -> dict:
+        """Merge effective custom_extra_body into payloads without overwriting existing keys.
+
+        Returns a shallow copy of payloads with custom_extra_body values merged in.
+        """
+        merged = dict(payloads)
+        for k, v in self.get_effective_custom_extra_body().items():
+            if k not in merged:
+                merged[k] = v
+        return merged
+
     @abc.abstractmethod
     def get_current_key(self) -> str:
         raise NotImplementedError
