@@ -1,8 +1,10 @@
 from pathlib import Path
 
 import pytest
+from click import ClickException
 from click.testing import CliRunner
 
+import astrbot.cli.utils.plugin as plugin_utils
 from astrbot.cli.commands.cmd_plug import plug
 
 
@@ -102,6 +104,74 @@ def test_plugin_install_editable_rejects_existing_plugin(
 
     assert result.exit_code != 0
     assert "already exists" in result.output
+
+
+def test_plugin_install_rejects_plugin_name_with_path_separator(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "root"
+    source = tmp_path / "source-plugin"
+    root.mkdir()
+    _write_astrbot_root(root)
+    _write_plugin(source, name="../bad_plugin")
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(plug, ["install", str(source)])
+
+    assert result.exit_code != 0
+    assert "invalid name" in result.output
+    assert not (root / "data" / "bad_plugin").exists()
+
+
+def test_plugin_install_copy_does_not_delete_existing_target_on_race(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "root"
+    source = tmp_path / "source-plugin"
+    root.mkdir()
+    _write_astrbot_root(root)
+    _write_plugin(source)
+    monkeypatch.chdir(root)
+
+    target = root / "data" / "plugins" / "astrbot_plugin_local_demo"
+    target.mkdir()
+    marker = target / "keep.txt"
+    marker.write_text("keep\n", encoding="utf-8")
+
+    result = CliRunner().invoke(plug, ["install", str(source)])
+
+    assert result.exit_code != 0
+    assert "already exists" in result.output
+    assert marker.read_text(encoding="utf-8") == "keep\n"
+
+
+def test_plugin_install_copy_does_not_delete_concurrently_created_target(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source-plugin"
+    plugins_dir = tmp_path / "plugins"
+    _write_plugin(source)
+
+    target = plugins_dir / "astrbot_plugin_local_demo"
+
+    def create_target_then_fail(
+        _source_path: Path,
+        _plugins_dir: Path,
+        _target_path: Path,
+    ) -> None:
+        target.mkdir(parents=True)
+        (target / "keep.txt").write_text("keep\n", encoding="utf-8")
+        raise FileExistsError
+
+    monkeypatch.setattr(plugin_utils, "_copy_local_plugin", create_target_then_fail)
+
+    with pytest.raises(ClickException, match="already exists"):
+        plugin_utils.install_local_plugin(source, plugins_dir)
+
+    assert (target / "keep.txt").read_text(encoding="utf-8") == "keep\n"
 
 
 def test_plugin_install_requires_name_or_editable_path(

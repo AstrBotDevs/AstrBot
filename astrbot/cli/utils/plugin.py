@@ -1,5 +1,6 @@
 import shutil
 import tempfile
+import uuid
 from enum import Enum
 from io import BytesIO
 from pathlib import Path
@@ -29,6 +30,23 @@ LOCAL_PLUGIN_COPY_IGNORE = shutil.ignore_patterns(
     ".vscode",
     ".zed",
 )
+
+
+def _validate_plugin_dir_name(plugin_name: str, source_path: Path) -> str:
+    plugin_name = plugin_name.strip()
+    plugin_path = Path(plugin_name)
+    has_separator = "/" in plugin_name or "\\" in plugin_name
+    if (
+        not plugin_name
+        or plugin_name in {".", ".."}
+        or plugin_path.is_absolute()
+        or has_separator
+        or plugin_path.name != plugin_name
+    ):
+        raise click.ClickException(
+            f"Local plugin {source_path} metadata.yaml has invalid name: {plugin_name}"
+        )
+    return plugin_name
 
 
 def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
@@ -209,6 +227,22 @@ def _cleanup_local_plugin_target(target_path: Path) -> None:
         shutil.rmtree(target_path, ignore_errors=True)
 
 
+def _copy_local_plugin(source_path: Path, plugins_dir: Path, target_path: Path) -> None:
+    temp_target = plugins_dir / f".{target_path.name}.tmp-{uuid.uuid4().hex}"
+    try:
+        shutil.copytree(source_path, temp_target, ignore=LOCAL_PLUGIN_COPY_IGNORE)
+        temp_target.rename(target_path)
+    except FileExistsError:
+        raise click.ClickException(
+            f"Plugin {target_path.name} already exists"
+        ) from None
+    except Exception:
+        raise
+    finally:
+        if temp_target.exists() or temp_target.is_symlink():
+            _cleanup_local_plugin_target(temp_target)
+
+
 def install_local_plugin(
     source_path: Path,
     plugins_dir: Path,
@@ -227,6 +261,7 @@ def install_local_plugin(
         raise click.ClickException(
             f"Local plugin {source_path} must contain metadata.yaml with a valid name"
         )
+    plugin_name = _validate_plugin_dir_name(plugin_name, source_path)
 
     target_path = plugins_dir / plugin_name
     if target_path.exists():
@@ -243,13 +278,15 @@ def install_local_plugin(
                     "On Windows, you may need to run as Administrator or enable Developer Mode."
                 ) from e
         else:
-            shutil.copytree(source_path, target_path, ignore=LOCAL_PLUGIN_COPY_IGNORE)
+            _copy_local_plugin(source_path, plugins_dir, target_path)
         click.echo(f"Plugin {plugin_name} installed successfully from {source_path}")
+    except FileExistsError:
+        raise click.ClickException(f"Plugin {plugin_name} already exists") from None
     except click.ClickException:
-        _cleanup_local_plugin_target(target_path)
         raise
     except Exception as e:
-        _cleanup_local_plugin_target(target_path)
+        if editable and target_path.is_symlink():
+            _cleanup_local_plugin_target(target_path)
         raise click.ClickException(
             f"Error installing local plugin {plugin_name}: {e}"
         ) from e
