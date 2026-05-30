@@ -75,9 +75,7 @@ class HelpCommand:
         dashboard_version = await get_dashboard_version()
         command_lines = await self._build_reserved_command_lines()
         commands_section = (
-            "\n".join(command_lines)
-            if command_lines
-            else "没有已启用的内置指令。"
+            "\n".join(command_lines) if command_lines else "没有已启用的内置指令。"
         )
 
         msg_parts = [

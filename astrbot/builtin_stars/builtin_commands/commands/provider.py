@@ -188,9 +188,7 @@ class ProviderCommands:
             event.set_result(MessageEventResult().message(ret))
         elif idx == "tts":
             if idx2 is None:
-                event.set_result(
-                    MessageEventResult().message("请输入序号。")
-                )
+                event.set_result(MessageEventResult().message("请输入序号。"))
                 return
             if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
                 event.set_result(
@@ -204,14 +202,10 @@ class ProviderCommands:
                 provider_type=ProviderType.TEXT_TO_SPEECH,
                 umo=umo,
             )
-            event.set_result(
-                MessageEventResult().message(f"✅ 已成功切换到 {id_}.")
-            )
+            event.set_result(MessageEventResult().message(f"✅ 已成功切换到 {id_}."))
         elif idx == "stt":
             if idx2 is None:
-                event.set_result(
-                    MessageEventResult().message("请输入序号。")
-                )
+                event.set_result(MessageEventResult().message("请输入序号。"))
                 return
             if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
                 event.set_result(
@@ -225,9 +219,7 @@ class ProviderCommands:
                 provider_type=ProviderType.SPEECH_TO_TEXT,
                 umo=umo,
             )
-            event.set_result(
-                MessageEventResult().message(f"✅ 已成功切换到 {id_}.")
-            )
+            event.set_result(MessageEventResult().message(f"✅ 已成功切换到 {id_}."))
         elif isinstance(idx, int):
             if idx > len(self.context.get_all_providers()) or idx < 1:
                 event.set_result(
@@ -241,8 +233,6 @@ class ProviderCommands:
                 provider_type=ProviderType.CHAT_COMPLETION,
                 umo=umo,
             )
-            event.set_result(
-                MessageEventResult().message(f"✅ 已成功切换到 {id_}.")
-            )
+            event.set_result(MessageEventResult().message(f"✅ 已成功切换到 {id_}."))
         else:
             event.set_result(MessageEventResult().message("❌ 无效的参数。"))

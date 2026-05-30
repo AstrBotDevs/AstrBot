@@ -161,16 +161,12 @@ class ConversationCommands:
                 umo,
                 agent_runner_type,
             )
-            message.set_result(
-                MessageEventResult().message("✅ 会话重置成功。")
-            )
+            message.set_result(MessageEventResult().message("✅ 会话重置成功。"))
             return
 
         if not self.context.get_using_provider(umo):
             message.set_result(
-                MessageEventResult().message(
-                    "😕 未找到任何 LLM Provider，请先配置。"
-                ),
+                MessageEventResult().message("😕 未找到任何 LLM Provider，请先配置。"),
             )
             return
 
@@ -259,9 +255,7 @@ class ConversationCommands:
                 message.unified_msg_origin,
                 agent_runner_type,
             )
-            message.set_result(
-                MessageEventResult().message("✅ 新对话已创建。")
-            )
+            message.set_result(MessageEventResult().message("✅ 新对话已创建。"))
             return
 
         active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
@@ -275,9 +269,7 @@ class ConversationCommands:
         message.set_extra("_clean_ltm_session", True)
 
         message.set_result(
-            MessageEventResult().message(
-                f"✅ 已切换到新对话: {cid[:4]}。"
-            ),
+            MessageEventResult().message(f"✅ 已切换到新对话: {cid[:4]}。"),
         )
 
     async def cmd_context(self, message: AstrMessageEvent) -> None:
@@ -395,9 +387,7 @@ class ConversationCommands:
 
         if stats.record_count == 0:
             message.set_result(
-                MessageEventResult().message(
-                    "📊 该会话暂无统计数据。"
-                ),
+                MessageEventResult().message("📊 该会话暂无统计数据。"),
             )
             return
 
