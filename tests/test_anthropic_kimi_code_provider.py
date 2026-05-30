@@ -416,3 +416,198 @@ def test_prepare_payload_does_not_merge_non_consecutive_tool_results():
             ],
         },
     ]
+
+
+# ---- tool_choice 转换测试 ----
+
+
+class _FakeToolSet:
+    """模拟包含工具的 ToolSet"""
+
+    def get_func_desc_anthropic_style(self):
+        return [{"name": "get_weather", "description": "Get weather"}]
+
+    def empty(self):
+        return False
+
+
+class _EmptyToolSet:
+    """模拟空工具列表的 ToolSet，用于验证无工具时不设置 tool_choice"""
+
+    def get_func_desc_anthropic_style(self):
+        return []
+
+    def empty(self):
+        return True
+
+
+class _FakeMessages:
+    """模拟 AsyncAnthropic.messages 命名空间"""
+
+
+async def _capture_payloads_create(**kwargs):
+    """捕获 payloads 并返回一个真实的 Message 实例"""
+    from anthropic.types import Message, TextBlock, Usage
+
+    _capture_payloads_create.last_kwargs = kwargs
+    return Message(
+        id="msg_fake",
+        content=[TextBlock(type="text", text="Hello")],
+        model="claude-test",
+        role="assistant",
+        stop_reason=None,
+        stop_sequence=None,
+        type="message",
+        usage=Usage(input_tokens=10, output_tokens=5),
+    )
+
+
+def _setup_provider_with_mock_client(monkeypatch) -> anthropic_source.ProviderAnthropic:
+    """创建 provider 并 mock 底层 API 调用"""
+    monkeypatch.setattr(anthropic_source, "AsyncAnthropic", _FakeAsyncAnthropic)
+
+    provider = anthropic_source.ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-test",
+            "type": "anthropic_chat_completion",
+            "model": "claude-test",
+            "key": ["test-key"],
+        },
+        provider_settings={},
+    )
+
+    fakeMessages = _FakeMessages()
+    fakeMessages.create = _capture_payloads_create
+    provider.client.messages = fakeMessages
+
+    return provider
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_auto_converts_to_dict(monkeypatch):
+    """tool_choice='auto' 应转换为 {'type': 'auto'}"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    await provider.text_chat(
+        prompt="hello",
+        func_tool=_FakeToolSet(),
+        tool_choice="auto",
+    )
+
+    assert _capture_payloads_create.last_kwargs["tool_choice"] == {"type": "auto"}
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_any_converts_to_dict(monkeypatch):
+    """tool_choice='any' 应转换为 {'type': 'any'}"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    await provider.text_chat(
+        prompt="hello",
+        func_tool=_FakeToolSet(),
+        tool_choice="any",
+    )
+
+    assert _capture_payloads_create.last_kwargs["tool_choice"] == {"type": "any"}
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_none_converts_to_dict(monkeypatch):
+    """tool_choice='none' 应转换为 {'type': 'none'}"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    await provider.text_chat(
+        prompt="hello",
+        func_tool=_FakeToolSet(),
+        tool_choice="none",
+    )
+
+    assert _capture_payloads_create.last_kwargs["tool_choice"] == {"type": "none"}
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_required_legacy_compat(monkeypatch):
+    """tool_choice='required'(OpenAI 命名) 应兼容转换为 {'type': 'any'}"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    await provider.text_chat(
+        prompt="hello",
+        func_tool=_FakeToolSet(),
+        tool_choice="required",
+    )
+
+    assert _capture_payloads_create.last_kwargs["tool_choice"] == {"type": "any"}
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_dict_passthrough(monkeypatch):
+    """tool_choice 为 dict 时应直接透传"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    await provider.text_chat(
+        prompt="hello",
+        func_tool=_FakeToolSet(),
+        tool_choice={"type": "tool", "name": "get_weather"},
+    )
+
+    assert _capture_payloads_create.last_kwargs["tool_choice"] == {
+        "type": "tool",
+        "name": "get_weather",
+    }
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_default_when_not_set(monkeypatch):
+    """未传 tool_choice 时，默认应为 {'type': 'auto'}"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    await provider.text_chat(
+        prompt="hello",
+        func_tool=_FakeToolSet(),
+    )
+
+    assert _capture_payloads_create.last_kwargs["tool_choice"] == {"type": "auto"}
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_invalid_string_falls_back_to_auto(monkeypatch):
+    """无效的 tool_choice 字符串应回退为 {'type': 'auto'}"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    await provider.text_chat(
+        prompt="hello",
+        func_tool=_FakeToolSet(),
+        tool_choice="invalid_value",
+    )
+
+    assert _capture_payloads_create.last_kwargs["tool_choice"] == {"type": "auto"}
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_no_tools_skips_tool_choice(monkeypatch):
+    """无工具时不应设置 tool_choice"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    await provider.text_chat(
+        prompt="hello",
+        func_tool=None,
+        tool_choice="any",
+    )
+
+    assert "tool_choice" not in _capture_payloads_create.last_kwargs
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_empty_tool_list_skips_tool_choice(monkeypatch):
+    """ToolSet 存在但工具列表为空时，不应设置 tools 和 tool_choice"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    await provider.text_chat(
+        prompt="hello",
+        func_tool=_EmptyToolSet(),
+        tool_choice="any",
+    )
+
+    kwargs = _capture_payloads_create.last_kwargs
+    assert "tools" not in kwargs
+    assert "tool_choice" not in kwargs
