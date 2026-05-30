@@ -603,11 +603,17 @@ class AstrBotDashboard:
 
     def check_port_in_use(self, host: str, port: int) -> bool:
         """跨平台检测端口是否被占用"""
-        family = socket.AF_INET6 if ":" in host else socket.AF_INET
+        probe_host = host
+        if host in ("", "0.0.0.0"):
+            probe_host = "127.0.0.1"
+        elif host == "::":
+            probe_host = "::1"
+
+        family = socket.AF_INET6 if ":" in probe_host else socket.AF_INET
         try:
             with socket.socket(family, socket.SOCK_STREAM) as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                s.bind((host, port))
+                s.bind((probe_host, port))
                 return False
         except OSError as exc:
             if exc.errno == errno.EADDRINUSE:
