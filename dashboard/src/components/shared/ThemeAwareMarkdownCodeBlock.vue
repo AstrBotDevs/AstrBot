@@ -3,7 +3,7 @@
     v-if="node.lang === 'diff'"
     :content="String((node as Record<string, unknown>).content ?? (node as Record<string, unknown>).code ?? '')"
     :is-dark="effectiveIsDark"
-    :max-lines="30"
+    :max-lines="100"
   />
   <MarkdownCodeBlockNode
     v-else
