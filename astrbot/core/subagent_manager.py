@@ -225,7 +225,6 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
             cls._tools_blacklist = {
                 "broadcast_shared_context",
                 "create_subagent",
-                "protect_subagent",
                 "manage_subagent_protection",
                 "remove_subagent",
                 "list_subagents",
