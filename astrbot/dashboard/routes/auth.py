@@ -288,7 +288,9 @@ class AuthRoute(Route):
             self._reset_failed_attempts += 1
             if self._reset_failed_attempts >= 3:
                 self._reset_code = None
-                return Response().error("确认码错误次数过多，已失效，请重新获取").__dict__
+                return (
+                    Response().error("确认码错误次数过多，已失效，请重新获取").__dict__
+                )
             remaining = 3 - self._reset_failed_attempts
             return Response().error(f"确认码不正确，还可以尝试 {remaining} 次").__dict__
 
