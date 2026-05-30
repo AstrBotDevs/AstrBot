@@ -5,7 +5,7 @@ import os
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.25.1"
+VERSION = "4.25.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -120,18 +120,20 @@ DEFAULT_CONFIG = {
         "default_personality": "default",
         "persona_pool": ["*"],
         "prompt_prefix": "{{prompt}}",
-        "context_limit_reached_strategy": "truncate_by_turns",  # or llm_compress
+        "context_limit_reached_strategy": "llm_compress",  # or truncate_by_turns
         "llm_compress_instruction": (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
+            "The primary goal of this summary is to enable seamless continuation of the work that follows.\n"
             "1. Systematically cover all core topics discussed and the final conclusion/outcome for each; clearly highlight the latest primary focus.\n"
             "2. If any tools were used, summarize tool usage (total call count) and extract the most valuable insights from tool outputs.\n"
-            "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
-            "4. Write the summary in the user's language.\n"
+            "3. If any materials (files, documents, code, references) were read during the conversation that may be helpful for subsequent work, list each one with its scope and path.\n"
+            "4. If there was an initial user goal, state it first and describe the current progress/status.\n"
+            "5. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent": 6,
+        "llm_compress_keep_recent": 10,
         "llm_compress_provider_id": "",
-        "max_context_length": -1,
-        "dequeue_context_length": 1,
+        "max_context_length": 50,
+        "dequeue_context_length": 10,
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
@@ -3530,30 +3532,30 @@ CONFIG_METADATA_3 = {
                 "type": "object",
                 "items": {
                     "provider_settings.max_context_length": {
-                        "description": "最多携带对话轮数",
+                        "description": "压缩前最多保留对话轮数",
                         "type": "int",
-                        "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条，-1 为不限制",
+                        "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.dequeue_context_length": {
-                        "description": "丢弃对话轮数",
+                        "description": "轮次超限时一次丢弃轮数",
                         "type": "int",
-                        "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数",
+                        "hint": "当超过“压缩前最多保留对话轮数”且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.context_limit_reached_strategy": {
-                        "description": "超出模型上下文窗口时的处理方式",
+                        "description": "历史超限或上下文接近上限时的处理方式",
                         "type": "string",
                         "options": ["truncate_by_turns", "llm_compress"],
                         "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
-                        "hint": "",
+                        "hint": "普通会话历史仅在超过“压缩前最多保留对话轮数”后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。",
                     },
                     "provider_settings.llm_compress_instruction": {
                         "description": "上下文压缩提示词",
@@ -3577,7 +3579,7 @@ CONFIG_METADATA_3 = {
                         "description": "用于上下文压缩的模型提供商 ID",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "留空时将降级为“按对话轮数截断”的策略。",
+                        "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为“按对话轮数截断”的策略。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
                             "provider_settings.agent_runner_type": "local",

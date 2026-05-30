@@ -526,6 +526,7 @@ import {
   type TransportMode,
 } from "@/composables/useMessages";
 import { useMediaHandling } from "@/composables/useMediaHandling";
+import { useRecording } from "@/composables/useRecording";
 import { useProjects } from "@/composables/useProjects";
 import { useCustomizerStore } from "@/stores/customizer";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
@@ -633,8 +634,12 @@ const threadSelection = reactive<{
   selectedText: "",
 });
 const enableStreaming = ref(true);
-const isRecording = ref(false);
 const sendShortcut = ref<"enter" | "shift_enter">("enter");
+const {
+  isRecording,
+  startRecording: startRecorder,
+  stopRecording: stopRecorder,
+} = useRecording();
 const chatSidebarDrawer = computed({
   get: () => lgAndUp.value || customizer.chatSidebarOpen,
   set: (value: boolean) => {
@@ -1303,12 +1308,26 @@ function toggleStreaming() {
   enableStreaming.value = !enableStreaming.value;
 }
 
-function startRecording() {
-  isRecording.value = true;
+async function startRecording() {
+  try {
+    await startRecorder();
+  } catch (error) {
+    console.error("Failed to start recording:", error);
+    toast.error(tm("voice.error"));
+  }
 }
 
-function stopRecording() {
-  isRecording.value = false;
+async function stopRecording() {
+  try {
+    const audioFile = await stopRecorder();
+    const uploaded = await processAndUploadFile(audioFile);
+    if (!uploaded) {
+      toast.error(tm("voice.error"));
+    }
+  } catch (error) {
+    console.error("Failed to stop recording:", error);
+    toast.error(tm("voice.error"));
+  }
 }
 
 function handleMessagesScroll() {
@@ -1520,7 +1539,12 @@ function toggleTheme() {
 }
 
 .session-progress {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   flex-shrink: 0;
+  transition: right 0.16s ease;
 }
 
 .session-actions {
@@ -1542,6 +1566,11 @@ function toggleTheme() {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
+}
+
+.session-item:hover .session-progress,
+.session-item:focus-within .session-progress {
+  right: 62px;
 }
 
 .session-action-btn {
