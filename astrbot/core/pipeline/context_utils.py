@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import traceback
 import typing as T
@@ -76,13 +77,21 @@ async def call_event_hook(
     event: AstrMessageEvent,
     hook_type: EventType,
     *args,
+    timeout: float = 300.0,
     **kwargs,
 ) -> bool:
     """调用事件钩子函数
 
+    Args:
+        event: 事件对象
+        hook_type: 钩子事件类型
+        *args: 传递给钩子处理器的位置参数
+        timeout: 单个钩子处理器的超时时间（秒），超时后跳过该处理器继续执行。
+            设为 0 或负数则不启用超时。默认 300 秒。
+        **kwargs: 传递给钩子处理器的关键字参数
+
     Returns:
         bool: 如果事件被终止，返回 True
-    #
 
     """
     handlers = star_handlers_registry.get_handlers_by_event_type(
@@ -92,16 +101,30 @@ async def call_event_hook(
     for handler in handlers:
         try:
             assert inspect.iscoroutinefunction(handler.handler)
+            plugin_name = star_map[handler.handler_module_path].name
+            handler_name = handler.handler_name
             logger.debug(
-                f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                f"hook({hook_type.name}) -> {plugin_name} - {handler_name}",
             )
-            await handler.handler(event, *args, **kwargs)
+            if timeout > 0:
+                try:
+                    await asyncio.wait_for(
+                        handler.handler(event, *args, **kwargs),
+                        timeout=timeout,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        f"hook({hook_type.name}) -> {plugin_name} - {handler_name} "
+                        f"timed out after {timeout}s, skipping.",
+                    )
+            else:
+                await handler.handler(event, *args, **kwargs)
         except BaseException:
             logger.error(traceback.format_exc())
 
         if event.is_stopped():
             logger.info(
-                f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。",
+                f"{plugin_name} - {handler_name} 终止了事件传播。",
             )
             return True
 
