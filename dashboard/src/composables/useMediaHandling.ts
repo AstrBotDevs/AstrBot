@@ -11,7 +11,6 @@ export interface StagedFileInfo {
 }
 
 export function useMediaHandling() {
-    const stagedAudioUrl = ref<string>('');
     const stagedFiles = ref<StagedFileInfo[]>([]);
     const mediaCache = ref<Record<string, string>>({});
     const pendingFileSignatures = new Set<string>();
@@ -56,9 +55,9 @@ export function useMediaHandling() {
         }
     }
 
-    async function uploadStagedFile(file: File) {
+    async function uploadStagedFile(file: File): Promise<StagedFileInfo | undefined> {
         const signature = await getFileSignature(file);
-        if (isDuplicateFile(signature)) return;
+        if (isDuplicateFile(signature)) return undefined;
 
         pendingFileSignatures.add(signature);
         const formData = new FormData();
@@ -72,27 +71,30 @@ export function useMediaHandling() {
             });
 
             const { attachment_id, filename, type } = response.data.data;
-            stagedFiles.value.push({
+            const stagedFile = {
                 attachment_id,
                 filename,
                 original_name: file.name,
                 url: URL.createObjectURL(file),
                 type,
                 signature
-            });
+            };
+            stagedFiles.value.push(stagedFile);
+            return stagedFile;
         } catch (err) {
             console.error('Error uploading file:', err);
+            return undefined;
         } finally {
             pendingFileSignatures.delete(signature);
         }
     }
 
     async function processAndUploadImage(file: File) {
-        await uploadStagedFile(file);
+        return uploadStagedFile(file);
     }
 
     async function processAndUploadFile(file: File) {
-        await uploadStagedFile(file);
+        return uploadStagedFile(file);
     }
 
     async function handlePaste(event: ClipboardEvent) {
@@ -128,14 +130,25 @@ export function useMediaHandling() {
     }
 
     function removeAudio() {
-        stagedAudioUrl.value = '';
+        for (let i = stagedFiles.value.length - 1; i >= 0; i--) {
+            if (stagedFiles.value[i].type !== 'record') continue;
+
+            const fileToRemove = stagedFiles.value[i];
+            if (fileToRemove.url.startsWith('blob:')) {
+                URL.revokeObjectURL(fileToRemove.url);
+            }
+            stagedFiles.value.splice(i, 1);
+        }
     }
 
     function removeFile(index: number) {
-        // 找到第 index 个非图片类型的文件
+        // Find the requested non-image, non-audio attachment.
         let fileCount = 0;
         for (let i = 0; i < stagedFiles.value.length; i++) {
-            if (stagedFiles.value[i].type !== 'image') {
+            if (
+                stagedFiles.value[i].type !== 'image' &&
+                stagedFiles.value[i].type !== 'record'
+            ) {
                 if (fileCount === index) {
                     const fileToRemove = stagedFiles.value[i];
                     if (fileToRemove.url.startsWith('blob:')) {
@@ -151,7 +164,6 @@ export function useMediaHandling() {
 
     function clearStaged(options: { revokeUrls?: boolean } = {}) {
         const { revokeUrls = true } = options;
-        stagedAudioUrl.value = '';
         if (revokeUrls) {
             // 清理文件的 blob URLs
             stagedFiles.value.forEach(file => {
@@ -177,9 +189,13 @@ export function useMediaHandling() {
         stagedFiles.value.filter(f => f.type === 'image').map(f => f.url)
     );
 
+    const stagedAudioUrl = computed(() =>
+        stagedFiles.value.find(f => f.type === 'record')?.url || ''
+    );
+
     // 计算属性：获取非图片文件列表
     const stagedNonImageFiles = computed(() => 
-        stagedFiles.value.filter(f => f.type !== 'image')
+        stagedFiles.value.filter(f => f.type !== 'image' && f.type !== 'record')
     );
 
     return {
