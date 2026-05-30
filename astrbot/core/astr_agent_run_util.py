@@ -257,7 +257,7 @@ async def run_agent(
                     )
                     astr_event.set_result(
                         MessageEventResult(
-                            chain=resp.data["chain"].chain,
+                            chain=list(resp.data["chain"].chain),
                             result_content_type=content_typ,
                         ),
                     )
@@ -275,7 +275,7 @@ async def run_agent(
                 if merged_chain:
                     astr_event.set_result(
                         MessageEventResult(
-                            chain=merged_chain.chain,
+                            chain=list(merged_chain.chain),
                             result_content_type=ResultContentType.LLM_RESULT,
                         ),
                     )

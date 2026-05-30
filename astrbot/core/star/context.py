@@ -471,6 +471,47 @@ class Context:
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
+
+                # Persist the sent message to conversation history so that
+                # LLM can see proactive / split messages in subsequent turns.
+                try:
+                    import json
+
+                    unified_msg_origin = str(session)
+                    cid = await self.conversation_manager.get_curr_conversation_id(
+                        unified_msg_origin
+                    )
+                    if cid:
+                        conv = await self.conversation_manager.get_conversation(
+                            unified_msg_origin, cid
+                        )
+                        if conv:
+                            history = json.loads(conv.history) if conv.history else []
+                            plain_text = message_chain.get_plain_text()
+                            if plain_text:
+                                # Deduplicate: skip if the last message is already
+                                # an assistant message with the same content.
+                                if (
+                                    history
+                                    and isinstance(history[-1], dict)
+                                    and history[-1].get("role") == "assistant"
+                                    and history[-1].get("content") == plain_text
+                                ):
+                                    pass
+                                else:
+                                    history.append(
+                                        {"role": "assistant", "content": plain_text}
+                                    )
+                                    await self.conversation_manager.update_conversation(
+                                        unified_msg_origin=unified_msg_origin,
+                                        conversation_id=cid,
+                                        history=history,
+                                    )
+                except Exception as e:
+                    logger.debug(
+                        f"send_message: failed to persist to history: {e}"
+                    )
+
                 return True
         logger.warning(
             f"cannot find platform for session {str(session)}, message not sent"
