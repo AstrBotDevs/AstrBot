@@ -16,6 +16,7 @@ def get_schema_item(schema: dict | None, key_path: str) -> dict | None:
     同时支持：
     - 扁平 schema（直接 key 命中）
     - 嵌套 object schema（{type: "object", items: {...}}）
+    - template_list schema（<field>.templates.<template>.items）
     """
 
     if not isinstance(schema, dict) or not key_path:
@@ -23,17 +24,31 @@ def get_schema_item(schema: dict | None, key_path: str) -> dict | None:
     if key_path in schema:
         return schema.get(key_path)
 
-    current = schema
     parts = key_path.split(".")
-    for idx, part in enumerate(parts):
+    current = schema
+    idx = 0
+    while idx < len(parts):
+        part = parts[idx]
         if part not in current:
             return None
         meta = current.get(part)
         if idx == len(parts) - 1:
             return meta
         if not isinstance(meta, dict) or meta.get("type") != "object":
-            return None
+            if not isinstance(meta, dict) or meta.get("type") != "template_list":
+                return None
+            if idx + 2 >= len(parts) or parts[idx + 1] != "templates":
+                return None
+            template_meta = meta.get("templates", {}).get(parts[idx + 2])
+            if not isinstance(template_meta, dict):
+                return None
+            if idx + 2 == len(parts) - 1:
+                return template_meta
+            current = template_meta.get("items", {})
+            idx += 3
+            continue
         current = meta.get("items", {})
+        idx += 1
     return None
 
 
