@@ -523,6 +523,27 @@
               </div>
             </div>
 
+            <!-- 默认 Chat Provider -->
+            <div class="dashboard-form-grid global-settings-grid mb-5">
+              <div class="setting-card">
+                <div class="setting-card-head">
+                  <div>
+                    <div class="setting-title">{{ tm('enhancedFields.defaultProviderId') }}</div>
+                    <div class="setting-subtitle">{{ tm('enhancedFields.defaultProviderIdHint') }}</div>
+                  </div>
+                </div>
+                <div class="selector-card mt-3">
+                  <ProviderSelector
+                    v-model="dynamicCfg.default_provider_id"
+                    provider-type="chat_completion"
+                    variant="outlined"
+                    density="comfortable"
+                    clearable
+                  />
+                </div>
+              </div>
+            </div>
+
             <!-- 行为约束提示词 -->
             <div class="dashboard-card dashboard-card--padded mb-4">
               <div class="d-flex justify-space-between align-center mb-3">
@@ -764,6 +785,7 @@ type DynamicAgentsConfig = {
   enabled: boolean
   max_subagent_count: number
   auto_cleanup_per_turn: boolean
+  default_provider_id: string
   rule_prompt: string
   tools_blacklist: string[]
   tools_inherent: string[]
@@ -853,12 +875,13 @@ function toast(message: string, color: 'success' | 'error' | 'warning' = 'succes
 }
 
 const DEFAULT_BLACKLIST = [
-  'broadcast_shared_context',
   'create_subagent',
   'manage_subagent_protection',
   'remove_subagent',
   'list_subagents',
   'wait_for_subagent',
+  'orchestrate_tasks',
+  'broadcast_shared_context',
   'view_shared_context'
 ]
 
@@ -882,6 +905,7 @@ const dynamicCfg = ref<DynamicAgentsConfig>({
   enabled: false,
   max_subagent_count: 3,
   auto_cleanup_per_turn: true,
+  default_provider_id: '',
   rule_prompt: '',
   tools_blacklist: [...DEFAULT_BLACKLIST],
   tools_inherent: [...DEFAULT_INHERENT]
@@ -955,6 +979,7 @@ function normalizeDynamicAgents(raw: any): DynamicAgentsConfig {
     enabled: !!src?.enabled,
     max_subagent_count: Number(src?.max_subagent_count) || 3,
     auto_cleanup_per_turn: src?.auto_cleanup_per_turn !== false,
+    default_provider_id: (src?.default_provider_id ?? '').toString(),
     rule_prompt: (src?.rule_prompt ?? '').toString(),
     tools_blacklist: blacklist !== null ? blacklist : [...DEFAULT_BLACKLIST],
     tools_inherent: inherent !== null ? inherent : [...DEFAULT_INHERENT]
@@ -999,6 +1024,7 @@ function serializeFullConfig(config: SubAgentConfig, dynamic: DynamicAgentsConfi
       enabled: dynamic.enabled,
       max_subagent_count: dynamic.max_subagent_count,
       auto_cleanup_per_turn: dynamic.auto_cleanup_per_turn,
+      default_provider_id: dynamic.default_provider_id,
       rule_prompt: dynamic.rule_prompt,
       tools_blacklist: dynamic.tools_blacklist,
       tools_inherent: dynamic.tools_inherent
@@ -1131,6 +1157,7 @@ async function save() {
         enabled: dynamicCfg.value.enabled,
         max_subagent_count: dynamicCfg.value.max_subagent_count,
         auto_cleanup_per_turn: dynamicCfg.value.auto_cleanup_per_turn,
+        default_provider_id: dynamicCfg.value.default_provider_id,
         rule_prompt: dynamicCfg.value.rule_prompt,
         tools_blacklist: dynamicCfg.value.tools_blacklist,
         tools_inherent: dynamicCfg.value.tools_inherent

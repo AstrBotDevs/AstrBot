@@ -42,6 +42,7 @@ class SubAgentRoute(Route):
                         "enabled": False,
                         "max_subagent_count": 3,
                         "auto_cleanup_per_turn": True,
+                        "default_provider_id": "",
                         "tools_blacklist": [],
                         "tools_inherent": [],
                     },
@@ -70,6 +71,7 @@ class SubAgentRoute(Route):
                 dyn.setdefault("enabled", False)
                 dyn.setdefault("max_subagent_count", 3)
                 dyn.setdefault("auto_cleanup_per_turn", True)
+                dyn.setdefault("default_provider_id", "")
                 dyn.setdefault("tools_blacklist", [])
                 dyn.setdefault("tools_inherent", [])
 

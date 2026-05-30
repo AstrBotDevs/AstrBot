@@ -47,7 +47,7 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
-from astrbot.core.subagent_manager import SubAgentManager
+from astrbot.core.subagent_manager import RET_DYNAMIC_TOOL_CREATED, SubAgentManager
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -1506,7 +1506,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return None
 
     def _maybe_register_dynamic_tool_from_result(self, result_content: str) -> None:
-        if not result_content.startswith("__DYNAMIC_TOOL_CREATED__:"):
+        if not result_content.startswith(f"{RET_DYNAMIC_TOOL_CREATED}:"):
             return
 
         parts = result_content.split(":", 3)

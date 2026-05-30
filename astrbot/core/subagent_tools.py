@@ -23,6 +23,11 @@ from astrbot.core.subagent_dag import (
     SubAgentDAGEngine,
 )
 from astrbot.core.subagent_manager import (
+    RET_DYNAMIC_TOOL_CREATE_FAILED,
+    RET_DYNAMIC_TOOL_CREATED,
+    RET_HISTORY_CLEARED,
+    RET_SHARED_CONTEXT_ADDED,
+    RET_SUBAGENT_REMOVED,
     SubAgentConfig,
     SubAgentManager,
 )
@@ -55,6 +60,10 @@ class CreateSubAgentTool(FunctionTool):
                 "workdir": {
                     "type": "string",
                     "description": "Subagent working directory(absolute path), can be empty(same to main agent). Fill only when the user has clearly specified the path.",
+                },
+                "provider_id": {
+                    "type": "string",
+                    "description": "LLM provider ID for this subagent. If not provided, uses the same provider as the main agent.",
                 },
             },
             "required": ["name", "system_prompt"],
@@ -151,6 +160,7 @@ class CreateSubAgentTool(FunctionTool):
         tools = kwargs.get("tools", {})
         skills = kwargs.get("skills", {})
         workdir = kwargs.get("workdir")
+        provider_id = kwargs.get("provider_id")
 
         session_id = context.context.event.unified_msg_origin
         if not self._check_path_safety(workdir):
@@ -161,15 +171,16 @@ class CreateSubAgentTool(FunctionTool):
             tools=set(tools),
             skills=set(skills),
             workdir=workdir,
+            provider_id=provider_id,
         )
 
         tool_name, handoff_tool = await SubAgentManager.create_subagent(
             session_id=session_id, config=config
         )
         if handoff_tool:
-            return f"__DYNAMIC_TOOL_CREATED__:{tool_name}:{handoff_tool.name}:Created. Use {tool_name} to delegate."
+            return f"{RET_DYNAMIC_TOOL_CREATED}:{tool_name}:Created. Use {tool_name} to delegate."
         else:
-            return f"__DYNAMIC_TOOL_CREATE_FAILED__:{tool_name}"
+            return f"{RET_DYNAMIC_TOOL_CREATE_FAILED}:{tool_name}"
 
 
 @dataclass
@@ -195,7 +206,7 @@ class RemoveSubagentTool(FunctionTool):
             return "Error: name required"
         session_id = context.context.event.unified_msg_origin
         remove_status = SubAgentManager.remove_subagent(session_id, name)
-        if remove_status == "__SUBAGENT_REMOVED__":
+        if remove_status.startswith(RET_SUBAGENT_REMOVED):
             return f"Cleaned {name} Subagent"
         else:
             return remove_status
@@ -297,7 +308,7 @@ class ResetSubAgentTool(FunctionTool):
             return "Error: name required"
         session_id = context.context.event.unified_msg_origin
         reset_status = SubAgentManager.clear_subagent_history(session_id, name)
-        if reset_status == "__HISTORY_CLEARED__":
+        if reset_status == RET_HISTORY_CLEARED:
             return f"Subagent {name} was reset"
         else:
             return reset_status
@@ -342,7 +353,7 @@ class BroadCastSharedContextTool(FunctionTool):
         add_status = SubAgentManager.add_shared_context(
             session_id, "System", context_type, content, target
         )
-        if add_status == "__SHARED_CONTEXT_ADDED__":
+        if add_status == RET_SHARED_CONTEXT_ADDED:
             return f"Shared context updated: [{context_type}] System -> {target}: {content[:100]}{'...' if len(content) > 100 else ''}"
         else:
             return add_status
@@ -393,7 +404,7 @@ Not used for informing the main agent, return the results directly instead.
         add_status = SubAgentManager.add_shared_context(
             session_id, sender, context_type, content, target
         )
-        if add_status == "__SHARED_CONTEXT_ADDED__":
+        if add_status == RET_SHARED_CONTEXT_ADDED:
             return f"Shared context updated: [{context_type}] {sender} -> {target}: {content[:100]}{'...' if len(content) > 100 else ''}"
         else:
             return add_status
@@ -532,7 +543,7 @@ parameter
                     session_id, subagent_name, task_id
                 )
                 if result and (result.result != "" or result.completed_at > 0):
-                    return f"SubAgent '{result.agent_name}' execution completed\n Task id: {result.task_id}\n Execution time: {result.execution_time:.1f}s\n--- Result ---\n{result.result}\n"
+                    return f"SubAgent '{result.agent_name}' execution completed\nTask id: {result.task_id}\nExecution time: {result.execution_time:.1f}s\n--- Result ---\n{result.result}\n"
                 else:
                     return f"SubAgent '{subagent_name}' task {task_id} execution completed with empty results."
             elif status == "FAILED":

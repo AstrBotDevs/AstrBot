@@ -118,6 +118,8 @@
   "enhancedFields": {
     "maxSubagentCount": "Max Subagent Count",
     "maxSubagentCountHint": "Set the maximum number of subagents. Dynamic subagent count = Max subagent count - Existing static subagent count",
+    "defaultProviderId": "Default Chat Provider",
+    "defaultProviderIdHint": "Default provider ID for dynamic subagents when not explicitly set. Leave empty to follow the main agent's provider",
     "sharedContextMaxlen": "Shared Context Max Length",
     "sharedContextMaxlenHint": "Maximum number of messages in shared context",
     "subagentHistoryMaxlen": "Max History Messages",

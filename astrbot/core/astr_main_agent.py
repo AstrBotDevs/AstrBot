@@ -1060,6 +1060,7 @@ async def _apply_subagent_manager_tools(
             time_prompt_enabled=orch_cfg.get("time_prompt_enabled", True),
             timezone=cfg.get("timezone", None),
             dag_enabled=orch_cfg.get("dag_enabled", False),
+            default_provider_id=dynamic_cfg.get("default_provider_id", ""),
         )
 
         # Enable subagent history and shared context if configured

@@ -12,6 +12,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -24,6 +25,28 @@ from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
 
 if TYPE_CHECKING:
     from astrbot.core.subagent_dag import DAGExecutionContext
+
+
+class SubAgentStatus(str, Enum):
+    """SubAgent lifecycle status."""
+
+    IDLE = "IDLE"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    UNKNOWN = "UNKNOWN"
+
+
+# 返回标记常量
+RET_DYNAMIC_TOOL_CREATED = "[DYNAMIC TOOL CREATED]"
+RET_DYNAMIC_TOOL_CREATE_FAILED = "[DYNAMIC TOOL CREATE FAILED]"
+RET_SUBAGENT_REMOVED = "[SUBAGENT REMOVED]"
+RET_SUBAGENT_REMOVE_FAILED = "[SUBAGENT REMOVE FAILED]"
+RET_HISTORY_CLEARED = "[HISTORY CLEARED]"
+RET_HISTORY_CLEARED_FAILED = "[HISTORY CLEARED FAILED]"
+RET_SHARED_CONTEXT_ADDED = "[SHARED CONTEXT ADDED]"
+RET_SHARED_CONTEXT_ADDED_FAILED = "[SHARED CONTEXT ADDED FAILED]"
+RET_PENDING_TASK_CREATE_FAILED = "[PENDING TASK CREATE FAILED]"
 
 
 @dataclass
@@ -58,7 +81,7 @@ class SubAgentSession:
     handoff_tools: dict = field(default_factory=dict)
     subagent_status: dict = field(
         default_factory=dict
-    )  # 工作状态 "IDLE" "RUNNING" "COMPLETED" "FAILED"
+    )  # 工作状态: SubAgentStatus 枚举值
     protected_agents: set = field(
         default_factory=set
     )  # 若某个agent受到保护，则不会被自动清理
@@ -104,6 +127,7 @@ class SubAgentManager:
         "astrbot_execute_python",
     }
     _dag_enabled: bool = False  # 是否启用 DAG 编排
+    _default_provider_id: str = ""  # 默认 Chat Provider ID
     _session_timeout_seconds = (
         1800  # 会话存活时间。若有会话的subagent闲置时间超过该值，自动清理
     )
@@ -174,6 +198,7 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
         time_prompt_enabled: bool = True,
         timezone: str | None = None,
         dag_enabled: bool = False,
+        default_provider_id: str = "",
         **kwargs,
     ) -> None:
         """Configure SubAgentManager settings"""
@@ -188,6 +213,7 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
         cls._time_prompt_enabled = time_prompt_enabled
         cls._timezone = timezone
         cls._dag_enabled = dag_enabled
+        cls._default_provider_id = default_provider_id
         if tools_inherent is None:
             cls._tools_inherent = {
                 "astrbot_execute_shell",
@@ -245,7 +271,7 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
 
         # If DAG is currently running, do NOT clean subagents
         dag_ctx = cls.get_active_dag(session_id)
-        if dag_ctx and dag_ctx.status == "RUNNING":
+        if dag_ctx and dag_ctx.status == SubAgentStatus.RUNNING:
             return {"status": "dag_running", "cleaned": []}
 
         cleaned = []
@@ -491,7 +517,7 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
         session = cls.get_session(session_id)
         if not session:
             return (
-                f"__HISTORY_CLEARED_FAILED__: Session_id {session_id} does not exist."
+                f"{RET_HISTORY_CLEARED_FAILED}: Session_id {session_id} does not exist."
             )
         if agent_name in session.subagents:
             if agent_name in session.subagent_histories:
@@ -499,9 +525,9 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
                 if session.shared_context_enabled:
                     cls.cleanup_shared_context_by_agent(session_id, agent_name)
                 logger.debug("[SubAgent:History] Cleared history for: %s", agent_name)
-            return "__HISTORY_CLEARED__"
+            return RET_HISTORY_CLEARED
         else:
-            return f"__HISTORY_CLEARED_FAILED__: Agent name {agent_name} not found. Available names {list(session.subagents.keys())}"
+            return f"{RET_HISTORY_CLEARED_FAILED}: Agent name {agent_name} not found. Available names {list(session.subagents.keys())}"
 
     @classmethod
     def add_shared_context(
@@ -524,11 +550,11 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
 
         session = cls._get_or_create_session(session_id)
         if not session.shared_context_enabled:
-            return "__SHARED_CONTEXT_ADDED_FAILED__: Shared context disabled."
+            return f"{RET_SHARED_CONTEXT_ADDED_FAILED}: Shared context disabled."
         if (sender not in list(session.subagents.keys())) and (sender != "System"):
-            return f"__SHARED_CONTEXT_ADDED_FAILED__: Sender name {sender} not found. Available names {list(session.subagents.keys())}"
+            return f"{RET_SHARED_CONTEXT_ADDED_FAILED}: Sender name {sender} not found. Available names {list(session.subagents.keys())}"
         if (target not in list(session.subagents.keys())) and (target != "all"):
-            return f"__SHARED_CONTEXT_ADDED_FAILED__: Target name {target} not found. Available names {list(session.subagents.keys())} and 'all' "
+            return f"{RET_SHARED_CONTEXT_ADDED_FAILED}: Target name {target} not found. Available names {list(session.subagents.keys())} and 'all' "
 
         if len(session.shared_context) >= cls._shared_context_maxlen:
             keep_count = int(cls._shared_context_maxlen * 0.9)
@@ -554,7 +580,7 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
             target,
             content[:50],
         )
-        return "__SHARED_CONTEXT_ADDED__"
+        return RET_SHARED_CONTEXT_ADDED
 
     @classmethod
     def get_shared_context(cls, session_id: str, filter_by_agent: str = None) -> list:
@@ -828,11 +854,13 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
         )
 
     @classmethod
-    def set_subagent_status(cls, session_id: str, agent_name: str, status: str) -> None:
+    def set_subagent_status(
+        cls, session_id: str, agent_name: str, status: SubAgentStatus
+    ) -> None:
         session = cls._get_or_create_session(session_id)
         if agent_name in session.subagents:
-            old_status = session.subagent_status.get(agent_name, "UNKNOWN")
-            session.subagent_status[agent_name] = status
+            old_status = session.subagent_status.get(agent_name, SubAgentStatus.UNKNOWN)
+            session.subagent_status[agent_name] = status.value
             trace = session.subagent_traces.get(agent_name)
             if trace:
                 trace.record(
@@ -955,12 +983,14 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
         )
         if config.provider_id:
             handoff_tool.provider_id = config.provider_id
+        elif cls._default_provider_id:
+            handoff_tool.provider_id = cls._default_provider_id
         session.handoff_tools[config.name] = handoff_tool
         # 初始化subagent的历史上下文（仅当历史功能启用时）
         if cls._history_enabled:
             session.subagent_histories[config.name] = []
         # 初始化subagent状态
-        cls.set_subagent_status(session_id, config.name, "IDLE")
+        cls.set_subagent_status(session_id, config.name, SubAgentStatus.IDLE)
         # 如果标记为protected，则加入protected集合
         if protected:
             session.protected_agents.add(config.name)
@@ -971,7 +1001,7 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
             tools=list(config.tools) if config.tools else [],
             skills=list(config.skills) if config.skills else [],
             protected=protected,
-            provider_id=config.provider_id,
+            provider_id=handoff_tool.provider_id,
         )
         session.subagent_traces[config.name] = trace
         logger.info(
@@ -1046,7 +1076,7 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
             if cls._history_enabled and config.name not in session.subagent_histories:
                 session.subagent_histories[config.name] = []
 
-            cls.set_subagent_status(session_id, config.name, "IDLE")
+            cls.set_subagent_status(session_id, config.name, SubAgentStatus.IDLE)
             session.protected_agents.add(config.name)
         else:
             pass
@@ -1121,9 +1151,9 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
         cls._touch_session(session_id)
         session = cls.get_session(session_id)
         if not session:
-            return f"__SUBAGENT_REMOVE_FAILED__: Session {session_id} does not exist."
-        if session.subagent_status.get(agent_name) == "RUNNING":
-            return f"__SUBAGENT_REMOVE_FAILED__: {agent_name} is still RUNNING. Waiting for finish first."
+            return f"{RET_SUBAGENT_REMOVE_FAILED}: Session {session_id} does not exist."
+        if session.subagent_status.get(agent_name) == SubAgentStatus.RUNNING:
+            return f"{RET_SUBAGENT_REMOVE_FAILED}: {agent_name} is still RUNNING. Waiting for finish first."
 
         def _remove_by_name(name):
             session.subagents.pop(name, None)
@@ -1137,14 +1167,17 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
             cls.cleanup_shared_context_by_agent(session_id, name)
 
         if agent_name == "all":
-            if "RUNNING" in session.subagent_status.values():
+            if SubAgentStatus.RUNNING in session.subagent_status.values():
                 removed = 0
                 for subagent_name in list(session.subagents.keys()):
-                    if session.subagent_status.get(subagent_name) == "RUNNING":
+                    if (
+                        session.subagent_status.get(subagent_name)
+                        == SubAgentStatus.RUNNING
+                    ):
                         continue
                     _remove_by_name(subagent_name)
                     removed += 1
-                return f"__SUBAGENT_REMOVED__: Removed {removed} subagents. {len(session.subagents.keys())} subagents are reserved because they are still running."
+                return f"{RET_SUBAGENT_REMOVED}: Removed {removed} subagents. {len(session.subagents.keys())} subagents are reserved because they are still running."
             else:
                 session.subagents.clear()
                 session.handoff_tools.clear()
@@ -1155,14 +1188,16 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
                 session.background_task_counters.clear()
                 session.subagent_traces.clear()
                 logger.info("[SubAgent:Cleanup] All subagents cleaned.")
-                return "__SUBAGENT_REMOVED__: All subagents have been removed."
+                return f"{RET_SUBAGENT_REMOVED}: All subagents have been removed."
         else:
             if agent_name not in session.subagents:
-                return f"__SUBAGENT_REMOVE_FAILED__: {agent_name} not found. Available subagent names {list(session.subagents.keys())}"
+                return f"{RET_SUBAGENT_REMOVE_FAILED}: {agent_name} not found. Available subagent names {list(session.subagents.keys())}"
             else:
                 _remove_by_name(agent_name)
                 logger.info("[SubAgent:Cleanup] Cleaned: %s", agent_name)
-                return f"__SUBAGENT_REMOVED__: Subagent {agent_name} has been removed."
+                return (
+                    f"{RET_SUBAGENT_REMOVED}: Subagent {agent_name} has been removed."
+                )
 
     @classmethod
     def get_handoff_tools_for_session(cls, session_id: str) -> list:
@@ -1191,11 +1226,9 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
             session.background_task_counters[agent_name] = 0
 
         if (
-            session.subagent_status[agent_name] == "RUNNING"
+            session.subagent_status[agent_name] == SubAgentStatus.RUNNING
         ):  # 若当前有任务在运行，不允许创建
-            return (
-                f"__PENDING_TASK_CREATE_FAILED__: Subagent {agent_name} already running"
-            )
+            return f"{RET_PENDING_TASK_CREATE_FAILED}: Subagent {agent_name} already running"
 
         # 生成递增的任务ID
         session.background_task_counters[agent_name] += 1
@@ -1420,8 +1453,8 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
         """
         session = cls.get_session(session_id)
         if not session:
-            return "UNKNOWN"
-        return session.subagent_status.get(agent_name, "UNKNOWN")
+            return SubAgentStatus.UNKNOWN
+        return session.subagent_status.get(agent_name, SubAgentStatus.UNKNOWN)
 
     @classmethod
     def get_all_subagent_status(cls, session_id: str) -> dict:
