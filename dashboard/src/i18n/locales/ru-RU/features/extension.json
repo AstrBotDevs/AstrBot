@@ -45,6 +45,7 @@
         "viewRepo": "Репозиторий",
         "openPages": "Pages",
         "openPage": "Открыть",
+        "openWebui": "Открыть UI плагина",
         "close": "Закрыть",
         "save": "Сохранить",
         "saveAndClose": "Сохранить и закрыть",
@@ -106,6 +107,7 @@
         "docsEmpty": "Документация отсутствует",
         "changelogTitle": "Журнал изменений",
         "changelogEmpty": "Журнал изменений отсутствует",
+        "subCommandsCount": "{count} подкоманд",
         "handlerGroups": {
             "page": "Pages",
             "skill": "Skills",
