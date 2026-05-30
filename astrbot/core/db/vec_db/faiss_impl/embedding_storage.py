@@ -1,6 +1,6 @@
 try:
     import faiss
-except ImportError as e:
+except ImportError:
     raise ImportError(
         "faiss 未安装。请使用 'pip install faiss-cpu' 或 'pip install faiss-gpu' 安装。",
     )
@@ -9,7 +9,6 @@ import shutil
 import tempfile
 
 import numpy as np
-
 
 # ── Faiss C++ fopen() 在 Windows 上使用 ANSI codepage ──
 # Python 传给 Faiss 的路径是 UTF-8 字节，但 Windows fopen 期望 ANSI 编码，
