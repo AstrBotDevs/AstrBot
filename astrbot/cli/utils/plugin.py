@@ -19,6 +19,18 @@ class PluginStatus(str, Enum):
     NOT_PUBLISHED = "unpublished"
 
 
+LOCAL_PLUGIN_COPY_IGNORE = shutil.ignore_patterns(
+    ".git",
+    "__pycache__",
+    "*.pyc",
+    ".venv",
+    "venv",
+    ".idea",
+    ".vscode",
+    ".zed",
+)
+
+
 def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
     """Download code from a Git repository and extract to the specified path"""
     temp_dir = Path(tempfile.mkdtemp())
@@ -190,7 +202,18 @@ def build_plug_list(plugins_dir: Path) -> list:
     return result
 
 
-def install_local_plugin(source_path: Path, plugins_dir: Path) -> None:
+def _cleanup_local_plugin_target(target_path: Path) -> None:
+    if target_path.is_symlink() or target_path.is_file():
+        target_path.unlink(missing_ok=True)
+    elif target_path.exists():
+        shutil.rmtree(target_path, ignore_errors=True)
+
+
+def install_local_plugin(
+    source_path: Path,
+    plugins_dir: Path,
+    editable: bool = False,
+) -> None:
     """Install a plugin from a local directory."""
     source_path = source_path.expanduser().resolve()
     plugins_dir = plugins_dir.resolve()
@@ -211,11 +234,22 @@ def install_local_plugin(source_path: Path, plugins_dir: Path) -> None:
 
     try:
         plugins_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(source_path, target_path)
+        if editable:
+            try:
+                target_path.symlink_to(source_path, target_is_directory=True)
+            except OSError as e:
+                raise click.ClickException(
+                    f"Failed to create symlink for editable install: {e}. "
+                    "On Windows, you may need to run as Administrator or enable Developer Mode."
+                ) from e
+        else:
+            shutil.copytree(source_path, target_path, ignore=LOCAL_PLUGIN_COPY_IGNORE)
         click.echo(f"Plugin {plugin_name} installed successfully from {source_path}")
+    except click.ClickException:
+        _cleanup_local_plugin_target(target_path)
+        raise
     except Exception as e:
-        if target_path.exists():
-            shutil.rmtree(target_path, ignore_errors=True)
+        _cleanup_local_plugin_target(target_path)
         raise click.ClickException(
             f"Error installing local plugin {plugin_name}: {e}"
         ) from e
