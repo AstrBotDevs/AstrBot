@@ -987,6 +987,7 @@ export default {
   display: flex;
   flex-direction: column;
   margin: 16px;
+  overflow: hidden;
 }
 
 .test-chat-header {
