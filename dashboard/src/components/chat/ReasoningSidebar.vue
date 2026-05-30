@@ -1,6 +1,17 @@
 <template>
   <transition name="slide-left">
-    <aside v-if="modelValue" class="reasoning-sidebar">
+    <aside
+      v-if="modelValue"
+      ref="sidebarRef"
+      class="reasoning-sidebar"
+      :style="{ width: sidebarWidth + 'px' }"
+    >
+      <!-- Drag handle -->
+      <div
+        class="reasoning-sidebar-resizer"
+        @mousedown="startResize"
+      />
+
       <div class="reasoning-sidebar-header">
         <div class="reasoning-sidebar-title">{{ reasoningTitle }}</div>
         <v-btn icon="mdi-close" size="small" variant="text" @click="close" />
@@ -22,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { onBeforeUnmount, ref, computed } from "vue";
 import {
   reasoningActivityCounts,
   reasoningActivityTitle,
@@ -55,6 +66,49 @@ const reasoningTitle = computed(() =>
 function close() {
   emit("update:modelValue", false);
 }
+
+// ── Drag resize ────────────────────────────────────────────────────
+
+const MIN_WIDTH = 280;
+const MAX_WIDTH = 1200;
+const DEFAULT_WIDTH = 380;
+
+const sidebarWidth = ref(DEFAULT_WIDTH);
+const sidebarRef = ref<HTMLElement | null>(null);
+let isResizing = false;
+
+function startResize(e: MouseEvent) {
+  e.preventDefault();
+  isResizing = true;
+  document.body.style.cursor = "ew-resize";
+  document.body.style.userSelect = "none";
+  document.addEventListener("mousemove", onMouseMove);
+  document.addEventListener("mouseup", onMouseUp);
+}
+
+function onMouseMove(e: MouseEvent) {
+  if (!isResizing || !sidebarRef.value) return;
+  // The sidebar is on the right side of the viewport.
+  // `sidebarRef` is positioned inside the parent's flex layout.
+  // Calculate width from the right edge of the viewport:
+  const rect = sidebarRef.value.parentElement?.getBoundingClientRect();
+  if (!rect) return;
+  const newWidth = rect.right - e.clientX;
+  sidebarWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth));
+}
+
+function onMouseUp() {
+  if (!isResizing) return;
+  isResizing = false;
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+  document.removeEventListener("mousemove", onMouseMove);
+  document.removeEventListener("mouseup", onMouseUp);
+}
+
+onBeforeUnmount(() => {
+  onMouseUp();
+});
 </script>
 
 <style scoped>
@@ -67,7 +121,28 @@ function close() {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  position: relative;
 }
+
+/* ── Drag handle ──────────────────────────────────────────────── */
+
+.reasoning-sidebar-resizer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 10;
+  transition: background 0.15s ease;
+}
+
+.reasoning-sidebar-resizer:hover,
+.reasoning-sidebar-resizer:active {
+  background: rgba(var(--v-theme-primary), 0.2);
+}
+
+/* ── Transition ───────────────────────────────────────────────── */
 
 .slide-left-enter-active,
 .slide-left-leave-active {
@@ -79,6 +154,8 @@ function close() {
   transform: translateX(100%);
   opacity: 0;
 }
+
+/* ── Header ───────────────────────────────────────────────────── */
 
 .reasoning-sidebar-header {
   display: flex;
@@ -93,6 +170,8 @@ function close() {
   line-height: 1.4;
   color: rgb(var(--v-theme-on-surface));
 }
+
+/* ── Body ─────────────────────────────────────────────────────── */
 
 .reasoning-sidebar-body {
   flex: 1;
@@ -109,14 +188,20 @@ function close() {
   font-size: 13px;
 }
 
+/* ── Mobile ───────────────────────────────────────────────────── */
+
 @media (max-width: 760px) {
   .reasoning-sidebar {
     position: fixed;
     inset: 0;
     z-index: 1300;
-    width: 100vw;
+    width: 100vw !important;
     height: 100dvh;
     border-left: 0;
+  }
+
+  .reasoning-sidebar-resizer {
+    display: none;
   }
 
   .reasoning-sidebar-header {
