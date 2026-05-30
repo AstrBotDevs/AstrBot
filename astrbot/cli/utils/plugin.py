@@ -190,6 +190,37 @@ def build_plug_list(plugins_dir: Path) -> list:
     return result
 
 
+def install_local_plugin(source_path: Path, plugins_dir: Path) -> None:
+    """Install a plugin from a local directory."""
+    source_path = source_path.expanduser().resolve()
+    plugins_dir = plugins_dir.resolve()
+
+    if not source_path.exists() or not source_path.is_dir():
+        raise click.ClickException(f"Local plugin path does not exist: {source_path}")
+
+    metadata = load_yaml_metadata(source_path)
+    plugin_name = metadata.get("name")
+    if not isinstance(plugin_name, str) or not plugin_name.strip():
+        raise click.ClickException(
+            f"Local plugin {source_path} must contain metadata.yaml with a valid name"
+        )
+
+    target_path = plugins_dir / plugin_name
+    if target_path.exists():
+        raise click.ClickException(f"Plugin {plugin_name} already exists")
+
+    try:
+        plugins_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(source_path, target_path)
+        click.echo(f"Plugin {plugin_name} installed successfully from {source_path}")
+    except Exception as e:
+        if target_path.exists():
+            shutil.rmtree(target_path, ignore_errors=True)
+        raise click.ClickException(
+            f"Error installing local plugin {plugin_name}: {e}"
+        ) from e
+
+
 def manage_plugin(
     plugin: dict,
     plugins_dir: Path,
