@@ -472,9 +472,7 @@ class Context:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
 
-                await self._persist_sent_message_to_history(
-                    session, message_chain
-                )
+                await self._persist_sent_message_to_history(session, message_chain)
 
                 return True
         logger.warning(
