@@ -327,7 +327,7 @@ export default defineComponent({
             :staged-images-url="stagedImagesUrl"
             :staged-audio-url="stagedAudioUrl"
             :staged-files="stagedNonImageFiles"
-            :disabled="sending || pageStatus == 'loading'"
+            :disabled="sending"
             :enable-streaming="enableStreaming"
             :is-recording="false"
             :is-running="Boolean(currSessionId && isSessionRunning(currSessionId))"
