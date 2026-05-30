@@ -27,7 +27,7 @@ GROUP_HISTORY_FOOTER = "\n--- END CONTEXT ---\n</system_reminder>"
 DEFAULT_GROUP_MESSAGE_MAX_CNT = 300
 
 
-class LongTermMemory:
+class GroupChatContext:
     def __init__(self, acm: AstrBotConfigManager, context: star.Context) -> None:
         self.acm = acm
         self.context = context
@@ -44,11 +44,13 @@ class LongTermMemory:
 
     def cfg(self, event: AstrMessageEvent):
         cfg = self.context.get_config(umo=event.unified_msg_origin)
-        ltm_cfg = cfg["provider_ltm_settings"]
+        group_context_cfg = cfg["provider_ltm_settings"]
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
-        image_caption_provider_id = ltm_cfg.get("image_caption_provider_id")
-        image_caption = ltm_cfg["image_caption"] and bool(image_caption_provider_id)
-        active_reply = ltm_cfg["active_reply"]
+        image_caption_provider_id = group_context_cfg.get("image_caption_provider_id")
+        image_caption = group_context_cfg["image_caption"] and bool(
+            image_caption_provider_id
+        )
+        active_reply = group_context_cfg["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
         ar_method = active_reply["method"]
         ar_possibility = active_reply["possibility_reply"]
@@ -56,7 +58,10 @@ class LongTermMemory:
         ar_whitelist = active_reply.get("whitelist", [])
         return {
             "group_message_max_cnt": _positive_int(
-                ltm_cfg.get("group_message_max_cnt", DEFAULT_GROUP_MESSAGE_MAX_CNT),
+                group_context_cfg.get(
+                    "group_message_max_cnt",
+                    DEFAULT_GROUP_MESSAGE_MAX_CNT,
+                ),
                 DEFAULT_GROUP_MESSAGE_MAX_CNT,
             ),
             "image_caption": image_caption,
@@ -136,15 +141,15 @@ class LongTermMemory:
             records.append(final_message)
             record_ids.append(record_id)
             _trim_left(records, cfg["group_message_max_cnt"], record_ids)
-            event.set_extra("_ltm_record_id", record_id)
-            event.set_extra("_ltm_raw_idx", len(records) - 1)
+            event.set_extra("_group_context_record_id", record_id)
+            event.set_extra("_group_context_raw_idx", len(records) - 1)
 
-        logger.debug(f"ltm | {umo} | {final_message}")
+        logger.debug(f"group_chat_context | {umo} | {final_message}")
 
     async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
         umo = event.unified_msg_origin
-        record_id = event.get_extra("_ltm_record_id", None)
-        prompt_idx = event.get_extra("_ltm_raw_idx", -1)
+        record_id = event.get_extra("_group_context_record_id", None)
+        prompt_idx = event.get_extra("_group_context_raw_idx", -1)
         if not isinstance(record_id, str) and (
             not isinstance(prompt_idx, int) or prompt_idx < 0
         ):
