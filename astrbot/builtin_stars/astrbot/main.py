@@ -7,7 +7,7 @@ import astrbot.api.message_components as Comp
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Plain
-from astrbot.api.provider import LLMResponse, ProviderRequest
+from astrbot.api.provider import ProviderRequest
 from astrbot.core import logger
 from astrbot.core.utils.session_waiter import (
     FILTERS,
@@ -140,6 +140,16 @@ class Main(star.Star):
         ]
         return ltmse["group_icl_enable"] or ltmse["active_reply"]["enable"]
 
+    async def _sync_ltm_enabled_state(self, event: AstrMessageEvent) -> bool:
+        """Reset stale LTM state before recording the first newly enabled message."""
+        now_enabled = self.ltm_enabled(event)
+        umo = event.unified_msg_origin
+        was_enabled = self._ltm_was_enabled.get(umo, False)
+        if self.ltm and now_enabled and not was_enabled:
+            await self.ltm.remove_session(event)
+        self._ltm_was_enabled[umo] = now_enabled
+        return now_enabled
+
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         """群聊记忆增强"""
@@ -150,7 +160,14 @@ class Main(star.Star):
                 has_image_or_plain = True
                 break
 
-        if self.ltm_enabled(event) and self.ltm and has_image_or_plain:
+        ltm_enabled = False
+        if self.ltm:
+            try:
+                ltm_enabled = await self._sync_ltm_enabled_state(event)
+            except BaseException as e:
+                logger.error(f"ltm: {e}")
+
+        if ltm_enabled and self.ltm and has_image_or_plain:
             need_active = await self.ltm.need_active_reply(event)
 
             group_icl_enable = self.context.get_config(umo=event.unified_msg_origin)[
@@ -170,28 +187,24 @@ class Main(star.Star):
                     logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
                     return
                 try:
-                    conv = None
+                    session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
+                        event.unified_msg_origin,
+                    )
 
-                    if not group_icl_enable:
-                        # 仅在走 Conversation 模式时才需要查询会话
-                        session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
-                            event.unified_msg_origin,
+                    if not session_curr_cid:
+                        logger.error(
+                            "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /new 创建一个会话。",
                         )
+                        return
 
-                        if not session_curr_cid:
-                            logger.error(
-                                "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /new 创建一个会话。",
-                            )
-                            return
+                    conv = await self.context.conversation_manager.get_conversation(
+                        event.unified_msg_origin,
+                        session_curr_cid,
+                    )
 
-                        conv = await self.context.conversation_manager.get_conversation(
-                            event.unified_msg_origin,
-                            session_curr_cid,
-                        )
-
-                        if not conv:
-                            logger.error("未找到对话，无法主动回复")
-                            return
+                    if not conv:
+                        logger.error("未找到对话，无法主动回复")
+                        return
 
                     prompt = event.message_str
                     image_urls = []
@@ -218,30 +231,9 @@ class Main(star.Star):
     ) -> None:
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
         if self.ltm and self.ltm_enabled(event):
-            umo = event.unified_msg_origin
-
-            # 惰性切换检测：false → true 时清理残留旧数据
-            now_enabled = self.ltm_enabled(event)
-            was_enabled = self._ltm_was_enabled.get(umo, False)
-            if now_enabled and not was_enabled:
-                await self.ltm.remove_session(event)
-                logger.info(f"LTM: group_icl_enable 开启，已重置 {umo} 上下文")
-            self._ltm_was_enabled[umo] = now_enabled
-
             try:
                 await self.ltm.on_req_llm(event, req)
             except BaseException as e:
-                logger.error(f"ltm: {e}")
-
-    @filter.on_agent_done()
-    async def record_agent_result_to_ltm(
-        self, event: AstrMessageEvent, run_context, resp: LLMResponse
-    ) -> None:
-        """Agent 完成后记录对话（含工具链）"""
-        if self.ltm and self.ltm_enabled(event):
-            try:
-                await self.ltm.on_agent_done(event, run_context, resp)
-            except Exception as e:
                 logger.error(f"ltm: {e}")
 
     @filter.after_message_sent()

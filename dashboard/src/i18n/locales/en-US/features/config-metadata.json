@@ -985,6 +985,9 @@
         "group_icl_enable": {
           "description": "Enable Group Chat Context Awareness"
         },
+        "group_message_max_cnt": {
+          "description": "Maximum Message Count"
+        },
         "image_caption": {
           "description": "Auto-understand Images",
           "hint": "Requires setting a group chat image caption model."
@@ -992,10 +995,6 @@
         "image_caption_provider_id": {
           "description": "Group Chat Image Caption Model",
           "hint": "Used for image understanding in group chat context awareness, configured separately from the default image caption model."
-        },
-        "history_tool_result_truncate": {
-          "description": "Truncate Historical Tool Output",
-          "hint": "Only affects group chat LTM history, not the current tool call round's full reasoning."
         },
         "active_reply": {
           "enable": {

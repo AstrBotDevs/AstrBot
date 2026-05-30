@@ -50,7 +50,7 @@ from astrbot.core.provider.provider import Provider
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
-from ..context.guard import RequestContextGuard
+from ..context.manager import ContextManager
 from ..context.token_counter import EstimateTokenCounter, TokenCounter
 from ..hooks import BaseAgentRunHooks
 from ..message import (
@@ -241,7 +241,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_result_overflow_dir = tool_result_overflow_dir
         self.read_tool = read_tool
         self._tool_result_token_counter = EstimateTokenCounter()
-        self.request_context_guard_config = ContextConfig(
+        self.request_context_manager_config = ContextConfig(
             # <=0 disables token-based guarding.
             max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
             # Enforce max turns before token-based guarding.
@@ -253,8 +253,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )
-        self.request_context_guard = RequestContextGuard(
-            self.request_context_guard_config
+        self.request_context_manager = ContextManager(
+            self.request_context_manager_config
         )
 
         self.provider = provider
@@ -706,13 +706,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
-        # Apply request-time context guard *on a copy* so the runner's canonical
-        # messages are never mutated by the guard. The guard result is only used
-        # for this provider call. Persistent compaction is owned by the
-        # conversation / memory layer.
+        # Process request-time context on a copy so the runner's canonical
+        # messages are never mutated. The processed result is only used for this
+        # provider call. Persistent compaction is owned by the conversation /
+        # memory layer.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]")
-        self._provider_messages = await self.request_context_guard.process(
+        self._provider_messages = await self.request_context_manager.process(
             self.run_context.messages, trusted_token_usage=token_usage
         )
         self._simple_print_message_role("[AftCompact]")

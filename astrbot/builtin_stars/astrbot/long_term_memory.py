@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import json
 import random
 import uuid
 from collections import defaultdict, deque
@@ -10,72 +9,38 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import MessageType
-from astrbot.api.provider import LLMResponse, Provider, ProviderRequest
-from astrbot.core.agent.context.round_utils import rounds_to_text, split_into_rounds
+from astrbot.api.provider import Provider, ProviderRequest
+from astrbot.core.agent.message import TextPart
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 """
-聊天记忆增强 (LTM v2)
+Group chat context awareness.
 """
 
-# === 常量 ===
-
-CHATROOM_SYSTEM_NOTE = (
-    "You are now in a chatroom. "
-    "Chat history messages below use the format '[username/time]: content'. "
-    "Your own messages are presented via the standard assistant role.\n"
-    "Messages prefixed with '⚠️[DIRECTED AT YOU]' were explicitly "
-    "addressed to you via @mention. Prioritize these over surrounding chatter.\n"
+GROUP_HISTORY_HEADER = (
+    "<system_reminder>"
+    "You are in a group chat. "
+    "Belows are group chat context after your last reply:\n"
+    "--- BEGIN CONTEXT---\n"
 )
-
-MAX_MSGS_PER_USER_SEGMENT = 50
-MAX_CHARS_PER_USER_SEGMENT = 3000
-MAX_RAW_BYTES = 500_000  # 500KB / 群
-DEFAULT_HISTORY_TOOL_RESULT_MAX_CHARS = 8192
-
-TOOL_CALL_PREFIX = "<T:CALL>"
-TOOL_RES_PREFIX = "<T:RES"
-BOT_MARKER = "<BOT/"
+GROUP_HISTORY_FOOTER = "\n--- END CONTEXT ---\n</system_reminder>"
+DEFAULT_GROUP_MESSAGE_MAX_CNT = 300
 
 
 class LongTermMemory:
     def __init__(self, acm: AstrBotConfigManager, context: star.Context) -> None:
         self.acm = acm
         self.context = context
-
         self._locks: dict[str, asyncio.Lock] = {}
-
         self.raw_records: dict[str, deque[str]] = defaultdict(deque)
-        """群聊原始记录。deque 支持 O(1) popleft。"""
-
-        self._raw_cursor: dict[str, int] = defaultdict(int)
-        """raw_records 中已消费到 contexts 的位置（指向下一条未消费的索引）。"""
-
-        self.contexts: dict[str, list[dict]] = defaultdict(list)
-        """累积累积态 LLM 上下文。由 ContextManager 修改后保留。"""
-
-        self._persisted_tool_call_ids: dict[str, set[str]] = defaultdict(set)
-        """已持久化到 raw_records 的 <T:CALL> 的 tool_call_id。用于防重复注入。"""
-        self._persisted_tool_result_ids: dict[str, set[str]] = defaultdict(set)
-        """已持久化到 raw_records 的 <T:RES> 的 tool_call_id。用于防重复注入。"""
-
-        self.summaries: dict[str, str] = defaultdict(str)
-        """LLM summary 策略下每个群聊的长期摘要文本。"""
-
-        self._summary_in_progress: set[str] = set()
-        """正在生成 LLM summary 的 session，防止重复触发。"""
+        self._record_ids: dict[str, deque[str]] = defaultdict(deque)
 
     def _get_lock(self, umo: str) -> asyncio.Lock:
-        """Return the per-session lock for a unified message origin."""
         lock = self._locks.get(umo)
         if lock is None:
             lock = asyncio.Lock()
             self._locks[umo] = lock
         return lock
-
-    # =========================================================================
-    # 配置
-    # =========================================================================
 
     def cfg(self, event: AstrMessageEvent):
         cfg = self.context.get_config(umo=event.unified_msg_origin)
@@ -83,45 +48,26 @@ class LongTermMemory:
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
         image_caption_provider_id = ltm_cfg.get("image_caption_provider_id")
         image_caption = ltm_cfg["image_caption"] and bool(image_caption_provider_id)
-        history_tool_result_truncate = ltm_cfg.get("history_tool_result_truncate", True)
         active_reply = ltm_cfg["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
         ar_method = active_reply["method"]
         ar_possibility = active_reply["possibility_reply"]
         ar_prompt = active_reply.get("prompt", "")
         ar_whitelist = active_reply.get("whitelist", [])
-        # LTM compaction
-        ltm_compaction_strategy = ltm_cfg.get("ltm_compaction_strategy", "truncate")
-        ltm_max_rounds = ltm_cfg.get("ltm_max_rounds", 80)
-        ltm_truncate_drop_rounds = ltm_cfg.get("ltm_truncate_drop_rounds", 50)
-        ltm_summary_trigger_rounds = ltm_cfg.get("ltm_summary_trigger_rounds", 80)
-        ltm_summary_keep_recent_rounds = ltm_cfg.get(
-            "ltm_summary_keep_recent_rounds", 30
-        )
-        ltm_summary_provider_id = ltm_cfg.get("ltm_summary_provider_id", "")
-        ltm_summary_prompt = ltm_cfg.get("ltm_summary_prompt", "")
         return {
+            "group_message_max_cnt": _positive_int(
+                ltm_cfg.get("group_message_max_cnt", DEFAULT_GROUP_MESSAGE_MAX_CNT),
+                DEFAULT_GROUP_MESSAGE_MAX_CNT,
+            ),
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
             "image_caption_provider_id": image_caption_provider_id,
-            "history_tool_result_truncate": history_tool_result_truncate,
             "enable_active_reply": enable_active_reply,
             "ar_method": ar_method,
             "ar_possibility": ar_possibility,
             "ar_prompt": ar_prompt,
             "ar_whitelist": ar_whitelist,
-            "ltm_compaction_strategy": ltm_compaction_strategy,
-            "ltm_max_rounds": max(1, ltm_max_rounds),
-            "ltm_truncate_drop_rounds": max(1, ltm_truncate_drop_rounds),
-            "ltm_summary_trigger_rounds": max(1, ltm_summary_trigger_rounds),
-            "ltm_summary_keep_recent_rounds": max(1, ltm_summary_keep_recent_rounds),
-            "ltm_summary_provider_id": ltm_summary_provider_id,
-            "ltm_summary_prompt": ltm_summary_prompt,
         }
-
-    # =========================================================================
-    # 图片描述
-    # =========================================================================
 
     async def get_image_caption(
         self,
@@ -145,10 +91,6 @@ class LongTermMemory:
         )
         return response.completion_text
 
-    # =========================================================================
-    # 主动回复判断
-    # =========================================================================
-
     async def need_active_reply(self, event: AstrMessageEvent) -> bool:
         cfg = self.cfg(event)
         if not cfg["enable_active_reply"]:
@@ -166,580 +108,129 @@ class LongTermMemory:
             return False
         match cfg["ar_method"]:
             case "possibility_reply":
-                trig = random.random() < cfg["ar_possibility"]
-                return trig
+                return random.random() < cfg["ar_possibility"]
         return False
 
-    # =========================================================================
-    # 会话清理
-    # =========================================================================
-
     async def remove_session(self, event: AstrMessageEvent) -> int:
-        """清理指定群的全部 LTM 状态。返回被清理的 raw_records 条数。"""
         umo = event.unified_msg_origin
-        async with self._get_lock(umo):
+        lock = self._get_lock(umo)
+        async with lock:
             cnt = len(self.raw_records.get(umo, deque()))
             self.raw_records.pop(umo, None)
-            self.contexts.pop(umo, None)
-            self._raw_cursor.pop(umo, None)
-            self._persisted_tool_call_ids.pop(umo, None)
-            self._persisted_tool_result_ids.pop(umo, None)
-            self.summaries.pop(umo, None)
-            self._locks.pop(umo, None)
-            self._summary_in_progress.discard(umo)
-            return cnt
-
-    # =========================================================================
-    # 消息记录 (on_message 调用)
-    # =========================================================================
+            self._record_ids.pop(umo, None)
+        self._locks.pop(umo, None)
+        return cnt
 
     async def handle_message(self, event: AstrMessageEvent) -> None:
-        """仅记录原始消息到 raw_records，不构建 contexts。"""
         if event.get_message_type() != MessageType.GROUP_MESSAGE:
             return
 
         umo = event.unified_msg_origin
+        cfg = self.cfg(event)
+        final_message = await self._format_message(event, cfg)
+
         async with self._get_lock(umo):
-            # 记录写入前索引 → on_req_llm 精确排除
-            raw_idx = len(self.raw_records[umo])
-            event.set_extra("_ltm_raw_idx", raw_idx)
+            records = self.raw_records[umo]
+            record_ids = self._record_ids[umo]
+            record_id = uuid.uuid4().hex
+            records.append(final_message)
+            record_ids.append(record_id)
+            _trim_left(records, cfg["group_message_max_cnt"], record_ids)
+            event.set_extra("_ltm_record_id", record_id)
+            event.set_extra("_ltm_raw_idx", len(records) - 1)
 
-            datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
-            parts = [f"[{event.message_obj.sender.nickname}/{datetime_str}]: "]
-            cfg = self.cfg(event)
-
-            for comp in event.get_messages():
-                if isinstance(comp, Plain):
-                    parts.append(f" {comp.text}")
-                elif isinstance(comp, Image):
-                    if cfg["image_caption"]:
-                        try:
-                            url = comp.url if comp.url else comp.file
-                            if not url:
-                                raise Exception("图片 URL 为空")
-                            caption = await self.get_image_caption(
-                                url,
-                                cfg["image_caption_provider_id"],
-                                cfg["image_caption_prompt"],
-                            )
-                            parts.append(f" [Image: {caption}]")
-                        except Exception as e:
-                            logger.error(f"获取图片描述失败: {e}")
-                    else:
-                        parts.append(" [Image]")
-                elif isinstance(comp, At):
-                    is_at_self = str(comp.qq) in (
-                        event.get_self_id(),
-                        "all",
-                    )
-                    if is_at_self:
-                        parts.insert(1, "⚠️[DIRECTED AT YOU] ")
-                    parts.append(f" [At: {comp.name}]")
-
-            final_message = "".join(parts)
-            logger.debug(f"ltm | {umo} | {final_message}")
-            self.raw_records[umo].append(final_message)
-            self._trim_raw_records(umo, max_bytes=MAX_RAW_BYTES)
-
-    # =========================================================================
-    # LLM 请求前（on_llm_request 钩子 → decorate_llm_req 调用）
-    # =========================================================================
+        logger.debug(f"ltm | {umo} | {final_message}")
 
     async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
-        """增量构建 contexts 并注入到 req。ContextManager 由 agent runner 自动调用。"""
         umo = event.unified_msg_origin
+        record_id = event.get_extra("_ltm_record_id", None)
         prompt_idx = event.get_extra("_ltm_raw_idx", -1)
-        if prompt_idx < 0:
+        if not isinstance(record_id, str) and (
+            not isinstance(prompt_idx, int) or prompt_idx < 0
+        ):
             return
 
         async with self._get_lock(umo):
-            if umo not in self.raw_records:
+            records = self.raw_records.get(umo)
+            if not records:
                 return
 
-            raw_list = list(self.raw_records[umo])
-            cursor = self._raw_cursor[umo]
-            new_raw = raw_list[cursor:prompt_idx] if prompt_idx > cursor else []
+            raw_list = list(records)
+            id_list = list(self._record_ids.get(umo, deque()))
+            if isinstance(record_id, str) and record_id in id_list:
+                prompt_idx = id_list.index(record_id)
 
-            if new_raw:
-                new_segs = _build_segments(
-                    new_raw,
-                    max_msgs=MAX_MSGS_PER_USER_SEGMENT,
-                    max_chars=MAX_CHARS_PER_USER_SEGMENT,
-                )
-                self.contexts[umo].extend(new_segs)
-                self._raw_cursor[umo] = prompt_idx
-
-            # 前置保留 Persona 已注入的 begin_dialogs
-            existing_contexts = req.contexts or []
-            ctxs: list[dict] = list(existing_contexts)
-
-            # Inject LTM summary if available (LLM summary compaction strategy).
-            summary = self.summaries.get(umo, "")
-            if summary:
-                ctxs.append(
-                    {
-                        "role": "system",
-                        "content": (
-                            "[System note: The following is a compressed summary of "
-                            "older messages in this group chat, generated to help you "
-                            "maintain context. Prioritise facts from recent verbatim "
-                            "messages over this summary if they conflict.]\n"
-                            "--- BEGIN GROUP CHAT MEMORY SUMMARY ---\n"
-                            + summary
-                            + "\n--- END GROUP CHAT MEMORY SUMMARY ---"
-                        ),
-                    }
-                )
-
-            ctxs.extend(self.contexts[umo])
-            req.contexts = ctxs
-            req.conversation = None
-            if CHATROOM_SYSTEM_NOTE not in req.system_prompt:
-                req.system_prompt += CHATROOM_SYSTEM_NOTE
-
-    # =========================================================================
-    # Agent 完成后（on_agent_done 钩子 → main.py 调用）
-    # =========================================================================
-
-    async def on_agent_done(
-        self,
-        event: AstrMessageEvent,
-        run_context,  # ContextWrapper
-        resp: LLMResponse,
-    ) -> None:
-        """记录工具链 + bot 回复到 raw_records，闭合段，裁剪。
-
-        LLM summary 的 LLM 调用在锁外进行，避免持锁期间阻塞
-        handle_message / on_req_llm。
-        """
-        umo = event.unified_msg_origin
-        cfg = self.cfg(event)
-        compact_ctx: dict | None = None
-
-        # === Phase 1: record data + detect compaction (LOCK) ===
-        async with self._get_lock(umo):
-            if umo not in self.raw_records:
+            if prompt_idx >= len(raw_list):
                 return
 
-            time_str = datetime.datetime.now().strftime("%H:%M:%S")
+            records_to_inject = raw_list[:prompt_idx]
+            remaining = raw_list[prompt_idx + 1 :]
+            remaining_ids = id_list[prompt_idx + 1 :] if id_list else []
+            records.clear()
+            records.extend(remaining)
+            if id_list:
+                record_ids = self._record_ids[umo]
+                record_ids.clear()
+                record_ids.extend(remaining_ids)
 
-            # Record tool calls
-            for msg in run_context.messages:
-                if msg.role == "assistant" and msg.tool_calls:
-                    for tc in msg.tool_calls:
-                        tc_dict = tc if isinstance(tc, dict) else tc.model_dump()
-                        tc_id = tc_dict["id"]
-                        if tc_id in self._persisted_tool_call_ids[umo]:
-                            continue
-                        self._persisted_tool_call_ids[umo].add(tc_id)
-                        args = tc_dict["function"]["arguments"]
-                        if isinstance(args, str):
-                            try:
-                                args = json.loads(args)
-                            except (json.JSONDecodeError, TypeError):
-                                pass  # keep raw string if JSON is malformed
-                        call_entry = {
-                            "id": tc_id,
-                            "name": tc_dict["function"]["name"],
-                            "args": args,
-                        }
-                        self.raw_records[umo].append(
-                            f"<T:CALL>{json.dumps(call_entry, ensure_ascii=False)}</T:CALL>"
+        if records_to_inject:
+            req.extra_user_content_parts.append(
+                TextPart(text=_format_group_history_block(records_to_inject))
+            )
+
+    async def _format_message(self, event: AstrMessageEvent, cfg: dict) -> str:
+        datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
+        parts = [f"[{event.message_obj.sender.nickname}/{datetime_str}]: "]
+
+        for comp in event.get_messages():
+            if isinstance(comp, Plain):
+                parts.append(f" {comp.text}")
+            elif isinstance(comp, Image):
+                if cfg["image_caption"]:
+                    try:
+                        url = comp.url if comp.url else comp.file
+                        if not url:
+                            raise Exception("图片 URL 为空")
+                        caption = await self.get_image_caption(
+                            url,
+                            cfg["image_caption_provider_id"],
+                            cfg["image_caption_prompt"],
                         )
-                elif msg.role == "tool":
-                    if msg.tool_call_id in self._persisted_tool_result_ids[umo]:
-                        continue
-                    self._persisted_tool_result_ids[umo].add(msg.tool_call_id)
-                    content = (
-                        msg.content
-                        if isinstance(msg.content, str)
-                        else str(msg.content)
-                    )
-                    if cfg["history_tool_result_truncate"]:
-                        content = _truncate_tool_result_for_history(
-                            content, DEFAULT_HISTORY_TOOL_RESULT_MAX_CHARS
-                        )
-                    self.raw_records[umo].append(
-                        f"<T:RES id={msg.tool_call_id}>{content}</T:RES>"
-                    )
-
-            # Record bot response
-            if resp and resp.completion_text:
-                self.raw_records[umo].append(
-                    f"<BOT/{time_str}>: {resp.completion_text}"
+                        parts.append(f" [Image: {caption}]")
+                    except Exception as e:
+                        logger.error(f"获取图片描述失败: {e}")
+                else:
+                    parts.append(" [Image]")
+            elif isinstance(comp, At):
+                is_at_self = str(comp.qq) in (
+                    event.get_self_id(),
+                    "all",
                 )
+                if is_at_self:
+                    parts.insert(1, "⚠️[DIRECTED AT YOU] ")
+                parts.append(f" [At: {comp.name}]")
 
-            # Build segments from remaining raw lines
-            raw_list = list(self.raw_records[umo])
-            cursor = self._raw_cursor[umo]
-            remaining = raw_list[cursor:]
-            if remaining:
-                new_segs = _build_segments(
-                    remaining,
-                    max_msgs=MAX_MSGS_PER_USER_SEGMENT,
-                    max_chars=MAX_CHARS_PER_USER_SEGMENT,
-                )
-                self.contexts[umo].extend(new_segs)
-                self._raw_cursor[umo] = len(raw_list)
-
-            # Detect compaction need — unified with provider_settings
-            provider_cfg = self.context.get_config(umo=umo).get("provider_settings", {})
-            strategy = provider_cfg.get(
-                "context_limit_reached_strategy", "truncate_by_turns"
-            )
-            max_rounds = provider_cfg.get("max_context_length", 50)
-            rounds = split_into_rounds(self.contexts[umo])
-
-            if strategy == "llm_compress":
-                if len(rounds) > max_rounds and umo not in self._summary_in_progress:
-                    provider_id = provider_cfg.get("llm_compress_provider_id", "")
-                    if provider_id:
-                        provider = self.context.get_provider_by_id(provider_id)
-                    else:
-                        provider = self.context.get_using_provider(umo)
-                    if provider is None or not isinstance(provider, Provider):
-                        logger.warning(
-                            "LTM summary 没有可用的 provider (umo=%s, configured=%s)",
-                            umo,
-                            provider_id or "(auto)",
-                        )
-                    else:
-                        keep_recent = provider_cfg.get("llm_compress_keep_recent", 10)
-                        old_rounds = (
-                            rounds[:-keep_recent] if keep_recent > 0 else rounds
-                        )
-                        recent_rounds = rounds[-keep_recent:] if keep_recent > 0 else []
-                        if old_rounds:
-                            self._summary_in_progress.add(umo)
-                            compact_ctx = {
-                                "provider": provider,
-                                "prompt": provider_cfg.get(
-                                    "llm_compress_instruction", ""
-                                ),
-                                "old_rounds": old_rounds,
-                                "recent_rounds": recent_rounds,
-                                "existing_summary": self.summaries.get(umo, ""),
-                                "snapshot_round_count": len(rounds),
-                            }
-            else:
-                drop_rounds = provider_cfg.get("dequeue_context_length", 10)
-                if len(rounds) > max_rounds:
-                    safe_drop = min(drop_rounds, len(rounds) - 1)
-                    kept = rounds[safe_drop:]
-                    self.contexts[umo] = [seg for rnd in kept for seg in rnd]
-
-            if not compact_ctx:
-                self._trim_raw_records(
-                    umo,
-                    max_bytes=MAX_RAW_BYTES,
-                )
-
-        # === Phase 2: LLM summary (NO LOCK) ===
-        if compact_ctx:
-            logger.info(
-                "LTM summary: starting compaction (umo=%s, rounds=%d, old=%d)",
-                umo,
-                compact_ctx["snapshot_round_count"],
-                len(compact_ctx["old_rounds"]),
-            )
-            compact_ctx["summary_text"] = await self._generate_llm_summary(
-                umo, compact_ctx
-            )
-
-        # === Phase 3: apply summary + trim (LOCK) ===
-        if compact_ctx:
-            async with self._get_lock(umo):
-                self._apply_llm_summary(umo, compact_ctx)
-                self._trim_raw_records(
-                    umo,
-                    max_bytes=MAX_RAW_BYTES,
-                )
-                self._summary_in_progress.discard(umo)
-
-    # =========================================================================
-    # LTM compaction
-    # =========================================================================
-
-    async def _generate_llm_summary(self, umo: str, ctx: dict) -> str | None:
-        """Generate summary via LLM. Does NOT mutate any LTM state.
-
-        Must be called WITHOUT the per-session lock held, as it may
-        block for seconds waiting on the summary provider.
-        """
-        if not ctx.get("old_rounds"):
-            return None
-
-        old_text = rounds_to_text(ctx["old_rounds"])
-        existing_summary = ctx["existing_summary"]
-
-        instruction = ctx["prompt"] or (
-            "Merge the older conversation rounds below into the existing "
-            "group-chat memory summary. "
-            "Preserve: user identities (names, nicknames, roles), recurring topics, "
-            "decisions made, preferences expressed, and unresolved tasks or questions. "
-            "Drop: transient greetings, small talk, and redundant confirmations. "
-            "Keep the summary concise and factual. "
-            "Output only the updated summary text, with no preamble or meta-commentary."
-        )
-
-        summary_prompt = (
-            f"{instruction}\n\n"
-            f"Existing memory summary:\n{existing_summary or '(none)'}\n\n"
-            "--- BEGIN OLDER CONVERSATION ROUNDS ---\n"
-            f"{old_text}\n"
-            "--- END OLDER CONVERSATION ROUNDS ---"
-        )
-
-        try:
-            resp = await ctx["provider"].text_chat(
-                prompt=summary_prompt,
-                session_id=uuid.uuid4().hex,
-                persist=False,
-            )
-            summary_text = resp.completion_text.strip()
-            if not summary_text:
-                logger.warning(
-                    "LTM LLM summary 返回空文本，跳过本次压缩 (umo=%s, provider=%s)",
-                    umo,
-                    ctx["provider"],
-                )
-                return None
-            logger.info(
-                "LTM summary: compaction completed (umo=%s, summary_len=%d)",
-                umo,
-                len(summary_text),
-            )
-            return summary_text
-        except Exception:
-            logger.warning("LTM LLM summary 失败，保留原始 contexts", exc_info=True)
-            return None
-
-    def _apply_llm_summary(self, umo: str, ctx: dict) -> None:
-        """Apply a completed LLM summary to LTM state.
-
-        Must be called WITH the per-session lock held.
-        Merges recent rounds from the snapshot with any rounds that
-        accumulated during summary generation.
-        """
-        summary_text = ctx.get("summary_text")
-        if not summary_text:
-            # LLM summary failed — truncate fallback
-            current_rounds = split_into_rounds(self.contexts[umo])
-            provider_cfg = self.context.get_config(umo=umo).get("provider_settings", {})
-            max_rounds = provider_cfg.get("max_context_length", 50)
-            drop_rounds = provider_cfg.get("dequeue_context_length", 10)
-            if len(current_rounds) > max_rounds:
-                safe_drop = min(drop_rounds, len(current_rounds) - 1)
-                kept = current_rounds[safe_drop:]
-                self.contexts[umo] = [seg for rnd in kept for seg in rnd]
-            return
-
-        self.summaries[umo] = summary_text
-        # Merge: snapshot recent rounds + rounds added during summary generation
-        current_rounds = split_into_rounds(self.contexts[umo])
-        snapshot_count = ctx["snapshot_round_count"]
-        new_rounds = current_rounds[snapshot_count:]
-        self.contexts[umo] = [seg for rnd in ctx["recent_rounds"] for seg in rnd] + [
-            seg for rnd in new_rounds for seg in rnd
-        ]
-
-    # =========================================================================
-    # 裁剪
-    # =========================================================================
-
-    def _trim_raw_records(self, umo: str, max_bytes: int = MAX_RAW_BYTES) -> None:
-        """仅淘汰 cursor 之前的条目。cursor 之后的绝不碰。"""
-        dq = self.raw_records[umo]
-        cursor = self._raw_cursor[umo]
-
-        # 1. 无条件清除 cursor 之前的条目（已消费）
-        while dq and cursor > 0:
-            dq.popleft()
-            cursor -= 1
-        self._raw_cursor[umo] = cursor
-
-        # 2. 按大小继续从前面淘汰（限制极端情况的总内存）
-        total = sum(len(s) for s in dq)
-        while total > max_bytes and dq:
-            removed = dq.popleft()
-            total -= len(removed)
-            if cursor > 0:
-                cursor -= 1
-        self._raw_cursor[umo] = max(0, cursor)
+        return "".join(parts)
 
 
-# =============================================================================
-# _build_segments — 从 raw lines 构建 OpenAI 格式 contexts 段
-# =============================================================================
-
-
-def _build_segments(
-    raw_lines: list[str],
-    max_msgs: int = MAX_MSGS_PER_USER_SEGMENT,
-    max_chars: int = MAX_CHARS_PER_USER_SEGMENT,
-) -> list[dict]:
-    """从 raw strings 构建 OpenAI 格式 contexts 段。
-
-    规则：
-    1. <T:CALL>json</T:CALL> → 连续多条合并为一个 assistant(tool_calls)
-    2. <T:RES id=xxx>content</T:RES> → tool 消息，tool_call_id 配对
-    3. <BOT/时间>: content → assistant（纯文本）
-    4. 其它行 → user（合并为段，段内裁剪 max_msgs/max_chars）
-    """
-    if not raw_lines:
-        return []
-
-    segments: list[dict] = []
-    user_buf: list[str] = []
-    tool_calls_buf: list[dict] = []
-
-    def flush_user():
-        if not user_buf:
-            return
-        truncated = _truncate_user_segment(user_buf, max_msgs, max_chars)
-        segments.append({"role": "user", "content": "\n".join(truncated)})
-        user_buf.clear()
-
-    def flush_tool_calls():
-        if not tool_calls_buf:
-            return
-        segments.append(
-            {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": tool_calls_buf.copy(),
-            }
-        )
-        tool_calls_buf.clear()
-
-    for line in raw_lines:
-        if line.startswith(TOOL_CALL_PREFIX):
-            flush_user()
-            tc_data = _parse_tool_call(line)
-            if tc_data:
-                tool_calls_buf.append(tc_data)
-            else:
-                user_buf.append(line)  # defensive: treat as user message
-        elif line.startswith(TOOL_RES_PREFIX):
-            flush_user()
-            flush_tool_calls()
-            tool_msg = _parse_tool_result(line)
-            if tool_msg:
-                segments.append(tool_msg)
-            else:
-                user_buf.append(line)  # defensive: treat as user message
-        elif line.startswith(BOT_MARKER):
-            flush_user()
-            flush_tool_calls()
-            content = _extract_bot_content(line)
-            if content:
-                segments.append({"role": "assistant", "content": content})
-            else:
-                user_buf.append(line)  # defensive: treat as user message
-        else:
-            user_buf.append(line)
-
-    flush_user()
-    flush_tool_calls()
-    return segments
-
-
-# =============================================================================
-# 解析 helper
-# =============================================================================
-
-
-def _parse_tool_call(line: str) -> dict | None:
-    """<T:CALL>{"id":"x","name":"f","args":{...}}</T:CALL> → tool_call dict"""
-    inner = _extract_tag_content(line, TOOL_CALL_PREFIX, "</T:CALL>")
-    if not inner:
-        return None
+def _positive_int(value, fallback: int) -> int:
     try:
-        tc = json.loads(inner)
-        tc_id = tc["id"]
-        tc_name = tc["name"]
-        tc_args = tc["args"]
-    except (json.JSONDecodeError, TypeError, KeyError):
-        return None
-    return {
-        "id": tc_id,
-        "type": "function",
-        "function": {
-            "name": tc_name,
-            "arguments": json.dumps(tc_args, ensure_ascii=False),
-        },
-    }
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return parsed if parsed > 0 else fallback
 
 
-def _parse_tool_result(line: str) -> dict | None:
-    """<T:RES id=xxx>content</T:RES> → {"role":"tool", ...}"""
-    rest = line[len(TOOL_RES_PREFIX) :].strip()
-    gt = rest.find(">")
-    if gt == -1:
-        return None
-    id_part = rest[:gt]
-    content = rest[gt + 1 :]
-    if content.endswith("</T:RES>"):
-        content = content[: -len("</T:RES>")]
-    if not id_part.startswith("id="):
-        return None
-    tc_id = id_part[3:]
-    return {"role": "tool", "tool_call_id": tc_id, "content": content}
+def _trim_left(
+    records: deque[str],
+    max_records: int,
+    record_ids: deque[str] | None = None,
+) -> None:
+    while len(records) > max_records:
+        records.popleft()
+        if record_ids:
+            record_ids.popleft()
 
 
-def _truncate_tool_result_for_history(content: str, max_chars: int) -> str:
-    """Truncate a single tool result before persisting into LTM history."""
-    if max_chars <= 0 or len(content) <= max_chars:
-        return content
-
-    omitted = len(content) - max_chars
-    marker = f"\n...[TRUNCATED {omitted} chars]..."
-    if len(marker) >= max_chars:
-        return content[:max_chars]
-
-    head_len = max_chars - len(marker)
-    return content[:head_len] + marker
-
-
-def _extract_bot_content(line: str) -> str | None:
-    """<BOT/HH:MM:SS>: content → content"""
-    idx = line.find(">: ")
-    if idx == -1:
-        return None
-    return line[idx + 3 :].strip()
-
-
-def _extract_tag_content(line: str, start_tag: str, end_tag: str) -> str | None:
-    """<TAG>content</TAG> → content"""
-    if not line.endswith(end_tag):
-        return None
-    return line[len(start_tag) : -len(end_tag)].strip()
-
-
-def _truncate_user_segment(
-    lines: list[str],
-    max_msgs: int = MAX_MSGS_PER_USER_SEGMENT,
-    max_chars: int = MAX_CHARS_PER_USER_SEGMENT,
-) -> list[str]:
-    """段内裁剪：保留最近 N 条，不超字符上限。从段内最早的消息开始丢弃。
-
-    Both limits are active simultaneously — whichever cap is hit first
-    (by count or by chars) stops accumulation. At least one message is
-    always retained even if it alone exceeds max_chars.
-    """
-    result: list[str] = []
-    total = 0
-    for line in reversed(lines):
-        if len(result) >= max_msgs:
-            break
-        if total + len(line) > max_chars and result:
-            break
-        result.append(line)
-        total += len(line) + 1  # +1 for \n
-    result.reverse()
-    return result
-
-
-# =============================================================================
-# 解析 helper
-# =============================================================================
+def _format_group_history_block(records: list[str]) -> str:
+    return GROUP_HISTORY_HEADER + "\n".join(records) + GROUP_HISTORY_FOOTER
