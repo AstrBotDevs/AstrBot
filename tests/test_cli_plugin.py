@@ -56,6 +56,7 @@ def test_plugin_install_editable_symlinks_local_plugin(
     )
 
     target = root / "data" / "plugins" / "astrbot_plugin_local_demo"
+    target = root / "data" / "plugins" / "astrbot_plugin_local_demo"
     assert result.exit_code == 0
     assert target.is_symlink()
     assert (target / "metadata.yaml").exists()
