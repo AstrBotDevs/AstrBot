@@ -178,7 +178,7 @@ class CreateSubAgentTool(FunctionTool):
             session_id=session_id, config=config
         )
         if handoff_tool:
-            return f"{RET_DYNAMIC_TOOL_CREATED}:{tool_name}:Created. Use {tool_name} to delegate."
+            return f"{RET_DYNAMIC_TOOL_CREATED}:{tool_name}:{handoff_tool.name}:Created. Use {tool_name} to delegate."
         else:
             return f"{RET_DYNAMIC_TOOL_CREATE_FAILED}:{tool_name}"
 
