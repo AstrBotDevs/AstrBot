@@ -62,6 +62,11 @@
       <div v-if="shellExtra" class="shell-extra-text">{{ shellExtra }}</div>
     </template>
 
+    <!-- ── execute_python ──────────────────────────────────────── -->
+    <template v-else-if="toolName === 'astrbot_execute_python' || toolName === 'astrbot_execute_ipython'">
+      <pre class="result-terminal" v-text="resultText"></pre>
+    </template>
+
     <!-- ── fallback ────────────────────────────────────────────── -->
     <template v-else>
       <pre class="result-raw">{{ formattedResult }}</pre>
@@ -79,6 +84,7 @@ import {
   escapeHtml,
   renderShikiCode,
 } from "@/utils/shiki";
+import { findRealSystemNoticeIndex } from "@/utils/systemNotice";
 
 const props = defineProps<{
   toolName: string;
@@ -145,8 +151,17 @@ const rawResult = computed(() => (props.result ?? "").trim());
 
 // Strip [SYSTEM NOTICE] suffix for all non-shell templates.
 // Shell uses rawResult directly via brace-tracking in shellParsed.
+// file_read_tool uses smart detection to avoid false positives from
+// file content that coincidentally contains "[SYSTEM NOTICE]".
 const resultText = computed(() => {
   const text = rawResult.value;
+
+  if (props.toolName === "astrbot_file_read_tool") {
+    const idx = findRealSystemNoticeIndex(text);
+    if (idx < 0) return text;
+    return text.slice(0, idx).trim();
+  }
+
   const idx = text.search(/\[SYSTEM NOTICE\]/i);
   if (idx < 0) return text;
   return text.slice(0, idx).trim();
@@ -154,6 +169,13 @@ const resultText = computed(() => {
 
 const resultSuffix = computed(() => {
   const text = rawResult.value;
+
+  if (props.toolName === "astrbot_file_read_tool") {
+    const idx = findRealSystemNoticeIndex(text);
+    if (idx < 0) return null;
+    return text.slice(idx).trim();
+  }
+
   const idx = text.search(/\[SYSTEM NOTICE\]/i);
   if (idx < 0) return null;
   return text.slice(idx).trim();
