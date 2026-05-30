@@ -178,21 +178,7 @@ function argIcon(key) {
 }
 
 function toggleArgExpand(index) {
-  const entry = argEntries.value[index];
-  if (!entry || !entry.long) return;
-  if (expandedArgs.has(index)) {
-    expandedArgs.delete(index);
-  } else {
-    expandedArgs.add(index);
-  }
-  // Update display
-  const displayed = displayedArgEntries.value;
-  for (let i = 0; i < displayed.length; i++) {
-    const e = argEntries.value.find((x) => x.key === displayed[i].key);
-    if (e && e.long) {
-      displayed[i].display = expandedArgs.has(i) ? e.raw : e.raw.slice(0, 60);
-    }
-  }
+  expandedArgs[index] = !expandedArgs[index];
 }
 
 // ── file_edit_tool diff rendering ─────────────────────────────
