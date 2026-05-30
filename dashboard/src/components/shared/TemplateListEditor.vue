@@ -42,7 +42,7 @@
       variant="outlined"
       class="mb-3"
     >
-      <v-card-title
+      <v-card-title 
         class="d-flex align-center justify-space-between entry-header"
         @click="toggleEntry(entryIndex)"
       >
@@ -51,33 +51,22 @@
             icon
             size="small"
             variant="text"
-            :title="
-              expandedEntries[entryIndex]
-                ? t('core.common.collapse') || '收起'
-                : t('core.common.expand') || '展开'
-            "
+            :title="expandedEntries[entryIndex] ? (t('core.common.collapse') || '收起') : (t('core.common.expand') || '展开')"
           >
-            <v-icon>{{
-              expandedEntries[entryIndex]
-                ? "mdi-chevron-down"
-                : "mdi-chevron-right"
-            }}</v-icon>
+            <v-icon>{{ expandedEntries[entryIndex] ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
           </v-btn>
           <div class="d-flex flex-column">
             <v-list-item-title class="property-name">{{ templateLabel(entry.__template_key) }}</v-list-item-title>
-            <v-list-item-subtitle class="property-hint" v-if="getTemplate(entry)?.hint || getTemplate(entry)?.description">
-              {{ templateText(entry.__template_key, 'hint', getTemplate(entry)?.hint || getTemplate(entry)?.description) }}
+            <v-list-item-subtitle class="property-hint entry-display-text" v-if="templateDisplayText(entry)">
+              {{ templateDisplayText(entry) }}
+            </v-list-item-subtitle>
+            <v-list-item-subtitle class="property-hint" v-if="templateHintText(entry)">
+              {{ templateHintText(entry) }}
             </v-list-item-subtitle>
           </div>
         </div>
         <div class="d-flex align-center ga-1">
-          <v-btn
-            icon
-            size="small"
-            variant="text"
-            color="error"
-            @click.stop="removeEntry(entryIndex)"
-          >
+          <v-btn icon size="small" variant="text" color="error" @click.stop="removeEntry(entryIndex)">
             <v-icon>mdi-delete</v-icon>
           </v-btn>
         </div>
@@ -85,25 +74,13 @@
       <v-expand-transition>
         <v-card-text v-show="expandedEntries[entryIndex]" class="px-0 py-1">
           <div v-if="!getTemplate(entry)" class="px-4 py-2">
-            <v-alert type="error" variant="tonal" density="compact">
-              {{
-                t("core.common.templateList.missingTemplate") ||
-                "找不到对应模板，请删除后重新添加。"
-              }}
-            </v-alert>
+            <v-alert type="error" variant="tonal" density="compact">{{ t('core.common.templateList.missingTemplate') || '找不到对应模板，请删除后重新添加。' }}</v-alert>
           </div>
           <div v-else class="template-entry-body">
-            <template
-              v-for="(itemMeta, itemKey, metaIndex) in (getTemplate(entry).items ?? {})"
-              :key="itemKey"
-            >
+            <template v-for="(itemMeta, itemKey, metaIndex) in getTemplate(entry).items" :key="itemKey">
               <!-- Nested Object -->
               <div
-                v-if="
-                  itemMeta?.type === 'object' &&
-                  !itemMeta?.invisible &&
-                  shouldShowItem(itemMeta, entry)
-                "
+                v-if="itemMeta?.type === 'object' && !itemMeta?.invisible && shouldShowItem(itemMeta, entry)"
                 class="nested-container mx-4"
               >
                 <div class="config-section mb-2">
@@ -114,15 +91,8 @@
                     {{ templateItemText(entry.__template_key, itemKey, 'hint', itemMeta.hint) }}
                   </v-list-item-subtitle>
                 </div>
-                <div
-                  v-for="(childMeta, childKey, childIndex) in (itemMeta.items ?? {})"
-                  :key="childKey"
-                >
-                  <template
-                    v-if="
-                      !childMeta?.invisible && shouldShowItem(childMeta, entry)
-                    "
-                  >
+                <div v-for="(childMeta, childKey, childIndex) in itemMeta.items" :key="childKey">
+                  <template v-if="!childMeta?.invisible && shouldShowItem(childMeta, entry)">
                     <v-row class="config-row">
                       <v-col cols="12" sm="6" class="property-info">
                         <v-list-item density="compact">
@@ -145,25 +115,15 @@
                       </v-col>
                     </v-row>
                     <v-divider
-                      v-if="
-                        hasVisibleItemsAfter(
-                          Object.entries(itemMeta.items ?? {}),
-                          childIndex,
-                          entry,
-                        )
-                      "
+                      v-if="hasVisibleItemsAfter(Object.entries(itemMeta.items), childIndex, entry)"
                       class="config-divider"
-                    />
+                    ></v-divider>
                   </template>
                 </div>
               </div>
 
               <!-- Regular Property -->
-              <template
-                v-else-if="
-                  !itemMeta?.invisible && shouldShowItem(itemMeta, entry)
-                "
-              >
+              <template v-else-if="!itemMeta?.invisible && shouldShowItem(itemMeta, entry)">
                 <v-row class="config-row">
                   <v-col cols="12" sm="6" class="property-info">
                     <v-list-item density="compact">
@@ -187,15 +147,9 @@
                   </v-col>
                 </v-row>
                 <v-divider
-                  v-if="
-                    hasVisibleItemsAfter(
-                      Object.entries(getTemplate(entry).items ?? {}),
-                      metaIndex,
-                      entry,
-                    )
-                  "
+                  v-if="hasVisibleItemsAfter(Object.entries(getTemplate(entry).items), metaIndex, entry)"
                   class="config-divider"
-                />
+                ></v-divider>
               </template>
             </template>
           </div>
@@ -205,286 +159,276 @@
   </div>
 </template>
 
-<script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import ConfigItemRenderer from "./ConfigItemRenderer.vue";
-import { useI18n } from "@/i18n/composables";
-import { useConfigTextResolver } from "@/composables/useConfigTextResolver";
+<script setup>
+import { computed, ref, watch } from 'vue'
+import ConfigItemRenderer from './ConfigItemRenderer.vue'
+import { useI18n } from '@/i18n/composables'
+import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
 
-interface TemplateMetaItem {
-  type?: string;
-  invisible?: boolean;
-  description?: string;
-  hint?: string;
-  default?: unknown;
-  condition?: Record<string, unknown>;
-  items?: Record<string, TemplateMetaItem>;
-  [key: string]: unknown;
-}
-
-interface TemplateMeta {
-  name?: string;
-  hint?: string;
-  description?: string;
-  items?: Record<string, TemplateMetaItem>;
-  [key: string]: unknown;
-}
-
-type EntryValue =
-  | string
-  | number
-  | boolean
-  | Record<string, unknown>
-  | unknown[]
-  | null
-  | undefined;
-
-type ConfigEntry = Record<string, EntryValue>;
-
-const props = withDefaults(
-  defineProps<{
-    modelValue?: ConfigEntry[];
-    templates?: Record<string, TemplateMeta>;
-    pluginName?: string;
-    pluginI18n?: Record<string, unknown>;
-    configPath?: string;
-  }>(),
-  {
-    modelValue: () => [],
-    templates: () => ({}),
-    pluginName: "",
-    pluginI18n: () => ({}),
-    configPath: "",
+const props = defineProps({
+  modelValue: {
+    type: Array,
+    default: () => []
+  },
+  templates: {
+    type: Object,
+    default: () => ({})
+  },
+  pluginName: {
+    type: String,
+    default: ''
+  },
+  pluginI18n: {
+    type: Object,
+    default: () => ({})
+  },
+  configPath: {
+    type: String,
+    default: ''
   }
-);
+})
 
-const emit = defineEmits<{
-  (e: "update:modelValue", value: ConfigEntry[]): void;
-}>();
-const { t } = useI18n();
-const { resolveConfigText } = useConfigTextResolver(props);
+const emit = defineEmits(['update:modelValue'])
+const { t } = useI18n()
+const { resolveConfigText } = useConfigTextResolver(props)
 
-const expandedEntries = ref<Record<number, boolean>>({});
+const expandedEntries = ref({})
 
-const safeText = (val: unknown, fallback: string): string =>
-  val && typeof val === "string" ? val : fallback;
-const addButtonText = computed(() =>
-  safeText(t("core.common.templateList.addEntry"), "添加条目"),
-);
-const emptyHintText = computed(() =>
-  safeText(
-    t("core.common.templateList.empty"),
-    "暂无条目，请先选择模板并添加。",
-  ),
-);
+const safeText = (val, fallback) => (val && typeof val === 'string' ? val : fallback)
+const addButtonText = computed(() => safeText(t('core.common.templateList.addEntry'), '添加条目'))
+const emptyHintText = computed(() => safeText(t('core.common.templateList.empty'), '暂无条目，请先选择模板并添加。'))
 const defaultValueMap = {
   int: 0,
   float: 0.0,
   bool: false,
-  string: "",
-  text: "",
+  string: '',
+  text: '',
   list: [],
+  file: [],
   object: {},
-  template_list: [],
-};
+  template_list: []
+}
 
 const templateOptions = computed(() => {
   return Object.entries(props.templates || {}).map(([value, meta]) => ({
     label: templateText(value, 'name', meta?.name || value),
     value,
     hint: templateText(value, 'hint', meta?.hint || meta?.description || '')
-  }));
-});
+  }))
+})
 
-function templateLabel(key: string | null | undefined): string {
-  if (!key) return t("core.common.templateList.unknownTemplate") || "未指定模板";
-  return templateText(key, 'name', props.templates?.[key]?.name || key);
+function templateLabel(key) {
+  if (!key) return t('core.common.templateList.unknownTemplate') || '未指定模板'
+  return templateText(key, 'name', props.templates?.[key]?.name || key)
 }
 
-function templatePath(templateKey: string): string {
-  return props.configPath ? `${props.configPath}.templates.${templateKey}` : `templates.${templateKey}`;
+function templatePath(templateKey) {
+  return props.configPath ? `${props.configPath}.templates.${templateKey}` : `templates.${templateKey}`
 }
 
-function templateItemPath(templateKey: string, itemPath: string): string {
-  return `${templatePath(templateKey)}.${itemPath}`;
+function templateItemPath(templateKey, itemPath) {
+  return `${templatePath(templateKey)}.${itemPath}`
 }
 
-function templateText(templateKey: string, attr: string, fallback: unknown): string {
-  return String(resolveConfigText(templatePath(templateKey), attr, fallback) || '');
+function templateText(templateKey, attr, fallback) {
+  return resolveConfigText(templatePath(templateKey), attr, fallback)
 }
 
-function templateItemText(templateKey: string, itemPath: string, attr: string, fallback: unknown): string {
-  return String(resolveConfigText(templateItemPath(templateKey, itemPath), attr, fallback) || '');
+function templateItemText(templateKey, itemPath, attr, fallback) {
+  return resolveConfigText(templateItemPath(templateKey, itemPath), attr, fallback)
 }
 
-function buildDefaults(itemsMeta: Record<string, TemplateMetaItem> = {}): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
+function buildDefaults(itemsMeta = {}) {
+  const result = {}
   for (const [k, meta] of Object.entries(itemsMeta)) {
-    if (!meta || !meta.type) continue;
-    const fallback = Object.prototype.hasOwnProperty.call(meta, "default")
+    if (!meta || !meta.type) continue
+    const fallback = Object.prototype.hasOwnProperty.call(meta, 'default')
       ? meta.default
-      : defaultValueMap[meta.type as keyof typeof defaultValueMap];
+      : defaultValueMap[meta.type]
 
-    if (meta.type === "object") {
-      result[k] = buildDefaults(meta.items || {});
+    if (meta.type === 'object') {
+      result[k] = buildDefaults(meta.items || {})
     } else {
-      result[k] = fallback;
+      result[k] = fallback
     }
   }
-  return result;
+  return result
 }
 
-function applyDefaults(
-  target: Record<string, unknown>,
-  itemsMeta: Record<string, TemplateMetaItem> = {},
-): boolean {
-  let changed = false;
+function applyDefaults(target, itemsMeta = {}) {
+  let changed = false
   for (const [k, meta] of Object.entries(itemsMeta)) {
-    if (!meta || !meta.type) continue;
-    const hasDefault = Object.prototype.hasOwnProperty.call(meta, "default");
-    const fallback = hasDefault ? meta.default : defaultValueMap[meta.type as keyof typeof defaultValueMap];
+    if (!meta || !meta.type) continue
+    const hasDefault = Object.prototype.hasOwnProperty.call(meta, 'default')
+    const fallback = hasDefault ? meta.default : defaultValueMap[meta.type]
 
-    if (meta.type === "object") {
-      if (!target[k] || typeof target[k] !== "object") {
-        target[k] = buildDefaults(meta.items || {});
-        changed = true;
+    if (meta.type === 'object') {
+      if (!target[k] || typeof target[k] !== 'object') {
+        target[k] = buildDefaults(meta.items || {})
+        changed = true
       } else {
-        if (applyDefaults(target[k] as Record<string, unknown>, meta.items || {})) {
-          changed = true;
+        if (applyDefaults(target[k], meta.items || {})) {
+          changed = true
         }
       }
     } else if (!(k in target)) {
-      target[k] = fallback;
-      changed = true;
+      target[k] = fallback
+      changed = true
     }
   }
-  return changed;
+  return changed
 }
 
 function ensureEntryDefaults() {
-  if (!Array.isArray(props.modelValue)) return;
-
-  let totalChanged = false;
+  if (!Array.isArray(props.modelValue)) return
+  
+  let totalChanged = false
   const nextValue = props.modelValue.map((entry, idx) => {
-    const template = getTemplate(entry);
-    if (!template || !template.items) return entry;
-
+    const template = getTemplate(entry)
+    if (!template || !template.items) return entry
+    
     // 我们必须克隆以避免就地修改
-    const newEntry = JSON.parse(JSON.stringify(entry)) as ConfigEntry;
-    let entryChanged = applyDefaults(newEntry, template.items);
-
-    if (!Object.prototype.hasOwnProperty.call(newEntry, "__template_key")) {
-      newEntry.__template_key = "";
-      entryChanged = true;
+    const newEntry = JSON.parse(JSON.stringify(entry))
+    let entryChanged = applyDefaults(newEntry, template.items)
+    
+    if (!Object.prototype.hasOwnProperty.call(newEntry, '__template_key')) {
+      newEntry.__template_key = ''
+      entryChanged = true
     }
-
+    
     if (!(idx in expandedEntries.value)) {
-      expandedEntries.value[idx] = false;
+      expandedEntries.value[idx] = false
     }
-
+    
     if (entryChanged) {
-      totalChanged = true;
+      totalChanged = true
     }
-    return newEntry;
-  });
-
+    return newEntry
+  })
+  
   if (totalChanged) {
-    emit("update:modelValue", nextValue);
+    emit('update:modelValue', nextValue)
   }
 }
 
 watch(
   () => props.modelValue,
   () => ensureEntryDefaults(),
-  { immediate: true, deep: true },
-);
+  { immediate: true, deep: true }
+)
 
-function addEntry(templateKey: string) {
-  if (!templateKey) return;
-  const template = props.templates?.[templateKey];
-  if (!template) return;
+function addEntry(templateKey) {
+  if (!templateKey) return
+  const template = props.templates?.[templateKey]
+  if (!template) return
   const newEntry = {
     __template_key: templateKey,
-    ...buildDefaults(template.items || {}),
-  } as ConfigEntry;
-  emit("update:modelValue", [...(props.modelValue || []), newEntry]);
-  expandedEntries.value[props.modelValue.length] = true;
+    ...buildDefaults(template.items || {})
+  }
+  emit('update:modelValue', [...(props.modelValue || []), newEntry])
+  expandedEntries.value[props.modelValue.length] = true
 }
 
-function removeEntry(index: number) {
-  const next = [...(props.modelValue || [])];
-  next.splice(index, 1);
-  const rebuilt: Record<number, boolean> = {};
+function removeEntry(index) {
+  const next = [...(props.modelValue || [])]
+  next.splice(index, 1)
+  const rebuilt = {}
   next.forEach((_, idx) => {
-    const sourceIdx = idx >= index ? idx + 1 : idx;
-    rebuilt[idx] = expandedEntries.value[sourceIdx] ?? false;
-  });
-  expandedEntries.value = rebuilt;
-  emit("update:modelValue", next);
+    const sourceIdx = idx >= index ? idx + 1 : idx
+    rebuilt[idx] = expandedEntries.value[sourceIdx] ?? false
+  })
+  expandedEntries.value = rebuilt
+  emit('update:modelValue', next)
 }
 
-function toggleEntry(index: number) {
-  expandedEntries.value[index] = !expandedEntries.value[index];
+function toggleEntry(index) {
+  expandedEntries.value[index] = !expandedEntries.value[index]
 }
 
-function getTemplate(entry: Record<string, unknown> | null | undefined): TemplateMeta | null {
-  if (!entry) return null;
-  const key = entry.__template_key;
-  if (!key || typeof key !== "string") return null;
-  return (props.templates?.[key] as TemplateMeta | undefined) || null;
+function getTemplate(entry) {
+  if (!entry) return null
+  const key = entry.__template_key
+  if (!key) return null
+  return props.templates?.[key] || null
 }
 
-function getValueBySelector(
-  obj: Record<string, unknown>,
-  selector: string,
-): unknown {
-  const keys = selector.split(".");
-  let current: unknown = obj;
+function templateHintText(entry) {
+  const template = getTemplate(entry)
+  if (!template || template.hide_hint_in_list) return ''
+  return templateText(entry.__template_key, 'hint', template.hint || template.description || '')
+}
+
+function getItemMetaBySelector(itemsMeta = {}, selector = '') {
+  const keys = selector.split('.').filter(Boolean)
+  let currentItems = itemsMeta
+  let currentMeta = null
+
+  for (let i = 0; i < keys.length; i++) {
+    currentMeta = currentItems?.[keys[i]]
+    if (!currentMeta) return null
+    if (i < keys.length - 1) {
+      if (currentMeta.type !== 'object') return null
+      currentItems = currentMeta.items || {}
+    }
+  }
+
+  return currentMeta
+}
+
+function templateDisplayText(entry) {
+  const template = getTemplate(entry)
+  const displayItem = template?.display_item
+  if (!template || typeof displayItem !== 'string' || !displayItem) return ''
+
+  const displayMeta = getItemMetaBySelector(template.items || {}, displayItem)
+  if (displayMeta?.type !== 'string') return ''
+
+  const value = getValueBySelector(entry, displayItem)
+  if (typeof value !== 'string' || !value.trim()) return ''
+
+  const label = templateItemText(
+    entry.__template_key,
+    displayItem,
+    'description',
+    displayMeta.description || displayItem,
+  )
+  return `${label}: ${value.trim()}`
+}
+
+function getValueBySelector(obj, selector) {
+  const keys = selector.split('.')
+  let current = obj
   for (const key of keys) {
-    if (
-      current &&
-      typeof current === "object" &&
-      key in current &&
-      current !== null
-    ) {
-      current = (current as Record<string, unknown>)[key];
+    if (current && typeof current === 'object' && key in current) {
+      current = current[key]
     } else {
-      return undefined;
+      return undefined
     }
   }
-  return current;
+  return current
 }
 
-function shouldShowItem(
-  itemMeta: TemplateMetaItem | null | undefined,
-  entry: Record<string, unknown>,
-): boolean {
+function shouldShowItem(itemMeta, entry) {
   if (!itemMeta?.condition) {
-    return true;
+    return true
   }
-  for (const [conditionKey, expectedValue] of Object.entries(
-    itemMeta.condition,
-  )) {
-    const actualValue = getValueBySelector(entry, conditionKey);
+  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
+    const actualValue = getValueBySelector(entry, conditionKey)
     if (actualValue !== expectedValue) {
-      return false;
+      return false
     }
   }
-  return true;
+  return true
 }
 
-function hasVisibleItemsAfter(
-  entries: [string, TemplateMetaItem][],
-  currentIndex: number,
-  entry: Record<string, unknown>,
-): boolean {
+function hasVisibleItemsAfter(entries, currentIndex, entry) {
   for (let i = currentIndex + 1; i < entries.length; i++) {
-    const [_k, meta] = entries[i];
+    const [k, meta] = entries[i]
     if (!meta?.invisible && shouldShowItem(meta, entry)) {
-      return true;
+      return true
     }
   }
-  return false;
+  return false
 }
 </script>
 
@@ -551,6 +495,11 @@ function hasVisibleItemsAfter(
   font-size: 0.75rem;
   color: var(--v-theme-secondaryText);
   margin-top: 2px;
+}
+
+.entry-display-text {
+  color: var(--v-theme-primary);
+  font-weight: 500;
 }
 
 .property-key {
