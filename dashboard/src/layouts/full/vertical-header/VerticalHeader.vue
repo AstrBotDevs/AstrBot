@@ -1860,8 +1860,30 @@ onMounted(async () => {
 
 .release-message-preview {
   max-height: 220px;
-  overflow: hidden;
-  position: relative;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.release-message-preview::-webkit-scrollbar {
+  width: 0;
+}
+
+.release-message-preview:hover {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--v-theme-primary), 0.45) transparent;
+}
+
+.release-message-preview:hover::-webkit-scrollbar {
+  width: 6px;
+}
+
+.release-message-preview:hover::-webkit-scrollbar-thumb {
+  background: rgba(var(--v-theme-primary), 0.45);
+  border-radius: 3px;
+}
+
+.release-message-preview:hover::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .release-message-preview::after {
