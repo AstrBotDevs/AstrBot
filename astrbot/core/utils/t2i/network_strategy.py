@@ -159,7 +159,10 @@ class NetworkRenderStrategy(RenderStrategy):
         # 在线程池中执行 Shiki 注入，避免 1.2MB JS 处理阻塞事件循环
         loop = asyncio.get_running_loop()
         tmpl_str, tmpl_data = await loop.run_in_executor(
-            None, self._prepare_template_sync, tmpl_str, tmpl_data
+            None,
+            self._prepare_template_sync,
+            tmpl_str,
+            tmpl_data,
         )
         post_data = {
             "tmpl": tmpl_str,

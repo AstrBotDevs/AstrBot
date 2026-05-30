@@ -787,12 +787,12 @@ async def _process_quote_message(
 
     if image_seg and main_provider_supports_image:
         logger.debug(
-            "Skipping quote image captioning because the main provider supports image input."
+            "Skipping quote image captioning because the main provider supports image input.",
         )
     elif image_seg and not img_cap_prov_id:
         logger.debug(
             "No dedicated image caption provider configured. "
-            "Skipping quote image captioning."
+            "Skipping quote image captioning.",
         )
     elif image_seg:
         try:
@@ -897,7 +897,8 @@ async def _decorate_llm_request(
     _apply_prompt_prefix(req, cfg)
 
     main_provider_supports_image = provider is not None and _provider_supports_modality(
-        provider, "image"
+        provider,
+        "image",
     )
 
     if req.conversation:
@@ -1461,7 +1462,9 @@ async def build_main_agent(
         )
 
     fallback_providers = _get_fallback_chat_providers(
-        provider, plugin_context, config.provider_settings
+        provider,
+        plugin_context,
+        config.provider_settings,
     )
     selected_provider = _select_image_chat_provider(provider, req, fallback_providers)
     if selected_provider is not provider:

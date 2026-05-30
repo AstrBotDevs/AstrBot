@@ -122,7 +122,7 @@ class DocumentStorage:
         create_table = CreateTable(Document.__table__, if_not_exists=True)  # type: ignore[attr-defined]
 
         await executor.execute(
-            text(str(create_table.compile(dialect=sqlite.dialect())))
+            text(str(create_table.compile(dialect=sqlite.dialect()))),
         )
         await self._ensure_doc_id_unique_index(executor)
 

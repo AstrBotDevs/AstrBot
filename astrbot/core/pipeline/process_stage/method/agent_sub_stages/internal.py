@@ -159,7 +159,9 @@ class InternalAgentSubStage(Stage):
         )
 
     async def _send_llm_error_message(
-        self, event: AstrMessageEvent, message: object
+        self,
+        event: AstrMessageEvent,
+        message: object,
     ) -> None:
         await event.send(MessageChain().message(str(message)))
 
@@ -235,7 +237,7 @@ class InternalAgentSubStage(Stage):
 
                     if build_result is None:
                         if llm_error_message := event.get_extra(
-                            LLM_ERROR_MESSAGE_EXTRA_KEY
+                            LLM_ERROR_MESSAGE_EXTRA_KEY,
                         ):
                             await self._send_llm_error_message(
                                 event,

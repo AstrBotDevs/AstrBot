@@ -340,6 +340,7 @@ class ProviderAnthropic(Provider):
 
         Returns:
             Anthropic API 格式的 tool_choice 字典
+
         """
         if isinstance(tool_choice, dict):
             return tool_choice
@@ -365,7 +366,7 @@ class ProviderAnthropic(Provider):
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = self._normalize_tool_choice(
-                    payloads.get("tool_choice", "auto")
+                    payloads.get("tool_choice", "auto"),
                 )
 
         extra_body = self.provider_config.get("custom_extra_body", {})
@@ -452,7 +453,7 @@ class ProviderAnthropic(Provider):
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = self._normalize_tool_choice(
-                    payloads.get("tool_choice", "auto")
+                    payloads.get("tool_choice", "auto"),
                 )
 
         # 用于累积工具调用信息

@@ -68,11 +68,11 @@ def service() -> None:
 
 def _validate_service_name(name: str) -> str:
     allowed_chars = set(
-        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-",
     )
     if not name or any(char not in allowed_chars for char in name):
         raise click.ClickException(
-            "Service name can only contain letters, numbers, dots, underscores, and hyphens"
+            "Service name can only contain letters, numbers, dots, underscores, and hyphens",
         )
     return name
 
@@ -90,7 +90,7 @@ def _resolve_workdir(workdir: Path | None) -> Path:
     if not _is_astrbot_root(astrbot_root):
         raise click.ClickException(
             f"{astrbot_root} is not a valid AstrBot root directory. "
-            "Use 'astrbot init' before installing the service"
+            "Use 'astrbot init' before installing the service",
         )
     return astrbot_root
 
@@ -117,7 +117,7 @@ def _resolve_astrbot_executable(executable: str | None) -> Path:
 
     raise click.ClickException(
         "Cannot find the astrbot executable. Install AstrBot with "
-        "'uv tool install astrbot --python 3.12', or pass --executable"
+        "'uv tool install astrbot --python 3.12', or pass --executable",
     )
 
 
@@ -178,7 +178,7 @@ def _build_systemd_unit(
 
         [Install]
         WantedBy=default.target
-        """
+        """,
     )
 
 
@@ -200,7 +200,7 @@ def _install_systemd_user_service(
 ) -> Path:
     if platform.system() != "Linux":
         raise click.ClickException(
-            "systemd service installation is only available on Linux"
+            "systemd service installation is only available on Linux",
         )
     if shutil.which("systemctl") is None:
         raise click.ClickException("systemctl was not found")
@@ -208,7 +208,7 @@ def _install_systemd_user_service(
     unit_path = _systemd_unit_path(service_name)
     if unit_path.exists() and not force:
         raise click.ClickException(
-            f"{unit_path} already exists. Use --force to overwrite"
+            f"{unit_path} already exists. Use --force to overwrite",
         )
 
     unit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -288,7 +288,7 @@ def _install_launch_agent(
 ) -> Path:
     if platform.system() != "Darwin":
         raise click.ClickException(
-            "launchd service installation is only available on macOS"
+            "launchd service installation is only available on macOS",
         )
     if shutil.which("launchctl") is None:
         raise click.ClickException("launchctl was not found")
@@ -296,7 +296,7 @@ def _install_launch_agent(
     plist_path = _launch_agent_path(service_name)
     if plist_path.exists() and not force:
         raise click.ClickException(
-            f"{plist_path} already exists. Use --force to overwrite"
+            f"{plist_path} already exists. Use --force to overwrite",
         )
 
     log_dir = _macos_log_dir()
@@ -324,7 +324,9 @@ def _task_element(
     attrib: dict[str, str] | None = None,
 ) -> ElementTree.Element:
     child = ElementTree.SubElement(
-        parent, f"{{{WINDOWS_TASK_XML_NS}}}{name}", attrib or {}
+        parent,
+        f"{{{WINDOWS_TASK_XML_NS}}}{name}",
+        attrib or {},
     )
     if text is not None:
         child.text = text
@@ -467,13 +469,13 @@ def _install_windows_task(
 ) -> None:
     if platform.system() != "Windows":
         raise click.ClickException(
-            "Windows scheduled task installation is only available on Windows"
+            "Windows scheduled task installation is only available on Windows",
         )
     if shutil.which("schtasks") is None:
         raise click.ClickException("schtasks was not found")
     if _windows_task_exists(service_name) and not force:
         raise click.ClickException(
-            f"Scheduled task {service_name} already exists. Use --force to overwrite"
+            f"Scheduled task {service_name} already exists. Use --force to overwrite",
         )
 
     _windows_log_dir().mkdir(parents=True, exist_ok=True)
@@ -621,7 +623,7 @@ def _get_windows_task_state(service_name: str) -> ServiceState:
         )
 
     result = _run_capture(
-        ["schtasks", "/Query", "/TN", service_name, "/FO", "LIST", "/V"]
+        ["schtasks", "/Query", "/TN", service_name, "/FO", "LIST", "/V"],
     )
     if result is None:
         return ServiceState(
@@ -740,7 +742,7 @@ def _control_systemd_service(service_name: str, action: str) -> None:
     unit_path = _systemd_unit_path(service_name)
     if not unit_path.exists():
         raise click.ClickException(
-            f"{unit_path} does not exist. Run 'service install' first"
+            f"{unit_path} does not exist. Run 'service install' first",
         )
 
     _run_checked(
@@ -784,7 +786,7 @@ def _bootstrap_launch_agent(service_name: str, plist_path: Path) -> None:
     if not _wait_for_launch_agent_state(service_name, loaded=True):
         raise click.ClickException(
             "LaunchAgent was bootstrapped but did not appear in launchd. "
-            f"Label: {_macos_label(service_name)}; plist: {plist_path}"
+            f"Label: {_macos_label(service_name)}; plist: {plist_path}",
         )
 
 
@@ -817,7 +819,7 @@ def _start_launch_agent(service_name: str) -> None:
     plist_path = _launch_agent_path(service_name)
     if not plist_path.exists():
         raise click.ClickException(
-            f"{plist_path} does not exist. Run 'service install' first"
+            f"{plist_path} does not exist. Run 'service install' first",
         )
 
     if not _is_launch_agent_loaded(service_name):
@@ -849,7 +851,7 @@ def _control_windows_task(service_name: str, action: str) -> None:
         raise click.ClickException("schtasks was not found")
     if not _windows_task_exists(service_name):
         raise click.ClickException(
-            f"Scheduled task {service_name} does not exist. Run 'service install' first"
+            f"Scheduled task {service_name} does not exist. Run 'service install' first",
         )
 
     match action:
@@ -1169,7 +1171,9 @@ def _show_service_logs(
 )
 @click.option("--force", is_flag=True, help="Overwrite an existing service definition.")
 @click.option(
-    "--now", is_flag=True, help="Start or restart the service after installing it."
+    "--now",
+    is_flag=True,
+    help="Start or restart the service after installing it.",
 )
 def install(
     name: str,
@@ -1196,7 +1200,7 @@ def install(
         click.echo(f"Manage it with: systemctl --user status {service_path.name}")
         click.echo(
             "To start it at boot before login, enable lingering with: "
-            f"loginctl enable-linger {getpass.getuser()}"
+            f"loginctl enable-linger {getpass.getuser()}",
         )
         return
 

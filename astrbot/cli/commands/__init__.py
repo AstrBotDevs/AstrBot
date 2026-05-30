@@ -12,12 +12,12 @@ plug = plugin
 
 __all__ = [
     "bk",
-    "config",
     "conf",
+    "config",
     "init",
     "password",
-    "plugin",
     "plug",
+    "plugin",
     "run",
     "service",
     "uninstall",
