@@ -9,6 +9,8 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
+_DEFAULT_HOOK_TIMEOUT: float = 300.0
+
 
 async def call_handler(
     event: AstrMessageEvent,
@@ -77,7 +79,7 @@ async def call_event_hook(
     event: AstrMessageEvent,
     hook_type: EventType,
     *args,
-    timeout: float = 300.0,
+    hook_timeout: float = _DEFAULT_HOOK_TIMEOUT,
     **kwargs,
 ) -> bool:
     """调用事件钩子函数
@@ -86,7 +88,7 @@ async def call_event_hook(
         event: 事件对象
         hook_type: 钩子事件类型
         *args: 传递给钩子处理器的位置参数
-        timeout: 单个钩子处理器的超时时间（秒），超时后跳过该处理器继续执行。
+        hook_timeout: 单个钩子处理器的超时时间（秒），超时后跳过该处理器继续执行。
             设为 0 或负数则不启用超时。默认 300 秒。
         **kwargs: 传递给钩子处理器的关键字参数
 
@@ -98,6 +100,8 @@ async def call_event_hook(
         hook_type,
         plugins_name=event.plugins_name,
     )
+    if hook_timeout is None or not isinstance(hook_timeout, int | float):
+        hook_timeout = _DEFAULT_HOOK_TIMEOUT
     for handler in handlers:
         try:
             assert inspect.iscoroutinefunction(handler.handler)
@@ -106,16 +110,16 @@ async def call_event_hook(
             logger.debug(
                 f"hook({hook_type.name}) -> {plugin_name} - {handler_name}",
             )
-            if timeout > 0:
+            if hook_timeout > 0:
                 try:
                     await asyncio.wait_for(
                         handler.handler(event, *args, **kwargs),
-                        timeout=timeout,
+                        timeout=hook_timeout,
                     )
                 except asyncio.TimeoutError:
                     logger.warning(
                         f"hook({hook_type.name}) -> {plugin_name} - {handler_name} "
-                        f"timed out after {timeout}s, skipping.",
+                        f"timed out after {hook_timeout}s, skipping.",
                     )
             else:
                 await handler.handler(event, *args, **kwargs)
