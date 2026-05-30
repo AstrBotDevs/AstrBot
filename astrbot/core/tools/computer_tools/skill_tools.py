@@ -69,11 +69,7 @@ def _resolve_temp_path(local_env: bool, filename: str) -> Path:
 
 def _is_within(path: Path, root: Path) -> bool:
     """Return True if *path* is inside *root* (after resolving both)."""
-    try:
-        path.resolve().relative_to(root.resolve())
-        return True
-    except ValueError:
-        return False
+    return path.resolve().is_relative_to(root.resolve())
 
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
