@@ -1,19 +1,8 @@
 <template>
   <transition name="slide-left">
-    <aside
-      v-if="modelValue"
-      ref="sidebarRef"
-      class="reasoning-sidebar"
-      :style="{ width: sidebarWidth + 'px' }"
-    >
-      <!-- Drag handle -->
-      <div
-        class="reasoning-sidebar-resizer"
-        @mousedown="startResize"
-      />
-
+    <aside v-if="modelValue" class="reasoning-sidebar">
       <div class="reasoning-sidebar-header">
-        <div class="reasoning-sidebar-title">{{ tm("reasoning.thinking") }}</div>
+        <div class="reasoning-sidebar-title">{{ reasoningTitle }}</div>
         <v-btn icon="mdi-close" size="small" variant="text" @click="close" />
       </div>
 
@@ -25,7 +14,7 @@
           :is-dark="isDark"
         />
         <div v-else class="reasoning-sidebar-empty">
-          {{ tm("reasoning.noThinking") }}
+          {{ reasoningTitle }}
         </div>
       </div>
     </aside>
@@ -33,12 +22,16 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from "vue";
-import type { MessagePart } from "@/composables/useMessages";
+import { computed } from "vue";
+import {
+  reasoningActivityCounts,
+  reasoningActivityTitle,
+  type MessagePart,
+} from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
 import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
 
-defineProps<{
+const props = defineProps<{
   modelValue: boolean;
   parts: MessagePart[];
   reasoning?: string;
@@ -51,52 +44,17 @@ const emit = defineEmits<{
 
 const { tm } = useModuleI18n("features/chat");
 
+const activityCounts = computed(() =>
+  reasoningActivityCounts(props.parts, props.reasoning || ""),
+);
+
+const reasoningTitle = computed(() =>
+  reasoningActivityTitle(activityCounts.value, tm),
+);
+
 function close() {
   emit("update:modelValue", false);
 }
-
-// ── Drag resize ────────────────────────────────────────────────────
-
-const MIN_WIDTH = 280;
-const MAX_WIDTH = 1200;
-const DEFAULT_WIDTH = 380;
-
-const sidebarWidth = ref(DEFAULT_WIDTH);
-const sidebarRef = ref<HTMLElement | null>(null);
-let isResizing = false;
-
-function startResize(e: MouseEvent) {
-  e.preventDefault();
-  isResizing = true;
-  document.body.style.cursor = "ew-resize";
-  document.body.style.userSelect = "none";
-  document.addEventListener("mousemove", onMouseMove);
-  document.addEventListener("mouseup", onMouseUp);
-}
-
-function onMouseMove(e: MouseEvent) {
-  if (!isResizing || !sidebarRef.value) return;
-  // The sidebar is on the right side of the viewport.
-  // `sidebarRef` is positioned inside the parent's flex layout.
-  // Calculate width from the right edge of the viewport:
-  const rect = sidebarRef.value.parentElement?.getBoundingClientRect();
-  if (!rect) return;
-  const newWidth = rect.right - e.clientX;
-  sidebarWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth));
-}
-
-function onMouseUp() {
-  if (!isResizing) return;
-  isResizing = false;
-  document.body.style.cursor = "";
-  document.body.style.userSelect = "";
-  document.removeEventListener("mousemove", onMouseMove);
-  document.removeEventListener("mouseup", onMouseUp);
-}
-
-onBeforeUnmount(() => {
-  onMouseUp();
-});
 </script>
 
 <style scoped>
@@ -109,28 +67,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  position: relative;
 }
-
-/* ── Drag handle ──────────────────────────────────────────────── */
-
-.reasoning-sidebar-resizer {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  cursor: ew-resize;
-  z-index: 10;
-  transition: background 0.15s ease;
-}
-
-.reasoning-sidebar-resizer:hover,
-.reasoning-sidebar-resizer:active {
-  background: rgba(var(--v-theme-primary), 0.2);
-}
-
-/* ── Transition ───────────────────────────────────────────────── */
 
 .slide-left-enter-active,
 .slide-left-leave-active {
@@ -142,8 +79,6 @@ onBeforeUnmount(() => {
   transform: translateX(100%);
   opacity: 0;
 }
-
-/* ── Header ───────────────────────────────────────────────────── */
 
 .reasoning-sidebar-header {
   display: flex;
@@ -158,8 +93,6 @@ onBeforeUnmount(() => {
   line-height: 1.4;
   color: rgb(var(--v-theme-on-surface));
 }
-
-/* ── Body ─────────────────────────────────────────────────────── */
 
 .reasoning-sidebar-body {
   flex: 1;
@@ -176,20 +109,14 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 
-/* ── Mobile ───────────────────────────────────────────────────── */
-
 @media (max-width: 760px) {
   .reasoning-sidebar {
     position: fixed;
     inset: 0;
     z-index: 1300;
-    width: 100vw !important;
+    width: 100vw;
     height: 100dvh;
     border-left: 0;
-  }
-
-  .reasoning-sidebar-resizer {
-    display: none;
   }
 
   .reasoning-sidebar-header {
