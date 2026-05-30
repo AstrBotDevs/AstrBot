@@ -7,6 +7,7 @@ import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import Chat from "@/components/chat/Chat.vue";
+import OverlayScrollbar from "@/components/shared/OverlayScrollbar.vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
 import { useCommonStore } from "@/stores/common";
@@ -127,28 +128,23 @@ onMounted(() => {
       <VerticalHeaderVue />
       <VerticalSidebarVue v-if="showSidebar" />
       <v-main
-        :style="{
-          height: isCurrentChatRoute ? 'calc(100vh - 55px)' : undefined,
-          overflow: isCurrentChatRoute ? 'hidden' : undefined,
-        }"
+        style="overflow: hidden; height: calc(100vh - 50px);"
       >
-        <v-container
-          fluid
-          class="page-wrapper"
-          :class="{ 'chat-mode-container': isCurrentChatRoute }"
-          :style="{
-            height: isCurrentChatRoute ? '100%' : 'calc(100% - 8px)',
-            padding: isCurrentChatRoute ? '0' : undefined,
-            minHeight: isCurrentChatRoute ? 'unset' : undefined,
-          }"
-        >
-          <div
-            :style="{
-              height: '100%',
-              width: '100%',
-              overflow: isCurrentChatRoute ? 'hidden' : undefined,
-            }"
+        <OverlayScrollbar v-if="!isCurrentChatRoute" class="main-scrollbar">
+          <v-container
+            fluid
+            class="page-wrapper"
           >
+            <RouterView />
+          </v-container>
+        </OverlayScrollbar>
+        <v-container
+          v-else
+          fluid
+          class="page-wrapper chat-mode-container"
+          style="height: 100%; padding: 0; min-height: unset;"
+        >
+          <div style="height: 100%; width: 100%; overflow: hidden;">
             <div
               v-if="shouldMountChat"
               v-show="isCurrentChatRoute"
@@ -156,7 +152,6 @@ onMounted(() => {
             >
               <Chat :active="isCurrentChatRoute" />
             </div>
-            <RouterView v-if="!isCurrentChatRoute" />
           </div>
         </v-container>
       </v-main>
@@ -176,5 +171,10 @@ onMounted(() => {
   min-height: unset !important;
   height: 100% !important;
   overflow: hidden !important;
+}
+
+.main-scrollbar {
+  height: 100%;
+  width: 100%;
 }
 </style>
