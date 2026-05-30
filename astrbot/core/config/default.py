@@ -6,6 +6,7 @@ from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 VERSION = "4.25.2"
+ASTRBOT_USER_AGENT = f"astrbot/{VERSION.removeprefix('v')}"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -1199,7 +1200,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.kimi.com/coding",
                         "timeout": 120,
                         "proxy": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "custom_headers": {"User-Agent": ASTRBOT_USER_AGENT},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Moonshot": {
@@ -1236,7 +1237,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.minimaxi.com/anthropic",
                         "timeout": 120,
                         "proxy": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "custom_headers": {"User-Agent": ASTRBOT_USER_AGENT},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Xiaomi": {
@@ -1261,7 +1262,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://token-plan-cn.xiaomimimo.com/anthropic",
                         "timeout": 120,
                         "proxy": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "custom_headers": {"User-Agent": ASTRBOT_USER_AGENT},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "xAI": {

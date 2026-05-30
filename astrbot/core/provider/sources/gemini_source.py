@@ -18,11 +18,13 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
+from astrbot.core.config.default import ASTRBOT_USER_AGENT
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.http_headers import apply_default_headers, normalize_headers
 from astrbot.core.utils.io import download_file, download_image_by_url
 from astrbot.core.utils.media_utils import ensure_wav
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
@@ -76,17 +78,41 @@ class ProviderGoogleGenAI(Provider):
         if self.api_base and self.api_base.endswith("/"):
             self.api_base = self.api_base[:-1]
 
+        self.custom_headers = self._resolve_custom_headers(provider_config)
         self._http_client: httpx.AsyncClient | None = None
         self._stale_http_clients: list[httpx.AsyncClient] = []
         self._init_client()
         self.set_model(provider_config.get("model", "unknown"))
         self._init_safety_settings()
 
+    @staticmethod
+    def _resolve_custom_headers(provider_config: dict) -> dict[str, str]:
+        headers = apply_default_headers(
+            normalize_headers(provider_config.get("custom_headers", {})),
+            {"user-agent": ASTRBOT_USER_AGENT},
+        )
+        return {
+            "user-agent" if key.lower() == "user-agent" else key: value
+            for key, value in headers.items()
+        }
+
+    @staticmethod
+    def _set_gemini_user_agent(client: object, user_agent: str) -> None:
+        api_client = getattr(client, "_api_client", None)
+        http_options = getattr(api_client, "_http_options", None)
+        if http_options is None or http_options.headers is None:
+            return
+        for key in list(http_options.headers):
+            if key.lower() == "user-agent":
+                http_options.headers.pop(key)
+        http_options.headers["user-agent"] = user_agent
+
     def _init_client(self) -> None:
         """初始化Gemini客户端"""
         proxy = self.provider_config.get("proxy", "")
         http_options = types.HttpOptions(
             base_url=self.api_base,
+            headers=dict(self.custom_headers),
             timeout=self.timeout * 1000,  # 毫秒
         )
 
@@ -94,6 +120,7 @@ class ProviderGoogleGenAI(Provider):
         # httpx.AsyncClient 的 timeout 单位为秒（与 HttpOptions 的毫秒不同）
         async_client_kwargs: dict = {
             "base_url": self.api_base,
+            "headers": dict(self.custom_headers),
             "timeout": self.timeout,
         }
         if proxy:
@@ -112,10 +139,15 @@ class ProviderGoogleGenAI(Provider):
         self._http_client = httpx.AsyncClient(**async_client_kwargs)
         http_options.httpx_async_client = self._http_client
 
-        self.client = genai.Client(
+        genai_client = genai.Client(
             api_key=self.chosen_api_key,
             http_options=http_options,
-        ).aio
+        )
+        self._set_gemini_user_agent(
+            genai_client,
+            self.custom_headers["user-agent"],
+        )
+        self.client = genai_client.aio
 
     def _init_safety_settings(self) -> None:
         """初始化安全设置"""

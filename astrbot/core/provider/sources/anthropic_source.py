@@ -13,9 +13,11 @@ from anthropic.types.usage import Usage
 from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
+from astrbot.core.config.default import ASTRBOT_USER_AGENT
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
+from astrbot.core.utils.http_headers import apply_default_headers, normalize_headers
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
@@ -50,13 +52,12 @@ class ProviderAnthropic(Provider):
 
     @staticmethod
     def _normalize_custom_headers(provider_config: dict) -> dict[str, str] | None:
-        custom_headers = provider_config.get("custom_headers", {})
-        if not isinstance(custom_headers, dict) or not custom_headers:
+        normalized_headers = normalize_headers(
+            provider_config.get("custom_headers", {})
+        )
+        if not normalized_headers:
             return None
-        normalized_headers: dict[str, str] = {}
-        for key, value in custom_headers.items():
-            normalized_headers[str(key)] = str(value)
-        return normalized_headers or None
+        return normalized_headers
 
     @classmethod
     def _resolve_custom_headers(
@@ -67,9 +68,7 @@ class ProviderAnthropic(Provider):
     ) -> dict[str, str] | None:
         merged_headers = cls._normalize_custom_headers(provider_config) or {}
         if required_headers:
-            for header_name, header_value in required_headers.items():
-                if not merged_headers.get(header_name, "").strip():
-                    merged_headers[header_name] = header_value
+            merged_headers = apply_default_headers(merged_headers, required_headers)
         return merged_headers or None
 
     def __init__(
@@ -89,7 +88,10 @@ class ProviderAnthropic(Provider):
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
         self.thinking_config = provider_config.get("anth_thinking_config", {})
-        self.custom_headers = self._resolve_custom_headers(provider_config)
+        self.custom_headers = self._resolve_custom_headers(
+            provider_config,
+            required_headers={"User-Agent": ASTRBOT_USER_AGENT},
+        )
 
         if use_api_key:
             self._init_api_key(provider_config)
