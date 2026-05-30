@@ -114,6 +114,9 @@
   },
   "reasoning": {
     "thinking": "Рассуждение",
+    "summarySeparator": ", ",
+    "thinkSummary": "Размышлений: {count}",
+    "toolSummary": "использований инструментов: {count}",
     "think": "Размышление",
     "toolUsed": "Использование инструмента"
   },
@@ -161,6 +164,11 @@
       "reconnected": "Соединение восстановлено",
       "failed": "Ошибка подключения, обновите страницу"
     }
+  },
+  "commandSuggestion": {
+    "navigate": "Выбор",
+    "select": "Подтвердить",
+    "close": "Закрыть"
   },
   "errors": {
     "sendMessageFailed": "Ошибка отправки сообщения, попробуйте еще раз",
