@@ -1,4 +1,6 @@
+import base64
 import builtins
+from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
@@ -1026,6 +1028,27 @@ async def test_resolve_image_part_supports_base64_scheme():
         assert await provider._resolve_image_part("base64://abcd") == {
             "type": "image_url",
             "image_url": {"url": "data:image/jpeg;base64,abcd"},
+        }
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_resolve_image_part_preserves_base64_png_mime_type():
+    provider = _make_provider()
+    try:
+        image_buffer = BytesIO()
+        PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(
+            image_buffer,
+            format="PNG",
+        )
+        image_base64 = base64.b64encode(image_buffer.getvalue()).decode("ascii")
+
+        image_part = await provider._resolve_image_part(f"base64://{image_base64}")
+
+        assert image_part == {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{image_base64}"},
         }
     finally:
         await provider.terminate()
