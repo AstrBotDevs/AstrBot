@@ -142,6 +142,7 @@ class ConversationManager:
             if curr_cid == conversation_id:
                 self.session_conversations.pop(unified_msg_origin, None)
                 await sp.session_remove(unified_msg_origin, "sel_conv_id")
+            await self._trigger_session_deleted(unified_msg_origin)
 
     async def delete_conversations_by_user_id(self, unified_msg_origin: str) -> None:
         """删除会话的所有对话
