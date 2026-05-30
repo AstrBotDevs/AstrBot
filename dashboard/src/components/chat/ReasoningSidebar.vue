@@ -58,7 +58,7 @@ function close() {
 // ── Drag resize ────────────────────────────────────────────────────
 
 const MIN_WIDTH = 280;
-const MAX_WIDTH = 800;
+const MAX_WIDTH = 1200;
 const DEFAULT_WIDTH = 380;
 
 const sidebarWidth = ref(DEFAULT_WIDTH);

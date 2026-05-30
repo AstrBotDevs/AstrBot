@@ -72,7 +72,7 @@
       <pre class="result-raw">{{ formattedResult }}</pre>
     </template>
 
-    <!-- ── shared [SYSTEM NOTICE] suffix (exclude shell which handles it separately) ── -->
+    <!-- ── shared system suffix ([SYSTEM NOTICE] + overflow notice; exclude shell which handles it separately) ── -->
     <div v-if="resultSuffix && toolName !== 'astrbot_execute_shell'" class="result-suffix">{{ resultSuffix }}</div>
   </div>
 </template>
@@ -84,7 +84,7 @@ import {
   escapeHtml,
   renderShikiCode,
 } from "@/utils/shiki";
-import { findRealSystemNoticeIndex } from "@/utils/systemNotice";
+import { findSystemNoticeIndex } from "@/utils/systemNotice";
 
 const props = defineProps<{
   toolName: string;
@@ -149,34 +149,20 @@ const shikiReady = ref(false);
 
 const rawResult = computed(() => (props.result ?? "").trim());
 
-// Strip [SYSTEM NOTICE] suffix for all non-shell templates.
-// Shell uses rawResult directly via brace-tracking in shellParsed.
-// file_read_tool uses smart detection to avoid false positives from
-// file content that coincidentally contains "[SYSTEM NOTICE]".
+// Strip system-injected suffixes ([SYSTEM NOTICE] + overflow notice) for all
+// non-shell templates.  Shell uses rawResult directly via brace-tracking in
+// shellParsed.  All other tools now use the smart findSystemNoticeIndex()
+// which handles both [SYSTEM NOTICE] markers and the overflow notice pattern.
 const resultText = computed(() => {
   const text = rawResult.value;
-
-  if (props.toolName === "astrbot_file_read_tool") {
-    const idx = findRealSystemNoticeIndex(text);
-    if (idx < 0) return text;
-    return text.slice(0, idx).trim();
-  }
-
-  const idx = text.search(/\[SYSTEM NOTICE\]/i);
+  const idx = findSystemNoticeIndex(text);
   if (idx < 0) return text;
   return text.slice(0, idx).trim();
 });
 
 const resultSuffix = computed(() => {
   const text = rawResult.value;
-
-  if (props.toolName === "astrbot_file_read_tool") {
-    const idx = findRealSystemNoticeIndex(text);
-    if (idx < 0) return null;
-    return text.slice(idx).trim();
-  }
-
-  const idx = text.search(/\[SYSTEM NOTICE\]/i);
+  const idx = findSystemNoticeIndex(text);
   if (idx < 0) return null;
   return text.slice(idx).trim();
 });

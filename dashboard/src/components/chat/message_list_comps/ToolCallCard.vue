@@ -88,7 +88,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { findRealSystemNoticeIndex } from "@/utils/systemNotice";
+import { findSystemNoticeIndex } from "@/utils/systemNotice";
 import DiffPreview from "./DiffPreview.vue";
 import ToolResultView from "./ToolResultView.vue";
 
@@ -189,17 +189,17 @@ const isEditTool = computed(
 );
 
 // Strip [SYSTEM NOTICE] suffix from the raw result for all edit tool computed properties.
-// Uses the shared findRealSystemNoticeIndex() to correctly distinguish genuine system
+// Uses the shared findSystemNoticeIndex() to correctly distinguish genuine system
 // notices from "[SYSTEM NOTICE]" text that may appear inside the edited file's diff content.
 const editToolCleanResult = computed(() => {
   const raw = props.toolCall.result ?? "";
-  const idx = findRealSystemNoticeIndex(raw);
+  const idx = findSystemNoticeIndex(raw);
   return idx < 0 ? raw : raw.slice(0, idx).trim();
 });
 
 const editToolNotice = computed(() => {
   const raw = props.toolCall.result ?? "";
-  const idx = findRealSystemNoticeIndex(raw);
+  const idx = findSystemNoticeIndex(raw);
   return idx < 0 ? null : raw.slice(idx).trim();
 });
 
