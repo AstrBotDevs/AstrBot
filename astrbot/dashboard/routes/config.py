@@ -95,7 +95,7 @@ def _validate_template_list(value, meta, path_key, errors, validate_fn) -> None:
         validate_fn(
             item,
             template_meta.get("items", {}),
-            path=f"{item_path}.",
+            path=f"{path_key}.templates.{template_key}.",
         )
 
 
