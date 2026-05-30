@@ -34,7 +34,6 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, ref, computed } from "vue";
-import type { MessagePart } from "@/composables/useMessages";
 import {
   reasoningActivityCounts,
   reasoningActivityTitle,
