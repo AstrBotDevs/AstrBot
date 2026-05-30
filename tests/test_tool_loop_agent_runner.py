@@ -260,6 +260,33 @@ class SingleToolThenFinalProvider(MockProvider):
         )
 
 
+class CapturingToolLoopProvider(MockProvider):
+    def __init__(self, tool_name: str):
+        super().__init__()
+        self.tool_name = tool_name
+        self.received_contexts = []
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        self.received_contexts.append(list(kwargs.get("contexts") or []))
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="最终回复",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            tools_call_name=[self.tool_name],
+            tools_call_args=[{"query": "test"}],
+            tools_call_ids=["call_context_refresh"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
 class SequentialToolProvider(MockProvider):
     def __init__(self, tool_sequence: list[str]):
         super().__init__()
@@ -448,6 +475,68 @@ async def test_max_step_limit_functionality(
     # 验证最后一条消息是assistant的最终回答
     last_message = runner.run_context.messages[-1]
     assert last_message.role == "assistant", "最后一条消息应该是assistant的最终回答"
+
+
+@pytest.mark.asyncio
+async def test_max_step_final_request_includes_limit_prompt(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """The forced final step must use contexts recomputed after max-step prompt."""
+    provider = CapturingToolLoopProvider("test_tool")
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def snapshot_context_manager(messages, trusted_token_usage=0):
+        return list(messages)
+
+    runner.request_context_manager.process = snapshot_context_manager
+
+    async for _ in runner.step_until_done(1):
+        pass
+
+    assert provider.call_count == 2
+    final_contexts = provider.received_contexts[-1]
+    assert final_contexts[-1].role == "user"
+    assert final_contexts[-1].content == runner.MAX_STEPS_REACHED_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_next_request_includes_tool_result(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """Tool-loop provider contexts must be recomputed after tool results append."""
+    provider = CapturingToolLoopProvider("test_tool")
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def snapshot_context_manager(messages, trusted_token_usage=0):
+        return list(messages)
+
+    runner.request_context_manager.process = snapshot_context_manager
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert provider.call_count == 2
+    second_contexts = provider.received_contexts[1]
+    tool_messages = [msg for msg in second_contexts if msg.role == "tool"]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_context_refresh"
+    assert "工具执行结果" in tool_messages[0].content
 
 
 @pytest.mark.asyncio
