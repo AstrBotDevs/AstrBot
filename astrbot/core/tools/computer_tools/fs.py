@@ -399,9 +399,8 @@ async def _sandbox_read_bytes(sb, path: str) -> bytes:
             output = result.get("output", "")
             if isinstance(output, dict):
                 error = str(output.get("error", "") or "").strip()
-        raise IOError(
-            f"Failed to read file in sandbox: "
-            f"{error or 'unknown read error'}"
+        raise OSError(
+            f"Failed to read file in sandbox: {error or 'unknown read error'}"
         )
     output = result.get("output", "")
     if isinstance(output, dict):
@@ -436,9 +435,8 @@ async def _sandbox_write_bytes(sb, path: str, data: bytes) -> None:
             output = result.get("output", "")
             if isinstance(output, dict):
                 error = str(output.get("error", "") or "").strip()
-        raise IOError(
-            f"Failed to write file in sandbox: "
-            f"{error or 'unknown write error'}"
+        raise OSError(
+            f"Failed to write file in sandbox: {error or 'unknown write error'}"
         )
 
 
@@ -582,10 +580,8 @@ class FileEditTool(FunctionTool):
                 async with lock:
                     # 1. Binary read — preserves original line endings (CRLF/LF)
                     try:
-                        raw_bytes = await _sandbox_read_bytes(
-                            sb, normalized_path
-                        )
-                    except IOError as exc:
+                        raw_bytes = await _sandbox_read_bytes(sb, normalized_path)
+                    except OSError as exc:
                         return f"Error editing file: {exc}"
 
                     # 2. Line-ending-aware edit (reuses edit_engine core logic)
@@ -602,10 +598,8 @@ class FileEditTool(FunctionTool):
 
                     # 3. Binary write — preserves restored line endings
                     try:
-                        await _sandbox_write_bytes(
-                            sb, normalized_path, write_bytes
-                        )
-                    except IOError as exc:
+                        await _sandbox_write_bytes(sb, normalized_path, write_bytes)
+                    except OSError as exc:
                         return f"Error editing file: {exc}"
 
             return _format_result(
