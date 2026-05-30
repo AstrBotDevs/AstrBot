@@ -26,6 +26,7 @@
         :parts="renderParts"
         :reasoning="reasoning"
         :is-dark="isDark"
+        :is-streaming="isStreaming"
       />
     </div>
 

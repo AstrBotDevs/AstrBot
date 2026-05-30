@@ -763,6 +763,7 @@ async def _process_quote_message(
     plugin_context: Context,
     quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
     config: MainAgentBuildConfig | None = None,
+    main_provider_supports_image: bool = False,
 ) -> None:
     quote = None
     for comp in event.message_obj.message:
@@ -792,13 +793,21 @@ async def _process_quote_message(
                 image_seg = comp
                 break
 
-    if image_seg:
+    if image_seg and main_provider_supports_image:
+        logger.debug(
+            "Skipping quote image captioning because the main provider supports image input."
+        )
+    elif image_seg and not img_cap_prov_id:
+        logger.debug(
+            "No dedicated image caption provider configured. "
+            "Skipping quote image captioning."
+        )
+    elif image_seg:
         try:
             prov = None
             path = None
             compress_path = None
-            if img_cap_prov_id:
-                prov = plugin_context.get_provider_by_id(img_cap_prov_id)
+            prov = plugin_context.get_provider_by_id(img_cap_prov_id)
             if prov is None:
                 prov = plugin_context.get_using_provider(event.unified_msg_origin)
 
@@ -887,6 +896,7 @@ async def _decorate_llm_request(
     req: ProviderRequest,
     plugin_context: Context,
     config: MainAgentBuildConfig,
+    provider: Provider | None = None,
 ) -> None:
     cfg = config.provider_settings or plugin_context.get_config(
         umo=event.unified_msg_origin
@@ -894,11 +904,15 @@ async def _decorate_llm_request(
 
     _apply_prompt_prefix(req, cfg)
 
+    main_provider_supports_image = provider is not None and _provider_supports_modality(
+        provider, "image"
+    )
+
     if req.conversation:
         await _ensure_persona_and_skills(req, cfg, plugin_context, event)
 
         img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
-        if img_cap_prov_id and req.image_urls:
+        if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
             await _ensure_img_caption(
                 event,
                 req,
@@ -916,6 +930,7 @@ async def _decorate_llm_request(
         plugin_context,
         quoted_message_settings,
         config,
+        main_provider_supports_image=main_provider_supports_image,
     )
 
     tz = config.timezone
@@ -1299,6 +1314,38 @@ def _get_fallback_chat_providers(
     return fallbacks
 
 
+def _provider_supports_modality(provider: Provider, modality: str) -> bool:
+    modalities = provider.provider_config.get("modalities", None)
+    return isinstance(modalities, list) and modality in modalities
+
+
+def _select_image_chat_provider(
+    provider: Provider,
+    req: ProviderRequest,
+    fallback_providers: list[Provider],
+) -> Provider:
+    if not req.image_urls or _provider_supports_modality(provider, "image"):
+        return provider
+
+    provider_id = provider.provider_config.get("id", "<unknown>")
+    for fallback_provider in fallback_providers:
+        if not _provider_supports_modality(fallback_provider, "image"):
+            continue
+        fallback_id = fallback_provider.provider_config.get("id", "<unknown>")
+        logger.warning(
+            "Chat provider %s does not support image input, switching this request to fallback provider %s.",
+            provider_id,
+            fallback_id,
+        )
+        return fallback_provider
+
+    logger.warning(
+        "Chat provider %s does not support image input and no image-capable fallback provider is available.",
+        provider_id,
+    )
+    return provider
+
+
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
@@ -1493,7 +1540,7 @@ async def build_main_agent(
         else:
             return None
 
-    await _decorate_llm_request(event, req, plugin_context, config)
+    await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
 
     await _apply_kb(event, req, plugin_context, config)
 
@@ -1527,6 +1574,16 @@ async def build_main_agent(
                 SendMessageToUserTool
             )
         )
+
+    fallback_providers = _get_fallback_chat_providers(
+        provider, plugin_context, config.provider_settings
+    )
+    selected_provider = _select_image_chat_provider(provider, req, fallback_providers)
+    if selected_provider is not provider:
+        provider = selected_provider
+        if req.model:
+            req.model = None
+        fallback_providers = [p for p in fallback_providers if p is not provider]
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()
@@ -1580,9 +1637,7 @@ async def build_main_agent(
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
-        fallback_providers=_get_fallback_chat_providers(
-            provider, plugin_context, config.provider_settings
-        ),
+        fallback_providers=fallback_providers,
         tool_result_overflow_dir=(
             get_astrbot_system_tmp_path()
             if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")
