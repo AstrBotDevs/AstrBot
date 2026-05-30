@@ -81,55 +81,57 @@
         />
       </div>
 
-      <div v-if="!isSidebarCollapsed" class="session-list">
-        <div
-          v-for="session in sessions"
-          :key="session.session_id"
-          class="session-item"
-          :class="{ active: !isProviderWorkspace && currSessionId === session.session_id }"
-          role="button"
-          tabindex="0"
-          @click="selectSession(session.session_id)"
-          @keydown.enter="selectSession(session.session_id)"
-          @keydown.space.prevent="selectSession(session.session_id)"
-        >
-          <span v-if="!isSidebarCollapsed" class="session-title">{{
-            sessionTitle(session)
-          }}</span>
-          <div class="session-actions" @click.stop>
-            <v-btn
-              icon="mdi-pencil-outline"
-              size="x-small"
-              variant="text"
-              class="session-action-btn"
-              :title="tm('conversation.editDisplayName')"
-              @click="editSidebarSessionTitle(session)"
-            />
-            <v-btn
-              icon="mdi-delete-outline"
-              size="x-small"
-              variant="text"
-              class="session-action-btn"
-              :title="tm('actions.deleteChat')"
-              @click="deleteSidebarSession(session)"
+      <OverlayScrollbar v-if="!isSidebarCollapsed" class="session-list-scroll">
+        <div class="session-list">
+          <div
+            v-for="session in sessions"
+            :key="session.session_id"
+            class="session-item"
+            :class="{ active: !isProviderWorkspace && currSessionId === session.session_id }"
+            role="button"
+            tabindex="0"
+            @click="selectSession(session.session_id)"
+            @keydown.enter="selectSession(session.session_id)"
+            @keydown.space.prevent="selectSession(session.session_id)"
+          >
+            <span v-if="!isSidebarCollapsed" class="session-title">{{
+              sessionTitle(session)
+            }}</span>
+            <div class="session-actions" @click.stop>
+              <v-btn
+                icon="mdi-pencil-outline"
+                size="x-small"
+                variant="text"
+                class="session-action-btn"
+                :title="tm('conversation.editDisplayName')"
+                @click="editSidebarSessionTitle(session)"
+              />
+              <v-btn
+                icon="mdi-delete-outline"
+                size="x-small"
+                variant="text"
+                class="session-action-btn"
+                :title="tm('actions.deleteChat')"
+                @click="deleteSidebarSession(session)"
+              />
+            </div>
+            <v-progress-circular
+              v-if="isSessionRunning(session.session_id)"
+              class="session-progress"
+              indeterminate
+              size="16"
+              width="2"
             />
           </div>
-          <v-progress-circular
-            v-if="isSessionRunning(session.session_id)"
-            class="session-progress"
-            indeterminate
-            size="16"
-            width="2"
-          />
-        </div>
 
-        <div
-          v-if="!isSidebarCollapsed && !sessions.length && !loadingSessions"
-          class="empty-sessions"
-        >
-          {{ tm("conversation.noHistory") }}
+          <div
+            v-if="!isSidebarCollapsed && !sessions.length && !loadingSessions"
+            class="empty-sessions"
+          >
+            {{ tm("conversation.noHistory") }}
+          </div>
         </div>
-      </div>
+      </OverlayScrollbar>
 
       <div class="sidebar-footer">
         <StyledMenu
@@ -337,14 +339,16 @@
       </ProjectView>
 
       <template v-else>
-        <section
-          ref="messagesContainer"
+        <OverlayScrollbar
+          ref="messagesScrollbar"
           class="messages-panel"
-          @scroll="handleMessagesScroll"
         >
-          <div v-if="loadingMessages" class="center-state">
-            <v-progress-circular indeterminate size="32" width="3" />
-          </div>
+          <section
+            class="messages-panel-inner"
+          >
+            <div v-if="loadingMessages" class="center-state">
+              <v-progress-circular indeterminate size="32" width="3" />
+            </div>
 
           <div v-else-if="sessionProject" class="session-project-breadcrumb">
             <span>{{ sessionProject.title }}</span>
@@ -387,6 +391,7 @@
             />
           </div>
         </section>
+        </OverlayScrollbar>
 
         <section class="composer-shell">
           <ChatInput
@@ -505,6 +510,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
 import axios from "axios";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import OverlayScrollbar from "@/components/shared/OverlayScrollbar.vue";
 import ProjectDialog, {
   type ProjectFormData,
 } from "@/components/chat/ProjectDialog.vue";
@@ -606,6 +612,7 @@ const projectSessions = ref<Session[]>([]);
 const loadingSessions = ref(false);
 const draft = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
+const messagesScrollbar = ref<InstanceType<typeof OverlayScrollbar> | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
 const replyTarget = ref<ChatRecord | null>(null);
@@ -761,6 +768,13 @@ onMounted(async () => {
   } finally {
     loadingSessions.value = false;
   }
+  // Bind messagesContainer to OverlayScrollbar viewport
+  nextTick(() => {
+    if (messagesScrollbar.value?.viewport) {
+      messagesContainer.value = messagesScrollbar.value.viewport;
+      messagesContainer.value.addEventListener('scroll', handleMessagesScroll);
+    }
+  });
 });
 
 onBeforeUnmount(() => {
@@ -1477,9 +1491,12 @@ function toggleTheme() {
   transform: rotate(180deg);
 }
 
-.session-list {
+.session-list-scroll {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+}
+
+.session-list {
   padding: 4px 12px 12px;
   display: flex;
   flex-direction: column;
@@ -1611,7 +1628,9 @@ function toggleTheme() {
 .messages-panel {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+}
+
+.messages-panel-inner {
   padding: 24px max(24px, calc((100% - 980px) / 2)) 18px;
 }
 
@@ -1744,13 +1763,8 @@ kbd {
 }
 
 @media (max-width: 760px) {
-  .messages-panel {
+  .messages-panel-inner {
     padding: 18px 14px;
-  }
-
-  .composer-shell,
-  .project-composer-shell {
-    padding: 0;
   }
 }
 </style>

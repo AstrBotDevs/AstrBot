@@ -9,8 +9,8 @@
     <div
       class="input-container"
       :style="{
-        width: '85%',
-        maxWidth: '900px',
+        width: '100%',
+        maxWidth: '800px',
         margin: '0 auto',
         border: isDark ? 'none' : '1px solid #e0e0e0',
         borderRadius: '24px',
@@ -1253,46 +1253,4 @@ defineExpose({
   }
 }
 
-@media (max-width: 768px) {
-  .input-area {
-    padding: 0 !important;
-  }
-
-  .input-container {
-    width: 100% !important;
-    max-width: 100% !important;
-    border-bottom-left-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
-  }
-
-  .input-outline-control {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
-  }
-
-  .input-area textarea,
-  .chat-textarea {
-    min-height: 28px !important;
-    max-height: 140px !important;
-    font-size: 16px !important;
-    line-height: 20px !important;
-    padding: 8px 14px 7px !important;
-  }
-
-  .attachments-preview {
-    margin: 8px 10px 0;
-    gap: 8px;
-  }
-
-  .attachment-card {
-    width: min(220px, calc(100vw - 28px));
-    height: 58px;
-  }
-
-  .image-preview {
-    width: 58px;
-    flex-basis: 58px;
-  }
-}
 </style>
