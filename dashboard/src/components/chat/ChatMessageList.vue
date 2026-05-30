@@ -290,7 +290,7 @@
             />
             <v-btn
               v-if="enableCopy && !isUserMessage(msg)"
-              icon="mdi-file-document-edit-outline"
+              icon="mdi-printer-outline"
               size="x-small"
               variant="text"
               @click="printMessage(msg)"

@@ -26,18 +26,26 @@ export default defineComponent({
 
     function scrollToBottom() {
       nextTick(() => {
-        if (shouldStickToBottom && messagesContainer.value) {
-          messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-        }
+        const container = messagesContainer.value;
+        if (!shouldStickToBottom.value || !container) return;
+        container.scrollTop = container.scrollHeight;
       });
     }
 
     // 检测到用户操作后，取消自动滚动
-    window.addEventListener('wheel', () => { shouldStickToBottom.value = false; }, { passive: true });
+    window.addEventListener(
+      'wheel',
+      () => {
+        const container = messagesContainer.value;
+        shouldStickToBottom.value = !!(container && container.scrollHeight - container.scrollTop == container.clientHeight);
+      },
+      { passive: true },
+    );
     window.addEventListener('keydown', (e) => {
       const scrollKeys = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Space', 'Home', 'End'];
       if (scrollKeys.includes(e.code)) {
-        shouldStickToBottom.value = false;
+        const container = messagesContainer.value;
+        shouldStickToBottom.value = shouldStickToBottom.value = !!(container && container.scrollHeight - container.scrollTop == container.clientHeight);
       }
     });
 
@@ -56,7 +64,7 @@ export default defineComponent({
       cleanupMediaCache,
       chatWidgetSetApiPackage,
     } = useMediaHandling();
-    const { sending, activeMessages, isSessionRunning, messageContent, createLocalExchange, sendMessageStream, stopSession, widgetSetApiPackage, loadSessionMessages } = useMessages({
+    const { sending, activeMessages, isSessionRunning, createLocalExchange, sendMessageStream, stopSession, widgetSetApiPackage, loadSessionMessages } = useMessages({
       currentSessionId: currSessionId,
       onStreamUpdate: () => {
         scrollToBottom();
@@ -70,8 +78,8 @@ export default defineComponent({
       currentSession,
       shouldStickToBottom,
       inputRef: ref<InstanceType<typeof ChatInput> | null>(null),
-      messagesContainer,
       scrollToBottom,
+      messagesContainer,
 
       stagedFiles,
       stagedImagesUrl,
@@ -90,7 +98,6 @@ export default defineComponent({
       sending,
       activeMessages,
       isSessionRunning,
-      messageContent,
       createLocalExchange,
       sendMessageStream,
       stopSession,
@@ -125,6 +132,14 @@ export default defineComponent({
     isDark() {
       return this.customizer.uiTheme === 'PurpleThemeDark';
     },
+  },
+  watch:{
+    activeMessages: {
+      deep: true,
+      handler: function() {
+        setTimeout(() => { this.scrollToBottom(); }, 1000);
+      }
+    }
   },
   created() {
     try {
@@ -161,6 +176,7 @@ export default defineComponent({
       .then()
       .finally(() => {
         this.pageStatus = 'success';
+        setTimeout(() => { this.scrollToBottom(); }, 1000);
       });
   },
   methods: {
@@ -227,12 +243,13 @@ export default defineComponent({
 
 <style lang="scss">
 .page-widget {
-  height: 100%;
   width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: #fff;
   position: absolute;
+  overflow: auto;
 
   .api-error {
     font-size: 18px;
@@ -245,9 +262,15 @@ export default defineComponent({
     align-items: center;
     justify-content: center;
     text-align: center;
+
+    .welcome-title {
+      font-size: 24px;
+      font-weight: 700;
+    }
   }
   .message-list-content {
     padding: 14px;
+    flex: 1;
   }
   .user-input-box {
     position: sticky;
@@ -261,7 +284,7 @@ export default defineComponent({
     }
   }
 
-  @media (max-width: 760px) {
+  @media (max-width: 768px) {
     .user-input-box {
       padding-bottom: 0;
     }
@@ -270,61 +293,63 @@ export default defineComponent({
 </style>
 
 <template>
-  <v-app ref="messagesContainer" class="page-widget" :theme="customizer.uiTheme" style="height: 100%; width: 100%">
-    <div class="center-state" v-if="pageStatus == 'loading'">
-      <v-progress-circular indeterminate size="28" width="3" />
-    </div>
-    <!-- 异常信息 -->
-    <div v-else-if="pageStatus == 'error'" class="api-error">{{ pageMessage }}</div>
-    <!-- 功能 -->
-    <template v-else-if="pageStatus == 'success'">
-      <ChatMessageList
-        v-if="activeMessages"
-        class="message-list-content"
-        :messages="activeMessages"
-        :is-dark="isDark"
-        :is-streaming="Boolean(currSessionId && isSessionRunning(currSessionId))"
-        :enable-edit="false"
-        :enable-regenerate="false"
-        :enable-copy="true"
-        :manage-refs-sidebar="false"
-      />
-      <!-- 欢迎页 -->
-      <div v-else class="center-state">
-        <div class="welcome-title">
-          {{ welcomeTitle ? welcomeTitle : tm('welcome.title') }}
+  <v-app :theme="customizer.uiTheme">
+    <div class="page-widget" ref="messagesContainer">
+      <div class="center-state" v-if="pageStatus == 'loading'">
+        <v-progress-circular indeterminate size="28" width="3" />
+      </div>
+      <!-- 异常信息 -->
+      <div v-else-if="pageStatus == 'error'" class="api-error">{{ pageMessage }}</div>
+      <!-- 功能 -->
+      <template v-else-if="pageStatus == 'success'">
+        <div v-if="activeMessages?.length" class="message-list-content">
+          <ChatMessageList
+            :messages="activeMessages"
+            :is-dark="isDark"
+            :is-streaming="Boolean(currSessionId && isSessionRunning(currSessionId))"
+            :enable-edit="false"
+            :enable-regenerate="false"
+            :enable-copy="true"
+            :manage-refs-sidebar="false"
+          />
         </div>
-      </div>
-      <!-- 输入框 -->
-      <div class="user-input-box">
-        <ChatInput
-          ref="inputRef"
-          v-model:prompt="draft"
-          :staged-images-url="stagedImagesUrl"
-          :staged-audio-url="stagedAudioUrl"
-          :staged-files="stagedNonImageFiles"
-          :disabled="sending || pageStatus == 'loading'"
-          :enable-streaming="enableStreaming"
-          :is-recording="false"
-          :is-running="Boolean(currSessionId && isSessionRunning(currSessionId))"
-          :session-id="currSessionId || null"
-          :current-session="currentSession"
-          :config-id="de_package.config_id"
-          send-shortcut="enter"
-          @send="sendCurrentMessage"
-          @stop="stopCurrentSession"
-          @toggle-streaming="enableStreaming = !enableStreaming"
-          @remove-image="removeImage"
-          @remove-audio="removeAudio"
-          @remove-file="removeFile"
-          @paste-image="(e: ClipboardEvent) => handlePaste(e, currSessionId)"
-          @file-select="handleFilesSelected"
-          :uploadFilesDisabled="!attachmentEnabled"
-          :providerModelMenuDisabled="true"
-          :config-selector-disabled="true"
-          :recordDisabled="!attachmentEnabled"
-        />
-      </div>
-    </template>
+        <!-- 欢迎页 -->
+        <div v-else class="center-state">
+          <div class="welcome-title">
+            {{ welcomeTitle ? welcomeTitle : tm('welcome.title') }}
+          </div>
+        </div>
+        <!-- 输入框 -->
+        <div class="user-input-box">
+          <ChatInput
+            ref="inputRef"
+            v-model:prompt="draft"
+            :staged-images-url="stagedImagesUrl"
+            :staged-audio-url="stagedAudioUrl"
+            :staged-files="stagedNonImageFiles"
+            :disabled="sending || pageStatus == 'loading'"
+            :enable-streaming="enableStreaming"
+            :is-recording="false"
+            :is-running="Boolean(currSessionId && isSessionRunning(currSessionId))"
+            :session-id="currSessionId || null"
+            :current-session="currentSession"
+            :config-id="de_package.config_id"
+            send-shortcut="enter"
+            @send="sendCurrentMessage"
+            @stop="stopCurrentSession"
+            @toggle-streaming="enableStreaming = !enableStreaming"
+            @remove-image="removeImage"
+            @remove-audio="removeAudio"
+            @remove-file="removeFile"
+            @paste-image="(e: ClipboardEvent) => handlePaste(e, currSessionId)"
+            @file-select="handleFilesSelected"
+            :uploadFilesDisabled="!attachmentEnabled"
+            :providerModelMenuDisabled="true"
+            :config-selector-disabled="true"
+            :recordDisabled="!attachmentEnabled"
+          />
+        </div>
+      </template>
+    </div>
   </v-app>
 </template>
