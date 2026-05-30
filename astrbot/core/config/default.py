@@ -208,6 +208,7 @@ DEFAULT_CONFIG = {
             "enabled": False,
             "max_subagent_count": 5,
             "auto_cleanup_per_turn": True,
+            "default_provider_id": "",
             "rule_prompt": (
                 "# Behavior Rules\n"
                 "## Output Guidelines\n"

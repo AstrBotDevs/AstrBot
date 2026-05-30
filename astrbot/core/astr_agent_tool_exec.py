@@ -31,7 +31,11 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
-from astrbot.core.subagent_manager import SubAgentManager
+from astrbot.core.subagent_manager import (
+    RET_PENDING_TASK_CREATE_FAILED,
+    SubAgentManager,
+    SubAgentStatus,
+)
 from astrbot.core.tools.computer_tools import (
     CuaKeyboardTypeTool,
     CuaMouseClickTool,
@@ -1023,7 +1027,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     session_id=umo, agent_name=agent_name
                 )
 
-                if subagent_task_id.startswith("__PENDING_TASK_CREATE_FAILED__"):
+                if subagent_task_id.startswith(RET_PENDING_TASK_CREATE_FAILED):
                     logger.info(
                         f"[SubAgent:BackgroundTask] Failed to created background task {subagent_task_id} for {agent_name}"
                     )
@@ -1031,7 +1035,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     SubAgentManager.set_subagent_status(
                         session_id=umo,
                         agent_name=agent_name,
-                        status="RUNNING",
+                        status=SubAgentStatus.RUNNING,
                     )
 
                     logger.info(
@@ -1051,7 +1055,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         subagent_task_id: str | None,
     ) -> mcp.types.TextContent:
         if subagent_task_id and not subagent_task_id.startswith(
-            "__PENDING_TASK_CREATE_FAILED__"
+            RET_PENDING_TASK_CREATE_FAILED
         ):
             return mcp.types.TextContent(
                 type="text",
@@ -1086,7 +1090,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         SubAgentManager.set_subagent_status(
             session_id=umo,
             agent_name=agent_name,
-            status="FAILED",
+            status=SubAgentStatus.FAILED,
         )
 
     @staticmethod
@@ -1113,7 +1117,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool_args: dict,
     ) -> None:
         success = error_text is None
-        status = "COMPLETED" if success else "FAILED"
+        status = SubAgentStatus.COMPLETED if success else SubAgentStatus.FAILED
         SubAgentManager.set_subagent_status(
             session_id=umo, agent_name=agent_name, status=status
         )

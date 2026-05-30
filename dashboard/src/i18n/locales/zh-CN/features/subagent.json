@@ -118,6 +118,8 @@
   "enhancedFields": {
     "maxSubagentCount": "最大子代理数量",
     "maxSubagentCountHint": "设置最大子代理数量。动态子代理数量 = 最大子代理数量 - 已有静态子代理数量",
+    "defaultProviderId": "默认 Chat Provider",
+    "defaultProviderIdHint": "动态子代理未指定 provider 时的默认值。留空则使用主代理的 provider",
     "sharedContextMaxlen": "共享上下文最大长度",
     "sharedContextMaxlenHint": "共享上下文消息的最大数量（条）",
     "subagentHistoryMaxlen": "最大历史消息数",
