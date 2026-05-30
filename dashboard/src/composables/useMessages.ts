@@ -794,6 +794,44 @@ export function extractReasoningText(
   return text || legacyReasoning;
 }
 
+export function reasoningActivityCounts(
+  parts: MessagePart[] | unknown,
+  legacyReasoning = "",
+) {
+  const normalizedParts = Array.isArray(parts)
+    ? parts
+    : normalizeMessageParts(parts, legacyReasoning);
+  let thinkCount = 0;
+  let toolCount = 0;
+
+  for (const part of normalizedParts) {
+    if (part.type === "think" && String(part.think || "").trim()) {
+      thinkCount += 1;
+    }
+    if (part.type === "tool_call" && Array.isArray(part.tool_calls)) {
+      toolCount += part.tool_calls.length;
+    }
+  }
+
+  return { thinkCount, toolCount };
+}
+
+export function reasoningActivityTitle(
+  counts: ReturnType<typeof reasoningActivityCounts>,
+  tm: (key: string, params?: Record<string, string | number>) => string,
+) {
+  return [
+    counts.thinkCount > 0
+      ? tm("reasoning.thinkSummary", { count: counts.thinkCount })
+      : "",
+    counts.toolCount > 0
+      ? tm("reasoning.toolSummary", { count: counts.toolCount })
+      : "",
+  ]
+    .filter(Boolean)
+    .join(tm("reasoning.summarySeparator")) || tm("reasoning.thinking");
+}
+
 export function thinkingParts(content: ChatContent): MessagePart[] {
   const firstThinkingBlock = messageBlocks(content).find(
     (block) => block.kind === "thinking",

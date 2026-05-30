@@ -114,6 +114,9 @@
   },
   "reasoning": {
     "thinking": "思考过程",
+    "summarySeparator": "，",
+    "thinkSummary": "思考了 {count} 次",
+    "toolSummary": "使用了 {count} 次工具",
     "think": "思考",
     "toolUsed": "使用工具"
   },
