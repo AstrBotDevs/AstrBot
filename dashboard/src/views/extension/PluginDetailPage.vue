@@ -1053,7 +1053,7 @@ onBeforeUnmount(() => {
   margin-bottom: 28px;
   padding: 10px 0;
   position: sticky;
-  top: calc(var(--v-layout-top, 64px));
+  top: 0;
   z-index: 20;
 }
 
