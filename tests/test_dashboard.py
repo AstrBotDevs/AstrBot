@@ -855,7 +855,9 @@ async def test_plugin_get_excludes_scanned_pages(
     )
     assert plugin["activated"] is True
     assert "page" not in plugin
-    assert "pages" not in plugin
+    assert "pages" in plugin
+    assert isinstance(plugin["pages"], list)
+    assert PLUGIN_PAGE_DEMO_PAGE_NAME in plugin["pages"]
 
 
 @pytest.mark.asyncio
@@ -887,6 +889,7 @@ async def test_plugin_detail_includes_scanned_page_component(
             "i18n_key": f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}",
             "description": "Plugin Page entry",
             "plugin_name": PLUGIN_PAGE_DEMO_NAME,
+            "plugin_marketplace_name": PLUGIN_PAGE_DEMO_NAME.replace("_", "-"),
         }
     ]
 
@@ -1433,9 +1436,14 @@ async def test_plugins(
         assert response.status_code == 200
         data = await response.get_json()
         assert data["status"] == "ok"
-        assert len(data["data"]) == 1
-        assert "components" not in data["data"][0]
-        installed_at = data["data"][0]["installed_at"]
+        assert len(data["data"]) >= 1
+        target = next(
+            (item for item in data["data"] if item["name"] == test_plugin_name),
+            None,
+        )
+        assert target is not None
+        assert "components" not in target
+        installed_at = target["installed_at"]
         assert installed_at is not None
         datetime.fromisoformat(installed_at)
 

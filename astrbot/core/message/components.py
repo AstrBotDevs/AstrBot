@@ -28,6 +28,7 @@ import os
 import sys
 import uuid
 from enum import Enum
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import anyio
@@ -680,6 +681,19 @@ class Unknown(BaseMessageComponent):
     text: str
 
 
+def _sanitize_file_component_name(name: str | None) -> str:
+    if not name:
+        return "file"
+
+    normalized = str(name).replace("\\", "/")
+    basename = PurePosixPath(normalized).name.replace("\x00", "").strip()
+    for char in ':*?"<>|':
+        basename = basename.replace(char, "_")
+    if basename in {"", ".", ".."}:
+        return "file"
+    return basename
+
+
 class File(BaseMessageComponent):
     """文件消息段"""
 
@@ -791,13 +805,16 @@ class File(BaseMessageComponent):
         """下载文件"""
         if not self.url:
             raise ValueError("Download failed: No URL provided in File component.")
-        download_dir = get_astrbot_temp_path()
+        download_dir = anyio.Path(get_astrbot_temp_path())
+        await download_dir.mkdir(parents=True, exist_ok=True)
         if self.name:
-            name, ext = os.path.splitext(self.name)
+            safe_name = _sanitize_file_component_name(self.name)
+            name = Path(safe_name).stem
+            ext = Path(safe_name).suffix
             filename = f"fileseg_{name}_{uuid.uuid4().hex[:8]}{ext}"
         else:
             filename = f"fileseg_{uuid.uuid4().hex}"
-        file_path = os.path.join(download_dir, filename)
+        file_path = str(download_dir / filename)
         await download_file(self.url, file_path)
         self.file_ = str(await anyio.Path(file_path).resolve())
 
