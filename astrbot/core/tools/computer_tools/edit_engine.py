@@ -668,6 +668,79 @@ class EditResult:
 # ---------------------------------------------------------------------------
 
 
+def bytes_edit_file(
+    raw_bytes: bytes,
+    old_string: str,
+    new_string: str,
+    *,
+    replace_all: bool = False,
+    encoding: str = "utf-8",
+) -> tuple[bytes, EditResult]:
+    """
+    Core line-ending-aware edit logic operating on raw bytes.
+
+    Performs:
+    1. BOM detection and preservation
+    2. Line-ending detection (CRLF vs LF)
+    3. Normalize to LF for matching (replacer chain works on LF)
+    4. Execute robust_replace()
+    5. Convert back to original line endings
+    6. Re-attach BOM if present
+
+    Returns:
+        (output_bytes, EditResult) — the caller is responsible for writing
+        *output_bytes* back to the file.
+
+    Raises:
+        ValueError: If old_string cannot be found or is not unique.
+    """
+    has_bom = raw_bytes.startswith(b"\xef\xbb\xbf")
+    if has_bom:
+        raw_bytes = raw_bytes[3:]
+
+    old_content = raw_bytes.decode(encoding)
+    original_ending = _detect_line_ending(old_content)
+
+    # Normalize for matching: ONLY normalize actual CRLF line endings.
+    # Escape sequence handling (\n vs actual newline, \t vs tab, etc.)
+    # is deferred to the _escape_normalized_replacer in the replacer chain.
+    normalized_old = _normalize_line_endings(old_string)
+    normalized_new = _normalize_line_endings(new_string)
+
+    # Normalize file content to LF for matching (replacers work on LF)
+    normalized_content = _normalize_line_endings(old_content)
+
+    # Perform replacement
+    new_content, replacements = robust_replace(
+        normalized_content,
+        normalized_old,
+        normalized_new,
+        replace_all=replace_all,
+    )
+
+    # Convert back to original line endings
+    if original_ending == "\r\n":
+        new_content = _convert_to_line_ending(new_content, "\r\n")
+
+    # Re-add BOM if present
+    write_bytes = b""
+    if has_bom:
+        write_bytes += b"\xef\xbb\xbf"
+    write_bytes += new_content.encode(encoding)
+
+    # Generate unified diff
+    diff = build_unified_diff("", old_content, new_content)
+
+    result = EditResult(
+        success=True,
+        replacements=replacements,
+        diff=diff,
+        old_content=old_content,
+        new_content=new_content,
+    )
+    return write_bytes, result
+
+
 async def edit_file(
     path: str,
     old_string: str,
@@ -688,59 +761,18 @@ async def edit_file(
     lock = get_file_lock(path)
     async with lock:
         try:
-            # Read file
+            # Read file in binary mode to preserve original line endings
             raw_bytes = await asyncio.to_thread(_read_file_bytes, path)
-            has_bom = raw_bytes.startswith(b"\xef\xbb\xbf")
-            if has_bom:
-                raw_bytes = raw_bytes[3:]
-
-            old_content = raw_bytes.decode(encoding)
-            original_ending = _detect_line_ending(old_content)
-
-            # Normalize for matching: ONLY normalize actual CRLF line endings.
-            # Escape sequence handling (\n vs actual newline, \t vs tab, etc.)
-            # is deferred to the _escape_normalized_replacer in the replacer chain.
-            normalized_old = _normalize_line_endings(old_string)
-            normalized_new = _normalize_line_endings(new_string)
-
-            # Normalize file content to LF for matching (replacers work on LF)
-            normalized_content = _normalize_line_endings(old_content)
-            # Perform replacement
-            new_content, replacements = robust_replace(
-                normalized_content,
-                normalized_old,
-                normalized_new,
+            write_bytes, result = bytes_edit_file(
+                raw_bytes,
+                old_string,
+                new_string,
                 replace_all=replace_all,
+                encoding=encoding,
             )
-
-            # Convert back to original line endings
-            if original_ending == "\r\n":
-                new_content = _convert_to_line_ending(new_content, "\r\n")
-
-            # Re-add BOM if present
-            write_bytes = b""
-            if has_bom:
-                write_bytes += b"\xef\xbb\xbf"
-            write_bytes += new_content.encode(encoding)
-
-            # Write file
+            # Write file in binary mode to preserve restored line endings
             await asyncio.to_thread(_write_file_bytes, path, write_bytes)
-
-            # Generate unified diff
-            diff = build_unified_diff(
-                path,
-                old_content,
-                new_content,
-            )
-
-            return EditResult(
-                success=True,
-                replacements=replacements,
-                diff=diff,
-                old_content=old_content,
-                new_content=new_content,
-            )
-
+            return result
         except Exception as exc:
             return EditResult(
                 success=False,

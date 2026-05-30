@@ -33,6 +33,7 @@ Local path resolution rule:
 - In sandbox runtime, relative paths are passed through unchanged.
 """
 
+import base64
 import os
 import uuid
 from dataclasses import dataclass, field
@@ -57,10 +58,9 @@ from ..registry import builtin_tool
 from . import util as computer_util
 from .edit_engine import (
     EditResult,
-    build_unified_diff,
+    bytes_edit_file,
     edit_file,
     get_file_lock,
-    robust_replace,
 )
 from .util import (
     check_admin_permission,
@@ -375,6 +375,73 @@ class FileWriteTool(FunctionTool):
             return f"Error writing file: {exc}"
 
 
+async def _sandbox_read_bytes(sb, path: str) -> bytes:
+    """Read a file in binary mode inside the sandbox via sb.python.exec.
+
+    Returns the raw bytes so that original line endings (CRLF/LF) are preserved.
+    Raises IOError on read failure.
+    """
+    code = (
+        "import base64 as _b64, sys\n"
+        f"path = {path!r}\n"
+        "try:\n"
+        "    with open(path, 'rb') as _f:\n"
+        "        _data = _f.read()\n"
+        "    print(_b64.b64encode(_data).decode(), end='')\n"
+        "except Exception as _e:\n"
+        "    print('ERROR:' + str(_e), end='', file=sys.stderr)\n"
+        "    sys.exit(1)\n"
+    )
+    result = await sb.python.exec(code, timeout=30)
+    if not result.get("success", False):
+        error = str(result.get("error", "") or "").strip()
+        if not error:
+            output = result.get("output", "")
+            if isinstance(output, dict):
+                error = str(output.get("error", "") or "").strip()
+        raise IOError(
+            f"Failed to read file in sandbox: "
+            f"{error or 'unknown read error'}"
+        )
+    output = result.get("output", "")
+    if isinstance(output, dict):
+        output = output.get("text", "")
+    b64_text = str(output).strip()
+    return base64.b64decode(b64_text)
+
+
+async def _sandbox_write_bytes(sb, path: str, data: bytes) -> None:
+    """Write raw bytes to a file inside the sandbox via sb.python.exec.
+
+    Raises IOError on write failure.
+    """
+    b64_data = base64.b64encode(data).decode()
+    code = (
+        "import base64 as _b64, sys\n"
+        f"path = {path!r}\n"
+        f"b64 = {b64_data!r}\n"
+        "try:\n"
+        "    _raw = _b64.b64decode(b64)\n"
+        "    with open(path, 'wb') as _f:\n"
+        "        _f.write(_raw)\n"
+        "    print('ok', end='')\n"
+        "except Exception as _e:\n"
+        "    print('ERROR:' + str(_e), end='', file=sys.stderr)\n"
+        "    sys.exit(1)\n"
+    )
+    result = await sb.python.exec(code, timeout=30)
+    if not result.get("success", False):
+        error = str(result.get("error", "") or "").strip()
+        if not error:
+            output = result.get("output", "")
+            if isinstance(output, dict):
+                error = str(output.get("error", "") or "").strip()
+        raise IOError(
+            f"Failed to write file in sandbox: "
+            f"{error or 'unknown write error'}"
+        )
+
+
 def _format_result(
     path: str,
     result: EditResult,
@@ -513,48 +580,33 @@ class FileEditTool(FunctionTool):
                 )
                 lock = get_file_lock(normalized_path)
                 async with lock:
-                    read_result = await sb.fs.read_file(path=normalized_path)
-                    if not read_result.get("success", False):
-                        error_detail = str(read_result.get("error", "") or "").strip()
-                        return (
-                            "Error editing file: "
-                            f"{error_detail or 'unknown filesystem read error'}"
-                        )
-
-                    old_content = read_result.get("content", "")
-
+                    # 1. Binary read — preserves original line endings (CRLF/LF)
                     try:
-                        new_content, replacements = robust_replace(
-                            old_content,
+                        raw_bytes = await _sandbox_read_bytes(
+                            sb, normalized_path
+                        )
+                    except IOError as exc:
+                        return f"Error editing file: {exc}"
+
+                    # 2. Line-ending-aware edit (reuses edit_engine core logic)
+                    try:
+                        write_bytes, result = bytes_edit_file(
+                            raw_bytes,
                             old,
                             new,
                             replace_all=replace_all,
+                            encoding="utf-8",
                         )
                     except ValueError as exc:
                         return f"Error editing file: {exc}"
 
-                    write_result = await sb.fs.write_file(
-                        path=normalized_path,
-                        content=new_content,
-                    )
-                    if not write_result.get("success", False):
-                        error_detail = str(write_result.get("error", "") or "").strip()
-                        return (
-                            "Error editing file: "
-                            f"{error_detail or 'unknown filesystem write error'}"
+                    # 3. Binary write — preserves restored line endings
+                    try:
+                        await _sandbox_write_bytes(
+                            sb, normalized_path, write_bytes
                         )
-
-                    diff = build_unified_diff(
-                        normalized_path,
-                        old_content,
-                        new_content,
-                    )
-
-                    result = EditResult(
-                        success=True,
-                        replacements=replacements,
-                        diff=diff,
-                    )
+                    except IOError as exc:
+                        return f"Error editing file: {exc}"
 
             return _format_result(
                 normalized_path,
