@@ -6,6 +6,7 @@ import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
 import PersonaQuickPreview from './PersonaQuickPreview.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
 
 
 const props = defineProps({
@@ -24,23 +25,30 @@ const props = defineProps({
   searchKeyword: {
     type: String,
     default: ''
+  },
+  pluginName: {
+    type: String,
+    default: ''
+  },
+  pluginI18n: {
+    type: Object,
+    default: () => ({})
+  },
+  pathPrefix: {
+    type: String,
+    default: ''
   }
 })
 
 const { t } = useI18n()
-const { tm, getRaw } = useModuleI18n('features/config-metadata')
+const { getRaw } = useModuleI18n('features/config-metadata')
 const { tm: tmConfig } = useModuleI18n('features/config')
+const { translateIfKey, resolveConfigText } = useConfigTextResolver(props)
 
 const hintMarkdown = new MarkdownIt({
   linkify: true,
   breaks: true
 })
-
-// 翻译器函数 - 如果是国际化键则翻译，否则原样返回
-const translateIfKey = (value) => {
-  if (!value || typeof value !== 'string') return value
-  return tm(value)
-}
 
 const renderHint = (value) => {
   const text = translateIfKey(value)
@@ -118,6 +126,18 @@ function createSelectorModel(selector) {
   })
 }
 
+function getItemPath(key) {
+  return props.pathPrefix ? `${props.pathPrefix}.${key}` : key
+}
+
+function getItemDescription(itemKey, itemMeta) {
+  return resolveConfigText(getItemPath(itemKey), 'description', itemMeta?.description) || itemKey
+}
+
+function getItemHint(itemKey, itemMeta) {
+  return resolveConfigText(getItemPath(itemKey), 'hint', itemMeta?.hint)
+}
+
 function openEditorDialog(key, value, theme, language) {
   currentEditingKey.value = key
   currentEditingLanguage.value = language || 'json'
@@ -147,8 +167,8 @@ function shouldShowItem(itemMeta, itemKey) {
 
   const searchableText = [
     itemKey,
-    translateIfKey(itemMeta?.description || ''),
-    translateIfKey(itemMeta?.hint || '')
+    getItemDescription(itemKey, itemMeta),
+    getItemHint(itemKey, itemMeta)
   ].join(' ').toLowerCase()
 
   return searchableText.includes(keyword)
@@ -263,13 +283,13 @@ function getSpecialSubtype(value) {
           <v-col cols="12" sm="6" class="property-info">
             <v-list-item density="compact">
               <v-list-item-title class="property-name">
-                {{ translateIfKey(itemMeta?.description) || itemKey }}
+                {{ getItemDescription(itemKey, itemMeta) }}
                 <span class="property-key">({{ itemKey }})</span>
               </v-list-item-title>
 
               <v-list-item-subtitle class="property-hint">
                 <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
-                <span v-html="renderHint(itemMeta?.hint)"></span>
+                <span v-html="renderHint(getItemHint(itemKey, itemMeta))"></span>
               </v-list-item-subtitle>
             </v-list-item>
           </v-col>
@@ -278,12 +298,18 @@ function getSpecialSubtype(value) {
               v-if="itemMeta?.type === 'template_list'"
               v-model="createSelectorModel(itemKey).value"
               :templates="itemMeta?.templates || {}"
+              :plugin-name="pluginName"
+              :plugin-i18n="pluginI18n"
+              :config-path="getItemPath(itemKey)"
               class="config-field"
             />
             <ConfigItemRenderer
               v-else
               v-model="createSelectorModel(itemKey).value"
               :item-meta="itemMeta || null"
+              :plugin-name="pluginName"
+              :plugin-i18n="pluginI18n"
+              :config-key="getItemPath(itemKey)"
               :show-fullscreen-btn="!!itemMeta?.editor_mode"
               @open-fullscreen="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
             />
@@ -343,13 +369,13 @@ function getSpecialSubtype(value) {
                 <v-col cols="12" sm="6" class="property-info">
                   <v-list-item density="compact">
                     <v-list-item-title class="property-name">
-                      {{ translateIfKey(itemMeta?.description) || itemKey }}
+                      {{ getItemDescription(itemKey, itemMeta) }}
                       <span class="property-key">({{ itemKey }})</span>
                     </v-list-item-title>
 
                     <v-list-item-subtitle class="property-hint">
                       <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
-                      <span v-html="renderHint(itemMeta?.hint)"></span>
+                      <span v-html="renderHint(getItemHint(itemKey, itemMeta))"></span>
                     </v-list-item-subtitle>
                   </v-list-item>
                 </v-col>
@@ -358,12 +384,18 @@ function getSpecialSubtype(value) {
                     v-if="itemMeta?.type === 'template_list'"
                     v-model="createSelectorModel(itemKey).value"
                     :templates="itemMeta?.templates || {}"
+                    :plugin-name="pluginName"
+                    :plugin-i18n="pluginI18n"
+                    :config-path="getItemPath(itemKey)"
                     class="config-field"
                   />
                   <ConfigItemRenderer
                     v-else
                     v-model="createSelectorModel(itemKey).value"
                     :item-meta="itemMeta || null"
+                    :plugin-name="pluginName"
+                    :plugin-i18n="pluginI18n"
+                    :config-key="getItemPath(itemKey)"
                     :show-fullscreen-btn="!!itemMeta?.editor_mode"
                     @open-fullscreen="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
                   />

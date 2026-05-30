@@ -35,7 +35,7 @@ class PersonaManager:
     async def initialize(self) -> None:
         self.personas = await self.get_all_personas()
         self.get_v3_persona_data()
-        logger.info(f"已加载 {len(self.personas)} 个人格。")
+        logger.info("Loaded %s personas.", len(self.personas))
 
     async def get_persona(self, persona_id: str):
         """获取指定 persona 的信息"""
@@ -239,8 +239,8 @@ class PersonaManager:
         self,
         folder_id: str,
         name: str | None = None,
-        parent_id: str | None = None,
-        description: str | None = None,
+        parent_id: str | None | object = NOT_GIVEN,
+        description: str | None | object = NOT_GIVEN,
         sort_order: int | None = None,
     ) -> PersonaFolder | None:
         """更新文件夹信息"""

@@ -96,51 +96,32 @@ class TruncateByTurnsCompressor:
         return truncated_messages
 
 
-def split_history(
-    messages: list[Message], keep_recent: int
-) -> tuple[list[Message], list[Message], list[Message]]:
-    """Split the message list into system messages, messages to summarize, and recent messages.
+def _message_to_dict(msg: Message) -> dict:
+    """Convert a Message to a plain dict suitable for round splitting."""
+    d = {"role": msg.role}
+    if msg.content is not None:
+        d["content"] = msg.content
+    if getattr(msg, "tool_calls", None):
+        d["tool_calls"] = msg.tool_calls
+    if getattr(msg, "tool_call_id", None):
+        d["tool_call_id"] = msg.tool_call_id
+    return d
 
-    Ensures that the split point is between complete user-assistant pairs to maintain conversation flow.
 
-    Args:
-        messages: The original message list.
-        keep_recent: The number of latest messages to keep.
+def _dict_to_message(d: dict) -> Message:
+    """Convert a plain dict back to a Message."""
+    return Message(**d)
 
-    Returns:
-        tuple: (system_messages, messages_to_summarize, recent_messages)
-    """
-    # keep the system messages
-    first_non_system = 0
-    for i, msg in enumerate(messages):
-        if msg.role != "system":
-            first_non_system = i
+
+def _extract_system_messages(messages: list[Message]) -> list[Message]:
+    """Return the leading system messages from a message list."""
+    result = []
+    for msg in messages:
+        if msg.role == "system":
+            result.append(msg)
+        else:
             break
-
-    system_messages = messages[:first_non_system]
-    non_system_messages = messages[first_non_system:]
-
-    if len(non_system_messages) <= keep_recent:
-        return system_messages, [], non_system_messages
-
-    # Find the split point, ensuring recent_messages starts with a user message
-    # This maintains complete conversation turns
-    split_index = len(non_system_messages) - keep_recent
-
-    # Search backward from split_index to find the first user message
-    # This ensures recent_messages starts with a user message (complete turn)
-    while split_index > 0 and non_system_messages[split_index].role != "user":
-        # TODO: +=1 or -=1 ? calculate by tokens
-        split_index -= 1
-
-    # If we couldn't find a user message, keep all messages as recent
-    if split_index == 0:
-        return system_messages, [], non_system_messages
-
-    messages_to_summarize = non_system_messages[:split_index]
-    recent_messages = non_system_messages[split_index:]
-
-    return system_messages, messages_to_summarize, recent_messages
+    return result
 
 
 class LLMSummaryCompressor:
@@ -166,13 +147,16 @@ class LLMSummaryCompressor:
         self.provider = provider
         self.keep_recent = keep_recent
         self.compression_threshold = compression_threshold
+        self.existing_summary: str = ""
 
         self.instruction_text = instruction_text or (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
+            "The primary goal of this summary is to enable seamless continuation of the work that follows.\n"
             "1. Systematically cover all core topics discussed and the final conclusion/outcome for each; clearly highlight the latest primary focus.\n"
             "2. If any tools were used, summarize tool usage (total call count) and extract the most valuable insights from tool outputs.\n"
-            "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
-            "4. Write the summary in the user's language.\n"
+            "3. If any materials (files, documents, code, references) were read during the conversation that may be helpful for subsequent work, list each one with its scope and path.\n"
+            "4. If there was an initial user goal, state it first and describe the current progress/status.\n"
+            "5. Write the summary in the user's language.\n"
         )
 
     def should_compress(
@@ -196,36 +180,55 @@ class LLMSummaryCompressor:
     async def __call__(self, messages: list[Message]) -> list[Message]:
         """Use LLM to generate a summary of the conversation history.
 
-        Process:
-        1. Divide messages: keep the system message and the latest N messages.
-        2. Send the old messages + the instruction message to the LLM.
-        3. Reconstruct the message list: [system message, summary message, latest messages].
+        Uses round-based splitting to preserve user-assistant turn boundaries.
+        On LLM failure, returns the original messages unchanged (caller should
+        fall back to truncation).
         """
-        if len(messages) <= self.keep_recent + 1:
+        from .round_utils import rounds_to_text, split_into_rounds
+
+        # Convert messages to dict list for round splitting
+        msg_dicts = [_message_to_dict(m) for m in messages]
+        rounds = split_into_rounds(msg_dicts)
+
+        if len(rounds) <= self.keep_recent:
             return messages
 
-        system_messages, messages_to_summarize, recent_messages = split_history(
-            messages, self.keep_recent
+        old_rounds = rounds[: -self.keep_recent]
+        recent_rounds = rounds[-self.keep_recent :]
+
+        if not old_rounds:
+            return messages
+
+        # Build LLM payload
+        old_text = rounds_to_text(old_rounds)
+        existing_note = ""
+        if self.existing_summary:
+            existing_note = (
+                "\nExisting memory summary (merge with old rounds above):\n"
+                f"{self.existing_summary}\n"
+            )
+        prompt = (
+            f"{self.instruction_text}\n\n"
+            "--- BEGIN CONVERSATION ROUNDS TO SUMMARIZE ---\n"
+            f"{old_text}\n"
+            "--- END CONVERSATION ROUNDS ---"
+            f"{existing_note}"
         )
 
-        if not messages_to_summarize:
-            return messages
-
-        # build payload
-        instruction_message = Message(role="user", content=self.instruction_text)
-        llm_payload = messages_to_summarize + [instruction_message]
-
-        # generate summary
+        # Generate summary
         try:
-            response = await self.provider.text_chat(contexts=llm_payload)
-            summary_content = response.completion_text
+            response = await self.provider.text_chat(prompt=prompt)
+            summary_content = (response.completion_text or "").strip()
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")
             return messages
 
-        # build result
-        result = []
-        result.extend(system_messages)
+        if not summary_content:
+            logger.warning("LLM context compression returned an empty summary.")
+            return messages
+
+        # Build result: system messages + summary pair + recent rounds
+        result = _extract_system_messages(messages)
 
         result.append(
             Message(
@@ -240,6 +243,9 @@ class LLMSummaryCompressor:
             )
         )
 
-        result.extend(recent_messages)
+        # Flatten recent rounds back to message list
+        for rnd in recent_rounds:
+            for seg in rnd:
+                result.append(_dict_to_message(seg))
 
         return result

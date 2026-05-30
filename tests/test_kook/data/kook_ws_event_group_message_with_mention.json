@@ -1,0 +1,88 @@
+{
+    "s": 0,
+    "d": {
+        "channel_type": "GROUP",
+        "type": 9,
+        "target_id": "2732467349811313213",
+        "author_id": "7324688132731983",
+        "content": "(rol)25555643(rol) /help (met)3351526782(met)  (met)all(met) ",
+        "msg_id": "9b047d81-40fe-41af-ad39-916ae77e6b20",
+        "msg_timestamp": 1776405840600,
+        "nonce": "r2oQkO7kRpNSgmsv7TNl2zOA",
+        "from_type": 1,
+        "extra": {
+            "type": 9,
+            "code": "",
+            "author": {
+                "id": "3351526782",
+                "username": "some_username",
+                "identify_num": "4198",
+                "nickname": "some_username",
+                "bot": false,
+                "online": true,
+                "avatar": "https://example.com",
+                "vip_avatar": "https://example.com",
+                "status": 1,
+                "roles": [
+                    63423577
+                ],
+                "os": "Websocket",
+                "banner": "",
+                "is_vip": false,
+                "vip_amp": false,
+                "nameplate": [],
+                "wealth_level": 0,
+                "is_sys": false
+            },
+            "kmarkdown": {
+                "raw_content": "@some_role /help @some_username  @全体成员",
+                "mention_part": [
+                    {
+                        "id": "3351526782",
+                        "username": "some_username",
+                        "full_name": "some_username#4198",
+                        "avatar": "https://example.com",
+                        "wealth_level": 0
+                    }
+                ],
+                "mention_role_part": [
+                    {
+                        "role_id": 25555643,
+                        "name": "some_role",
+                        "color": 0,
+                        "color_type": 1,
+                        "color_map": []
+                    }
+                ],
+                "channel_part": [],
+                "spl": []
+            },
+            "last_msg_content": "some_username：@some_role /help @some_username  @全体成员",
+            "mention": [
+                "3351526782"
+            ],
+            "mention_all": true,
+            "mention_here": false,
+            "guild_id": "1239678456780469",
+            "guild_type": 0,
+            "channel_name": "聊天大厅",
+            "visible_only": "",
+            "mention_no_at": [],
+            "mention_roles": [
+                25555643
+            ],
+            "nav_channels": [],
+            "emoji": [],
+            "preview_content": "",
+            "channel_type": 1,
+            "send_msg_device": 0
+        }
+    },
+    "extra": {
+        "verifyToken": "kW4FH_ASHio1hosd",
+        "encryptKey": "",
+        "callbackUrl": "",
+        "intent": 255
+    },
+    "sn": 1
+}

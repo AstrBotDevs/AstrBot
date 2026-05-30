@@ -1,6 +1,6 @@
 <template>
-    <v-card class="persona-card" :class="{ 'dragging': isDragging }" rounded="lg" @click="$emit('view')" elevation="0"
-        draggable="true" @dragstart="handleDragStart" @dragend="handleDragEnd">
+    <v-card class="persona-card" :class="{ 'dragging': isDragging }" rounded="lg" variant="outlined" @click="$emit('view')"
+        elevation="0" draggable="true" @dragstart="handleDragStart" @dragend="handleDragEnd">
         <v-card-title class="d-flex justify-space-between align-center">
             <div class="text-truncate ml-2">{{ persona.persona_id }}</div>
             <v-menu offset-y>
@@ -142,9 +142,15 @@ export default defineComponent({
 
 <style scoped>
 .persona-card {
+    background: rgb(var(--v-theme-surface));
     height: 100%;
     cursor: grab;
-    transition: all 0.2s ease;
+    transition: background-color 0.16s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.persona-card:hover,
+.persona-card:focus-within {
+    background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
 .persona-card:active {

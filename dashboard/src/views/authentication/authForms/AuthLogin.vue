@@ -2,7 +2,6 @@
 import { ref, useCssModule } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { Form } from 'vee-validate';
-import md5 from 'js-md5';
 import { useModuleI18n } from '@/i18n/composables';
 
 const { tm: t } = useModuleI18n('features/auth');
@@ -17,17 +16,10 @@ const loading = ref(false);
 async function validate(values: any, { setErrors }: any) {
   loading.value = true;
 
-  // md5加密
-  let password_ = password.value;
-  if (password.value != '') {
-    // @ts-ignore
-    password_ = md5(password.value);
-  }
-
   const authStore = useAuthStore();
   // @ts-ignore
   authStore.returnUrl = new URLSearchParams(window.location.search).get('redirect');
-  return authStore.login(username.value, password_).then((res) => {
+  return authStore.login(username.value, password.value).then((res) => {
     console.log(res);
     loading.value = false;
   }).catch((err) => {
@@ -44,8 +36,8 @@ async function validate(values: any, { setErrors }: any) {
       variant="outlined" prepend-inner-icon="mdi-account" :disabled="loading"></v-text-field>
 
     <v-text-field v-model="password" :label="t('password')" required variant="outlined" hide-details="auto"
-      :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'" :type="show1 ? 'text' : 'password'"
-      @click:append="show1 = !show1" class="pwd-input" prepend-inner-icon="mdi-lock" :disabled="loading"></v-text-field>
+      :append-inner-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'" :type="show1 ? 'text' : 'password'"
+      @click:append-inner="show1 = !show1" class="pwd-input" prepend-inner-icon="mdi-lock" :disabled="loading"></v-text-field>
 
     <div class="mt-2">
       <small style="color: grey;">{{ t('defaultHint') }}</small>

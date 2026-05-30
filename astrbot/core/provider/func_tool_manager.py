@@ -311,7 +311,7 @@ class FunctionToolManager:
                 handler=handler,
             ),
         )
-        logger.info(f"添加函数调用工具: {name}")
+        logger.info(f"Added llm tool: {name}")
 
     def remove_func(self, name: str) -> None:
         """删除一个函数调用工具。"""

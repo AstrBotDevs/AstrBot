@@ -94,6 +94,25 @@ class TestContextManager:
 
         assert isinstance(manager.compressor, TruncateByTurnsCompressor)
 
+    @pytest.mark.asyncio
+    async def test_llm_compressor_keeps_history_when_summary_is_empty(self):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        provider.text_chat = AsyncMock(
+            return_value=LLMResponse(role="assistant", completion_text="  ")
+        )
+        compressor = LLMSummaryCompressor(provider=provider, keep_recent=2)  # type: ignore[arg-type]
+        messages = self.create_messages(6)
+
+        with patch("astrbot.core.agent.context.compressor.logger") as mock_logger:
+            result = await compressor(messages)
+
+        assert result == messages
+        mock_logger.warning.assert_called_once_with(
+            "LLM context compression returned an empty summary."
+        )
+
     # ==================== Empty and Edge Cases ====================
 
     @pytest.mark.asyncio
@@ -684,91 +703,61 @@ class TestContextManager:
         # Should have been compressed
         assert len(result) <= len(messages)
 
-    # ==================== split_history Tests ====================
+    # ==================== split_into_rounds Tests ====================
 
-    def test_split_history_ensures_user_start(self):
-        """Test split_history ensures recent_messages starts with user message."""
-        from astrbot.core.agent.context.compressor import split_history
+    def test_split_rounds_ensures_user_start(self):
+        """Test split_into_rounds preserves user-assistant round boundaries."""
+        from astrbot.core.agent.context.round_utils import split_into_rounds
 
-        # Create alternating messages: user, assistant, user, assistant, user, assistant
+        # First round may begin with system messages; subsequent rounds must start with user
         messages = [
-            self.create_message("system", "System prompt"),
-            self.create_message("user", "msg1"),
-            self.create_message("assistant", "msg2"),
-            self.create_message("user", "msg3"),
-            self.create_message("assistant", "msg4"),
-            self.create_message("user", "msg5"),
-            self.create_message("assistant", "msg6"),
+            {"role": "system", "content": "System prompt"},
+            {"role": "user", "content": "msg1"},
+            {"role": "assistant", "content": "msg2"},
+            {"role": "user", "content": "msg3"},
+            {"role": "assistant", "content": "msg4"},
+            {"role": "tool", "content": "tool result"},
+            {"role": "user", "content": "msg5"},
         ]
 
-        # Keep recent 3 messages - should adjust to start with user
-        system, to_summarize, recent = split_history(messages, keep_recent=3)
+        rounds = split_into_rounds(messages)
 
-        # recent_messages should start with user message
-        assert len(recent) > 0
-        assert recent[0].role == "user"
+        # Subsequent rounds (after the first) must start with user
+        for rnd in rounds[1:]:
+            assert rnd[0]["role"] == "user"
 
-        # messages_to_summarize should end with assistant (complete turn)
-        if len(to_summarize) > 0:
-            assert to_summarize[-1].role == "assistant"
+        assert len(rounds) >= 2
 
-    def test_split_history_handles_assistant_at_split_point(self):
-        """Test split_history when assistant message is at the intended split point."""
-        from astrbot.core.agent.context.compressor import split_history
+    def test_split_rounds_single_round(self):
+        """A single user-assistant pair is one round."""
+        from astrbot.core.agent.context.round_utils import split_into_rounds
 
         messages = [
-            self.create_message("user", "msg1"),
-            self.create_message("assistant", "msg2"),
-            self.create_message("user", "msg3"),
-            self.create_message("assistant", "msg4"),  # <- intended split here
-            self.create_message("user", "msg5"),
-            self.create_message("assistant", "msg6"),
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
         ]
+        rounds = split_into_rounds(messages)
+        assert len(rounds) == 1
+        assert rounds[0][0]["role"] == "user"
 
-        # keep_recent=2 would normally split at index 4 (assistant msg4)
-        # Should move back to include from msg5 (user)
-        system, to_summarize, recent = split_history(messages, keep_recent=2)
-
-        # recent should start with user message
-        assert recent[0].role == "user"
-        assert recent[0].content == "msg5"
-
-    def test_split_history_all_assistant_messages(self):
-        """Test split_history when there are consecutive assistant messages."""
-        from astrbot.core.agent.context.compressor import split_history
+    def test_split_rounds_multi_tool(self):
+        """Tool calls/results within a round are kept together."""
+        from astrbot.core.agent.context.round_utils import split_into_rounds
 
         messages = [
-            self.create_message("user", "msg1"),
-            self.create_message("assistant", "msg2"),
-            self.create_message("assistant", "msg3"),
-            self.create_message("assistant", "msg4"),
+            {"role": "user", "content": "search"},
+            {"role": "assistant", "tool_calls": [{"id": "c1"}]},
+            {"role": "tool", "tool_call_id": "c1", "content": "result1"},
+            {"role": "tool", "tool_call_id": "c1", "content": "result2"},
+            {"role": "assistant", "content": "done"},
         ]
+        rounds = split_into_rounds(messages)
+        # One round with 5 segments
+        assert len(rounds) == 1
+        assert len(rounds[0]) == 5
 
-        system, to_summarize, recent = split_history(messages, keep_recent=2)
-
-        # Should find the user message and keep from there
-        if len(recent) > 0:
-            # Find first user message backwards
-            assert any(m.role == "user" for m in messages)
-
-    def test_split_history_with_system_messages(self):
-        """Test split_history preserves system messages separately."""
-        from astrbot.core.agent.context.compressor import split_history
-
-        messages = [
-            self.create_message("system", "System 1"),
-            self.create_message("system", "System 2"),
-            self.create_message("user", "msg1"),
-            self.create_message("assistant", "msg2"),
-            self.create_message("user", "msg3"),
-        ]
-
-        system, to_summarize, recent = split_history(messages, keep_recent=2)
-
-        # System messages should be separate
-        assert len(system) == 2
-        assert all(m.role == "system" for m in system)
-
-        # Recent should start with user
-        if len(recent) > 0:
-            assert recent[0].role == "user"
+    def test_split_rounds_empty(self):
+        """Empty list returns no rounds."""
+        from astrbot.core.agent.context.round_utils import split_into_rounds
+        rounds = split_into_rounds([])
+        assert len(rounds) == 0

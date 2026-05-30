@@ -21,6 +21,7 @@ from astrbot.core.provider.provider import (
 )
 
 from .chunking.base import BaseChunker
+from .chunking.markdown import MarkdownChunker
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .models import KBDocument, KBMedia, KnowledgeBase
@@ -107,6 +108,10 @@ Text chunk to process:
         f"  - Failed to process chunk after {max_retries + 1} attempts. Using original text."
     )
     return [chunk]
+
+
+def _compact_chunks(chunks: list[str]) -> list[str]:
+    return [chunk.strip() for chunk in chunks if chunk and chunk.strip()]
 
 
 class KBHelper:
@@ -249,7 +254,7 @@ class KBHelper:
 
             if pre_chunked_text is not None:
                 # 如果提供了预分块文本，直接使用
-                chunks_text = pre_chunked_text
+                chunks_text = _compact_chunks(pre_chunked_text)
                 file_size = sum(len(chunk) for chunk in chunks_text)
                 logger.info(f"使用预分块文本进行上传，共 {len(chunks_text)} 个块。")
             else:
@@ -311,11 +316,24 @@ class KBHelper:
                     await progress_callback("chunking", 0, 100)
 
                 try:
-                    chunks_text = await self.chunker.chunk(
+                    # 根据文件类型选择分块器：Markdown 文件使用结构感知分块
+                    effective_chunker = self.chunker
+                    file_ext = Path(file_name).suffix.lower() if file_name else ""
+                    if file_ext in (".md", ".markdown", ".mkd", ".mdx"):
+                        effective_chunker = MarkdownChunker(
+                            chunk_size=chunk_size,
+                            chunk_overlap=chunk_overlap,
+                        )
+                        logger.info(
+                            f"检测到 Markdown 文件 '{file_name}'，使用 MarkdownChunker 进行结构化分块"
+                        )
+
+                    chunks_text = await effective_chunker.chunk(
                         text_content,
                         chunk_size=chunk_size,
                         chunk_overlap=chunk_overlap,
                     )
+                    chunks_text = _compact_chunks(chunks_text)
                 except KnowledgeBaseUploadError:
                     raise
                 except Exception as exc:
@@ -727,6 +745,8 @@ class KBHelper:
                     final_chunks.append(initial_chunks[i])
                 elif isinstance(result, list):
                     final_chunks.extend(result)
+
+            final_chunks = _compact_chunks(final_chunks)
 
             logger.info(
                 f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块。"

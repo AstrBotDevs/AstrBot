@@ -6,7 +6,7 @@ export const useCustomizerStore = defineStore("customizer", {
     Sidebar_drawer: config.Sidebar_drawer,
     Customizer_drawer: config.Customizer_drawer,
     mini_sidebar: config.mini_sidebar,
-    fontTheme: "Poppins",
+    fontTheme: "Noto Sans SC",
     uiTheme: config.uiTheme,
     inputBg: config.inputBg,
     chatSidebarOpen: false // chat mode mobile sidebar state

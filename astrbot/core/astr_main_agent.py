@@ -29,7 +29,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.conversation_mgr import Conversation
-from astrbot.core.message.components import File, Image, Record, Reply
+from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
     set_persona_custom_error_message_on_event,
@@ -38,8 +38,13 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.register import llm_tools
-from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
+from astrbot.core.skills.skill_manager import (
+    SkillInfo,
+    SkillManager,
+    build_skills_prompt,
+)
 from astrbot.core.star.context import Context
+from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.tools.computer_tools import (
     AnnotateExecutionTool,
@@ -47,6 +52,9 @@ from astrbot.core.tools.computer_tools import (
     BrowserExecTool,
     CreateSkillCandidateTool,
     CreateSkillPayloadTool,
+    CuaKeyboardTypeTool,
+    CuaMouseClickTool,
+    CuaScreenshotTool,
     EvaluateSkillCandidateTool,
     ExecuteShellTool,
     FileDownloadTool,
@@ -77,6 +85,8 @@ from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
     BraveWebSearchTool,
+    FirecrawlExtractWebPageTool,
+    FirecrawlWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
     normalize_legacy_web_search_config,
@@ -103,6 +113,8 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_text,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+
+LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
 
 
 @dataclass(slots=True)
@@ -138,15 +150,17 @@ class MainAgentBuildConfig:
     """The strategy to handle context length limit reached."""
     llm_compress_instruction: str = ""
     """The instruction for compression in llm_compress strategy."""
-    llm_compress_keep_recent: int = 6
+    llm_compress_keep_recent: int = 10
     """The number of most recent turns to keep during llm_compress strategy."""
     llm_compress_provider_id: str = ""
     """The provider ID for the LLM used in context compression."""
-    max_context_length: int = -1
+    max_context_length: int = 50
     """The maximum number of turns to keep in context. -1 means no limit.
     This enforce max turns before compression"""
-    dequeue_context_length: int = 1
+    dequeue_context_length: int = 10
     """The number of oldest turns to remove when context length limit is reached."""
+    fallback_max_context_tokens: int = 128000
+    """Fallback max context tokens. When max_context_tokens is 0 and the model is not in LLM_METADATAS, use this value."""
     llm_safety_mode: bool = True
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
@@ -171,6 +185,10 @@ class MainAgentBuildResult:
     reset_coro: Coroutine | None = None
 
 
+def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
+    event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, message)
+
+
 def _select_provider(
     event: AstrMessageEvent, plugin_context: Context
 ) -> Provider | None:
@@ -178,11 +196,20 @@ def _select_provider(
     sel_provider = event.get_extra("selected_provider")
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
-        if not provider:
+        if provider is None:
             logger.error("未找到指定的提供商: %s。", sel_provider)
+            _set_llm_error_message(
+                event,
+                f"LLM 请求失败：未找到指定的提供商 `{sel_provider}`。请检查提供商配置或重新选择可用模型。",
+            )
+            return None
         if not isinstance(provider, Provider):
             logger.error(
                 "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
+            )
+            _set_llm_error_message(
+                event,
+                f"LLM 请求失败：选择的提供商类型无效（{type(provider).__name__}），已跳过本次请求。",
             )
             return None
         return provider
@@ -190,6 +217,7 @@ def _select_provider(
         return plugin_context.get_using_provider(umo=event.unified_msg_origin)
     except ValueError as exc:
         logger.error("Error occurred while selecting provider: %s", exc)
+        _set_llm_error_message(event, f"LLM 请求失败：{exc}")
         return None
 
 
@@ -217,7 +245,7 @@ async def _apply_kb(
     config: MainAgentBuildConfig,
 ) -> None:
     if not config.kb_agentic_mode:
-        if req.prompt is None:
+        if req.prompt is None or not req.prompt.strip():
             return
         try:
             kb_result = await retrieve_knowledge_base(
@@ -368,6 +396,38 @@ def _build_local_mode_prompt() -> str:
     )
 
 
+def _filter_skills_for_current_config(
+    skills: list[SkillInfo],
+    cfg: dict,
+) -> list[SkillInfo]:
+    plugin_set = cfg.get("plugin_set", ["*"])
+    allowed_plugins = (
+        None
+        if not isinstance(plugin_set, list) or "*" in plugin_set
+        else {str(name) for name in plugin_set}
+    )
+    plugin_by_root_dir = {
+        metadata.root_dir_name: metadata
+        for metadata in star_registry
+        if metadata.root_dir_name
+    }
+    filtered: list[SkillInfo] = []
+    for skill in skills:
+        if skill.source_type != "plugin":
+            filtered.append(skill)
+            continue
+
+        plugin = plugin_by_root_dir.get(skill.plugin_name)
+        if not plugin or not plugin.activated:
+            continue
+        if plugin.reserved or allowed_plugins is None:
+            filtered.append(skill)
+            continue
+        if plugin.name is not None and plugin.name in allowed_plugins:
+            filtered.append(skill)
+    return filtered
+
+
 async def _ensure_persona_and_skills(
     req: ProviderRequest,
     cfg: dict,
@@ -394,6 +454,9 @@ async def _ensure_persona_and_skills(
         event, extract_persona_custom_error_message_from_persona(persona)
     )
 
+    if req.system_prompt is None:
+        req.system_prompt = ""
+
     if persona:
         # Inject persona system prompt
         if prompt := persona["prompt"]:
@@ -407,6 +470,7 @@ async def _ensure_persona_and_skills(
     runtime = cfg.get("computer_use_runtime", "local")
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
+    skills = _filter_skills_for_current_config(skills, cfg)
 
     if skills:
         if persona and persona.get("skills") is not None:
@@ -592,6 +656,33 @@ def _append_quoted_audio_attachment(req: ProviderRequest, audio_path: str) -> No
     )
 
 
+async def _append_video_attachment(
+    req: ProviderRequest,
+    video: Video,
+    *,
+    quoted: bool = False,
+) -> None:
+    try:
+        video_path = await video.convert_to_file_path()
+    except Exception as exc:  # noqa: BLE001
+        if quoted:
+            logger.error("Error processing quoted video attachment: %s", exc)
+        else:
+            logger.error("Error processing video attachment: %s", exc)
+        return
+
+    video_name = os.path.basename(video_path)
+    if quoted:
+        text = (
+            f"[Video Attachment in quoted message: "
+            f"name {video_name}, path {video_path}]"
+        )
+    else:
+        text = f"[Video Attachment: name {video_name}, path {video_path}]"
+
+    req.extra_user_content_parts.append(TextPart(text=text))
+
+
 def _get_quoted_message_parser_settings(
     provider_settings: dict[str, object] | None,
 ) -> QuotedMessageParserSettings:
@@ -661,6 +752,7 @@ async def _process_quote_message(
     plugin_context: Context,
     quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
     config: MainAgentBuildConfig | None = None,
+    main_provider_supports_image: bool = False,
 ) -> None:
     quote = None
     for comp in event.message_obj.message:
@@ -690,13 +782,21 @@ async def _process_quote_message(
                 image_seg = comp
                 break
 
-    if image_seg:
+    if image_seg and main_provider_supports_image:
+        logger.debug(
+            "Skipping quote image captioning because the main provider supports image input."
+        )
+    elif image_seg and not img_cap_prov_id:
+        logger.debug(
+            "No dedicated image caption provider configured. "
+            "Skipping quote image captioning."
+        )
+    elif image_seg:
         try:
             prov = None
             path = None
             compress_path = None
-            if img_cap_prov_id:
-                prov = plugin_context.get_provider_by_id(img_cap_prov_id)
+            prov = plugin_context.get_provider_by_id(img_cap_prov_id)
             if prov is None:
                 prov = plugin_context.get_using_provider(event.unified_msg_origin)
 
@@ -785,6 +885,7 @@ async def _decorate_llm_request(
     req: ProviderRequest,
     plugin_context: Context,
     config: MainAgentBuildConfig,
+    provider: Provider | None = None,
 ) -> None:
     cfg = config.provider_settings or plugin_context.get_config(
         umo=event.unified_msg_origin
@@ -792,11 +893,15 @@ async def _decorate_llm_request(
 
     _apply_prompt_prefix(req, cfg)
 
+    main_provider_supports_image = provider is not None and _provider_supports_modality(
+        provider, "image"
+    )
+
     if req.conversation:
         await _ensure_persona_and_skills(req, cfg, plugin_context, event)
 
         img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
-        if img_cap_prov_id and req.image_urls:
+        if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
             await _ensure_img_caption(
                 event,
                 req,
@@ -814,6 +919,7 @@ async def _decorate_llm_request(
         plugin_context,
         quoted_message_settings,
         config,
+        main_provider_supports_image=main_provider_supports_image,
     )
 
     tz = config.timezone
@@ -821,136 +927,6 @@ async def _decorate_llm_request(
         tz = plugin_context.get_config().get("timezone")
     _append_system_reminders(event, req, cfg, tz)
     _apply_workspace_extra_prompt(event, req)
-
-
-def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
-    if req.image_urls:
-        provider_cfg = provider.provider_config.get("modalities", ["image"])
-        if "image" not in provider_cfg:
-            logger.debug(
-                "Provider %s does not support image, using placeholder.", provider
-            )
-            image_count = len(req.image_urls)
-            placeholder = " ".join(["[Image]"] * image_count)
-            if req.prompt:
-                req.prompt = f"{placeholder} {req.prompt}"
-            else:
-                req.prompt = placeholder
-            req.image_urls = []
-    if req.audio_urls:
-        provider_cfg = provider.provider_config.get("modalities", ["audio"])
-        if "audio" not in provider_cfg:
-            logger.debug(
-                "Provider %s does not support audio, using placeholder.", provider
-            )
-            audio_count = len(req.audio_urls)
-            placeholder = " ".join(["[Audio]"] * audio_count)
-            if req.prompt:
-                req.prompt = f"{placeholder} {req.prompt}"
-            else:
-                req.prompt = placeholder
-            req.audio_urls = []
-    if req.func_tool:
-        provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
-        if "tool_use" not in provider_cfg:
-            logger.debug(
-                "Provider %s does not support tool_use, clearing tools.", provider
-            )
-            req.func_tool = None
-
-
-def _sanitize_context_by_modalities(
-    config: MainAgentBuildConfig,
-    provider: Provider,
-    req: ProviderRequest,
-) -> None:
-    if not config.sanitize_context_by_modalities:
-        return
-    if not isinstance(req.contexts, list) or not req.contexts:
-        return
-    modalities = provider.provider_config.get("modalities", None)
-    if not modalities or not isinstance(modalities, list):
-        return
-    supports_image = bool("image" in modalities)
-    supports_audio = bool("audio" in modalities)
-    supports_tool_use = bool("tool_use" in modalities)
-    if supports_image and supports_audio and supports_tool_use:
-        return
-
-    sanitized_contexts: list[dict] = []
-    removed_image_blocks = 0
-    removed_audio_blocks = 0
-    removed_tool_messages = 0
-    removed_tool_calls = 0
-
-    for msg in req.contexts:
-        if not isinstance(msg, dict):
-            continue
-        role = msg.get("role")
-        if not role:
-            continue
-
-        new_msg = msg
-        if not supports_tool_use:
-            if role == "tool":
-                removed_tool_messages += 1
-                continue
-            if role == "assistant" and "tool_calls" in new_msg:
-                if "tool_calls" in new_msg:
-                    removed_tool_calls += 1
-                new_msg.pop("tool_calls", None)
-                new_msg.pop("tool_call_id", None)
-
-        if not supports_image or not supports_audio:
-            content = new_msg.get("content")
-            if isinstance(content, list):
-                filtered_parts: list = []
-                removed_any_multimodal = False
-                for part in content:
-                    if isinstance(part, dict):
-                        part_type = str(part.get("type", "")).lower()
-                        if not supports_image and part_type in {"image_url", "image"}:
-                            removed_any_multimodal = True
-                            removed_image_blocks += 1
-                            continue
-                        if not supports_audio and part_type in {
-                            "audio_url",
-                            "input_audio",
-                        }:
-                            removed_any_multimodal = True
-                            removed_audio_blocks += 1
-                            continue
-                    filtered_parts.append(part)
-                if removed_any_multimodal:
-                    new_msg["content"] = filtered_parts
-
-        if role == "assistant":
-            content = new_msg.get("content")
-            has_tool_calls = bool(new_msg.get("tool_calls"))
-            if not has_tool_calls:
-                if not content:
-                    continue
-                if isinstance(content, str) and not content.strip():
-                    continue
-
-        sanitized_contexts.append(new_msg)
-
-    if (
-        removed_image_blocks
-        or removed_audio_blocks
-        or removed_tool_messages
-        or removed_tool_calls
-    ):
-        logger.debug(
-            "sanitize_context_by_modalities applied: "
-            "removed_image_blocks=%s, removed_audio_blocks=%s, "
-            "removed_tool_messages=%s, removed_tool_calls=%s",
-            removed_image_blocks,
-            removed_audio_blocks,
-            removed_tool_messages,
-            removed_tool_calls,
-        )
-    req.contexts = sanitized_contexts
 
 
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
@@ -1116,6 +1092,22 @@ def _apply_sandbox_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
 
+    if booter == "cua":
+        req.system_prompt += (
+            "\n[CUA Desktop Control]\n"
+            "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
+            'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
+            "After each visible step, call `astrbot_cua_screenshot` with "
+            "`send_to_user=true` and `return_image_to_llm=true` so the user can "
+            "monitor progress. When typing, inspect the screenshot first and confirm "
+            "the target field is focused and empty or safe to append to. Use "
+            "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
+            "for text input; use text=`\\n` for Enter.\n"
+        )
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
+
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
 
@@ -1150,31 +1142,35 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BochaWebSearchTool))
     elif provider == "brave":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BraveWebSearchTool))
+    elif provider == "firecrawl":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlExtractWebPageTool))
     elif provider == "baidu_ai_search":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
 
 
 def _get_compress_provider(
-    config: MainAgentBuildConfig, plugin_context: Context
+    config: MainAgentBuildConfig,
+    plugin_context: Context,
+    event: AstrMessageEvent | None = None,
 ) -> Provider | None:
-    if not config.llm_compress_provider_id:
-        return None
     if config.context_limit_reached_strategy != "llm_compress":
         return None
-    provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
-    if provider is None:
+    if config.llm_compress_provider_id:
+        provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
+        if provider and isinstance(provider, Provider):
+            return provider
         logger.warning(
-            "未找到指定的上下文压缩模型 %s，将跳过压缩。",
+            "指定的上下文压缩模型 %s 不可用",
             config.llm_compress_provider_id,
         )
-        return None
-    if not isinstance(provider, Provider):
-        logger.warning(
-            "指定的上下文压缩模型 %s 不是对话模型，将跳过压缩。",
-            config.llm_compress_provider_id,
-        )
-        return None
-    return provider
+    # fallback: use current chat provider for this session
+    if event:
+        try:
+            return plugin_context.get_using_provider(umo=event.unified_msg_origin)
+        except ValueError:
+            pass
+    return None
 
 
 def _get_fallback_chat_providers(
@@ -1212,6 +1208,38 @@ def _get_fallback_chat_providers(
     return fallbacks
 
 
+def _provider_supports_modality(provider: Provider, modality: str) -> bool:
+    modalities = provider.provider_config.get("modalities", None)
+    return isinstance(modalities, list) and modality in modalities
+
+
+def _select_image_chat_provider(
+    provider: Provider,
+    req: ProviderRequest,
+    fallback_providers: list[Provider],
+) -> Provider:
+    if not req.image_urls or _provider_supports_modality(provider, "image"):
+        return provider
+
+    provider_id = provider.provider_config.get("id", "<unknown>")
+    for fallback_provider in fallback_providers:
+        if not _provider_supports_modality(fallback_provider, "image"):
+            continue
+        fallback_id = fallback_provider.provider_config.get("id", "<unknown>")
+        logger.warning(
+            "Chat provider %s does not support image input, switching this request to fallback provider %s.",
+            provider_id,
+            fallback_id,
+        )
+        return fallback_provider
+
+    logger.warning(
+        "Chat provider %s does not support image input and no image-capable fallback provider is available.",
+        provider_id,
+    )
+    return provider
+
+
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
@@ -1228,6 +1256,11 @@ async def build_main_agent(
     provider = provider or _select_provider(event, plugin_context)
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
+        if not event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):
+            _set_llm_error_message(
+                event,
+                "LLM 请求失败：未找到任何可用的对话模型（提供商）。请先在 WebUI 中配置并启用可用模型。",
+            )
         return None
 
     if req is None:
@@ -1278,6 +1311,8 @@ async def build_main_agent(
                             text=f"[File Attachment: name {file_name}, path {file_path}]"
                         )
                     )
+                elif isinstance(comp, Video):
+                    await _append_video_attachment(req, comp)
             # quoted message attachments
             reply_comps = [
                 comp for comp in event.message_obj.message if isinstance(comp, Reply)
@@ -1316,6 +1351,8 @@ async def build_main_agent(
                                     )
                                 )
                             )
+                        elif isinstance(reply_comp, Video):
+                            await _append_video_attachment(req, reply_comp, quoted=True)
 
                 # Fallback quoted image extraction for reply-id-only payloads, or when
                 # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).
@@ -1371,6 +1408,17 @@ async def build_main_agent(
 
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
+    thread_selected_text = event.get_extra("thread_selected_text")
+    if isinstance(thread_selected_text, str) and thread_selected_text.strip():
+        req.extra_user_content_parts.append(
+            TextPart(
+                text=(
+                    "The user is asking in a side thread about this selected "
+                    "excerpt from the previous assistant answer:\n"
+                    f"<selected_excerpt>{thread_selected_text.strip()}</selected_excerpt>"
+                )
+            )
+        )
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
 
@@ -1386,17 +1434,15 @@ async def build_main_agent(
         else:
             return None
 
-    await _decorate_llm_request(event, req, plugin_context, config)
+    await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
 
     await _apply_kb(event, req, plugin_context, config)
 
     if not req.session_id:
         req.session_id = event.unified_msg_origin
 
-    _modalities_fix(provider, req)
     _plugin_tool_fix(event, req)
     await _apply_web_search_tools(event, req, plugin_context)
-    _sanitize_context_by_modalities(config, provider, req)
 
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
@@ -1424,12 +1470,27 @@ async def build_main_agent(
             )
         )
 
+    fallback_providers = _get_fallback_chat_providers(
+        provider, plugin_context, config.provider_settings
+    )
+    selected_provider = _select_image_chat_provider(provider, req, fallback_providers)
+    if selected_provider is not provider:
+        provider = selected_provider
+        if req.model:
+            req.model = None
+        fallback_providers = [p for p in fallback_providers if p is not provider]
+
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()
         if model_info := LLM_METADATAS.get(model):
             provider.provider_config["max_context_tokens"] = model_info["limit"][
                 "context"
             ]
+        else:
+            # fallback: default to configured fallback value
+            provider.provider_config["max_context_tokens"] = (
+                config.fallback_max_context_tokens
+            )
 
     if event.get_platform_name() == "webchat":
         asyncio.create_task(_handle_webchat(event, req, provider))
@@ -1467,13 +1528,10 @@ async def build_main_agent(
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent=config.llm_compress_keep_recent,
-        llm_compress_provider=_get_compress_provider(config, plugin_context),
+        llm_compress_provider=_get_compress_provider(config, plugin_context, event),
         truncate_turns=config.dequeue_context_length,
-        enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
-        fallback_providers=_get_fallback_chat_providers(
-            provider, plugin_context, config.provider_settings
-        ),
+        fallback_providers=fallback_providers,
         tool_result_overflow_dir=(
             get_astrbot_system_tmp_path()
             if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")

@@ -58,10 +58,12 @@ _qqofficial_retry = retry(
         (
             botpy.errors.ServerError,
             botpy.errors.SequenceNumberError,
+            OSError,
+            asyncio.TimeoutError,
         )
     ),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=10),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
     before_sleep=before_sleep_log(logger, logging.WARNING),
     reraise=True,
 )
@@ -181,8 +183,60 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ret_id = getattr(ret, "id", None)
         return str(ret_id) if ret_id is not None else None
 
+    @staticmethod
+    def _split_message_chain_by_media(message: MessageChain) -> list[MessageChain]:
+        chunks: list[MessageChain] = []
+        current_chain = []
+        current_has_media = False
+
+        for component in message.chain:
+            is_media = isinstance(component, Image | Record | Video | File)
+            if is_media and current_has_media:
+                chunks.append(
+                    MessageChain(
+                        chain=current_chain,
+                        use_t2i_=message.use_t2i_,
+                        type=message.type,
+                    )
+                )
+                current_chain = []
+                current_has_media = False
+
+            current_chain.append(component)
+            current_has_media = current_has_media or is_media
+
+        if current_chain or not message.chain:
+            chunks.append(
+                MessageChain(
+                    chain=current_chain,
+                    use_t2i_=message.use_t2i_,
+                    type=message.type,
+                )
+            )
+
+        return chunks
+
     async def _post_send(self, stream: dict | None = None):
         if not self.send_buffer:
+            return None
+
+        message_chains = self._split_message_chain_by_media(self.send_buffer)
+        stream_for_chain = stream if len(message_chains) == 1 else None
+
+        ret = None
+        for message_chain in message_chains:
+            ret = await self._post_send_one(message_chain, stream_for_chain)
+
+        self.send_buffer = None
+
+        return ret
+
+    async def _post_send_one(
+        self,
+        message_to_send: MessageChain,
+        stream: dict | None = None,
+    ):
+        if not message_to_send:
             return None
 
         source = self.message_obj.raw_message
@@ -205,10 +259,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             video_file_source,
             file_source,
             file_name,
-        ) = await QQOfficialMessageEvent._parse_to_qqofficial(self.send_buffer)
+        ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
-        if stream and (image_base64 or record_file_path):
+        if stream and (
+            image_base64 or record_file_path or video_file_source or file_source
+        ):
             logger.debug("[QQOfficial] 检测到富媒体，降级为非流式发送。")
             stream = None
 
@@ -233,12 +289,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             plain_text = plain_text + "\n"
 
-        payload: dict = {
-            # "content": plain_text,
-            "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
-            "msg_type": 2,
-            "msg_id": self.message_obj.message_id,
-        }
+        # 根据消息链的 use_markdown_ 标记决定发送模式
+        use_md = getattr(self.send_buffer, "use_markdown_", None)
+        if use_md is False:
+            payload: dict = {
+                "content": plain_text,
+                "msg_type": 0,
+                "msg_id": self.message_obj.message_id,
+            }
+        else:
+            payload = {
+                "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
+                "msg_type": 2,
+                "msg_id": self.message_obj.message_id,
+            }
 
         if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
             payload["msg_seq"] = random.randint(1, 10000)
@@ -406,9 +470,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             case _:
                 pass
 
-        await super().send(self.send_buffer)
-
-        self.send_buffer = None
+        await super().send(message_to_send)
 
         return ret
 
@@ -564,7 +626,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     ttl=result.get("ttl", 0),
                 )
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
-            logger.error(f"上传媒体文件失败，共尝试3次后放弃: {file_source}")
+            logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
         except Exception as e:
             logger.error(f"上传请求错误: {e}")
 

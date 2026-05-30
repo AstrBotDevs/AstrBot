@@ -15,7 +15,7 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 {
   "token": {
     "description": "Bot Token",
-    "type": "string",
+    "type": "string"
   },
   "sub_config": {
     "description": "Test nested configuration",
@@ -55,6 +55,10 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 - `editor_language`: Optional. The code language for the code editor, defaults to `json`.
 - `editor_theme`: Optional. The theme for the code editor. Options are `vs-light` (default) and `vs-dark`.
 - `_special`: Optional. Used to call AstrBot's visualization features for provider selection, persona selection, knowledge base selection, etc. See details below.
+
+### Configuration Internationalization (Optional)
+
+Configuration `description`, `hint`, and select `labels` can follow the WebUI language. See [Plugin Internationalization](./plugin-i18n).
 
 When the code editor is enabled, it looks like this:
 
@@ -142,7 +146,14 @@ Plugin developers can add a template-style configuration to `_conf_schema` in th
     "template_1": {
         "name": "Template One",
         "hint":"hint",
+        "display_item": "attr_name",
+        "hide_hint_in_list": true,
         "items": {
+          "attr_name": {
+            "description": "Attribute Name",
+            "type": "string",
+            "default": ""
+          },
           "attr_a": {
             "description": "Attribute A",
             "type": "int",
@@ -183,6 +194,7 @@ Saved config example:
 "field_id": [
     {
         "__template_key": "template_1",
+        "attr_name": "",
         "attr_a": 10,
         "attr_b": true
     },
@@ -193,6 +205,11 @@ Saved config example:
     }
 ]
 ```
+
+Templates also support these optional fields:
+
+- `display_item`: Specifies the key of a `string` item inside the template `items`. When set, the WebUI shows that field's current value in the collapsed list of added template entries, for example `Attribute Name: my-adapter`, making it easier to distinguish multiple entries created from the same template. Dot paths are supported for fields inside nested objects, for example `meta.name`.
+- `hide_hint_in_list`: When set to `true`, the WebUI hides the template `hint` in the collapsed list of added template entries. The template selection dropdown still shows the `hint`, and hints for fields inside the expanded entry are not affected.
 
 <img width="1000" alt="image" src="https://github.com/user-attachments/assets/74876d30-11a4-491b-a7a0-8ebe8d603782" />
 

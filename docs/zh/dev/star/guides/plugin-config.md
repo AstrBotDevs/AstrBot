@@ -15,7 +15,7 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
 {
   "token": {
     "description": "Bot Token",
-    "type": "string",
+    "type": "string"
   },
   "sub_config": {
     "description": "测试嵌套配置",
@@ -55,6 +55,10 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
 - `editor_language`: 可选。代码编辑器的代码语言，默认为 `json`。
 - `editor_theme`: 可选。代码编辑器的主题，可选值有 `vs-light`（默认）， `vs-dark`。
 - `_special`: 可选。用于调用 AstrBot 提供的可视化提供商选取、人格选取、知识库选取等功能，详见下文。
+
+### 配置项国际化（可选）
+
+配置项的 `description`、`hint` 和下拉选项 `labels` 支持按 WebUI 语言显示，详见[插件国际化](./plugin-i18n)。
 
 其中，如果启用了代码编辑器，效果如下图所示:
 
@@ -142,7 +146,14 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
     "template_1": {
         "name": "Template One",
         "hint":"hint",
+        "display_item": "attr_name",
+        "hide_hint_in_list": true,
         "items": {
+          "attr_name": {
+            "description": "Attribute Name",
+            "type": "string",
+            "default": ""
+          },
           "attr_a": {
             "description": "Attribute A",
             "type": "int",
@@ -183,6 +194,7 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
 "field_id": [
     {
         "__template_key": "template_1",
+        "attr_name": "",
         "attr_a": 10,
         "attr_b": true
     },
@@ -193,6 +205,11 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
     }
 ]
 ```
+
+模板本身还支持以下可选字段：
+
+- `display_item`: 指定模板 `items` 中一个 `string` 类型字段的 key。设置后，WebUI 会在已添加模板条目的折叠列表中显示该字段当前值，例如 `Attribute Name: my-adapter`，便于添加多个同类型模板时快速区分。支持用点号选择嵌套 object 中的字段，例如 `meta.name`。
+- `hide_hint_in_list`: 设置为 `true` 时，WebUI 会在已添加模板条目的折叠列表中隐藏该模板的 `hint`。添加模板时的下拉菜单仍会显示 `hint`，展开条目后各配置项自己的 `hint` 也不受影响。
 
 <img width="1000" alt="image" src="https://github.com/user-attachments/assets/74876d30-11a4-491b-a7a0-8ebe8d603782" />
 

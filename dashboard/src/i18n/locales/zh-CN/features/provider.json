@@ -94,6 +94,7 @@
   "providerSources": {
     "title": "提供商源",
     "add": "新增",
+    "delete": "删除提供商源",
     "empty": "暂无提供商源",
     "selectHint": "请选择一个提供商源",
     "selectCreated": "选择已创建的提供商源",
@@ -124,6 +125,7 @@
     }
   },
   "models": {
+    "title": "模型",
     "available": "可用模型",
     "configured": "已配置的模型",
     "empty": "暂无已配置的模型，点击上方的\"获取模型列表\"添加",

@@ -19,8 +19,8 @@
             :key="option.value"
             @click="addEntry(option.value)"
           >
-            <v-list-item-title>{{ translateIfKey(option.label) }}</v-list-item-title>
-            <v-list-item-subtitle v-if="option.hint">{{ translateIfKey(option.hint) }}</v-list-item-subtitle>
+            <v-list-item-title>{{ option.label }}</v-list-item-title>
+            <v-list-item-subtitle v-if="option.hint">{{ option.hint }}</v-list-item-subtitle>
           </v-list-item>
         </v-list>
       </v-menu>
@@ -57,8 +57,11 @@
           </v-btn>
           <div class="d-flex flex-column">
             <v-list-item-title class="property-name">{{ templateLabel(entry.__template_key) }}</v-list-item-title>
-            <v-list-item-subtitle class="property-hint" v-if="getTemplate(entry)?.hint || getTemplate(entry)?.description">
-              {{ translateIfKey(getTemplate(entry)?.hint || getTemplate(entry)?.description) }}
+            <v-list-item-subtitle class="property-hint entry-display-text" v-if="templateDisplayText(entry)">
+              {{ templateDisplayText(entry) }}
+            </v-list-item-subtitle>
+            <v-list-item-subtitle class="property-hint" v-if="templateHintText(entry)">
+              {{ templateHintText(entry) }}
             </v-list-item-subtitle>
           </div>
         </div>
@@ -82,10 +85,10 @@
               >
                 <div class="config-section mb-2">
                   <v-list-item-title class="config-title">
-                    {{ translateIfKey(itemMeta?.description) || itemKey }}
+                    {{ templateItemText(entry.__template_key, itemKey, 'description', itemMeta?.description) || itemKey }}
                   </v-list-item-title>
                   <v-list-item-subtitle class="config-hint" v-if="itemMeta?.hint">
-                    {{ translateIfKey(itemMeta.hint) }}
+                    {{ templateItemText(entry.__template_key, itemKey, 'hint', itemMeta.hint) }}
                   </v-list-item-subtitle>
                 </div>
                 <div v-for="(childMeta, childKey, childIndex) in itemMeta.items" :key="childKey">
@@ -94,10 +97,10 @@
                       <v-col cols="12" sm="6" class="property-info">
                         <v-list-item density="compact">
                           <v-list-item-title class="property-name">
-                            {{ translateIfKey(childMeta?.description) || childKey }}
+                            {{ templateItemText(entry.__template_key, `${itemKey}.${childKey}`, 'description', childMeta?.description) || childKey }}
                           </v-list-item-title>
                           <v-list-item-subtitle class="property-hint">
-                            {{ translateIfKey(childMeta?.hint) }}
+                            {{ templateItemText(entry.__template_key, `${itemKey}.${childKey}`, 'hint', childMeta?.hint) }}
                           </v-list-item-subtitle>
                         </v-list-item>
                       </v-col>
@@ -105,6 +108,9 @@
                         <ConfigItemRenderer
                           v-model="entry[itemKey][childKey]"
                           :item-meta="childMeta"
+                          :plugin-name="pluginName"
+                          :plugin-i18n="pluginI18n"
+                          :config-key="templateItemPath(entry.__template_key, `${itemKey}.${childKey}`)"
                         />
                       </v-col>
                     </v-row>
@@ -122,11 +128,11 @@
                   <v-col cols="12" sm="6" class="property-info">
                     <v-list-item density="compact">
                       <v-list-item-title class="property-name">
-                        <span v-if="itemMeta?.description">{{ translateIfKey(itemMeta?.description) }} <span class="property-key">({{ itemKey }})</span></span>
+                        <span v-if="itemMeta?.description">{{ templateItemText(entry.__template_key, itemKey, 'description', itemMeta?.description) }} <span class="property-key">({{ itemKey }})</span></span>
                         <span v-else>{{ itemKey }}</span>
                       </v-list-item-title>
                       <v-list-item-subtitle class="property-hint">
-                        {{ translateIfKey(itemMeta?.hint) }}
+                        {{ templateItemText(entry.__template_key, itemKey, 'hint', itemMeta?.hint) }}
                       </v-list-item-subtitle>
                     </v-list-item>
                   </v-col>
@@ -134,6 +140,9 @@
                     <ConfigItemRenderer
                       v-model="entry[itemKey]"
                       :item-meta="itemMeta"
+                      :plugin-name="pluginName"
+                      :plugin-i18n="pluginI18n"
+                      :config-key="templateItemPath(entry.__template_key, itemKey)"
                     />
                   </v-col>
                 </v-row>
@@ -153,7 +162,8 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
-import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { useI18n } from '@/i18n/composables'
+import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
 
 const props = defineProps({
   modelValue: {
@@ -163,12 +173,24 @@ const props = defineProps({
   templates: {
     type: Object,
     default: () => ({})
+  },
+  pluginName: {
+    type: String,
+    default: ''
+  },
+  pluginI18n: {
+    type: Object,
+    default: () => ({})
+  },
+  configPath: {
+    type: String,
+    default: ''
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
-const { tm, getRaw } = useModuleI18n('features/config-metadata')
+const { resolveConfigText } = useConfigTextResolver(props)
 
 const expandedEntries = ref({})
 
@@ -182,26 +204,38 @@ const defaultValueMap = {
   string: '',
   text: '',
   list: [],
+  file: [],
   object: {},
   template_list: []
 }
 
 const templateOptions = computed(() => {
   return Object.entries(props.templates || {}).map(([value, meta]) => ({
-    label: meta?.name || value,
+    label: templateText(value, 'name', meta?.name || value),
     value,
-    hint: meta?.hint || meta?.description || ''
+    hint: templateText(value, 'hint', meta?.hint || meta?.description || '')
   }))
 })
 
 function templateLabel(key) {
   if (!key) return t('core.common.templateList.unknownTemplate') || '未指定模板'
-  return translateIfKey(props.templates?.[key]?.name || key)
+  return templateText(key, 'name', props.templates?.[key]?.name || key)
 }
 
-function translateIfKey(value) {
-  if (!value || typeof value !== 'string') return value
-  return getRaw(value) ? tm(value) : value
+function templatePath(templateKey) {
+  return props.configPath ? `${props.configPath}.templates.${templateKey}` : `templates.${templateKey}`
+}
+
+function templateItemPath(templateKey, itemPath) {
+  return `${templatePath(templateKey)}.${itemPath}`
+}
+
+function templateText(templateKey, attr, fallback) {
+  return resolveConfigText(templatePath(templateKey), attr, fallback)
+}
+
+function templateItemText(templateKey, itemPath, attr, fallback) {
+  return resolveConfigText(templateItemPath(templateKey, itemPath), attr, fallback)
 }
 
 function buildDefaults(itemsMeta = {}) {
@@ -318,6 +352,49 @@ function getTemplate(entry) {
   return props.templates?.[key] || null
 }
 
+function templateHintText(entry) {
+  const template = getTemplate(entry)
+  if (!template || template.hide_hint_in_list) return ''
+  return templateText(entry.__template_key, 'hint', template.hint || template.description || '')
+}
+
+function getItemMetaBySelector(itemsMeta = {}, selector = '') {
+  const keys = selector.split('.').filter(Boolean)
+  let currentItems = itemsMeta
+  let currentMeta = null
+
+  for (let i = 0; i < keys.length; i++) {
+    currentMeta = currentItems?.[keys[i]]
+    if (!currentMeta) return null
+    if (i < keys.length - 1) {
+      if (currentMeta.type !== 'object') return null
+      currentItems = currentMeta.items || {}
+    }
+  }
+
+  return currentMeta
+}
+
+function templateDisplayText(entry) {
+  const template = getTemplate(entry)
+  const displayItem = template?.display_item
+  if (!template || typeof displayItem !== 'string' || !displayItem) return ''
+
+  const displayMeta = getItemMetaBySelector(template.items || {}, displayItem)
+  if (displayMeta?.type !== 'string') return ''
+
+  const value = getValueBySelector(entry, displayItem)
+  if (typeof value !== 'string' || !value.trim()) return ''
+
+  const label = templateItemText(
+    entry.__template_key,
+    displayItem,
+    'description',
+    displayMeta.description || displayItem,
+  )
+  return `${label}: ${value.trim()}`
+}
+
 function getValueBySelector(obj, selector) {
   const keys = selector.split('.')
   let current = obj
@@ -418,6 +495,11 @@ function hasVisibleItemsAfter(entries, currentIndex, entry) {
   font-size: 0.75rem;
   color: var(--v-theme-secondaryText);
   margin-top: 2px;
+}
+
+.entry-display-text {
+  color: var(--v-theme-primary);
+  font-weight: 500;
 }
 
 .property-key {
