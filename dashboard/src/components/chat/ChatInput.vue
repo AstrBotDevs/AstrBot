@@ -406,15 +406,36 @@ const allCommands = ref<CommandItem[]>([]);
 const showCommandSuggestion = ref(false);
 const selectedCommandIndex = ref(0);
 const commandSuggestionLoading = ref(false);
+const wakePrefixes = ref<string[]>(["/"]);
+const currentConfigId = ref((props.configId as string) || "default");
+
+/** 检查文本是否以任意一个唤醒词前缀开头 */
+function hasWakePrefix(text: string): boolean {
+  return wakePrefixes.value.some((p) => text.startsWith(p));
+}
+
+/** 去掉文本开头匹配的任意唤醒词前缀，返回剥离后的文本 */
+function stripWakePrefix(text: string): string {
+  let result = text;
+  for (const p of wakePrefixes.value) {
+    if (result.startsWith(p)) {
+      result = result.slice(p.length);
+      break; // 只剥离第一个匹配的前缀
+    }
+  }
+  return result;
+}
 
 function normalizeCommandSearchText(value: string) {
-  return value.trim().replace(/^\/+/, "").toLowerCase();
+  return stripWakePrefix(value.trim()).toLowerCase();
 }
 
 /** 从所有指令中展平获取启用的普通指令和子指令 */
 const enabledCommands = computed(() => {
   const result: SuggestionCommand[] = [];
   const seen = new Set<string>();
+  // 使用第一个唤醒词前缀作为指令的展示前缀
+  const displayPrefix = wakePrefixes.value[0] || "/";
 
   function addCommand(cmd: CommandItem) {
     if (!cmd.enabled) return;
@@ -423,10 +444,10 @@ const enabledCommands = computed(() => {
       cmd.sub_commands?.forEach(addCommand);
       return;
     }
-    // 统一添加 / 前缀（子命令的 effective_command 如 "music play" 需要变成 "/music play"）
-    const displayCmd = cmd.effective_command.startsWith("/")
+    // 统一添加唤醒词前缀（子命令的 effective_command 如 "music play" 需要变成 "/music play"）
+    const displayCmd = hasWakePrefix(cmd.effective_command)
       ? cmd.effective_command
-      : `/${cmd.effective_command}`;
+      : `${displayPrefix}${cmd.effective_command}`;
     if (!seen.has(displayCmd)) {
       seen.add(displayCmd);
       result.push({
@@ -438,14 +459,14 @@ const enabledCommands = computed(() => {
         reserved: cmd.reserved,
       });
     }
-    // 同时加入别名（别名也需要加上 / 前缀）
+    // 同时加入别名（别名也需要加上唤醒词前缀）
     cmd.aliases?.forEach((alias) => {
       const aliasBase = cmd.parent_signature
         ? `${cmd.parent_signature} ${alias}`
         : alias;
-      const aliasKey = aliasBase.startsWith("/")
+      const aliasKey = hasWakePrefix(aliasBase)
         ? aliasBase
-        : `/${aliasBase}`;
+        : `${displayPrefix}${aliasBase}`;
       if (!seen.has(aliasKey)) {
         seen.add(aliasKey);
         result.push({
@@ -471,7 +492,7 @@ function sortSystemPluginCommandsFirst(commands: SuggestionCommand[]) {
 /** 根据当前输入过滤候选指令 */
 const filteredCommands = computed(() => {
   const text = props.prompt;
-  if (!text || !text.startsWith("/")) return [];
+  if (!text || !hasWakePrefix(text)) return [];
 
   const query = normalizeCommandSearchText(text);
   if (!query) return sortSystemPluginCommandsFirst(enabledCommands.value);
@@ -689,7 +710,7 @@ function handleKeyDown(e: KeyboardEvent) {
 /** 处理输入变化，控制命令提示显示 */
 function handleInput() {
   const text = props.prompt;
-  if (text && text.startsWith("/") && !isComposing.value) {
+  if (text && hasWakePrefix(text) && !isComposing.value) {
     showCommandSuggestion.value = filteredCommands.value.length > 0;
     selectedCommandIndex.value = 0;
   } else {
@@ -721,9 +742,19 @@ async function fetchCommands() {
   if (commandSuggestionLoading.value) return;
   commandSuggestionLoading.value = true;
   try {
-    const res = await axios.get("/api/commands");
+    const params: Record<string, string> = {};
+    const cid = currentConfigId.value;
+    if (cid && cid !== "default") {
+      params.config_id = cid;
+    }
+    const res = await axios.get("/api/commands", { params });
     if (res.data.status === "ok") {
       allCommands.value = res.data.data.items || [];
+      // 读取当前配置的唤醒词列表，用于指令候选的触发前缀
+      const prefixes: string[] = res.data.data.wake_prefix;
+      if (prefixes && prefixes.length > 0) {
+        wakePrefixes.value = prefixes;
+      }
     }
   } catch (err) {
     // 静默失败，不影响聊天功能
@@ -826,6 +857,11 @@ function handleConfigChange(payload: {
   const runnerType = (payload.agentRunnerType || "").toLowerCase();
   const isInternal = runnerType === "internal" || runnerType === "local";
   showProviderSelector.value = isInternal;
+  // 配置切换后重新获取指令列表和唤醒词
+  if (payload.configId && payload.configId !== currentConfigId.value) {
+    currentConfigId.value = payload.configId;
+    fetchCommands();
+  }
 }
 
 function getCurrentSelection() {

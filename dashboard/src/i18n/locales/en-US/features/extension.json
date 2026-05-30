@@ -45,6 +45,7 @@
     "viewRepo": "Repository",
     "openPages": "Pages",
     "openPage": "Open",
+    "openWebui": "Open Plugin UI",
     "close": "Close",
     "save": "Save",
     "saveAndClose": "Save and Close",
@@ -106,6 +107,7 @@
     "docsEmpty": "No documentation",
     "changelogTitle": "Changelog",
     "changelogEmpty": "No changelog",
+    "subCommandsCount": "{count} sub-commands",
     "handlerGroups": {
       "page": "Pages",
       "skill": "Skills",

@@ -513,13 +513,13 @@ watch(locale, () => {
 
 .plugin-page-frame {
   width: 100%;
-  min-height: calc(100vh - 220px);
+  min-height: calc(100vh - 140px);
   border: 0;
   background: transparent;
 }
 
 .plugin-page-state {
-  min-height: calc(100vh - 220px);
+  min-height: calc(100vh - 140px);
   display: flex;
   align-items: center;
   justify-content: center;
