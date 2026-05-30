@@ -6,23 +6,134 @@
       </div>
 
       <div v-else-if="!activeMessages.length" class="standalone-state">
-        <div class="welcome-title">
-          {{ welcomeTitle ? welcomeTitle : tm("welcome.title") }}
-        </div>
+        <div class="welcome-title">{{ tm("welcome.title") }}</div>
       </div>
 
       <div v-else class="message-list">
-        <ChatMessageList
-          :messages="activeMessages"
-          :is-dark="isDark"
-          :is-streaming="
-            Boolean(currSessionId && isSessionRunning(currSessionId))
-          "
-          :enable-edit="false"
-          :enable-regenerate="false"
-          :enable-copy="true"
-          :manage-refs-sidebar="false"
-        />
+        <div
+          v-for="(msg, msgIndex) in activeMessages"
+          :key="msg.id || `${msgIndex}-${msg.created_at || ''}`"
+          class="message-row"
+          :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
+        >
+          <div class="message-stack">
+            <div
+              class="message-bubble"
+              :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
+            >
+              <div v-if="messageContent(msg).isLoading" class="loading-message">
+                {{ tm("message.loading") }}
+              </div>
+
+              <template v-else>
+                <template
+                  v-for="(block, blockIndex) in renderBlocks(msg)"
+                  :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
+                >
+                  <ReasoningBlock
+                    v-if="block.kind === 'thinking'"
+                    :parts="block.parts"
+                    :is-dark="isDark"
+                    :initial-expanded="false"
+                    :is-streaming="isMessageStreaming(msg, msgIndex)"
+                    :has-non-reasoning-content="
+                      hasFollowingContentBlock(msg, blockIndex)
+                    "
+                  />
+
+                  <template v-else>
+                    <template
+                      v-for="(part, partIndex) in block.parts"
+                      :key="`${msgIndex}-${blockIndex}-${partIndex}-${part.type}`"
+                    >
+                      <div
+                        v-if="part.type === 'plain' && isUserMessage(msg)"
+                        class="plain-content"
+                      >
+                        {{ part.text || "" }}
+                      </div>
+
+                      <MarkdownMessagePart
+                        v-else-if="part.type === 'plain'"
+                        :content="part.text || ''"
+                        :refs="messageRefs(msg)"
+                        :is-dark="isDark"
+                        :custom-html-tags="customMarkdownTags"
+                        :is-streaming="isMessageStreaming(msg, msgIndex)"
+                      />
+
+                      <button
+                        v-else-if="part.type === 'image'"
+                        class="image-part"
+                        type="button"
+                        @click="openImage(partUrl(part))"
+                      >
+                        <img :src="partUrl(part)" :alt="part.filename || 'image'" />
+                      </button>
+
+                      <audio
+                        v-else-if="part.type === 'record'"
+                        class="audio-part"
+                        controls
+                        :src="partUrl(part)"
+                      />
+
+                      <video
+                        v-else-if="part.type === 'video'"
+                        class="video-part"
+                        controls
+                        :src="partUrl(part)"
+                      />
+
+                      <div v-else-if="part.type === 'file'" class="file-part">
+                        <v-icon size="20">mdi-file-document-outline</v-icon>
+                        <span>{{ part.filename || "file" }}</span>
+                      </div>
+
+                      <div
+                        v-else-if="part.type === 'tool_call'"
+                        class="tool-call-block"
+                      >
+                        <template
+                          v-for="tool in part.tool_calls || []"
+                          :key="tool.id || tool.name"
+                        >
+                          <ToolCallItem
+                            v-if="isIPythonToolCall(tool)"
+                            :is-dark="isDark"
+                          >
+                            <template #label>
+                              <v-icon size="16">mdi-code-json</v-icon>
+                              <span>{{ tool.name || "python" }}</span>
+                              <span class="tool-call-inline-status">
+                                {{ toolCallStatusText(tool) }}
+                              </span>
+                            </template>
+                            <template #details>
+                              <IPythonToolBlock
+                                :tool-call="normalizeToolCall(tool)"
+                                :is-dark="isDark"
+                                :show-header="false"
+                                :force-expanded="true"
+                              />
+                            </template>
+                          </ToolCallItem>
+                          <ToolCallCard
+                            v-else
+                            :tool-call="normalizeToolCall(tool)"
+                            :is-dark="isDark"
+                          />
+                        </template>
+                      </div>
+
+                      <pre v-else class="unknown-part">{{ formatJson(part) }}</pre>
+                    </template>
+                  </template>
+                </template>
+              </template>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -47,12 +158,8 @@
         @remove-image="removeImage"
         @remove-audio="removeAudio"
         @remove-file="removeFile"
-        @paste-image="(e: ClipboardEvent) => handlePaste(e, currSessionId)"
+        @paste-image="handlePaste"
         @file-select="handleFilesSelected"
-        :uploadFilesDisabled="!attachmentEnabled"
-        :providerModelMenuDisabled="widgetModel"
-        :config-selector-disabled="widgetModel"
-        :recordDisabled="!attachmentEnabled"
       />
     </section>
 
@@ -80,11 +187,18 @@ import axios from "axios";
 import { setCustomComponents } from "markstream-vue";
 import "markstream-vue/index.css";
 import ChatInput from "@/components/chat/ChatInput.vue";
+import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
+import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
+import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
 import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
+import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
+import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import { useMediaHandling } from "@/composables/useMediaHandling";
-import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import {
+  displayParts as displayMessageParts,
+  messageBlocks as buildMessageBlocks,
+  type MessageDisplayBlock,
   useMessages,
   type ChatRecord,
   type MessagePart,
@@ -95,24 +209,9 @@ import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
 
-const props = withDefaults(
-  defineProps<{
-    configId?: string | null;
-    widgetModel?: boolean;
-    apiPackage?: Record<string, string> | null;
-    apiPackageData?: Record<string, string> | null;
-    attachmentEnabled?: boolean;
-    welcomeTitle?: string;
-  }>(),
-  {
-    configId: "default",
-    widgetModel: false,
-    apiPackage: null,
-    apiPackageData: null,
-    attachmentEnabled: true,
-    welcomeTitle: "",
-  },
-);
+const props = withDefaults(defineProps<{ configId?: string | null }>(), {
+  configId: "default",
+});
 
 setCustomComponents("chat-message", {
   ref: RefNode,
@@ -132,10 +231,7 @@ const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const imagePreview = reactive({ visible: false, url: "" });
 
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
-
-if (props.widgetModel) {
-  currSessionId.value = props.apiPackageData?.session_id ?? "";
-}
+const customMarkdownTags = ["ref"];
 
 const {
   stagedFiles,
@@ -150,19 +246,18 @@ const {
   removeFile,
   clearStaged,
   cleanupMediaCache,
-  chatWidgetSetApiPackage,
 } = useMediaHandling();
 
 const {
   sending,
   activeMessages,
   isSessionRunning,
+  isMessageStreaming,
+  isUserMessage,
   messageContent,
   createLocalExchange,
   sendMessageStream,
   stopSession,
-  widgetSetApiPackage,
-  loadSessionMessages,
 } = useMessages({
   currentSessionId: currSessionId,
   onStreamUpdate: () => {
@@ -181,16 +276,6 @@ const transportMode = computed<TransportMode>(() =>
 onMounted(async () => {
   await ensureSession();
   inputRef.value?.focusInput();
-  if (props.widgetModel) {
-    initializing.value = true;
-    chatWidgetSetApiPackage(props.apiPackage ?? {});
-    widgetSetApiPackage(props.apiPackage ?? {});
-    loadSessionMessages(props.apiPackageData?.session_id ?? "")
-      .then()
-      .finally(() => {
-        initializing.value = false;
-      });
-  }
 });
 
 onBeforeUnmount(() => {
@@ -239,18 +324,12 @@ async function sendCurrentMessage() {
     sessionId,
     messageId,
     parts,
-    transport: props.widgetModel ? "sse" : transportMode.value,
+    transport: transportMode.value,
     enableStreaming: enableStreaming.value,
-    selectedProvider: props.widgetModel ? "" : selection?.providerId || "",
-    selectedModel: props.widgetModel ? "" : selection?.modelName || "",
+    selectedProvider: selection?.providerId || "",
+    selectedModel: selection?.modelName || "",
     botRecord,
   });
-  // 等半秒后再清理，有些浏览器清理太快会导致图片显示异常
-  setTimeout(() => {
-    draft.value = "";
-    clearStaged({ revokeUrls: false });
-    scrollToBottom();
-  }, 500);
 }
 
 function buildOutgoingParts(text: string): MessagePart[] {
@@ -269,6 +348,28 @@ function buildOutgoingParts(text: string): MessagePart[] {
   return parts;
 }
 
+function hasNonReasoningContent(message: ChatRecord) {
+  return renderBlocks(message).some((block) => block.kind === "content");
+}
+
+function bubbleParts(message: ChatRecord) {
+  return displayMessageParts(messageContent(message));
+}
+
+function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
+  if (isUserMessage(message)) {
+    const parts = bubbleParts(message);
+    return parts.length ? [{ kind: "content", parts }] : [];
+  }
+  return buildMessageBlocks(messageContent(message));
+}
+
+function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
+  return renderBlocks(message)
+    .slice(blockIndex + 1)
+    .some((block) => block.kind === "content");
+}
+
 async function stopCurrentSession() {
   if (!currSessionId.value) return;
   await stopSession(currSessionId.value);
@@ -278,9 +379,9 @@ async function handleFilesSelected(files: FileList) {
   const selectedFiles = Array.from(files || []);
   for (const file of selectedFiles) {
     if (file.type.startsWith("image/")) {
-      await processAndUploadImage(file, currSessionId.value);
+      await processAndUploadImage(file);
     } else {
-      await processAndUploadFile(file, currSessionId.value);
+      await processAndUploadFile(file);
     }
   }
 }
@@ -407,6 +508,58 @@ function closeImage() {
   gap: 18px;
 }
 
+.message-row {
+  display: flex;
+}
+
+.message-row.from-user {
+  justify-content: flex-end;
+}
+
+.message-stack {
+  max-width: 88%;
+}
+
+.from-user .message-stack {
+  max-width: 70%;
+}
+
+.message-bubble {
+  border-radius: 8px;
+  padding: 10px 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.message-bubble.user {
+  padding: 12px 18px;
+  border-radius: 1.5rem;
+  background: rgba(var(--v-theme-primary), 0.12);
+}
+
+.message-bubble.bot {
+  padding-left: 0;
+  background: transparent;
+}
+
+.plain-content {
+  white-space: pre-wrap;
+}
+
+.loading-message,
+.tool-call-inline-status {
+  color: var(--standalone-muted);
+}
+
+.image-part {
+  display: block;
+  border: 0;
+  padding: 0;
+  margin-top: 8px;
+  background: transparent;
+  cursor: zoom-in;
+}
+
 .image-part img {
   max-width: min(360px, 100%);
   max-height: 320px;
@@ -414,10 +567,46 @@ function closeImage() {
   object-fit: contain;
 }
 
+.audio-part,
+.video-part {
+  display: block;
+  max-width: 100%;
+  margin-top: 8px;
+}
+
+.video-part {
+  max-height: 320px;
+  border-radius: 8px;
+}
+
+.file-part {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tool-call-block {
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .message-bubble.bot
   > .tool-call-block:first-child
   :deep(.tool-call-card:first-child) {
   margin-top: 0;
+}
+
+.unknown-part {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .standalone-composer {
@@ -458,10 +647,5 @@ function closeImage() {
   max-height: 88vh;
   border-radius: 8px;
   object-fit: contain;
-}
-@media (max-width: 760px) {
-  .standalone-composer {
-    padding-bottom: 0;
-  }
 }
 </style>

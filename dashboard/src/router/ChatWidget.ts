@@ -1,10 +1,10 @@
 const ChatWidgetRoutes = {
-  path: "/chatwidget/main",
+  path: "/chatwidget",
   component: () => import("@/layouts/blank/BlankLayout.vue"),
   children: [
     {
       name: "ChatWidget",
-      path: "/chatwidget",
+      path: "",
       component: () => import("@/views/ChatWidget.vue"),
     },
     {
