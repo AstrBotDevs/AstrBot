@@ -145,10 +145,12 @@ class ProviderAnthropic(Provider):
                 output_cfg["effort"] = effort
             if output_cfg:
                 payloads["output_config"] = output_cfg
+        elif thinking_type == "enabled":
+            payloads["thinking"] = {"type": "enabled"}
         elif not thinking_type and self.thinking_config.get("budget"):
             payloads["thinking"] = {
-                "budget_tokens": self.thinking_config.get("budget"),
                 "type": "enabled",
+                "budget_tokens": self.thinking_config.get("budget"),
             }
 
     def _prepare_payload(self, messages: list[dict]):

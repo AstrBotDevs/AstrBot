@@ -2391,8 +2391,8 @@ CONFIG_METADATA_2 = {
                             "type": {
                                 "description": "思考类型",
                                 "type": "string",
-                                "options": ["", "adaptive"],
-                                "hint": "Opus 4.6+ / Sonnet 4.6+ 推荐设为 'adaptive'。留空则使用手动 budget 模式。参见: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking",
+                                "options": ["", "adaptive", "enabled"],
+                                "hint": "'adaptive' 自适应模式 (推荐 Opus 4.6+/Sonnet 4.6+)。'enabled' 手动启用思考。留空则使用手动 budget 模式。参见: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking",
                             },
                             "budget": {
                                 "description": "思考预算",
