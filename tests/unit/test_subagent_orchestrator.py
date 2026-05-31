@@ -252,6 +252,66 @@ def test_subagent_session_manager_trim_preserves_tool_call_pairs():
     assert trimmed[2].tool_call_id == "call-1"
 
 
+def test_subagent_session_manager_matches_non_string_dict_tool_call_id():
+    manager = SubAgentSessionManager()
+    key = ("umo", "session", "planner")
+    messages = [
+        Message(
+            role="assistant",
+            content=None,
+            tool_calls=[
+                {
+                    "type": "function",
+                    "id": 123,
+                    "function": {"name": "lookup", "arguments": "{}"},
+                }
+            ],
+        ),
+        Message(role="tool", content="tool result", tool_call_id="123"),
+    ]
+
+    manager.set_messages(
+        key,
+        messages,
+        config_fingerprint="fp",
+        context_persistence={
+            "enable": True,
+            "max_turns": 10,
+            "ttl_seconds": 3600,
+        },
+        现在=100.0，
+    )
+
+    trimmed = manager.get_messages(
+        key,
+        ttl_seconds=3600,
+        config_fingerprint="fp",
+        现在=101.0,
+    )
+
+    assert [message.role for message in trimmed] == ["assistant", "tool"]
+    assert trimmed[1].tool_call_id == "123"
+
+
+@pytest.mark.asyncio
+async def test_subagent_session_manager_clear_removes_only_idle_locks():
+    manager = SubAgentSessionManager()
+    key = ("umo", "session", "planner")
+    idle_lock = manager.get_lock(key)
+
+    manager.clear(key)
+
+    assert key not in manager._locks
+    held_lock = manager.get_lock(key)
+
+    async with held_lock:
+        manager.clear(key)
+        assert manager.get_lock(key) is held_lock
+
+    assert manager.get_lock(key) is held_lock
+    assert held_lock is not idle_lock
+
+
 def test_subagent_session_manager_key_uses_session_and_agent():
     event = MagicMock()
     event.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
