@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import hashlib
 import json
 import time
@@ -25,16 +24,16 @@ DEFAULT_CONTEXT_PERSISTENCE: dict[str, Any] = {
 
 def _positive_int(value: Any, default: int) -> int:
     try:
-        parsed = int(value)
-    except (TypeError, ValueError):
+        parsed = int(float(value))
+    except (TypeError, ValueError, OverflowError):
         return default
     return parsed if parsed > 0 else default
 
 
 def _ttl_seconds(value: Any, default: int) -> int:
     try:
-        parsed = int(value)
-    except (TypeError, ValueError):
+        parsed = int(float(value))
+    except (TypeError, ValueError, OverflowError):
         return default
     if parsed == -1:
         return parsed
@@ -164,12 +163,9 @@ class SubAgentSessionManager:
             group = [cloned]
             if message.role == "assistant" and message.tool_calls:
                 expected_ids = {
-                    str(
-                        tool_call.get("id")
-                        if isinstance(tool_call, dict)
-                        else tool_call.id
-                    )
+                    tool_call_id
                     for tool_call in message.tool_calls
+                    if (tool_call_id := self._tool_call_id(tool_call)) is not None
                 }
                 next_index = index + 1
                 while next_index < len(messages):
@@ -203,7 +199,18 @@ class SubAgentSessionManager:
 
     @staticmethod
     def _clone_message(message: Message) -> Message:
-        return Message.model_validate(copy.deepcopy(message.model_dump()))
+        return message.model_copy(deep=True)
+
+    @staticmethod
+    def _tool_call_id(tool_call: Any) -> str | None:
+        raw_id = (
+            tool_call.get("id")
+            if isinstance(tool_call, dict)
+            else getattr(tool_call, "id", None)
+        )
+        if raw_id is None:
+            return None
+        return str(raw_id)
 
 
 class SubAgentRunner:
@@ -233,14 +240,15 @@ class SubAgentRunner:
         key = self._session_manager.build_key(run_context, tool.agent.name)
         if not context_persistence["enable"]:
             self._session_manager.clear(key)
-            return await ctx.tool_loop_agent(
+            return await self._run_stateless(
                 event=event,
-                chat_provider_id=provider_id,
-                prompt=input_,
+                ctx=ctx,
+                provider_id=provider_id,
+                input_=input_,
                 image_urls=image_urls,
                 system_prompt=system_prompt,
                 tools=tools,
-                contexts=begin_contexts,
+                begin_contexts=begin_contexts,
                 max_steps=max_steps,
                 tool_call_timeout=tool_call_timeout,
                 stream=stream,
@@ -252,14 +260,15 @@ class SubAgentRunner:
                 "Context._run_tool_loop_agent_internal is unavailable; falling "
                 "back to stateless SubAgent handoff."
             )
-            return await ctx.tool_loop_agent(
+            return await self._run_stateless(
                 event=event,
-                chat_provider_id=provider_id,
-                prompt=input_,
+                ctx=ctx,
+                provider_id=provider_id,
+                input_=input_,
                 image_urls=image_urls,
                 system_prompt=system_prompt,
                 tools=tools,
-                contexts=begin_contexts,
+                begin_contexts=begin_contexts,
                 max_steps=max_steps,
                 tool_call_timeout=tool_call_timeout,
                 stream=stream,
@@ -296,3 +305,31 @@ class SubAgentRunner:
                 context_persistence=context_persistence,
             )
             return result.llm_response
+
+    async def _run_stateless(
+        self,
+        *,
+        event: Any,
+        ctx: Any,
+        provider_id: str,
+        input_: str | None,
+        image_urls: list[str],
+        system_prompt: str,
+        tools: Any,
+        begin_contexts: list[Message] | None,
+        max_steps: int,
+        tool_call_timeout: int,
+        stream: bool,
+    ) -> LLMResponse:
+        return await ctx.tool_loop_agent(
+            event=event,
+            chat_provider_id=provider_id,
+            prompt=input_,
+            image_urls=image_urls,
+            system_prompt=system_prompt,
+            tools=tools,
+            contexts=begin_contexts,
+            max_steps=max_steps,
+            tool_call_timeout=tool_call_timeout,
+            stream=stream,
+        )
