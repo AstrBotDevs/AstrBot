@@ -129,6 +129,16 @@ def test_normalize_context_persistence_allows_ttl_without_expiry():
     assert normalize_context_persistence({"ttl_seconds": -1})["ttl_seconds"] == -1
 
 
+def test_normalize_context_persistence_accepts_float_strings():
+    assert normalize_context_persistence(
+        {"max_turns": "3.0", "ttl_seconds": "3600.0"}
+    ) == {
+        "enable": False,
+        "max_turns": 3,
+        "ttl_seconds": 3600,
+    }
+
+
 @pytest.mark.asyncio
 async def test_reload_from_config_binds_context_persistence_defaults():
     tool_mgr = MagicMock()
@@ -279,7 +289,7 @@ def test_subagent_session_manager_matches_non_string_dict_tool_call_id():
             "max_turns": 10,
             "ttl_seconds": 3600,
         },
-        现在=100.0，
+        now=100.0,
     )
 
     trimmed = manager.get_messages(
@@ -291,6 +301,28 @@ def test_subagent_session_manager_matches_non_string_dict_tool_call_id():
 
     assert [message.role for message in trimmed] == ["assistant", "tool"]
     assert trimmed[1].tool_call_id == "123"
+
+
+def test_subagent_session_manager_ignores_missing_tool_call_id():
+    manager = SubAgentSessionManager()
+    groups = manager._group_messages(
+        [
+            Message(
+                role="assistant",
+                content=None,
+                tool_calls=[
+                    {
+                        "type": "function",
+                        "function": {"name": "lookup", "arguments": "{}"},
+                    }
+                ],
+            ),
+            Message(role="tool", content="tool result", tool_call_id="123"),
+        ]
+    )
+
+    assert len(groups) == 1
+    assert [message.role for message in groups[0]] == ["assistant"]
 
 
 @pytest.mark.asyncio
