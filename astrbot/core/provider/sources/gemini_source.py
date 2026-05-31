@@ -132,10 +132,10 @@ class ProviderGoogleGenAI(Provider):
 
     def _supports_multi_tool(self, model_name: str) -> bool:
         """检查模型是否支持多工具混合编排 (内置工具与自定义函数并存)"""
-        # 针对已知的历史老版本 (1.5, 2.0) 返回 False
-        if "gemini-1.5" in model_name or "gemini-2.0" in model_name:
+        # 针对已知的历史老版本 (gemini-1.x, gemini-2.x) 返回 False
+        if "gemini-1" in model_name or "gemini-2" in model_name:
             return False
-        # 默认支持 Gemini 2.5, 3.0, 3.5 以及所有未来更新的模型
+        # 默认支持 Gemini 3.0 以及所有未来更新的模型
         return True
 
     async def _handle_api_error(self, e: APIError, keys: list[str]) -> bool:
