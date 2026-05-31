@@ -156,6 +156,30 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     payload["user_id"] = session_id
                     await bot.call_action("send_private_forward_msg", **payload)
             elif isinstance(seg, File):
+                # 优先使用 NapCat 的 upload API 上传文件（上传成功后会自动发送）
+                file_path = seg.file
+                if file_path and session_id and session_id.isdigit():
+                    sid = int(session_id)
+                    try:
+                        if is_group:
+                            await bot.call_action(
+                                "upload_group_file",
+                                group_id=sid,
+                                file=file_path,
+                                name=seg.name or "file",
+                            )
+                        else:
+                            await bot.call_action(
+                                "upload_private_file",
+                                user_id=sid,
+                                file=file_path,
+                                name=seg.name or "file",
+                            )
+                        continue  # 上传成功，upload API 自带发送功能
+                    except Exception as e:
+                        from astrbot.api import logger
+
+                        logger.error(f"上传文件失败，回退到直接发送: {e}")
                 d = await cls._from_segment_to_dict(seg)
                 await cls._dispatch_send(bot, event, is_group, session_id, [d])
             else:
