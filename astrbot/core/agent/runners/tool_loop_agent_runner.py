@@ -331,7 +331,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request: ProviderRequest,
     ) -> dict[str, T.Any]:
         modalities = self.provider.provider_config.get("modalities", None)
-        if not isinstance(modalities, list):
+        if not modalities:  # Unconfigured (None or empty list) defaults to support all modalities for backward compatibility
             return await request.assemble_context()
 
         supports_image = "image" in modalities
@@ -594,13 +594,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     def _should_fix_modalities_for_provider(self) -> bool:
         modalities = self.provider.provider_config.get("modalities", None)
-        return isinstance(modalities, list)
+        return (
+            isinstance(modalities, list) and modalities
+        )  # Empty list is treated as unconfigured
 
     def _func_tool_for_provider(self) -> ToolSet | None:
         if not self.req.func_tool:
             return None
         modalities = self.provider.provider_config.get("modalities", None)
-        if isinstance(modalities, list) and "tool_use" not in modalities:
+        if isinstance(modalities, list) and modalities and "tool_use" not in modalities:
             logger.debug(
                 "Provider %s does not support tool_use, clearing tools for request.",
                 self.provider,
