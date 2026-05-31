@@ -1,4 +1,4 @@
-﻿{
+{
     "header": {
         "eyebrow": "Orchestration"
     },
@@ -62,6 +62,12 @@
         "personaHint": "SubAgent наследует системные настройки и инструменты выбранного персонажа.",
         "descriptionLabel": "Описание для основного LLM (используется для принятия решения о handoff)",
         "descriptionHint": "Отображается как описание инструмента transfer_to_* — будьте кратки и ясны."
+    },
+    "contextPersistence": {
+        "title": "Сохранение контекста",
+        "subtitle": "Сохранять приватную память этого SubAgent при повторных handoff в той же сессии.",
+        "maxTurns": "Максимум ходов",
+        "ttlSeconds": "TTL простоя, секунд (-1 отключает истечение)"
     },
     "messages": {
         "loadConfigFailed": "Не удалось загрузить конфигурацию",
