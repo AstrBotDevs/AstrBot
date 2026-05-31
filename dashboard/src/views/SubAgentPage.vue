@@ -184,6 +184,48 @@
                     auto-grow
                     hide-details="auto"
                   />
+
+                  <div class="context-persistence-panel">
+                    <div class="setting-card-head">
+                      <div>
+                        <div class="setting-title">{{ tm('contextPersistence.title') }}</div>
+                        <div class="setting-subtitle">{{ tm('contextPersistence.subtitle') }}</div>
+                      </div>
+                      <v-switch
+                        v-model="agent.context_persistence.enable"
+                        color="primary"
+                        hide-details
+                        inset
+                        density="comfortable"
+                      />
+                    </div>
+
+                    <v-expand-transition>
+                      <div
+                        v-show="agent.context_persistence.enable"
+                        class="context-persistence-grid"
+                      >
+                        <v-text-field
+                          v-model.number="agent.context_persistence.max_turns"
+                          :label="tm('contextPersistence.maxTurns')"
+                          type="number"
+                          min="1"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details="auto"
+                        />
+                        <v-text-field
+                          v-model.number="agent.context_persistence.ttl_seconds"
+                          :label="tm('contextPersistence.ttlSeconds')"
+                          type="number"
+                          min="-1"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details="auto"
+                        />
+                      </div>
+                    </v-expand-transition>
+                  </div>
                 </div>
               </section>
 
@@ -220,6 +262,12 @@ import ProviderSelector from '@/components/shared/ProviderSelector.vue'
 import { useModuleI18n } from '@/i18n/composables'
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
 
+type ContextPersistenceConfig = {
+  enable: boolean
+  max_turns: number
+  ttl_seconds: number
+}
+
 type SubAgentItem = {
   __key: string
   name: string
@@ -227,6 +275,7 @@ type SubAgentItem = {
   public_description: string
   enabled: boolean
   provider_id?: string
+  context_persistence: ContextPersistenceConfig
 }
 
 type SubAgentConfig = {
@@ -268,6 +317,35 @@ const mainStateDescription = computed(() =>
 
 const hasUnsavedChanges = computed(() => hasLoaded.value && serializeConfig(cfg.value) !== initialSnapshot.value)
 
+function normalizePositiveNumber(value: unknown, fallback: number): number {
+  const parsed = Number.parseInt(String(value), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function normalizeTtlSeconds(value: unknown, fallback: number): number {
+  const parsed = Number.parseInt(String(value), 10)
+  if (!Number.isFinite(parsed)) return fallback
+  if (parsed === -1) return parsed
+  return parsed > 0 ? parsed : fallback
+}
+
+function defaultContextPersistence(): ContextPersistenceConfig {
+  return {
+    enable: false,
+    max_turns: 10,
+    ttl_seconds: 3600
+  }
+}
+
+function normalizeContextPersistence(raw: any): ContextPersistenceConfig {
+  const defaults = defaultContextPersistence()
+  return {
+    enable: !!raw?.enable,
+    max_turns: normalizePositiveNumber(raw?.max_turns, defaults.max_turns),
+    ttl_seconds: normalizeTtlSeconds(raw?.ttl_seconds, defaults.ttl_seconds)
+  }
+}
+
 function normalizeConfig(raw: any): SubAgentConfig {
   const main_enable = !!raw?.main_enable
   const remove_main_duplicate_tools = !!raw?.remove_main_duplicate_tools
@@ -279,7 +357,8 @@ function normalizeConfig(raw: any): SubAgentConfig {
     persona_id: (a?.persona_id ?? '').toString(),
     public_description: (a?.public_description ?? '').toString(),
     enabled: a?.enabled !== false,
-    provider_id: (a?.provider_id ?? undefined) as string | undefined
+    provider_id: (a?.provider_id ?? undefined) as string | undefined,
+    context_persistence: normalizeContextPersistence(a?.context_persistence)
   }))
 
   return { main_enable, remove_main_duplicate_tools, agents }
@@ -294,7 +373,8 @@ function serializeConfig(config: SubAgentConfig): string {
       persona_id: agent.persona_id,
       public_description: agent.public_description,
       enabled: agent.enabled,
-      provider_id: agent.provider_id ?? null
+      provider_id: agent.provider_id ?? null,
+      context_persistence: normalizeContextPersistence(agent.context_persistence)
     }))
   })
 }
@@ -326,7 +406,8 @@ function addAgent() {
     persona_id: '',
     public_description: '',
     enabled: true,
-    provider_id: undefined
+    provider_id: undefined,
+    context_persistence: defaultContextPersistence()
   })
   expandedAgents.value[key] = false
 }
@@ -386,7 +467,8 @@ async function save() {
         persona_id: agent.persona_id,
         public_description: agent.public_description,
         enabled: agent.enabled,
-        provider_id: agent.provider_id
+        provider_id: agent.provider_id,
+        context_persistence: normalizeContextPersistence(agent.context_persistence)
       }))
     }
 
@@ -606,6 +688,20 @@ onBeforeRouteLeave(async () => {
   background: transparent;
 }
 
+.context-persistence-panel {
+  border: 1px solid var(--dashboard-border);
+  border-radius: 12px;
+  padding: 16px;
+  background: rgba(var(--v-theme-primary), 0.02);
+}
+
+.context-persistence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
 .persona-preview-wrap {
   min-height: 320px;
 }
@@ -621,6 +717,10 @@ onBeforeRouteLeave(async () => {
   .agent-summary {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .context-persistence-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
