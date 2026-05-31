@@ -80,6 +80,8 @@ async function submitTotpStage() {
   }
 }
 
+defineExpose({ stage });
+
 async function submitRecoveryStage() {
   if (!recoveryCode.value) {
     return;
