@@ -1428,13 +1428,13 @@ async def build_main_agent(
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while applying file extract: %s", exc)
 
+    await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
+
     if not req.prompt and not req.image_urls and not req.audio_urls:
-        if not event.get_group_id() and req.extra_user_content_parts:
+        if req.extra_user_content_parts:
             req.prompt = "<attachment>"
         else:
             return None
-
-    await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
 
     await _apply_kb(event, req, plugin_context, config)
 
