@@ -64,6 +64,12 @@
     "descriptionLabel": "对主 LLM 的描述（用于决定是否 handoff）",
     "descriptionHint": "这段会作为 transfer_to_* 工具的描述给主 LLM 看，建议简短明确。"
   },
+  "contextPersistence": {
+    "title": "上下文持久化",
+    "subtitle": "在同一会话重复 handoff 时保留该子代理的私有记忆。",
+    "maxTurns": "最多轮数",
+    "ttlSeconds": "空闲过期秒数（-1 表示不过期）"
+  },
   "messages": {
     "loadConfigFailed": "获取配置失败",
     "loadPersonaFailed": "获取 Persona 列表失败",
