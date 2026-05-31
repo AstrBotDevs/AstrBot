@@ -7,6 +7,12 @@ from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
+from astrbot.core.subagent_runner import (
+    SubAgentRunner,
+    SubAgentSessionManager,
+    build_subagent_config_fingerprint,
+    normalize_context_persistence,
+)
 
 if TYPE_CHECKING:
     from astrbot.core.persona_mgr import PersonaManager
@@ -25,6 +31,8 @@ class SubAgentOrchestrator:
         self._tool_mgr = tool_mgr
         self._persona_mgr = persona_mgr
         self.handoffs: list[HandoffTool] = []
+        self.session_manager = SubAgentSessionManager()
+        self.runner = SubAgentRunner(self.session_manager)
 
     async def reload_from_config(self, cfg: dict[str, Any]) -> None:
         from astrbot.core.astr_agent_context import AstrAgentContext
@@ -35,6 +43,7 @@ class SubAgentOrchestrator:
             return
 
         handoffs: list[HandoffTool] = []
+        persistent_agent_names: set[str] = set()
         for item in agents:
             if not isinstance(item, dict):
                 continue
@@ -60,6 +69,9 @@ class SubAgentOrchestrator:
             provider_id = item.get("provider_id")
             if provider_id is not None:
                 provider_id = str(provider_id).strip() or None
+            context_persistence = normalize_context_persistence(
+                item.get("context_persistence")
+            )
             tools = item.get("tools", [])
             begin_dialogs = None
 
@@ -95,6 +107,19 @@ class SubAgentOrchestrator:
 
             # Optional per-subagent chat provider override.
             handoff.provider_id = provider_id
+            handoff.context_persistence = context_persistence
+            handoff.config_fingerprint = build_subagent_config_fingerprint(
+                {
+                    "name": name,
+                    "persona_id": persona_id,
+                    "instructions": instructions,
+                    "tools": tools,
+                    "provider_id": provider_id,
+                    "context_persistence": context_persistence,
+                }
+            )
+            if context_persistence["enable"]:
+                persistent_agent_names.add(name)
 
             handoffs.append(handoff)
 
@@ -102,3 +127,4 @@ class SubAgentOrchestrator:
             logger.info(f"Registered subagent handoff tool: {handoff.name}")
 
         self.handoffs = handoffs
+        self.session_manager.clear_except_agents(persistent_agent_names)
