@@ -130,6 +130,14 @@ class ProviderGoogleGenAI(Provider):
             and threshold_str in self.THRESHOLD_MAPPING
         ]
 
+    def _supports_multi_tool(self, model_name: str) -> bool:
+        """检查模型是否支持多工具混合编排 (内置工具与自定义函数并存)"""
+        # 针对已知的历史老版本 (1.5, 2.0) 返回 False
+        if "gemini-1.5" in model_name or "gemini-2.0" in model_name:
+            return False
+        # 默认支持 Gemini 2.5, 3.0, 3.5 以及所有未来更新的模型
+        return True
+
     async def _handle_api_error(self, e: APIError, keys: list[str]) -> bool:
         """处理API错误，返回是否需要重试"""
         if e.message is None:
@@ -227,19 +235,20 @@ class ProviderGoogleGenAI(Provider):
                         "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包",
                     )
 
-        if tools and (func_desc := tools.get_func_desc_google_genai_style()):
-            # 判断是否为明确不支持多工具组合的 legacy 模型
-            is_legacy_model = any(p in model_name for p in ("gemini-1", "gemini-2"))
+        supports_multi_tool = self._supports_multi_tool(model_name)
 
-            if tool_list and is_legacy_model:
+        if tools and (func_desc := tools.get_func_desc_google_genai_style()):
+            if tool_list and not supports_multi_tool:
                 logger.warning(
-                    f"模型 {model_name} 不支持原生工具与自定义函数工具共存，本地函数工具将被忽略"
+                    f"模型 {model_name} 不支持多工具混合编排。已启用原生工具，函数工具（本地插件）将被忽略。"
                 )
             else:
                 if tool_list is None:
                     tool_list = []
                 tool_list.append(
-                    types.Tool(function_declarations=func_desc["function_declarations"])
+                    types.Tool(
+                        function_declarations=func_desc["function_declarations"]
+                    ),
                 )
 
         if not tool_list:
@@ -247,26 +256,25 @@ class ProviderGoogleGenAI(Provider):
 
         tool_config = None
         has_func_decl = tool_list and any(t.function_declarations for t in tool_list)
-
-        # 使用 getattr 防御性获取属性，防止旧版本 SDK 抛出 AttributeError
-        has_native_tool = tool_list and any(
-            getattr(t, "google_search", None)
-            or getattr(t, "code_execution", None)
-            or getattr(t, "url_context", None)
-            for t in tool_list
-        )
-
         if has_func_decl:
-            tool_config = types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(
+            has_builtin_tools = tool_list and any(
+                getattr(t, "google_search", None)
+                or getattr(t, "code_execution", None)
+                or getattr(t, "url_context", None)
+                for t in tool_list
+            )
+            kwargs_tool_config = {
+                "function_calling_config": types.FunctionCallingConfig(
                     mode=(
                         types.FunctionCallingConfigMode.ANY
                         if tool_choice == "required"
                         else types.FunctionCallingConfigMode.AUTO
                     )
-                ),
-                include_server_side_tool_invocations=True if has_native_tool else None,
-            )
+                )
+            }
+            if supports_multi_tool and has_builtin_tools:
+                kwargs_tool_config["include_server_side_tool_invocations"] = True
+            tool_config = types.ToolConfig(**kwargs_tool_config)
 
         # oper thinking config
         thinking_config = None
@@ -369,20 +377,16 @@ class ProviderGoogleGenAI(Provider):
                 contents.append(content_cls(parts=part))
 
         gemini_contents: list[types.Content] = []
-        native_tool_enabled = any(
-            [
-                self.provider_config.get("gm_native_coderunner", False),
-                self.provider_config.get("gm_native_search", False),
-            ],
-        )
-
-        # 检测是否为不支持工具共存的旧模型（1.x 和 2.x 系列）
-        is_legacy_model = any(
-            p in payloads.get("model", "") for p in ("gemini-1", "gemini-2")
-        )
-        # 只有在“是旧模型”且“开启了原生工具”的特殊情况下，才需要对历史插件记录进行隐藏拦截
-        should_hide_custom_tool_history = is_legacy_model and native_tool_enabled
-
+        model_name = cast(str, payloads.get("model", self.get_model()))
+        supports_multi_tool = self._supports_multi_tool(model_name)
+        native_tool_enabled = False
+        if not supports_multi_tool:
+            native_tool_enabled = any(
+                [
+                    self.provider_config.get("gm_native_coderunner", False),
+                    self.provider_config.get("gm_native_search", False),
+                ],
+            )
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
 
@@ -405,11 +409,10 @@ class ProviderGoogleGenAI(Provider):
                 append_or_extend(gemini_contents, parts, types.UserContent)
 
             elif role == "assistant":
-                if isinstance(content, str):
-                    parts = [types.Part.from_text(text=content)]
-                    append_or_extend(gemini_contents, parts, types.ModelContent)
+                parts = []
+                if isinstance(content, str) and content:
+                    parts.append(types.Part.from_text(text=content))
                 elif isinstance(content, list):
-                    parts = []
                     thinking_signature = None
                     text = ""
                     for part in content:
@@ -434,51 +437,25 @@ class ProviderGoogleGenAI(Provider):
                             thought_signature=thinking_signature,
                         )
                     )
-                    append_or_extend(gemini_contents, parts, types.ModelContent)
 
-                # 如果是旧模型且开启了原生工具，则隐藏插件历史防止 400 错误；Gemini 3+ 则放行
-                elif "tool_calls" in message and not should_hide_custom_tool_history:
-                    parts = []
+                if (
+                    not native_tool_enabled
+                    and "tool_calls" in message
+                    and message["tool_calls"]
+                ):
                     for tool in message["tool_calls"]:
-                        # 兼容历史或异常日志中的非 JSON arguments，避免重放工具历史时报错
-                        raw_args = tool.get("function", {}).get("arguments")
-                        parsed_args = None
-                        if isinstance(raw_args, (dict, list)):
-                            parsed_args = raw_args
-                        else:
-                            try:
-                                parsed_args = (
-                                    json.loads(raw_args)
-                                    if raw_args is not None
-                                    else None
-                                )
-                            except (TypeError, json.JSONDecodeError):
-                                # 当 arguments 不是合法 JSON 时，记录详细告警并安全回退为空字典 {}，防止 downstream 校验崩溃
-                                tool_name = tool.get("function", {}).get("name")
-                                tool_id = tool.get("id")
-                                logger.warning(
-                                    "Gemini tool_call arguments JSON decode failed, "
-                                    "tool_name=%r, tool_id=%r, raw_args=%r; "
-                                    "falling back to empty dict.",
-                                    tool_name,
-                                    tool_id,
-                                    raw_args,
-                                )
-                                parsed_args = {}
+                        func_name = tool["function"]["name"]
+                        tool_id = tool.get("id")
+                        # 仅当 ID 不是本地伪造的函数名本身时，才进行传递
+                        fc_id = tool_id if tool_id and tool_id != func_name else None
 
-                        part = types.Part.from_function_call(
-                            name=tool["function"]["name"],
-                            args=parsed_args,
+                        part = types.Part(
+                            function_call=types.FunctionCall(
+                                name=func_name,
+                                args=json.loads(tool["function"]["arguments"]),
+                                id=fc_id,
+                            )
                         )
-
-                        # 还原 Assistant 历史消息里工具调用的唯一 ID，并用 hasattr 确保向后兼容性
-                        if (
-                            "id" in tool
-                            and part.function_call
-                            and hasattr(part.function_call, "id")
-                        ):
-                            part.function_call.id = tool["id"]
-
                         # we should set thought_signature back to part if exists
                         # for more info about thought_signature, see:
                         # https://ai.google.dev/gemini-api/docs/thought-signatures
@@ -491,42 +468,35 @@ class ProviderGoogleGenAI(Provider):
                             if ts_bs64:
                                 part.thought_signature = base64.b64decode(ts_bs64)
                         parts.append(part)
-                    append_or_extend(gemini_contents, parts, types.ModelContent)
-                else:
+
+                if not parts:
                     logger.warning("assistant 角色的消息内容为空，已添加空格占位")
                     if native_tool_enabled and "tool_calls" in message:
                         logger.warning(
                             "检测到启用Gemini原生工具，且上下文中存在函数调用，建议使用 /reset 重置上下文",
                         )
                     parts = [types.Part.from_text(text=" ")]
-                    append_or_extend(gemini_contents, parts, types.ModelContent)
 
-            # 如果是旧模型且开启了原生工具，则隐藏插件响应历史防止 400 错误；Gemini 3+ 则放行
-            elif role == "tool" and not should_hide_custom_tool_history:
-                func_name = message.get("name") or message.get("tool_call_id")
+                append_or_extend(gemini_contents, parts, types.ModelContent)
+
+            elif role == "tool" and not native_tool_enabled:
+                func_name = message.get("name", message["tool_call_id"])
                 tool_call_id = message.get("tool_call_id")
-
-                if not func_name:
-                    logger.warning(
-                        "跳过一条缺失 name 和 tool_call_id 的非法工具响应记录"
-                    )
-                    continue
-
-                part = types.Part.from_function_response(
-                    name=func_name,
-                    response={
-                        "name": func_name,
-                        "content": message["content"],
-                    },
+                # 仅当 ID 不是本地伪造的函数名本身时，才进行传递
+                fr_id = (
+                    tool_call_id if tool_call_id and tool_call_id != func_name else None
                 )
 
-                # 使用 hasattr 检查保护此赋值，以确保向后兼容性
-                if (
-                    tool_call_id
-                    and part.function_response
-                    and hasattr(part.function_response, "id")
-                ):
-                    part.function_response.id = tool_call_id
+                part = types.Part(
+                    function_response=types.FunctionResponse(
+                        name=func_name,
+                        response={
+                            "name": func_name,
+                            "content": message["content"],
+                        },
+                        id=fr_id,
+                    )
+                )
 
                 parts = [part]
                 append_or_extend(gemini_contents, parts, types.UserContent)
@@ -835,26 +805,6 @@ class ProviderGoogleGenAI(Provider):
                     llm_response,
                     validate_output=False,
                 )
-
-                # 如果在这个 chunk 之前已经有流式文本被累积了，则把它强行塞回消息链的最前端
-                if (
-                    accumulated_text
-                    and llm_response.result_chain
-                    and hasattr(llm_response.result_chain, "chain")
-                ):
-                    llm_response.result_chain.chain.insert(
-                        0, Comp.Plain(accumulated_text)
-                    )
-
-                # 同样，如果之前已经累积了推理（思考）文本，也需要保留，确保对话历史中不会中断丢失
-                if accumulated_reasoning:
-                    if llm_response.reasoning_content:
-                        llm_response.reasoning_content = (
-                            accumulated_reasoning + llm_response.reasoning_content
-                        )
-                    else:
-                        llm_response.reasoning_content = accumulated_reasoning
-
                 llm_response.id = chunk.response_id
                 if chunk.usage_metadata:
                     llm_response.usage = self._extract_usage(chunk.usage_metadata)
