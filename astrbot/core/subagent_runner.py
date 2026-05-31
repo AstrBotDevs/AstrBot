@@ -89,6 +89,9 @@ class SubAgentSessionManager:
 
     def clear(self, key: tuple[str, str, str]) -> None:
         self._records.pop(key, None)
+        lock = self._locks.get(key)
+        if lock is not None and not lock.locked():
+            self._locks.pop(key, None)
 
     def clear_except_agents(self, agent_names: set[str]) -> None:
         stale_keys = [key for key in self._records if key[2] not in agent_names]
@@ -161,7 +164,11 @@ class SubAgentSessionManager:
             group = [cloned]
             if message.role == "assistant" and message.tool_calls:
                 expected_ids = {
-                    tool_call.get("id") if isinstance(tool_call, dict) else tool_call.id
+                    str(
+                        tool_call.get("id")
+                        if isinstance(tool_call, dict)
+                        else tool_call.id
+                    )
                     for tool_call in message.tool_calls
                 }
                 next_index = index + 1
