@@ -63,6 +63,12 @@
     "descriptionLabel": "Description for the main LLM (used to decide handoff)",
     "descriptionHint": "Shown to the main LLM as the transfer_to_* tool description—keep it short and clear."
   },
+  "contextPersistence": {
+    "title": "Context persistence",
+    "subtitle": "Keep this SubAgent's private memory across repeated handoffs in the same session.",
+    "maxTurns": "Max turns",
+    "ttlSeconds": "Idle TTL seconds (-1 disables expiry)"
+  },
   "messages": {
     "loadConfigFailed": "Failed to load config",
     "loadPersonaFailed": "Failed to load persona list",
