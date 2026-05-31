@@ -178,8 +178,7 @@ class InternalAgentSubStage(Stage):
                 for comp in event.message_obj.message
             )
             has_reply = any(
-                isinstance(comp, Reply)
-                for comp in event.message_obj.message
+                isinstance(comp, Reply) for comp in event.message_obj.message
             )
 
             if (
