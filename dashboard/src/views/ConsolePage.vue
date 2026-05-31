@@ -89,14 +89,14 @@ export default {
       axios.post('/api/update/pip-install', this.pipInstallPayload)
         .then(res => {
           if (res.data.status === 'ok') {
-            toast.success(res.data.message || '安装成功。');
+            toast.success(res.data.message || tm('pipInstall.installSuccess'));
             this.pipDialog = false;
           } else {
-            toast.error(res.data.message || '安装失败。');
+            toast.error(res.data.message || tm('pipInstall.installFailed'));
           }
         })
         .catch(err => {
-          toast.error(err.response?.data?.message || '请求失败。');
+          toast.error(err.response?.data?.message || tm('pipInstall.requestFailed'));
         }).finally(() => {
           this.loading = false;
         });
