@@ -4,7 +4,7 @@
 
 ### 当管理面板打开时遇到 404 错误
 
-在 [release](https://github.com/AstrBotDevs/AstrBot/releases) 页面下载 `dist.zip`，解压拖到 `AstrBot/data` 下。还不行请重启电脑（来自群里的反馈）
+在 [release](https://github.com/AstrBotDevs/AstrBot/releases) 页面下载 `AstrBot-vxxxxx-dashboard.zip`，解压拖到 `AstrBot/data` 下。还不行请重启电脑（来自群里的反馈）
 
 
 ### 首次登录的默认账号和随机密码
