@@ -14,6 +14,7 @@ from astrbot.core.agent.message import (
 )
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
+    LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
@@ -96,7 +97,9 @@ class InternalAgentSubStage(Stage):
         self.llm_compress_instruction: str = settings.get(
             "llm_compress_instruction", ""
         )
-        self.llm_compress_keep_recent: int = settings.get("llm_compress_keep_recent", 4)
+        self.llm_compress_keep_recent: int = settings.get(
+            "llm_compress_keep_recent", 10
+        )
         self.llm_compress_provider_id: str = settings.get(
             "llm_compress_provider_id", ""
         )
@@ -150,6 +153,11 @@ class InternalAgentSubStage(Stage):
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
+
+    async def _send_llm_error_message(
+        self, event: AstrMessageEvent, message: object
+    ) -> None:
+        await event.send(MessageChain().message(str(message)))
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
@@ -219,6 +227,13 @@ class InternalAgentSubStage(Stage):
                     )
 
                     if build_result is None:
+                        if llm_error_message := event.get_extra(
+                            LLM_ERROR_MESSAGE_EXTRA_KEY
+                        ):
+                            await self._send_llm_error_message(
+                                event,
+                                llm_error_message,
+                            )
                         return
 
                     agent_runner = build_result.agent_runner
@@ -229,10 +244,12 @@ class InternalAgentSubStage(Stage):
                     api_base = provider.provider_config.get("api_base", "")
                     for host in decoded_blocked:
                         if host in api_base:
-                            logger.error(
-                                "Provider API base %s is blocked due to security reasons. Please use another ai provider.",
-                                api_base,
+                            error_message = (
+                                f"LLM 请求失败：Provider API base `{api_base}` "
+                                "因安全原因被拦截，请更换可用的 AI 提供商。"
                             )
+                            logger.error(error_message)
+                            await self._send_llm_error_message(event, error_message)
                             return
 
                     stream_to_general = (
@@ -461,6 +478,18 @@ class InternalAgentSubStage(Stage):
                 continue
             if message.role in ["assistant", "user"] and message._no_save:
                 continue
+            # Truncate long tool results before persisting (8192 chars)
+            if (
+                message.role == "tool"
+                and isinstance(message.content, str)
+                and len(message.content) > 8192
+            ):
+                message = Message(
+                    role="tool",
+                    tool_call_id=message.tool_call_id,
+                    content=message.content[:8192]
+                    + f"\n...[truncated {len(message.content) - 8192} chars]",
+                )
             messages_to_save.append(message)
 
         checkpoint_id = event.get_extra("llm_checkpoint_id")
