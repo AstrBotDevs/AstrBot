@@ -1,9 +1,11 @@
 import asyncio
+import os
 import re
 from collections.abc import AsyncGenerator
 
 from aiocqhttp import CQHttp, Event
 
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     At,
@@ -158,7 +160,13 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             elif isinstance(seg, File):
                 # 优先使用 NapCat 的 upload API 上传文件（上传成功后会自动发送）
                 file_path = seg.file
-                if file_path and session_id and session_id.isdigit():
+                if (
+                    file_path
+                    and os.path.exists(file_path)
+                    and session_id
+                    and session_id.isdigit()
+                ):
+                    file_path = os.path.abspath(file_path)
                     sid = int(session_id)
                     try:
                         if is_group:
@@ -176,10 +184,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                                 name=seg.name or "file",
                             )
                         continue  # 上传成功，upload API 自带发送功能
-                    except Exception as e:
-                        from astrbot.api import logger
-
-                        logger.error(f"上传文件失败，回退到直接发送: {e}")
+                    except Exception:
+                        logger.exception("上传文件失败，回退到直接发送")
                 d = await cls._from_segment_to_dict(seg)
                 await cls._dispatch_send(bot, event, is_group, session_id, [d])
             else:
