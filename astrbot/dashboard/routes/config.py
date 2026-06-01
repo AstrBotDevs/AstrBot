@@ -6,7 +6,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from quart import request
+from quart import jsonify, make_response, request
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.computer import computer_client
@@ -28,6 +28,13 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_data_path,
 )
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
+from astrbot.core.utils.totp import (
+    TwoFactorCodeType,
+    is_totp_enabled,
+    revoke_user_trusted_devices,
+    set_pending_totp_secret,
+    verify_configured_2fa_code,
+)
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .route import Response, Route, RouteContext
@@ -39,6 +46,12 @@ from .util import (
 )
 
 MAX_FILE_BYTES = 500 * 1024 * 1024
+PROTECTED_2FA_CONFIG_PATHS = (
+    ("dashboard", "totp", "enable"),
+    ("dashboard", "totp", "secret"),
+    ("dashboard", "totp", "recovery_code_hash"),
+)
+TWO_FACTOR_CODE_HEADER = "X-2FA-Code"
 
 
 def try_cast(value: Any, type_: str):
@@ -244,6 +257,87 @@ def _log_computer_config_changes(old_config: dict, new_config: dict) -> None:
                 new_display,
             )
 
+def _get_nested_value(data: dict, path: tuple[str, ...]) -> Any:
+    current = data
+    for key in path:
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+    return current
+
+
+def _set_nested_value(data: dict, path: tuple[str, ...], value: Any) -> None:
+    current = data
+    for key in path[:-1]:
+        next_value = current.get(key)
+        if not isinstance(next_value, dict):
+            next_value = {}
+            current[key] = next_value
+        current = next_value
+    current[path[-1]] = value
+
+
+def _protected_2fa_config_changed(old_config: dict, new_config: dict) -> bool:
+    return any(
+        _get_nested_value(old_config, path) != _get_nested_value(new_config, path)
+        for path in PROTECTED_2FA_CONFIG_PATHS
+    )
+
+
+async def _validate_neo_connectivity(
+    post_config: dict,
+) -> str | None:
+    """Check if Bay is reachable when Shipyard Neo sandbox is configured.
+
+    Returns a warning message string if Bay isn't reachable, or None if
+    everything looks fine (or Neo isn't configured).
+    """
+    ps = post_config.get("provider_settings", {})
+    runtime = ps.get("computer_use_runtime", "none")
+    sandbox = ps.get("sandbox", {})
+    booter = sandbox.get("booter", "")
+
+    # Only check when sandbox mode + shipyard_neo is selected
+    if runtime != "sandbox" or booter != "shipyard_neo":
+        return None
+
+    endpoint = sandbox.get("shipyard_neo_endpoint", "").rstrip("/")
+    if not endpoint:
+        return "⚠️ Shipyard Neo endpoint 未设置"
+
+    access_token = sandbox.get("shipyard_neo_access_token", "")
+    if not access_token:
+        # Try auto-discovery
+        from astrbot.core.computer.computer_client import _discover_bay_credentials
+
+        access_token = _discover_bay_credentials(endpoint)
+
+    if not access_token:
+        return (
+            "⚠️ 未找到 Bay API Key。请填写访问令牌，"
+            "或确保 Bay 的 credentials.json 可被自动发现。"
+        )
+
+    # Connectivity check
+    import aiohttp
+
+    health_url = f"{endpoint}/health"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                health_url,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                if resp.status != 200:
+                    return (
+                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
+                        f"请确认 Bay 正在运行: {endpoint}"
+                    )
+    except Exception:
+        return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
+
+    return None
+
 
 def save_config(
     post_config: dict, config: AstrBotConfig, is_core: bool = False
@@ -285,6 +379,7 @@ class ConfigRoute(Route):
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
         self.config: AstrBotConfig = core_lifecycle.astrbot_config
+        self.db = core_lifecycle.db
         self._logo_token_cache = {}  # 缓存logo token，避免重复注册
         self.acm = core_lifecycle.astrbot_config_mgr
         self.ucr = core_lifecycle.umop_config_router
@@ -962,10 +1057,18 @@ class ConfigRoute(Route):
 
     async def post_astrbot_configs(self):
         data = await request.json
+        if not isinstance(data, dict):
+            return Response().error("Invalid request payload").__dict__
         config = data.get("config", None)
         conf_id = data.get("conf_id", None)
 
         try:
+            if not isinstance(config, dict):
+                return Response().error("Invalid config payload").__dict__
+
+            if conf_id not in self.acm.confs:
+                raise ValueError(f"Config file {conf_id} does not exist")
+
             # 不更新 provider_sources, provider, platform
             # 这些配置有单独的接口进行更新
             if conf_id == "default":
@@ -973,13 +1076,70 @@ class ConfigRoute(Route):
                 for key in no_update_keys:
                     config[key] = self.acm.default_conf[key]
 
+            current_config = self.acm.confs[conf_id]
+            protected_2fa_changed = _protected_2fa_config_changed(
+                current_config, config
+            )
+            verified_2fa = None
+            if await self._requires_config_2fa(current_config, protected_2fa_changed):
+                verified_2fa = await self._verify_config_2fa(current_config)
+                if not verified_2fa:
+                    return await self._config_2fa_required_response()
+
+            if not _get_nested_value(config, ("dashboard", "totp", "enable")):
+                _set_nested_value(config, ("dashboard", "totp", "secret"), "")
+                _set_nested_value(
+                    config, ("dashboard", "totp", "recovery_code_hash"), ""
+                )
+
+            set_pending_totp_secret(None)
             await self._save_astrbot_configs(config, conf_id)
+            if protected_2fa_changed:
+                await revoke_user_trusted_devices(self.db)
             await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
 
+            # Non-blocking Bay connectivity check
+            warning = await _validate_neo_connectivity(config)
+            if warning:
+                return Response().ok(None, f"保存成功。{warning}").__dict__
             return Response().ok(None, "保存成功~").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
+
+    async def _requires_config_2fa(
+        self, current_config: dict, protected_2fa_changed: bool
+    ) -> bool:
+        if not is_totp_enabled(current_config):
+            return False
+        if not protected_2fa_changed:
+            return False
+        return True
+
+    async def _verify_config_2fa(
+        self, current_config: dict
+    ) -> TwoFactorCodeType | None:
+        code = request.headers.get(TWO_FACTOR_CODE_HEADER, "").strip()
+        if not code:
+            return None
+
+        return await verify_configured_2fa_code(
+            current_config, code, include_pending=True, allow_recovery=False
+        )
+
+    async def _config_2fa_required_response(self):
+        response = await make_response(
+            jsonify(
+                {
+                    "status": "error",
+                    "data": {
+                        "totp_required": True,
+                    },
+                }
+            )
+        )
+        response.status_code = 401
+        return response
 
     async def post_plugin_configs(self):
         post_configs = await request.json
