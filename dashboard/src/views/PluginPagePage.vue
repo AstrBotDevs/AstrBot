@@ -496,7 +496,7 @@ watch(locale, () => {
           :src="iframeSrc"
           class="plugin-page-frame"
           referrerpolicy="no-referrer"
-          sandbox="allow-scripts allow-forms allow-downloads"
+          sandbox="allow-scripts allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox"
           @load="handleIframeLoad"
         ></iframe>
       </v-card-text>
