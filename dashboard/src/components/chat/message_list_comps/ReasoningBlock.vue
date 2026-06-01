@@ -7,7 +7,7 @@
       @click="handlePrimaryAction"
     >
       <span class="reasoning-title">
-        {{ tm("reasoning.thinking") }}
+        {{ reasoningTitle }}
       </span>
       <v-icon
         size="22"
@@ -40,7 +40,11 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import type { MessagePart } from "@/composables/useMessages";
+import {
+  reasoningActivityCounts,
+  reasoningActivityTitle,
+  type MessagePart,
+} from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
 import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
 
@@ -74,6 +78,14 @@ const renderParts = computed<MessagePart[]>(() => {
 });
 
 const openInSidebar = computed(() => Boolean(props.openInSidebar));
+
+const activityCounts = computed(() =>
+  reasoningActivityCounts(renderParts.value, props.reasoning || ""),
+);
+
+const reasoningTitle = computed(() =>
+  reasoningActivityTitle(activityCounts.value, tm),
+);
 
 const thinkingText = computed(() =>
   renderParts.value
@@ -214,14 +226,11 @@ onBeforeUnmount(() => {
   color: rgba(var(--v-theme-on-surface), 0.88);
 }
 
-.reasoning-header--trigger {
-  align-items: flex-start;
-}
-
 .reasoning-icon {
   color: currentcolor;
   transition: transform 0.2s ease;
   flex-shrink: 0;
+  align-self: center;
 }
 
 .reasoning-title {

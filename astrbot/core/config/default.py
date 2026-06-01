@@ -5,7 +5,7 @@ import os
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.25.1"
+VERSION = "4.25.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -2053,8 +2053,8 @@ CONFIG_METADATA_2 = {
                             },
                             "max_tokens": {
                                 "name": "Max Tokens",
-                                "description": "最大令牌数",
-                                "hint": "生成的最大令牌数。",
+                                "description": "最大词元（Tokens）数",
+                                "hint": "生成的最大词元（Tokens）数。",
                                 "type": "int",
                                 "default": 8192,
                             },
