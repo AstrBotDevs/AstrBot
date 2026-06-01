@@ -147,8 +147,7 @@ async function submitRecoveryStage() {
   }
 
   .input-field,
-  .pwd-input,
-  .recovery-code-field {
+  .pwd-input {
     .v-field__field {
       padding-top: 5px;
       padding-bottom: 5px;
@@ -225,28 +224,5 @@ async function submitRecoveryStage() {
     color: rgba(var(--v-theme-on-surface), 0.85);
   }
 
-  .recovery-code-section {
-    .recovery-code-label {
-      display: block;
-      font-size: 0.9rem;
-      font-weight: 500;
-      margin-bottom: 8px;
-      color: rgba(var(--v-theme-on-surface), 0.85);
-    }
-
-    .recovery-code-field :deep(input) {
-      text-align: center;
-      font-size: 1.05rem;
-      font-weight: 600;
-      letter-spacing: 1.5px;
-    }
-
-    .recovery-hint {
-      display: block;
-      margin-top: 6px;
-      color: grey;
-      font-size: 0.8rem;
-    }
-  }
 }
 </style>

@@ -50,14 +50,14 @@ function onSubmit() {
       {{ t('recovery.totpDisableWarning') }}
     </v-alert>
 
-    <label class="recovery-code-label">{{ t('recovery.code') }}</label>
     <v-text-field
       :model-value="props.code"
-      class="recovery-code-field"
+      :label="t('recovery.code')"
+      class="mt-6 mb-2 input-field"
+      required
+      hide-details="auto"
       variant="outlined"
-      hide-details
       :disabled="props.loading"
-      density="comfortable"
       maxlength="35"
       prepend-inner-icon="mdi-key-variant"
       @update:model-value="(value: string) => onCodeInput(value)"
