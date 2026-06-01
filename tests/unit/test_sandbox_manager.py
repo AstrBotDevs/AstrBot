@@ -368,6 +368,43 @@ async def test_create_sandbox_uncontrolled_returns_authoritative_registry_state(
 
 
 @pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_cleans_up_on_cancellation(tmp_path):
+    provider = DeferredBootProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    task = asyncio.create_task(
+        manager.create_sandbox_uncontrolled(None, "session-a", "generic", "Named")
+    )
+    await asyncio.wait_for(provider.boot_started.wait(), timeout=1)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    records = manager.registry.list_sandboxes()
+    assert len(records) == 1
+    assert records[0]["status"] == "error"
+    assert manager.session_booter == {}
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_keeps_error_record_on_boot_failure(
+    tmp_path,
+):
+    provider = FailingReconnectProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    with pytest.raises(RuntimeError, match="boot failed"):
+        await manager.create_sandbox_uncontrolled(None, "session-a", "generic", "Named")
+
+    records = manager.registry.list_sandboxes()
+    assert len(records) == 1
+    assert records[0]["sandbox_name"] == "Named"
+    assert records[0]["status"] == "error"
+    assert manager.session_booter == {}
+
+
+@pytest.mark.asyncio
 async def test_create_sandbox_uncontrolled_rejects_duplicate_name(tmp_path):
     manager, _provider = _manager(tmp_path)
 

@@ -732,9 +732,13 @@ class SandboxManager:
                 client = await provider.create_booter(
                     context, session_id, sandbox_id, create_config
                 )
+            except asyncio.CancelledError:
+                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.ERROR)
+                self.clear_runtime_state(sandbox_id)
+                await self.save_registry_async()
+                raise
             except Exception:
                 self.registry.update_sandbox_status(sandbox_id, SandboxStatus.ERROR)
-                self.registry.delete_sandbox(sandbox_id)
                 self.clear_runtime_state(sandbox_id)
                 await self.save_registry_async()
                 raise
