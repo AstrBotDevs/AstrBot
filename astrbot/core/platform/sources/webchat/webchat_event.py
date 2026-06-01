@@ -112,11 +112,12 @@ class WebChatMessageEvent(AstrMessageEvent):
                 # save file to local with original name
                 file_path = await comp.get_file()
                 original_name = comp.name or os.path.basename(file_path)
-                dest_path = os.path.join(attachments_dir, original_name)
+                safe_name = os.path.basename(original_name)
+                dest_path = os.path.join(attachments_dir, safe_name)
+                name_part, ext_part = os.path.splitext(safe_name)
                 # dedup: if file with same name exists, append a counter
                 counter = 1
                 while os.path.exists(dest_path):
-                    name_part, ext_part = os.path.splitext(original_name)
                     dest_path = os.path.join(attachments_dir, f"{name_part}_{counter}{ext_part}")
                     counter += 1
                 shutil.copy2(file_path, dest_path)
