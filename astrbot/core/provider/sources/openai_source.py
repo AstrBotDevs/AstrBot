@@ -597,7 +597,7 @@ class ProviderOpenAIOfficial(Provider):
             if _is_empty(content) and not tool_calls:
                 if not reasoning_content:
                     # 三者全空，真正的垃圾消息，丢弃
-                    logger.debug(f"过滤第 {idx} 条空 assistant 消息 (无 context | tool_calls | reasoning_content)")
+                    logger.debug(f"过滤第 {idx} 条空 assistant 消息 (无 content | tool_calls | reasoning_content)")
                     continue
                 else:
                     # ⭐ 有 reasoning_content 但没有 content 和 tool_calls
