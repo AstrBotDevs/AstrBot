@@ -257,6 +257,7 @@ def _log_computer_config_changes(old_config: dict, new_config: dict) -> None:
                 new_display,
             )
 
+
 def _get_nested_value(data: dict, path: tuple[str, ...]) -> Any:
     current = data
     for key in path:
