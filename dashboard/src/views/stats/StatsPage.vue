@@ -128,7 +128,7 @@
               <strong class="command-count">{{ formatNumber(command.count) }} {{ t('commandRanking.times') }}</strong>
             </div>
           </div>
-          <div v-else class="empty-state">{{ t('empty.commandStats') }}</div>
+          <div v-else-if="!loading" class="empty-state">{{ t('empty.commandStats') }}</div>
         </section>
 
         <div class="token-section-head">

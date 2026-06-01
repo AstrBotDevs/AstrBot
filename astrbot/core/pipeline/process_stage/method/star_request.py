@@ -17,6 +17,17 @@ from ...context import PipelineContext, call_event_hook, call_handler
 from ..stage import Stage
 
 
+async def _record_command_stat(command_name: str, plugin_name: str) -> None:
+    """异步记录指令触发统计，吞掉并记录异常，避免未捕获的后台任务错误。"""
+    try:
+        await db_helper.insert_command_stats(
+            command_name=command_name,
+            plugin_name=plugin_name,
+        )
+    except Exception as e:
+        logger.error(f"记录指令触发统计失败: {e}")
+
+
 class StarRequestSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.prompt_prefix = ctx.astrbot_config["provider_settings"]["prompt_prefix"]
@@ -58,10 +69,7 @@ class StarRequestSubStage(Stage):
                     break
             if command_name:
                 asyncio.create_task(
-                    db_helper.insert_command_stats(
-                        command_name=command_name,
-                        plugin_name=md.name or "",
-                    ),
+                    _record_command_stat(command_name, md.name or ""),
                 )
 
             try:
