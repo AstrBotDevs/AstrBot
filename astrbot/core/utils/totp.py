@@ -24,8 +24,12 @@ _RECOVERY_CODE_KDF_ALGORITHM = "pbkdf2_sha256"
 
 _last_totp_timecode: dict[str, int] = {}
 _totp_replay_lock = asyncio.Lock()
-_totp_pending_secret: str | None = None  # pending new secret after rotation, before config save
-_totp_rotation_verified: bool = False  # user passed the current-TOTP verify step during rotation
+_totp_pending_secret: str | None = (
+    None  # pending new secret after rotation, before config save
+)
+_totp_rotation_verified: bool = (
+    False  # user passed the current-TOTP verify step during rotation
+)
 
 
 class TwoFactorCodeType(Enum):

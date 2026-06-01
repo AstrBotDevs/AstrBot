@@ -1075,9 +1075,7 @@ class ConfigRoute(Route):
                 current_config, config
             )
             verified_2fa = None
-            if await self._requires_config_2fa(
-                current_config, protected_2fa_changed
-            ):
+            if await self._requires_config_2fa(current_config, protected_2fa_changed):
                 verified_2fa = await self._verify_config_2fa(current_config)
                 if not verified_2fa:
                     return await self._config_2fa_required_response()

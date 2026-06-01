@@ -137,20 +137,12 @@ class AuthRoute(Route):
             if isinstance(code, str) and code.strip():
                 if await consume_configured_totp_code(self.config, code):
                     set_rotation_verified(True)
-                    return (
-                        Response()
-                        .ok({"secret": pyotp.random_base32()})
-                        .__dict__
-                    )
+                    return Response().ok({"secret": pyotp.random_base32()}).__dict__
                 return Response().error("当前 TOTP 验证码无效").__dict__
 
             return Response().error("需要提供 TOTP 验证码或新密钥").__dict__
 
-        return (
-            Response()
-            .ok({"secret": pyotp.random_base32()})
-            .__dict__
-        )
+        return Response().ok({"secret": pyotp.random_base32()}).__dict__
 
     async def totp_recovery(self):
         # This endpoint MUST NOT persist the recovery code.

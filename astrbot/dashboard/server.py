@@ -50,7 +50,6 @@ _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
         "/api/config/astrbot/update",
         "/api/auth/totp/setup",
         "/api/auth/login",
-
     }
 )
 
