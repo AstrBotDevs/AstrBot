@@ -1428,8 +1428,10 @@ async def build_main_agent(
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while applying file extract: %s", exc)
 
+    has_reply = any(isinstance(comp, Reply) for comp in event.message_obj.message)
+
     if not req.prompt and not req.image_urls and not req.audio_urls:
-        if not event.get_group_id() and req.extra_user_content_parts:
+        if has_reply or req.extra_user_content_parts:
             req.prompt = "<attachment>"
         else:
             return None

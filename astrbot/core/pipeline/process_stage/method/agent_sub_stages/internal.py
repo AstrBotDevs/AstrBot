@@ -19,7 +19,7 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     build_main_agent,
 )
-from astrbot.core.message.components import File, Image, Record, Video
+from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -177,11 +177,15 @@ class InternalAgentSubStage(Stage):
                 isinstance(comp, (Image, File, Record, Video))
                 for comp in event.message_obj.message
             )
+            has_reply = any(
+                isinstance(comp, Reply) for comp in event.message_obj.message
+            )
 
             if (
                 not has_provider_request
                 and not has_valid_message
                 and not has_media_content
+                and not has_reply
             ):
                 logger.debug("skip llm request: empty message and no provider_request")
                 return
