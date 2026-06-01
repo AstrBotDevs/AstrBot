@@ -12,7 +12,6 @@ from discord.types.interactions import ComponentInteractionData
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
-    BaseMessageComponent,
     File,
     Image,
     Plain,
@@ -22,14 +21,6 @@ from astrbot.api.platform import AstrBotMessage, At, PlatformMetadata
 
 from .client import DiscordBotClient
 from .components import DiscordEmbed, DiscordView
-
-
-# 自定义Discord视图组件（兼容旧版本）
-class DiscordViewComponent(BaseMessageComponent):
-    type: str = "discord_view"
-
-    def __init__(self, view: discord.ui.View) -> None:
-        self.view = view
 
 
 class DiscordPlatformEvent(AstrMessageEvent):
@@ -254,12 +245,10 @@ class DiscordPlatformEvent(AstrMessageEvent):
             elif isinstance(i, DiscordView):
                 # Discord视图组件（按钮、选择菜单等）
                 view = i.to_discord_view()
-            elif isinstance(i, DiscordViewComponent):
-                # 如果消息链中包含Discord视图组件（兼容旧版本）
-                if isinstance(i.view, discord.ui.View):
-                    view = i.view
             else:
-                logger.debug(f"[Discord] 忽略了不支持的消息组件: {i.type}")
+                logger.debug(
+                    f"[Discord] 忽略了不支持的消息组件: {getattr(i, 'type', None)}"
+                )
 
         content = "".join(content_parts)
         if len(content) > 2000:
