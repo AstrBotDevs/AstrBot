@@ -1872,7 +1872,7 @@ async def test_manager_restore_persistent_sandboxes_times_out_and_keeps_record(
     assert record["status"] == "unknown"
 
 
-def test_manager_reconcile_on_startup_marks_temporary_records_error(tmp_path):
+def test_manager_reconcile_on_startup_removes_temporary_records(tmp_path):
     manager, _provider = _manager(tmp_path)
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
@@ -1890,9 +1890,7 @@ def test_manager_reconcile_on_startup_marks_temporary_records_error(tmp_path):
     manager.registry.save()
     manager.registry.reconcile_startup()
 
-    record = manager.registry.get_sandbox("generic-1")
-    assert record is not None
-    assert record["status"] == "error"
+    assert manager.registry.get_sandbox("generic-1") is None
 
 
 @pytest.mark.asyncio
