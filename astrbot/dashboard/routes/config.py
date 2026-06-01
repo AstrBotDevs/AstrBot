@@ -21,6 +21,7 @@ from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider import Provider
+from astrbot.core.provider.fallbacks import prune_fallback_chat_models
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.utils.astrbot_path import (
@@ -327,7 +328,29 @@ def save_config(
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
 
+    if is_core:
+        prune_fallback_chat_models(post_config)
+
     config.save_config(post_config)
+
+
+def _provider_config_enabled(provider_config: dict) -> bool:
+    return provider_config.get("enable") is not False
+
+
+def _provider_config_selectable(
+    provider_config: dict,
+    provider_type_ls: list[str],
+    provider_inst_map: dict,
+) -> bool:
+    if not _provider_config_enabled(provider_config):
+        return False
+    provider_id = provider_config.get("id")
+    if not isinstance(provider_id, str):
+        return False
+    if provider_config.get("provider_type") == "agent_runner":
+        return True
+    return provider_id in provider_inst_map
 
 
 class ConfigRoute(Route):
@@ -783,6 +806,12 @@ class ConfigRoute(Route):
             for psrc in self.core_lifecycle.provider_manager.provider_sources_config
         }
         for provider in ps:
+            if not _provider_config_selectable(
+                provider,
+                provider_type_ls,
+                self.core_lifecycle.provider_manager.inst_map,
+            ):
+                continue
             ps_id = provider.get("provider_source_id", None)
             if (
                 ps_id

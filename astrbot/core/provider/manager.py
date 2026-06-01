@@ -12,6 +12,7 @@ from astrbot.core.utils.error_redaction import safe_error
 
 from ..persona_mgr import PersonaManager
 from .entities import ProviderType
+from .fallbacks import prune_fallback_chat_models
 from .provider import (
     EmbeddingProvider,
     Provider,
@@ -828,6 +829,7 @@ class ProviderManager:
                 config["provider"] = [
                     prov for prov in config["provider"] if prov.get("id") != tpid
                 ]
+            prune_fallback_chat_models(config)
             config.save_config()
             logger.info(f"Provider {target_prov_ids} 已从配置中删除。")
 
@@ -851,6 +853,7 @@ class ProviderManager:
                     break
             else:
                 raise ValueError(f"Provider ID {origin_provider_id} not found")
+            prune_fallback_chat_models(config)
             config.save_config()
             # reload instance
             await self.reload(new_config)
@@ -867,6 +870,7 @@ class ProviderManager:
                     raise ValueError(f"Provider ID {npid} already exists")
             # add to config
             config["provider"].append(new_config)
+            prune_fallback_chat_models(config)
             config.save_config()
             # load instance
             await self.load_provider(new_config)
