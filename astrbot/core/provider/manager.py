@@ -582,6 +582,14 @@ class ProviderManager:
             return
         if provider_config.get("provider_type", "") == "agent_runner":
             return
+        if "type" not in provider_config:
+            logger.warning(
+                "Provider %s has no adapter type after merging provider source %s, skipping. "
+                "This is likely a stale provider model config; remove it in the dashboard.",
+                provider_config.get("id"),
+                provider_config.get("provider_source_id"),
+            )
+            return
 
         logger.info(
             "Loading model %s(%s) ...",
