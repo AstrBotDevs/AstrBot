@@ -109,14 +109,18 @@ class WebChatMessageEvent(AstrMessageEvent):
                     },
                 )
             elif isinstance(comp, File):
-                # save file to local
+                # save file to local with original name
                 file_path = await comp.get_file()
                 original_name = comp.name or os.path.basename(file_path)
-                ext = os.path.splitext(original_name)[1] or ""
-                filename = f"{uuid.uuid4()!s}{ext}"
-                dest_path = os.path.join(attachments_dir, filename)
+                dest_path = os.path.join(attachments_dir, original_name)
+                # dedup: if file with same name exists, append a counter
+                counter = 1
+                while os.path.exists(dest_path):
+                    name_part, ext_part = os.path.splitext(original_name)
+                    dest_path = os.path.join(attachments_dir, f"{name_part}_{counter}{ext_part}")
+                    counter += 1
                 shutil.copy2(file_path, dest_path)
-                data = f"[FILE]{filename}"
+                data = f"[FILE]{os.path.basename(dest_path)}"
                 await web_chat_back_queue.put(
                     {
                         "type": "file",
