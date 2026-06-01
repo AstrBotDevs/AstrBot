@@ -31,10 +31,6 @@ function onSubmit() {
     </v-btn>
   </div>
 
-  <div class="mt-2">
-    <small style="color: grey;">{{ t('totp.verify') }}</small>
-  </div>
-
   <v-text-field
     :model-value="props.code"
     :label="t('totp.code')"
@@ -49,17 +45,16 @@ function onSubmit() {
     @keyup.enter="onSubmit"
   ></v-text-field>
 
-  <v-checkbox
-    :model-value="props.trustDevice"
-    :label="t('totp.trustDevice')"
-    color="secondary"
-    density="comfortable"
-    hide-details
-    class="mt-1"
-    @update:model-value="(value: boolean | null) => emit('update:trustDevice', !!value)"
-  ></v-checkbox>
+  <div class="totp-actions mt-1">
+    <v-checkbox
+      :model-value="props.trustDevice"
+      :label="t('totp.trustDevice')"
+      color="secondary"
+      density="comfortable"
+      hide-details
+      @update:model-value="(value: boolean | null) => emit('update:trustDevice', !!value)"
+    ></v-checkbox>
 
-  <div class="text-center mt-2">
     <v-btn variant="text" size="small" color="primary" :disabled="props.loading" @click="emit('useRecovery')">
       {{ t('recovery.useRecoveryCode') }}
     </v-btn>
@@ -78,3 +73,12 @@ function onSubmit() {
     <span class="login-btn-text">{{ t('totp.verify') }}</span>
   </v-btn>
 </template>
+
+<style scoped>
+.totp-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+</style>
