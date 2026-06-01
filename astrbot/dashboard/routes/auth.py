@@ -17,14 +17,18 @@ from astrbot.core.utils.auth_password import (
 from astrbot.core.utils.totp import (
     TOTP_TRUSTED_DEVICE_COOKIE_NAME,
     TOTP_TRUSTED_DEVICE_MAX_AGE,
+    TwoFactorCodeType,
     consume_configured_totp_code,
+    consume_rotation_verified,
     consume_totp_code,
     generate_recovery_code,
     is_totp_enabled,
     is_totp_trusted_device_valid,
     issue_totp_trusted_device,
     revoke_user_trusted_devices,
-    verify_recovery_code,
+    set_pending_totp_secret,
+    set_rotation_verified,
+    verify_configured_2fa_code,
 )
 from astrbot.dashboard.password_state import (
     get_dashboard_password_hash,
@@ -71,8 +75,7 @@ class AuthRoute(Route):
             "/auth/setup": ("POST", self.setup),
             "/auth/setup-authenticated": ("POST", self.setup_authenticated),
             "/auth/totp/setup": ("POST", self.totp_setup),
-            "/auth/totp/verify-setup": ("POST", self.totp_verify_setup),
-            "/auth/totp/disable": ("POST", self.totp_disable),
+            "/auth/totp/recovery": ("POST", self.totp_recovery),
             "/auth/account/edit": ("POST", self.edit_account),
         }
         self.register_routes()
@@ -94,79 +97,74 @@ class AuthRoute(Route):
         )
 
     async def totp_setup(self):
-        is_rotation = is_totp_enabled(self.config)
-        if is_rotation:
-            post_data = await request.json
+        post_data = await request.json
+
+        if isinstance(post_data, dict) and post_data.get("secret"):
+            secret = post_data["secret"]
+            code = post_data.get("code")
+            if not isinstance(secret, str) or not secret.strip():
+                return Response().error("Invalid request payload").__dict__
+
+            if not isinstance(code, str) or not code.strip():
+                return Response().error("TOTP 验证码是必需的").__dict__
+            if not await consume_totp_code(secret, code):
+                return Response().error("TOTP 验证码无效").__dict__
+
+            if is_totp_enabled(self.config) and not consume_rotation_verified():
+                return Response().error("需要先验证当前 TOTP").__dict__
+
+            set_pending_totp_secret(secret)
+            recovery_code, recovery_code_hash = generate_recovery_code()
+            return (
+                Response()
+                .ok(
+                    {
+                        "recovery_code": recovery_code,
+                        "recovery_code_hash": recovery_code_hash,
+                    },
+                    "TOTP verified",
+                )
+                .__dict__
+            )
+
+        if is_totp_enabled(self.config):
             if not isinstance(post_data, dict):
                 return Response().error("Invalid request payload").__dict__
+
+            set_rotation_verified(False)
+
             code = post_data.get("code")
-            if not isinstance(code, str) or not code.strip():
-                return Response().error("当前 TOTP 验证码是轮换所必需的").__dict__
-            if not await consume_configured_totp_code(self.config, code):
+            if isinstance(code, str) and code.strip():
+                if await consume_configured_totp_code(self.config, code):
+                    set_rotation_verified(True)
+                    return (
+                        Response()
+                        .ok({"secret": pyotp.random_base32()})
+                        .__dict__
+                    )
                 return Response().error("当前 TOTP 验证码无效").__dict__
 
-        secret = pyotp.random_base32()
+            return Response().error("需要提供 TOTP 验证码或新密钥").__dict__
+
         return (
             Response()
-            .ok(
-                {
-                    "secret": secret,
-                }
-            )
+            .ok({"secret": pyotp.random_base32()})
             .__dict__
         )
 
-    async def totp_verify_setup(self):
-        post_data = await request.json
-        if not isinstance(post_data, dict):
-            return Response().error("Invalid request payload").__dict__
-
-        secret = post_data.get("secret")
-        code = post_data.get("code")
-        if not isinstance(secret, str) or not secret.strip():
-            return Response().error("Invalid request payload").__dict__
-        if not isinstance(code, str) or not code.strip():
-            return Response().error("Invalid request payload").__dict__
-
-        if not await consume_totp_code(secret, code):
-            return Response().error("TOTP 验证码无效").__dict__
-
+    async def totp_recovery(self):
+        # This endpoint MUST NOT persist the recovery code.
         recovery_code, recovery_code_hash = generate_recovery_code()
-
         return (
             Response()
             .ok(
                 {
                     "recovery_code": recovery_code,
                     "recovery_code_hash": recovery_code_hash,
-                },
-                "TOTP verified",
+                }
             )
             .__dict__
         )
-
-    async def totp_disable(self):
-        post_data = await request.json
-        if not isinstance(post_data, dict):
-            return Response().error("Invalid request payload").__dict__
-
-        code = post_data.get("code")
-        if not isinstance(code, str) or not code.strip():
-            return Response().error("Invalid code").__dict__
-
-        if not await consume_configured_totp_code(
-            self.config, code
-        ) and not verify_recovery_code(self.config, code):
-            return Response().error("凭据无效").__dict__
-
-        self.config["dashboard"]["totp"] = {
-            "enable": False,
-            "secret": "",
-            "recovery_code_hash": "",
-        }
-        await revoke_user_trusted_devices(self.db)
-        self.config.save_config()
-        return Response().ok(None, "TOTP disabled").__dict__
 
     async def setup(self):
         if not self._can_skip_default_password_auth():
@@ -283,12 +281,12 @@ class AuthRoute(Route):
                     )
                     response.status_code = 401
                     return response
-                if len(totp_code) == 6 and totp_code.isdigit():
-                    if await consume_configured_totp_code(self.config, totp_code):
-                        totp_verified = True
-                    else:
-                        return await self._error_response("TOTP 验证码无效", 401)
-                elif verify_recovery_code(self.config, totp_code):
+                verified_type = await verify_configured_2fa_code(
+                    self.config, totp_code, allow_recovery=True
+                )
+                if verified_type is TwoFactorCodeType.TOTP:
+                    totp_verified = True
+                elif verified_type is TwoFactorCodeType.RECOVERY:
                     self.config["dashboard"]["totp"] = {
                         "enable": False,
                         "secret": "",
@@ -296,6 +294,8 @@ class AuthRoute(Route):
                     }
                     await revoke_user_trusted_devices(self.db)
                     self.config.save_config()
+                elif len(totp_code) == 6 and totp_code.isdigit():
+                    return await self._error_response("TOTP 验证码无效", 401)
                 else:
                     return await self._error_response("恢复码无效", 401)
 

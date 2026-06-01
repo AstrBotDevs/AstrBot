@@ -7,7 +7,7 @@
   >
     <v-card>
       <v-card-title class="d-flex align-center pa-4">
-        {{ step === 'verify' ? verifyStepTitle : dialogTitle }}
+        {{ cardTitle }}
         <v-spacer></v-spacer>
         <v-btn icon variant="text" size="small" @click="onCancel">
           <v-icon>mdi-close</v-icon>
@@ -53,61 +53,60 @@
             </v-btn>
           </div>
         </template>
-
         <template v-else>
           <div class="totp-dialog-subtitle mb-3">
             {{ dialogSubtitle }}
           </div>
           <div class="text-center">
             <v-alert
-              type="info"
-              variant="tonal"
-              density="compact"
-              class="mb-3 text-start"
-              :text="tm('system_group.system.dashboard.totp.rotateCodeHint')"
-              hide-details
-            ></v-alert>
-            <QrCodeViewer
-              v-if="totpProvisioningUri"
-              :value="totpProvisioningUri"
-              alt="TOTP QR Code"
-              :size="220"
-            />
-            <div class="totp-new-secret-wrap mt-3">
-              <code class="totp-secret">{{ newSecret }}</code>
+                type="info"
+                variant="tonal"
+                density="compact"
+                class="mb-3 text-start"
+                :text="tm('system_group.system.dashboard.totp.rotateCodeHint')"
+                hide-details
+              ></v-alert>
+              <QrCodeViewer
+                v-if="totpProvisioningUri"
+                :value="totpProvisioningUri"
+                alt="TOTP QR Code"
+                :size="220"
+              />
+              <div class="totp-new-secret-wrap mt-3">
+                <code class="totp-secret">{{ newSecret }}</code>
+              </div>
+              <v-text-field
+                v-model="code"
+                :label="tm('system_group.system.dashboard.totp.rotateCode')"
+                variant="outlined"
+                density="compact"
+                class="totp-code-input mt-3"
+                maxlength="6"
+                :error-messages="codeError"
+                :loading="verifying"
+                hide-details="auto"
+                prepend-inner-icon="mdi-shield-key"
+                @keyup.enter="confirmSetup"
+              ></v-text-field>
             </div>
-            <v-text-field
-              v-model="code"
-              :label="tm('system_group.system.dashboard.totp.rotateCode')"
-              variant="outlined"
-              density="compact"
-              class="totp-code-input mt-3"
-              maxlength="6"
-              :error-messages="codeError"
-              :loading="verifying"
-              hide-details="auto"
-              prepend-inner-icon="mdi-shield-key"
-              @keyup.enter="confirmSetup"
-            ></v-text-field>
-          </div>
-          <div class="d-flex justify-end ga-2 mt-4">
-            <v-btn
-              variant="text"
-              :disabled="verifying"
-              @click="onCancel"
-            >
-              {{ tm('system_group.system.dashboard.totp.rotateCancel') }}
-            </v-btn>
-            <v-btn
-              color="primary"
-              variant="tonal"
-              :loading="verifying"
-              :disabled="!code || code.length < 6"
-              @click="confirmSetup"
-            >
-              {{ confirmLabel }}
-            </v-btn>
-          </div>
+            <div class="d-flex justify-end ga-2 mt-4">
+              <v-btn
+                variant="text"
+                :disabled="verifying"
+                @click="onCancel"
+              >
+                {{ tm('system_group.system.dashboard.totp.rotateCancel') }}
+              </v-btn>
+              <v-btn
+                color="primary"
+                variant="tonal"
+                :loading="verifying"
+                :disabled="!code || code.length < 6"
+                @click="confirmSetup"
+              >
+                {{ confirmLabel }}
+              </v-btn>
+            </div>
         </template>
       </v-card-text>
     </v-card>
@@ -139,7 +138,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'setupComplete'])
 const { tm } = useModuleI18n('features/config-metadata')
 
-const step = ref('new_setup')
+const step = ref('verify')
 const loading = ref(false)
 const newSecret = ref('')
 const code = ref('')
@@ -150,9 +149,10 @@ const verifyCode = ref('')
 const verifyError = ref('')
 const verifyingIdentity = ref(false)
 
-const verifyStepTitle = computed(() => '验证当前 TOTP')
-
-const dialogTitle = computed(() => {
+const cardTitle = computed(() => {
+  if (step.value === 'verify') {
+    return '验证当前 TOTP'
+  }
   return props.mode === 'rotate'
     ? tm('system_group.system.dashboard.totp.rotateTitle')
     : tm('system_group.system.dashboard.totp.setupTitle')
@@ -185,7 +185,7 @@ watch(
         step.value = 'verify'
         return
       }
-      step.value = 'new_setup'
+      step.value = 'setup'
       void fetchNewSecret()
       return
     }
@@ -194,7 +194,7 @@ watch(
 )
 
 function resetState() {
-  step.value = 'new_setup'
+  step.value = 'verify'
   newSecret.value = ''
   code.value = ''
   codeError.value = ''
@@ -244,7 +244,7 @@ async function verifyIdentity() {
       return
     }
     newSecret.value = res.data.data?.secret || ''
-    step.value = 'new_setup'
+    step.value = 'setup'
   } catch {
     verifyError.value = '验证失败'
   } finally {
@@ -257,7 +257,7 @@ async function confirmSetup() {
   verifying.value = true
   codeError.value = ''
   try {
-    const res = await axios.post('/api/auth/totp/verify-setup', {
+    const res = await axios.post('/api/auth/totp/setup', {
       secret: newSecret.value,
       code: code.value,
     })

@@ -47,10 +47,10 @@ from .routes.t2i import T2iRoute
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
-        "/api/auth/totp/disable",
+        "/api/config/astrbot/update",
         "/api/auth/totp/setup",
         "/api/auth/login",
-        "/api/auth/totp/verify-setup",
+
     }
 )
 

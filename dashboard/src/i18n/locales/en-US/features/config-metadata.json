@@ -1094,11 +1094,11 @@
             "hint": "When disabled, authentication endpoints (login, TOTP, etc.) will not be rate-limited."
           },
           "average_interval": {
-            "description": "Rate Limit Average Interval (seconds)",
+            "description": "Endpoint Rate Limit Average Interval (seconds)",
             "hint": "Minimum average interval between authentication requests. For example, 1.0 means at most 1 request per second."
           },
           "max_burst": {
-            "description": "Rate Limit Max Burst",
+            "description": "Endpoint Rate Limit Max Burst",
             "hint": "Maximum number of consecutive burst requests allowed. For example, 3 allows up to 3 requests in a short burst."
           }
         },
@@ -1138,11 +1138,6 @@
           "rotateSubtitle": "Generate a new secret, then enter a code from your authenticator to confirm the replacement.",
           "rotate": "Rotate",
           "rotateRecovery": "Rotate Recovery Code",
-          "rotateRecoveryTitle": "Rotate Recovery Code",
-          "rotateRecoverySubtitle": "Enter a verification code from your authenticator app to generate a new recovery code.",
-          "rotateRecoveryCode": "Verification Code",
-          "rotateRecoveryConfirm": "Generate New Recovery Code",
-          "rotateRecoveryMissingSecret": "TOTP secret is missing. Please complete setup first.",
           "rotateConfirm": "Confirm Rotation",
           "rotateCancel": "Cancel",
           "rotateCode": "Verification Code",
@@ -1162,7 +1157,14 @@
           "disableCancel": "Cancel",
           "disableError": "Verification failed. Please try again.",
           "disableUseRecovery": "Can't use TOTP?",
-          "disableUseCode": "Use verification code"
+          "disableUseCode": "Use verification code",
+          "configSaveTitle": "Two-Factor Verification",
+          "configSaveSubtitle": "Enter a verification code to change protected configuration.",
+          "configSaveRotationHint": "When rotating TOTP keys, both the old and new verification codes are accepted (allowed once per rotation operation).",
+          "configSaveCode": "Verification Code",
+          "configSaveConfirm": "Continue",
+          "configSaveCancel": "Cancel",
+          "configSaveError": "Verification failed. Please try again."
         }
       },
       "timezone": {

@@ -52,15 +52,6 @@
     @rotate="onStartRotate"
     @rotate-recovery="onStartRotateRecovery"
   />
-  <DashboardTotpDisableDialog
-    v-model="disableDialogVisible"
-    @disable-completed="onDisableCompleted"
-  />
-  <DashboardTotpRotateRecoveryDialog
-    v-model="rotateRecoveryDialogVisible"
-    :config-root="configRoot"
-    @rotated="onRecoveryRotated"
-  />
 </template>
 
 <script setup>
@@ -68,8 +59,7 @@ import { computed, ref } from 'vue'
 import DashboardTotpSetupDialog from './DashboardTotpSetupDialog.vue'
 import DashboardTotpRecoveryDialog from './DashboardTotpRecoveryDialog.vue'
 import DashboardTotpManageDialog from './DashboardTotpManageDialog.vue'
-import DashboardTotpDisableDialog from './DashboardTotpDisableDialog.vue'
-import DashboardTotpRotateRecoveryDialog from './DashboardTotpRotateRecoveryDialog.vue'
+import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({
@@ -89,8 +79,6 @@ const { tm } = useModuleI18n('features/config-metadata')
 const setupDialogVisible = ref(false)
 const recoveryDialogVisible = ref(false)
 const manageDialogVisible = ref(false)
-const disableDialogVisible = ref(false)
-const rotateRecoveryDialogVisible = ref(false)
 const setupDialogMode = ref('setup')
 const pendingRecoveryCode = ref('')
 
@@ -103,12 +91,6 @@ const isTotpInitialSetup = computed(
     props.modelValue === true
     && (!totpSecret.value || !totpRecoveryCodeHash.value)
 )
-const isTotpFullyActive = computed(
-  () =>
-    props.modelValue === true
-    && !!totpSecret.value
-    && !!totpRecoveryCodeHash.value
-)
 
 function emitUpdate(val) {
   emit('update:modelValue', val)
@@ -117,8 +99,6 @@ function emitUpdate(val) {
 function clearTotpConfig() {
   if (props.configRoot?.dashboard?.totp) {
     props.configRoot.dashboard.totp.enable = false
-    props.configRoot.dashboard.totp.secret = ''
-    props.configRoot.dashboard.totp.recovery_code_hash = ''
   }
 }
 
@@ -134,17 +114,14 @@ function writeTotpSecretToConfig(secret, recoveryCodeHash = '') {
 
 function onTotpToggle(val) {
   if (!val) {
-    if (isTotpFullyActive.value) {
-      disableDialogVisible.value = true
-      return
-    }
     clearTotpConfig()
     emitUpdate(val)
     return
   }
-  // Toggle on: auto-open setup dialog
-  setupDialogMode.value = 'setup'
-  setupDialogVisible.value = true
+  if (!totpSecret.value || !totpRecoveryCodeHash.value) {
+    setupDialogMode.value = 'setup'
+    setupDialogVisible.value = true
+  }
   emitUpdate(true)
 }
 
@@ -169,21 +146,21 @@ function onStartRotate() {
   setupDialogVisible.value = true
 }
 
-function onStartRotateRecovery() {
+async function onStartRotateRecovery() {
   manageDialogVisible.value = false
-  rotateRecoveryDialogVisible.value = true
-}
-
-function onRecoveryRotated({ recoveryCode, recoveryCodeHash }) {
-  if (!props.configRoot?.dashboard?.totp) return
-  props.configRoot.dashboard.totp.recovery_code_hash = recoveryCodeHash
-  pendingRecoveryCode.value = recoveryCode
-  recoveryDialogVisible.value = true
-}
-
-function onDisableCompleted() {
-  clearTotpConfig()
-  emitUpdate(false)
+  if (!totpSecret.value) return
+  try {
+    const res = await axios.post('/api/auth/totp/recovery')
+    if (res.data.status !== 'ok') return
+    const { recovery_code: recoveryCode, recovery_code_hash: recoveryCodeHash } = res.data.data || {}
+    if (!recoveryCode || !recoveryCodeHash) return
+    if (!props.configRoot?.dashboard?.totp) return
+    props.configRoot.dashboard.totp.recovery_code_hash = recoveryCodeHash
+    pendingRecoveryCode.value = recoveryCode
+    recoveryDialogVisible.value = true
+  } catch {
+    // silently fail
+  }
 }
 </script>
 

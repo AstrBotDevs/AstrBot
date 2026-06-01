@@ -4255,13 +4255,13 @@ CONFIG_METADATA_3_SYSTEM = {
                         "hint": "关闭后将不对登录、TOTP 等身份验证接口进行速率限制。",
                     },
                     "dashboard.auth_rate_limit.average_interval": {
-                        "description": "登录验证速率限制平均间隔(秒)",
+                        "description": "验证端点速率限制平均间隔(秒)",
                         "type": "float",
                         "hint": "两次身份验证请求之间的最小平均间隔时间。例如设置为 1.0 表示每秒最多处理 1 个请求。",
                         "condition": {"dashboard.auth_rate_limit.enable": True},
                     },
                     "dashboard.auth_rate_limit.max_burst": {
-                        "description": "登录验证速率限制最大突发数",
+                        "description": "验证端点速率限制最大突发数",
                         "type": "int",
                         "hint": "允许的瞬时最大突发请求数。例如设置为 3 表示在短时间内最多连续处理 3 个请求。",
                         "condition": {"dashboard.auth_rate_limit.enable": True},

@@ -722,7 +722,7 @@ async def test_auth_login_skips_totp_when_trusted_cookie_valid(
 
 
 @pytest.mark.asyncio
-async def test_auth_totp_disable_by_totp_code(
+async def test_config_save_requires_two_factor_for_protected_totp_changes(
     app: Quart,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -740,10 +740,65 @@ async def test_auth_totp_disable_by_totp_code(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        post_config = copy.deepcopy(dict(core_lifecycle_td.astrbot_config))
+        post_config["dashboard"]["totp"] = {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        }
         response = await test_client.post(
-            "/api/auth/totp/disable",
+            "/api/config/astrbot/update",
             headers=authenticated_header,
-            json={"code": pyotp.TOTP(secret).now()},
+            json={"conf_id": "default", "config": post_config},
+        )
+        data = await response.get_json()
+        assert response.status_code == 401
+        assert data["status"] == "error"
+        assert data["data"]["totp_required"] is True
+        assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_config_save_accepts_totp_code_for_protected_totp_changes(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        post_config = copy.deepcopy(dict(core_lifecycle_td.astrbot_config))
+        post_config["dashboard"]["totp"] = {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        }
+        response = await test_client.post(
+            "/api/config/astrbot/update",
+            headers={
+                **authenticated_header,
+                "X-2FA-Code": pyotp.TOTP(secret).now(),
+            },
+            json={"conf_id": "default", "config": post_config},
         )
         data = await response.get_json()
         assert data["status"] == "ok"
@@ -760,27 +815,7 @@ async def test_auth_totp_disable_by_totp_code(
 
 
 @pytest.mark.asyncio
-async def test_auth_totp_verify_setup_with_valid_code_returns_recovery_code(
-    app: Quart,
-    authenticated_header: dict,
-):
-    test_client = app.test_client()
-    secret = pyotp.random_base32()
-    response = await test_client.post(
-        "/api/auth/totp/verify-setup",
-        headers=authenticated_header,
-        json={"secret": secret, "code": pyotp.TOTP(secret).now()},
-    )
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert isinstance(data["data"]["recovery_code"], str)
-    assert isinstance(data["data"]["recovery_code_hash"], str)
-    assert data["data"]["recovery_code"]
-    assert data["data"]["recovery_code_hash"]
-
-
-@pytest.mark.asyncio
-async def test_auth_totp_disable_by_recovery_code(
+async def test_config_save_rejects_recovery_code_for_protected_totp_changes(
     app: Quart,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -798,23 +833,54 @@ async def test_auth_totp_disable_by_recovery_code(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
-        response = await test_client.post(
-            "/api/auth/totp/disable",
-            headers=authenticated_header,
-            json={"code": recovery_code},
-        )
-        data = await response.get_json()
-        assert data["status"] == "ok"
-        assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
+        post_config = copy.deepcopy(dict(core_lifecycle_td.astrbot_config))
+        post_config["dashboard"]["totp"] = {
             "enable": False,
             "secret": "",
-            "recovery_code_hash": "",
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.post(
+            "/api/config/astrbot/update",
+            headers={
+                **authenticated_header,
+                "X-2FA-Code": recovery_code,
+            },
+            json={"conf_id": "default", "config": post_config},
+        )
+        data = await response.get_json()
+        assert response.status_code == 401
+        assert data["status"] == "error"
+        assert data["data"]["totp_required"] is True
+        assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
         }
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,
             original_dashboard_config,
         )
+
+
+@pytest.mark.asyncio
+async def test_auth_totp_setup_with_valid_code_returns_recovery_code(
+    app: Quart,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+    secret = pyotp.random_base32()
+    response = await test_client.post(
+        "/api/auth/totp/setup",
+        headers=authenticated_header,
+        json={"secret": secret, "code": pyotp.TOTP(secret).now()},
+    )
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert isinstance(data["data"]["recovery_code"], str)
+    assert isinstance(data["data"]["recovery_code_hash"], str)
+    assert data["data"]["recovery_code"]
+    assert data["data"]["recovery_code_hash"]
 
 
 @pytest.mark.asyncio

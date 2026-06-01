@@ -6,6 +6,7 @@ import datetime
 import hashlib
 import hmac
 import secrets
+from enum import Enum
 
 import pyotp
 from sqlmodel import col, delete, select
@@ -23,6 +24,13 @@ _RECOVERY_CODE_KDF_ALGORITHM = "pbkdf2_sha256"
 
 _last_totp_timecode: dict[str, int] = {}
 _totp_replay_lock = asyncio.Lock()
+_totp_pending_secret: str | None = None  # pending new secret after rotation, before config save
+_totp_rotation_verified: bool = False  # user passed the current-TOTP verify step during rotation
+
+
+class TwoFactorCodeType(Enum):
+    TOTP = "totp"
+    RECOVERY = "recovery"
 
 
 def _get_totp_config(config) -> dict:
@@ -76,6 +84,58 @@ async def consume_configured_totp_code(config, code: str) -> bool:
         return False
     secret = _get_totp_config(config).get("secret", "")
     return await consume_totp_code(secret, code)
+
+
+async def verify_configured_2fa_code(
+    config, code: str, include_pending: bool = False, allow_recovery: bool = False
+) -> TwoFactorCodeType | None:
+    """Return a 2FA code type when a configured code is valid.
+
+    When include_pending is True, also checks the in-memory pending TOTP
+    secret from an active rotation (used by config-save verification).
+    When allow_recovery is False, only TOTP codes are accepted (recovery
+    codes are rejected to prevent privilege escalation on sensitive ops).
+    """
+    if not isinstance(code, str) or not code.strip():
+        return None
+    if await consume_configured_totp_code(config, code):
+        return TwoFactorCodeType.TOTP
+    if include_pending:
+        pending = _totp_pending_secret
+        if pending and await consume_totp_code(pending, code):
+            return TwoFactorCodeType.TOTP
+    if allow_recovery and verify_recovery_code(config, code):
+        return TwoFactorCodeType.RECOVERY
+    return None
+
+
+def set_pending_totp_secret(secret: str | None) -> None:
+    """Set the pending TOTP secret for an in-memory rotation.
+
+    After a successful TOTP rotation, the new secret is stored in memory
+    so that the subsequent config save 2FA check can verify against it.
+    Cleared once the config save completes.
+    """
+    global _totp_pending_secret
+    _totp_pending_secret = secret
+
+
+def set_rotation_verified(value: bool) -> None:
+    """Set or clear the rotation-verified flag."""
+    global _totp_rotation_verified
+    _totp_rotation_verified = value
+
+
+def consume_rotation_verified() -> bool:
+    """Check and consume the rotation-verified flag (single-use).
+
+    Returns True if the user has passed the old-key verification step.
+    """
+    global _totp_rotation_verified
+    if _totp_rotation_verified:
+        _totp_rotation_verified = False
+        return True
+    return False
 
 
 def _hash_totp_trusted_device_token(config, token: str) -> str:
