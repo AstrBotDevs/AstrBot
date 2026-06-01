@@ -382,6 +382,21 @@ class ApiKey(TimestampMixin, SQLModel, table=True):
     )
 
 
+class DashboardTrustedDevice(TimestampMixin, SQLModel, table=True):
+    """Trusted dashboard device token used to skip TOTP for a limited time."""
+
+    __tablename__: str = "dashboard_trusted_devices"
+
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    token_hash: str = Field(max_length=64, nullable=False, unique=True, index=True)
+    totp_secret_hash: str = Field(max_length=64, nullable=False, index=True)
+    expires_at: datetime = Field(nullable=False, index=True)
+
+
 class ChatUIProject(TimestampMixin, SQLModel, table=True):
     """This class represents projects for organizing ChatUI conversations.
 

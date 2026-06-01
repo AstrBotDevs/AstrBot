@@ -54,3 +54,4 @@ shipyard-neo-sdk>=0.2.0
 packaging>=24.2
 qrcode>=8.2
 python-ripgrep==0.0.8
+pyotp>=2.9.0

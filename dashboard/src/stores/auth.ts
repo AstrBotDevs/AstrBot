@@ -6,7 +6,7 @@ export const useAuthStore = defineStore("auth", {
   state: () => ({
     // @ts-ignore
     username: '',
-    returnUrl: null
+    returnUrl: null,
   }),
   actions: {
     async finishAuthenticatedSession(data: any): Promise<void> {
@@ -46,13 +46,26 @@ export const useAuthStore = defineStore("auth", {
         router.push('/welcome');
       }
     },
-    async login(username: string, password: string): Promise<void> {
+    async login(
+      username: string,
+      password: string,
+      code?: string,
+      trustDeviceToken = false,
+    ): Promise<'totp_required' | void> {
       try {
         const res = await axios.post('/api/auth/login', {
           username: username,
-          password: password
+          password: password,
+          code: code,
+          trust_device_flag: trustDeviceToken,
+        }, {
+          validateStatus: (status) => (status >= 200 && status < 300) || status === 401
         });
-    
+
+        if (res.status === 401 && res.data?.data?.totp_required) {
+          return 'totp_required';
+        }
+
         if (res.data.status === 'error') {
           return Promise.reject(res.data.message);
         }
@@ -62,13 +75,17 @@ export const useAuthStore = defineStore("auth", {
         return Promise.reject(error);
       }
     },
-    async setup(username: string, password: string, confirmPassword: string): Promise<void> {
+    async setup(
+      username: string,
+      password: string,
+      confirmPassword: string,
+    ): Promise<void> {
       try {
-        const setupEndpoint = this.has_token() ? '/api/auth/setup-authenticated' : '/api/auth/setup';
-        const res = await axios.post(setupEndpoint, {
+        const endpoint = this.has_token() ? '/api/auth/setup-authenticated' : '/api/auth/setup';
+        const res = await axios.post(endpoint, {
           username: username,
           password: password,
-          confirm_password: confirmPassword
+          confirm_password: confirmPassword,
         });
 
         if (res.data.status === 'error') {
