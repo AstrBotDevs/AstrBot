@@ -38,6 +38,33 @@ class PlatformStat(SQLModel, table=True):
     )
 
 
+class CommandStat(SQLModel, table=True):
+    """This class represents the trigger statistics of plugin (Star) commands.
+
+    Counts are aggregated per hour, per owning plugin and per command name.
+    Aliases are merged into the canonical command name. The same command name
+    registered by different plugins is counted separately (the unique key is
+    timestamp + plugin_name + command_name), so plugin attribution is accurate.
+    """
+
+    __tablename__: str = "command_stats"
+
+    id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
+    timestamp: datetime = Field(nullable=False)
+    plugin_name: str = Field(default="", nullable=False)  # owning plugin
+    command_name: str = Field(nullable=False)
+    count: int = Field(default=0, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "timestamp",
+            "plugin_name",
+            "command_name",
+            name="uix_command_stats",
+        ),
+    )
+
+
 class ProviderStat(TimestampMixin, SQLModel, table=True):
     """Per-response provider stats for internal agent runs."""
 

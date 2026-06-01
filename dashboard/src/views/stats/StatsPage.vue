@@ -105,6 +105,32 @@
           </section>
         </div>
 
+        <section class="stat-card provider-list-card">
+          <div class="card-head compact">
+            <div>
+              <div class="section-title">{{ t('commandRanking.title') }}</div>
+              <div class="section-subtitle">{{ t('commandRanking.subtitle', { range: rangeLabel }) }}</div>
+            </div>
+            <div v-if="commandStats.length" class="section-badge">
+              {{ t('commandRanking.total', { count: formatNumber(commandStats.length) }) }}
+            </div>
+          </div>
+          <div v-if="commandStats.length" class="provider-list provider-list--grid provider-list--scrollable">
+            <div
+              v-for="command in commandStats"
+              :key="`${command.plugin_name}/${command.command_name}`"
+              class="provider-row"
+            >
+              <span class="provider-name">
+                {{ command.command_name }}
+                <span v-if="command.plugin_name" class="command-plugin">{{ command.plugin_name }}</span>
+              </span>
+              <strong class="command-count">{{ formatNumber(command.count) }} {{ t('commandRanking.times') }}</strong>
+            </div>
+          </div>
+          <div v-else class="empty-state">{{ t('empty.commandStats') }}</div>
+        </section>
+
         <div class="token-section-head">
           <div>
             <div class="section-title">{{ t('modelCalls.title') }}</div>
@@ -275,6 +301,12 @@ interface ProviderTokenStatsResponse {
   today_by_provider: ProviderRankingItem[]
 }
 
+interface CommandRankingItem {
+  command_name: string
+  plugin_name: string
+  count: number
+}
+
 const { locale } = useI18n()
 const { tm: t } = useModuleI18n('features/stats')
 const theme = useTheme()
@@ -282,6 +314,7 @@ const loading = ref(true)
 const errorMessage = ref('')
 const baseStats = ref<BaseStatsResponse | null>(null)
 const providerStats = ref<ProviderTokenStatsResponse | null>(null)
+const commandStats = ref<CommandRankingItem[]>([])
 const selectedRange = ref<TokenRange>(1)
 const lastUpdatedAt = ref<Date | null>(null)
 const isDark = computed(() => theme.global.current.value.dark)
@@ -408,10 +441,20 @@ async function fetchProviderStats(): Promise<void> {
   providerStats.value = response.data.data
 }
 
+async function fetchCommandStats(): Promise<void> {
+  const response = await axios.get('/api/stat/top-commands', {
+    params: {
+      offset_sec: selectedRange.value * 24 * 60 * 60,
+      limit: 100
+    }
+  })
+  commandStats.value = response.data.data?.commands ?? []
+}
+
 async function refreshStats(): Promise<void> {
   try {
     errorMessage.value = ''
-    await Promise.all([fetchBaseStats(), fetchProviderStats()])
+    await Promise.all([fetchBaseStats(), fetchProviderStats(), fetchCommandStats()])
     lastUpdatedAt.value = new Date()
   } catch (error) {
     console.error('Failed to load stats page data:', error)
@@ -663,7 +706,7 @@ const providerChartOptions = computed<ApexOptions>(() => ({
 
 watch(selectedRange, async () => {
   try {
-    await Promise.all([fetchBaseStats(), fetchProviderStats()])
+    await Promise.all([fetchBaseStats(), fetchProviderStats(), fetchCommandStats()])
     lastUpdatedAt.value = new Date()
   } catch (error) {
     console.error('Failed to refresh stats range:', error)
@@ -1085,6 +1128,37 @@ onBeforeUnmount(() => {
   padding-right: 6px;
 }
 
+.provider-list--grid {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  column-gap: 28px;
+  gap: 0 28px;
+}
+
+.provider-list--grid .provider-row {
+  padding: 10px 0;
+}
+
+.provider-list--grid .provider-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.section-badge {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 2px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  color: var(--stats-text-secondary, #888);
+  background: var(--stats-chip-bg, rgba(128, 128, 128, 0.12));
+  white-space: nowrap;
+}
+
+.command-count {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .provider-row {
   padding: 12px 0;
   border-bottom: 1px solid var(--stats-border);
@@ -1100,6 +1174,15 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.command-plugin {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--stats-text-secondary, #888);
+  background: var(--stats-chip-bg, rgba(128, 128, 128, 0.12));
 }
 
 .token-total-card .card-label,

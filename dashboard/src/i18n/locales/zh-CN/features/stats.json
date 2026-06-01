@@ -54,6 +54,13 @@
     "title": "平台消息排名",
     "subtitle": "{range}按聚合消息总量排序"
   },
+  "commandRanking": {
+    "title": "指令使用排名",
+    "subtitle": "{range}按指令触发次数排序",
+    "plugin": "插件",
+    "times": "次",
+    "total": "共 {count} 条"
+  },
   "modelCalls": {
     "title": "模型调用",
     "subtitle": "模型调用数据统计"
@@ -81,7 +88,8 @@
   "empty": {
     "platformStats": "当前没有平台消息统计数据。",
     "modelCalls": "{range}还没有模型调用数据。",
-    "sessionCalls": "{range}还没有会话调用数据。"
+    "sessionCalls": "{range}还没有会话调用数据。",
+    "commandStats": "当前没有指令触发统计数据。"
   },
   "chart": {
     "messages": "消息",

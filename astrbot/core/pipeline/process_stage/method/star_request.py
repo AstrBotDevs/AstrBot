@@ -1,12 +1,15 @@
 """本地 Agent 模式的 AstrBot 插件调用 Stage"""
 
+import asyncio
 import traceback
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from astrbot.core import logger
+from astrbot.core import db_helper, logger
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.star.filter.command import CommandFilter
+from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 
@@ -44,6 +47,23 @@ class StarRequestSubStage(Stage):
                 )
                 continue
             logger.debug(f"plugin -> {md.name} - {handler.handler_name}")
+
+            # 统计指令触发次数（仅统计带指令过滤器的 handler）
+            command_name = None
+            for f in handler.event_filters:
+                if isinstance(f, (CommandFilter, CommandGroupFilter)):
+                    complete_names = f.get_complete_command_names()
+                    if complete_names:
+                        command_name = complete_names[0]
+                    break
+            if command_name:
+                asyncio.create_task(
+                    db_helper.insert_command_stats(
+                        command_name=command_name,
+                        plugin_name=md.name or "",
+                    ),
+                )
+
             try:
                 wrapper = call_handler(event, handler.handler, **params)
                 async for ret in wrapper:
