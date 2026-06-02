@@ -14,6 +14,7 @@ from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     At,
+    BaseMessageComponent,
     File,
     Image,
     Plain,
@@ -23,6 +24,8 @@ from astrbot.api.message_components import (
 )
 from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
 from astrbot.core.utils.metrics import Metric
+
+from .components import TelegramInlineKeyboard, TelegramMessageOptions
 
 
 def _is_gif(path: str) -> bool:
@@ -80,6 +83,76 @@ class TelegramPlatformEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
 
+    @staticmethod
+    def _extract_send_options(
+        message: MessageChain,
+    ) -> tuple[
+        list[BaseMessageComponent],
+        TelegramMessageOptions,
+        TelegramInlineKeyboard | None,
+    ]:
+        chain: list[BaseMessageComponent] = []
+        options = TelegramMessageOptions()
+        keyboard = None
+
+        for item in message.chain:
+            if isinstance(item, TelegramMessageOptions):
+                options = item
+            elif isinstance(item, TelegramInlineKeyboard):
+                keyboard = item
+            else:
+                chain.append(item)
+
+        return chain, options, keyboard
+
+    @staticmethod
+    def _normalize_parse_mode(parse_mode: str | None) -> str | None:
+        if parse_mode is None:
+            return None
+        normalized = parse_mode.strip()
+        if not normalized or normalized.lower() in {"plain", "plaintext", "none"}:
+            return None
+        if normalized not in {"MarkdownV2", "Markdown", "HTML"}:
+            raise ValueError(
+                "Telegram parse_mode must be one of MarkdownV2, Markdown, HTML, or plaintext.",
+            )
+        return normalized
+
+    @staticmethod
+    def _is_plaintext_parse_mode(parse_mode: str | None) -> bool:
+        if parse_mode is None:
+            return False
+        return parse_mode.strip().lower() in {"plain", "plaintext", "none"}
+
+    @classmethod
+    def _build_text_payload(
+        cls,
+        payload: dict[str, Any],
+        options: TelegramMessageOptions,
+        keyboard: TelegramInlineKeyboard | None,
+    ) -> dict[str, Any]:
+        send_payload = dict(payload)
+        link_preview_options = options.to_link_preview_options()
+        if link_preview_options is not None:
+            send_payload["link_preview_options"] = link_preview_options
+        if keyboard is not None:
+            send_payload["reply_markup"] = keyboard.to_telegram_markup()
+        return send_payload
+
+    @staticmethod
+    def _is_markdown_parse_error(error: BadRequest) -> bool:
+        message = getattr(error, "message", str(error)).lower()
+        return any(
+            fragment in message
+            for fragment in (
+                "can't parse entities",
+                "can't parse entity",
+                "parse entities",
+                "entity",
+                "markdown",
+            )
+        )
+
     @classmethod
     def _split_message(cls, text: str) -> list[str]:
         if len(text) <= cls.MAX_MESSAGE_LENGTH:
@@ -111,19 +184,46 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: ExtBot,
         text: str,
         payload: dict[str, Any],
+        *,
+        use_markdown: bool | None = None,
+        options: TelegramMessageOptions | None = None,
     ) -> None:
         """按 Telegram 限制切分文本后逐段发送。"""
+        options = options or TelegramMessageOptions()
+        parse_mode = cls._normalize_parse_mode(options.parse_mode)
         for chunk in cls._split_message(text):
-            try:
-                markdown_text = telegramify_markdown.markdownify(
-                    chunk,
+            if parse_mode is not None:
+                await client.send_message(
+                    text=chunk,
+                    parse_mode=parse_mode,
+                    **cast(Any, payload),
                 )
+                continue
+
+            if use_markdown is False or cls._is_plaintext_parse_mode(
+                options.parse_mode,
+            ):
+                await client.send_message(text=chunk, **cast(Any, payload))
+                continue
+
+            try:
+                markdown_text = telegramify_markdown.markdownify(chunk)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to convert message to Markdown，using normal text: {e!s}"
+                )
+                await client.send_message(text=chunk, **cast(Any, payload))
+                continue
+
+            try:
                 await client.send_message(
                     text=markdown_text,
                     parse_mode="MarkdownV2",
                     **cast(Any, payload),
                 )
-            except (ValueError, BadRequest) as e:
+            except BadRequest as e:
+                if not cls._is_markdown_parse_error(e):
+                    raise
                 logger.warning(
                     f"Failed to convert message to Markdown，using normal text: {e!s}"
                 )
@@ -273,11 +373,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
         user_name: str,
     ) -> None:
         image_path = None
+        chain, options, keyboard = cls._extract_send_options(message)
 
         has_reply = False
         reply_message_id = None
         at_user_id = None
-        for i in message.chain:
+        for i in chain:
             if isinstance(i, Reply):
                 has_reply = True
                 reply_message_id = i.id
@@ -291,10 +392,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
             user_name, message_thread_id = user_name.split("#")
 
         # 根据消息链确定合适的 chat action 并发送
-        action = cls._get_chat_action_for_chain(message.chain)
+        action = cls._get_chat_action_for_chain(chain)
         await cls._send_chat_action(client, user_name, action, message_thread_id)
 
-        for i in message.chain:
+        extra_payload = cls._build_text_payload({}, options, keyboard)
+        for i in chain:
             payload = {
                 "chat_id": user_name,
             }
@@ -302,12 +404,23 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 payload["reply_to_message_id"] = str(reply_message_id)
             if message_thread_id:
                 payload["message_thread_id"] = message_thread_id
+            media_payload = payload | {
+                key: value
+                for key, value in extra_payload.items()
+                if key != "link_preview_options"
+            }
 
             if isinstance(i, Plain):
                 if at_user_id and not at_flag:
                     i.text = f"@{at_user_id} {i.text}"
                     at_flag = True
-                await cls._send_text_chunks(client, i.text, payload)
+                await cls._send_text_chunks(
+                    client,
+                    i.text,
+                    payload | extra_payload,
+                    use_markdown=message.use_markdown_,
+                    options=options,
+                )
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
                 if _is_gif(image_path):
@@ -316,19 +429,19 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 else:
                     send_coro = client.send_photo
                     media_kwarg = {"photo": image_path}
-                await send_coro(**media_kwarg, **cast(Any, payload))
+                await send_coro(**media_kwarg, **cast(Any, media_payload))
             elif isinstance(i, File):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)
                 await client.send_document(
-                    document=path, filename=name, **cast(Any, payload)
+                    document=path, filename=name, **cast(Any, media_payload)
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
                 await cls._send_voice_with_fallback(
                     client,
                     path,
-                    payload,
+                    media_payload,
                     caption=i.text or None,
                     use_media_action=False,
                 )
@@ -337,7 +450,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await client.send_video(
                     video=path,
                     caption=getattr(i, "text", None) or None,
-                    **cast(Any, payload),
+                    **cast(Any, media_payload),
                 )
 
     async def send(self, message: MessageChain) -> None:
@@ -346,6 +459,55 @@ class TelegramPlatformEvent(AstrMessageEvent):
         else:
             await self.send_with_client(self.client, message, self.get_sender_id())
         await super().send(message)
+
+    def _get_callback_query(self):
+        raw_message = getattr(self.message_obj, "raw_message", None)
+        return getattr(raw_message, "callback_query", None)
+
+    def is_button_interaction(self) -> bool:
+        """Return whether this event comes from a Telegram callback query."""
+        return self._get_callback_query() is not None
+
+    def get_interaction_custom_id(self) -> str:
+        """Return Telegram callback_data for inline button interactions."""
+        callback_query = self._get_callback_query()
+        if callback_query is None:
+            return ""
+        return str(getattr(callback_query, "data", "") or "")
+
+    def get_interaction_data(self) -> str:
+        """Alias for callback_data to match other platform interaction helpers."""
+        return self.get_interaction_custom_id()
+
+    def get_interaction_user_id(self) -> str:
+        callback_query = self._get_callback_query()
+        if callback_query is None:
+            return ""
+        from_user = getattr(callback_query, "from_user", None)
+        if not from_user:
+            return ""
+        return str(getattr(from_user, "id", "") or "")
+
+    async def answer_interaction(
+        self,
+        text: str | None = None,
+        *,
+        show_alert: bool | None = None,
+        url: str | None = None,
+        cache_time: int | None = None,
+    ) -> None:
+        callback_query = self._get_callback_query()
+        if callback_query is None:
+            raise RuntimeError("This Telegram event is not a button interaction.")
+        await callback_query.answer(
+            text=text,
+            show_alert=show_alert,
+            url=url,
+            cache_time=cache_time,
+        )
+
+    async def ack_interaction(self) -> None:
+        await self.answer_interaction()
 
     async def react(self, emoji: str | None, big: bool = False) -> None:
         """给原消息添加 Telegram 反应：

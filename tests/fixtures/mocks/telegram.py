@@ -21,6 +21,67 @@ class MockTelegramInvalidToken(Exception):
     """Mock telegram.error.InvalidToken used in tests."""
 
 
+class MockTelegramObject:
+    """Small value object for Telegram classes used in tests."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        self.args = args
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
+class MockBotCommand(MockTelegramObject):
+    def __init__(self, command: str, description: str) -> None:
+        super().__init__(command=command, description=description)
+
+
+class MockBotCommandScopeDefault(MockTelegramObject):
+    pass
+
+
+class MockBotCommandScopeAllPrivateChats(MockTelegramObject):
+    pass
+
+
+class MockBotCommandScopeAllGroupChats(MockTelegramObject):
+    pass
+
+
+class MockBotCommandScopeAllChatAdministrators(MockTelegramObject):
+    pass
+
+
+class MockBotCommandScopeChat(MockTelegramObject):
+    pass
+
+
+class MockBotCommandScopeChatAdministrators(MockTelegramObject):
+    pass
+
+
+class MockBotCommandScopeChatMember(MockTelegramObject):
+    pass
+
+
+class MockInlineKeyboardButton(MockTelegramObject):
+    def __init__(self, text: str, **kwargs) -> None:
+        super().__init__(text=text, **kwargs)
+
+
+class MockInlineKeyboardMarkup(MockTelegramObject):
+    def __init__(self, inline_keyboard) -> None:
+        super().__init__(inline_keyboard=inline_keyboard)
+
+
+class MockLinkPreviewOptions(MockTelegramObject):
+    pass
+
+
+class MockCallbackQueryHandler(MockTelegramObject):
+    def __init__(self, callback, **kwargs) -> None:
+        super().__init__(callback=callback, **kwargs)
+
+
 def create_mock_telegram_modules():
     """创建 Telegram 相关的 mock 模块。
 
@@ -28,8 +89,27 @@ def create_mock_telegram_modules():
         dict: 包含 telegram 和相关模块的 mock 对象
     """
     mock_telegram = MagicMock()
-    mock_telegram.BotCommand = MagicMock
+    mock_telegram.BotCommand = MockBotCommand
+    mock_telegram.BotCommandScopeDefault = MockBotCommandScopeDefault
+    mock_telegram.BotCommandScopeAllPrivateChats = MockBotCommandScopeAllPrivateChats
+    mock_telegram.BotCommandScopeAllGroupChats = MockBotCommandScopeAllGroupChats
+    mock_telegram.BotCommandScopeAllChatAdministrators = (
+        MockBotCommandScopeAllChatAdministrators
+    )
+    mock_telegram.BotCommandScopeChat = MockBotCommandScopeChat
+    mock_telegram.BotCommandScopeChatAdministrators = (
+        MockBotCommandScopeChatAdministrators
+    )
+    mock_telegram.BotCommandScopeChatMember = MockBotCommandScopeChatMember
+    mock_telegram.CallbackGame = MagicMock
+    mock_telegram.CopyTextButton = MockTelegramObject
+    mock_telegram.InlineKeyboardButton = MockInlineKeyboardButton
+    mock_telegram.InlineKeyboardMarkup = MockInlineKeyboardMarkup
+    mock_telegram.LinkPreviewOptions = MockLinkPreviewOptions
+    mock_telegram.LoginUrl = MockTelegramObject
+    mock_telegram.SwitchInlineQueryChosenChat = MockTelegramObject
     mock_telegram.Update = MagicMock
+    mock_telegram.WebAppInfo = MockTelegramObject
     mock_telegram.constants = MagicMock()
     mock_telegram.constants.ChatType = MagicMock()
     mock_telegram.constants.ChatType.PRIVATE = "private"
@@ -47,12 +127,15 @@ def create_mock_telegram_modules():
     mock_telegram.ReactionTypeEmoji = MagicMock
 
     mock_telegram_ext = MagicMock()
-    mock_telegram_ext.ApplicationBuilder = MagicMock
+    mock_telegram_ext.ApplicationBuilder = (
+        MockTelegramBuilder.create_application_builder
+    )
     mock_telegram_ext.ContextTypes = MagicMock()
     mock_telegram_ext.ContextTypes.DEFAULT_TYPE = MagicMock
     mock_telegram_ext.ExtBot = MagicMock
     mock_telegram_ext.filters = MagicMock()
     mock_telegram_ext.filters.ALL = MagicMock()
+    mock_telegram_ext.CallbackQueryHandler = MockCallbackQueryHandler
     mock_telegram_ext.MessageHandler = MagicMock
 
     # Mock telegramify_markdown
@@ -127,9 +210,22 @@ class MockTelegramBuilder:
         bot.delete_my_commands = AsyncMock()
         bot.set_my_commands = AsyncMock()
         bot.set_message_reaction = AsyncMock()
+        bot.answer_callback_query = AsyncMock()
         bot.edit_message_text = AsyncMock()
         bot.send_message_draft = AsyncMock()
         return bot
+
+    @staticmethod
+    def create_application_builder(app=None):
+        """创建支持链式调用的 mock Telegram ApplicationBuilder 实例。"""
+        builder = MagicMock()
+        builder.token.return_value = builder
+        builder.base_url.return_value = builder
+        builder.base_file_url.return_value = builder
+        builder.proxy.return_value = builder
+        builder.get_updates_proxy.return_value = builder
+        builder.build.return_value = app or MockTelegramBuilder.create_application()
+        return builder
 
     @staticmethod
     def create_application():

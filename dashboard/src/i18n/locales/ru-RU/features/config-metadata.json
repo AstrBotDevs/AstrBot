@@ -588,6 +588,26 @@
                 "description": "Интервал автообновления команд Telegram",
                 "hint": "Интервал автоматического обновления команд Telegram в секундах."
             },
+            "telegram_command_registered_plugins": {
+                "description": "Плагины команд Telegram",
+                "hint": "Регистрировать команды только выбранных плагинов. Можно указать имя плагина, отображаемое имя, имя папки или путь модуля. Пусто — команды всех включенных плагинов."
+            },
+            "telegram_command_scopes": {
+                "description": "Области команд Telegram",
+                "hint": "Конфигурации Telegram BotCommandScope, например {\"type\":\"default\",\"language_code\":\"ru\"} или {\"type\":\"chat\",\"chat_id\":12345}."
+            },
+            "telegram_get_updates_proxy": {
+                "description": "Прокси Telegram getUpdates",
+                "hint": "Прокси только для polling getUpdates этого Telegram-адаптера. Оставьте пустым для стандартных сетевых настроек."
+            },
+            "telegram_polling_restart_delay": {
+                "description": "Задержка перезапуска polling Telegram",
+                "hint": "Сколько секунд ждать перед перезапуском polling после неожиданного завершения. По умолчанию 5 секунд."
+            },
+            "telegram_proxy": {
+                "description": "Прокси Telegram API",
+                "hint": "Прокси только для Bot API запросов этого Telegram-адаптера, например http://127.0.0.1:7890. Оставьте пустым для стандартных сетевых настроек."
+            },
             "telegram_token": {
                 "description": "Токен бота",
                 "hint": "Если вы находитесь в материковом Китае, установите прокси или измените api_base в разделе «Другие настройки»."

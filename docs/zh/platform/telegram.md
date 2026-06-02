@@ -12,6 +12,7 @@
 | 语音 | 是 | 是 | |
 | 视频 | 是 | 是 | |
 | 文件 | 是 | 是 | |
+| Inline Keyboard | 是 | 是 | 支持按钮回调事件 |
 
 
 主动消息推送：支持。
@@ -37,7 +38,33 @@
 - 启用(enable): 勾选。
 - Bot Token: 你的 Telegram 机器人的 `token`。
 
-请确保你的网络环境可以访问 Telegram。你可能需要使用 `配置页->其他配置->HTTP 代理` 来设置代理。
+请确保你的网络环境可以访问 Telegram。你可以使用 `配置页->其他配置->HTTP 代理` 设置全局代理，也可以在 Telegram 适配器里设置独立代理：
+
+- `telegram_proxy`：仅用于此 Telegram 适配器的 Bot API 请求。
+- `telegram_get_updates_proxy`：仅用于此 Telegram 适配器轮询 `getUpdates` 的请求。
+
+## 命令注册
+
+Telegram 适配器可以把 AstrBot 插件指令注册为 Telegram Bot Commands：
+
+- `telegram_command_register`：是否启用命令注册。
+- `telegram_command_auto_refresh`：是否在运行时自动刷新命令。
+- `telegram_command_register_interval`：自动刷新间隔，单位为秒。
+- `telegram_command_registered_plugins`：只注册所选插件提供的指令。留空表示注册全部已启用插件的指令。
+- `telegram_command_scopes`：注册范围配置。默认值为 `[{"type": "default"}]`。
+
+`telegram_command_scopes` 支持 Telegram Bot API 的这些范围：`default`、`all_private_chats`、`all_group_chats`、`all_chat_administrators`、`chat`、`chat_administrators`、`chat_member`。其中 `chat`、`chat_administrators` 需要 `chat_id`，`chat_member` 需要 `chat_id` 和 `user_id`。每个范围都可以额外设置 `language_code`。
+
+示例：
+
+```json
+[
+  {"type": "default", "language_code": "zh"},
+  {"type": "chat", "chat_id": 123456789}
+]
+```
+
+Telegram 每个 scope 最多支持 100 条命令。如果注册失败，请使用 `telegram_command_registered_plugins` 缩小要注册的插件范围。
 
 ## 流式输出
 

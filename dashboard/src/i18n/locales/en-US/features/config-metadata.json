@@ -588,9 +588,25 @@
         "description": "Telegram Command Auto Refresh Interval",
         "hint": "Telegram command auto-refresh interval in seconds."
       },
+      "telegram_command_registered_plugins": {
+        "description": "Telegram Command Plugins",
+        "hint": "Only register commands from the selected plugins. Accepts plugin name, display name, directory name, or module path. Leave empty to register commands from all enabled plugins."
+      },
+      "telegram_command_scopes": {
+        "description": "Telegram Command Scopes",
+        "hint": "Telegram BotCommandScope configs, e.g. {\"type\":\"default\",\"language_code\":\"en\"} or {\"type\":\"chat\",\"chat_id\":12345}."
+      },
+      "telegram_get_updates_proxy": {
+        "description": "Telegram getUpdates Proxy",
+        "hint": "Proxy used only for this Telegram adapter's getUpdates polling. Leave empty to use the default network settings."
+      },
       "telegram_polling_restart_delay": {
         "description": "Telegram Polling Restart Delay",
         "hint": "Waiting time in seconds when the polling loop needs to restart after unexpected exits. Defaults to 5s."
+      },
+      "telegram_proxy": {
+        "description": "Telegram API Proxy",
+        "hint": "Proxy used only for this Telegram adapter's Bot API requests, for example http://127.0.0.1:7890. Leave empty to use the default network settings."
       },
       "telegram_token": {
         "description": "Bot Token",

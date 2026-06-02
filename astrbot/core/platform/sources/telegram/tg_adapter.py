@@ -4,14 +4,25 @@ import re
 import sys
 import uuid
 from contextlib import suppress
-from typing import cast
+from typing import Any, cast
 
 from apscheduler.events import EVENT_JOB_ERROR
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from telegram import BotCommand, Update
+from telegram import (
+    BotCommand,
+    BotCommandScopeAllChatAdministrators,
+    BotCommandScopeAllGroupChats,
+    BotCommandScopeAllPrivateChats,
+    BotCommandScopeChat,
+    BotCommandScopeChatAdministrators,
+    BotCommandScopeChatMember,
+    BotCommandScopeDefault,
+    Update,
+)
 from telegram.constants import ChatType
 from telegram.error import Forbidden, InvalidToken, NetworkError
 from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
+from telegram.ext import CallbackQueryHandler as TelegramCallbackQueryHandler
 from telegram.ext import MessageHandler as TelegramMessageHandler
 
 import astrbot.api.message_components as Comp
@@ -78,7 +89,13 @@ class TelegramPlatformAdapter(Platform):
             "telegram_command_auto_refresh",
             True,
         )
-        self.last_command_hash = None
+        self.command_registered_plugins = self._normalize_command_plugin_allowlist(
+            self.config.get("telegram_command_registered_plugins"),
+        )
+        self.command_scopes = self._normalize_command_scope_configs(
+            self.config.get("telegram_command_scopes"),
+        )
+        self.last_command_hashes: dict[tuple[str, str | None], int] = {}
 
         self.scheduler = AsyncIOScheduler()
         self.scheduler.add_listener(
@@ -130,18 +147,28 @@ class TelegramPlatformAdapter(Platform):
         )  # max seconds - hard cap to prevent indefinite delay
 
     def _build_application(self) -> None:
-        self.application = (
+        builder = (
             ApplicationBuilder()
             .token(self.config["telegram_token"])
             .base_url(self.base_url)
             .base_file_url(self.file_base_url)
-            .build()
         )
+        telegram_proxy = self.config.get("telegram_proxy")
+        if telegram_proxy:
+            builder = builder.proxy(telegram_proxy)
+        telegram_get_updates_proxy = self.config.get("telegram_get_updates_proxy")
+        if telegram_get_updates_proxy:
+            builder = builder.get_updates_proxy(telegram_get_updates_proxy)
+
+        self.application = builder.build()
         message_handler = TelegramMessageHandler(
             filters=filters.ALL,
             callback=self.message_handler,
         )
         self.application.add_handler(message_handler)
+        self.application.add_handler(
+            TelegramCallbackQueryHandler(callback=self.callback_query_handler),
+        )
         self.client = self.application.bot
         logger.debug(f"Telegram base url: {self.client.base_url}")
 
@@ -168,7 +195,7 @@ class TelegramPlatformAdapter(Platform):
 
         if delete_commands and self.enable_command_register:
             with suppress(Exception):
-                await self.client.delete_my_commands()
+                await self.delete_registered_commands()
 
         with suppress(Exception):
             await self.application.stop()
@@ -322,19 +349,155 @@ class TelegramPlatformAdapter(Platform):
         """收集所有注册的指令并注册到 Telegram"""
         try:
             commands = self.collect_commands()
-
-            if commands:
-                current_hash = hash(
-                    tuple((cmd.command, cmd.description) for cmd in commands),
+            if not commands:
+                return
+            if len(commands) > 100:
+                raise ValueError(
+                    "Telegram supports at most 100 bot commands per scope. "
+                    "Use telegram_command_registered_plugins to narrow registered plugins.",
                 )
-                if current_hash == self.last_command_hash:
-                    return
-                self.last_command_hash = current_hash
-                await self.client.delete_my_commands()
-                await self.client.set_my_commands(commands)
+
+            current_hash = hash(
+                tuple((cmd.command, cmd.description) for cmd in commands),
+            )
+            for scope_config in self.command_scopes:
+                scope = self._build_bot_command_scope(scope_config)
+                language_code = self._command_language_code(scope_config)
+                scope_key = self._command_scope_key(scope_config)
+                scoped_hash = hash((scope_key, language_code, current_hash))
+                if scoped_hash == self.last_command_hashes.get(
+                    (scope_key, language_code),
+                ):
+                    continue
+                await self.client.delete_my_commands(
+                    scope=scope,
+                    language_code=language_code,
+                )
+                await self.client.set_my_commands(
+                    commands,
+                    scope=scope,
+                    language_code=language_code,
+                )
+                self.last_command_hashes[(scope_key, language_code)] = scoped_hash
 
         except Exception as e:
             logger.error(f"向 Telegram 注册指令时发生错误: {e!s}")
+
+    async def delete_registered_commands(self) -> None:
+        for scope_config in self.command_scopes:
+            await self.client.delete_my_commands(
+                scope=self._build_bot_command_scope(scope_config),
+                language_code=self._command_language_code(scope_config),
+            )
+
+    @staticmethod
+    def _normalize_command_plugin_allowlist(value: Any) -> set[str] | None:
+        if value in (None, "", []):
+            return None
+        if isinstance(value, str):
+            raw_items = [item.strip() for item in value.split(",")]
+        elif isinstance(value, list):
+            raw_items = [str(item).strip() for item in value]
+        else:
+            raise ValueError(
+                "telegram_command_registered_plugins must be a list or CSV string.",
+            )
+        allowlist = {item for item in raw_items if item}
+        if "*" in allowlist:
+            return None
+        return allowlist or None
+
+    @staticmethod
+    def _normalize_command_scope_configs(value: Any) -> list[dict[str, Any]]:
+        if value in (None, "", []):
+            return [{"type": "default"}]
+        if not isinstance(value, list):
+            raise ValueError("telegram_command_scopes must be a list of scope configs.")
+
+        configs: list[dict[str, Any]] = []
+        for item in value:
+            if isinstance(item, str):
+                configs.append({"type": item})
+            elif isinstance(item, dict):
+                configs.append(dict(item))
+            else:
+                raise ValueError(
+                    "telegram_command_scopes items must be strings or dicts.",
+                )
+        return configs or [{"type": "default"}]
+
+    @staticmethod
+    def _command_scope_key(scope_config: dict[str, Any]) -> str:
+        parts = [
+            str(scope_config.get("type") or "default"),
+            str(scope_config.get("chat_id") or ""),
+            str(scope_config.get("user_id") or ""),
+        ]
+        return ":".join(parts)
+
+    @staticmethod
+    def _command_language_code(scope_config: dict[str, Any]) -> str | None:
+        language_code = str(scope_config.get("language_code") or "").strip()
+        return language_code or None
+
+    @staticmethod
+    def _build_bot_command_scope(scope_config: dict[str, Any]):
+        scope_type = str(scope_config.get("type") or "default")
+        match scope_type:
+            case "default":
+                return BotCommandScopeDefault()
+            case "all_private_chats":
+                return BotCommandScopeAllPrivateChats()
+            case "all_group_chats":
+                return BotCommandScopeAllGroupChats()
+            case "all_chat_administrators":
+                return BotCommandScopeAllChatAdministrators()
+            case "chat":
+                chat_id = scope_config.get("chat_id")
+                if chat_id in (None, ""):
+                    raise ValueError("telegram command scope 'chat' requires chat_id.")
+                return BotCommandScopeChat(chat_id=chat_id)
+            case "chat_administrators":
+                chat_id = scope_config.get("chat_id")
+                if chat_id in (None, ""):
+                    raise ValueError(
+                        "telegram command scope 'chat_administrators' requires chat_id.",
+                    )
+                return BotCommandScopeChatAdministrators(chat_id=chat_id)
+            case "chat_member":
+                chat_id = scope_config.get("chat_id")
+                user_id = scope_config.get("user_id")
+                if chat_id in (None, "") or user_id in (None, ""):
+                    raise ValueError(
+                        "telegram command scope 'chat_member' requires chat_id and user_id.",
+                    )
+                return BotCommandScopeChatMember(chat_id=chat_id, user_id=user_id)
+            case _:
+                raise ValueError(
+                    f"Unsupported Telegram command scope type: {scope_type}",
+                )
+
+    def _plugin_matches_command_allowlist(self, module_path: str) -> bool:
+        if self.command_registered_plugins is None:
+            return True
+
+        plugin = star_map.get(module_path)
+        candidates = {
+            module_path,
+            module_path.split(".")[-1],
+        }
+        if plugin:
+            candidates.update(
+                str(value)
+                for value in (
+                    plugin.name,
+                    plugin.display_name,
+                    plugin.root_dir_name,
+                    plugin.module_path,
+                )
+                if value
+            )
+        return bool(candidates & self.command_registered_plugins)
 
     def collect_commands(self) -> list[BotCommand]:
         """从注册的处理器中收集所有指令"""
@@ -343,9 +506,12 @@ class TelegramPlatformAdapter(Platform):
 
         for handler_md in star_handlers_registry:
             handler_metadata = handler_md
-            if (
-                handler_metadata.handler_module_path not in star_map
-                or not star_map[handler_metadata.handler_module_path].activated
+            if handler_metadata.handler_module_path not in star_map:
+                continue
+            if not star_map[handler_metadata.handler_module_path].activated:
+                continue
+            if not self._plugin_matches_command_allowlist(
+                handler_metadata.handler_module_path,
             ):
                 continue
             if not handler_metadata.enabled:
@@ -435,6 +601,73 @@ class TelegramPlatformAdapter(Platform):
         abm = await self.convert_message(update, context)
         if abm:
             await self.handle_msg(abm)
+
+    async def callback_query_handler(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        logger.debug(f"Telegram callback query: {update.callback_query}")
+        abm = await self.convert_callback_query(update, context)
+        if abm:
+            await self.handle_msg(abm)
+
+    async def convert_callback_query(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> AstrBotMessage | None:
+        """Convert a Telegram callback query into an AstrBot message event."""
+        callback_query = update.callback_query
+        if not callback_query:
+            logger.warning("Received an update without a callback query.")
+            return None
+
+        from_user = getattr(callback_query, "from_user", None)
+        if not from_user:
+            logger.warning("[Telegram] Received a callback query without from_user.")
+            return None
+
+        source_message = getattr(callback_query, "message", None)
+        source_chat = getattr(source_message, "chat", None)
+        data = getattr(callback_query, "data", None)
+        game_short_name = getattr(callback_query, "game_short_name", None)
+        message_text = str(data or game_short_name or "")
+
+        message = AstrBotMessage()
+        message.sender = MessageMember(
+            str(from_user.id),
+            getattr(from_user, "username", None)
+            or getattr(from_user, "full_name", None)
+            or "Unknown",
+        )
+        message.self_id = str(context.bot.username)
+        message.raw_message = update
+        message.message_str = message_text
+        message.message = [Comp.Plain(message_text)] if message_text else []
+        message.message_id = str(
+            getattr(callback_query, "id", None)
+            or getattr(source_message, "message_id", "")
+            or "",
+        )
+
+        if source_chat and getattr(source_chat, "type", None) != ChatType.PRIVATE:
+            message.type = MessageType.GROUP_MESSAGE
+            message.group_id = str(source_chat.id)
+            message.session_id = message.group_id
+            message_thread_id = getattr(source_message, "message_thread_id", None)
+            is_topic_message = getattr(source_message, "is_topic_message", False)
+            if is_topic_message and message_thread_id:
+                message.group_id += "#" + str(message_thread_id)
+                message.session_id = message.group_id
+        elif source_chat:
+            message.type = MessageType.FRIEND_MESSAGE
+            message.session_id = str(source_chat.id)
+        else:
+            message.type = MessageType.FRIEND_MESSAGE
+            message.session_id = str(from_user.id)
+
+        return message
 
     async def convert_message(
         self,

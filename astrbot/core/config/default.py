@@ -447,9 +447,13 @@ CONFIG_METADATA_2 = {
                         "start_message": "Hello, I'm AstrBot!",
                         "telegram_api_base_url": "https://api.telegram.org/bot",
                         "telegram_file_base_url": "https://api.telegram.org/file/bot",
+                        "telegram_proxy": "",
+                        "telegram_get_updates_proxy": "",
                         "telegram_command_register": True,
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
+                        "telegram_command_registered_plugins": [],
+                        "telegram_command_scopes": [{"type": "default"}],
                         "telegram_polling_restart_delay": 5.0,
                     },
                     "Discord": {
@@ -764,6 +768,28 @@ CONFIG_METADATA_2 = {
                         "description": "Telegram 命令自动刷新间隔",
                         "type": "int",
                         "hint": "Telegram 命令自动刷新间隔，单位为秒。",
+                    },
+                    "telegram_command_registered_plugins": {
+                        "description": "Telegram 命令注册插件",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "只注册所选插件提供的指令，填写插件名、展示名、目录名或模块路径。留空表示注册全部已启用插件的指令。",
+                    },
+                    "telegram_command_scopes": {
+                        "description": "Telegram 命令注册范围",
+                        "type": "list",
+                        "items": {"type": "object"},
+                        "hint": '每项可填写 Telegram BotCommandScope 配置，如 {"type":"default","language_code":"zh"} 或 {"type":"chat","chat_id":12345}。',
+                    },
+                    "telegram_proxy": {
+                        "description": "Telegram API 代理",
+                        "type": "string",
+                        "hint": "仅用于此 Telegram 适配器的 Bot API 请求代理，例如 http://127.0.0.1:7890。留空则使用默认网络设置。",
+                    },
+                    "telegram_get_updates_proxy": {
+                        "description": "Telegram getUpdates 代理",
+                        "type": "string",
+                        "hint": "仅用于此 Telegram 适配器轮询 getUpdates 的代理。留空时与 Bot API 请求使用相同网络设置。",
                     },
                     "telegram_polling_restart_delay": {
                         "description": "Telegram 轮询重启延迟",

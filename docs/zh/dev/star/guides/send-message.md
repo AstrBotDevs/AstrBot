@@ -104,6 +104,66 @@ async def test(self, event: AstrMessageEvent):
 
 ![发送视频消息](https://files.astrbot.app/docs/source/images/plugin/db93a2bb-671c-4332-b8ba-9a91c35623c2.png)
 
+## Telegram 专属发送选项
+
+Telegram 适配器支持在 `MessageChain` 中加入 Telegram 专属组件，用于控制 Markdown/HTML 解析、链接预览和 Inline Keyboard。这些组件同样适用于 `self.context.send_message(unified_msg_origin, chains)` 主动发送。
+
+```python
+from astrbot.api.event import MessageChain, filter, AstrMessageEvent
+from astrbot.core.platform.sources.telegram.components import (
+    TelegramInlineButton,
+    TelegramInlineKeyboard,
+    TelegramMessageOptions,
+)
+
+@filter.command("review")
+async def review(self, event: AstrMessageEvent):
+    chain = MessageChain()
+    chain.message("**请选择审批动作**\n\n[查看详情](https://example.com/item/42)")
+    chain.chain.append(
+        TelegramMessageOptions(
+            parse_mode="MarkdownV2",
+            link_preview_is_disabled=False,
+            link_preview_url="https://example.com/item/42",
+            link_preview_prefer_large_media=True,
+            link_preview_show_above_text=True,
+        )
+    )
+    chain.chain.append(
+        TelegramInlineKeyboard(
+            [
+                [
+                    TelegramInlineButton("通过", callback_data="approve:42"),
+                    TelegramInlineButton("拒绝", callback_data="reject:42"),
+                ],
+                [TelegramInlineButton("打开网页", url="https://example.com/item/42")],
+            ]
+        )
+    )
+    yield event.chain_result(chain)
+```
+
+`TelegramMessageOptions.parse_mode` 支持 `MarkdownV2`、`Markdown`、`HTML`，也可以传 `plaintext`、`plain` 或 `none` 发送纯文本。链接预览支持 Telegram `LinkPreviewOptions` 的所有字段：是否禁用预览、预览 URL、小/大媒体偏好、是否显示在文本上方。
+
+`TelegramInlineButton` 每个按钮必须且只能设置一种动作。支持 `url`、`callback_data`、`login_url`、`web_app`、`switch_inline_query`、`switch_inline_query_current_chat`、`switch_inline_query_chosen_chat`、`copy_text`、`callback_game`、`pay`，以及 Bot API 支持时的 `style`、`icon_custom_emoji_id`。`callback_data` 必须是 1-64 UTF-8 字节。
+
+插件可以通过回调事件实现审批、确认、翻页等交互：
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+
+@filter.event_message_type(filter.EventMessageType.ALL)
+async def on_telegram_button(self, event: AstrMessageEvent):
+    if not hasattr(event, "is_button_interaction") or not event.is_button_interaction():
+        return
+
+    action = event.get_interaction_data()
+    user_id = event.get_interaction_user_id()
+    await event.answer_interaction(f"已收到 {user_id}: {action}", show_alert=False)
+```
+
+`event.ack_interaction()` 可以快速确认回调；`event.get_interaction_custom_id()` 与 `event.get_interaction_data()` 都会返回 Telegram 的 `callback_data`。
+
 ## 发送群合并转发消息
 
 > 大多数平台都不支持此种消息类型，当前适配情况：OneBot v11
