@@ -72,6 +72,16 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 logger.warning(
                     f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored."
                 )
+
+        # Fix: SiliconFlow provider does not support dimensions parameter, except for Qwen models.
+        provider_api_base = self.provider_config.get("embedding_api_base")
+        if (
+            provider_api_base
+            and provider_api_base.startswith("https://api.siliconflow.cn")
+            and not self.model.startswith("Qwen")
+        ):
+            # For SiliconFlow and Non-Qwen models, dimensions parameter is not supported. so remove it.
+            kwargs.pop("dimensions", None)
         return kwargs
 
     def get_dim(self) -> int:
