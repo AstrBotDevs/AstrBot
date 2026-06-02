@@ -73,6 +73,25 @@
         >
           {{ t('core.common.autoDetect') }}
         </v-btn>
+        <v-tooltip
+          v-if="hasEmbeddingDimensionsRequestParam"
+          :text="t('core.common.embeddingDimensionsRequestParamHint')"
+          location="top"
+        >
+          <template #activator="{ props: tooltipProps }">
+            <v-switch
+              v-bind="tooltipProps"
+              :model-value="Boolean(configRoot.embedding_dimensions_as_request_param)"
+              @update:model-value="setEmbeddingDimensionsRequestParam"
+              :label="t('core.common.embeddingDimensionsRequestParam')"
+              color="primary"
+              inset
+              density="compact"
+              hide-details
+              class="dimensions-param-switch ml-1"
+            ></v-switch>
+          </template>
+        </v-tooltip>
       </div>
     </template>
 
@@ -307,9 +326,22 @@ const listSelectItems = computed(() =>
     : []
 )
 
+const hasEmbeddingDimensionsRequestParam = computed(() =>
+  props.configRoot
+  && Object.prototype.hasOwnProperty.call(
+    props.configRoot,
+    'embedding_dimensions_as_request_param'
+  )
+)
+
 function toNumber(val) {
   const n = parseFloat(val)
   return isNaN(n) ? 0 : n
+}
+
+function setEmbeddingDimensionsRequestParam(val) {
+  if (!props.configRoot) return
+  props.configRoot.embedding_dimensions_as_request_param = Boolean(val)
 }
 
 function getLabel(itemMeta, index, option) {
