@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from ..message import Message
+from ..message import ContentPart, Message, ToolCall
 
 if TYPE_CHECKING:
     from astrbot import logger
@@ -100,9 +100,17 @@ def _message_to_dict(msg: Message) -> dict:
     """Convert a Message to a plain dict suitable for round splitting."""
     d = {"role": msg.role}
     if msg.content is not None:
-        d["content"] = msg.content
+        if isinstance(msg.content, list):
+            d["content"] = [
+                part.model_dump_for_context() if isinstance(part, ContentPart) else part
+                for part in msg.content
+            ]
+        else:
+            d["content"] = msg.content
     if getattr(msg, "tool_calls", None):
-        d["tool_calls"] = msg.tool_calls
+        d["tool_calls"] = [
+            tc.model_dump() if isinstance(tc, ToolCall) else tc for tc in msg.tool_calls
+        ]
     if getattr(msg, "tool_call_id", None):
         d["tool_call_id"] = msg.tool_call_id
     return d

@@ -610,11 +610,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return None
         return self.req.func_tool
 
-    def _simple_print_message_role(self, tag: str = ""):
-        roles = []
-        for message in self.run_context.messages:
-            roles.append(message.role)
-        logger.debug(f"{tag} RunCtx.messages -> [{len(roles)}] {','.join(roles)}")
+    def _simple_print_message_role(self, tag: str, messages: list):
+        roles = [m.role for m in messages]
+        n = len(roles)
+        if n > 10:
+            summary = ",".join(roles[:4]) + ",...," + ",".join(roles[-4:])
+        else:
+            summary = ",".join(roles)
+        logger.debug(f"{tag} messages -> [{n}] {summary}")
 
     def follow_up(
         self,
@@ -713,11 +716,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # provider call. Persistent compaction is owned by the conversation /
         # memory layer.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
-        self._simple_print_message_role("[BefCompact]")
+        self._simple_print_message_role("[BefCompact]", self.run_context.messages)
         self._provider_messages = await self.request_context_manager.process(
             self.run_context.messages, trusted_token_usage=token_usage
         )
-        self._simple_print_message_role("[AftCompact]")
+        self._simple_print_message_role("[AftCompact]", self._provider_messages)
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:

@@ -28,11 +28,9 @@ class MockProvider:
 
     async def text_chat(self, **kwargs):
         """模拟 LLM 调用，返回摘要"""
-        messages = kwargs.get("messages", [])
-        # 简单的摘要逻辑：返回消息数量统计
         return LLMResponse(
             role="assistant",
-            completion_text=f"历史对话包含 {len(messages) - 1} 条消息，主要讨论了技术话题。",
+            completion_text="Summary of conversation: Hello and discussed various topics.",
         )
 
     def get_model(self):
@@ -112,6 +110,28 @@ class TestContextManager:
         mock_logger.warning.assert_called_once_with(
             "LLM context compression returned an empty summary."
         )
+
+    @pytest.mark.asyncio
+    async def test_llm_compressor_handles_textpart_content(self):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        compressor = LLMSummaryCompressor(provider=provider, keep_recent=1)  # type: ignore[arg-type]
+        messages = [
+            Message(role="user", content=[TextPart(text="Hello")]),
+            Message(role="assistant", content=[TextPart(text="Hi there")]),
+            Message(role="user", content=[TextPart(text="Summarize our work")]),
+            Message(role="assistant", content=[TextPart(text="Sure")]),
+        ]
+
+        result = await compressor(messages)
+
+        assert len(result) == 4
+        assert result[0].role == "user"
+        assert isinstance(result[0].content, str)
+        assert result[0].content.strip()
+        assert "Hello" in result[0].content
+        assert result[-1].content == [TextPart(text="Sure")]
 
     # ==================== Empty and Edge Cases ====================
 
@@ -759,5 +779,6 @@ class TestContextManager:
     def test_split_rounds_empty(self):
         """Empty list returns no rounds."""
         from astrbot.core.agent.context.round_utils import split_into_rounds
+
         rounds = split_into_rounds([])
         assert len(rounds) == 0

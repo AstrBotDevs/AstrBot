@@ -1534,6 +1534,7 @@ async def build_main_agent(
         llm_compress_keep_recent=config.llm_compress_keep_recent,
         llm_compress_provider=_get_compress_provider(config, plugin_context, event),
         truncate_turns=config.dequeue_context_length,
+        enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=fallback_providers,
         tool_result_overflow_dir=(
