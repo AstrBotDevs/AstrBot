@@ -34,9 +34,6 @@ class StarMetadata:
     repo: str | None = None
     """插件仓库地址"""
 
-    plugin_id: str | None = None
-    """插件的唯一标识，格式为 author/name"""
-
     star_cls_type: type[Star] | None = None
     """插件的类对象的类型"""
     module_path: str | None = None
@@ -78,14 +75,11 @@ class StarMetadata:
     pages: list[dict] = field(default_factory=list)
     """插件注册的 Pages 元数据。"""
 
-    def compute_plugin_id(self) -> str:
+    @property
+    def plugin_id(self) -> str:
         p_name = (self.name or "unknown").lower().replace("/", "_")
         p_author = (self.author or "unknown").lower().replace("/", "_")
         return f"{p_author}/{p_name}"
-
-    def __post_init__(self):
-        if self.plugin_id is None and (self.name or self.author):
-            self.plugin_id = self.compute_plugin_id()
 
     def __str__(self) -> str:
         return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"

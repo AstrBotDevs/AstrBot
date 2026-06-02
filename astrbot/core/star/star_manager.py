@@ -750,7 +750,7 @@ class PluginManager:
                         "display_name": metadata.display_name,
                         "support_platforms": metadata.support_platforms,
                         "astrbot_version": metadata.astrbot_version,
-                        "plugin_id": metadata.compute_plugin_id(),
+                        "plugin_id": metadata.plugin_id,
                     }
                 )
         except Exception as metadata_error:
