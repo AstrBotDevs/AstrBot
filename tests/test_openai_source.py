@@ -569,6 +569,71 @@ async def test_handle_api_error_invalid_attachment_removes_images_and_retries_te
 
 
 @pytest.mark.asyncio
+async def test_handle_api_error_unsupported_image_content_retries_text_only():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "hello"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/jpeg;base64,abcd"},
+                        },
+                    ],
+                }
+            ]
+        }
+        context_query = payloads["messages"]
+        err = _ErrorWithBody(
+            "upstream error",
+            {
+                "error": {
+                    "code": "invalid_request_error",
+                    "message": (
+                        "Failed to deserialize the JSON body into the target type: "
+                        "messages[918]: unknown variant `image_url`, expected `text`"
+                    ),
+                }
+            },
+        )
+
+        success, *_rest = await provider._handle_api_error(
+            err,
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        assert payloads["messages"][0]["content"] == [{"type": "text", "text": "hello"}]
+    finally:
+        await provider.terminate()
+
+
+def test_unsupported_image_content_error_matches_quoted_expected_text():
+    provider = _make_provider()
+    err = _ErrorWithBody(
+        "upstream error",
+        {
+            "error": {
+                "message": (
+                    "messages[918]: unknown variant 'image_url', expected \"text\""
+                ),
+            }
+        },
+    )
+
+    assert provider._is_unsupported_image_content_error(err) is True
+
+
+@pytest.mark.asyncio
 async def test_handle_api_error_invalid_attachment_without_images_raises():
     provider = _make_provider()
     try:

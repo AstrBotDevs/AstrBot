@@ -146,35 +146,119 @@ class ProviderOpenAIOfficial(Provider):
                     return True
         return False
 
+    @staticmethod
+    def _normalize_error_match_text(text: str) -> str:
+        return text.lower().translate(str.maketrans("", "", "`'\"‘’“”"))
+
+    @classmethod
+    def _normalized_error_text_candidates(cls, error: Exception) -> list[str]:
+        return [
+            cls._normalize_error_match_text(text)
+            for text in cls._extract_error_text_candidates(error)
+        ]
+
     def _is_invalid_attachment_error(self, error: Exception) -> bool:
-        body = getattr(error, "body", None)
-        code: str | None = None
-        message: str | None = None
-        if isinstance(body, dict):
-            err_obj = body.get("error")
-            if isinstance(err_obj, dict):
-                raw_code = err_obj.get("code")
-                raw_message = err_obj.get("message")
-                code = raw_code.lower() if isinstance(raw_code, str) else None
-                message = raw_message.lower() if isinstance(raw_message, str) else None
-
-        if code == "invalid_attachment":
-            return True
-
-        text_sources: list[str] = []
-        if message:
-            text_sources.append(message)
-        if code:
-            text_sources.append(code)
-        text_sources.extend(map(str, self._extract_error_text_candidates(error)))
-
-        error_text = " ".join(text.lower() for text in text_sources if text)
+        error_text = " ".join(self._normalized_error_text_candidates(error))
         if "invalid_attachment" in error_text:
             return True
         if "download attachment" in error_text and "404" in error_text:
             return True
         return False
 
+    def _is_unsupported_image_content_error(self, error: Exception) -> bool:
+        for normalized_text in self._normalized_error_text_candidates(error):
+            if "image_url" not in normalized_text:
+                continue
+            if any(
+                phrase in normalized_text
+                for phrase in ("unknown variant", "expected text")
+            ):
+                return True
+        return False
+
+    @classmethod
+    def _encode_image_file_to_data_url(
+        cls,
+        image_path: str,
+        *,
+        mode: Literal["safe", "strict"],
+    ) -> str | None:
+        try:
+            image_bytes = Path(image_path).read_bytes()
+        except OSError:
+            if mode == "strict":
+                raise
+            return None
+
+        image_format = cls._detect_image_format(image_bytes)
+        if image_format is None:
+            if mode == "strict":
+                raise ValueError(f"Invalid image file: {image_path}")
+            return None
+
+        mime_type = cls._image_format_to_mime_type(image_format)
+        image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
+        return f"data:{mime_type};base64,{image_bs64}"
+
+    @classmethod
+    def _detect_image_format(cls, image_bytes: bytes) -> str | None:
+        """返回 Pillow 校验后的图片格式，非法图片返回 None。"""
+        try:
+            # verify() 只校验图片容器，不完整解码像素。
+            # 这里仅需要可信的格式标签，因此这种方式足够且开销较小。
+            with PILImage.open(BytesIO(image_bytes)) as image:
+                image.verify()
+                return str(image.format or "").upper()
+        except (OSError, UnidentifiedImageError):
+            return None
+
+    @classmethod
+    def _image_format_to_mime_type(cls, image_format: str | None) -> str:
+        """将 Pillow 图片格式映射为 data URL 使用的 MIME 类型。"""
+        # 未识别格式保持历史 JPEG 兜底，兼容传入任意 `base64://` 内容的旧调用方。
+        return cls._IMAGE_FORMAT_MIME_TYPES.get(
+            str(image_format or "").upper(), "image/jpeg"
+        )
+
+    @classmethod
+    def _base64_image_ref_to_data_url(cls, image_ref: str) -> str:
+        """将 `base64://` 图片引用转换为带真实 MIME 的 data URL。"""
+        raw_base64 = image_ref.removeprefix("base64://")
+        mime_type = "image/jpeg"
+        try:
+            # 平台适配器可能通过 `base64://` 传入 PNG/GIF/WebP 等图片字节，
+            # 但不会额外携带 MIME 元数据。发送 OpenAI 请求前先识别真实格式，
+            # 避免把 PNG 等图片错误声明为 JPEG。
+            image_bytes = base64.b64decode(raw_base64)
+        except (binascii.Error, ValueError):
+            # 对错误或非图片 base64 保持旧行为：继续返回 JPEG data URL，
+            # 避免让历史调用方因为格式识别失败而直接抛异常。
+            pass
+        else:
+            image_format = cls._detect_image_format(image_bytes)
+            mime_type = cls._image_format_to_mime_type(image_format)
+        return f"data:{mime_type};base64,{raw_base64}"
+
+    @staticmethod
+    def _file_uri_to_path(file_uri: str) -> str:
+        """Normalize file URIs to paths.
+
+        `file://localhost/...` and drive-letter forms are treated as local paths.
+        Other non-empty hosts are preserved as UNC-style paths.
+        """
+        parsed = urlparse(file_uri)
+        if parsed.scheme != "file":
+            return file_uri
+
+        netloc = unquote(parsed.netloc or "")
+        path = unquote(parsed.path or "")
+        if re.fullmatch(r"[A-Za-z]:", netloc):
+            return str(Path(f"{netloc}{path}"))
+        if re.match(r"^/[A-Za-z]:/", path):
+            path = path[1:]
+        if netloc and netloc != "localhost":
+            path = f"//{netloc}{path}"
+        return str(Path(path))
     async def _image_ref_to_data_url(
         self,
         image_ref: str,
@@ -1061,6 +1145,18 @@ class ProviderOpenAIOfficial(Provider):
                 available_api_keys,
                 func_tool,
                 "invalid_attachment",
+                image_fallback_used=True,
+            )
+        if self._is_unsupported_image_content_error(e):
+            if image_fallback_used or not self._context_contains_image(context_query):
+                raise e
+            return await self._fallback_to_text_only_and_retry(
+                payloads,
+                context_query,
+                chosen_key,
+                available_api_keys,
+                func_tool,
+                "unsupported_image_content",
                 image_fallback_used=True,
             )
 
