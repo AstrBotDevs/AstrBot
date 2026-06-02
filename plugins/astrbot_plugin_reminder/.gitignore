@@ -1,0 +1,31 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Logs / coverage / test artifacts
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+.tox/
+
+# OS
+.DS_Store
+Thumbs.db
+

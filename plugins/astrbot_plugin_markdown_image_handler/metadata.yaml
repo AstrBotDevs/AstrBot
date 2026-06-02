@@ -1,0 +1,6 @@
+name: astrbot_plugin_markdown_image_handler
+version: 1.0.0
+author: yangyongjie
+desc: 移除LLM输出中的Markdown格式并提取发送图片
+repo: https://github.com/AlanBacker/astrbot_plugin_markdown_image_handler
+display_name: Markdown图片处理器

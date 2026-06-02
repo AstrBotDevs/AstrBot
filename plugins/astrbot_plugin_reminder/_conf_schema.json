@@ -1,0 +1,19 @@
+{
+    "whitelist": {
+        "description": "白名单用户",
+        "hint": "只有白名单用户或管理员可以使用指令",
+        "type": "list",
+        "default": []
+    },
+    "monitor_timeout": {
+        "description": "监控超时时间",
+        "hint": "监控指令任务响应的超时时间（秒）",
+        "type": "int",
+        "slider": {
+            "min": 1,
+            "max": 600,
+            "step": 1
+        },
+        "default": 60
+    }
+}

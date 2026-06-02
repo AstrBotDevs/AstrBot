@@ -1,0 +1,10 @@
+name: "Run Stale Check"
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # 每天凌晨自动运行一次
+  workflow_dispatch:   
+
+jobs:
+  call-stale-logic:
+    uses: Foolllll-J/.github-shared-config/.github/workflows/stale-logic.yml@main

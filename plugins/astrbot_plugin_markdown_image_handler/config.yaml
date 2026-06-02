@@ -1,0 +1,11 @@
+# Dify 服务器地址配置
+# 将 Dify 容器内的相对路径转换为真实可访问的地址
+dify_host: "http://223.109.141.49:8081"
+
+# 是否启用 Markdown 格式移除功能
+enable_markdown_removal: true
+
+# 是否启用图片提取和发送功能
+# 注意：图片发送功能需要 AstrBot 支持相应的 API
+# 如果遇到问题，请先设置为 false，只使用 Markdown 清理功能
+enable_image_extraction: false

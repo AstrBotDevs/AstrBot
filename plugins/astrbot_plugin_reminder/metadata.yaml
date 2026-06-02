@@ -1,0 +1,6 @@
+name: astrbot_plugin_reminder
+display_name: 定时提醒助手
+desc: 支持在指定会话定时发送消息或执行任务，支持cron表达式、富媒体消息
+version: v1.1
+author: Foolllll
+repo: https://github.com/Foolllll-J/astrbot_plugin_reminder
