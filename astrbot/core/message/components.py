@@ -46,9 +46,9 @@ def _write_base64_payload_to_temp_file(
     suffix: str,
 ) -> str:
     file_bytes = base64.b64decode(payload)
-    file_path = os.path.join(
-        get_astrbot_temp_path(), f"{prefix}_{uuid.uuid4().hex}{suffix}"
-    )
+    temp_dir = get_astrbot_temp_path()
+    os.makedirs(temp_dir, exist_ok=True)
+    file_path = os.path.join(temp_dir, f"{prefix}_{uuid.uuid4().hex}{suffix}")
     with open(file_path, "wb") as f:
         f.write(file_bytes)
     return os.path.abspath(file_path)
