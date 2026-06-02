@@ -689,7 +689,9 @@ async def test_tool_result_includes_all_calltoolresult_content(
                 "mime_type": mime_type,
             }
         )
-        return SimpleNamespace(file_path=f"/tmp/{tool_call_id}_{index}.png")
+        return SimpleNamespace(
+            file_path=f"/tmp/{tool_call_id}_{index}.png", mime_type=mime_type
+        )
 
     monkeypatch.setattr(tool_image_cache, "save_image", fake_save_image)
 
