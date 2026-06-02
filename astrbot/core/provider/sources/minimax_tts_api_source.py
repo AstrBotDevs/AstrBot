@@ -3,14 +3,14 @@ import os
 import uuid
 from collections.abc import AsyncIterator
 
-import aiofiles
 import aiohttp
 
 from astrbot.api import logger
-from astrbot.core.provider.entities import ProviderType
-from astrbot.core.provider.provider import TTSProvider
-from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+from ..entities import ProviderType
+from ..provider import TTSProvider
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -37,12 +37,21 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             "minimax-is-timber-weight",
             False,
         )
-        self.timber_weight: list[dict[str, str | int]] = json.loads(
-            provider_config.get(
-                "minimax-timber-weight",
-                '[{"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}]',
-            ),
-        )
+        default_timber_weight = [
+            {"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}
+        ]
+        raw_timber_weight = provider_config.get("minimax-timber-weight", "")
+        if not raw_timber_weight:
+            self.timber_weight = default_timber_weight
+        else:
+            try:
+                self.timber_weight = json.loads(raw_timber_weight)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "MiniMax TTS 权重配置解析失败，将使用默认值。 raw_value: %s",
+                    raw_timber_weight,
+                )
+                self.timber_weight = default_timber_weight
 
         self.voice_setting: dict = {
             "speed": provider_config.get("minimax-voice-speed", 1.0),
@@ -121,7 +130,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                                     if "extra_info" in data:
                                         continue
                                     audio: str | None = data.get("data", {}).get(
-                                        "audio",
+                                        "audio"
                                     )
                                     if audio is not None:
                                         yield audio
@@ -159,12 +168,12 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                 raise Exception(
                     "MiniMax TTS API returned empty audio data. "
                     "Please verify your configuration, especially the 'group_id' parameter. "
-                    "You can find your group_id in Account Management -> Basic Information on the MiniMax platform.",
+                    "You can find your group_id in Account Management -> Basic Information on the MiniMax platform."
                 )
 
             # 结果保存至文件
-            async with aiofiles.open(path, "wb") as file:
-                await file.write(audio)
+            with open(path, "wb") as file:
+                file.write(audio)
 
             return path
 

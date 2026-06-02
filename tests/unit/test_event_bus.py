@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from astrbot.core.event_bus import EventBus
-from astrbot.core.pipeline.scheduler import PipelineScheduler
 
 
 @pytest.fixture
@@ -277,13 +276,13 @@ class TestEventSubscription:
     async def test_subscriber_registration(self, event_queue, mock_config_manager):
         """Test registering a subscriber (scheduler) to the event bus."""
         # Create multiple schedulers as subscribers
-        scheduler1 = MagicMock(spec=PipelineScheduler)
+        scheduler1 = MagicMock()
         scheduler1.execute = AsyncMock()
-        scheduler2 = MagicMock(spec=PipelineScheduler)
+        scheduler2 = MagicMock()
         scheduler2.execute = AsyncMock()
 
         # Create EventBus with multiple subscribers
-        pipeline_mapping: dict[str, PipelineScheduler] = {
+        pipeline_mapping = {
             "conf-id-1": scheduler1,
             "conf-id-2": scheduler2,
         }
@@ -311,7 +310,7 @@ class TestEventSubscription:
             "name": "Test Config",
         }
 
-        scheduler1 = MagicMock(spec=PipelineScheduler)
+        scheduler1 = MagicMock()
         scheduler1.execute = AsyncMock()
 
         async def execute_scheduler1(event):  # noqa: ARG001
@@ -320,7 +319,7 @@ class TestEventSubscription:
 
         scheduler1.execute.side_effect = execute_scheduler1
 
-        scheduler2 = MagicMock(spec=PipelineScheduler)
+        scheduler2 = MagicMock()
         scheduler2.execute = AsyncMock()
 
         async def execute_scheduler2(event):  # noqa: ARG001
@@ -328,7 +327,7 @@ class TestEventSubscription:
 
         scheduler2.execute.side_effect = execute_scheduler2
 
-        pipeline_mapping: dict[str, PipelineScheduler] = {
+        pipeline_mapping = {
             "conf-id-1": scheduler1,
             "conf-id-2": scheduler2,
         }

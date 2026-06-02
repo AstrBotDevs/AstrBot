@@ -10,7 +10,6 @@
   },
   "actions": {
     "save": "Save Configuration",
-    "refresh": "Reload From File",
     "delete": "Delete This Item",
     "add": "Add",
     "reset": "Reset to Default",
@@ -33,8 +32,6 @@
     "saveSuccess": "Configuration saved successfully",
     "saveError": "Failed to save configuration",
     "loadError": "Failed to load configuration",
-    "refreshSuccess": "Configuration reloaded from file",
-    "refreshError": "Failed to reload configuration from file",
     "deleteSuccess": "Deleted successfully",
     "deleteError": "Failed to delete",
     "updateSuccess": "Updated successfully",
@@ -128,11 +125,9 @@
       "save": "Save",
       "saveAndSwitch": "Save and switch",
       "discardAndSwitch": "Discard changes and switch",
-      "cancelReload": "Cancel reload",
       "closeCard": "Close the pop-up window",
       "confirm": "confirm",
       "cancel": "cancel"
-    },
-    "reloadConfig": "Reloading from file will discard your unsaved changes. Continue?"
+    }
   }
 }

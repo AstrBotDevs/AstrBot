@@ -1,7 +1,6 @@
 import asyncio
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -71,13 +70,8 @@ async def test_mattermost_parse_post_attachments_maps_media_types(tmp_path):
         "doc": {"name": "report.pdf", "mime_type": "application/pdf"},
     }
 
-    async def fake_get_file_info(file_id: str) -> dict[str, Any]:
-        return file_infos[file_id]
-    client.get_file_info = fake_get_file_info
-
-    async def fake_download_file(file_id: str) -> bytes:
-        return b"payload"
-    client.download_file = fake_download_file
+    client.get_file_info = AsyncMock(side_effect=lambda file_id: file_infos[file_id])
+    client.download_file = AsyncMock(return_value=b"payload")
 
     with patch(
         "astrbot.core.platform.sources.mattermost.client.get_astrbot_temp_path",

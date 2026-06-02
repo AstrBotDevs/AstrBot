@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import base64
 import hashlib
 import json
 import random
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 import aiohttp
@@ -38,7 +37,7 @@ class WeixinOCClient:
             self._http_session = aiohttp.ClientSession(timeout=timeout)
 
     async def close(self) -> None:
-        if self._http_session is not None and (not self._http_session.closed):
+        if self._http_session is not None and not self._http_session.closed:
             await self._http_session.close()
             self._http_session = None
 
@@ -47,7 +46,7 @@ class WeixinOCClient:
             "Content-Type": "application/json",
             "AuthorizationType": "ilink_bot_token",
             "X-WECHAT-UIN": base64.b64encode(
-                str(random.getrandbits(32)).encode("utf-8"),
+                str(random.getrandbits(32)).encode("utf-8")
             ).decode("utf-8"),
         }
         if token_required and self.token:
@@ -58,18 +57,24 @@ class WeixinOCClient:
         return f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
 
     def _build_cdn_upload_url(self, upload_param: str, file_key: str) -> str:
-        return f"{self.cdn_base_url}/upload?encrypted_query_param={quote(upload_param)}&filekey={quote(file_key)}"
+        return (
+            f"{self.cdn_base_url}/upload?"
+            f"encrypted_query_param={quote(upload_param)}&filekey={quote(file_key)}"
+        )
 
     def _build_cdn_download_url(self, encrypted_query_param: str) -> str:
-        return f"{self.cdn_base_url}/download?encrypted_query_param={quote(encrypted_query_param)}"
+        return (
+            f"{self.cdn_base_url}/download?"
+            f"encrypted_query_param={quote(encrypted_query_param)}"
+        )
 
     @staticmethod
     def aes_padded_size(size: int) -> int:
-        return size + (16 - size % 16 or 16)
+        return size + (16 - (size % 16) or 16)
 
     @staticmethod
     def pkcs7_pad(data: bytes, block_size: int = 16) -> bytes:
-        pad_len = block_size - len(data) % block_size
+        pad_len = block_size - (len(data) % block_size)
         if pad_len == 0:
             pad_len = block_size
         return data + bytes([pad_len]) * pad_len
@@ -84,20 +89,6 @@ class WeixinOCClient:
         if data[-pad_len:] != bytes([pad_len]) * pad_len:
             return data
         return data[:-pad_len]
-
-    @staticmethod
-    def _build_media_cipher(key: bytes):
-        return AES.new(key, AES.MODE_ECB)
-
-    @classmethod
-    def encrypt_cdn_payload(cls, data: bytes, key: bytes) -> bytes:
-        cipher = cls._build_media_cipher(key)
-        return cipher.encrypt(cls.pkcs7_pad(data))
-
-    @classmethod
-    def decrypt_cdn_payload(cls, encrypted: bytes, key: bytes) -> bytes:
-        cipher = cls._build_media_cipher(key)
-        return cls.pkcs7_unpad(cipher.decrypt(encrypted))
 
     @staticmethod
     def parse_media_aes_key(aes_key_value: str) -> bytes:
@@ -129,9 +120,10 @@ class WeixinOCClient:
             cdn_url = self._build_cdn_upload_url(upload_param, file_key)
         else:
             raise ValueError(
-                "CDN upload URL missing (need upload_full_url or upload_param)",
+                "CDN upload URL missing (need upload_full_url or upload_param)"
             )
-        raw_data = await asyncio.to_thread(media_path.read_bytes)
+
+        raw_data = media_path.read_bytes()
         logger.debug(
             "weixin_oc(%s): prepare CDN upload file=%s size=%s md5=%s filekey=%s",
             self.adapter_id,
@@ -140,18 +132,20 @@ class WeixinOCClient:
             hashlib.md5(raw_data).hexdigest(),
             file_key,
         )
-        key = bytes.fromhex(aes_key_hex)
-        encrypted = self.encrypt_cdn_payload(raw_data, key)
+        cipher = AES.new(bytes.fromhex(aes_key_hex), AES.MODE_ECB)
+        encrypted = cipher.encrypt(self.pkcs7_pad(raw_data))
         logger.debug(
             "weixin_oc(%s): encrypt done aes_key_len=%s plain_size=%s cipher_size=%s",
             self.adapter_id,
-            len(key),
+            len(bytes.fromhex(aes_key_hex)),
             len(raw_data),
             len(encrypted),
         )
+
         await self.ensure_http_session()
         assert self._http_session is not None
         timeout = aiohttp.ClientTimeout(total=self.api_timeout_ms / 1000)
+
         async with self._http_session.post(
             cdn_url,
             data=encrypted,
@@ -170,16 +164,16 @@ class WeixinOCClient:
             )
             if resp.status >= 400 and resp.status < 500:
                 raise RuntimeError(
-                    f"upload media to cdn failed: {resp.status} {detail}",
+                    f"upload media to cdn failed: {resp.status} {detail}"
                 )
             if resp.status != 200:
                 raise RuntimeError(
-                    f"upload media to cdn failed: {resp.status} {detail}",
+                    f"upload media to cdn failed: {resp.status} {detail}"
                 )
             download_param = resp.headers.get("x-encrypted-param")
             if not download_param:
                 raise RuntimeError(
-                    "upload media to cdn failed: missing x-encrypted-param",
+                    "upload media to cdn failed: missing x-encrypted-param"
                 )
             return download_param
 
@@ -194,7 +188,7 @@ class WeixinOCClient:
             if resp.status >= 400:
                 detail = await resp.text()
                 raise RuntimeError(
-                    f"download media from cdn failed: {resp.status} {detail}",
+                    f"download media from cdn failed: {resp.status} {detail}"
                 )
             return await resp.read()
 
@@ -205,7 +199,8 @@ class WeixinOCClient:
     ) -> bytes:
         encrypted = await self.download_cdn_bytes(encrypted_query_param)
         key = self.parse_media_aes_key(aes_key_value)
-        return self.decrypt_cdn_payload(encrypted, key)
+        cipher = AES.new(key, AES.MODE_ECB)
+        return self.pkcs7_unpad(cipher.decrypt(encrypted))
 
     async def request_json(
         self,
@@ -225,6 +220,7 @@ class WeixinOCClient:
         merged_headers = self._build_base_headers(token_required=token_required)
         if headers:
             merged_headers.update(headers)
+
         async with self._http_session.request(
             method,
             self._resolve_url(endpoint),
@@ -238,7 +234,7 @@ class WeixinOCClient:
                 raise RuntimeError(f"{method} {endpoint} failed: {resp.status} {text}")
             if not text:
                 return {}
-            return json.loads(text)
+            return cast(dict[str, Any], json.loads(text))
 
     async def get_typing_config(
         self,
@@ -251,7 +247,9 @@ class WeixinOCClient:
             payload={
                 "ilink_user_id": user_id,
                 "context_token": context_token,
-                "base_info": {"channel_version": "astrbot"},
+                "base_info": {
+                    "channel_version": "astrbot",
+                },
             },
             token_required=True,
             timeout_ms=self.api_timeout_ms,
@@ -271,7 +269,9 @@ class WeixinOCClient:
                 "ilink_user_id": user_id,
                 "typing_ticket": typing_ticket,
                 "status": 2 if cancel else 1,
-                "base_info": {"channel_version": "astrbot"},
+                "base_info": {
+                    "channel_version": "astrbot",
+                },
             },
             token_required=True,
             timeout_ms=self.api_timeout_ms,

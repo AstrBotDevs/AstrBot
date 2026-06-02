@@ -1,6 +1,6 @@
 """飞书(Lark) Webhook 服务器实现
 
-实现飞书事件订阅的 Webhook 模式,支持:
+实现飞书事件订阅的 Webhook 模式，支持:
 1. 请求 URL 验证 (challenge 验证)
 2. 事件加密/解密 (AES-256-CBC)
 3. 签名校验 (SHA256)
@@ -58,7 +58,6 @@ class LarkWebhookServer:
         Args:
             config: 飞书配置
             event_queue: 事件队列
-
         """
         self.app_id = config["app_id"]
         self.app_secret = config["app_secret"]
@@ -92,7 +91,6 @@ class LarkWebhookServer:
 
         Returns:
             签名是否有效
-
         """
         # 拼接字符串: timestamp + nonce + encrypt_key + body
         bytes_b1 = (timestamp + nonce + encrypt_key).encode("utf-8")
@@ -109,10 +107,9 @@ class LarkWebhookServer:
 
         Returns:
             解密后的事件字典
-
         """
         if not self.cipher:
-            raise ValueError("未配置 encrypt_key,无法解密事件")
+            raise ValueError("未配置 encrypt_key，无法解密事件")
 
         decrypted_str = self.cipher.decrypt_string(encrypted_data)
         return json.loads(decrypted_str)
@@ -125,7 +122,6 @@ class LarkWebhookServer:
 
         Returns:
             包含 challenge 的响应
-
         """
         challenge = event_data.get("challenge", "")
         logger.info(f"[Lark Webhook] 收到 challenge 验证请求: {challenge}")
@@ -133,14 +129,13 @@ class LarkWebhookServer:
         return {"challenge": challenge}
 
     async def handle_callback(self, request) -> tuple[dict, int] | dict:
-        """处理 webhook 回调,可被统一 webhook 入口复用
+        """处理 webhook 回调，可被统一 webhook 入口复用
 
         Args:
             request: Quart 请求对象
 
         Returns:
             响应数据
-
         """
         # 获取原始请求体
         body = await request.get_data()
@@ -155,7 +150,7 @@ class LarkWebhookServer:
             logger.error("[Lark Webhook] 请求体为空")
             return {"error": "Empty request body"}, 400
 
-        # 如果配置了 encrypt_key,进行签名验证
+        # 如果配置了 encrypt_key，进行签名验证
         if self.encrypt_key:
             timestamp = request.headers.get("X-Lark-Request-Timestamp", "")
             nonce = request.headers.get("X-Lark-Request-Nonce", "")
@@ -163,11 +158,7 @@ class LarkWebhookServer:
 
             if timestamp and nonce and signature:
                 if not self.verify_signature(
-                    timestamp,
-                    nonce,
-                    self.encrypt_key,
-                    body,
-                    signature,
+                    timestamp, nonce, self.encrypt_key, body, signature
                 ):
                     logger.error("[Lark Webhook] 签名验证失败")
                     return {"error": "Invalid signature"}, 401
@@ -189,7 +180,7 @@ class LarkWebhookServer:
             else:
                 token = event_data.get("token", "")
             if token != self.verification_token:
-                logger.error("[Lark Webhook] Verification Token 不匹配｡")
+                logger.error("[Lark Webhook] Verification Token 不匹配。")
                 return {"error": "Invalid verification token"}, 401
 
         # 处理 URL 验证 (challenge)
@@ -211,6 +202,5 @@ class LarkWebhookServer:
 
         Args:
             callback: 处理事件的异步函数
-
         """
         self.callback = callback

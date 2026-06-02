@@ -11,4 +11,6 @@ AstrBot 是受 AGPLv3 开源协议保护的**免费开源软件项目**，您可
 
 如果您在使用 AstrBot 的过程中被要求付费，**表明您已经遭遇诈骗行为**。请立即向相关方申请退款，并及时通过邮件向我们反馈。
 
+📊 在使用本项目之前，请仔细阅读 [最终用户许可协议](https://github.com/AstrBotDevs/AstrBot/blob/master/EULA.md)。安装即表示您已阅读并同意其中的全部内容。
+
 📮 官方邮箱：[community@astrbot.app](mailto:community@astrbot.app)

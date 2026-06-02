@@ -77,6 +77,3 @@ class PluginUpdator(RepoZipUpdator):
             z.extractall(target_dir)
 
         self._finalize_extracted_archive(zip_path, target_dir, update_dir)
-
-    # Backward compatibility alias
-    update_plugin = update

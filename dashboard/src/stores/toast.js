@@ -1,28 +1,17 @@
-import { defineStore } from "pinia";
-import { ref, computed } from "vue";
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
 
-/**
- * @typedef {Object} ToastItem
- * @property {string} message
- * @property {string} color
- * @property {number} timeout
- * @property {boolean} closable
- * @property {boolean} multiLine
- * @property {string} location
- */
-
-export const useToastStore = defineStore("toast", () => {
-  /** @type {import('vue').Ref<ToastItem[]>} */
-  const queue = ref([]);
-  const current = computed(() => queue.value[0]);
+export const useToastStore = defineStore('toast', () => {
+  const queue = ref([])
+  const current = computed(() => queue.value[0])
 
   function add({
     message,
-    color = "info", // Vuetify 颜色
+    color = 'info',   // Vuetify 颜色
     timeout = 3000,
     closable = true,
     multiLine = false,
-    location = "top center",
+    location = 'top center'
   }) {
     queue.value.push({
       message,
@@ -30,13 +19,13 @@ export const useToastStore = defineStore("toast", () => {
       timeout,
       closable,
       multiLine,
-      location,
-    });
+      location
+    })
   }
 
   function shift() {
-    queue.value.shift();
+    queue.value.shift()
   }
 
-  return { current, add, shift };
-});
+  return { current, add, shift }
+})

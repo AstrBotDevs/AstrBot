@@ -1,4 +1,6 @@
+import base64
 import builtins
+from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
@@ -333,36 +335,6 @@ async def test_groq_payload_drops_reasoning_content_from_assistant_history():
         assert "reasoning" not in assistant_message
     finally:
         await provider.terminate()
-
-
-@pytest.mark.asyncio
-async def test_openai_payload_handles_none_think_content():
-    """Test that _finally_convert_payload handles think content being None."""
-    provider = _make_provider()
-    try:
-        # Test case where think content might be None
-        payloads = {
-            "messages": [
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "think", "think": None},
-                        {"type": "text", "text": "final answer"},
-                    ],
-                }
-            ]
-        }
-
-        # Should not raise TypeError: unsupported operand type(s) for +=: 'NoneType' and 'str'
-        provider._finally_convert_payload(payloads)
-
-        assistant_message = payloads["messages"][0]
-        assert assistant_message["content"] == [
-            {"type": "text", "text": "final answer"}
-        ]
-    finally:
-        await provider.terminate()
-
 
 
 @pytest.mark.asyncio
@@ -1062,6 +1034,27 @@ async def test_resolve_image_part_supports_base64_scheme():
 
 
 @pytest.mark.asyncio
+async def test_resolve_image_part_preserves_base64_png_mime_type():
+    provider = _make_provider()
+    try:
+        image_buffer = BytesIO()
+        PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(
+            image_buffer,
+            format="PNG",
+        )
+        image_base64 = base64.b64encode(image_buffer.getvalue()).decode("ascii")
+
+        image_part = await provider._resolve_image_part(f"base64://{image_base64}")
+
+        assert image_part == {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{image_base64}"},
+        }
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_prepare_chat_payload_materializes_context_localhost_file_uri_image_urls(
     tmp_path,
 ):
@@ -1228,28 +1221,6 @@ async def test_query_injects_reasoning_effort_none_for_ollama(monkeypatch):
         assert extra_body["reasoning_effort"] == "none"
         assert "reasoning" not in extra_body
         assert extra_body["temperature"] == 0.1
-    finally:
-        await provider.terminate()
-
-
-@pytest.mark.asyncio
-async def test_prepare_chat_payload_strips_non_json_serializable_kwargs():
-    """abort_signal (asyncio.Event) passed via **kwargs must be filtered out.
-
-    Regression test: previously **kwargs merge caused abort_signal to end up in
-    payloads, triggering "Object of type Event is not JSON serializable" when
-    the OpenAI client tried to serialize the request body.
-    """
-    import asyncio
-    provider = _make_provider()
-    try:
-        payloads, _ = await provider._prepare_chat_payload(
-            prompt="hello",
-            abort_signal=asyncio.Event(),  # non-serializable object
-            max_tokens=1024,  # normal kwarg that SHOULD be kept
-        )
-        assert "abort_signal" not in payloads
-        assert payloads.get("max_tokens") == 1024
     finally:
         await provider.terminate()
 

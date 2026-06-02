@@ -5,21 +5,16 @@ import subprocess
 import tempfile
 import wave
 from io import BytesIO
-from typing import TYPE_CHECKING
-
-import anyio
-import pysilk  # requires silk-python (core dependency)
 
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
-if TYPE_CHECKING:
-    pass  # pilk/p Moffmpeg are runtime optional deps
-
 
 async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
-    async with await anyio.open_file(silk_path, "rb") as f:
-        input_data = await f.read()
+    import pysilk
+
+    with open(silk_path, "rb") as f:
+        input_data = f.read()
         if input_data.startswith(b"\x02"):
             input_data = input_data[1:]
         input_io = BytesIO(input_data)
@@ -35,14 +30,14 @@ async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
     return output_path
 
 
-async def wav_to_tencent_silk(wav_path: str, output_path: str) -> float:
+async def wav_to_tencent_silk(wav_path: str, output_path: str) -> int:
     """返回 duration"""
     try:
         import pilk
     except (ImportError, ModuleNotFoundError) as _:
         raise Exception(
-            "pilk 模块未安装,请前往管理面板->平台日志->安装pip库 安装 pilk 这个库",
-        ) from None
+            "pilk 模块未安装，请前往管理面板->平台日志->安装pip库 安装 pilk 这个库",
+        )
     # with wave.open(wav_path, 'rb') as wav:
     #     wav_data = wav.readframes(wav.getnframes())
     #     wav_data = BytesIO(wav_data)
@@ -66,8 +61,8 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> float:
 
 
 async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
-    """将 MP3 或其他音频格式转换为 PCM 16bit WAV,采样率24000Hz,单声道｡
-    若转换失败则抛出异常｡
+    """将 MP3 或其他音频格式转换为 PCM 16bit WAV，采样率24000Hz，单声道。
+    若转换失败则抛出异常。
     """
     try:
         from pyffmpeg import FFmpeg
@@ -102,31 +97,28 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
         logger.debug(f"[FFmpeg] stderr: {stderr.decode().strip()}")
         logger.info(f"[FFmpeg] return code: {p.returncode}")
 
-    if (
-        await anyio.Path(output_path).exists()
-        and (await anyio.Path(output_path).stat()).st_size > 0
-    ):
+    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         return output_path
     raise RuntimeError("生成的WAV文件不存在或为空")
 
 
 async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
-    """将 MP3/WAV 文件转为 Tencent Silk 并返回 base64 编码与时长(秒)｡
+    """将 MP3/WAV 文件转为 Tencent Silk 并返回 base64 编码与时长（秒）。
 
     参数:
-    - audio_path: 输入音频文件路径(.mp3 或 .wav)
+    - audio_path: 输入音频文件路径（.mp3 或 .wav）
 
     返回:
     - silk_b64: Base64 编码的 Silk 字符串
-    - duration: 音频时长(秒)
+    - duration: 音频时长（秒）
     """
     try:
         import pilk
     except ImportError as e:
-        raise Exception("未安装 pilk: pip install pilk") from e  # noqa
+        raise Exception("未安装 pilk: pip install pilk") from e
 
     temp_dir = get_astrbot_temp_path()
-    await anyio.Path(temp_dir).mkdir(parents=True, exist_ok=True)
+    os.makedirs(temp_dir, exist_ok=True)
 
     # 是否需要转换为 WAV
     ext = os.path.splitext(audio_path)[1].lower()
@@ -140,7 +132,7 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     if ext != ".wav":
         await convert_to_pcm_wav(audio_path, temp_wav)
         # 删除原文件
-        await anyio.Path(audio_path).unlink()
+        os.remove(audio_path)
         wav_path = temp_wav
     else:
         wav_path = audio_path
@@ -164,13 +156,13 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
             tencent=True,
         )
 
-        async with await anyio.open_file(silk_path, "rb") as f:
-            silk_bytes = await f.read()
+        with open(silk_path, "rb") as f:
+            silk_bytes = await asyncio.to_thread(f.read)
             silk_b64 = base64.b64encode(silk_bytes).decode("utf-8")
 
         return silk_b64, duration  # 已是秒
     finally:
-        if await anyio.Path(wav_path).exists() and wav_path != audio_path:
-            await anyio.Path(wav_path).unlink()
-        if await anyio.Path(silk_path).exists():
-            await anyio.Path(silk_path).unlink()
+        if os.path.exists(wav_path) and wav_path != audio_path:
+            os.remove(wav_path)
+        if os.path.exists(silk_path):
+            os.remove(silk_path)

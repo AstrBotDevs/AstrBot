@@ -1,29 +1,18 @@
-from __future__ import annotations
-
 import asyncio
-import functools
 import random
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import aiohttp
-import anyio
 import boxlite
-from shipyard.filesystem import FileSystemComponent as ShipyardFileSystemComponent
+from shipyard import FileSystemComponent as ShipyardFileSystemComponent
 from shipyard.python import PythonComponent as ShipyardPythonComponent
 from shipyard.shell import ShellComponent as ShipyardShellComponent
 
 from astrbot.api import logger
 
-if TYPE_CHECKING:
-    from astrbot.core.agent.tool import FunctionTool, ToolSchema
-
-from astrbot.core.computer.olayer import (
-    FileSystemComponent,
-    PythonComponent,
-    ShellComponent,
-)
-
+from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
+from .shipyard import ShipyardFileSystemWrapper
 
 
 class MockShipyardSandboxClient:
@@ -46,10 +35,11 @@ class MockShipyardSandboxClient:
             ) as response:
                 if response.status == 200:
                     return await response.json()
-                error_text = await response.text()
-                raise Exception(
-                    f"Failed to exec operation: {response.status} {error_text}",
-                )
+                else:
+                    error_text = await response.text()
+                    raise Exception(
+                        f"Failed to exec operation: {response.status} {error_text}"
+                    )
 
     async def upload_file(self, path: str, remote_path: str) -> dict:
         """Upload a file to the sandbox"""
@@ -57,15 +47,15 @@ class MockShipyardSandboxClient:
 
         try:
             # Read file content
-            async with await anyio.open_file(path, "rb") as f:
-                file_content = await f.read()
+            with open(path, "rb") as f:
+                file_content = f.read()
 
             # Create multipart form data
             data = aiohttp.FormData()
             data.add_field(
                 "file",
                 file_content,
-                filename=remote_path.rsplit("/", maxsplit=1)[-1],
+                filename=remote_path.split("/")[-1],
                 content_type="application/octet-stream",
             )
             data.add_field("file_path", remote_path)
@@ -76,7 +66,7 @@ class MockShipyardSandboxClient:
                 async with session.post(url, data=data) as response:
                     if response.status == 200:
                         logger.info(
-                            "[Computer] file_upload booter=boxlite remote_path=%s",
+                            "[Computer] File uploaded to Boxlite sandbox: %s",
                             remote_path,
                         )
                         return {
@@ -84,52 +74,39 @@ class MockShipyardSandboxClient:
                             "message": "File uploaded successfully",
                             "file_path": remote_path,
                         }
-                    error_text = await response.text()
-                    logger.warning(
-                        "[Computer] file_upload_failed booter=boxlite error=http_status status=%s remote_path=%s",
-                        response.status,
-                        remote_path,
-                    )
-                    return {
-                        "success": False,
-                        "error": f"Server returned {response.status}: {error_text}",
-                        "message": "File upload failed",
-                    }
+                    else:
+                        error_text = await response.text()
+                        return {
+                            "success": False,
+                            "error": f"Server returned {response.status}: {error_text}",
+                            "message": "File upload failed",
+                        }
 
         except aiohttp.ClientError as e:
-            logger.error("[Computer] file_upload_failed booter=boxlite error=%s", e)
+            logger.error(f"Failed to upload file: {e}")
             return {
                 "success": False,
-                "error": f"Connection error: {e!s}",
+                "error": f"Connection error: {str(e)}",
                 "message": "File upload failed",
             }
         except asyncio.TimeoutError:
-            logger.warning(
-                "[Computer] file_upload_failed booter=boxlite error=timeout remote_path=%s",
-                remote_path,
-            )
             return {
                 "success": False,
                 "error": "File upload timeout",
                 "message": "File upload failed",
             }
         except FileNotFoundError:
-            logger.error(
-                "[Computer] file_upload_failed booter=boxlite error=file_not_found path=%s",
-                path,
-            )
+            logger.error(f"File not found: {path}")
             return {
                 "success": False,
                 "error": f"File not found: {path}",
                 "message": "File upload failed",
             }
-        except Exception as exc:
-            logger.exception(
-                "[Computer] file_upload_failed booter=boxlite error=unexpected",
-            )
+        except Exception as e:
+            logger.error(f"Unexpected error uploading file: {e}")
             return {
                 "success": False,
-                "error": f"Internal error: {exc!s}",
+                "error": f"Internal error: {str(e)}",
                 "message": "File upload failed",
             }
 
@@ -138,45 +115,27 @@ class MockShipyardSandboxClient:
         loop = 60
         while loop > 0:
             try:
-                logger.debug(
-                    "[Computer] health_check booter=boxlite ship_id=%s session=%s endpoint=%s attempt=%s healthy=pending",
-                    ship_id,
-                    session_id,
-                    self.sb_url,
-                    61 - loop,
+                logger.info(
+                    f"Checking health for sandbox {ship_id} on {self.sb_url}..."
                 )
                 url = f"{self.sb_url}/health"
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url) as response:
                         if response.status == 200:
-                            logger.debug(
-                                "[Computer] health_check booter=boxlite ship_id=%s session=%s endpoint=%s healthy=true",
-                                ship_id,
-                                session_id,
-                                self.sb_url,
-                            )
-                            return
-                await asyncio.sleep(1)
-                loop -= 1
+                            logger.info(f"Sandbox {ship_id} is healthy")
+                return
             except Exception:
                 await asyncio.sleep(1)
                 loop -= 1
-        logger.warning(
-            "[Computer] health_check_timeout booter=boxlite ship_id=%s session=%s endpoint=%s",
-            ship_id,
-            session_id,
-            self.sb_url,
-        )
 
 
 class BoxliteBooter(ComputerBooter):
     async def boot(self, session_id: str) -> None:
         logger.info(
-            "[Computer] booter_boot booter=boxlite session=%s status=starting",
-            session_id,
+            f"Booting(Boxlite) for session: {session_id}, this may take a while..."
         )
         random_port = random.randint(20000, 30000)
-        self.box = boxlite.SimpleBox(  # type: ignore
+        self.box = boxlite.SimpleBox(
             image="soulter/shipyard-ship",
             memory_mib=512,
             cpus=1,
@@ -184,46 +143,39 @@ class BoxliteBooter(ComputerBooter):
                 {
                     "host_port": random_port,
                     "guest_port": 8123,
-                },
+                }
             ],
         )
         await self.box.start()
-        logger.info(
-            "[Computer] booter_boot booter=boxlite session=%s status=ready ship_id=%s",
-            session_id,
-            self.box.id,
-        )
+        logger.info(f"Boxlite booter started for session: {session_id}")
         self.mocked = MockShipyardSandboxClient(
-            sb_url=f"http://127.0.0.1:{random_port}",
-        )
-        self._fs = ShipyardFileSystemComponent(
-            client=self.mocked,
-            ship_id=self.box.id,
-            session_id=session_id,
+            sb_url=f"http://127.0.0.1:{random_port}"
         )
         self._python = ShipyardPythonComponent(
-            client=self.mocked,
+            client=self.mocked,  # type: ignore
             ship_id=self.box.id,
             session_id=session_id,
         )
         self._shell = ShipyardShellComponent(
-            client=self.mocked,
+            client=self.mocked,  # type: ignore
             ship_id=self.box.id,
             session_id=session_id,
+        )
+        self._ship_fs = ShipyardFileSystemComponent(
+            client=self.mocked,  # type: ignore
+            ship_id=self.box.id,
+            session_id=session_id,
+        )
+        self._fs = ShipyardFileSystemWrapper(
+            _shipyard_fs=self._ship_fs, _shipyard_shell=self._shell
         )
 
         await self.mocked.wait_healthy(self.box.id, session_id)
 
     async def shutdown(self) -> None:
-        logger.info(
-            "[Computer] booter_shutdown booter=boxlite ship_id=%s status=starting",
-            self.box.id,
-        )
+        logger.info(f"Shutting down Boxlite booter for ship: {self.box.id}")
         self.box.shutdown()
-        logger.info(
-            "[Computer] booter_shutdown booter=boxlite ship_id=%s status=done",
-            self.box.id,
-        )
+        logger.info(f"Boxlite booter for ship: {self.box.id} stopped")
 
     @property
     def fs(self) -> FileSystemComponent:
@@ -240,24 +192,3 @@ class BoxliteBooter(ComputerBooter):
     async def upload_file(self, path: str, file_name: str) -> dict:
         """Upload file to sandbox"""
         return await self.mocked.upload_file(path, file_name)
-
-    @classmethod
-    @functools.cache
-    def _default_tools(cls) -> tuple[FunctionTool, ...]:
-        from astrbot.core.computer.tools import (
-            ExecuteShellTool,
-            FileDownloadTool,
-            FileUploadTool,
-            PythonTool,
-        )
-
-        return (  # type: ignore
-            ExecuteShellTool(),
-            PythonTool(),
-            FileUploadTool(),
-            FileDownloadTool(),
-        )
-
-    @classmethod
-    def get_default_tools(cls) -> list[ToolSchema]:
-        return list(cls._default_tools())

@@ -113,7 +113,12 @@
     "title": "Конфигурация"
   },
   "reasoning": {
-    "thinking": "Рассуждение"
+    "thinking": "Рассуждение",
+    "summarySeparator": ", ",
+    "thinkSummary": "Размышлений: {count}",
+    "toolSummary": "использований инструментов: {count}",
+    "think": "Размышление",
+    "toolUsed": "Использование инструмента"
   },
   "reply": {
     "replyTo": "В ответ на",
@@ -135,9 +140,9 @@
   },
   "stats": {
     "tokens": "Токены",
-    "inputTokens": "Входящие",
+    "inputTokens": "Входящие (прочие)",
     "outputTokens": "Исходящие",
-    "cachedTokens": "Кэшированные",
+    "cachedTokens": "Входящие (кэш)",
     "duration": "Время",
     "ttft": "Время до первого токена"
   },
@@ -159,6 +164,11 @@
       "reconnected": "Соединение восстановлено",
       "failed": "Ошибка подключения, обновите страницу"
     }
+  },
+  "commandSuggestion": {
+    "navigate": "Выбор",
+    "select": "Подтвердить",
+    "close": "Закрыть"
   },
   "errors": {
     "sendMessageFailed": "Ошибка отправки сообщения, попробуйте еще раз",

@@ -1,9 +1,8 @@
 from botpy import Client
 
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
-    QQOfficialMessageEvent,
-)
+
+from ..qqofficial.qqofficial_message_event import QQOfficialMessageEvent
 
 
 class QQOfficialWebhookMessageEvent(QQOfficialMessageEvent):

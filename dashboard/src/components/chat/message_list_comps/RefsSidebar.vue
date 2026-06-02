@@ -2,16 +2,19 @@
   <transition name="slide-left">
     <div v-if="isOpen" class="refs-sidebar">
       <div class="sidebar-header">
-        <h3 class="sidebar-title">
-          {{ tm("refs.title") }}
-        </h3>
-        <v-btn icon="mdi-close" size="small" variant="text" @click="close" />
+        <h3 class="sidebar-title">{{ tm("refs.title") }}</h3>
+        <v-btn
+          icon="mdi-close"
+          size="small"
+          variant="text"
+          @click="close"
+        ></v-btn>
       </div>
 
       <div class="refs-list">
         <div
-          v-for="(ref, index) in refs?.used || []"
-          :key="index"
+          v-for="(ref, index) in normalizedRefs"
+          :key="ref.index || index"
           class="ref-item"
           @click="openLink(ref.url)"
         >
@@ -20,31 +23,27 @@
               v-if="ref.favicon"
               :src="ref.favicon"
               class="ref-item-favicon"
-              @error="handleImgError"
+              @error="(e) => (e.target.style.display = 'none')"
             />
             <div v-else class="ref-item-initial">
               {{ getRefInitial(ref.title) }}
             </div>
           </div>
           <div class="ref-item-content">
-            <div class="ref-item-title">
-              {{ ref.title }}
-            </div>
-            <div class="ref-item-url">
-              {{ formatUrl(ref.url) }}
-            </div>
+            <div class="ref-item-title">{{ ref.title }}</div>
+            <div class="ref-item-url">{{ formatUrl(ref.url) }}</div>
             <div v-if="ref.snippet" class="ref-item-snippet">
               {{ ref.snippet }}
             </div>
           </div>
-          <v-icon size="small" class="ref-item-arrow"> mdi-open-in-new </v-icon>
+          <v-icon size="small" class="ref-item-arrow">mdi-open-in-new</v-icon>
         </div>
       </div>
     </div>
   </transition>
 </template>
 
-<script lang="ts">
+<script>
 import { useModuleI18n } from "@/i18n/composables";
 
 export default {
@@ -69,27 +68,40 @@ export default {
       get() {
         return this.modelValue;
       },
-      set(value: boolean) {
+      set(value) {
         this.$emit("update:modelValue", value);
       },
     },
+
+    normalizedRefs() {
+      const used = Array.isArray(this.refs?.used)
+        ? this.refs.used
+        : Array.isArray(this.refs)
+        ? this.refs
+        : [];
+
+      return used
+        .map((ref) => ({
+          index: ref?.index,
+          title: ref?.title || ref?.url || "Reference",
+          url: ref?.url,
+          snippet: ref?.snippet,
+          favicon: ref?.favicon,
+        }))
+        .filter((ref) => ref.url);
+    },
   },
   methods: {
-    handleImgError(e: Event): void {
-      const el = e.target as HTMLElement;
-      if (el) el.style.display = "none";
-    },
-
-    close(): void {
+    close() {
       this.isOpen = false;
     },
 
-    getRefInitial(title: string): string {
+    getRefInitial(title) {
       if (!title) return "?";
       return title.charAt(0).toUpperCase();
     },
 
-    formatUrl(url: string): string {
+    formatUrl(url) {
       if (!url) return "";
       try {
         const urlObj = new URL(url);
@@ -99,7 +111,7 @@ export default {
       }
     },
 
-    openLink(url: string): void {
+    openLink(url) {
       if (url) {
         window.open(url, "_blank");
       }
@@ -112,11 +124,12 @@ export default {
 .refs-sidebar {
   width: 360px;
   height: 100%;
-  background-color: var(--v-theme-surface);
-  border-left: 1px solid var(--v-theme-border);
+  background-color: rgb(var(--v-theme-surface));
+  border-left: 1px solid rgba(var(--v-border-color), 0.16);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .slide-left-enter-active,

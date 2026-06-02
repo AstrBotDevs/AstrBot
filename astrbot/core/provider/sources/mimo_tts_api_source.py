@@ -1,10 +1,9 @@
 import base64
 import uuid
 
-from astrbot.core.provider.entities import ProviderType
-from astrbot.core.provider.provider import TTSProvider
-from astrbot.core.provider.register import register_provider_adapter
-
+from ..entities import ProviderType
+from ..provider import TTSProvider
+from ..register import register_provider_adapter
 from .mimo_api_common import (
     DEFAULT_MIMO_API_BASE,
     DEFAULT_MIMO_TTS_MODEL,
@@ -40,8 +39,7 @@ class ProviderMiMoTTSAPI(TTSProvider):
         self.style_prompt = provider_config.get("mimo-tts-style-prompt", "")
         self.dialect = provider_config.get("mimo-tts-dialect", "")
         self.seed_text = provider_config.get(
-            "mimo-tts-seed-text",
-            DEFAULT_MIMO_TTS_SEED_TEXT,
+            "mimo-tts-seed-text", DEFAULT_MIMO_TTS_SEED_TEXT
         )
         self.set_model(provider_config.get("model", DEFAULT_MIMO_TTS_MODEL))
         self.client = create_http_client(self.timeout, self.proxy)
@@ -80,23 +78,25 @@ class ProviderMiMoTTSAPI(TTSProvider):
                 {
                     "role": "user",
                     "content": user_prompt,
-                },
+                }
             )
 
         messages.append(
             {
                 "role": "assistant",
                 "content": self._build_assistant_content(text),
-            },
+            }
         )
+
+        audio_params = {"format": self.audio_format}
+        # voice design 模型不支持 audio.voice 参数
+        if "voicedesign" not in self.model_name:
+            audio_params["voice"] = self.voice
 
         return {
             "model": self.model_name,
             "messages": messages,
-            "audio": {
-                "format": self.audio_format,
-                "voice": self.voice,
-            },
+            "audio": audio_params,
         }
 
     async def get_audio(self, text: str) -> str:
@@ -111,7 +111,7 @@ class ProviderMiMoTTSAPI(TTSProvider):
         except Exception as exc:
             error_text = response.text[:1024]
             raise MiMoAPIError(
-                f"MiMo TTS API request failed: HTTP {response.status_code}, response: {error_text}",
+                f"MiMo TTS API request failed: HTTP {response.status_code}, response: {error_text}"
             ) from exc
 
         data = response.json()

@@ -7,7 +7,7 @@ import base64
 import os
 import time
 from dataclasses import dataclass, field
-from typing import ClassVar, Self
+from typing import ClassVar
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -35,20 +35,16 @@ class ToolImageCache:
     Images are stored in data/temp/tool_images/ and can be retrieved by file path.
     """
 
-    _instance: ClassVar[Self | None] = None
+    _instance: ClassVar["ToolImageCache | None"] = None
     CACHE_DIR_NAME: ClassVar[str] = "tool_images"
     # Cache expiry time in seconds (1 hour)
     CACHE_EXPIRY: ClassVar[int] = 3600
-    _initialized: bool
-    _cache_dir: str
 
-    def __new__(cls) -> Self:
-        instance = cls._instance
-        if instance is None:
-            instance = super().__new__(cls)
-            instance._initialized = False
-            cls._instance = instance
-        return instance
+    def __new__(cls) -> "ToolImageCache":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
 
     def __init__(self) -> None:
         if self._initialized:
@@ -89,7 +85,6 @@ class ToolImageCache:
 
         Returns:
             CachedImage object with file path.
-
         """
         ext = self._get_file_extension(mime_type)
         file_name = f"{tool_call_id}_{index}{ext}"
@@ -113,9 +108,7 @@ class ToolImageCache:
         )
 
     def get_image_base64_by_path(
-        self,
-        file_path: str,
-        mime_type: str = "image/png",
+        self, file_path: str, mime_type: str = "image/png"
     ) -> tuple[str, str] | None:
         """Read an image file and return its base64 encoded data.
 
@@ -125,7 +118,6 @@ class ToolImageCache:
 
         Returns:
             Tuple of (base64_data, mime_type) if found, None otherwise.
-
         """
         if not os.path.exists(file_path):
             return None
@@ -144,7 +136,6 @@ class ToolImageCache:
 
         Returns:
             Number of images cleaned up.
-
         """
         now = time.time()
         cleaned = 0

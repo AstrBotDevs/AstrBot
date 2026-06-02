@@ -183,10 +183,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats.end_time = time.time()
 
         parts = []
-        if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+        if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
-                    think=llm_resp.reasoning_content,
+                    think=llm_resp.reasoning_content or "",
                     encrypted=llm_resp.reasoning_signature,
                 )
             )
@@ -241,13 +241,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_result_overflow_dir = tool_result_overflow_dir
         self.read_tool = read_tool
         self._tool_result_token_counter = EstimateTokenCounter()
-        # we will do compress when:
-        # 1. before requesting LLM
-        # TODO: 2. after LLM output a tool call
-        self.context_config = ContextConfig(
-            # <=0 will never do compress
+        self.request_context_manager_config = ContextConfig(
+            # <=0 disables token-based guarding.
             max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
-            # enforce max turns before compression
+            # Enforce max turns before token-based guarding.
             enforce_max_turns=self.enforce_max_turns,
             truncate_turns=self.truncate_turns,
             llm_compress_instruction=self.llm_compress_instruction,
@@ -256,7 +253,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )
-        self.context_manager = ContextManager(self.context_config)
+        self.request_context_manager = ContextManager(
+            self.request_context_manager_config
+        )
 
         self.provider = provider
         self.fallback_providers: list[Provider] = []
@@ -332,7 +331,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request: ProviderRequest,
     ) -> dict[str, T.Any]:
         modalities = self.provider.provider_config.get("modalities", None)
-        if not isinstance(modalities, list):
+        if not modalities:  # Unconfigured (None or empty list) defaults to support all modalities for backward compatibility
             return await request.assemble_context()
 
         supports_image = "image" in modalities
@@ -459,8 +458,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        messages_for_provider = getattr(
+            self, "_provider_messages", self.run_context.messages
+        )
         payload = {
-            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
+            "contexts": self._sanitize_contexts_for_provider(messages_for_provider),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
@@ -592,13 +594,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     def _should_fix_modalities_for_provider(self) -> bool:
         modalities = self.provider.provider_config.get("modalities", None)
-        return isinstance(modalities, list)
+        return (
+            isinstance(modalities, list) and modalities
+        )  # Empty list is treated as unconfigured
 
     def _func_tool_for_provider(self) -> ToolSet | None:
         if not self.req.func_tool:
             return None
         modalities = self.provider.provider_config.get("modalities", None)
-        if isinstance(modalities, list) and "tool_use" not in modalities:
+        if isinstance(modalities, list) and modalities and "tool_use" not in modalities:
             logger.debug(
                 "Provider %s does not support tool_use, clearing tools for request.",
                 self.provider,
@@ -704,20 +708,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
-        # do truncate and compress
+        # Process request-time context on a copy so the runner's canonical
+        # messages are never mutated. The processed result is only used for this
+        # provider call. Persistent compaction is owned by the conversation /
+        # memory layer.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]")
-        self.run_context.messages = await self.context_manager.process(
+        self._provider_messages = await self.request_context_manager.process(
             self.run_context.messages, trusted_token_usage=token_usage
         )
         self._simple_print_message_role("[AftCompact]")
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
-                # update ttft
                 if self.stats.time_to_first_token == 0:
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
 
+                if llm_response.reasoning_content:
+                    yield AgentResponse(
+                        type="streaming_delta",
+                        data=AgentResponseData(
+                            chain=MessageChain(type="reasoning").message(
+                                llm_response.reasoning_content,
+                            ),
+                        ),
+                    )
                 if llm_response.result_chain:
                     yield AgentResponse(
                         type="streaming_delta",
@@ -728,15 +743,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         type="streaming_delta",
                         data=AgentResponseData(
                             chain=MessageChain().message(llm_response.completion_text),
-                        ),
-                    )
-                elif llm_response.reasoning_content:
-                    yield AgentResponse(
-                        type="streaming_delta",
-                        data=AgentResponseData(
-                            chain=MessageChain(type="reasoning").message(
-                                llm_response.reasoning_content,
-                            ),
                         ),
                     )
                 if self._is_stop_requested():
@@ -792,6 +798,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
+        if llm_resp.reasoning_content:
+            yield AgentResponse(
+                type="llm_result",
+                data=AgentResponseData(
+                    chain=MessageChain(type="reasoning").message(
+                        llm_resp.reasoning_content,
+                    ),
+                ),
+            )
         if llm_resp.result_chain:
             yield AgentResponse(
                 type="llm_result",
@@ -808,11 +823,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
             if self.tool_schema_mode == "skills_like":
-                llm_resp, _ = await self._resolve_tool_exec(llm_resp)
-                if not llm_resp.tools_call_name:
+                requery_resp, _ = await self._resolve_tool_exec(llm_resp)
+                if not requery_resp.tools_call_name:
+                    llm_resp = requery_resp
                     logger.warning(
                         "skills_like tool re-query returned no tool calls; fallback to assistant response."
                     )
+                    if llm_resp.reasoning_content:
+                        yield AgentResponse(
+                            type="llm_result",
+                            data=AgentResponseData(
+                                chain=MessageChain(type="reasoning").message(
+                                    llm_resp.reasoning_content,
+                                ),
+                            ),
+                        )
                     if llm_resp.result_chain:
                         yield AgentResponse(
                             type="llm_result",
@@ -825,8 +850,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 chain=MessageChain().message(llm_resp.completion_text),
                             ),
                         )
+
                     await self._complete_with_assistant_response(llm_resp)
                     return
+                else:
+                    llm_resp.tools_call_name = requery_resp.tools_call_name
+                    llm_resp.tools_call_args = requery_resp.tools_call_args
+                    llm_resp.tools_call_ids = requery_resp.tools_call_ids
 
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
@@ -858,10 +888,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             # 将结果添加到上下文中
             parts = []
-            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
                 parts.append(
                     ThinkPart(
-                        think=llm_resp.reasoning_content,
+                        think=llm_resp.reasoning_content or "",
                         encrypted=llm_resp.reasoning_signature,
                     )
                 )
@@ -885,7 +915,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # append a user message with images so LLM can see them
             if cached_images:
                 modalities = self.provider.provider_config.get("modalities", [])
-                supports_image = "image" in modalities
+                supports_image = (
+                    not modalities or "image" in modalities
+                )  # Empty list is treated as unconfigured for backward compatibility
                 if supports_image:
                     # Build user message with images for LLM to review
                     image_parts = []
@@ -971,6 +1003,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
         ):
+            tool_result_blocks_start = len(tool_call_result_blocks)
             tool_call_streak = self._track_tool_call_streak(func_tool_name)
             yield _HandleFunctionToolsResult.from_message_chain(
                 MessageChain(
@@ -1003,6 +1036,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     func_tool = req.func_tool.get_tool(func_tool_name)
                     available_tools = req.func_tool.names()
 
+                #  Some API may return None for tools with no parameters
+                if func_tool_args is None:
+                    func_tool_args = {}
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
                 if not func_tool:
@@ -1184,24 +1220,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     ),
                 )
 
-        # yield the last tool call result
-        if tool_call_result_blocks:
-            last_tcr_content = str(tool_call_result_blocks[-1].content)
-            yield _HandleFunctionToolsResult.from_message_chain(
-                MessageChain(
-                    type="tool_call_result",
-                    chain=[
-                        Json(
-                            data={
-                                "id": func_tool_id,
-                                "ts": time.time(),
-                                "result": last_tcr_content,
-                            }
-                        )
-                    ],
+            if len(tool_call_result_blocks) > tool_result_blocks_start:
+                tool_result_content = str(tool_call_result_blocks[-1].content)
+                yield _HandleFunctionToolsResult.from_message_chain(
+                    MessageChain(
+                        type="tool_call_result",
+                        chain=[
+                            Json(
+                                data={
+                                    "id": func_tool_id,
+                                    "ts": time.time(),
+                                    "result": tool_result_content,
+                                }
+                            )
+                        ],
+                    )
                 )
-            )
-            logger.info(f"Tool `{func_tool_name}` Result: {last_tcr_content}")
+                logger.info(f"Tool `{func_tool_name}` Result: {tool_result_content}")
 
         # 处理函数调用响应
         if tool_call_result_blocks:
@@ -1275,7 +1310,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     model=self.req.model,
                     session_id=self.req.session_id,
                     extra_user_content_parts=self.req.extra_user_content_parts,
-                    tool_choice="required",
+                    # tool_choice="required",
                     abort_signal=self._abort_signal,
                 )
                 if requery_resp:
@@ -1301,7 +1336,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         model=self.req.model,
                         session_id=self.req.session_id,
                         extra_user_content_parts=self.req.extra_user_content_parts,
-                        tool_choice="required",
+                        # tool_choice="required",
                         abort_signal=self._abort_signal,
                     )
                     if repair_resp:
@@ -1343,10 +1378,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats.end_time = time.time()
 
         parts = []
-        if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+        if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
-                    think=llm_resp.reasoning_content,
+                    think=llm_resp.reasoning_content or "",
                     encrypted=llm_resp.reasoning_signature,
                 )
             )
@@ -1377,6 +1412,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         executor: AsyncIterator[ToolExecutorResultT],
     ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+        async def _next_executor_result() -> ToolExecutorResultT:
+            return await anext(executor)
+
         while True:
             if self._is_stop_requested():
                 await self._close_executor(executor)
@@ -1384,7 +1422,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "Tool execution interrupted before reading the next tool result."
                 )
 
-            next_result_task = asyncio.create_task(anext(executor))
+            next_result_task = asyncio.create_task(_next_executor_result())
             abort_task = asyncio.create_task(self._abort_signal.wait())
             try:
                 done, _ = await asyncio.wait(

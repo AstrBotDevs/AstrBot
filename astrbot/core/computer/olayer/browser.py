@@ -1,4 +1,6 @@
-"""Browser automation component"""
+"""
+Browser automation component
+"""
 
 from typing import Any, Protocol
 
@@ -9,7 +11,7 @@ class BrowserComponent(Protocol):
     async def exec(
         self,
         cmd: str,
-        timeout_seconds: int = 30,
+        timeout: int = 30,
         description: str | None = None,
         tags: str | None = None,
         learn: bool = False,
@@ -21,7 +23,7 @@ class BrowserComponent(Protocol):
     async def exec_batch(
         self,
         commands: list[str],
-        timeout_seconds: int = 60,
+        timeout: int = 60,
         stop_on_error: bool = True,
         description: str | None = None,
         tags: str | None = None,
@@ -34,7 +36,7 @@ class BrowserComponent(Protocol):
     async def run_skill(
         self,
         skill_key: str,
-        timeout_seconds: int = 60,
+        timeout: int = 60,
         stop_on_error: bool = True,
         include_trace: bool = False,
         description: str | None = None,

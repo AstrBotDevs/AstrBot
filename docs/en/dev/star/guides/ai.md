@@ -1,4 +1,3 @@
-
 # AI
 
 AstrBot provides built-in support for multiple Large Language Model (LLM) providers and offers a unified interface, making it convenient for plugin developers to access various LLM services.
@@ -67,6 +66,58 @@ class BilibiliTool(FunctionTool[AstrAgentContext]):
         return "1. Video Title: How to Use AstrBot\nVideo Link: xxxxxx"
 ```
 
+## Registering Tools with AstrBot
+
+Once a Tool is defined, if you want it to be automatically invoked during user conversations, register it in your plugin's `__init__` method:
+
+```py
+class MyPlugin(Star):
+    def __init__(self, context: Context):
+        super().__init__(context)
+        # >= v4.5.1:
+        self.context.add_llm_tools(BilibiliTool(), SecondTool(), ...)
+
+        # < v4.5.1:
+        tool_mgr = self.context.provider_manager.llm_tools
+        tool_mgr.func_list.append(BilibiliTool())
+```
+
+> [!WARNING]
+> `context.register_llm_tool()` is deprecated. Do not use it in new plugins.
+>
+> If you must use it for legacy compatibility, `func_args` must be a **list of dicts** in this format:
+> ```py
+> func_args = [{"type": "string", "name": "arg_name", "description": "..."}, ...]
+> ```
+> Passing a list of strings or any other format will raise `AttributeError: 'str' object has no attribute 'pop'`.
+
+### Registering Tools via Decorator
+
+Alternatively, you can use the `@filter.llm_tool` decorator to define and register a tool in one step. Make sure to follow the exact format below, including the docstring — AstrBot parses the docstring to generate the parameter schema:
+
+```py{3,4,5,6,7}
+@filter.llm_tool(name="get_weather")  # If name is omitted, the function name is used
+async def get_weather(self, event: AstrMessageEvent, location: str) -> MessageEventResult:
+    '''Get weather information.
+
+    Args:
+        location(string): The location to query
+    '''
+    resp = self.get_weather_from_api(location)
+    yield event.plain_result("Weather: " + resp)
+```
+
+In `location(string): The location to query`, `location` is the parameter name, `string` is the type, and the remainder is the description.
+
+Supported types: `string`, `number`, `object`, `boolean`, `array`. Since v4.5.7, array subtypes are supported, e.g. `array[string]`.
+
+> [!WARNING]
+> **The `Args:` block is required and must be formatted correctly.**
+>
+> The `@filter.llm_tool` decorator generates the parameter schema by parsing the function's docstring — it does **not** read Python type annotations. If the docstring is missing an `Args:` block, or the format does not follow `param_name(type): description`, the generated schema will be empty. Any arguments passed by the LLM will be silently dropped, causing the function to fail with a missing-argument error.
+>
+> Additionally, passing `parameters=...` directly to the decorator is **not supported** and will be silently ignored. If you need manual control over the schema, use the `@dataclass` + `add_llm_tools()` approach above.
+
 ## Invoking Agents
 
 > [!TIP]
@@ -106,13 +157,21 @@ In the example below, we define a Main Agent responsible for delegating tasks to
 Define Tools:
 
 ```py
+from astrbot.api import logger
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
+from astrbot.core.astr_agent_context import AstrAgentContext
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+
+
 @dataclass
 class AssignAgentTool(FunctionTool[AstrAgentContext]):
     """Main agent uses this tool to decide which sub-agent to delegate a task to."""
 
     name: str = "assign_agent"
     description: str = "Assign an agent to a task based on the given query"
-    parameters: dict = field(
+    parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -127,7 +186,7 @@ class AssignAgentTool(FunctionTool[AstrAgentContext]):
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> str | CallToolResult:
+    ) -> ToolExecResult:
         # Here you would implement the actual agent assignment logic.
         # For demonstration purposes, we'll return a dummy response.
         return "Based on the query, you should assign agent 1."
@@ -139,7 +198,7 @@ class WeatherTool(FunctionTool[AstrAgentContext]):
 
     name: str = "weather"
     description: str = "Get weather information for a location"
-    parameters: dict = field(
+    parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -154,7 +213,7 @@ class WeatherTool(FunctionTool[AstrAgentContext]):
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> str | CallToolResult:
+    ) -> ToolExecResult:
         city = kwargs["city"]
         # Here you would implement the actual weather fetching logic.
         # For demonstration purposes, we'll return a dummy response.
@@ -167,7 +226,7 @@ class SubAgent1(FunctionTool[AstrAgentContext]):
 
     name: str = "subagent1_name"
     description: str = "subagent1_description"
-    parameters: dict = field(
+    parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -182,7 +241,7 @@ class SubAgent1(FunctionTool[AstrAgentContext]):
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> str | CallToolResult:
+    ) -> ToolExecResult:
         ctx = context.context.context
         event = context.context.event
         logger.info(f"the llm context messages: {context.messages}")
@@ -204,7 +263,7 @@ class SubAgent2(FunctionTool[AstrAgentContext]):
 
     name: str = "subagent2_name"
     description: str = "subagent2_description"
-    parameters: dict = field(
+    parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -219,7 +278,7 @@ class SubAgent2(FunctionTool[AstrAgentContext]):
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> str | CallToolResult:
+    ) -> ToolExecResult:
         return "I am useless :(, you shouldn't call me :("
 ```
 
@@ -284,87 +343,113 @@ class Conversation:
 
 :::
 
+### Quickly Adding LLM Records to a Conversation `add_message_pair`
+
+```py
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    UserMessageSegment,
+    TextPart,
+)
+
+conv_mgr = self.context.conversation_manager
+provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
+curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
+user_msg = UserMessageSegment(content=[TextPart(text="hi")])
+llm_resp = await self.context.llm_generate(
+    chat_provider_id=provider_id,  # Chat model ID
+    contexts=[user_msg],  # When prompt is not specified, contexts is used as input; if both prompt and contexts are provided, prompt is appended to the end of the LLM input
+)
+await conv_mgr.add_message_pair(
+    cid=curr_cid,
+    user_message=user_msg,
+    assistant_message=AssistantMessageSegment(
+        content=[TextPart(text=llm_resp.completion_text)]
+    ),
+)
+```
+
 ### Main Methods
 
 #### `new_conversation`
 
-- **Usage**
+- **Usage**  
   Create a new conversation in the current session and automatically switch to it.
-- **Arguments**
-  - `unified_msg_origin: str` – In the format `platform_name:message_type:session_id`
-  - `platform_id: str | None` – Platform identifier, defaults to parsing from `unified_msg_origin`
-  - `content: list[dict] | None` – Initial message history
-  - `title: str | None` – Conversation title
+- **Arguments**  
+  - `unified_msg_origin: str` – In the format `platform_name:message_type:session_id`  
+  - `platform_id: str | None` – Platform identifier, defaults to parsing from `unified_msg_origin`  
+  - `content: list[dict] | None` – Initial message history  
+  - `title: str | None` – Conversation title  
   - `persona_id: str | None` – Associated persona ID
-- **Returns**
+- **Returns**  
   `str` – Newly generated UUID conversation ID
 
 #### `switch_conversation`
 
-- **Usage**
+- **Usage**  
   Switch the session to a specified conversation.
-- **Arguments**
-  - `unified_msg_origin: str`
+- **Arguments**  
+  - `unified_msg_origin: str`  
   - `conversation_id: str`
-- **Returns**
+- **Returns**  
   `None`
 
 #### `delete_conversation`
 
-- **Usage**
+- **Usage**  
   Delete a conversation from the session; if `conversation_id` is `None`, deletes the current conversation.
-- **Arguments**
-  - `unified_msg_origin: str`
+- **Arguments**  
+  - `unified_msg_origin: str`  
   - `conversation_id: str | None`
-- **Returns**
+- **Returns**  
   `None`
 
 #### `get_curr_conversation_id`
 
-- **Usage**
+- **Usage**  
   Get the conversation ID currently in use by the session.
-- **Arguments**
+- **Arguments**  
   - `unified_msg_origin: str`
-- **Returns**
+- **Returns**  
   `str | None` – Current conversation ID, returns `None` if it doesn't exist
 
 #### `get_conversation`
 
-- **Usage**
+- **Usage**  
   Get the complete object for a specified conversation; automatically creates it if it doesn't exist and `create_if_not_exists=True`.
-- **Arguments**
-  - `unified_msg_origin: str`
-  - `conversation_id: str`
+- **Arguments**  
+  - `unified_msg_origin: str`  
+  - `conversation_id: str`  
   - `create_if_not_exists: bool = False`
-- **Returns**
+- **Returns**  
   `Conversation | None`
 
 #### `get_conversations`
 
-- **Usage**
+- **Usage**  
   Retrieve the complete list of conversations for a user or platform.
-- **Arguments**
-  - `unified_msg_origin: str | None` – When `None`, does not filter by user
+- **Arguments**  
+  - `unified_msg_origin: str | None` – When `None`, does not filter by user  
   - `platform_id: str | None`
-- **Returns**
+- **Returns**  
   `List[Conversation]`
 
 #### `update_conversation`
 
-- **Usage**
+- **Usage**  
   Update the title, history, or persona_id of a conversation.
-- **Arguments**
-  - `unified_msg_origin: str`
-  - `conversation_id: str | None` – Uses the current conversation when `None`
-  - `history: list[dict] | None`
-  - `title: str | None`
+- **Arguments**  
+  - `unified_msg_origin: str`  
+  - `conversation_id: str | None` – Uses the current conversation when `None`  
+  - `history: list[dict] | None`  
+  - `title: str | None`  
   - `persona_id: str | None`
-- **Returns**
+- **Returns**  
   `None`
 
 ## Persona Manager
 
-`PersonaManager` is responsible for unified loading, caching, and providing CRUD interfaces for all Personas, while maintaining compatibility with the legacy persona format (v3) from before AstrBot 4.x.
+`PersonaManager` is responsible for unified loading, caching, and providing CRUD interfaces for all Personas, while maintaining compatibility with the legacy persona format (v3) from before AstrBot 4.x.  
 During initialization, it automatically reads all personas from the database and generates v3-compatible data for seamless use with legacy code.
 
 ```py
@@ -386,59 +471,59 @@ persona_mgr = self.context.persona_manager
 
 #### `get_all_personas`
 
-- **Usage**
+- **Usage**  
   Retrieve all personas from the database at once.
-- **Returns**
+- **Returns**  
   `list[Persona]` – Persona list, may be empty
 
 #### `create_persona`
 
-- **Usage**
+- **Usage**  
   Create a new persona and immediately write it to the database; automatically refreshes the local cache upon success.
-- **Arguments**
-  - `persona_id: str` – New persona ID (unique)
-  - `system_prompt: str` – System prompt
-  - `begin_dialogs: list[str]` – Optional, opening dialogs (even number of entries, alternating user/assistant)
+- **Arguments**  
+  - `persona_id: str` – New persona ID (unique)  
+  - `system_prompt: str` – System prompt  
+  - `begin_dialogs: list[str]` – Optional, opening dialogs (even number of entries, alternating user/assistant)  
   - `tools: list[str]` – Optional, list of allowed tools; `None`=all tools, `[]`=disable all
-- **Returns**
+- **Returns**  
   `Persona` – Newly created persona object
-- **Raises**
+- **Raises**  
   `ValueError` – If `persona_id` already exists
 
 #### `update_persona`
 
-- **Usage**
+- **Usage**  
   Update any fields of an existing persona and synchronize to database and cache.
-- **Arguments**
-  - `persona_id: str` – Persona ID to update
-  - `system_prompt: str` – Optional, new system prompt
-  - `begin_dialogs: list[str]` – Optional, new opening dialogs
+- **Arguments**  
+  - `persona_id: str` – Persona ID to update  
+  - `system_prompt: str` – Optional, new system prompt  
+  - `begin_dialogs: list[str]` – Optional, new opening dialogs  
   - `tools: list[str]` – Optional, new tool list; semantics same as `create_persona`
-- **Returns**
+- **Returns**  
   `Persona` – Updated persona object
-- **Raises**
+- **Raises**  
   `ValueError` – If `persona_id` doesn't exist
 
 #### `delete_persona`
 
-- **Usage**
+- **Usage**  
   Delete the specified persona and clean up both database and cache.
-- **Arguments**
+- **Arguments**  
   - `persona_id: str` – Persona ID to delete
-- **Raises**
+- **Raises**  
   `ValueError` – If `persona_id` doesn't exist
 
 #### `get_default_persona_v3`
 
-- **Usage**
-  Get the default persona (v3 format) to use based on the current session configuration.
+- **Usage**  
+  Get the default persona (v3 format) to use based on the current session configuration.  
   Falls back to `DEFAULT_PERSONALITY` if configuration doesn't specify one or the specified persona doesn't exist.
-- **Arguments**
+- **Arguments**  
   - `umo: str | MessageSession | None` – Session identifier, used to read user-level configuration
-- **Returns**
+- **Returns**  
   `Personality` – Default persona object in v3 format
 
-::: details Persona / Personality type definitions
+::: details Persona / Personality Type Definition
 
 ```py
 

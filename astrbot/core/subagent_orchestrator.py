@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
-from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
 if TYPE_CHECKING:
@@ -21,9 +20,7 @@ class SubAgentOrchestrator:
     """
 
     def __init__(
-        self,
-        tool_mgr: FunctionToolManager,
-        persona_mgr: PersonaManager,
+        self, tool_mgr: FunctionToolManager, persona_mgr: PersonaManager
     ) -> None:
         self._tool_mgr = tool_mgr
         self._persona_mgr = persona_mgr
@@ -63,7 +60,7 @@ class SubAgentOrchestrator:
             provider_id = item.get("provider_id")
             if provider_id is not None:
                 provider_id = str(provider_id).strip() or None
-            tools: list[str | FunctionTool] | None = item.get("tools")
+            tools = item.get("tools", [])
             begin_dialogs = None
 
             if persona_data:
@@ -71,17 +68,9 @@ class SubAgentOrchestrator:
                 if prompt:
                     instructions = prompt
                 begin_dialogs = copy.deepcopy(
-                    persona_data.get("_begin_dialogs_processed"),
+                    persona_data.get("_begin_dialogs_processed")
                 )
-                persona_tools = persona_data.get("tools")
-                if isinstance(persona_tools, list):
-                    tools = [str(t).strip() for t in persona_tools if str(t).strip()]
-                elif persona_tools is None:
-                    # persona exists but explicitly has tools=None -> use None
-                    # This preserves the case where persona has no tools
-                    tools = None
-                else:
-                    tools = None
+                tools = persona_data.get("tools")
                 if public_description == "" and prompt:
                     public_description = prompt[:120]
             if tools is None:
@@ -89,20 +78,12 @@ class SubAgentOrchestrator:
             elif not isinstance(tools, list):
                 tools = []
             else:
-                tools = [
-                    t if isinstance(t, FunctionTool) else str(t).strip()
-                    for t in tools
-                    if (
-                        isinstance(t, FunctionTool)
-                        or (isinstance(t, str) and t.strip())
-                        or (not isinstance(t, FunctionTool) and str(t).strip())
-                    )
-                ]
+                tools = [str(t).strip() for t in tools if str(t).strip()]
 
             agent = Agent[AstrAgentContext](
                 name=name,
                 instructions=instructions,
-                tools=tools,
+                tools=tools,  # type: ignore
             )
             agent.begin_dialogs = begin_dialogs
             # The tool description should be a short description for the main LLM,

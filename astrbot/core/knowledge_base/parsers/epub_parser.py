@@ -13,33 +13,29 @@ _KEYS = (
 _META_RE = re.compile(rf"^\s*(?:[-*]\s*)?\*\*(?:{_KEYS})\s*[:：]\*\*\s+\S")
 _TOC_HEAD_RE = re.compile(
     r"^\s{0,3}(?:#{1,6}\s*)?(?:table of contents|contents|toc|目录|目次|もくじ)\s*$",
-    re.IGNORECASE,
+    re.I,
 )
 _LINK_RE = re.compile(r"(?<!!)\[([^\]]+)\]\(([^)]+)\)")
 _IMG_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 _EMPTY_IMG_LINK_RE = re.compile(
-    r"\[\s*\]\([^)]+\.(?:png|jpe?g|gif|webp|svg)(?:#[^)]+)?\)",
-    re.IGNORECASE,
+    r"\[\s*\]\([^)]+\.(?:png|jpe?g|gif|webp|svg)(?:#[^)]+)?\)", re.I
 )
 _FOOTNOTE_LABEL_RE = re.compile(
-    r"^(?:\d{1,3}|[ivxlcdm]{1,8}|[*†‡§¶]|↩|↑|back|return|返回|回到正文)$",
-    re.IGNORECASE,
+    r"^(?:\d{1,3}|[ivxlcdm]{1,8}|[*†‡§¶]|↩|↑|back|return|返回|回到正文)$", re.I
 )
 _FOOTNOTE_HREF_RE = re.compile(
-    r"(?:^#|[#/_-](?:fn|footnote|note|noteref|backlink|return|filepos)\b)",
-    re.IGNORECASE,
+    r"(?:^#|[#/_-](?:fn|footnote|note|noteref|backlink|return|filepos)\b)", re.I
 )
-_DOTTED_TOC_RE = re.compile(r"^\s*.+?\.{2,}\s*(?:\d+|[ivxlcdm]+)\s*$", re.IGNORECASE)
+_DOTTED_TOC_RE = re.compile(r"^\s*.+?\.{2,}\s*(?:\d+|[ivxlcdm]+)\s*$", re.I)
 _SEP_RE = re.compile(r"^\s*(?:[-=*_]){3,}\s*$")
 _NOISE_RE = re.compile(
-    r"^\s*(?:\[\s*)?(?:\d{1,3}|[ivxlcdm]{1,8}|[*†‡§¶]|↩|↑)(?:\s*\])?\s*$",
-    re.IGNORECASE,
+    r"^\s*(?:\[\s*)?(?:\d{1,3}|[ivxlcdm]{1,8}|[*†‡§¶]|↩|↑)(?:\s*\])?\s*$", re.I
 )
 _GENERIC_ALT_RE = re.compile(
     r"^(?:image|img|picture|photo|illustration|figure|fig|cover|插图|图片|图像|封面)\s*[\d._-]*$",
-    re.IGNORECASE,
+    re.I,
 )
-_FILENAME_ALT_RE = re.compile(r"^[\w.\- ]+\.(?:png|jpe?g|gif|webp|svg)$", re.IGNORECASE)
+_FILENAME_ALT_RE = re.compile(r"^[\w.\- ]+\.(?:png|jpe?g|gif|webp|svg)$", re.I)
 
 
 def _n(s: str) -> str:

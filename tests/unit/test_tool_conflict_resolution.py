@@ -4,6 +4,8 @@ This module tests the fix for issue #5821: when an MCP external tool shares a na
 with a disabled built-in tool, the MCP tool should not be removed as collateral damage.
 """
 
+import pytest
+
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
@@ -74,25 +76,21 @@ class TestToolSetAddTool:
         """Tools without 'active' attribute should be treated as active."""
         toolset = ToolSet()
 
-        # Create a mock tool via ToolSchema dataclass - active defaults to True
-        mock_tool = FunctionTool(
-            name="mock_tool",
-            description="Mock",
-            parameters={"type": "object"},
-        )
+        # Create a mock object without 'active' attribute
+        class MockTool:
+            name = "mock_tool"
+            description = "Mock"
+            parameters = {"type": "object"}
 
-        toolset.add_tool(mock_tool)
+        mock_tool = MockTool()
+        toolset.add_tool(mock_tool)  # type: ignore
 
         # Should be added successfully
         assert len(toolset.tools) == 1
 
-        # Adding another tool should overwrite
-        mock_tool2 = FunctionTool(
-            name="mock_tool",
-            description="Mock",
-            parameters={"type": "object"},
-        )
-        toolset.add_tool(mock_tool2)
+        # Adding another tool without active should overwrite
+        mock_tool2 = MockTool()
+        toolset.add_tool(mock_tool2)  # type: ignore
 
         assert len(toolset.tools) == 1
 
@@ -116,7 +114,6 @@ class TestFunctionToolManagerGetFunc:
     def test_returns_active_over_inactive(self):
         """Should prefer active tool over inactive tool with same name."""
         manager = FunctionToolManager()
-        # Use internal list for test setup (property setter triggers ty error)
         manager.func_list = [
             make_tool("web_search", active=False),
             make_tool("web_search", active=True),

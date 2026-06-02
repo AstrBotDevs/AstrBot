@@ -1,22 +1,19 @@
 import asyncio
 import os
 import uuid
-from typing import Protocol
+from functools import partial
+from typing import cast
 
-import anyio
-import whisper  # type: ignore
+import whisper
 
 from astrbot.core import logger
-from astrbot.core.provider.entities import ProviderType
-from astrbot.core.provider.provider import STTProvider
-from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
 
-
-class WhisperModel(Protocol):
-    def transcribe(self, audio_path: str) -> dict[str, object]: ...
+from ..entities import ProviderType
+from ..provider import STTProvider
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -32,22 +29,39 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.set_model(provider_config["model"])
-        self.model: WhisperModel | None = None
+        self.device = str(provider_config.get("whisper_device", "cpu")).strip().lower()
+        self.model = None
+
+    def _resolve_device(self) -> str:
+        if self.device == "mps":
+            import torch  # torch is a dependency of openai-whisper
+
+            mps_backend = getattr(torch.backends, "mps", None)
+            if mps_backend and mps_backend.is_available():
+                return "mps"
+            logger.warning("Whisper 已配置为使用 MPS，但当前环境不可用，将回退到 CPU。")
+            return "cpu"
+        if self.device != "cpu":
+            logger.warning(
+                "Whisper 配置了未知 device=%s，将回退到 CPU。",
+                self.device,
+            )
+        return "cpu"
 
     async def initialize(self) -> None:
         loop = asyncio.get_running_loop()
-        logger.info("下载或者加载 Whisper 模型中,这可能需要一些时间 ...")
+        device = self._resolve_device()
+        logger.info("下载或者加载 Whisper 模型中，这可能需要一些时间 ...")
         self.model = await loop.run_in_executor(
             None,
-            whisper.load_model,
-            self.model_name,
+            partial(whisper.load_model, self.model_name, device=device),
         )
-        logger.info("Whisper 模型加载完成｡")
+        logger.info("Whisper 模型加载完成。device=%s", device)
 
     async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
-        async with await anyio.open_file(file_path, "rb") as f:
-            file_header = await f.read(8)
+        with open(file_path, "rb") as f:
+            file_header = f.read(8)
 
         if silk_header in file_header:
             return True
@@ -70,7 +84,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
             await download_file(audio_url, path)
             audio_url = path
 
-        if not await anyio.Path(audio_url).exists():
+        if not os.path.exists(audio_url):
             raise FileNotFoundError(f"文件不存在: {audio_url}")
 
         if audio_url.endswith(".amr") or audio_url.endswith(".silk") or is_tencent:
@@ -85,12 +99,8 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
                 await tencent_silk_to_wav(audio_url, output_path)
                 audio_url = output_path
 
-        model = self.model
-        if model is None:
+        if not self.model:
             raise RuntimeError("Whisper 模型未初始化")
 
-        result = await loop.run_in_executor(None, model.transcribe, audio_url)
-        text = result.get("text")
-        if isinstance(text, str):
-            return text
-        raise RuntimeError("Whisper 返回结果缺少 text 字段")
+        result = await loop.run_in_executor(None, self.model.transcribe, audio_url)
+        return cast(str, result["text"])

@@ -18,8 +18,9 @@ from .route import Response, Route, RouteContext
 
 
 class CommandRoute(Route):
-    def __init__(self, context: RouteContext) -> None:
+    def __init__(self, context: RouteContext, core_lifecycle=None) -> None:
         super().__init__(context)
+        self.core_lifecycle = core_lifecycle
         self.routes = {
             "/commands": ("GET", self.get_commands),
             "/commands/conflicts": ("GET", self.get_conflicts),
@@ -36,11 +37,22 @@ class CommandRoute(Route):
             "disabled": len([cmd for cmd in commands if not cmd["enabled"]]),
             "conflicts": len([cmd for cmd in commands if cmd.get("has_conflict")]),
         }
-        return Response().ok({"items": commands, "summary": summary}).to_json()
+        # 优先从指定 config_id 的配置中读取唤醒词，否则使用默认配置
+        config_id = request.args.get("config_id", "").strip()
+        wake_prefix = self.config.get("wake_prefix", ["/"])
+        if config_id and self.core_lifecycle:
+            acm = getattr(self.core_lifecycle, "astrbot_config_mgr", None)
+            if acm and config_id in acm.confs:
+                wake_prefix = acm.confs[config_id].get("wake_prefix", wake_prefix)
+        return (
+            Response()
+            .ok({"items": commands, "summary": summary, "wake_prefix": wake_prefix})
+            .__dict__
+        )
 
     async def get_conflicts(self):
         conflicts = await list_command_conflicts()
-        return Response().ok(conflicts).to_json()
+        return Response().ok(conflicts).__dict__
 
     async def toggle_command(self):
         data = await request.get_json()
@@ -48,7 +60,7 @@ class CommandRoute(Route):
         enabled = data.get("enabled")
 
         if handler_full_name is None or enabled is None:
-            return Response().error("handler_full_name 与 enabled 均为必填｡").to_json()
+            return Response().error("handler_full_name 与 enabled 均为必填。").__dict__
 
         if isinstance(enabled, str):
             enabled = enabled.lower() in ("1", "true", "yes", "on")
@@ -56,10 +68,10 @@ class CommandRoute(Route):
         try:
             await toggle_command_service(handler_full_name, bool(enabled))
         except ValueError as exc:
-            return Response().error(str(exc)).to_json()
+            return Response().error(str(exc)).__dict__
 
         payload = await _get_command_payload(handler_full_name)
-        return Response().ok(payload).to_json()
+        return Response().ok(payload).__dict__
 
     async def rename_command(self):
         data = await request.get_json()
@@ -68,15 +80,15 @@ class CommandRoute(Route):
         aliases = data.get("aliases")
 
         if not handler_full_name or not new_name:
-            return Response().error("handler_full_name 与 new_name 均为必填｡").to_json()
+            return Response().error("handler_full_name 与 new_name 均为必填。").__dict__
 
         try:
             await rename_command_service(handler_full_name, new_name, aliases=aliases)
         except ValueError as exc:
-            return Response().error(str(exc)).to_json()
+            return Response().error(str(exc)).__dict__
 
         payload = await _get_command_payload(handler_full_name)
-        return Response().ok(payload).to_json()
+        return Response().ok(payload).__dict__
 
     async def update_permission(self):
         data = await request.get_json()
@@ -85,16 +97,16 @@ class CommandRoute(Route):
 
         if not handler_full_name or not permission:
             return (
-                Response().error("handler_full_name 与 permission 均为必填｡").to_json()
+                Response().error("handler_full_name 与 permission 均为必填。").__dict__
             )
 
         try:
             await update_command_permission_service(handler_full_name, permission)
         except ValueError as exc:
-            return Response().error(str(exc)).to_json()
+            return Response().error(str(exc)).__dict__
 
         payload = await _get_command_payload(handler_full_name)
-        return Response().ok(payload).to_json()
+        return Response().ok(payload).__dict__
 
 
 async def _get_command_payload(handler_full_name: str):

@@ -4,11 +4,12 @@ import re
 import time
 import uuid
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import aiofiles
 
 from astrbot.core import logger
-from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+from astrbot.core.db.vec_db.base import BaseVecDB
 from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
@@ -20,12 +21,16 @@ from astrbot.core.provider.provider import (
 )
 
 from .chunking.base import BaseChunker
+from .chunking.markdown import MarkdownChunker
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .models import KBDocument, KBMedia, KnowledgeBase
 from .parsers.url_parser import extract_text_from_url
 from .parsers.util import select_parser
 from .prompts import TEXT_REPAIR_SYSTEM_PROMPT
+
+if TYPE_CHECKING:
+    from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 
 
 class RateLimiter:
@@ -58,8 +63,10 @@ async def _repair_and_translate_chunk_with_retry(
     rate_limiter: RateLimiter,
     max_retries: int = 2,
 ) -> list[str]:
-    """Repairs, translates, and optionally re-chunks a single text chunk using the small LLM, with rate limiting."""
-    # 为了防止 LLM 上下文污染,在 user_prompt 中也加入明确的指令
+    """
+    Repairs, translates, and optionally re-chunks a single text chunk using the small LLM, with rate limiting.
+    """
+    # 为了防止 LLM 上下文污染，在 user_prompt 中也加入明确的指令
     user_prompt = f"""IGNORE ALL PREVIOUS INSTRUCTIONS. Your ONLY task is to process the following text chunk according to the system prompt provided.
 
 Text chunk to process:
@@ -71,8 +78,7 @@ Text chunk to process:
         try:
             async with rate_limiter:
                 response = await repair_llm_service.text_chat(
-                    prompt=user_prompt,
-                    system_prompt=TEXT_REPAIR_SYSTEM_PROMPT,
+                    prompt=user_prompt, system_prompt=TEXT_REPAIR_SYSTEM_PROMPT
                 )
 
             llm_output = response.completion_text
@@ -90,15 +96,16 @@ Text chunk to process:
             if matches:
                 # Further cleaning to ensure no empty strings are returned
                 return [m.strip() for m in matches if m.strip()]
-            # If no valid tags and not explicitly discarded, discard it to be safe.
-            return []
+            else:
+                # If no valid tags and not explicitly discarded, discard it to be safe.
+                return []
         except Exception as e:
             logger.warning(
-                f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {e!s}",
+                f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {str(e)}"
             )
 
     logger.error(
-        f"  - Failed to process chunk after {max_retries + 1} attempts. Using original text.",
+        f"  - Failed to process chunk after {max_retries + 1} attempts. Using original text."
     )
     return [chunk]
 
@@ -108,7 +115,7 @@ def _compact_chunks(chunks: list[str]) -> list[str]:
 
 
 class KBHelper:
-    vec_db: FaissVecDB | None
+    vec_db: BaseVecDB
     kb: KnowledgeBase
     init_error: str | None
 
@@ -130,7 +137,6 @@ class KBHelper:
         self.kb_dir = Path(self.kb_root_dir) / self.kb.kb_id
         self.kb_medias_dir = Path(self.kb_dir) / "medias" / self.kb.kb_id
         self.kb_files_dir = Path(self.kb_dir) / "files" / self.kb.kb_id
-        self.vec_db = None
 
         self.kb_medias_dir.mkdir(parents=True, exist_ok=True)
         self.kb_files_dir.mkdir(parents=True, exist_ok=True)
@@ -138,45 +144,32 @@ class KBHelper:
     async def initialize(self) -> None:
         await self._ensure_vec_db()
 
-    def _get_vec_db(self) -> FaissVecDB:
-        if self.vec_db is None:
-            raise ValueError("Vector database is not initialized")
-        return self.vec_db
-
     async def get_ep(self) -> EmbeddingProvider:
         if not self.kb.embedding_provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
-        ep = await self.prov_mgr.get_provider_by_id(
+        ep: EmbeddingProvider = await self.prov_mgr.get_provider_by_id(
             self.kb.embedding_provider_id,
-        )
+        )  # type: ignore
         if not ep:
             raise ValueError(
                 f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider",
-            )
-        if not isinstance(ep, EmbeddingProvider):
-            raise ValueError(
-                f"Provider {self.kb.embedding_provider_id} is not an Embedding Provider",
             )
         return ep
 
     async def get_rp(self) -> RerankProvider | None:
         if not self.kb.rerank_provider_id:
             return None
-        rp = await self.prov_mgr.get_provider_by_id(
+        rp: RerankProvider | None = await self.prov_mgr.get_provider_by_id(
             self.kb.rerank_provider_id,
-        )
+        )  # type: ignore
         if not rp:
             logger.warning(
                 f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 的 Rerank Provider({self.kb.rerank_provider_id}) 不可用，将跳过重排序。",
             )
             return None
-        if not isinstance(rp, RerankProvider):
-            raise ValueError(
-                f"Provider {self.kb.rerank_provider_id} is not a Rerank Provider",
-            )
         return rp
 
-    async def _ensure_vec_db(self) -> FaissVecDB:
+    async def _ensure_vec_db(self) -> "FaissVecDB":
         if not self.kb.embedding_provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
@@ -188,6 +181,8 @@ class KBHelper:
             logger.warning(
                 f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
             )
+
+        from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 
         vec_db = FaissVecDB(
             doc_store_path=str(self.kb_dir / "doc.db"),
@@ -226,7 +221,7 @@ class KBHelper:
         progress_callback=None,
         pre_chunked_text: list[str] | None = None,
     ) -> KBDocument:
-        """上传并处理文档(带原子性保证和失败清理)
+        """上传并处理文档（带原子性保证和失败清理）
 
         流程:
         1. 保存原始文件
@@ -234,11 +229,11 @@ class KBHelper:
         3. 提取多媒体资源
         4. 分块处理
         5. 生成向量并存储
-        6. 保存元数据(事务)
+        6. 保存元数据（事务）
         7. 更新统计
 
         Args:
-            progress_callback: 进度回调函数,接收参数 (stage, current, total)
+            progress_callback: 进度回调函数，接收参数 (stage, current, total)
                 - stage: 当前阶段 ('parsing', 'chunking', 'embedding')
                 - current: 当前进度
                 - total: 总数
@@ -247,38 +242,59 @@ class KBHelper:
         await self._ensure_vec_db()
         doc_id = str(uuid.uuid4())
         media_paths: list[Path] = []
-        saved_file_path: Path | None = None
         file_size = 0
 
+        # file_path = self.kb_files_dir / f"{doc_id}.{file_type}"
+        # async with aiofiles.open(file_path, "wb") as f:
+        #     await f.write(file_content)
+
         try:
-            chunks_text: list[str] = []
-            saved_media: list[KBMedia] = []
+            chunks_text = []
+            saved_media = []
 
             if pre_chunked_text is not None:
                 # 如果提供了预分块文本，直接使用
                 chunks_text = _compact_chunks(pre_chunked_text)
                 file_size = sum(len(chunk) for chunk in chunks_text)
-                logger.info(f"使用预分块文本进行上传,共 {len(chunks_text)} 个块｡")
+                logger.info(f"使用预分块文本进行上传，共 {len(chunks_text)} 个块。")
             else:
-                # 否则,执行标准的文件解析和分块流程
+                # 否则，执行标准的文件解析和分块流程
                 if file_content is None:
                     raise ValueError(
-                        "当未提供 pre_chunked_text 时,file_content 不能为空｡",
+                        "当未提供 pre_chunked_text 时，file_content 不能为空。"
                     )
 
                 file_size = len(file_content)
-                saved_file_path = self.kb_files_dir / f"{doc_id}.{file_type}"
-                async with aiofiles.open(saved_file_path, "wb") as f:
-                    await f.write(file_content)
 
                 # 阶段1: 解析文档
                 if progress_callback:
                     await progress_callback("parsing", 0, 100)
 
-                parser = await select_parser(f".{file_type}")
-                parse_result = await parser.parse(file_content, file_name)
+                try:
+                    parser = await select_parser(f".{file_type}")
+                    parse_result = await parser.parse(file_content, file_name)
+                except KnowledgeBaseUploadError:
+                    raise
+                except Exception as exc:
+                    raise KnowledgeBaseUploadError(
+                        stage="parsing",
+                        user_message=(
+                            "文档解析失败：无法读取或解析上传文件。"
+                            "请确认文件格式受支持且文件内容未损坏。"
+                        ),
+                        details={"file_name": file_name},
+                    ) from exc
                 text_content = parse_result.text
                 media_items = parse_result.media
+                if not text_content or not text_content.strip():
+                    raise KnowledgeBaseUploadError(
+                        stage="parsing",
+                        user_message=(
+                            "文档解析失败：未能从文件中提取可索引文本。"
+                            "该文件可能是扫描件、纯图片 PDF，或格式暂不受支持。"
+                        ),
+                        details={"file_name": file_name},
+                    )
 
                 if progress_callback:
                     await progress_callback("parsing", 100, 100)
@@ -300,7 +316,19 @@ class KBHelper:
                     await progress_callback("chunking", 0, 100)
 
                 try:
-                    chunks_text = await self.chunker.chunk(
+                    # 根据文件类型选择分块器：Markdown 文件使用结构感知分块
+                    effective_chunker = self.chunker
+                    file_ext = Path(file_name).suffix.lower() if file_name else ""
+                    if file_ext in (".md", ".markdown", ".mkd", ".mdx"):
+                        effective_chunker = MarkdownChunker(
+                            chunk_size=chunk_size,
+                            chunk_overlap=chunk_overlap,
+                        )
+                        logger.info(
+                            f"检测到 Markdown 文件 '{file_name}'，使用 MarkdownChunker 进行结构化分块"
+                        )
+
+                    chunks_text = await effective_chunker.chunk(
                         text_content,
                         chunk_size=chunk_size,
                         chunk_overlap=chunk_overlap,
@@ -325,11 +353,14 @@ class KBHelper:
                         user_message=("预分块文本为空，未提供任何可索引文本块。"),
                         details={"file_name": file_name},
                     )
-                raise KnowledgeBaseUploadError(
-                    stage="chunking",
-                    user_message=("分块失败：文档内容为空，未生成任何可索引文本块。"),
-                    details={"file_name": file_name},
-                )
+                else:
+                    raise KnowledgeBaseUploadError(
+                        stage="chunking",
+                        user_message=(
+                            "分块失败：文档内容为空，未生成任何可索引文本块。"
+                        ),
+                        details={"file_name": file_name},
+                    )
 
             contents = []
             metadatas = []
@@ -346,19 +377,28 @@ class KBHelper:
             if progress_callback:
                 await progress_callback("chunking", 100, 100)
 
-            # 阶段3: 生成向量(带进度回调)
+            # 阶段3: 生成向量（带进度回调）
             async def embedding_progress_callback(current, total) -> None:
                 if progress_callback:
                     await progress_callback("embedding", current, total)
 
-            await self._get_vec_db().insert_batch(
-                contents=contents,
-                metadatas=metadatas,
-                batch_size=batch_size,
-                tasks_limit=tasks_limit,
-                max_retries=max_retries,
-                progress_callback=embedding_progress_callback,
-            )
+            try:
+                await self.vec_db.insert_batch(
+                    contents=contents,
+                    metadatas=metadatas,
+                    batch_size=batch_size,
+                    tasks_limit=tasks_limit,
+                    max_retries=max_retries,
+                    progress_callback=embedding_progress_callback,
+                )
+            except KnowledgeBaseUploadError:
+                raise
+            except Exception as exc:
+                raise KnowledgeBaseUploadError(
+                    stage="storage",
+                    user_message=("存储失败：文本块已生成，但写入知识库索引时出错。"),
+                    details={"file_name": file_name},
+                ) from exc
 
             # 保存文档的元数据
             doc = KBDocument(
@@ -367,33 +407,54 @@ class KBHelper:
                 doc_name=file_name,
                 file_type=file_type,
                 file_size=file_size,
-                file_path=str(saved_file_path) if saved_file_path else "",
+                # file_path=str(file_path),
+                file_path="",
                 chunk_count=len(chunks_text),
-                media_count=len(saved_media),
+                media_count=0,
             )
-            async with self.kb_db.get_db() as session:
-                async with session.begin():
-                    session.add(doc)
-                    for media in saved_media:
-                        session.add(media)
+            try:
+                async with self.kb_db.get_db() as session:
+                    async with session.begin():
+                        session.add(doc)
+                        for media in saved_media:
+                            session.add(media)
+                        await session.commit()
 
-                await session.refresh(doc)
+                    await session.refresh(doc)
+            except KnowledgeBaseUploadError:
+                raise
+            except Exception as exc:
+                raise KnowledgeBaseUploadError(
+                    stage="metadata",
+                    user_message=(
+                        "元数据保存失败：文本块已写入知识库，但文档记录保存失败。"
+                    ),
+                    details={"file_name": file_name, "doc_id": doc_id},
+                ) from exc
 
-            vec_db = self._get_vec_db()
-            await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=vec_db)
-            await self.refresh_kb()
-            await self.refresh_document(doc_id)
+            vec_db: FaissVecDB = self.vec_db  # type: ignore
+            try:
+                await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=vec_db)
+                await self.refresh_kb()
+                await self.refresh_document(doc_id)
+            except KnowledgeBaseUploadError:
+                raise
+            except Exception as exc:
+                raise KnowledgeBaseUploadError(
+                    stage="metadata",
+                    user_message=(
+                        "元数据更新失败：文档已上传，但知识库统计信息刷新失败。"
+                    ),
+                    details={"file_name": file_name, "doc_id": doc_id},
+                ) from exc
             return doc
         except Exception as e:
-            logger.error(f"上传文档失败: {e}")
-
-            if saved_file_path and saved_file_path.exists():
-                try:
-                    saved_file_path.unlink()
-                except Exception as file_error:
-                    logger.warning(
-                        f"清理原始文档文件失败 {saved_file_path}: {file_error}",
-                    )
+            if isinstance(e, KnowledgeBaseUploadError):
+                logger.warning(f"上传文档失败: {e}", extra={"details": e.details})
+            else:
+                logger.error(f"上传文档失败: {e}", exc_info=True)
+            # if file_path.exists():
+            #     file_path.unlink()
 
             for media_path in media_paths:
                 try:
@@ -422,21 +483,21 @@ class KBHelper:
         """删除单个文档及其相关数据"""
         await self.kb_db.delete_document_by_id(
             doc_id=doc_id,
-            vec_db=self._get_vec_db(),
+            vec_db=self.vec_db,  # type: ignore
         )
         await self.kb_db.update_kb_stats(
             kb_id=self.kb.kb_id,
-            vec_db=self._get_vec_db(),
+            vec_db=self.vec_db,  # type: ignore
         )
         await self.refresh_kb()
 
     async def delete_chunk(self, chunk_id: str, doc_id: str) -> None:
         """删除单个文本块及其相关数据"""
-        vec_db = self._get_vec_db()
+        vec_db: FaissVecDB = self.vec_db  # type: ignore
         await vec_db.delete(chunk_id)
         await self.kb_db.update_kb_stats(
             kb_id=self.kb.kb_id,
-            vec_db=self._get_vec_db(),
+            vec_db=self.vec_db,  # type: ignore
         )
         await self.refresh_kb()
         await self.refresh_document(doc_id)
@@ -457,6 +518,7 @@ class KBHelper:
         async with self.kb_db.get_db() as session:
             async with session.begin():
                 session.add(doc)
+                await session.commit()
             await session.refresh(doc)
 
     async def get_chunks_by_doc_id(
@@ -466,7 +528,7 @@ class KBHelper:
         limit: int = 100,
     ) -> list[dict]:
         """获取文档的所有块及其元数据"""
-        vec_db = self._get_vec_db()
+        vec_db: FaissVecDB = self.vec_db  # type: ignore
         chunks = await vec_db.document_storage.get_documents(
             metadata_filters={"kb_doc_id": doc_id},
             offset=offset,
@@ -489,7 +551,7 @@ class KBHelper:
 
     async def get_chunk_count_by_doc_id(self, doc_id: str) -> int:
         """获取文档的块数量"""
-        vec_db = self._get_vec_db()
+        vec_db: FaissVecDB = self.vec_db  # type: ignore
         count = await vec_db.count_documents(metadata_filter={"kb_doc_id": doc_id})
         return count
 
@@ -536,8 +598,7 @@ class KBHelper:
         enable_cleaning: bool = False,
         cleaning_provider_id: str | None = None,
     ) -> KBDocument:
-        """从 URL 上传并处理文档(带原子性保证和失败清理)
-
+        """从 URL 上传并处理文档（带原子性保证和失败清理）
         Args:
             url: 要提取内容的网页 URL
             chunk_size: 文本块大小
@@ -545,7 +606,7 @@ class KBHelper:
             batch_size: 批处理大小
             tasks_limit: 并发任务限制
             max_retries: 最大重试次数
-            progress_callback: 进度回调函数,接收参数 (stage, current, total)
+            progress_callback: 进度回调函数，接收参数 (stage, current, total)
                 - stage: 当前阶段 ('extracting', 'cleaning', 'parsing', 'chunking', 'embedding')
                 - current: 当前进度
                 - total: 总数
@@ -554,17 +615,15 @@ class KBHelper:
         Raises:
             ValueError: 如果 URL 为空或无法提取内容
             IOError: 如果网络请求失败
-
         """
         # 获取 Tavily API 密钥
         config = self.prov_mgr.acm.default_conf
         tavily_keys = config.get("provider_settings", {}).get(
-            "websearch_tavily_key",
-            [],
+            "websearch_tavily_key", []
         )
         if not tavily_keys:
             raise ValueError(
-                "Error: Tavily API key is not configured in provider_settings.",
+                "Error: Tavily API key is not configured in provider_settings."
             )
 
         # 阶段1: 从 URL 提取内容
@@ -596,15 +655,15 @@ class KBHelper:
 
         if enable_cleaning and not final_chunks:
             raise ValueError(
-                "内容清洗后未提取到有效文本｡请尝试关闭内容清洗功能,或更换更高性能的LLM模型后重试｡",
+                "内容清洗后未提取到有效文本。请尝试关闭内容清洗功能，或更换更高性能的LLM模型后重试。"
             )
 
         # 创建一个虚拟文件名
-        file_name = url.rsplit("/", maxsplit=1)[-1] or f"document_from_{url}"
+        file_name = url.split("/")[-1] or f"document_from_{url}"
         if not Path(file_name).suffix:
             file_name += ".url"
 
-        # 复用现有的 upload_document 方法,但传入预分块文本
+        # 复用现有的 upload_document 方法，但传入预分块文本
         return await self.upload_document(
             file_name=file_name,
             file_content=None,
@@ -629,21 +688,21 @@ class KBHelper:
         chunk_size: int = 512,
         chunk_overlap: int = 50,
     ) -> list[str]:
-        """对从 URL 获取的内容进行清洗､修复､翻译和重新分块｡"""
+        """
+        对从 URL 获取的内容进行清洗、修复、翻译和重新分块。
+        """
         if not enable_cleaning:
-            # 如果不启用清洗,则使用从前端传递的参数进行分块
+            # 如果不启用清洗，则使用从前端传递的参数进行分块
             logger.info(
-                f"内容清洗未启用,使用指定参数进行分块: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}",
+                f"内容清洗未启用，使用指定参数进行分块: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}"
             )
             return await self.chunker.chunk(
-                content,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
+                content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
             )
 
         if not cleaning_provider_id:
             logger.warning(
-                "启用了内容清洗,但未提供 cleaning_provider_id,跳过清洗并使用默认分块｡",
+                "启用了内容清洗，但未提供 cleaning_provider_id，跳过清洗并使用默认分块。"
             )
             return await self.chunker.chunk(content)
 
@@ -655,26 +714,24 @@ class KBHelper:
             llm_provider = await self.prov_mgr.get_provider_by_id(cleaning_provider_id)
             if not llm_provider or not isinstance(llm_provider, LLMProvider):
                 raise ValueError(
-                    f"无法找到 ID 为 {cleaning_provider_id} 的 LLM Provider 或类型不正确",
+                    f"无法找到 ID 为 {cleaning_provider_id} 的 LLM Provider 或类型不正确"
                 )
 
             # 初步分块
-            # 优化分隔符,优先按段落分割,以获得更高质量的文本块
+            # 优化分隔符，优先按段落分割，以获得更高质量的文本块
             text_splitter = RecursiveCharacterChunker(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
                 separators=["\n\n", "\n", " "],  # 优先使用段落分隔符
             )
             initial_chunks = await text_splitter.chunk(content)
-            logger.info(f"初步分块完成,生成 {len(initial_chunks)} 个块用于修复｡")
+            logger.info(f"初步分块完成，生成 {len(initial_chunks)} 个块用于修复。")
 
             # 并发处理所有块
             rate_limiter = RateLimiter(repair_max_rpm)
             tasks = [
                 _repair_and_translate_chunk_with_retry(
-                    chunk,
-                    llm_provider,
-                    rate_limiter,
+                    chunk, llm_provider, rate_limiter
                 )
                 for chunk in initial_chunks
             ]
@@ -684,7 +741,7 @@ class KBHelper:
             final_chunks = []
             for i, result in enumerate(repaired_results):
                 if isinstance(result, Exception):
-                    logger.warning(f"块 {i} 处理异常: {result!s}. 回退到原始块｡")
+                    logger.warning(f"块 {i} 处理异常: {str(result)}. 回退到原始块。")
                     final_chunks.append(initial_chunks[i])
                 elif isinstance(result, list):
                     final_chunks.extend(result)
@@ -692,7 +749,7 @@ class KBHelper:
             final_chunks = _compact_chunks(final_chunks)
 
             logger.info(
-                f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块｡",
+                f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块。"
             )
 
             if progress_callback:
@@ -702,5 +759,5 @@ class KBHelper:
 
         except Exception as e:
             logger.error(f"使用 Provider '{cleaning_provider_id}' 清洗内容失败: {e}")
-            # 清洗失败,返回默认分块结果,保证流程不中断
+            # 清洗失败，返回默认分块结果，保证流程不中断
             return await self.chunker.chunk(content)

@@ -1,5 +1,3 @@
-@use '../variables' as *;
-
 html {
   overflow-y: auto;
 }
@@ -81,16 +79,8 @@ $sizes: (
 // font family
 
 body {
-  .Poppins {
-    font-family: 'Poppins', $cjk-sans-fallback, sans-serif !important;
-  }
-
-  .Inter {
-    font-family: 'Inter', $cjk-sans-fallback, sans-serif !important;
-  }
-
   .Outfit {
-    font-family: 'Outfit', $cjk-sans-fallback, sans-serif !important;
+    font-family: $body-font-family !important;
   }
 }
 

@@ -1,5 +1,4 @@
 import asyncio
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -7,13 +6,19 @@ import pytest_asyncio
 from quart import Quart
 
 from astrbot.core import LogBroker
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle, LifecycleState
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.exceptions import KnowledgeBaseUploadError
+from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
-from astrbot.core.utils.auth_password import hash_dashboard_password
+from astrbot.core.utils.auth_password import (
+    hash_dashboard_password,
+    hash_legacy_dashboard_password,
+)
 from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
 from astrbot.dashboard.server import AstrBotDashboard
+
+_TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -25,23 +30,9 @@ async def core_lifecycle_td(tmp_path_factory):
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
 
-    # Override the dashboard password with a known test value so that
-    # _resolve_dashboard_password can return "astrbot-test-password"
-    # and the login endpoint will verify correctly regardless of what
-    # the real config file contains.
-    core_lifecycle.astrbot_config["dashboard"]["password"] = hash_dashboard_password(
-        "astrbot-test-password"
-    )
-
-    # Mark runtime as ready so the dashboard's runtime guard allows
-    # API requests through.  The full initialize() path only reaches
-    # CORE_READY; the test mocks kb_manager and does not need the
-    # heavy bootstrap_runtime() step.
-    core_lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_READY)
-
     # Mock kb_manager and kb_helper
-    kb_manager: Any = MagicMock()
-    kb_helper: Any = AsyncMock()
+    kb_manager = MagicMock()
+    kb_helper = AsyncMock(spec=KBHelper)
 
     # Configure get_kb to be an async mock that returns kb_helper
     kb_manager.get_kb = AsyncMock(return_value=kb_helper)
@@ -60,7 +51,25 @@ async def core_lifecycle_td(tmp_path_factory):
     kb_helper.upload_document.return_value = mock_doc
 
     # kb_manager.get_kb.return_value = kb_helper # Removed this line as it's handled above
-    setattr(core_lifecycle, 'kb_manager', kb_manager)
+    core_lifecycle.kb_manager = kb_manager
+    generated_password = getattr(
+        core_lifecycle.astrbot_config,
+        "_generated_dashboard_password",
+        None,
+    )
+    dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
+    if not generated_password:
+        core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
+            hash_dashboard_password(dashboard_password)
+        )
+        core_lifecycle.astrbot_config["dashboard"]["password"] = (
+            hash_legacy_dashboard_password(dashboard_password)
+        )
+    object.__setattr__(
+        core_lifecycle,
+        "_dashboard_plain_password",
+        dashboard_password,
+    )
 
     try:
         yield core_lifecycle
@@ -82,12 +91,13 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
 
 
 def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
-    password = core_lifecycle_td.astrbot_config["dashboard"]["password"]
-    if isinstance(password, str) and (
-        password.startswith("pbkdf2_sha256$") or password.startswith("$argon2")
-    ):
-        return "astrbot-test-password"
-    return str(password)
+    generated_password = getattr(core_lifecycle_td, "_dashboard_plain_password", None)
+    if generated_password:
+        return generated_password
+    password = core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"]
+    if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
+        return "astrbot"
+    return password
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -113,7 +123,7 @@ async def test_import_documents(
 ):
     """Tests the import documents functionality."""
     test_client = app.test_client()
-    kb_helper: Any = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
     kb_helper.upload_document.reset_mock()
     kb_helper.upload_document.side_effect = None
 
@@ -178,7 +188,7 @@ async def test_import_documents(
 async def test_import_documents_returns_friendly_failure_message(
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
-    kb_helper: Any = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
     kb_helper.upload_document.reset_mock()
     kb_helper.upload_document.side_effect = KnowledgeBaseUploadError(
         stage="embedding",

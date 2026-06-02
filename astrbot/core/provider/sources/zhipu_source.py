@@ -2,8 +2,7 @@
 # It is no longer specifically adapted to Zhipu's models. To ensure compatibility, this
 
 
-from astrbot.core.provider.register import register_provider_adapter
-
+from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
 
 

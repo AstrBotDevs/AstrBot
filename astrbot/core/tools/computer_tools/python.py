@@ -59,10 +59,8 @@ async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult
         for img in images:
             resp.content.append(
                 mcp.types.ImageContent(
-                    type="image",
-                    data=img["image/png"],
-                    mimeType="image/png",
-                ),
+                    type="image", data=img["image/png"], mimeType="image/png"
+                )
             )
 
             if event.get_platform_name() == "webchat":
@@ -109,7 +107,7 @@ class PythonTool(FunctionTool):
             )
             return await handle_result(result, context.context.event)
         except Exception as e:
-            return f"Error executing code: {e!s}"
+            return f"Error executing code: {str(e)}"
 
 
 @builtin_tool(config=_LOCAL_PYTHON_TOOL_CONFIG)
@@ -146,4 +144,4 @@ class LocalPythonTool(FunctionTool):
             )
             return await handle_result(result, context.context.event)
         except Exception as e:
-            return f"Error executing code: {e!s}"
+            return f"Error executing code: {str(e)}"

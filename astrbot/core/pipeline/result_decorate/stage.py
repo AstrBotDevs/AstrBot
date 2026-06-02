@@ -5,25 +5,17 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
-from astrbot.core.message.components import (
-    At,
-    BaseMessageComponent,
-    Image,
-    Json,
-    Node,
-    Plain,
-    Record,
-    Reply,
-)
+from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
-from astrbot.core.pipeline.context import PipelineContext
-from astrbot.core.pipeline.stage import Stage, register_stage, registered_stages
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+
+from ..context import PipelineContext
+from ..stage import Stage, register_stage, registered_stages
 
 
 @register_stage
@@ -82,14 +74,12 @@ class ResultDecorateStage(Stage):
         self.split_words = ctx.astrbot_config["platform_settings"][
             "segmented_reply"
         ].get("split_words", ["。", "？", "！", "~", "…"])
-        self.split_words_pattern: re.Pattern[str] | None
         if self.split_words:
-            escaped_words_list = [re.escape(word) for word in self.split_words]
-            escaped_words_list.sort(key=len, reverse=True)
-            escaped_words = escaped_words_list
+            escaped_words = sorted(
+                [re.escape(word) for word in self.split_words], key=len, reverse=True
+            )
             self.split_words_pattern = re.compile(
-                f"(.*?({'|'.join(escaped_words)})|.+$)",
-                re.DOTALL,
+                f"(.*?({'|'.join(escaped_words)})|.+$)", re.DOTALL
             )
         else:
             self.split_words_pattern = None
@@ -101,15 +91,12 @@ class ResultDecorateStage(Stage):
         self.content_safe_check_reply = ctx.astrbot_config["content_safety"][
             "also_use_in_response"
         ]
-        self.content_safe_check_stage: ContentSafetyCheckStage | None = None
+        self.content_safe_check_stage = None
         if self.content_safe_check_reply:
             for stage_cls in registered_stages:
                 if stage_cls.__name__ == "ContentSafetyCheckStage":
-                    stage = stage_cls()
-                    if isinstance(stage, ContentSafetyCheckStage):
-                        self.content_safe_check_stage = stage
-                        await stage.initialize(ctx)
-                        break
+                    self.content_safe_check_stage = stage_cls()
+                    await self.content_safe_check_stage.initialize(ctx)
 
         provider_cfg = ctx.astrbot_config.get("provider_settings", {})
         self.show_reasoning = provider_cfg.get("display_reasoning_text", False)
@@ -120,20 +107,26 @@ class ResultDecorateStage(Stage):
             return [text]
 
         segments = self.split_words_pattern.findall(text)
-        result: list[str] = []
-        for content, _ in segments:
-            for word in self.split_words:
-                if content.endswith(word):
-                    content = content[: -len(word)]
-                    break
-            if content.strip():
-                result.append(content)
-        return result or [text]
+        result = []
+        for seg in segments:
+            if isinstance(seg, tuple):
+                content = seg[0]
+                if not isinstance(content, str):
+                    continue
+                for word in self.split_words:
+                    if content.endswith(word):
+                        content = content[: -len(word)]
+                        break
+                if content.strip():
+                    result.append(content)
+            elif seg and seg.strip():
+                result.append(seg)
+        return result if result else [text]
 
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> AsyncGenerator[None, None]:
+    ) -> None | AsyncGenerator[None, None]:
         result = event.get_result()
         if result is None or not result.chain:
             return
@@ -156,8 +149,11 @@ class ResultDecorateStage(Stage):
                     text += comp.text
 
             if isinstance(self.content_safe_check_stage, ContentSafetyCheckStage):
-                async for _ in self.content_safe_check_stage.process_text(event, text):
-                    yield None
+                async for _ in self.content_safe_check_stage.process(
+                    event,
+                    check_text=text,
+                ):
+                    yield
 
         # 发送消息前事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
@@ -215,7 +211,7 @@ class ResultDecorateStage(Stage):
                 if (
                     self.only_llm_result and result.is_model_result()
                 ) or not self.only_llm_result:
-                    new_chain: list[BaseMessageComponent] = []
+                    new_chain = []
                     for comp in result.chain:
                         if isinstance(comp, Plain):
                             if len(comp.text) > self.words_count_threshold:
@@ -249,7 +245,8 @@ class ResultDecorateStage(Stage):
                             for seg in split_response:
                                 if self.content_cleanup_rule:
                                     seg = re.sub(self.content_cleanup_rule, "", seg)
-                                if seg.strip():
+                                seg = seg.strip()
+                                if seg:
                                     new_chain.append(Plain(seg))
                         else:
                             # 非 Plain 类型的消息段不分段
@@ -261,17 +258,17 @@ class ResultDecorateStage(Stage):
                 event.unified_msg_origin,
             )
 
-            tts_requested = (
+            should_tts = (
                 bool(self.ctx.astrbot_config["provider_tts_settings"]["enable"])
                 and result.is_llm_result()
                 and await SessionServiceManager.should_process_tts_request(event)
                 and random.random() <= self.tts_trigger_probability
+                and tts_provider
             )
-            if tts_requested and tts_provider is None:
+            if should_tts and not tts_provider:
                 logger.warning(
                     f"会话 {event.unified_msg_origin} 未配置文本转语音模型。",
                 )
-            should_tts = tts_requested and tts_provider is not None
 
             if (
                 not should_tts
@@ -298,7 +295,7 @@ class ResultDecorateStage(Stage):
                     )
 
             if should_tts and tts_provider:
-                tts_chain: list[BaseMessageComponent] = []
+                new_chain = []
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:
                         try:
@@ -309,7 +306,7 @@ class ResultDecorateStage(Stage):
                                 logger.error(
                                     f"由于 TTS 音频文件未找到，消息段转语音失败: {comp.text}",
                                 )
-                                tts_chain.append(comp)
+                                new_chain.append(comp)
                                 continue
 
                             use_file_service = self.ctx.astrbot_config[
@@ -322,7 +319,7 @@ class ResultDecorateStage(Stage):
                                 "provider_tts_settings"
                             ]["dual_output"]
 
-                            url: str | None = None
+                            url = None
                             if use_file_service and callback_api_base:
                                 token = await file_token_service.register_file(
                                     audio_path,
@@ -330,7 +327,7 @@ class ResultDecorateStage(Stage):
                                 url = f"{callback_api_base}/api/file/{token}"
                                 logger.debug(f"已注册：{url}")
 
-                            tts_chain.append(
+                            new_chain.append(
                                 Record(
                                     file=url or audio_path,
                                     url=url or audio_path,
@@ -338,14 +335,14 @@ class ResultDecorateStage(Stage):
                                 ),
                             )
                             if dual_output:
-                                tts_chain.append(comp)
+                                new_chain.append(comp)
                         except Exception:
                             logger.error(traceback.format_exc())
                             logger.error("TTS 失败，使用文本发送。")
-                            tts_chain.append(comp)
+                            new_chain.append(comp)
                     else:
-                        tts_chain.append(comp)
-                result.chain = tts_chain
+                        new_chain.append(comp)
+                result.chain = new_chain
 
             # 文本转图片
             elif (
@@ -372,7 +369,7 @@ class ResultDecorateStage(Stage):
                         return
                     if time.time() - render_start > 3:
                         logger.warning(
-                            "文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。",
+                            "文本转图片耗时超过了 3 秒，如果觉得很慢可以在 WebUI 中关闭文本转图片模式。",
                         )
                     if url:
                         if url.startswith("http"):

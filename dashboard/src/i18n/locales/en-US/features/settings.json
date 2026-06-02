@@ -1,24 +1,6 @@
 {
   "network": {
     "title": "Network",
-    "proxy": {
-      "title": "Proxy",
-      "subtitle": "Configure proxy for network requests"
-    },
-    "server": {
-      "title": "Server Address",
-      "subtitle": "Configure backend API URL",
-      "label": "API Base URL",
-      "placeholder": "e.g. http://localhost:6185",
-      "hint": "Empty for default (relative path)",
-      "save": "Save & Reload",
-      "presets": "Presets",
-      "preset": {
-        "add": "Add Preset",
-        "name": "Name",
-        "url": "URL"
-      }
-    },
     "githubProxy": {
       "title": "GitHub Proxy Address",
       "subtitle": "Set the GitHub proxy address used when downloading plugins or updating AstrBot. This is effective in mainland China's network environment. Can be customized, input takes effect in real time. All addresses do not guarantee stability. If errors occur when updating plugins/projects, please first check if the proxy address is working properly.",
@@ -39,22 +21,10 @@
     "subtitle": "Customize theme primary and secondary colors. Changes apply immediately and are stored locally in your browser.",
     "customize": {
       "title": "Theme Colors",
-      "colors": "Custom Colors",
-      "preset": "Color Scheme",
       "primary": "Primary Color",
       "secondary": "Secondary Color",
-      "reset": "Reset to Default",
-      "presetApplied": "Theme applied",
-      "light": "Light Mode",
-      "dark": "Dark Mode",
-      "auto": "System Mode",
-      "autoSwitchDesc": "Theme will automatically switch based on your browser's appearance setting when enable system mode"
+      "reset": "Reset to Default"
     }
-  },
-  "reset": {
-    "title": "Reset to Default",
-    "subtitle": "Reset theme colors to default settings",
-    "button": "Reset"
   },
   "system": {
     "title": "System",
@@ -62,11 +32,6 @@
       "title": "Restart",
       "subtitle": "Restart AstrBot",
       "button": "Restart"
-    },
-    "logout": {
-      "title": "Log Out",
-      "subtitle": "Log out of the current account",
-      "button": "Log Out"
     },
     "migration": {
       "title": "Data Migration to v4.0.0",
@@ -124,10 +89,6 @@
     }
   },
   "backup": {
-    "title": "Backup",
-    "subtitle": "Manage data backups",
-    "operate": "Backup Operations",
-    "open": "Open Backup Manager",
     "dialog": {
       "title": "Backup Manager"
     },
@@ -208,14 +169,6 @@
     "subtitle": "Create API keys for external developers to call open HTTP APIs.",
     "name": "Key Name",
     "expiresInDays": "Expiration",
-    "expiry": {
-      "7days": "7 days",
-      "30days": "30 days",
-      "90days": "90 days",
-      "180days": "180 days",
-      "365days": "365 days",
-      "permanent": "Permanent"
-    },
     "expiryOptions": {
       "day1": "1 day",
       "day7": "7 days",

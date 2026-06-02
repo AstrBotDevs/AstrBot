@@ -1,33 +1,32 @@
-import { createVuetify } from "vuetify";
-// MDI font loaded in index.html via CDN
-import * as components from "vuetify/components";
-import * as directives from "vuetify/directives";
-import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
-import { BlueBusinessDarkTheme } from "@/theme/BlueBusinessDarkTheme";
-import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
+import { createVuetify } from 'vuetify';
+import '@/assets/mdi-subset/materialdesignicons-subset.css';
+import * as components from 'vuetify/components';
+import * as directives from 'vuetify/directives';
+import { PurpleTheme } from '@/theme/LightTheme';
+import { PurpleThemeDark } from "@/theme/DarkTheme";
 
 export default createVuetify({
   components,
   directives,
 
   theme: {
-    defaultTheme: LIGHT_THEME_NAME,
+    defaultTheme: 'PurpleTheme',
     themes: {
-      [LIGHT_THEME_NAME]: BlueBusinessLightTheme,
-      [DARK_THEME_NAME]: BlueBusinessDarkTheme,
-    },
+      PurpleTheme,
+      PurpleThemeDark
+    }
   },
   defaults: {
     VBtn: {},
     VCard: {
-      rounded: "lg",
+      rounded: 'lg'
     },
     VTextField: {
-      rounded: "lg",
+      rounded: 'lg'
     },
     VTooltip: {
       // set v-tooltip default location to top
-      location: "top",
-    },
-  },
+      location: 'top'
+    }
+  }
 });

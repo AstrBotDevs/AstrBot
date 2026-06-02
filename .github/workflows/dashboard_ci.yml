@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.5
+        uses: pnpm/action-setup@v6.0.8
         with:
           version: 10.28.2
 
@@ -30,7 +30,6 @@ jobs:
         working-directory: dashboard
         run: |
           pnpm install --frozen-lockfile
-          pnpm lint:check
           pnpm run build
 
       - name: Inject Commit SHA

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import json
 import os
@@ -8,7 +6,6 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
@@ -19,11 +16,7 @@ from astrbot.core.utils.astrbot_path import (
 )
 
 from .booters.base import ComputerBooter
-from .booters.constants import BOOTER_BOXLITE, BOOTER_SHIPYARD, BOOTER_SHIPYARD_NEO
 from .booters.local import LocalBooter
-
-if TYPE_CHECKING:
-    from astrbot.core.agent.tool import ToolSchema
 
 session_booter: dict[str, ComputerBooter] = {}
 local_booter: ComputerBooter | None = None
@@ -148,7 +141,6 @@ def _discover_bay_credentials(endpoint: str) -> str:
 
     Returns:
         API key string, or empty string if not found.
-
     """
     candidates: list[Path] = []
 
@@ -158,7 +150,7 @@ def _discover_bay_credentials(endpoint: str) -> str:
         candidates.append(Path(bay_data_dir) / "credentials.json")
 
     # 2. Mono-repo layout: AstrBot/../pkgs/bay/credentials.json
-    astrbot_root = Path(__file__).resolve().parents[3]  # astrbot/core/computer/ ￫ root
+    astrbot_root = Path(__file__).resolve().parents[3]  # astrbot/core/computer/ → root
     candidates.append(astrbot_root.parent / "pkgs" / "bay" / "credentials.json")
 
     # 3. Current working directory
@@ -179,25 +171,22 @@ def _discover_bay_credentials(endpoint: str) -> str:
                     and cred_endpoint.rstrip("/") != endpoint.rstrip("/")
                 ):
                     logger.warning(
-                        "[Computer] bay_credentials_mismatch file_endpoint=%s configured_endpoint=%s action=use_key",
+                        "[Computer] credentials.json endpoint mismatch: "
+                        "file=%s, configured=%s — using key anyway",
                         cred_endpoint,
                         endpoint,
                     )
                 masked_key = f"{api_key[:4]}..." if len(api_key) >= 6 else "redacted"
                 logger.info(
-                    "[Computer] bay_credentials_lookup status=found path=%s key_prefix=%s",
+                    "[Computer] Auto-discovered Bay API key from %s (prefix=%s)",
                     cred_path,
                     masked_key,
                 )
                 return api_key
         except (json.JSONDecodeError, OSError) as exc:
-            logger.debug(
-                "[Computer] bay_credentials_read_failed path=%s error=%s",
-                cred_path,
-                exc,
-            )
+            logger.debug("[Computer] Failed to read %s: %s", cred_path, exc)
 
-    logger.debug("[Computer] bay_credentials_lookup status=not_found")
+    logger.debug("[Computer] No Bay credentials.json found in search paths")
     return ""
 
 
@@ -402,6 +391,14 @@ print(
     return _build_python_exec_command(script)
 
 
+def _build_sync_and_scan_command() -> str:
+    """Legacy combined command kept for backward compatibility.
+
+    New code paths should prefer apply + scan split helpers.
+    """
+    return f"{_build_apply_sync_command()}\n{_build_scan_command()}"
+
+
 def _shell_exec_succeeded(result: dict) -> bool:
     if "success" in result:
         return bool(result.get("success"))
@@ -453,39 +450,33 @@ async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
     This function is intentionally limited to file mutation. Metadata scanning is
     executed in a separate phase to keep failure domains clear.
     """
-    logger.info("[Computer] sandbox_sync phase=apply status=start")
+    logger.info("[Computer] Skill sync phase=apply start")
     apply_result = _normalize_shell_exec_result(
         await booter.shell.exec(_build_apply_sync_command())
     )
     if not _shell_exec_succeeded(apply_result):
         detail = _format_exec_error_detail(apply_result)
-        logger.error(
-            "[Computer] sandbox_sync phase=apply status=failed detail=%s",
-            detail,
-        )
+        logger.error("[Computer] Skill sync phase=apply failed: %s", detail)
         raise RuntimeError(f"Failed to apply sandbox skill sync strategy: {detail}")
-    logger.info("[Computer] sandbox_sync phase=apply status=done")
+    logger.info("[Computer] Skill sync phase=apply done")
 
 
 async def _scan_sandbox_skills(booter: ComputerBooter) -> dict | None:
     """Scan sandbox skills and return normalized payload for cache update."""
-    logger.info("[Computer] sandbox_sync phase=scan status=start")
+    logger.info("[Computer] Skill sync phase=scan start")
     scan_result = _normalize_shell_exec_result(
         await booter.shell.exec(_build_scan_command())
     )
     if not _shell_exec_succeeded(scan_result):
         detail = _format_exec_error_detail(scan_result)
-        logger.error(
-            "[Computer] sandbox_sync phase=scan status=failed detail=%s",
-            detail,
-        )
+        logger.error("[Computer] Skill sync phase=scan failed: %s", detail)
         raise RuntimeError(f"Failed to scan sandbox skills after sync: {detail}")
 
     payload = _decode_sync_payload(str(scan_result.get("stdout", "") or ""))
     if payload is None:
-        logger.warning("[Computer] sandbox_sync phase=scan status=empty_payload")
+        logger.warning("[Computer] Skill sync phase=scan returned empty payload")
     else:
-        logger.info("[Computer] sandbox_sync phase=scan status=done")
+        logger.info("[Computer] Skill sync phase=scan done")
     return payload
 
 
@@ -495,41 +486,33 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     Backward-compatible orchestrator: keep historical behavior while internally
     splitting into `apply` and `scan` phases.
     """
-    import anyio
-
     sync_skill_dirs = _collect_sync_skill_dirs()
 
-    skills_root = anyio.Path(get_astrbot_skills_path())
-    if not await skills_root.is_dir():
-        return
-
-    temp_dir = anyio.Path(get_astrbot_temp_path())
-    await temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir = Path(get_astrbot_temp_path())
+    temp_dir.mkdir(parents=True, exist_ok=True)
     zip_base = temp_dir / "skills_bundle"
     zip_path = zip_base.with_suffix(".zip")
     bundle_root = temp_dir / f"skills_bundle_{uuid.uuid4().hex}"
 
     try:
         if sync_skill_dirs:
-            if await zip_path.exists():
-                await zip_path.unlink()
-            if await bundle_root.exists():
+            if zip_path.exists():
+                zip_path.unlink()
+            if bundle_root.exists():
                 shutil.rmtree(bundle_root)
-            await bundle_root.mkdir(parents=True, exist_ok=True)
+            bundle_root.mkdir(parents=True)
             for skill_name, skill_dir in sync_skill_dirs:
                 shutil.copytree(skill_dir, bundle_root / skill_name)
             shutil.make_archive(str(zip_base), "zip", str(bundle_root))
-            remote_zip = anyio.Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
-            logger.info("[Computer] sandbox_sync phase=upload status=start")
+            remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
+            logger.info("Uploading skills bundle to sandbox...")
             await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
             upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
             if not upload_result.get("success", False):
-                logger.error("[Computer] sandbox_sync phase=upload status=failed")
                 raise RuntimeError("Failed to upload skills bundle to sandbox.")
-            logger.info("[Computer] sandbox_sync phase=upload status=done")
         else:
             logger.info(
-                "[Computer] sandbox_sync phase=upload status=skipped reason=no_skills",
+                "No local skills found. Keeping sandbox built-ins and refreshing metadata."
             )
             await booter.shell.exec(f"rm -f {SANDBOX_SKILLS_ROOT}/skills.zip")
 
@@ -540,26 +523,20 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
         _update_sandbox_skills_cache(payload)
         managed = payload.get("managed_skills", []) if isinstance(payload, dict) else []
         logger.info(
-            "[Computer] sandbox_sync phase=overall status=done managed=%d",
+            "[Computer] Sandbox skill sync complete: managed=%d",
             len(managed),
         )
     finally:
-        if await bundle_root.exists():
+        if bundle_root.exists():
             try:
                 shutil.rmtree(bundle_root)
             except Exception:
-                logger.warning(
-                    "[Computer] sandbox_sync phase=cleanup status=failed path=%s",
-                    bundle_root,
-                )
-        if await zip_path.exists():
+                logger.warning(f"Failed to remove temp skills bundle: {bundle_root}")
+        if zip_path.exists():
             try:
-                await zip_path.unlink()
+                zip_path.unlink()
             except Exception:
-                logger.warning(
-                    "[Computer] sandbox_sync phase=cleanup status=failed path=%s",
-                    zip_path,
-                )
+                logger.warning(f"Failed to remove temp skills zip: {zip_path}")
 
 
 async def get_booter(
@@ -571,7 +548,7 @@ async def get_booter(
     runtime = config.get("provider_settings", {}).get("computer_use_runtime", "local")
     if runtime == "local":
         return get_local_booter()
-    if runtime == "none":
+    elif runtime == "none":
         raise RuntimeError("Sandbox runtime is disabled by configuration.")
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
@@ -597,13 +574,12 @@ async def get_booter(
                     session_id,
                     shutdown_err,
                 )
+            _clear_cua_idle_state(session_id)
             session_booter.pop(session_id, None)
     if session_id not in session_booter:
         uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
         logger.info(
-            "[Computer] booter_init booter=%s session=%s",
-            booter_type,
-            session_id,
+            f"[Computer] Initializing booter: type={booter_type}, session={session_id}"
         )
         if booter_type == "shipyard":
             from .booters.shipyard import ShipyardBooter
@@ -614,10 +590,7 @@ async def get_booter(
             max_sessions = sandbox_cfg.get("shipyard_max_sessions", 10)
 
             client = ShipyardBooter(
-                endpoint_url=ep,
-                access_token=token,
-                ttl=ttl,
-                session_num=max_sessions,
+                endpoint_url=ep, access_token=token, ttl=ttl, session_num=max_sessions
             )
         elif booter_type == "shipyard_neo":
             from .booters.shipyard_neo import ShipyardNeoBooter
@@ -632,7 +605,7 @@ async def get_booter(
                 token = _discover_bay_credentials(ep)
 
             logger.info(
-                f"[Computer] Shipyard Neo config: endpoint={ep}, profile={profile}, ttl={ttl}",
+                f"[Computer] Shipyard Neo config: endpoint={ep}, profile={profile}, ttl={ttl}"
             )
             client = ShipyardNeoBooter(
                 endpoint_url=ep,
@@ -659,9 +632,7 @@ async def get_booter(
         try:
             await client.boot(uuid_str)
             logger.info(
-                "[Computer] booter_ready booter=%s session=%s",
-                booter_type,
-                session_id,
+                f"[Computer] Sandbox booted successfully: type={booter_type}, session={session_id}"
             )
             await _sync_skills_to_sandbox(client)
         except Exception as e:
@@ -677,6 +648,7 @@ async def get_booter(
                     session_id,
                     shutdown_error,
                 )
+            _clear_cua_idle_state(session_id)
             raise e
 
         session_booter[session_id] = client
@@ -688,19 +660,18 @@ async def get_booter(
 async def sync_skills_to_active_sandboxes() -> None:
     """Best-effort skills synchronization for all active sandbox sessions."""
     logger.info(
-        "[Computer] sandbox_sync scope=active sessions=%d",
-        len(session_booter),
+        "[Computer] Syncing skills to %d active sandbox(es)", len(session_booter)
     )
     for session_id, booter in list(session_booter.items()):
         try:
             if not await booter.available():
                 continue
             await _sync_skills_to_sandbox(booter)
-        except Exception:
-            logger.exception(
-                "[Computer] sandbox_sync_failed session=%s booter=%s",
+        except Exception as e:
+            logger.warning(
+                "Failed to sync skills to sandbox for session %s: %s",
                 session_id,
-                booter.__class__.__name__,
+                e,
             )
 
 
@@ -709,95 +680,3 @@ def get_local_booter() -> ComputerBooter:
     if local_booter is None:
         local_booter = LocalBooter()
     return local_booter
-
-
-# ---------------------------------------------------------------------------
-# Unified query API — used by ComputerToolProvider and subagent tool exec
-# ---------------------------------------------------------------------------
-
-
-def _get_booter_class(booter_type: str) -> type[ComputerBooter] | None:
-    """Map booter_type string to class (lazy import)."""
-    if booter_type == BOOTER_SHIPYARD:
-        from .booters.shipyard import ShipyardBooter
-
-        return ShipyardBooter
-    if booter_type == BOOTER_SHIPYARD_NEO:
-        from .booters.shipyard_neo import ShipyardNeoBooter
-
-        return ShipyardNeoBooter
-    if booter_type == BOOTER_BOXLITE:
-        from .booters.boxlite import BoxliteBooter
-
-        return BoxliteBooter
-    logger.warning(
-        "[Computer] booter_class_lookup booter=%s found=false",
-        booter_type,
-    )
-    return None
-
-
-def get_sandbox_tools(session_id: str) -> list[ToolSchema]:
-    """Return precise tool list from a booted session, or [] if not booted."""
-    booter = session_booter.get(session_id)
-    if booter is None:
-        logger.debug(
-            "[Computer] sandbox_tools source=booted session=%s booter=none tools=0 capabilities=none",
-            session_id,
-        )
-        return []
-    tools = booter.get_tools()
-    caps = getattr(booter, "capabilities", None)
-    logger.debug(
-        "[Computer] sandbox_tools source=booted session=%s booter=%s tools=%d capabilities=%s",
-        session_id,
-        booter.__class__.__name__,
-        len(tools),
-        list(caps) if caps is not None else None,
-    )
-    return tools
-
-
-def get_sandbox_capabilities(session_id: str) -> tuple[str, ...] | None:
-    """Return capability tuple from a booted session, or None if unavailable."""
-    booter = session_booter.get(session_id)
-    if booter is None:
-        logger.debug(
-            "[Computer] sandbox_capabilities session=%s booter=none capabilities=none",
-            session_id,
-        )
-        return None
-    caps = getattr(booter, "capabilities", None)
-    logger.debug(
-        "[Computer] sandbox_capabilities session=%s booter=%s capabilities=%s",
-        session_id,
-        booter.__class__.__name__,
-        list(caps) if caps is not None else None,
-    )
-    return caps
-
-
-def get_default_sandbox_tools(sandbox_cfg: dict) -> list[ToolSchema]:
-    """Return conservative (pre-boot) tool list based on config. No instance needed."""
-    booter_type = sandbox_cfg.get("booter", BOOTER_SHIPYARD_NEO)
-    cls = _get_booter_class(booter_type)
-    tools = cls.get_default_tools() if cls else []
-    logger.debug(
-        "[Computer] sandbox_tools source=default booter=%s tools=%d capabilities=unknown",
-        booter_type,
-        len(tools),
-    )
-    return tools
-
-
-def get_sandbox_prompt_parts(sandbox_cfg: dict) -> list[str]:
-    """Return booter-specific system prompt fragments based on config."""
-    booter_type = sandbox_cfg.get("booter", BOOTER_SHIPYARD_NEO)
-    cls = _get_booter_class(booter_type)
-    prompt_parts = cls.get_system_prompt_parts() if cls else []
-    logger.debug(
-        "[Computer] sandbox_prompts booter=%s parts=%d",
-        booter_type,
-        len(prompt_parts),
-    )
-    return prompt_parts

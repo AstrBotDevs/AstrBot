@@ -1,11 +1,9 @@
 import codecs
 import json
-import types
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from aiohttp import ClientResponse, ClientSession, ClientTimeout
-from typing_extensions import Self
 
 from astrbot.core import logger
 
@@ -157,26 +155,26 @@ class DeerFlowAPIClient:
             self._session = ClientSession(trust_env=True)
         return self._session
 
-    async def __aenter__(self) -> Self:
+    async def __aenter__(self) -> "DeerFlowAPIClient":
         return self
 
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
-        tb: types.TracebackType | None,
+        tb: object | None,
     ) -> None:
         await self.close()
 
     async def create_thread(self, timeout: float = 20) -> dict[str, Any]:
         session = self._get_session()
         url = f"{self.api_base}/api/langgraph/threads"
-        payload: dict[str, dict[str, object]] = {"metadata": {}}
+        payload = {"metadata": {}}
         async with session.post(
             url,
             json=payload,
             headers=self.headers,
-            timeout=ClientTimeout(total=timeout),
+            timeout=timeout,
             proxy=self.proxy,
         ) as resp:
             if resp.status not in (200, 201):
@@ -219,8 +217,7 @@ class DeerFlowAPIClient:
         input_payload = payload.get("input")
         message_count = 0
         if isinstance(input_payload, dict) and isinstance(
-            input_payload.get("messages"),
-            list,
+            input_payload.get("messages"), list
         ):
             message_count = len(input_payload["messages"])
         # Log only a minimal summary to avoid exposing sensitive user content.
@@ -293,7 +290,7 @@ class DeerFlowAPIClient:
             return
         logger.warning(
             "DeerFlowAPIClient garbage collected with unclosed session; "
-            "explicit close() should be called by runner lifecycle (or `async with`).",
+            "explicit close() should be called by runner lifecycle (or `async with`)."
         )
 
     @property

@@ -1,50 +1,41 @@
 import json
-from pathlib import Path
-from typing import TypeVar, overload
+import os
+from typing import TypeVar
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-_MISSING = object()
-_T = TypeVar("_T")
+_VT = TypeVar("_VT")
 
 
 class SharedPreferences:
-    def __init__(self, path: Path | None = None) -> None:
+    def __init__(self, path=None) -> None:
         if path is None:
-            path = Path(get_astrbot_data_path()) / "shared_preferences.json"
+            path = os.path.join(get_astrbot_data_path(), "shared_preferences.json")
         self.path = path
         self._data = self._load_preferences()
 
-    def _load_preferences(self) -> dict[str, object]:
-        if self.path.exists():
+    def _load_preferences(self):
+        if os.path.exists(self.path):
             try:
-                with self.path.open(encoding="utf-8") as f:
+                with open(self.path) as f:
                     return json.load(f)
             except json.JSONDecodeError:
-                self.path.unlink()
+                os.remove(self.path)
         return {}
 
     def _save_preferences(self) -> None:
-        with self.path.open("w", encoding="utf-8") as f:
+        with open(self.path, "w") as f:
             json.dump(self._data, f, indent=4, ensure_ascii=False)
             f.flush()
 
-    @overload
-    def get(self, key: str) -> object | None: ...
-
-    @overload
-    def get(self, key: str, default: _T) -> object | _T: ...
-
-    def get(self, key: str, default: object = _MISSING) -> object | None:
-        if default is _MISSING:
-            return self._data.get(key)
+    def get(self, key, default: _VT = None) -> _VT:
         return self._data.get(key, default)
 
-    def put(self, key: str, value: object) -> None:
+    def put(self, key, value) -> None:
         self._data[key] = value
         self._save_preferences()
 
-    def remove(self, key: str) -> None:
+    def remove(self, key) -> None:
         if key in self._data:
             del self._data[key]
             self._save_preferences()

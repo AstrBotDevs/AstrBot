@@ -9,13 +9,13 @@
         v-for="(ref, refIdx) in refs.used.slice(0, 3)"
         :key="refIdx"
         class="ref-avatar"
-        :style="{ zIndex: 3 - (refIdx as number) }"
+        :style="{ zIndex: 3 - refIdx }"
       >
         <img
           v-if="ref.favicon"
           :src="ref.favicon"
           class="ref-favicon"
-          @error="handleImgError"
+          @error="(e) => (e.target.style.display = 'none')"
         />
         <span v-else class="ref-initial">{{ getRefInitial(ref.title) }}</span>
       </div>
@@ -29,7 +29,7 @@
   </div>
 </template>
 
-<script lang="ts">
+<script>
 import { useModuleI18n } from "@/i18n/composables";
 
 export default {
@@ -46,19 +46,14 @@ export default {
     return { tm };
   },
   methods: {
-    handleImgError(e: Event): void {
-      const el = e.target as HTMLElement;
-      if (el) el.style.display = "none";
-    },
-
     // Get first character of ref title for fallback display
-    getRefInitial(title: string): string {
+    getRefInitial(title) {
       if (!title) return "?";
       return title.charAt(0).toUpperCase();
     },
 
     // Handle click to open refs sidebar
-    handleClick(): void {
+    handleClick() {
       this.$emit("open-refs", this.refs);
     },
   },

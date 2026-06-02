@@ -9,19 +9,16 @@ from .conversation import ConversationRoute
 from .cron import CronRoute
 from .file import FileRoute
 from .knowledge_base import KnowledgeBaseRoute
-from .live_chat import LiveChatRoute
 from .log import LogRoute
 from .open_api import OpenApiRoute
 from .persona import PersonaRoute
 from .platform import PlatformRoute
 from .plugin import PluginRoute
-from .route import Response, RouteContext
 from .session_management import SessionManagementRoute
 from .skills import SkillsRoute
 from .stat import StatRoute
 from .static_file import StaticFileRoute
 from .subagent import SubAgentRoute
-from .t2i import T2iRoute
 from .tools import ToolsRoute
 from .update import UpdateRoute
 
@@ -37,20 +34,16 @@ __all__ = [
     "CronRoute",
     "FileRoute",
     "KnowledgeBaseRoute",
-    "LiveChatRoute",
     "LogRoute",
     "OpenApiRoute",
     "PersonaRoute",
     "PlatformRoute",
     "PluginRoute",
-    "Response",
-    "RouteContext",
     "SessionManagementRoute",
-    "SkillsRoute",
     "StatRoute",
     "StaticFileRoute",
     "SubAgentRoute",
-    "T2iRoute",
     "ToolsRoute",
+    "SkillsRoute",
     "UpdateRoute",
 ]

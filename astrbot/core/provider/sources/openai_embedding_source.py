@@ -2,9 +2,10 @@ import httpx
 from openai import AsyncOpenAI
 
 from astrbot import logger
-from astrbot.core.provider.entities import ProviderType
-from astrbot.core.provider.provider import EmbeddingProvider
-from astrbot.core.provider.register import register_provider_adapter
+
+from ..entities import ProviderType
+from ..provider import EmbeddingProvider
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -69,7 +70,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 kwargs["dimensions"] = int(self.provider_config["embedding_dimensions"])
             except (ValueError, TypeError):
                 logger.warning(
-                    f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored.",
+                    f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored."
                 )
         return kwargs
 
@@ -80,7 +81,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 return int(self.provider_config["embedding_dimensions"])
             except (ValueError, TypeError):
                 logger.warning(
-                    f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored.",
+                    f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored."
                 )
         return 0
 

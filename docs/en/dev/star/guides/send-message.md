@@ -1,4 +1,3 @@
-
 # Sending Messages
 
 ## Passive Messages
@@ -93,14 +92,14 @@ from astrbot.api.event import filter, AstrMessageEvent
 async def test(self, event: AstrMessageEvent):
     from astrbot.api.message_components import Video
     # fromFileSystem requires the user's protocol client and bot to be on the same system.
-    music = Video.fromFileSystem(
+    video = Video.fromFileSystem(
         path="test.mp4"
     )
     # More universal approach
-    music = Video.fromURL(
+    video = Video.fromURL(
         url="https://example.com/video.mp4"
     )
-    yield event.chain_result([music])
+    yield event.chain_result([video])
 ```
 
 ![Sending video messages](https://files.astrbot.app/docs/source/images/plugin/db93a2bb-671c-4332-b8ba-9a91c35623c2.png)

@@ -68,7 +68,7 @@ def test_core_constraints_provider_writes_constraints_file_from_fallback_distrib
         with provider.constraints_file() as constraints_path:
             assert constraints_path is not None
             assert (
-                Path(constraints_path).read_text(encoding="utf-8") == "shared-lib>=1.0"
+                Path(constraints_path).read_text(encoding="utf-8") == "shared-lib==2.0"
             )
     finally:
         core_constraints_module._get_core_constraints.cache_clear()
@@ -226,8 +226,11 @@ def test_plan_missing_requirements_install_returns_none_when_missing_names_canno
 
     monkeypatch.setattr(
         requirements_utils,
-        "find_missing_requirements_from_lines",
-        lambda lines: {"botocore"},
+        "classify_missing_requirements_from_lines",
+        lambda lines: requirements_utils.MissingRequirementsAnalysis(
+            missing_names=frozenset({"botocore"}),
+            version_mismatch_names=frozenset(),
+        ),
     )
 
     plan = requirements_utils.plan_missing_requirements_install(str(requirements_path))
@@ -238,7 +241,7 @@ def test_plan_missing_requirements_install_returns_none_when_missing_names_canno
     assert plan.fallback_reason == "unmapped missing requirement names"
 
 
-def test_find_missing_requirements_from_lines_tracks_missing_and_version_mismatches(
+def test_classify_missing_requirements_from_lines_tracks_missing_and_version_mismatches(
     monkeypatch,
 ):
     monkeypatch.setattr(
@@ -252,11 +255,13 @@ def test_find_missing_requirements_from_lines_tracks_missing_and_version_mismatc
         lambda: ["/tmp/site-packages"],
     )
 
-    missing = requirements_utils.find_missing_requirements_from_lines(
+    analysis = requirements_utils.classify_missing_requirements_from_lines(
         ["boto3>=2.0", "botocore"]
     )
 
-    assert missing == {"boto3", "botocore"}
+    assert analysis is not None
+    assert analysis.missing_names == frozenset({"boto3", "botocore"})
+    assert analysis.version_mismatch_names == frozenset({"boto3"})
 
 
 def test_plan_missing_requirements_install_loads_requirement_lines_once(
@@ -316,6 +321,7 @@ def test_plan_missing_requirements_install_tracks_version_mismatches(
 
     assert plan is not None
     assert plan.missing_names == frozenset({"boto3", "botocore"})
+    assert plan.version_mismatch_names == frozenset({"boto3"})
     assert plan.install_lines == ("boto3>=2.0", "botocore")
 
 

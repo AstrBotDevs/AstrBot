@@ -309,7 +309,7 @@ async def test_cua_config_log_does_not_include_api_key(monkeypatch):
         FakeCuaBooter,
         raising=False,
     )
-    monkeypatch.setattr(computer_client.logger, "info", lambda *args: log_messages.append(args[0] if args else ""))
+    monkeypatch.setattr(computer_client.logger, "info", log_messages.append)
 
     ctx = FakeContext(
         {
@@ -1347,7 +1347,6 @@ def test_cua_tools_are_registered_as_builtin_tools():
     )
 
 
-@pytest.mark.skip(reason="_get_booter_class no longer maps 'cua' to CuaBooter, skipping until supported")
 def test_cua_runtime_tools_are_available_to_handoffs():
     manager = FunctionToolManager()
 
@@ -1368,7 +1367,6 @@ def test_runtime_tool_selection_treats_none_booter_as_empty():
     assert "astrbot_cua_screenshot" not in tools
 
 
-@pytest.mark.skip(reason="_get_booter_class no longer maps 'cua' to CuaBooter, skipping until supported")
 def test_runtime_tool_selection_normalizes_cua_booter_case():
     manager = FunctionToolManager()
 

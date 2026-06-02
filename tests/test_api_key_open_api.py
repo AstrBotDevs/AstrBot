@@ -11,8 +11,14 @@ from werkzeug.datastructures import FileStorage
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.utils.auth_password import (
+    hash_dashboard_password,
+    hash_legacy_dashboard_password,
+)
 from astrbot.dashboard.routes.route import Response
 from astrbot.dashboard.server import AstrBotDashboard
+
+_TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
 
 def _get_open_api_route(app: Quart):
@@ -20,7 +26,7 @@ def _get_open_api_route(app: Quart):
         (
             item
             for item in app.url_map.iter_rules()
-            if item.rule == "/api/v1/chat" and item.methods is not None and "POST" in item.methods
+            if item.rule == "/api/v1/chat" and "POST" in item.methods
         ),
         None,
     )
@@ -49,29 +55,32 @@ async def _create_api_key(
 
 @pytest_asyncio.fixture(scope="module")
 async def core_lifecycle_td(tmp_path_factory):
-    from astrbot.core import astrbot_config as _astrbot_config
-    from astrbot.core.utils.auth_password import hash_dashboard_password
-
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_api_key.db"
     db = SQLiteDatabase(str(tmp_db_path))
     log_broker = LogBroker()
-
-    # Override the dashboard password to a known test value so the login
-    # credential resolution works during test. _resolve_dashboard_password
-    # detects the hash prefix and sends back "astrbot-test-password" as
-    # the plaintext credential.
-    orig_password = _astrbot_config.get("dashboard", {}).get("password")
-    _astrbot_config["dashboard"]["password"] = hash_dashboard_password(
-        "astrbot-test-password"
-    )
-
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
+    generated_password = getattr(
+        core_lifecycle.astrbot_config,
+        "_generated_dashboard_password",
+        None,
+    )
+    dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
+    if not generated_password:
+        core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
+            hash_dashboard_password(dashboard_password)
+        )
+        core_lifecycle.astrbot_config["dashboard"]["password"] = (
+            hash_legacy_dashboard_password(dashboard_password)
+        )
+    object.__setattr__(
+        core_lifecycle,
+        "_dashboard_plain_password",
+        dashboard_password,
+    )
     try:
         yield core_lifecycle
     finally:
-        if orig_password is not None:
-            _astrbot_config["dashboard"]["password"] = orig_password
         try:
             stop_result = core_lifecycle.stop()
             if asyncio.iscoroutine(stop_result):
@@ -88,10 +97,13 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
 
 
 def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
-    password = core_lifecycle_td.astrbot_config["dashboard"]["password"]
-    if isinstance(password, str) and (password.startswith("pbkdf2_sha256$") or password.startswith("$argon2")):
-        return "astrbot-test-password"
-    return str(password)
+    generated_password = getattr(core_lifecycle_td, "_dashboard_plain_password", None)
+    if generated_password:
+        return generated_password
+    password = core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"]
+    if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
+        return "astrbot"
+    return password
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -510,14 +522,13 @@ async def test_open_chat_send_config_resolution(
 
     update_route = AsyncMock()
     delete_route = AsyncMock()
-    config_router = getattr(open_api_route.core_lifecycle, 'umop_config_router')
     monkeypatch.setattr(
-        config_router,
+        open_api_route.core_lifecycle.umop_config_router,
         "update_route",
         update_route,
     )
     monkeypatch.setattr(
-        config_router,
+        open_api_route.core_lifecycle.umop_config_router,
         "delete_route",
         delete_route,
     )

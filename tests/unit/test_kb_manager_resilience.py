@@ -81,23 +81,10 @@ def mock_knowledge_base():
 
 @pytest.fixture
 def mock_embedding_provider():
-    """Create a mock EmbeddingProvider that passes isinstance checks."""
-    from astrbot.core.provider.provider import EmbeddingProvider
-
-    class FakeEmbeddingProvider(EmbeddingProvider):
-        def __init__(self) -> None:
-            pass  # Skip normal __init__ that needs config dicts
-
-        async def get_embedding(self, text: str) -> list[float]:
-            return [0.1, 0.2, 0.3]
-
-        async def get_embeddings(self, text: list[str]) -> list[list[float]]:
-            return [[0.1, 0.2, 0.3] for _ in text]
-
-        def get_dim(self) -> int:
-            return 3
-
-    return FakeEmbeddingProvider()
+    """Create a mock EmbeddingProvider."""
+    provider = MagicMock()
+    provider.get_embeddings_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+    return provider
 
 
 @pytest.mark.asyncio
@@ -257,7 +244,6 @@ async def test_ensure_vec_db_clears_stale_init_error(
     helper.chunker = MagicMock()
     helper.init_error = "Previous initialization failed"
     helper.kb_dir = Path("/tmp/test_kb") / mock_knowledge_base.kb_id
-    helper.kb_dir.mkdir(parents=True, exist_ok=True)
     helper.kb_medias_dir = helper.kb_dir / "medias" / mock_knowledge_base.kb_id
     helper.kb_files_dir = helper.kb_dir / "files" / mock_knowledge_base.kb_id
 
@@ -267,7 +253,7 @@ async def test_ensure_vec_db_clears_stale_init_error(
     mock_vec_db.close = AsyncMock()
 
     with patch(
-        "astrbot.core.knowledge_base.kb_helper.FaissVecDB",
+        "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
         return_value=mock_vec_db,
     ):
         # Execute _ensure_vec_db

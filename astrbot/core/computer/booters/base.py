@@ -1,9 +1,4 @@
-from __future__ import annotations
-
-import abc
-from typing import TYPE_CHECKING
-
-from astrbot.core.computer.olayer import (
+from ..olayer import (
     BrowserComponent,
     FileSystemComponent,
     GUIComponent,
@@ -11,25 +6,16 @@ from astrbot.core.computer.olayer import (
     ShellComponent,
 )
 
-if TYPE_CHECKING:
-    from astrbot.core.agent.tool import ToolSchema
 
-
-class ComputerBooter(abc.ABC):
+class ComputerBooter:
     @property
-    @abc.abstractmethod
-    def fs(self) -> FileSystemComponent:
-        raise NotImplementedError("Subclass must implement fs property")
+    def fs(self) -> FileSystemComponent: ...
 
     @property
-    @abc.abstractmethod
-    def python(self) -> PythonComponent:
-        raise NotImplementedError("Subclass must implement python property")
+    def python(self) -> PythonComponent: ...
 
     @property
-    @abc.abstractmethod
-    def shell(self) -> ShellComponent:
-        raise NotImplementedError("Subclass must implement shell property")
+    def shell(self) -> ShellComponent: ...
 
     @property
     def capabilities(self) -> tuple[str, ...] | None:
@@ -65,29 +51,12 @@ class ComputerBooter(abc.ABC):
 
         Should return a dict with `success` (bool) and `file_path` (str) keys.
         """
-        raise NotImplementedError("Subclass must implement upload_file method")
+        ...
 
     async def download_file(self, remote_path: str, local_path: str) -> None:
         """Download file from the computer."""
-        raise NotImplementedError("Subclass must implement download_file method")
+        ...
 
-    @abc.abstractmethod
     async def available(self) -> bool:
         """Check if the computer is available."""
-        raise NotImplementedError("Subclass must implement available method")
-
-    @classmethod
-    def get_default_tools(cls) -> list[ToolSchema]:
-        """Conservative full tool list (no instance needed, pre-boot)."""
-        return []
-
-    def get_tools(self) -> list[ToolSchema]:
-        """Capability-filtered tool list (post-boot).
-        Defaults to get_default_tools().
-        """
-        return self.__class__.get_default_tools()
-
-    @classmethod
-    def get_system_prompt_parts(cls) -> list[str]:
-        """Booter-specific system prompt fragments (static text, no instance needed)."""
-        return []
+        ...

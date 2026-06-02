@@ -1,14 +1,19 @@
 <template>
   <div class="qr-code-viewer">
-    <img v-if="imageSrc" :src="imageSrc" :alt="alt" class="qr-code-image" />
+    <img
+      v-if="imageSrc"
+      :src="imageSrc"
+      :alt="alt"
+      class="qr-code-image"
+    />
     <div v-else class="qr-code-empty">
       {{ emptyHint }}
     </div>
   </div>
 </template>
 
-<script lang="ts">
-import QRCode from "qrcode";
+<script>
+import QRCode from 'qrcode';
 
 export default {
   name: "QrCodeViewer",
@@ -24,6 +29,10 @@ export default {
     size: {
       type: Number,
       default: 260,
+    },
+    margin: {
+      type: Number,
+      default: 2,
     },
     emptyHint: {
       type: String,
@@ -51,7 +60,7 @@ export default {
 
       try {
         this.imageSrc = await QRCode.toDataURL(value, {
-          margin: 2,
+          margin: this.margin,
           width: this.size,
           errorCorrectionLevel: "M",
         });

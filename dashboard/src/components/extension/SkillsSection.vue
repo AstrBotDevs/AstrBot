@@ -1,29 +1,11 @@
 <template>
   <div class="skills-page">
     <v-container fluid class="pa-0" elevation="0">
-      <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-4">
-        <div>
-          <v-btn
-            v-if="mode === 'local'"
-            color="primary"
-            prepend-icon="mdi-upload"
-            class="me-2"
-            variant="tonal"
-            @click="openUploadDialog"
-          >
-            {{ tm("skills.upload") }}
-          </v-btn>
-          <v-btn
-            color="primary"
-            prepend-icon="mdi-refresh"
-            variant="tonal"
-            @click="refreshCurrentMode"
-          >
-            {{ tm("skills.refresh") }}
-          </v-btn>
-        </div>
+      <v-row
+        v-if="neoEnabled"
+        class="d-flex justify-end align-center px-4 py-3 pb-4"
+      >
         <v-btn-toggle
-          v-if="neoEnabled"
           v-model="mode"
           mandatory
           divided
@@ -58,13 +40,15 @@
       </div>
 
       <template v-if="mode === 'local'">
-        <v-progress-linear v-if="loading" indeterminate color="primary" />
+        <v-progress-linear
+          v-if="loading"
+          indeterminate
+          color="primary"
+        ></v-progress-linear>
 
         <div v-else-if="skills.length === 0" class="text-center pa-8">
-          <v-icon size="64" color="grey-lighten-1"> mdi-folder-open </v-icon>
-          <p class="text-grey mt-4">
-            {{ tm("skills.empty") }}
-          </p>
+          <v-icon size="64" color="grey-lighten-1">mdi-folder-open</v-icon>
+          <p class="text-grey mt-4">{{ tm("skills.empty") }}</p>
           <small class="text-grey">{{ tm("skills.emptyHint") }}</small>
         </div>
 
@@ -205,24 +189,28 @@
           </v-row>
         </v-card>
 
-        <v-progress-linear v-if="neoLoading" indeterminate color="primary" />
+        <v-progress-linear
+          v-if="neoLoading"
+          indeterminate
+          color="primary"
+        ></v-progress-linear>
 
         <div class="mx-3 mb-3 d-flex flex-wrap ga-2">
-          <v-chip size="small" color="primary" variant="tonal">
-            Candidates: {{ neoCandidates.length }}
-          </v-chip>
-          <v-chip size="small" color="indigo" variant="tonal">
-            Releases: {{ neoReleases.length }}
-          </v-chip>
-          <v-chip size="small" color="success" variant="tonal">
-            Active: {{ activeReleaseCount }}
-          </v-chip>
+          <v-chip size="small" color="primary" variant="tonal"
+            >Candidates: {{ neoCandidates.length }}</v-chip
+          >
+          <v-chip size="small" color="indigo" variant="tonal"
+            >Releases: {{ neoReleases.length }}</v-chip
+          >
+          <v-chip size="small" color="success" variant="tonal"
+            >Active: {{ activeReleaseCount }}</v-chip
+          >
         </div>
 
         <v-card class="mx-3 mb-4 neo-table-card" variant="outlined">
-          <v-card-title class="text-subtitle-1 font-weight-bold">
-            {{ tm("skills.neoCandidates") }}
-          </v-card-title>
+          <v-card-title class="text-subtitle-1 font-weight-bold">{{
+            tm("skills.neoCandidates")
+          }}</v-card-title>
           <v-data-table
             :headers="candidateHeaders"
             :items="neoCandidates"
@@ -293,9 +281,9 @@
         </v-card>
 
         <v-card class="mx-3 mb-4 neo-table-card" variant="outlined">
-          <v-card-title class="text-subtitle-1 font-weight-bold">
-            {{ tm("skills.neoReleases") }}
-          </v-card-title>
+          <v-card-title class="text-subtitle-1 font-weight-bold">{{
+            tm("skills.neoReleases")
+          }}</v-card-title>
           <v-data-table
             :headers="releaseHeaders"
             :items="neoReleases"
@@ -407,26 +395,26 @@
           </p>
 
           <div class="skills-upload-structure-note">
-            <v-icon size="18"> mdi-information-outline </v-icon>
+            <v-icon size="18">mdi-information-outline</v-icon>
             <span>{{ tm("skills.structureRequirement") }}</span>
           </div>
 
           <div class="skills-upload-capabilities">
             <div class="skills-upload-capability">
               <div class="skills-upload-capability__icon">
-                <v-icon size="18"> mdi-layers-outline </v-icon>
+                <v-icon size="18">mdi-layers-outline</v-icon>
               </div>
               <span>{{ tm("skills.abilityMultiple") }}</span>
             </div>
             <div class="skills-upload-capability">
               <div class="skills-upload-capability__icon">
-                <v-icon size="18"> mdi-shield-check-outline </v-icon>
+                <v-icon size="18">mdi-shield-check-outline</v-icon>
               </div>
               <span>{{ tm("skills.abilityValidate") }}</span>
             </div>
             <div class="skills-upload-capability">
               <div class="skills-upload-capability__icon">
-                <v-icon size="18"> mdi-skip-next-circle-outline </v-icon>
+                <v-icon size="18">mdi-skip-next-circle-outline</v-icon>
               </div>
               <span>{{ tm("skills.abilitySkip") }}</span>
             </div>
@@ -446,7 +434,7 @@
             @drop.prevent="handleUploadDrop"
           >
             <div class="skills-dropzone__icon">
-              <v-icon size="34"> mdi-folder-zip-outline </v-icon>
+              <v-icon size="34">mdi-folder-zip-outline</v-icon>
             </div>
             <div class="text-h6 font-weight-medium">
               {{ tm("skills.dropzoneTitle") }}
@@ -532,9 +520,7 @@
               class="skills-upload-row"
             >
               <div class="skills-upload-row__meta">
-                <div class="skills-upload-row__name">
-                  {{ item.name }}
-                </div>
+                <div class="skills-upload-row__name">{{ item.name }}</div>
                 <div class="skills-upload-row__size">
                   {{ formatFileSize(item.size) }}
                 </div>
@@ -596,9 +582,9 @@
         <v-card-title>{{ tm("skills.deleteTitle") }}</v-card-title>
         <v-card-text>{{ tm("skills.deleteMessage") }}</v-card-text>
         <v-card-actions class="d-flex justify-end">
-          <v-btn variant="text" @click="deleteDialog = false">
-            {{ tm("skills.cancel") }}
-          </v-btn>
+          <v-btn variant="text" @click="deleteDialog = false">{{
+            tm("skills.cancel")
+          }}</v-btn>
           <v-btn color="error" :loading="deleting" @click="deleteSkill">
             {{ t("core.common.itemCard.delete") }}
           </v-btn>
@@ -749,9 +735,9 @@
           <pre class="payload-preview">{{ payloadDialog.content }}</pre>
         </v-card-text>
         <v-card-actions class="d-flex justify-end">
-          <v-btn variant="text" @click="payloadDialog.show = false">
-            {{ tm("skills.cancel") }}
-          </v-btn>
+          <v-btn variant="text" @click="payloadDialog.show = false">{{
+            tm("skills.cancel")
+          }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -767,81 +753,13 @@
   </div>
 </template>
 
-<script lang="ts">
-import axios from "@/utils/request";
+<script>
+import axios from "axios";
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import { useCustomizerStore } from "@/stores/customizer";
-
-interface Skill {
-  name: string;
-  active: boolean;
-  description: string | null;
-  path: string;
-  source_type: string;
-}
-
-interface UploadResultEntry {
-  name?: string;
-  error?: string;
-  filename?: string;
-}
-
-type UploadStatus = 'waiting' | 'uploading' | 'success' | 'error' | 'skipped';
-
-interface UploadItem {
-  id: string;
-  file: File;
-  name: string;
-  size: number;
-  status: UploadStatus;
-  validationMessage: string;
-  filenameKey: string;
-}
-
-interface NeoCandidate {
-  id: string;
-  skill_key: string;
-  status: string;
-  latest_score: number | null;
-  payload_ref: string | null;
-}
-
-interface NeoRelease {
-  id: string;
-  skill_key: string;
-  stage: string;
-  version: string;
-  is_active: boolean;
-  active?: boolean;
-}
-
-interface SandboxCache {
-  ready: boolean;
-  count: number;
-  updated_at: string | null;
-}
-
-interface UploadStateCounts {
-  total: number;
-  waiting: number;
-  uploading: number;
-  success: number;
-  error: number;
-  skipped: number;
-}
-
-interface SkillsListPayload {
-  runtime?: string;
-  sandbox_cache?: {
-    ready?: boolean;
-    count?: number;
-    updated_at?: string | null;
-  };
-  skills?: Skill[];
-}
 
 const STATUS_WAITING = "waiting";
 const STATUS_UPLOADING = "uploading";
@@ -858,31 +776,31 @@ export default {
     const customizer = useCustomizerStore();
 
     const mode = ref("local");
-    const skills = ref<Skill[]>([]);
+    const skills = ref([]);
     const loading = ref(false);
     const runtime = ref("local");
-    const sandboxCache = reactive<SandboxCache>({ ready: false, count: 0, updated_at: null });
+    const sandboxCache = reactive({ ready: false, count: 0, updated_at: null });
     const uploading = ref(false);
     const uploadDialog = ref(false);
-    const uploadInput = ref<HTMLInputElement | null>(null);
-    const uploadItems = ref<UploadItem[]>([]);
+    const uploadInput = ref(null);
+    const uploadItems = ref([]);
     const isUploadDragging = ref(false);
-    const itemLoading = reactive<Record<string, boolean>>({});
+    const itemLoading = reactive({});
     const deleteDialog = ref(false);
     const deleting = ref(false);
-    const skillToDelete = ref<Skill | null>(null);
-    const snackbar = reactive<{ show: boolean; message: string; color: string }>({ show: false, message: "", color: "success" });
+    const skillToDelete = ref(null);
+    const snackbar = reactive({ show: false, message: "", color: "success" });
 
     const neoLoading = ref(false);
-    const neoCandidates = ref<NeoCandidate[]>([]);
-    const neoReleases = ref<NeoRelease[]>([]);
-    const neoFilters = reactive<{ skill_key: string; status: string; stage: string }>({
+    const neoCandidates = ref([]);
+    const neoReleases = ref([]);
+    const neoFilters = reactive({
       skill_key: "",
       status: "",
       stage: "",
     });
-    const candidatePromoteLoading = reactive<Record<string, boolean>>({});
-    const payloadDialog = reactive<{ show: boolean; content: string }>({
+    const candidatePromoteLoading = reactive({});
+    const payloadDialog = reactive({
       show: false,
       content: "",
     });
@@ -923,7 +841,7 @@ export default {
     ]);
 
     const activeReleaseCount = computed(
-      () => neoReleases.value.filter((item: NeoRelease) => item?.is_active).length,
+      () => neoReleases.value.filter((item) => item?.is_active).length,
     );
     const editorLanguage = computed(() => {
       const path = String(editorDialog.filePath || "").toLowerCase();
@@ -953,7 +871,7 @@ export default {
       wordWrap: "on",
     }));
     const uploadStateCounts = computed(() =>
-      uploadItems.value.reduce<UploadStateCounts>(
+      uploadItems.value.reduce(
         (counts, item) => {
           counts.total += 1;
           counts[item.status] += 1;
@@ -971,7 +889,7 @@ export default {
     );
     const hasUploadableItems = computed(() =>
       uploadItems.value.some(
-        (item: UploadItem) =>
+        (item) =>
           item.status === STATUS_WAITING || item.status === STATUS_ERROR,
       ),
     );
@@ -1003,13 +921,13 @@ export default {
       },
     ]);
 
-    const showMessage = (message: string, color: string = "success"): void => {
+    const showMessage = (message, color = "success") => {
       snackbar.message = message;
       snackbar.color = color;
       snackbar.show = true;
     };
 
-    const normalizeSkillsPayload = (res: { data?: { data?: Skill[] | SkillsListPayload } }): Skill[] => {
+    const normalizeSkillsPayload = (res) => {
       const payload = res?.data?.data || [];
       if (Array.isArray(payload)) {
         runtime.value = "local";
@@ -1037,39 +955,39 @@ export default {
       return tm("skills.sourceLocalOnly");
     };
 
-    const sourceTypeColor = (sourceType: string): string => {
+    const sourceTypeColor = (sourceType) => {
       if (sourceType === "sandbox_only") return "indigo";
       if (sourceType === "plugin") return "secondary";
       if (sourceType === "both") return "success";
       return "primary";
     };
 
-    const isSandboxPresetSkill = (skill: Skill): boolean =>
+    const isSandboxPresetSkill = (skill) =>
       skill?.source_type === "sandbox_only";
     const isPluginProvidedSkill = (skill) => skill?.source_type === "plugin";
     const isReadOnlySourceSkill = (skill) =>
       isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
 
-    const normalizeNeoItemsPayload = <T>(res: { data?: { data?: T[] | { items?: T[] } } }): T[] => {
+    const normalizeNeoItemsPayload = (res) => {
       const payload = res?.data?.data || [];
       if (Array.isArray(payload)) return payload;
       if (Array.isArray(payload.items)) return payload.items;
       return [];
     };
 
-    const formatFileSize = (size: number): string => {
+    const formatFileSize = (size) => {
       if (!Number.isFinite(size) || size <= 0) return "0 B";
       if (size < 1024) return `${size} B`;
       if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
       return `${(size / (1024 * 1024)).toFixed(1)} MB`;
     };
 
-    const normalizeUploadName = (name: string): string =>
+    const normalizeUploadName = (name) =>
       String(name || "")
         .trim()
         .toLowerCase();
 
-    const buildUploadItem = (file: File, status: UploadStatus, validationMessage: string): UploadItem => ({
+    const buildUploadItem = (file, status, validationMessage) => ({
       id: `upload-${nextUploadItemId++}`,
       file,
       name: file.name,
@@ -1079,7 +997,7 @@ export default {
       filenameKey: normalizeUploadName(file.name),
     });
 
-    const uploadStatusLabel = (status: UploadStatus): string => {
+    const uploadStatusLabel = (status) => {
       if (status === STATUS_UPLOADING) return tm("skills.statusUploading");
       if (status === STATUS_SUCCESS) return tm("skills.statusSuccess");
       if (status === STATUS_ERROR) return tm("skills.statusError");
@@ -1087,10 +1005,10 @@ export default {
       return tm("skills.statusWaiting");
     };
 
-    const statusChipClass = (status: string): string =>
+    const statusChipClass = (status) =>
       `skills-status-chip skills-status-chip--${status}`;
 
-    const resetUploadState = (): void => {
+    const resetUploadState = () => {
       uploadItems.value = [];
       isUploadDragging.value = false;
       if (uploadInput.value) {
@@ -1098,25 +1016,25 @@ export default {
       }
     };
 
-    const openUploadDialog = (): void => {
+    const openUploadDialog = () => {
       uploadDialog.value = true;
     };
 
-    const closeUploadDialog = (): void => {
+    const closeUploadDialog = () => {
       if (uploading.value) return;
       uploadDialog.value = false;
     };
 
-    const openUploadPicker = (): void => {
+    const openUploadPicker = () => {
       if (uploading.value) return;
       uploadInput.value?.click();
     };
 
-    const addUploadFiles = (filesToAdd: File[]): void => {
+    const addUploadFiles = (filesToAdd) => {
       const existingNames = new Set(
-        uploadItems.value.map((item: UploadItem) => item.filenameKey),
+        uploadItems.value.map((item) => item.filenameKey),
       );
-      const nextItems: UploadItem[] = [];
+      const nextItems = [];
 
       for (const file of filesToAdd) {
         if (!file?.name) continue;
@@ -1155,16 +1073,15 @@ export default {
       }
     };
 
-    const handleUploadSelection = (event: Event): void => {
-      const target = event?.target as HTMLInputElement | null;
-      const selected = Array.from(target?.files || []);
+    const handleUploadSelection = (event) => {
+      const selected = Array.from(event?.target?.files || []);
       addUploadFiles(selected);
       if (uploadInput.value) {
         uploadInput.value.value = "";
       }
     };
 
-    const handleUploadDrop = (event: DragEvent): void => {
+    const handleUploadDrop = (event) => {
       isUploadDragging.value = false;
       if (uploading.value) {
         return;
@@ -1172,16 +1089,13 @@ export default {
       addUploadFiles(Array.from(event?.dataTransfer?.files || []));
     };
 
-    const removeUploadItem = (itemId: string): void => {
+    const removeUploadItem = (itemId) => {
       uploadItems.value = uploadItems.value.filter(
-        (item: UploadItem) => item.id !== itemId,
+        (item) => item.id !== itemId,
       );
     };
 
-    const takeFirstMatch = (
-      matchMap: Map<string, UploadResultEntry[]>,
-      filenameKey: string,
-    ): UploadResultEntry | null => {
+    const takeFirstMatch = (matchMap, filenameKey) => {
       const matches = matchMap.get(filenameKey) || [];
       const entry = matches.shift() || null;
       if (matches.length === 0) {
@@ -1190,29 +1104,20 @@ export default {
       return entry;
     };
 
-    const buildResultMap = (
-      items: UploadResultEntry[] = [],
-    ): Map<string, UploadResultEntry[]> => {
-      const resultMap = new Map<string, UploadResultEntry[]>();
+    const buildResultMap = (items = []) => {
+      const resultMap = new Map();
       for (const item of items) {
-        const filenameKey = normalizeUploadName(item?.filename || "");
+        const filenameKey = normalizeUploadName(item?.filename);
         if (!filenameKey) continue;
         if (!resultMap.has(filenameKey)) {
           resultMap.set(filenameKey, []);
         }
-        resultMap.get(filenameKey)!.push(item);
+        resultMap.get(filenameKey).push(item);
       }
       return resultMap;
     };
 
-    const applyUploadResults = (
-      attemptedItems: UploadItem[],
-      payload: {
-        succeeded?: UploadResultEntry[];
-        failed?: UploadResultEntry[];
-        skipped?: UploadResultEntry[];
-      },
-    ): void => {
+    const applyUploadResults = (attemptedItems, payload) => {
       const succeededMap = buildResultMap(payload?.succeeded);
       const failedMap = buildResultMap(payload?.failed);
       const skippedMap = buildResultMap(payload?.skipped);
@@ -1248,12 +1153,12 @@ export default {
       }
     };
 
-    const fetchSkills = async (): Promise<void> => {
+    const fetchSkills = async () => {
       loading.value = true;
       try {
         const res = await axios.get("/api/skills");
         skills.value = normalizeSkillsPayload(res);
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.loadFailed"), "error");
       } finally {
         loading.value = false;
@@ -1261,11 +1166,11 @@ export default {
     };
 
     const handleApiResponse = (
-      res: { data?: { status?: string; message?: string } },
-      successMessage: string,
-      failureMessageDefault: string,
-      onSuccess?: () => void,
-    ): void => {
+      res,
+      successMessage,
+      failureMessageDefault,
+      onSuccess,
+    ) => {
       if (res && res.data && res.data.status === "ok") {
         showMessage(successMessage, "success");
         if (onSuccess) onSuccess();
@@ -1276,9 +1181,9 @@ export default {
       }
     };
 
-    const uploadSkillBatch = async (): Promise<void> => {
+    const uploadSkillBatch = async () => {
       const attemptedItems = uploadItems.value.filter(
-        (item: UploadItem) =>
+        (item) =>
           item.status === STATUS_WAITING || item.status === STATUS_ERROR,
       );
       if (attemptedItems.length === 0) return;
@@ -1312,8 +1217,8 @@ export default {
           res?.data?.status === "error"
             ? "error"
             : failedCount > 0
-              ? "warning"
-              : "success";
+            ? "warning"
+            : "success";
         showMessage(
           res?.data?.message || tm("skills.uploadSuccess"),
           responseColor,
@@ -1322,7 +1227,7 @@ export default {
         if (succeededCount > 0) {
           await fetchSkills();
         }
-      } catch (_err: unknown) {
+      } catch (_err) {
         for (const item of attemptedItems) {
           item.status = STATUS_ERROR;
           item.validationMessage = tm("skills.validationUploadFailed");
@@ -1333,7 +1238,7 @@ export default {
       }
     };
 
-    const toggleSkill = async (skill: Skill): Promise<void> => {
+    const toggleSkill = async (skill) => {
       if (isSandboxPresetSkill(skill)) {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
@@ -1353,14 +1258,14 @@ export default {
             skill.active = nextActive;
           },
         );
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.updateFailed"), "error");
       } finally {
         itemLoading[skill.name] = false;
       }
     };
 
-    const confirmDelete = (skill: Skill): void => {
+    const confirmDelete = (skill) => {
       if (isSandboxPresetSkill(skill)) {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
@@ -1373,7 +1278,7 @@ export default {
       deleteDialog.value = true;
     };
 
-    const deleteSkill = async (): Promise<void> => {
+    const deleteSkill = async () => {
       if (!skillToDelete.value) return;
       deleting.value = true;
       try {
@@ -1389,14 +1294,14 @@ export default {
             await fetchSkills();
           },
         );
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.deleteFailed"), "error");
       } finally {
         deleting.value = false;
       }
     };
 
-    const downloadSkill = async (skill: Skill): Promise<void> => {
+    const downloadSkill = async (skill) => {
       if (isSandboxPresetSkill(skill)) {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
@@ -1421,7 +1326,7 @@ export default {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
         showMessage(tm("skills.downloadSuccess"), "success");
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.downloadFailed"), "error");
       } finally {
         itemLoading[skill.name] = false;
@@ -1595,16 +1500,16 @@ export default {
         status: neoFilters.status || undefined,
       };
       const res = await axios.get("/api/skills/neo/candidates", { params });
-      neoCandidates.value = normalizeNeoItemsPayload<NeoCandidate>(res);
+      neoCandidates.value = normalizeNeoItemsPayload(res);
     };
 
-    const fetchNeoReleases = async (): Promise<void> => {
+    const fetchNeoReleases = async () => {
       const params = {
         skill_key: neoFilters.skill_key || undefined,
         stage: neoFilters.stage || undefined,
       };
       const res = await axios.get("/api/skills/neo/releases", { params });
-      neoReleases.value = normalizeNeoItemsPayload<NeoRelease>(res).map((item: NeoRelease) => {
+      neoReleases.value = normalizeNeoItemsPayload(res).map((item) => {
         if (!item || typeof item !== "object") {
           return item;
         }
@@ -1615,7 +1520,7 @@ export default {
       });
     };
 
-    const loadNeoAvailability = async (): Promise<void> => {
+    const loadNeoAvailability = async () => {
       try {
         const res = await axios.get("/api/config/get");
         const config = res?.data?.data?.config || {};
@@ -1625,7 +1530,7 @@ export default {
         const booter = providerSettings?.sandbox?.booter || "";
         neoEnabled.value =
           currentRuntime === "sandbox" && booter === "shipyard_neo";
-      } catch (_err: unknown) {
+      } catch (_err) {
         neoEnabled.value = false;
       }
 
@@ -1635,18 +1540,18 @@ export default {
       }
     };
 
-    const fetchNeoData = async (): Promise<void> => {
+    const fetchNeoData = async () => {
       neoLoading.value = true;
       try {
         await Promise.all([fetchNeoCandidates(), fetchNeoReleases()]);
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.neoLoadFailed"), "error");
       } finally {
         neoLoading.value = false;
       }
     };
 
-    const evaluateCandidate = async (candidate: NeoCandidate, passed: boolean): Promise<void> => {
+    const evaluateCandidate = async (candidate, passed) => {
       try {
         const res = await axios.post("/api/skills/neo/evaluate", {
           candidate_id: candidate.id,
@@ -1662,20 +1567,20 @@ export default {
             await fetchNeoCandidates();
           },
         );
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.neoEvaluateFailed"), "error");
       }
     };
 
-    const candidatePromoteLoadingKey = (candidateId: string, stage: string): string =>
+    const candidatePromoteLoadingKey = (candidateId, stage) =>
       `${candidateId}:${stage}`;
-    const isCandidatePromoteLoading = (candidateId: string, stage: string): boolean =>
+    const isCandidatePromoteLoading = (candidateId, stage) =>
       !!candidatePromoteLoading[candidatePromoteLoadingKey(candidateId, stage)];
-    const isCandidatePromoting = (candidateId: string): boolean =>
+    const isCandidatePromoting = (candidateId) =>
       isCandidatePromoteLoading(candidateId, "canary") ||
       isCandidatePromoteLoading(candidateId, "stable");
 
-    const promoteCandidate = async (candidate: NeoCandidate, stage: 'canary' | 'stable'): Promise<void> => {
+    const promoteCandidate = async (candidate, stage) => {
       const candidateId = candidate?.id;
       if (!candidateId) return;
       const loadingKey = candidatePromoteLoadingKey(candidateId, stage);
@@ -1700,14 +1605,14 @@ export default {
         if (stage === "stable") {
           await fetchSkills();
         }
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.neoPromoteFailed"), "error");
       } finally {
         candidatePromoteLoading[loadingKey] = false;
       }
     };
 
-    const rollbackRelease = async (release: NeoRelease): Promise<void> => {
+    const rollbackRelease = async (release) => {
       try {
         const res = await axios.post("/api/skills/neo/rollback", {
           release_id: release.id,
@@ -1720,12 +1625,12 @@ export default {
             await fetchNeoData();
           },
         );
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.neoRollbackFailed"), "error");
       }
     };
 
-    const deactivateRelease = async (release: NeoRelease): Promise<void> => {
+    const deactivateRelease = async (release) => {
       try {
         const res = await axios.post("/api/skills/neo/rollback", {
           release_id: release.id,
@@ -1738,12 +1643,12 @@ export default {
             await fetchNeoData();
           },
         );
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.neoDeactivateFailed"), "error");
       }
     };
 
-    const handleReleaseLifecycleAction = async (release: NeoRelease): Promise<void> => {
+    const handleReleaseLifecycleAction = async (release) => {
       if (release?.is_active) {
         await deactivateRelease(release);
         return;
@@ -1751,7 +1656,7 @@ export default {
       await rollbackRelease(release);
     };
 
-    const syncRelease = async (release: NeoRelease): Promise<void> => {
+    const syncRelease = async (release) => {
       try {
         const res = await axios.post("/api/skills/neo/sync", {
           release_id: release.id,
@@ -1764,12 +1669,12 @@ export default {
             await fetchSkills();
           },
         );
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.neoSyncFailed"), "error");
       }
     };
 
-    const viewPayload = async (payloadRef: string): Promise<void> => {
+    const viewPayload = async (payloadRef) => {
       if (!payloadRef) return;
       try {
         const res = await axios.get("/api/skills/neo/payload", {
@@ -1785,12 +1690,12 @@ export default {
         const payload = res?.data?.data || {};
         payloadDialog.content = JSON.stringify(payload, null, 2);
         payloadDialog.show = true;
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.neoPayloadFailed"), "error");
       }
     };
 
-    const deleteCandidate = async (candidate: NeoCandidate): Promise<void> => {
+    const deleteCandidate = async (candidate) => {
       try {
         const res = await axios.post("/api/skills/neo/delete-candidate", {
           candidate_id: candidate.id,
@@ -1804,12 +1709,12 @@ export default {
             await fetchNeoData();
           },
         );
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.neoDeleteFailed"), "error");
       }
     };
 
-    const deleteRelease = async (release: NeoRelease): Promise<void> => {
+    const deleteRelease = async (release) => {
       try {
         const res = await axios.post("/api/skills/neo/delete-release", {
           release_id: release.id,
@@ -1823,12 +1728,12 @@ export default {
             await fetchNeoData();
           },
         );
-      } catch (_err: unknown) {
+      } catch (_err) {
         showMessage(tm("skills.neoDeleteFailed"), "error");
       }
     };
 
-    const refreshCurrentMode = async (): Promise<void> => {
+    const refreshCurrentMode = async () => {
       if (mode.value === "neo") {
         await loadNeoAvailability();
         if (neoEnabled.value) {
@@ -1841,7 +1746,7 @@ export default {
       }
     };
 
-    watch(mode, async (nextMode: string) => {
+    watch(mode, async (nextMode) => {
       if (nextMode === "neo") {
         await loadNeoAvailability();
         if (neoEnabled.value) {
@@ -1852,7 +1757,7 @@ export default {
       }
     });
 
-    watch(uploadDialog, (isOpen: boolean) => {
+    watch(uploadDialog, (isOpen) => {
       if (!isOpen && !uploading.value) {
         resetUploadState();
       }
@@ -2421,11 +2326,11 @@ export default {
   border-radius: 14px;
 }
 
-.neo-data-table ::v-deep(.v-data-table-header__content) {
+.neo-data-table :deep(.v-data-table-header__content) {
   font-weight: 700;
 }
 
-.neo-data-table ::v-deep(tbody tr:hover) {
+.neo-data-table :deep(tbody tr:hover) {
   background: rgba(var(--v-theme-primary), 0.04);
 }
 

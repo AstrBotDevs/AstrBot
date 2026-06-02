@@ -1,10 +1,26 @@
 import { ref } from 'vue';
-import axios from '@/utils/request';
 
 export function useRecording() {
     const isRecording = ref(false);
     const audioChunks = ref<Blob[]>([]);
     const mediaRecorder = ref<MediaRecorder | null>(null);
+
+    function getSupportedMimeType(): string {
+        const candidates = [
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/ogg;codecs=opus',
+            'audio/ogg',
+            'audio/mp4',
+            'audio/wav'
+        ];
+
+        if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) {
+            return '';
+        }
+
+        return candidates.find(type => MediaRecorder.isTypeSupported(type)) || '';
+    }
 
     function getRecordingMimeType(): string {
         const chunkType = audioChunks.value.find(chunk => chunk.type)?.type;
@@ -23,16 +39,30 @@ export function useRecording() {
         };
         const normalizedMimeType = mimeType.toLowerCase();
         const extension = extensionMap[normalizedMimeType] || normalizedMimeType.split('/')[1]?.split(';')[0] || 'webm';
-        return `${crypto.randomUUID()}.${extension}`;
+        const id = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        return `${id}.${extension}`;
     }
 
     async function startRecording(onStart?: (label: string) => void) {
         try {
+            if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+                throw new Error('Audio recording is not supported in this browser');
+            }
+
+            mediaRecorder.value?.stream.getTracks().forEach(track => track.stop());
+            audioChunks.value = [];
+
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder.value = new MediaRecorder(stream);
+            const mimeType = getSupportedMimeType();
+            mediaRecorder.value = new MediaRecorder(
+                stream,
+                mimeType ? { mimeType } : undefined
+            );
             
             mediaRecorder.value.ondataavailable = (event) => {
-                audioChunks.value.push(event.data);
+                if (event.data.size > 0) {
+                    audioChunks.value.push(event.data);
+                }
             };
             
             mediaRecorder.value.start();
@@ -43,13 +73,16 @@ export function useRecording() {
             }
         } catch (error) {
             console.error('Failed to start recording:', error);
+            isRecording.value = false;
+            throw error;
         }
     }
 
-    async function stopRecording(onStop?: (label: string) => void): Promise<string> {
+    async function stopRecording(onStop?: (label: string) => void): Promise<File> {
         return new Promise((resolve, reject) => {
-            if (!mediaRecorder.value) {
-                reject('No media recorder');
+            const recorder = mediaRecorder.value;
+            if (!recorder) {
+                reject(new Error('No media recorder'));
                 return;
             }
 
@@ -58,33 +91,45 @@ export function useRecording() {
                 onStop('聊天输入框');
             }
 
-            mediaRecorder.value.stop();
-            mediaRecorder.value.onstop = async () => {
+            recorder.onstop = () => {
                 const mimeType = getRecordingMimeType();
                 const audioBlob = new Blob(audioChunks.value, { type: mimeType });
-                const filename = getRecordingFilename(mimeType);
                 audioChunks.value = [];
-
-                mediaRecorder.value?.stream.getTracks().forEach(track => track.stop());
-
-                const formData = new FormData();
-                formData.append('file', audioBlob, filename);
-
-                try {
-                    const response = await axios.post('/api/chat/post_file', formData, {
-                        headers: {
-                            'Content-Type': 'multipart/form-data'
-                        }
-                    });
-
-                    const attachmentId = response.data.data.attachment_id;
-                    console.log('Audio uploaded:', attachmentId);
-                    resolve(attachmentId);
-                } catch (err) {
-                    console.error('Error uploading audio:', err);
-                    reject(err);
+                recorder.stream.getTracks().forEach(track => track.stop());
+                if (mediaRecorder.value === recorder) {
+                    mediaRecorder.value = null;
                 }
+
+                if (!audioBlob.size) {
+                    reject(new Error('Recording is empty'));
+                    return;
+                }
+
+                const filename = getRecordingFilename(mimeType);
+                const audioFile = new File([audioBlob], filename, {
+                    type: mimeType,
+                    lastModified: Date.now()
+                });
+                resolve(audioFile);
             };
+
+            recorder.onerror = (event) => {
+                recorder.stream.getTracks().forEach(track => track.stop());
+                if (mediaRecorder.value === recorder) {
+                    mediaRecorder.value = null;
+                }
+                reject(event);
+            };
+
+            try {
+                recorder.stop();
+            } catch (error) {
+                recorder.stream.getTracks().forEach(track => track.stop());
+                if (mediaRecorder.value === recorder) {
+                    mediaRecorder.value = null;
+                }
+                reject(error);
+            }
         });
     }
 

@@ -1,4 +1,6 @@
-"""Shell component"""
+"""
+Shell component
+"""
 
 from typing import Any, Protocol
 
@@ -14,7 +16,6 @@ class ShellComponent(Protocol):
         timeout: int | None = 300,
         shell: bool = True,
         background: bool = False,
-        session_id: str | None = None,
     ) -> dict[str, Any]:
         """Execute shell command"""
         ...

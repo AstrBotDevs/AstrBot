@@ -13,13 +13,13 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.response import AgentStats
-from astrbot.core.astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from astrbot.core.astr_main_agent import (
+    LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
 )
-from astrbot.core.message.components import File, Image, Record, Video
+from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -27,15 +27,6 @@ from astrbot.core.message.message_event_result import (
 )
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
-)
-from astrbot.core.pipeline.context import PipelineContext, call_event_hook
-from astrbot.core.pipeline.process_stage.follow_up import (
-    FollowUpCapture,
-    finalize_follow_up_capture,
-    prepare_follow_up_capture,
-    register_active_runner,
-    try_capture_follow_up,
-    unregister_active_runner,
 )
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -46,6 +37,17 @@ from astrbot.core.provider.entities import (
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
+
+from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
+from ....context import PipelineContext, call_event_hook
+from ...follow_up import (
+    FollowUpCapture,
+    finalize_follow_up_capture,
+    prepare_follow_up_capture,
+    register_active_runner,
+    try_capture_follow_up,
+    unregister_active_runner,
+)
 
 
 class InternalAgentSubStage(Stage):
@@ -74,7 +76,6 @@ class InternalAgentSubStage(Stage):
             "buffer_intermediate_messages",
             False,
         )
-        self.provider_wake_prefix: str = settings.get("wake_prefix", "")
         self.show_reasoning = settings.get("display_reasoning_text", False)
         self.sanitize_context_by_modalities: bool = settings.get(
             "sanitize_context_by_modalities",
@@ -96,7 +97,9 @@ class InternalAgentSubStage(Stage):
         self.llm_compress_instruction: str = settings.get(
             "llm_compress_instruction", ""
         )
-        self.llm_compress_keep_recent: int = settings.get("llm_compress_keep_recent", 4)
+        self.llm_compress_keep_recent: int = settings.get(
+            "llm_compress_keep_recent", 10
+        )
         self.llm_compress_provider_id: str = settings.get(
             "llm_compress_provider_id", ""
         )
@@ -151,8 +154,14 @@ class InternalAgentSubStage(Stage):
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
 
-    async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None, None]:
-        provider_wake_prefix = self.provider_wake_prefix
+    async def _send_llm_error_message(
+        self, event: AstrMessageEvent, message: object
+    ) -> None:
+        await event.send(MessageChain().message(str(message)))
+
+    async def process(
+        self, event: AstrMessageEvent, provider_wake_prefix: str
+    ) -> AsyncGenerator[None, None]:
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
@@ -168,11 +177,15 @@ class InternalAgentSubStage(Stage):
                 isinstance(comp, (Image, File, Record, Video))
                 for comp in event.message_obj.message
             )
+            has_reply = any(
+                isinstance(comp, Reply) for comp in event.message_obj.message
+            )
 
             if (
                 not has_provider_request
                 and not has_valid_message
                 and not has_media_content
+                and not has_reply
             ):
                 logger.debug("skip llm request: empty message and no provider_request")
                 return
@@ -218,6 +231,13 @@ class InternalAgentSubStage(Stage):
                     )
 
                     if build_result is None:
+                        if llm_error_message := event.get_extra(
+                            LLM_ERROR_MESSAGE_EXTRA_KEY
+                        ):
+                            await self._send_llm_error_message(
+                                event,
+                                llm_error_message,
+                            )
                         return
 
                     agent_runner = build_result.agent_runner
@@ -228,10 +248,12 @@ class InternalAgentSubStage(Stage):
                     api_base = provider.provider_config.get("api_base", "")
                     for host in decoded_blocked:
                         if host in api_base:
-                            logger.error(
-                                "Provider API base %s is blocked due to security reasons. Please use another ai provider.",
-                                api_base,
+                            error_message = (
+                                f"LLM 请求失败：Provider API base `{api_base}` "
+                                "因安全原因被拦截，请更换可用的 AI 提供商。"
                             )
+                            logger.error(error_message)
+                            await self._send_llm_error_message(event, error_message)
                             return
 
                     stream_to_general = (
@@ -398,7 +420,7 @@ class InternalAgentSubStage(Stage):
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
-            logger.error(f"Error occurred while processing agent: {e}", exc_info=True)
+            logger.error(f"Error occurred while processing agent: {e}")
             custom_error_message = extract_persona_custom_error_message_from_event(
                 event
             )
@@ -460,6 +482,18 @@ class InternalAgentSubStage(Stage):
                 continue
             if message.role in ["assistant", "user"] and message._no_save:
                 continue
+            # Truncate long tool results before persisting (8192 chars)
+            if (
+                message.role == "tool"
+                and isinstance(message.content, str)
+                and len(message.content) > 8192
+            ):
+                message = Message(
+                    role="tool",
+                    tool_call_id=message.tool_call_id,
+                    content=message.content[:8192]
+                    + f"\n...[truncated {len(message.content) - 8192} chars]",
+                )
             messages_to_save.append(message)
 
         checkpoint_id = event.get_extra("llm_checkpoint_id")
