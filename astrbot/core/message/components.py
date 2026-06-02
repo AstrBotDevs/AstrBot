@@ -526,6 +526,10 @@ class Reply(BaseMessageComponent):
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
+    def toDict(self):
+        """仅输出 id 字段，符合 OneBot V11 reply 段标准格式。"""
+        return {"type": "reply", "data": {"id": str(self.id)}}
+
 
 class Poke(BaseMessageComponent):
     type: ComponentType = ComponentType.Poke
