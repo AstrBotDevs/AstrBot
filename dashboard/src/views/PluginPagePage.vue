@@ -432,7 +432,9 @@ const loadPluginPage = async () => {
 
     plugin.value = pluginData;
     page.value = pageEntry;
-    iframeSrc.value = pageEntry.content_path;
+    const uiTheme = localStorage.getItem("uiTheme") || "PurpleTheme";
+    const sep = pageEntry.content_path.includes('?') ? '&' : '?';
+    iframeSrc.value = pageEntry.content_path + sep + 'ui_theme=' + encodeURIComponent(uiTheme);
   } catch (error) {
     errorMessage.value =
       error?.response?.data?.message ||

@@ -808,6 +808,17 @@ class PluginRoute(Route):
         extra_query_params: dict[str, str] | None,
     ):
         html_text = await self._read_plugin_page_text(file_path)
+        # Inject AstrBot theme for plugin pages to prevent FOUC
+        ui_theme = request.args.get("ui_theme", "").strip()
+        if ui_theme and re.match(r"^[a-zA-Z0-9_-]+$", ui_theme):
+            theme_script = (
+                f"<script>window.__ASTRBOT_UI_THEME__={json.dumps(ui_theme)}</script>"
+            )
+            head_pattern = re.compile(r"<head\b[^>]*>", re.IGNORECASE)
+            match = head_pattern.search(html_text)
+            if match:
+                end = match.end()
+                html_text = html_text[:end] + theme_script + html_text[end:]
         rewritten_html = self._rewrite_plugin_page_html(
             html_text,
             plugin_name,
