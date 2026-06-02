@@ -321,6 +321,18 @@ class SandboxManager:
             record.get("lease_expires_at"),
         )
 
+    def _release_expired_lease(self, record: dict) -> dict:
+        sandbox_id = record.get("sandbox_id")
+        controller_session_id = record.get("controller_session_id")
+        if not sandbox_id or not controller_session_id:
+            return record
+        if lease_is_active(controller_session_id, record.get("lease_expires_at")):
+            return record
+        released = self.registry.release_lease(sandbox_id) or record
+        if self.registry.get_current_sandbox_id(controller_session_id) == sandbox_id:
+            self.registry.set_current_sandbox_id(controller_session_id, None)
+        return released
+
     def sandbox_controlled_by_other_session(
         self, sandbox_id: str, session_id: str
     ) -> bool:
@@ -887,6 +899,7 @@ class SandboxManager:
                 continue
             if "booter_type" in record:
                 record = SandboxRecord.from_dict(record).to_dict()
+            record = self._release_expired_lease(record)
             provider = self.providers.get(record.get("provider"))
             updated = dict(record)
             updated["capabilities"] = sorted(

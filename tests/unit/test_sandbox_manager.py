@@ -1008,6 +1008,34 @@ def test_manager_treats_expired_lease_sandbox_as_idle(tmp_path):
     assert manager._find_idle_provider_sandbox_id("generic") == "generic-1"
 
 
+def test_manager_list_sandboxes_releases_expired_lease(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Expired",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Expired"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() - 1,
+    )
+    manager.registry.set_current_sandbox_id("session-a", "generic-1")
+
+    listed = manager.list_sandboxes()[0]
+    persisted = manager.registry.get_sandbox("generic-1")
+
+    assert listed["controller_session_id"] is None
+    assert listed["controller_user_id"] is None
+    assert listed["lease_expires_at"] is None
+    assert persisted["controller_session_id"] is None
+    assert manager.registry.get_current_sandbox_id("session-a") is None
+
+
 @pytest.mark.asyncio
 async def test_manager_creates_new_sandbox_when_current_binding_is_busy(tmp_path):
     manager, provider = _manager(tmp_path)
