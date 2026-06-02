@@ -596,6 +596,42 @@
         "description": "Telegram Command Scopes",
         "hint": "Telegram BotCommandScope configs, e.g. {\"type\":\"default\",\"language_code\":\"en\"} or {\"type\":\"chat\",\"chat_id\":12345}."
       },
+      "telegram_update_mode": {
+        "description": "Telegram Update Mode",
+        "hint": "polling uses getUpdates polling; webhook starts an independent Telegram adapter listener and requires a public URL reachable by Telegram."
+      },
+      "telegram_webhook_listen": {
+        "description": "Telegram Webhook Listen Address",
+        "hint": "Local listen address for the independent Telegram webhook. Reverse-proxy deployments usually use 0.0.0.0 or 127.0.0.1."
+      },
+      "telegram_webhook_port": {
+        "description": "Telegram Webhook Listen Port",
+        "hint": "Local listen port for the independent Telegram webhook. Use the reverse proxy target port when proxied."
+      },
+      "telegram_webhook_url_path": {
+        "description": "Telegram Webhook Path",
+        "hint": "Local path for the independent Telegram webhook. The public URL should route to this path."
+      },
+      "telegram_webhook_url": {
+        "description": "Telegram Webhook Public URL",
+        "hint": "HTTPS public URL passed to Telegram Bot API setWebhook. Required when webhook mode is enabled."
+      },
+      "telegram_webhook_secret_token": {
+        "description": "Telegram Webhook Secret Token",
+        "hint": "Optional. Telegram includes this secret token in webhook requests so you can verify the source."
+      },
+      "telegram_webhook_drop_pending_updates": {
+        "description": "Drop Pending Updates On Webhook Start",
+        "hint": "When enabled, Telegram drops queued pending updates while starting webhook mode."
+      },
+      "telegram_webhook_cert_path": {
+        "description": "Telegram Webhook Certificate Path",
+        "hint": "Optional. Only set this when PTB serves HTTPS directly instead of going through a reverse proxy."
+      },
+      "telegram_webhook_key_path": {
+        "description": "Telegram Webhook Private Key Path",
+        "hint": "Optional. Only set this when PTB serves HTTPS directly instead of going through a reverse proxy."
+      },
       "telegram_get_updates_proxy": {
         "description": "Telegram getUpdates Proxy",
         "hint": "Proxy used only for this Telegram adapter's getUpdates polling. Leave empty to use the default network settings."

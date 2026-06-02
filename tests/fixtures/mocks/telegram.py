@@ -73,11 +73,52 @@ class MockInlineKeyboardMarkup(MockTelegramObject):
         super().__init__(inline_keyboard=inline_keyboard)
 
 
+class MockKeyboardButton(MockTelegramObject):
+    def __init__(self, text: str, **kwargs) -> None:
+        super().__init__(text=text, **kwargs)
+
+
+class MockReplyKeyboardMarkup(MockTelegramObject):
+    def __init__(self, keyboard, **kwargs) -> None:
+        super().__init__(keyboard=keyboard, **kwargs)
+
+
+class MockReplyKeyboardRemove(MockTelegramObject):
+    pass
+
+
+class MockForceReply(MockTelegramObject):
+    pass
+
+
 class MockLinkPreviewOptions(MockTelegramObject):
     pass
 
 
 class MockCallbackQueryHandler(MockTelegramObject):
+    def __init__(self, callback, **kwargs) -> None:
+        super().__init__(callback=callback, **kwargs)
+
+
+class MockMessageHandler(MockTelegramObject):
+    def __init__(self, filters, callback, **kwargs) -> None:
+        super().__init__(filters=filters, callback=callback, **kwargs)
+
+
+class MockInlineQueryHandler(MockTelegramObject):
+    def __init__(self, callback, **kwargs) -> None:
+        super().__init__(callback=callback, **kwargs)
+
+
+class MockChosenInlineResultHandler(MockTelegramObject):
+    def __init__(self, callback, **kwargs) -> None:
+        super().__init__(callback=callback, **kwargs)
+
+
+class MockChatMemberHandler(MockTelegramObject):
+    CHAT_MEMBER = 0
+    MY_CHAT_MEMBER = -1
+
     def __init__(self, callback, **kwargs) -> None:
         super().__init__(callback=callback, **kwargs)
 
@@ -103,12 +144,50 @@ def create_mock_telegram_modules():
     mock_telegram.BotCommandScopeChatMember = MockBotCommandScopeChatMember
     mock_telegram.CallbackGame = MagicMock
     mock_telegram.CopyTextButton = MockTelegramObject
+    mock_telegram.ForceReply = MockForceReply
+    mock_telegram.InputTextMessageContent = MockTelegramObject
     mock_telegram.InlineKeyboardButton = MockInlineKeyboardButton
     mock_telegram.InlineKeyboardMarkup = MockInlineKeyboardMarkup
+    inline_result_names = [
+        "InlineQueryResultArticle",
+        "InlineQueryResultAudio",
+        "InlineQueryResultCachedAudio",
+        "InlineQueryResultCachedDocument",
+        "InlineQueryResultCachedGif",
+        "InlineQueryResultCachedMpeg4Gif",
+        "InlineQueryResultCachedPhoto",
+        "InlineQueryResultCachedSticker",
+        "InlineQueryResultCachedVideo",
+        "InlineQueryResultCachedVoice",
+        "InlineQueryResultContact",
+        "InlineQueryResultDocument",
+        "InlineQueryResultGame",
+        "InlineQueryResultGif",
+        "InlineQueryResultLocation",
+        "InlineQueryResultMpeg4Gif",
+        "InlineQueryResultPhoto",
+        "InlineQueryResultVenue",
+        "InlineQueryResultVideo",
+        "InlineQueryResultVoice",
+        "InlineQueryResultsButton",
+    ]
+    for inline_result_name in inline_result_names:
+        setattr(mock_telegram, inline_result_name, MockTelegramObject)
+    mock_telegram.KeyboardButton = MockKeyboardButton
     mock_telegram.LinkPreviewOptions = MockLinkPreviewOptions
     mock_telegram.LoginUrl = MockTelegramObject
+    mock_telegram.ReplyKeyboardMarkup = MockReplyKeyboardMarkup
+    mock_telegram.ReplyKeyboardRemove = MockReplyKeyboardRemove
     mock_telegram.SwitchInlineQueryChosenChat = MockTelegramObject
     mock_telegram.Update = MagicMock
+    mock_telegram.Update.ALL_TYPES = [
+        "message",
+        "callback_query",
+        "inline_query",
+        "chosen_inline_result",
+        "chat_member",
+        "my_chat_member",
+    ]
     mock_telegram.WebAppInfo = MockTelegramObject
     mock_telegram.constants = MagicMock()
     mock_telegram.constants.ChatType = MagicMock()
@@ -136,7 +215,10 @@ def create_mock_telegram_modules():
     mock_telegram_ext.filters = MagicMock()
     mock_telegram_ext.filters.ALL = MagicMock()
     mock_telegram_ext.CallbackQueryHandler = MockCallbackQueryHandler
-    mock_telegram_ext.MessageHandler = MagicMock
+    mock_telegram_ext.ChatMemberHandler = MockChatMemberHandler
+    mock_telegram_ext.ChosenInlineResultHandler = MockChosenInlineResultHandler
+    mock_telegram_ext.InlineQueryHandler = MockInlineQueryHandler
+    mock_telegram_ext.MessageHandler = MockMessageHandler
 
     # Mock telegramify_markdown
     mock_telegramify = MagicMock()
@@ -206,12 +288,19 @@ class MockTelegramBuilder:
         bot.send_photo = AsyncMock()
         bot.send_document = AsyncMock()
         bot.send_voice = AsyncMock()
+        bot.send_video = AsyncMock()
+        bot.send_animation = AsyncMock()
         bot.send_chat_action = AsyncMock()
         bot.delete_my_commands = AsyncMock()
         bot.set_my_commands = AsyncMock()
         bot.set_message_reaction = AsyncMock()
         bot.answer_callback_query = AsyncMock()
+        bot.answer_inline_query = AsyncMock()
         bot.edit_message_text = AsyncMock()
+        bot.edit_message_reply_markup = AsyncMock()
+        bot.delete_message = AsyncMock()
+        bot.copy_message = AsyncMock()
+        bot.forward_message = AsyncMock()
         bot.send_message_draft = AsyncMock()
         return bot
 
@@ -241,6 +330,7 @@ class MockTelegramBuilder:
         app.add_handler = MagicMock()
         app.updater = MagicMock()
         app.updater.start_polling = MagicMock(return_value=NoopAwaitable())
+        app.updater.start_webhook = MagicMock(return_value=NoopAwaitable())
         app.updater.stop = AsyncMock()
         app.updater.running = False
         return app

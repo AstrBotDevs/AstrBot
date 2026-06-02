@@ -596,6 +596,42 @@
                 "description": "Области команд Telegram",
                 "hint": "Конфигурации Telegram BotCommandScope, например {\"type\":\"default\",\"language_code\":\"ru\"} или {\"type\":\"chat\",\"chat_id\":12345}."
             },
+            "telegram_update_mode": {
+                "description": "Режим обновлений Telegram",
+                "hint": "polling использует getUpdates; webhook запускает отдельный listener Telegram-адаптера и требует публичный URL, доступный Telegram."
+            },
+            "telegram_webhook_listen": {
+                "description": "Адрес прослушивания Telegram Webhook",
+                "hint": "Локальный адрес для отдельного Telegram webhook. При reverse proxy обычно используют 0.0.0.0 или 127.0.0.1."
+            },
+            "telegram_webhook_port": {
+                "description": "Порт прослушивания Telegram Webhook",
+                "hint": "Локальный порт отдельного Telegram webhook. При reverse proxy укажите целевой локальный порт."
+            },
+            "telegram_webhook_url_path": {
+                "description": "Путь Telegram Webhook",
+                "hint": "Локальный путь отдельного Telegram webhook. Публичный URL должен вести на этот путь."
+            },
+            "telegram_webhook_url": {
+                "description": "Публичный URL Telegram Webhook",
+                "hint": "Публичный HTTPS URL для setWebhook Telegram Bot API. Обязателен в режиме webhook."
+            },
+            "telegram_webhook_secret_token": {
+                "description": "Telegram Webhook Secret Token",
+                "hint": "Необязательно. Telegram добавляет этот secret token в webhook-запросы для проверки источника."
+            },
+            "telegram_webhook_drop_pending_updates": {
+                "description": "Сбрасывать ожидающие обновления при запуске Webhook",
+                "hint": "Если включено, Telegram сбросит накопленные pending updates при запуске webhook."
+            },
+            "telegram_webhook_cert_path": {
+                "description": "Путь к сертификату Telegram Webhook",
+                "hint": "Необязательно. Используйте только если PTB обслуживает HTTPS напрямую без reverse proxy."
+            },
+            "telegram_webhook_key_path": {
+                "description": "Путь к приватному ключу Telegram Webhook",
+                "hint": "Необязательно. Используйте только если PTB обслуживает HTTPS напрямую без reverse proxy."
+            },
             "telegram_get_updates_proxy": {
                 "description": "Прокси Telegram getUpdates",
                 "hint": "Прокси только для polling getUpdates этого Telegram-адаптера. Оставьте пустым для стандартных сетевых настроек."

@@ -23,6 +23,9 @@ from telegram.constants import ChatType
 from telegram.error import Forbidden, InvalidToken, NetworkError
 from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
 from telegram.ext import CallbackQueryHandler as TelegramCallbackQueryHandler
+from telegram.ext import ChatMemberHandler as TelegramChatMemberHandler
+from telegram.ext import ChosenInlineResultHandler as TelegramChosenInlineResultHandler
+from telegram.ext import InlineQueryHandler as TelegramInlineQueryHandler
 from telegram.ext import MessageHandler as TelegramMessageHandler
 
 import astrbot.api.message_components as Comp
@@ -96,6 +99,9 @@ class TelegramPlatformAdapter(Platform):
             self.config.get("telegram_command_scopes"),
         )
         self.last_command_hashes: dict[tuple[str, str | None], int] = {}
+        self.update_mode = self._normalize_update_mode(
+            self.config.get("telegram_update_mode"),
+        )
 
         self.scheduler = AsyncIOScheduler()
         self.scheduler.add_listener(
@@ -146,6 +152,15 @@ class TelegramPlatformAdapter(Platform):
             "telegram_media_group_max_wait", 10.0
         )  # max seconds - hard cap to prevent indefinite delay
 
+    @staticmethod
+    def _normalize_update_mode(value: Any) -> str:
+        mode = str(value or "polling").strip().lower()
+        if mode not in {"polling", "webhook"}:
+            raise ValueError(
+                "telegram_update_mode must be either 'polling' or 'webhook'.",
+            )
+        return mode
+
     def _build_application(self) -> None:
         builder = (
             ApplicationBuilder()
@@ -169,8 +184,124 @@ class TelegramPlatformAdapter(Platform):
         self.application.add_handler(
             TelegramCallbackQueryHandler(callback=self.callback_query_handler),
         )
+        self.application.add_handler(
+            TelegramInlineQueryHandler(callback=self.inline_query_handler),
+        )
+        self.application.add_handler(
+            TelegramChosenInlineResultHandler(
+                callback=self.chosen_inline_result_handler,
+            ),
+        )
+        self.application.add_handler(
+            TelegramChatMemberHandler(
+                callback=self.chat_member_handler,
+                chat_member_types=TelegramChatMemberHandler.CHAT_MEMBER,
+            ),
+        )
+        self.application.add_handler(
+            TelegramChatMemberHandler(
+                callback=self.my_chat_member_handler,
+                chat_member_types=TelegramChatMemberHandler.MY_CHAT_MEMBER,
+            ),
+        )
         self.client = self.application.bot
         logger.debug(f"Telegram base url: {self.client.base_url}")
+
+    @staticmethod
+    def _allowed_updates() -> list[str]:
+        return [
+            "message",
+            "callback_query",
+            "inline_query",
+            "chosen_inline_result",
+            "chat_member",
+            "my_chat_member",
+        ]
+
+    @staticmethod
+    def _normalize_webhook_path(path: Any) -> str:
+        normalized = str(path or "astrbot-telegram-webhook").strip()
+        return normalized.lstrip("/")
+
+    @staticmethod
+    def _telegram_user_name(user: Any) -> str:
+        return (
+            getattr(user, "username", None)
+            or getattr(user, "full_name", None)
+            or getattr(user, "first_name", None)
+            or "Unknown"
+        )
+
+    @staticmethod
+    def _message_file_name(obj: Any, fallback_ext: str = "") -> str:
+        return getattr(obj, "file_name", None) or f"{uuid.uuid4().hex}{fallback_ext}"
+
+    @staticmethod
+    def _set_chat_context(
+        message: AstrBotMessage,
+        chat: Any,
+        *,
+        fallback_user_id: str,
+        source_message: Any | None = None,
+    ) -> None:
+        chat_id = str(getattr(chat, "id", fallback_user_id) or fallback_user_id)
+        chat_type = getattr(chat, "type", ChatType.PRIVATE)
+        if chat_type == ChatType.PRIVATE:
+            message.type = MessageType.FRIEND_MESSAGE
+            message.session_id = chat_id
+            return
+
+        message.type = MessageType.GROUP_MESSAGE
+        message.group_id = chat_id
+        message.session_id = chat_id
+        if source_message is not None:
+            message_thread_id = getattr(source_message, "message_thread_id", None)
+            is_topic_message = getattr(source_message, "is_topic_message", False)
+            if is_topic_message and message_thread_id:
+                message.group_id += "#" + str(message_thread_id)
+                message.session_id = message.group_id
+
+    def _new_message_from_user(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        from_user: Any,
+        *,
+        message_text: str,
+        message_id: str,
+        chat: Any | None = None,
+        source_message: Any | None = None,
+    ) -> AstrBotMessage:
+        message = AstrBotMessage()
+        message.sender = MessageMember(
+            str(getattr(from_user, "id", "")),
+            self._telegram_user_name(from_user),
+        )
+        message.self_id = str(context.bot.username)
+        message.raw_message = update
+        message.message_str = message_text
+        message.message = [Comp.Plain(message_text)] if message_text else []
+        message.message_id = message_id
+        self._set_chat_context(
+            message,
+            chat,
+            fallback_user_id=str(getattr(from_user, "id", "")),
+            source_message=source_message,
+        )
+        return message
+
+    @staticmethod
+    def _mark_telegram_event(
+        message: AstrBotMessage,
+        event_type: str,
+        payload: Any,
+        *,
+        skip_llm: bool = True,
+    ) -> AstrBotMessage:
+        message.telegram_event_type = event_type
+        message.telegram_payload = payload
+        message.telegram_skip_llm = skip_llm
+        return message
 
     async def _start_application(self) -> None:
         await self.application.initialize()
@@ -220,6 +351,83 @@ class TelegramPlatformAdapter(Platform):
         self._last_polling_failure_at = 0.0
         self._polling_recovery_requested.clear()
 
+    def _webhook_start_kwargs(self) -> dict[str, Any]:
+        webhook_url = str(self.config.get("telegram_webhook_url") or "").strip()
+        if not webhook_url:
+            raise ValueError(
+                "telegram_webhook_url is required when telegram_update_mode is 'webhook'.",
+            )
+
+        kwargs: dict[str, Any] = {
+            "listen": self.config.get("telegram_webhook_listen", "0.0.0.0"),
+            "port": int(self.config.get("telegram_webhook_port", 8443)),
+            "url_path": self._normalize_webhook_path(
+                self.config.get("telegram_webhook_url_path"),
+            ),
+            "webhook_url": webhook_url,
+            "allowed_updates": self._allowed_updates(),
+            "drop_pending_updates": self.config.get(
+                "telegram_webhook_drop_pending_updates",
+                False,
+            ),
+        }
+        secret_token = str(
+            self.config.get("telegram_webhook_secret_token") or "",
+        ).strip()
+        if secret_token:
+            kwargs["secret_token"] = secret_token
+        cert_path = str(self.config.get("telegram_webhook_cert_path") or "").strip()
+        key_path = str(self.config.get("telegram_webhook_key_path") or "").strip()
+        if cert_path:
+            kwargs["cert"] = cert_path
+        if key_path:
+            kwargs["key"] = key_path
+        return kwargs
+
+    async def _run_webhook(self) -> None:
+        if not self._application_started:
+            await self._start_application()
+
+        updater = self.application.updater
+        if updater is None:
+            raise RuntimeError("Telegram Updater is not initialized.")
+
+        webhook_kwargs = self._webhook_start_kwargs()
+        logger.info(
+            "Starting Telegram webhook on %s:%s/%s ...",
+            webhook_kwargs["listen"],
+            webhook_kwargs["port"],
+            webhook_kwargs["url_path"],
+        )
+        await updater.start_webhook(**webhook_kwargs)
+        logger.info("Telegram Platform Adapter webhook is running.")
+        while updater.running and not self._terminating:  # noqa: ASYNC110
+            await asyncio.sleep(1)
+
+    async def _run_polling(self) -> bool:
+        if not self._application_started:
+            await self._start_application()
+
+        self._polling_recovery_requested.clear()
+        updater = self.application.updater
+        if updater is None:
+            logger.error("Telegram Updater is not initialized. Cannot start polling.")
+            self._application_started = False
+            await asyncio.sleep(self._polling_restart_delay)
+            return False
+        logger.info("Starting Telegram polling...")
+        await updater.start_polling(
+            allowed_updates=self._allowed_updates(),
+            error_callback=self._on_polling_error,
+        )
+        logger.info("Telegram Platform Adapter is running.")
+        while updater.running and not self._terminating:  # noqa: ASYNC110
+            if self._polling_recovery_requested.is_set():
+                await self._recreate_application()
+                return True
+            await asyncio.sleep(1)
+        return False
+
     def _start_command_scheduler(self) -> None:
         if not self.enable_command_refresh or not self.enable_command_register:
             return
@@ -261,36 +469,25 @@ class TelegramPlatformAdapter(Platform):
 
         while not self._terminating:
             try:
-                if not self._application_started:
-                    await self._start_application()
-
-                self._polling_recovery_requested.clear()
-                updater = self.application.updater
-                if updater is None:
-                    logger.error(
-                        "Telegram Updater is not initialized. Cannot start polling."
-                    )
-                    self._application_started = False
-                    await asyncio.sleep(self._polling_restart_delay)
-                    continue
-                logger.info("Starting Telegram polling...")
-                await updater.start_polling(error_callback=self._on_polling_error)
-                logger.info("Telegram Platform Adapter is running.")
-                while updater.running and not self._terminating:  # noqa: ASYNC110
-                    if self._polling_recovery_requested.is_set():
-                        await self._recreate_application()
-                        break
-                    await asyncio.sleep(1)
-                else:
+                if self.update_mode == "webhook":
+                    await self._run_webhook()
                     if not self._terminating:
                         logger.warning(
-                            "Telegram polling loop exited unexpectedly, "
-                            f"retrying in {self._polling_restart_delay}s."
+                            "Telegram webhook loop exited unexpectedly, "
+                            f"retrying in {self._polling_restart_delay}s.",
                         )
                     continue
 
-                if not self._terminating:
+                polling_restarted = await self._run_polling()
+                if polling_restarted:
                     logger.info("Telegram polling restarted with a fresh client.")
+                    continue
+
+                if not self._terminating:
+                    logger.warning(
+                        "Telegram polling loop exited unexpectedly, "
+                        f"retrying in {self._polling_restart_delay}s.",
+                    )
                     continue
             except asyncio.CancelledError:
                 raise
@@ -301,7 +498,7 @@ class TelegramPlatformAdapter(Platform):
                 break
             except Exception as e:
                 logger.exception(
-                    "Telegram polling crashed with exception: "
+                    "Telegram adapter crashed with exception: "
                     f"{type(e).__name__}: {e!s}. "
                     f"Retrying in {self._polling_restart_delay}s.",
                 )
@@ -612,6 +809,54 @@ class TelegramPlatformAdapter(Platform):
         if abm:
             await self.handle_msg(abm)
 
+    async def inline_query_handler(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        logger.debug(f"Telegram inline query: {update.inline_query}")
+        abm = await self.convert_inline_query(update, context)
+        if abm:
+            await self.handle_msg(abm)
+
+    async def chosen_inline_result_handler(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        logger.debug(f"Telegram chosen inline result: {update.chosen_inline_result}")
+        abm = await self.convert_chosen_inline_result(update, context)
+        if abm:
+            await self.handle_msg(abm)
+
+    async def chat_member_handler(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        logger.debug(f"Telegram chat member update: {update.chat_member}")
+        abm = await self.convert_chat_member_update(
+            update,
+            context,
+            "chat_member",
+        )
+        if abm:
+            await self.handle_msg(abm)
+
+    async def my_chat_member_handler(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        logger.debug(f"Telegram my chat member update: {update.my_chat_member}")
+        abm = await self.convert_chat_member_update(
+            update,
+            context,
+            "my_chat_member",
+        )
+        if abm:
+            await self.handle_msg(abm)
+
     async def convert_callback_query(
         self,
         update: Update,
@@ -634,40 +879,116 @@ class TelegramPlatformAdapter(Platform):
         game_short_name = getattr(callback_query, "game_short_name", None)
         message_text = str(data or game_short_name or "")
 
-        message = AstrBotMessage()
-        message.sender = MessageMember(
-            str(from_user.id),
-            getattr(from_user, "username", None)
-            or getattr(from_user, "full_name", None)
-            or "Unknown",
+        message = self._new_message_from_user(
+            update,
+            context,
+            from_user,
+            message_text=message_text,
+            message_id=str(
+                getattr(callback_query, "id", None)
+                or getattr(source_message, "message_id", "")
+                or "",
+            ),
+            chat=source_chat,
+            source_message=source_message,
         )
-        message.self_id = str(context.bot.username)
-        message.raw_message = update
-        message.message_str = message_text
-        message.message = [Comp.Plain(message_text)] if message_text else []
-        message.message_id = str(
-            getattr(callback_query, "id", None)
-            or getattr(source_message, "message_id", "")
-            or "",
+        return self._mark_telegram_event(message, "callback_query", callback_query)
+
+    async def convert_inline_query(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> AstrBotMessage | None:
+        inline_query = update.inline_query
+        if not inline_query:
+            logger.warning("Received an update without an inline query.")
+            return None
+
+        from_user = getattr(inline_query, "from_user", None)
+        if not from_user:
+            logger.warning("[Telegram] Received an inline query without from_user.")
+            return None
+
+        query_text = str(getattr(inline_query, "query", "") or "")
+        message = self._new_message_from_user(
+            update,
+            context,
+            from_user,
+            message_text=query_text,
+            message_id=str(getattr(inline_query, "id", "") or ""),
+            chat=None,
+        )
+        return self._mark_telegram_event(message, "inline_query", inline_query)
+
+    async def convert_chosen_inline_result(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> AstrBotMessage | None:
+        chosen_result = update.chosen_inline_result
+        if not chosen_result:
+            logger.warning("Received an update without a chosen inline result.")
+            return None
+
+        from_user = getattr(chosen_result, "from_user", None)
+        if not from_user:
+            logger.warning(
+                "[Telegram] Received a chosen inline result without from_user.",
+            )
+            return None
+
+        query = str(getattr(chosen_result, "query", "") or "")
+        result_id = str(getattr(chosen_result, "result_id", "") or "")
+        message_text = query or result_id
+        message = self._new_message_from_user(
+            update,
+            context,
+            from_user,
+            message_text=message_text,
+            message_id=result_id or str(getattr(update, "update_id", "") or ""),
+            chat=None,
+        )
+        return self._mark_telegram_event(
+            message,
+            "chosen_inline_result",
+            chosen_result,
         )
 
-        if source_chat and getattr(source_chat, "type", None) != ChatType.PRIVATE:
-            message.type = MessageType.GROUP_MESSAGE
-            message.group_id = str(source_chat.id)
-            message.session_id = message.group_id
-            message_thread_id = getattr(source_message, "message_thread_id", None)
-            is_topic_message = getattr(source_message, "is_topic_message", False)
-            if is_topic_message and message_thread_id:
-                message.group_id += "#" + str(message_thread_id)
-                message.session_id = message.group_id
-        elif source_chat:
-            message.type = MessageType.FRIEND_MESSAGE
-            message.session_id = str(source_chat.id)
-        else:
-            message.type = MessageType.FRIEND_MESSAGE
-            message.session_id = str(from_user.id)
+    async def convert_chat_member_update(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        event_type: str,
+    ) -> AstrBotMessage | None:
+        chat_member_update = (
+            update.chat_member if event_type == "chat_member" else update.my_chat_member
+        )
+        if not chat_member_update:
+            logger.warning("Received an update without a chat member payload.")
+            return None
 
-        return message
+        from_user = getattr(chat_member_update, "from_user", None)
+        chat = getattr(chat_member_update, "chat", None)
+        if not from_user:
+            logger.warning(
+                "[Telegram] Received a chat member update without from_user."
+            )
+            return None
+
+        old_member = getattr(chat_member_update, "old_chat_member", None)
+        new_member = getattr(chat_member_update, "new_chat_member", None)
+        old_status = getattr(old_member, "status", "")
+        new_status = getattr(new_member, "status", "")
+        message_text = f"{event_type}: {old_status}->{new_status}"
+        message = self._new_message_from_user(
+            update,
+            context,
+            from_user,
+            message_text=message_text,
+            message_id=str(getattr(update, "update_id", "") or ""),
+            chat=chat,
+        )
+        return self._mark_telegram_event(message, event_type, chat_member_update)
 
     async def convert_message(
         self,
@@ -685,35 +1006,41 @@ class TelegramPlatformAdapter(Platform):
             logger.warning("Received an update without a message.")
             return None
 
+        telegram_message = update.message
+
         def _apply_caption() -> None:
-            if not update.message:
+            if not telegram_message:
                 return
-            if update.message.caption:
-                message.message_str = update.message.caption
+            if telegram_message.caption:
+                message.message_str = telegram_message.caption
                 message.message.append(Comp.Plain(message.message_str))
-            if update.message.caption and update.message.caption_entities:
-                for entity in update.message.caption_entities:
+            if telegram_message.caption and telegram_message.caption_entities:
+                for entity in telegram_message.caption_entities:
                     if entity.type == "mention":
-                        name = update.message.caption[
+                        name = telegram_message.caption[
                             entity.offset + 1 : entity.offset + entity.length
                         ]
                         message.message.append(Comp.At(qq=name, name=name))
 
         message = AstrBotMessage()
-        message.session_id = str(update.message.chat.id)
+        message.session_id = str(telegram_message.chat.id)
 
         # 获得是群聊还是私聊
-        if update.message.chat.type == ChatType.PRIVATE:
+        if telegram_message.chat.type == ChatType.PRIVATE:
             message.type = MessageType.FRIEND_MESSAGE
         else:
             message.type = MessageType.GROUP_MESSAGE
-            message.group_id = str(update.message.chat.id)
-            if update.message.is_topic_message and update.message.message_thread_id:
+            message.group_id = str(telegram_message.chat.id)
+            if telegram_message.is_topic_message and telegram_message.message_thread_id:
                 # Telegram Topic Group: include thread id to isolate per-topic sessions.
-                message.group_id += "#" + str(update.message.message_thread_id)
+                message.group_id += "#" + str(telegram_message.message_thread_id)
                 message.session_id = message.group_id
-        message.message_id = str(update.message.message_id)
-        _from_user = update.message.from_user
+        message.message_id = str(telegram_message.message_id)
+        new_chat_members = getattr(telegram_message, "new_chat_members", None)
+        left_chat_member = getattr(telegram_message, "left_chat_member", None)
+        _from_user = telegram_message.from_user or (
+            new_chat_members[0] if new_chat_members else left_chat_member
+        )
         if not _from_user:
             logger.warning("[Telegram] Received a message without a from_user.")
             return None
@@ -726,15 +1053,37 @@ class TelegramPlatformAdapter(Platform):
         message.message_str = ""
         message.message = []
 
-        if update.message.reply_to_message and not (
-            update.message.is_topic_message
-            and update.message.message_thread_id
-            == update.message.reply_to_message.message_id
+        if new_chat_members:
+            member_names = ", ".join(
+                self._telegram_user_name(member) for member in new_chat_members
+            )
+            message.message_str = f"member_joined: {member_names}"
+            message.message = [Comp.Plain(message.message_str)]
+            return self._mark_telegram_event(
+                message,
+                "member_joined",
+                new_chat_members,
+            )
+
+        if left_chat_member:
+            member_name = self._telegram_user_name(left_chat_member)
+            message.message_str = f"member_left: {member_name}"
+            message.message = [Comp.Plain(message.message_str)]
+            return self._mark_telegram_event(
+                message,
+                "member_left",
+                left_chat_member,
+            )
+
+        if telegram_message.reply_to_message and not (
+            telegram_message.is_topic_message
+            and telegram_message.message_thread_id
+            == telegram_message.reply_to_message.message_id
         ):
             # 获取回复消息
             reply_update = Update(
                 update_id=1,
-                message=update.message.reply_to_message,
+                message=telegram_message.reply_to_message,
             )
             reply_abm = await self.convert_message(reply_update, context, False)
 
@@ -752,15 +1101,15 @@ class TelegramPlatformAdapter(Platform):
                     ),
                 )
 
-        if update.message.text:
+        if telegram_message.text:
             # 处理文本消息
-            plain_text = update.message.text
+            plain_text = telegram_message.text
             if (
                 message.type == MessageType.GROUP_MESSAGE
-                and update.message
-                and update.message.reply_to_message
-                and update.message.reply_to_message.from_user
-                and update.message.reply_to_message.from_user.id == context.bot.id
+                and telegram_message
+                and telegram_message.reply_to_message
+                and telegram_message.reply_to_message.from_user
+                and telegram_message.reply_to_message.from_user.id == context.bot.id
             ):
                 plain_text2 = f"/@{context.bot.username} " + plain_text
                 plain_text = plain_text2
@@ -775,8 +1124,8 @@ class TelegramPlatformAdapter(Platform):
                             f" {command_parts[1]}" if len(command_parts) > 1 else ""
                         )
 
-            if update.message.entities:
-                for entity in update.message.entities:
+            if telegram_message.entities:
+                for entity in telegram_message.entities:
                     if entity.type == "mention":
                         name = plain_text[
                             entity.offset + 1 : entity.offset + entity.length
@@ -797,8 +1146,8 @@ class TelegramPlatformAdapter(Platform):
                 await self.start(update, context)
                 return None
 
-        elif update.message.voice:
-            file = await update.message.voice.get_file()
+        elif telegram_message.voice:
+            file = await telegram_message.voice.get_file()
 
             file_basename = os.path.basename(cast(str, file.file_path))
             temp_dir = get_astrbot_temp_path()
@@ -814,24 +1163,24 @@ class TelegramPlatformAdapter(Platform):
             record.path = path_wav
             message.message = [record]
 
-        elif update.message.photo:
-            photo = update.message.photo[-1]  # get the largest photo
+        elif telegram_message.photo:
+            photo = telegram_message.photo[-1]  # get the largest photo
             file = await photo.get_file()
             message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
             _apply_caption()
 
-        elif update.message.sticker:
+        elif telegram_message.sticker:
             # 将sticker当作图片处理
-            file = await update.message.sticker.get_file()
+            file = await telegram_message.sticker.get_file()
             message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
-            if update.message.sticker.emoji:
-                sticker_text = f"Sticker: {update.message.sticker.emoji}"
+            if telegram_message.sticker.emoji:
+                sticker_text = f"Sticker: {telegram_message.sticker.emoji}"
                 message.message_str = sticker_text
                 message.message.append(Comp.Plain(sticker_text))
 
-        elif update.message.document:
-            file = await update.message.document.get_file()
-            file_name = update.message.document.file_name or uuid.uuid4().hex
+        elif telegram_message.document:
+            file = await telegram_message.document.get_file()
+            file_name = telegram_message.document.file_name or uuid.uuid4().hex
             file_path = file.file_path
             if file_path is None:
                 logger.warning(
@@ -843,9 +1192,9 @@ class TelegramPlatformAdapter(Platform):
                 )
                 _apply_caption()
 
-        elif update.message.video:
-            file = await update.message.video.get_file()
-            file_name = update.message.video.file_name or uuid.uuid4().hex
+        elif telegram_message.video:
+            file = await telegram_message.video.get_file()
+            file_name = telegram_message.video.file_name or uuid.uuid4().hex
             file_path = file.file_path
             if file_path is None:
                 logger.warning(
@@ -854,6 +1203,97 @@ class TelegramPlatformAdapter(Platform):
             else:
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))
                 _apply_caption()
+
+        elif telegram_message.audio:
+            file = await telegram_message.audio.get_file()
+            file_name = self._message_file_name(telegram_message.audio, ".mp3")
+            file_path = file.file_path
+            if file_path is None:
+                logger.warning(
+                    f"Telegram audio file_path is None, cannot save the file {file_name}.",
+                )
+            else:
+                message.message.append(
+                    Comp.File(file=file_path, name=file_name, url=file_path),
+                )
+                _apply_caption()
+
+        elif telegram_message.animation:
+            file = await telegram_message.animation.get_file()
+            file_path = file.file_path
+            if file_path is None:
+                logger.warning("Telegram animation file_path is None, cannot save it.")
+            else:
+                message.message.append(Comp.Image(file=file_path, url=file_path))
+                _apply_caption()
+
+        elif telegram_message.video_note:
+            file = await telegram_message.video_note.get_file()
+            file_path = file.file_path
+            if file_path is None:
+                logger.warning("Telegram video_note file_path is None, cannot save it.")
+            else:
+                message.message.append(Comp.Video(file=file_path, path=file_path))
+
+        elif telegram_message.location:
+            location = telegram_message.location
+            message.message_str = f"Location: {location.latitude}, {location.longitude}"
+            message.message.append(
+                Comp.Location(
+                    lat=location.latitude,
+                    lon=location.longitude,
+                    title="",
+                    content=message.message_str,
+                ),
+            )
+
+        elif telegram_message.venue:
+            venue = telegram_message.venue
+            message.message_str = f"Venue: {venue.title} {venue.address}"
+            message.message.append(
+                Comp.Location(
+                    lat=venue.location.latitude,
+                    lon=venue.location.longitude,
+                    title=venue.title,
+                    content=venue.address,
+                ),
+            )
+
+        elif telegram_message.contact:
+            contact = telegram_message.contact
+            user_id = getattr(contact, "user_id", None)
+            message.message_str = (
+                f"Contact: {getattr(contact, 'first_name', '')} "
+                f"{getattr(contact, 'last_name', '')}".strip()
+                or getattr(contact, "phone_number", "")
+            )
+            if user_id is not None:
+                message.message.append(Comp.Contact(id=int(user_id)))
+            message.message.append(Comp.Plain(message.message_str))
+
+        elif telegram_message.poll:
+            poll = telegram_message.poll
+            message.message_str = f"Poll: {getattr(poll, 'question', '')}"
+            message.message.append(Comp.Plain(message.message_str))
+            return self._mark_telegram_event(
+                message,
+                "poll",
+                poll,
+                skip_llm=False,
+            )
+
+        elif telegram_message.dice:
+            dice = telegram_message.dice
+            message.message_str = (
+                f"Dice: {getattr(dice, 'emoji', '')}={getattr(dice, 'value', '')}"
+            )
+            message.message.append(Comp.Plain(message.message_str))
+            return self._mark_telegram_event(
+                message,
+                "dice",
+                dice,
+                skip_llm=False,
+            )
 
         return message
 
@@ -977,6 +1417,15 @@ class TelegramPlatformAdapter(Platform):
             session_id=message.session_id,
             client=self.client,
         )
+        event_type = getattr(message, "telegram_event_type", None)
+        if event_type:
+            message_event.set_extra("telegram_event_type", event_type)
+            message_event.set_extra(
+                "telegram_payload",
+                getattr(message, "telegram_payload", None),
+            )
+        if getattr(message, "telegram_skip_llm", False):
+            message_event.should_call_llm(True)
         self.commit_event(message_event)
 
     def get_client(self) -> ExtBot:

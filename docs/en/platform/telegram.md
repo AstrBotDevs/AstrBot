@@ -13,8 +13,30 @@
 | Video | Yes | Yes | |
 | File | Yes | Yes | |
 | Inline Keyboard | Yes | Yes | Supports button callback events |
+| Reply Keyboard | - | Yes | Supports custom reply keyboard, keyboard removal, and force reply |
+| Inline Query | Yes | Yes | Plugins can listen for and answer inline queries |
 
 Proactive message push: Supported.
+
+## Interaction Events
+
+The Telegram adapter lets plugins listen for Telegram-specific events such as callback queries, inline queries, chosen inline results, member status changes, member join/leave events, polls, and dice. Register these handlers with the custom filter `@filter.custom_filter(telegram_event_filter(...))`. Common event types include `callback_query`, `inline_query`, `chosen_inline_result`, `chat_member`, `my_chat_member`, `member_joined`, and `member_left`.
+
+These structured events do not enter the regular LLM conversation flow by default. Match them explicitly with `telegram_event_filter(...)` and handle them in your plugin, otherwise a button click or inline/member event may appear to do nothing.
+
+Short button callback example:
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.core.platform.sources.telegram.filters import telegram_event_filter
+
+@filter.custom_filter(telegram_event_filter("callback_query"))
+async def on_telegram_button(self, event: AstrMessageEvent):
+    data = event.get_interaction_data()
+    await event.answer_interaction(f"Received: {data}", show_alert=False)
+```
+
+For complete Inline Keyboard, Reply Keyboard, inline query answer, and callback handling examples, see "Telegram-Specific Send Options" in the developer guide.
 
 ## 1. Create a Telegram Bot
 
@@ -41,6 +63,21 @@ Please ensure your network environment can access Telegram. You can configure a 
 
 - `telegram_proxy`: Used only for this Telegram adapter's Bot API requests.
 - `telegram_get_updates_proxy`: Used only for this Telegram adapter's `getUpdates` polling requests.
+
+### Update Mode
+
+Telegram uses `telegram_update_mode="polling"` by default and receives updates through `getUpdates` polling. You can switch to `telegram_update_mode="webhook"` to use an independent Telegram adapter webhook listener.
+
+Webhook mode requires these settings:
+
+- `telegram_webhook_listen`: Local listen address.
+- `telegram_webhook_port`: Local listen port.
+- `telegram_webhook_url_path`: Local webhook path.
+- `telegram_webhook_url`: HTTPS public URL reachable by Telegram. Required.
+- `telegram_webhook_secret_token`: Optional token for verifying Telegram webhook requests.
+- `telegram_webhook_drop_pending_updates`: Whether Telegram should drop pending updates when starting webhook mode.
+
+If HTTPS is provided by a reverse proxy such as Nginx or Caddy, `telegram_webhook_cert_path` and `telegram_webhook_key_path` are usually not needed. Set them only when `python-telegram-bot` serves HTTPS directly.
 
 ## Command Registration
 

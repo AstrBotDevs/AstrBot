@@ -13,9 +13,31 @@
 | 视频 | 是 | 是 | |
 | 文件 | 是 | 是 | |
 | Inline Keyboard | 是 | 是 | 支持按钮回调事件 |
+| Reply Keyboard | - | 是 | 支持自定义回复键盘、移除键盘、强制回复 |
+| Inline Query | 是 | 是 | 插件可监听并回答 inline query |
 
 
 主动消息推送：支持。
+
+## 交互增强事件
+
+Telegram 适配器支持插件监听 callback query、inline query、chosen inline result、成员状态变更、成员加入/离开、poll、dice 等 Telegram 专属事件。插件需要使用自定义过滤器 `@filter.custom_filter(telegram_event_filter(...))` 注册处理函数，常见事件类型包括 `callback_query`、`inline_query`、`chosen_inline_result`、`chat_member`、`my_chat_member`、`member_joined`、`member_left`。
+
+这些结构化事件默认不会进入普通 LLM 对话流程；请用 `telegram_event_filter(...)` 精确匹配后在插件里处理，否则用户点击按钮或触发 inline/member 事件时可能看起来“没有响应”。
+
+按钮回调短示例：
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.core.platform.sources.telegram.filters import telegram_event_filter
+
+@filter.custom_filter(telegram_event_filter("callback_query"))
+async def on_telegram_button(self, event: AstrMessageEvent):
+    data = event.get_interaction_data()
+    await event.answer_interaction(f"已收到：{data}", show_alert=False)
+```
+
+完整 Inline Keyboard、Reply Keyboard、inline query answer 与回调处理示例见开发指南中的「Telegram 专属发送选项」。
 
 ## 1. 创建 Telegram Bot
 
@@ -42,6 +64,21 @@
 
 - `telegram_proxy`：仅用于此 Telegram 适配器的 Bot API 请求。
 - `telegram_get_updates_proxy`：仅用于此 Telegram 适配器轮询 `getUpdates` 的请求。
+
+### 更新模式
+
+Telegram 默认使用 `telegram_update_mode="polling"`，通过 `getUpdates` 轮询接收 update。也可以切换为 `telegram_update_mode="webhook"` 使用 Telegram 适配器独立 webhook listener。
+
+启用 webhook 模式时需要配置：
+
+- `telegram_webhook_listen`：本地监听地址。
+- `telegram_webhook_port`：本地监听端口。
+- `telegram_webhook_url_path`：本地 webhook 路径。
+- `telegram_webhook_url`：Telegram 可访问的 HTTPS 公开 URL，必填。
+- `telegram_webhook_secret_token`：可选，用于校验 Telegram webhook 请求。
+- `telegram_webhook_drop_pending_updates`：启动 webhook 时是否丢弃待处理 update。
+
+如果通过 Nginx/Caddy 等反向代理提供 HTTPS，通常不需要填写 `telegram_webhook_cert_path` 和 `telegram_webhook_key_path`；只有让 `python-telegram-bot` 直接提供 HTTPS 时才需要填写证书和私钥路径。
 
 ## 命令注册
 

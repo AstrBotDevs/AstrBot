@@ -114,6 +114,10 @@ from astrbot.core.platform.sources.telegram.components import (
     TelegramInlineButton,
     TelegramInlineKeyboard,
     TelegramMessageOptions,
+    TelegramReplyKeyboard,
+    TelegramKeyboardButton,
+    TelegramRemoveKeyboard,
+    TelegramForceReply,
 )
 
 @filter.command("review")
@@ -147,22 +151,91 @@ async def review(self, event: AstrMessageEvent):
 
 Each `TelegramInlineButton` must set exactly one action. Supported actions are `url`, `callback_data`, `login_url`, `web_app`, `switch_inline_query`, `switch_inline_query_current_chat`, `switch_inline_query_chosen_chat`, `copy_text`, `callback_game`, and `pay`, plus `style` and `icon_custom_emoji_id` when supported by the Bot API. `callback_data` must be 1-64 UTF-8 bytes.
 
-Plugins can handle callback events for approval, confirmation, pagination, and similar flows:
+You can also send Telegram Reply Keyboard, remove an existing keyboard, or force a reply:
+
+```python
+chain = MessageChain()
+chain.message("Choose a contact method")
+chain.chain.append(
+    TelegramReplyKeyboard(
+        [[TelegramKeyboardButton("Share phone", request_contact=True), "Cancel"]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+        input_field_placeholder="Choose",
+    )
+)
+yield event.chain_result(chain)
+
+remove = MessageChain()
+remove.message("Cancelled")
+remove.chain.append(TelegramRemoveKeyboard(selective=True))
+yield event.chain_result(remove)
+
+force = MessageChain()
+force.message("Please reply with the approval reason")
+force.chain.append(TelegramForceReply(input_field_placeholder="Reason"))
+yield event.chain_result(force)
+```
+
+Plugins can listen for button callbacks with the Telegram custom filter to build approval, confirmation, pagination, and similar flows. The important part is `@filter.custom_filter(telegram_event_filter(...))`; regular command filters do not specifically match Telegram callback/inline/member events:
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.core.platform.sources.telegram.filters import telegram_event_filter
 
-@filter.event_message_type(filter.EventMessageType.ALL)
+@filter.custom_filter(telegram_event_filter("callback_query"))
 async def on_telegram_button(self, event: AstrMessageEvent):
-    if not hasattr(event, "is_button_interaction") or not event.is_button_interaction():
+    action = event.get_interaction_data()
+    await event.ack_interaction()
+
+    if action == "approve:42":
+        yield event.plain_result("Approved")
         return
 
-    action = event.get_interaction_data()
-    user_id = event.get_interaction_user_id()
-    await event.answer_interaction(f"Received {user_id}: {action}", show_alert=False)
+    if action == "reject:42":
+        await event.answer_interaction("Rejected", show_alert=True)
+        return
+
+    await event.answer_interaction(f"Unknown action: {action}", show_alert=True)
 ```
 
-Use `event.ack_interaction()` for a quick acknowledgment. `event.get_interaction_custom_id()` and `event.get_interaction_data()` both return Telegram `callback_data`.
+Use `event.ack_interaction()` for a quick acknowledgment so the Telegram client stops showing the button loading state. Use `event.answer_interaction(text, show_alert=False)` to answer the callback query; `show_alert=True` shows an alert dialog. `event.get_interaction_custom_id()` and `event.get_interaction_data()` both return Telegram `callback_data`, which is the value set by `TelegramInlineButton(..., callback_data="approve:42")` above.
+
+The same filter entrypoint can also listen for Telegram inline/member events. For these events, read the original Telegram `Update` object from `event.message_obj.raw_message`:
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.core.platform.sources.telegram.components import (
+    TelegramInlineQueryResult,
+    TelegramInputTextMessageContent,
+)
+from astrbot.core.platform.sources.telegram.filters import telegram_event_filter
+
+@filter.custom_filter(telegram_event_filter("inline_query"))
+async def on_telegram_inline_query(self, event: AstrMessageEvent):
+    query = event.get_inline_query_text()
+    await event.answer_inline_query(
+        [
+            TelegramInlineQueryResult(
+                "article",
+                id="echo",
+                title=f"Send: {query}",
+                input_message_content=TelegramInputTextMessageContent(query or "Empty query"),
+            )
+        ],
+        cache_time=0,
+        is_personal=True,
+    )
+
+@filter.custom_filter(telegram_event_filter("chat_member"))
+async def on_telegram_chat_member(self, event: AstrMessageEvent):
+    member_update = event.get_chat_member_update()
+    yield event.plain_result(f"Member status changed: {member_update.new_chat_member.status}")
+```
+
+Available event types include `callback_query`, `inline_query`, `chosen_inline_result`, `chat_member`, `my_chat_member`, `member_joined`, `member_left`, `poll`, and `dice`. Button callbacks are the most common interaction enhancement case. A practical pattern is to encode `callback_data` as `action:resource_id` and branch explicitly in the handler.
+
+If AstrBot has not wrapped a Telegram Bot API method yet, Telegram events expose `event.get_telegram_client()` for direct `python-telegram-bot` Bot calls. Use `event.get_telegram_update()` when you need the raw Telegram `Update`.
 
 ## Sending Group Forward Messages
 

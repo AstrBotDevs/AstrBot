@@ -46,16 +46,21 @@ def _load_telegram_module(module_name: str):
         return module
 
     components_module_name = "astrbot.core.platform.sources.telegram.components"
+    filters_module_name = "astrbot.core.platform.sources.telegram.filters"
     with patch.dict(sys.modules, _build_telegram_patched_modules()):
         sys.modules.pop(module_name, None)
         module = importlib.import_module(module_name)
         components_module = sys.modules.get(components_module_name)
+        filters_module = sys.modules.get(filters_module_name)
 
     sys.modules[module_name] = module
     _TELEGRAM_MODULES[module_name] = module
     if components_module is not None:
         sys.modules[components_module_name] = components_module
         _TELEGRAM_MODULES[components_module_name] = components_module
+    if filters_module is not None:
+        sys.modules[filters_module_name] = filters_module
+        _TELEGRAM_MODULES[filters_module_name] = filters_module
     return module
 
 
@@ -84,11 +89,36 @@ def _load_telegram_components():
     return _TELEGRAM_MODULES["astrbot.core.platform.sources.telegram.components"]
 
 
+def _load_telegram_filters():
+    return _load_telegram_module("astrbot.core.platform.sources.telegram.filters")
+
+
 def _build_context() -> MagicMock:
     context = MagicMock()
     context.bot.username = "test_bot"
     context.bot.id = 12345678
     return context
+
+
+def _build_user(user_id: int = 42, username: str = "alice") -> MagicMock:
+    user = MagicMock()
+    user.id = user_id
+    user.username = username
+    user.full_name = username
+    user.first_name = username
+    return user
+
+
+def _build_chat(chat_id: int = -100, chat_type: str = "supergroup") -> MagicMock:
+    chat = MagicMock()
+    chat.id = chat_id
+    chat.type = chat_type
+    return chat
+
+
+async def _commit_and_get_event(adapter, abm):
+    await adapter.handle_msg(abm)
+    return adapter._event_queue.get_nowait()
 
 
 @pytest.mark.asyncio
@@ -492,6 +522,71 @@ async def test_telegram_send_by_session_preserves_markdown_options_and_keyboard(
     assert call["reply_markup"].inline_keyboard[0][0].callback_data == "ok"
 
 
+@pytest.mark.asyncio
+async def test_telegram_send_with_reply_keyboard_remove_keyboard_and_force_reply():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    components = _load_telegram_components()
+    client = MagicMock()
+    client.send_message = AsyncMock()
+    client.send_chat_action = AsyncMock()
+
+    reply_keyboard_message = MessageChain()
+    reply_keyboard_message.message("choose")
+    reply_keyboard_message.chain.append(
+        components.TelegramReplyKeyboard(
+            [
+                [
+                    components.TelegramKeyboardButton(
+                        "Share phone",
+                        request_contact=True,
+                    ),
+                    "Cancel",
+                ],
+            ],
+            resize_keyboard=True,
+            one_time_keyboard=True,
+            input_field_placeholder="Choose",
+        ),
+    )
+    await TelegramPlatformEvent.send_with_client(
+        client,
+        reply_keyboard_message,
+        "123456",
+    )
+    reply_markup = client.send_message.await_args.kwargs["reply_markup"]
+    assert reply_markup.keyboard[0][0].request_contact is True
+    assert reply_markup.keyboard[0][1] == "Cancel"
+    assert reply_markup.resize_keyboard is True
+    assert reply_markup.one_time_keyboard is True
+    assert reply_markup.input_field_placeholder == "Choose"
+
+    remove_keyboard_message = MessageChain()
+    remove_keyboard_message.message("remove")
+    remove_keyboard_message.chain.append(
+        components.TelegramRemoveKeyboard(selective=True)
+    )
+    await TelegramPlatformEvent.send_with_client(
+        client,
+        remove_keyboard_message,
+        "123456",
+    )
+    remove_markup = client.send_message.await_args.kwargs["reply_markup"]
+    assert remove_markup.selective is True
+
+    force_reply_message = MessageChain()
+    force_reply_message.message("reply")
+    force_reply_message.chain.append(
+        components.TelegramForceReply(
+            selective=True,
+            input_field_placeholder="Reply",
+        ),
+    )
+    await TelegramPlatformEvent.send_with_client(client, force_reply_message, "123456")
+    force_markup = client.send_message.await_args.kwargs["reply_markup"]
+    assert force_markup.selective is True
+    assert force_markup.input_field_placeholder == "Reply"
+
+
 def test_telegram_inline_button_validates_actions_and_callback_data():
     components = _load_telegram_components()
 
@@ -513,6 +608,14 @@ def test_telegram_inline_button_validates_actions_and_callback_data():
 
     button = components.TelegramInlineButton("中文", callback_data="确认")
     assert len(button.callback_data.encode("utf-8")) <= 64
+
+    url_button = components.TelegramInlineButton(
+        "Open",
+        url="https://example.com",
+        pay=False,
+    ).to_telegram_button()
+    assert url_button.url == "https://example.com"
+    assert not hasattr(url_button, "pay")
 
     styled_button = components.TelegramInlineButton(
         "Styled",
@@ -539,6 +642,53 @@ def test_telegram_command_config_normalization_supports_wildcard_and_empty_langu
         TelegramPlatformAdapter._command_language_code({"language_code": " zh "})
         == "zh"
     )
+
+
+def test_telegram_event_filter_matches_structured_events():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    filters_module = _load_telegram_filters()
+    platform_meta = MagicMock()
+    platform_meta.name = "telegram"
+    platform_meta.id = "telegram"
+    message_obj = MagicMock()
+    message_obj.type = "FriendMessage"
+    message_obj.sender.user_id = "42"
+    message_obj.sender.nickname = "alice"
+    message_obj.raw_message.callback_query.data = "approve:42"
+    event = TelegramPlatformEvent(
+        "approve:42", message_obj, platform_meta, "42", MagicMock()
+    )
+    event.set_extra("telegram_event_type", "callback_query")
+
+    callback_filter = filters_module.telegram_event_filter(
+        callback_data_prefix="approve:",
+    )(raise_error=False)
+    assert callback_filter.filter(event, MagicMock()) is True
+
+    inline_event = TelegramPlatformEvent(
+        "", message_obj, platform_meta, "42", MagicMock()
+    )
+    inline_event.set_extra("telegram_event_type", "inline_query")
+    inline_filter = filters_module.telegram_event_filter("inline_query")(
+        raise_error=False,
+    )
+    assert inline_filter.filter(inline_event, MagicMock()) is True
+    assert callback_filter.filter(inline_event, MagicMock()) is False
+
+    member_event = TelegramPlatformEvent(
+        "", message_obj, platform_meta, "42", MagicMock()
+    )
+    member_event.set_extra("telegram_event_type", "member_left")
+    member_filter = filters_module.telegram_event_filter(
+        ["member_joined", "member_left"]
+    )(
+        raise_error=False,
+    )
+    assert member_filter.filter(member_event, MagicMock()) is True
+
+    other_platform = MagicMock()
+    other_platform.get_platform_name.return_value = "discord"
+    assert member_filter.filter(other_platform, MagicMock()) is False
 
 
 @pytest.mark.asyncio
@@ -593,6 +743,166 @@ async def test_telegram_callback_query_is_converted_to_platform_event():
     )
 
 
+@pytest.mark.asyncio
+async def test_telegram_inline_query_is_converted_and_answered():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    components = _load_telegram_components()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    inline_query = MagicMock()
+    inline_query.id = "inline-id"
+    inline_query.query = "search text"
+    inline_query.from_user = _build_user(42, "alice")
+    update = MagicMock()
+    update.inline_query = inline_query
+
+    abm = await adapter.convert_inline_query(update, _build_context())
+
+    assert abm is not None
+    assert abm.message_str == "search text"
+    event = await _commit_and_get_event(adapter, abm)
+    assert event.get_extra("telegram_event_type") == "inline_query"
+    assert event.get_inline_query_text() == "search text"
+    assert event.call_llm is True
+
+    result = components.TelegramInlineQueryResult(
+        "article",
+        id="article-1",
+        title="Result",
+        input_message_content=components.TelegramInputTextMessageContent(
+            "hello",
+            parse_mode="MarkdownV2",
+        ),
+    )
+    await event.answer_inline_query([result], cache_time=5, is_personal=True)
+
+    answer_call = adapter.client.answer_inline_query.await_args.kwargs
+    assert answer_call["inline_query_id"] == "inline-id"
+    assert answer_call["cache_time"] == 5
+    assert answer_call["is_personal"] is True
+    assert answer_call["results"][0].title == "Result"
+    assert answer_call["results"][0].input_message_content.message_text == "hello"
+
+
+@pytest.mark.asyncio
+async def test_telegram_chosen_inline_result_is_converted():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    chosen_result = MagicMock()
+    chosen_result.result_id = "article-1"
+    chosen_result.query = "search text"
+    chosen_result.from_user = _build_user(42, "alice")
+    update = MagicMock()
+    update.chosen_inline_result = chosen_result
+
+    abm = await adapter.convert_chosen_inline_result(update, _build_context())
+
+    assert abm is not None
+    assert abm.message_id == "article-1"
+    event = await _commit_and_get_event(adapter, abm)
+    assert event.get_extra("telegram_event_type") == "chosen_inline_result"
+    assert event.get_chosen_inline_result().result_id == "article-1"
+    assert event.call_llm is True
+
+
+@pytest.mark.asyncio
+async def test_telegram_chat_member_events_are_converted():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = MagicMock()
+    update.update_id = 77
+    update.chat_member = MagicMock()
+    update.chat_member.from_user = _build_user(42, "admin")
+    update.chat_member.chat = _build_chat(-100, "supergroup")
+    update.chat_member.old_chat_member.status = "member"
+    update.chat_member.new_chat_member.status = "administrator"
+
+    abm = await adapter.convert_chat_member_update(
+        update,
+        _build_context(),
+        "chat_member",
+    )
+
+    assert abm is not None
+    assert abm.group_id == "-100"
+    event = await _commit_and_get_event(adapter, abm)
+    assert event.get_extra("telegram_event_type") == "chat_member"
+    assert event.get_chat_member_update().chat.id == -100
+    assert event.call_llm is True
+
+    my_update = MagicMock()
+    my_update.update_id = 78
+    my_update.my_chat_member = MagicMock()
+    my_update.my_chat_member.from_user = _build_user(43, "owner")
+    my_update.my_chat_member.chat = _build_chat(-101, "supergroup")
+    my_update.my_chat_member.old_chat_member.status = "left"
+    my_update.my_chat_member.new_chat_member.status = "member"
+
+    my_abm = await adapter.convert_chat_member_update(
+        my_update,
+        _build_context(),
+        "my_chat_member",
+    )
+    my_event = await _commit_and_get_event(adapter, my_abm)
+    assert my_event.get_extra("telegram_event_type") == "my_chat_member"
+    assert my_event.get_chat_member_update().chat.id == -101
+    assert my_event.call_llm is True
+
+
+@pytest.mark.asyncio
+async def test_telegram_member_joined_and_left_are_converted():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    new_member = _build_user(99, "newbie")
+    join_update = create_mock_update(
+        message_text=None,
+        chat_type="supergroup",
+        chat_id=-100,
+        user_id=42,
+        username="admin",
+        new_chat_members=[new_member],
+    )
+
+    join_abm = await adapter.convert_message(join_update, _build_context())
+
+    assert join_abm is not None
+    join_event = await _commit_and_get_event(adapter, join_abm)
+    assert join_event.get_extra("telegram_event_type") == "member_joined"
+    assert join_event.get_extra("telegram_payload")[0].id == 99
+    assert join_event.call_llm is True
+
+    left_member = _build_user(100, "leaver")
+    left_update = create_mock_update(
+        message_text=None,
+        chat_type="supergroup",
+        chat_id=-100,
+        user_id=42,
+        username="admin",
+        left_chat_member=left_member,
+    )
+
+    left_abm = await adapter.convert_message(left_update, _build_context())
+    left_event = await _commit_and_get_event(adapter, left_abm)
+    assert left_event.get_extra("telegram_event_type") == "member_left"
+    assert left_event.get_extra("telegram_payload").id == 100
+    assert left_event.call_llm is True
+
+
 def test_telegram_application_builder_uses_adapter_proxy_config():
     TelegramPlatformAdapter = _load_telegram_adapter()
     module_globals = TelegramPlatformAdapter.__init__.__globals__
@@ -620,7 +930,14 @@ def test_telegram_application_builder_uses_adapter_proxy_config():
     builder.proxy.assert_called_once_with("http://127.0.0.1:7890")
     builder.get_updates_proxy.assert_called_once_with("http://127.0.0.1:7891")
     app = builder.build.return_value
-    assert app.add_handler.call_count == 2
+    handlers = [call.args[0] for call in app.add_handler.call_args_list]
+    assert app.add_handler.call_count == 6
+    assert handlers[0].filters is module_globals["filters"].ALL
+    handler_type_names = [type(handler).__name__ for handler in handlers]
+    assert "MockCallbackQueryHandler" in handler_type_names
+    assert "MockInlineQueryHandler" in handler_type_names
+    assert "MockChosenInlineResultHandler" in handler_type_names
+    assert handler_type_names.count("MockChatMemberHandler") == 2
 
 
 @pytest.mark.asyncio
@@ -703,6 +1020,69 @@ async def test_telegram_command_registration_filters_plugins_and_uses_scopes():
     assert "BotCommandScopeChat" in repr(type(second_kwargs["scope"]))
 
 
+def test_telegram_event_filter_does_not_pollute_bot_command_collection():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    filters_module = _load_telegram_filters()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+
+    @dataclass
+    class _Plugin:
+        name: str
+        display_name: str
+        root_dir_name: str
+        module_path: str
+        activated: bool = True
+
+    @dataclass
+    class _Handler:
+        handler_module_path: str
+        event_filters: list
+        desc: str
+        enabled: bool = True
+
+    telegram_custom_filter = filters_module.telegram_event_filter("inline_query")(
+        raise_error=False,
+    )
+    handlers = [
+        _Handler(
+            "plugins.allowed.main",
+            [module_globals["CommandFilter"]("ok"), telegram_custom_filter],
+            "OK command",
+        ),
+        _Handler(
+            "plugins.inline_only.main",
+            [telegram_custom_filter],
+            "Inline only",
+        ),
+    ]
+    star_map = {
+        "plugins.allowed.main": _Plugin(
+            "allowed_plugin",
+            "Allowed",
+            "allowed",
+            "plugins.allowed.main",
+        ),
+        "plugins.inline_only.main": _Plugin(
+            "inline_plugin",
+            "Inline",
+            "inline_only",
+            "plugins.inline_only.main",
+        ),
+    }
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+
+    with patch.dict(
+        module_globals, {"star_handlers_registry": handlers, "star_map": star_map}
+    ):
+        commands = adapter.collect_commands()
+
+    assert [command.command for command in commands] == ["ok"]
+
+
 @pytest.mark.asyncio
 async def test_telegram_command_registration_skips_when_command_count_exceeds_limit():
     TelegramPlatformAdapter = _load_telegram_adapter()
@@ -721,3 +1101,172 @@ async def test_telegram_command_registration_skips_when_command_count_exceeds_li
 
     adapter.client.delete_my_commands.assert_not_awaited()
     adapter.client.set_my_commands.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_telegram_run_starts_webhook_when_configured():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    app = MockTelegramBuilder.create_application()
+    app.updater.running = False
+    builder = MagicMock()
+    builder.token.return_value = builder
+    builder.base_url.return_value = builder
+    builder.base_file_url.return_value = builder
+    builder.build.return_value = app
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+        },
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config(
+                "telegram",
+                telegram_update_mode="webhook",
+                telegram_webhook_listen="127.0.0.1",
+                telegram_webhook_port=9443,
+                telegram_webhook_url_path="/tg-hook",
+                telegram_webhook_url="https://example.com/tg-hook",
+                telegram_webhook_secret_token="secret",
+                telegram_webhook_drop_pending_updates=True,
+            ),
+            {},
+            asyncio.Queue(),
+        )
+
+        async def start_webhook_side_effect(*args, **kwargs):
+            adapter._terminating = True
+
+        app.updater.start_webhook.side_effect = start_webhook_side_effect
+        await adapter.run()
+
+    app.updater.start_polling.assert_not_called()
+    webhook_kwargs = app.updater.start_webhook.call_args.kwargs
+    assert webhook_kwargs["listen"] == "127.0.0.1"
+    assert webhook_kwargs["port"] == 9443
+    assert webhook_kwargs["url_path"] == "tg-hook"
+    assert webhook_kwargs["webhook_url"] == "https://example.com/tg-hook"
+    assert webhook_kwargs["secret_token"] == "secret"
+    assert webhook_kwargs["drop_pending_updates"] is True
+    assert "inline_query" in webhook_kwargs["allowed_updates"]
+    assert "chat_member" in webhook_kwargs["allowed_updates"]
+
+
+@pytest.mark.asyncio
+async def test_telegram_polling_mode_still_uses_start_polling():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+
+    async def start_polling_side_effect(*args, **kwargs):
+        adapter._terminating = True
+
+    adapter.application.updater.start_polling.side_effect = start_polling_side_effect
+    await adapter.run()
+
+    adapter.application.updater.start_webhook.assert_not_called()
+    polling_kwargs = adapter.application.updater.start_polling.call_args.kwargs
+    assert polling_kwargs["error_callback"] == adapter._on_polling_error
+    assert "chosen_inline_result" in polling_kwargs["allowed_updates"]
+
+
+@pytest.mark.asyncio
+async def test_telegram_message_helpers_edit_delete_copy_forward():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    components = _load_telegram_components()
+    client = MockTelegramBuilder.create_bot()
+    message_obj = MagicMock()
+    message_obj.type = "GroupMessage"
+    message_obj.group_id = "-100#7"
+    message_obj.message_id = "99"
+    message_obj.sender.user_id = "42"
+    message_obj.sender.nickname = "alice"
+    platform_meta = MagicMock()
+    platform_meta.name = "telegram"
+    platform_meta.id = "telegram"
+    event = TelegramPlatformEvent("msg", message_obj, platform_meta, "-100#7", client)
+    keyboard = components.TelegramInlineKeyboard(
+        [[components.TelegramInlineButton("OK", callback_data="ok")]],
+    )
+
+    await event.edit_text("edited", reply_markup=keyboard, parse_mode="HTML")
+    await event.edit_reply_markup(reply_markup=keyboard)
+    await event.delete_message()
+    await event.copy_message("-200#8")
+    await event.forward_message("-300#9")
+
+    edit_text_kwargs = client.edit_message_text.await_args.kwargs
+    assert edit_text_kwargs["chat_id"] == "-100"
+    assert edit_text_kwargs["message_id"] == 99
+    assert edit_text_kwargs["parse_mode"] == "HTML"
+    assert edit_text_kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "ok"
+    assert client.edit_message_reply_markup.await_args.kwargs["chat_id"] == "-100"
+    assert client.delete_message.await_args.kwargs == {
+        "chat_id": "-100",
+        "message_id": 99,
+    }
+    assert client.copy_message.await_args.kwargs["chat_id"] == "-200"
+    assert client.copy_message.await_args.kwargs["from_chat_id"] == "-100"
+    assert client.copy_message.await_args.kwargs["message_thread_id"] == 8
+    assert client.forward_message.await_args.kwargs["chat_id"] == "-300"
+    assert client.forward_message.await_args.kwargs["message_thread_id"] == 9
+
+
+@pytest.mark.asyncio
+async def test_telegram_common_inbound_message_types_are_converted():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    audio = create_mock_file("https://api.telegram.org/file/test/song.mp3")
+    audio.file_name = "song.mp3"
+    audio_update = create_mock_update(message_text=None, audio=audio)
+
+    audio_result = await adapter.convert_message(audio_update, _build_context())
+
+    assert any(isinstance(component, Comp.File) for component in audio_result.message)
+
+    location = MagicMock()
+    location.latitude = 1.25
+    location.longitude = 2.5
+    location_update = create_mock_update(message_text=None, location=location)
+
+    location_result = await adapter.convert_message(location_update, _build_context())
+
+    assert isinstance(location_result.message[0], Comp.Location)
+    assert location_result.message[0].lat == 1.25
+    assert location_result.message[0].lon == 2.5
+
+    poll = MagicMock()
+    poll.question = "Pick one"
+    poll_update = create_mock_update(message_text=None, poll=poll)
+
+    poll_result = await adapter.convert_message(poll_update, _build_context())
+    poll_event = await _commit_and_get_event(adapter, poll_result)
+
+    assert poll_event.get_extra("telegram_event_type") == "poll"
+    assert poll_event.get_extra("telegram_payload").question == "Pick one"
+    assert poll_event.call_llm is False
+
+    dice = MagicMock()
+    dice.emoji = "\U0001f3b2"
+    dice.value = 6
+    dice_update = create_mock_update(message_text=None, dice=dice)
+
+    dice_result = await adapter.convert_message(dice_update, _build_context())
+    dice_event = await _commit_and_get_event(adapter, dice_result)
+
+    assert dice_result.message_str == "Dice: \U0001f3b2=6"
+    assert dice_event.get_extra("telegram_event_type") == "dice"
+    assert dice_event.get_extra("telegram_payload").value == 6
+    assert dice_event.call_llm is False

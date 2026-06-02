@@ -598,6 +598,42 @@
         "description": "Telegram 命令注册范围",
         "hint": "Telegram BotCommandScope 配置，例如 {\"type\":\"default\",\"language_code\":\"zh\"} 或 {\"type\":\"chat\",\"chat_id\":12345}。"
       },
+      "telegram_update_mode": {
+        "description": "Telegram 更新模式",
+        "hint": "polling 使用 getUpdates 轮询；webhook 使用 Telegram 适配器独立监听并需要可被 Telegram 访问的公开 URL。"
+      },
+      "telegram_webhook_listen": {
+        "description": "Telegram Webhook 监听地址",
+        "hint": "Telegram 独立 Webhook 监听的本地地址。反向代理部署通常使用 0.0.0.0 或 127.0.0.1。"
+      },
+      "telegram_webhook_port": {
+        "description": "Telegram Webhook 监听端口",
+        "hint": "Telegram 独立 Webhook 监听端口。使用反向代理时填写本地监听端口。"
+      },
+      "telegram_webhook_url_path": {
+        "description": "Telegram Webhook 路径",
+        "hint": "Telegram 独立 Webhook 的本地路径，公开 URL 应映射到这个路径。"
+      },
+      "telegram_webhook_url": {
+        "description": "Telegram Webhook 公开 URL",
+        "hint": "Telegram Bot API 调用 setWebhook 使用的 HTTPS 公开 URL。启用 webhook 模式时必填。"
+      },
+      "telegram_webhook_secret_token": {
+        "description": "Telegram Webhook Secret Token",
+        "hint": "可选。Telegram 会在 Webhook 请求中携带 secret token，用于校验来源。"
+      },
+      "telegram_webhook_drop_pending_updates": {
+        "description": "启动 Webhook 时丢弃待处理更新",
+        "hint": "启用后，启动 webhook 时丢弃 Telegram 服务端积压的未处理 update。"
+      },
+      "telegram_webhook_cert_path": {
+        "description": "Telegram Webhook 证书路径",
+        "hint": "可选。仅在不通过反向代理、直接让 PTB 提供 HTTPS 时填写证书路径。"
+      },
+      "telegram_webhook_key_path": {
+        "description": "Telegram Webhook 私钥路径",
+        "hint": "可选。仅在不通过反向代理、直接让 PTB 提供 HTTPS 时填写私钥路径。"
+      },
       "telegram_get_updates_proxy": {
         "description": "Telegram getUpdates 代理",
         "hint": "仅用于此 Telegram 适配器轮询 getUpdates 的代理。留空则使用默认网络设置。"

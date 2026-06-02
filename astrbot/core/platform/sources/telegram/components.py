@@ -3,10 +3,36 @@ from typing import Any
 from telegram import (
     CallbackGame,
     CopyTextButton,
+    ForceReply,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    InlineQueryResultArticle,
+    InlineQueryResultAudio,
+    InlineQueryResultCachedAudio,
+    InlineQueryResultCachedDocument,
+    InlineQueryResultCachedGif,
+    InlineQueryResultCachedMpeg4Gif,
+    InlineQueryResultCachedPhoto,
+    InlineQueryResultCachedSticker,
+    InlineQueryResultCachedVideo,
+    InlineQueryResultCachedVoice,
+    InlineQueryResultContact,
+    InlineQueryResultDocument,
+    InlineQueryResultGame,
+    InlineQueryResultGif,
+    InlineQueryResultLocation,
+    InlineQueryResultMpeg4Gif,
+    InlineQueryResultPhoto,
+    InlineQueryResultsButton,
+    InlineQueryResultVenue,
+    InlineQueryResultVideo,
+    InlineQueryResultVoice,
+    InputTextMessageContent,
+    KeyboardButton,
     LinkPreviewOptions,
     LoginUrl,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
     SwitchInlineQueryChosenChat,
     WebAppInfo,
 )
@@ -14,6 +40,29 @@ from telegram import (
 from astrbot.api.message_components import BaseMessageComponent
 
 TELEGRAM_CALLBACK_DATA_MAX_BYTES = 64
+
+TELEGRAM_INLINE_QUERY_RESULT_TYPES: dict[str, type] = {
+    "article": InlineQueryResultArticle,
+    "audio": InlineQueryResultAudio,
+    "cached_audio": InlineQueryResultCachedAudio,
+    "cached_document": InlineQueryResultCachedDocument,
+    "cached_gif": InlineQueryResultCachedGif,
+    "cached_mpeg4_gif": InlineQueryResultCachedMpeg4Gif,
+    "cached_photo": InlineQueryResultCachedPhoto,
+    "cached_sticker": InlineQueryResultCachedSticker,
+    "cached_video": InlineQueryResultCachedVideo,
+    "cached_voice": InlineQueryResultCachedVoice,
+    "contact": InlineQueryResultContact,
+    "document": InlineQueryResultDocument,
+    "game": InlineQueryResultGame,
+    "gif": InlineQueryResultGif,
+    "location": InlineQueryResultLocation,
+    "mpeg4_gif": InlineQueryResultMpeg4Gif,
+    "photo": InlineQueryResultPhoto,
+    "venue": InlineQueryResultVenue,
+    "video": InlineQueryResultVideo,
+    "voice": InlineQueryResultVoice,
+}
 
 
 class TelegramInlineButton(BaseMessageComponent):
@@ -118,7 +167,9 @@ class TelegramInlineButton(BaseMessageComponent):
             payload["copy_text"] = CopyTextButton(self.copy_text)
 
         button_payload = {
-            key: value for key, value in payload.items() if value is not None
+            key: value
+            for key, value in payload.items()
+            if value is not None and value is not False
         }
         if self.style is not None:
             button_payload["style"] = self.style
@@ -155,6 +206,253 @@ class TelegramInlineKeyboard(BaseMessageComponent):
                 ],
             )
         return InlineKeyboardMarkup(keyboard)
+
+
+class TelegramKeyboardButton(BaseMessageComponent):
+    """Telegram reply-keyboard button component."""
+
+    type: str = "telegram_keyboard_button"
+    text: str
+    request_contact: bool | None = None
+    request_location: bool | None = None
+    request_poll: Any = None
+    web_app: Any = None
+    request_chat: Any = None
+    request_users: Any = None
+    style: str | None = None
+    icon_custom_emoji_id: str | None = None
+
+    def __init__(
+        self,
+        text: str,
+        *,
+        request_contact: bool | None = None,
+        request_location: bool | None = None,
+        request_poll: Any = None,
+        web_app: WebAppInfo | str | None = None,
+        request_chat: Any = None,
+        request_users: Any = None,
+        style: str | None = None,
+        icon_custom_emoji_id: str | None = None,
+    ) -> None:
+        super().__init__(
+            text=text,
+            request_contact=request_contact,
+            request_location=request_location,
+            request_poll=request_poll,
+            web_app=web_app,
+            request_chat=request_chat,
+            request_users=request_users,
+            style=style,
+            icon_custom_emoji_id=icon_custom_emoji_id,
+        )
+
+    def to_telegram_button(self) -> KeyboardButton:
+        web_app = (
+            WebAppInfo(self.web_app) if isinstance(self.web_app, str) else self.web_app
+        )
+        return KeyboardButton(
+            text=self.text,
+            request_contact=self.request_contact,
+            request_location=self.request_location,
+            request_poll=self.request_poll,
+            web_app=web_app,
+            request_chat=self.request_chat,
+            request_users=self.request_users,
+            style=self.style,
+            icon_custom_emoji_id=self.icon_custom_emoji_id,
+        )
+
+
+class TelegramInputTextMessageContent(BaseMessageComponent):
+    """Telegram inline-query text message content component."""
+
+    type: str = "telegram_input_text_message_content"
+    message_text: str
+    parse_mode: str | None = None
+    entities: Any = None
+    link_preview_options: Any = None
+    disable_web_page_preview: bool | None = None
+    api_kwargs: dict[str, Any] | None = None
+
+    def __init__(
+        self,
+        message_text: str,
+        *,
+        parse_mode: str | None = None,
+        entities: Any = None,
+        link_preview_options: Any = None,
+        disable_web_page_preview: bool | None = None,
+        api_kwargs: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message_text=message_text,
+            parse_mode=parse_mode,
+            entities=entities,
+            link_preview_options=link_preview_options,
+            disable_web_page_preview=disable_web_page_preview,
+            api_kwargs=api_kwargs,
+        )
+
+    def to_telegram_content(self) -> InputTextMessageContent:
+        return InputTextMessageContent(
+            message_text=self.message_text,
+            parse_mode=self.parse_mode,
+            entities=self.entities,
+            link_preview_options=self.link_preview_options,
+            disable_web_page_preview=self.disable_web_page_preview,
+            api_kwargs=self.api_kwargs,
+        )
+
+
+class TelegramInlineQueryResult(BaseMessageComponent):
+    """Telegram inline-query result component.
+
+    ``result_type`` accepts every Bot API inline result type supported by
+    python-telegram-bot 22.6+: article, audio, cached_audio, cached_document,
+    cached_gif, cached_mpeg4_gif, cached_photo, cached_sticker, cached_video,
+    cached_voice, contact, document, game, gif, location, mpeg4_gif, photo,
+    venue, video, and voice.
+    """
+
+    type: str = "telegram_inline_query_result"
+    result_type: str
+    payload: dict[str, Any]
+
+    def __init__(self, result_type: str, **payload: Any) -> None:
+        super().__init__(result_type=result_type, payload=payload)
+
+    def to_telegram_result(self):
+        result_type = self.result_type.strip().lower()
+        result_class = TELEGRAM_INLINE_QUERY_RESULT_TYPES.get(result_type)
+        if result_class is None:
+            supported = ", ".join(sorted(TELEGRAM_INLINE_QUERY_RESULT_TYPES))
+            raise ValueError(
+                f"Unsupported Telegram inline query result type: {self.result_type}. "
+                f"Supported types: {supported}.",
+            )
+        return result_class(**_convert_telegram_payload(self.payload))
+
+
+class TelegramInlineQueryResultsButton(BaseMessageComponent):
+    """Telegram inline-query answer button component."""
+
+    type: str = "telegram_inline_query_results_button"
+    text: str
+    web_app: Any = None
+    start_parameter: str | None = None
+
+    def __init__(
+        self,
+        text: str,
+        *,
+        web_app: WebAppInfo | str | None = None,
+        start_parameter: str | None = None,
+    ) -> None:
+        super().__init__(
+            text=text,
+            web_app=web_app,
+            start_parameter=start_parameter,
+        )
+
+    def to_telegram_button(self) -> InlineQueryResultsButton:
+        web_app = (
+            WebAppInfo(self.web_app) if isinstance(self.web_app, str) else self.web_app
+        )
+        return InlineQueryResultsButton(
+            text=self.text,
+            web_app=web_app,
+            start_parameter=self.start_parameter,
+        )
+
+
+class TelegramReplyKeyboard(BaseMessageComponent):
+    """Telegram custom reply keyboard component."""
+
+    type: str = "telegram_reply_keyboard"
+    rows: list[list[Any]]
+    resize_keyboard: bool | None = None
+    one_time_keyboard: bool | None = None
+    selective: bool | None = None
+    input_field_placeholder: str | None = None
+    is_persistent: bool | None = None
+
+    def __init__(
+        self,
+        rows: list[list[str | TelegramKeyboardButton | KeyboardButton]],
+        *,
+        resize_keyboard: bool | None = None,
+        one_time_keyboard: bool | None = None,
+        selective: bool | None = None,
+        input_field_placeholder: str | None = None,
+        is_persistent: bool | None = None,
+    ) -> None:
+        super().__init__(
+            rows=rows,
+            resize_keyboard=resize_keyboard,
+            one_time_keyboard=one_time_keyboard,
+            selective=selective,
+            input_field_placeholder=input_field_placeholder,
+            is_persistent=is_persistent,
+        )
+
+    def to_telegram_markup(self) -> ReplyKeyboardMarkup:
+        keyboard: list[list[str | KeyboardButton]] = []
+        for row in self.rows:
+            keyboard.append(
+                [
+                    button.to_telegram_button()
+                    if isinstance(button, TelegramKeyboardButton)
+                    else button
+                    for button in row
+                ],
+            )
+        return ReplyKeyboardMarkup(
+            keyboard,
+            resize_keyboard=self.resize_keyboard,
+            one_time_keyboard=self.one_time_keyboard,
+            selective=self.selective,
+            input_field_placeholder=self.input_field_placeholder,
+            is_persistent=self.is_persistent,
+        )
+
+
+class TelegramRemoveKeyboard(BaseMessageComponent):
+    """Telegram reply-keyboard removal component."""
+
+    type: str = "telegram_remove_keyboard"
+    selective: bool | None = None
+
+    def __init__(self, *, selective: bool | None = None) -> None:
+        super().__init__(selective=selective)
+
+    def to_telegram_markup(self) -> ReplyKeyboardRemove:
+        return ReplyKeyboardRemove(selective=self.selective)
+
+
+class TelegramForceReply(BaseMessageComponent):
+    """Telegram force-reply prompt component."""
+
+    type: str = "telegram_force_reply"
+    selective: bool | None = None
+    input_field_placeholder: str | None = None
+
+    def __init__(
+        self,
+        *,
+        selective: bool | None = None,
+        input_field_placeholder: str | None = None,
+    ) -> None:
+        super().__init__(
+            selective=selective,
+            input_field_placeholder=input_field_placeholder,
+        )
+
+    def to_telegram_markup(self) -> ForceReply:
+        return ForceReply(
+            selective=self.selective,
+            input_field_placeholder=self.input_field_placeholder,
+        )
 
 
 class TelegramMessageOptions(BaseMessageComponent):
@@ -207,3 +505,21 @@ class TelegramMessageOptions(BaseMessageComponent):
             prefer_large_media=self.link_preview_prefer_large_media,
             show_above_text=self.link_preview_show_above_text,
         )
+
+
+def _convert_telegram_payload(value: Any) -> Any:
+    if isinstance(value, TelegramInlineKeyboard):
+        return value.to_telegram_markup()
+    if isinstance(value, TelegramInputTextMessageContent):
+        return value.to_telegram_content()
+    if isinstance(value, TelegramInlineQueryResultsButton):
+        return value.to_telegram_button()
+    if isinstance(value, TelegramInlineQueryResult):
+        return value.to_telegram_result()
+    if isinstance(value, list):
+        return [_convert_telegram_payload(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_convert_telegram_payload(item) for item in value)
+    if isinstance(value, dict):
+        return {key: _convert_telegram_payload(item) for key, item in value.items()}
+    return value

@@ -103,6 +103,16 @@ def create_mock_update(
     document: MagicMock | None = None,
     voice: MagicMock | None = None,
     sticker: MagicMock | None = None,
+    audio: MagicMock | None = None,
+    animation: MagicMock | None = None,
+    video_note: MagicMock | None = None,
+    location: MagicMock | None = None,
+    venue: MagicMock | None = None,
+    contact: MagicMock | None = None,
+    poll: MagicMock | None = None,
+    dice: MagicMock | None = None,
+    new_chat_members: list | None = None,
+    left_chat_member: MagicMock | None = None,
     reply_to_message: MagicMock | None = None,
     caption: str | None = None,
     entities: list | None = None,
@@ -125,6 +135,16 @@ def create_mock_update(
         document: 文档对象
         voice: 语音对象
         sticker: 贴纸对象
+        audio: 音频对象
+        animation: 动画对象
+        video_note: 圆形视频对象
+        location: 位置对象
+        venue: 地点对象
+        contact: 联系人对象
+        poll: 投票对象
+        dice: 骰子对象
+        new_chat_members: 新加入成员列表
+        left_chat_member: 离开成员对象
         reply_to_message: 回复的消息
         caption: 说明文字
         entities: 实体列表
@@ -161,6 +181,16 @@ def create_mock_update(
     message.document = document
     message.voice = voice
     message.sticker = sticker
+    message.audio = audio
+    message.animation = animation
+    message.video_note = video_note
+    message.location = location
+    message.venue = venue
+    message.contact = contact
+    message.poll = poll
+    message.dice = dice
+    message.new_chat_members = new_chat_members
+    message.left_chat_member = left_chat_member
     message.reply_to_message = reply_to_message
     message.caption = caption
     message.entities = entities

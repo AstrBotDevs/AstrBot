@@ -25,7 +25,22 @@ from astrbot.api.message_components import (
 from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
 from astrbot.core.utils.metrics import Metric
 
-from .components import TelegramInlineKeyboard, TelegramMessageOptions
+from .components import (
+    TelegramForceReply,
+    TelegramInlineKeyboard,
+    TelegramInlineQueryResult,
+    TelegramInlineQueryResultsButton,
+    TelegramMessageOptions,
+    TelegramRemoveKeyboard,
+    TelegramReplyKeyboard,
+)
+
+TelegramReplyMarkup = (
+    TelegramInlineKeyboard
+    | TelegramReplyKeyboard
+    | TelegramRemoveKeyboard
+    | TelegramForceReply
+)
 
 
 def _is_gif(path: str) -> bool:
@@ -89,21 +104,29 @@ class TelegramPlatformEvent(AstrMessageEvent):
     ) -> tuple[
         list[BaseMessageComponent],
         TelegramMessageOptions,
-        TelegramInlineKeyboard | None,
+        TelegramReplyMarkup | None,
     ]:
         chain: list[BaseMessageComponent] = []
         options = TelegramMessageOptions()
-        keyboard = None
+        reply_markup = None
 
         for item in message.chain:
             if isinstance(item, TelegramMessageOptions):
                 options = item
-            elif isinstance(item, TelegramInlineKeyboard):
-                keyboard = item
+            elif isinstance(
+                item,
+                (
+                    TelegramInlineKeyboard,
+                    TelegramReplyKeyboard,
+                    TelegramRemoveKeyboard,
+                    TelegramForceReply,
+                ),
+            ):
+                reply_markup = item
             else:
                 chain.append(item)
 
-        return chain, options, keyboard
+        return chain, options, reply_markup
 
     @staticmethod
     def _normalize_parse_mode(parse_mode: str | None) -> str | None:
@@ -129,15 +152,53 @@ class TelegramPlatformEvent(AstrMessageEvent):
         cls,
         payload: dict[str, Any],
         options: TelegramMessageOptions,
-        keyboard: TelegramInlineKeyboard | None,
+        reply_markup: TelegramReplyMarkup | None,
     ) -> dict[str, Any]:
         send_payload = dict(payload)
         link_preview_options = options.to_link_preview_options()
         if link_preview_options is not None:
             send_payload["link_preview_options"] = link_preview_options
-        if keyboard is not None:
-            send_payload["reply_markup"] = keyboard.to_telegram_markup()
+        if reply_markup is not None:
+            send_payload["reply_markup"] = reply_markup.to_telegram_markup()
         return send_payload
+
+    @staticmethod
+    def _split_telegram_chat_reference(chat_id: str) -> tuple[str, int | None]:
+        if "#" not in chat_id:
+            return chat_id, None
+        raw_chat_id, raw_thread_id = chat_id.split("#", 1)
+        if not raw_thread_id:
+            return raw_chat_id, None
+        return raw_chat_id, int(raw_thread_id)
+
+    def _current_chat_reference(self) -> tuple[str, int | None]:
+        if self.get_message_type() == MessageType.GROUP_MESSAGE:
+            chat_id = self.message_obj.group_id
+        else:
+            chat_id = self.get_sender_id()
+        if not chat_id:
+            raise RuntimeError("Telegram event has no target chat_id.")
+        return self._split_telegram_chat_reference(chat_id)
+
+    def _current_message_id(self) -> int:
+        message_id = getattr(self.message_obj, "message_id", None)
+        if message_id in (None, ""):
+            raise RuntimeError("Telegram event has no message_id.")
+        return int(message_id)
+
+    @staticmethod
+    def _convert_reply_markup(reply_markup: Any) -> Any:
+        if hasattr(reply_markup, "to_telegram_markup"):
+            return reply_markup.to_telegram_markup()
+        return reply_markup
+
+    @staticmethod
+    def _convert_inline_query_result(result: Any) -> Any:
+        if isinstance(result, TelegramInlineQueryResult):
+            return result.to_telegram_result()
+        if hasattr(result, "to_telegram_result"):
+            return result.to_telegram_result()
+        return result
 
     @staticmethod
     def _is_markdown_parse_error(error: BadRequest) -> bool:
@@ -373,7 +434,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         user_name: str,
     ) -> None:
         image_path = None
-        chain, options, keyboard = cls._extract_send_options(message)
+        chain, options, reply_markup = cls._extract_send_options(message)
 
         has_reply = False
         reply_message_id = None
@@ -395,7 +456,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         action = cls._get_chat_action_for_chain(chain)
         await cls._send_chat_action(client, user_name, action, message_thread_id)
 
-        extra_payload = cls._build_text_payload({}, options, keyboard)
+        extra_payload = cls._build_text_payload({}, options, reply_markup)
         for i in chain:
             payload = {
                 "chat_id": user_name,
@@ -460,6 +521,22 @@ class TelegramPlatformEvent(AstrMessageEvent):
             await self.send_with_client(self.client, message, self.get_sender_id())
         await super().send(message)
 
+    def get_telegram_client(self) -> ExtBot:
+        """Return the Telegram Bot client for advanced Bot API calls."""
+        return self.client
+
+    def get_telegram_update(self):
+        """Return the raw Telegram Update object."""
+        return getattr(self.message_obj, "raw_message", None)
+
+    def get_telegram_event_type(self) -> str:
+        """Return the Telegram structured event type stored on this event."""
+        return str(self.get_extra("telegram_event_type", "") or "")
+
+    def get_telegram_payload(self) -> Any:
+        """Return the Telegram object that triggered this structured event."""
+        return self.get_extra("telegram_payload")
+
     def _get_callback_query(self):
         raw_message = getattr(self.message_obj, "raw_message", None)
         return getattr(raw_message, "callback_query", None)
@@ -508,6 +585,169 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     async def ack_interaction(self) -> None:
         await self.answer_interaction()
+
+    def get_inline_query(self):
+        update = self.get_telegram_update()
+        return getattr(update, "inline_query", None)
+
+    def is_inline_query(self) -> bool:
+        return self.get_inline_query() is not None
+
+    def get_inline_query_text(self) -> str:
+        inline_query = self.get_inline_query()
+        if inline_query is None:
+            return ""
+        return str(getattr(inline_query, "query", "") or "")
+
+    def get_chosen_inline_result(self):
+        update = self.get_telegram_update()
+        return getattr(update, "chosen_inline_result", None)
+
+    def is_chosen_inline_result(self) -> bool:
+        return self.get_chosen_inline_result() is not None
+
+    def get_chat_member_update(self):
+        update = self.get_telegram_update()
+        event_type = self.get_telegram_event_type()
+        if event_type == "my_chat_member":
+            return getattr(update, "my_chat_member", None)
+        if event_type == "chat_member":
+            return getattr(update, "chat_member", None)
+        return getattr(update, "chat_member", None) or getattr(
+            update,
+            "my_chat_member",
+            None,
+        )
+
+    def is_chat_member_event(self) -> bool:
+        return self.get_chat_member_update() is not None
+
+    async def answer_inline_query(
+        self,
+        results: list[Any],
+        *,
+        inline_query_id: str | None = None,
+        cache_time: int | None = None,
+        is_personal: bool | None = None,
+        next_offset: str | None = None,
+        button: TelegramInlineQueryResultsButton | Any | None = None,
+        current_offset: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        inline_query = self.get_inline_query()
+        target_inline_query_id = inline_query_id or (
+            str(getattr(inline_query, "id", "") or "") if inline_query else ""
+        )
+        if not target_inline_query_id:
+            raise RuntimeError("This Telegram event has no inline_query_id.")
+
+        telegram_button = (
+            button.to_telegram_button()
+            if isinstance(button, TelegramInlineQueryResultsButton)
+            else button
+        )
+        telegram_results = [
+            self._convert_inline_query_result(result) for result in results
+        ]
+        await self.client.answer_inline_query(
+            inline_query_id=target_inline_query_id,
+            results=telegram_results,
+            cache_time=cache_time,
+            is_personal=is_personal,
+            next_offset=next_offset,
+            button=telegram_button,
+            current_offset=current_offset,
+            **kwargs,
+        )
+
+    async def edit_text(
+        self,
+        text: str,
+        *,
+        reply_markup: TelegramInlineKeyboard | Any | None = None,
+        parse_mode: str | None = None,
+        link_preview_options: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        chat_id, _ = self._current_chat_reference()
+        return await self.client.edit_message_text(
+            text=text,
+            chat_id=chat_id,
+            message_id=self._current_message_id(),
+            reply_markup=self._convert_reply_markup(reply_markup),
+            parse_mode=parse_mode,
+            link_preview_options=link_preview_options,
+            **kwargs,
+        )
+
+    async def edit_reply_markup(
+        self,
+        reply_markup: TelegramInlineKeyboard | Any | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        chat_id, _ = self._current_chat_reference()
+        return await self.client.edit_message_reply_markup(
+            chat_id=chat_id,
+            message_id=self._current_message_id(),
+            reply_markup=self._convert_reply_markup(reply_markup),
+            **kwargs,
+        )
+
+    async def delete_message(self, **kwargs: Any) -> Any:
+        chat_id, _ = self._current_chat_reference()
+        return await self.client.delete_message(
+            chat_id=chat_id,
+            message_id=self._current_message_id(),
+            **kwargs,
+        )
+
+    async def copy_message(
+        self,
+        chat_id: str,
+        *,
+        from_chat_id: str | None = None,
+        message_id: int | None = None,
+        message_thread_id: int | None = None,
+        reply_markup: TelegramReplyMarkup | Any | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        source_chat_id, _ = self._current_chat_reference()
+        target_chat_id, target_thread_id = self._split_telegram_chat_reference(
+            str(chat_id),
+        )
+        return await self.client.copy_message(
+            chat_id=target_chat_id,
+            from_chat_id=from_chat_id or source_chat_id,
+            message_id=message_id or self._current_message_id(),
+            message_thread_id=message_thread_id
+            if message_thread_id is not None
+            else target_thread_id,
+            reply_markup=self._convert_reply_markup(reply_markup),
+            **kwargs,
+        )
+
+    async def forward_message(
+        self,
+        chat_id: str,
+        *,
+        from_chat_id: str | None = None,
+        message_id: int | None = None,
+        message_thread_id: int | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        source_chat_id, _ = self._current_chat_reference()
+        target_chat_id, target_thread_id = self._split_telegram_chat_reference(
+            str(chat_id),
+        )
+        return await self.client.forward_message(
+            chat_id=target_chat_id,
+            from_chat_id=from_chat_id or source_chat_id,
+            message_id=message_id or self._current_message_id(),
+            message_thread_id=message_thread_id
+            if message_thread_id is not None
+            else target_thread_id,
+            **kwargs,
+        )
 
     async def react(self, emoji: str | None, big: bool = False) -> None:
         """给原消息添加 Telegram 反应：

@@ -114,6 +114,10 @@ from astrbot.core.platform.sources.telegram.components import (
     TelegramInlineButton,
     TelegramInlineKeyboard,
     TelegramMessageOptions,
+    TelegramReplyKeyboard,
+    TelegramKeyboardButton,
+    TelegramRemoveKeyboard,
+    TelegramForceReply,
 )
 
 @filter.command("review")
@@ -147,22 +151,91 @@ async def review(self, event: AstrMessageEvent):
 
 `TelegramInlineButton` 每个按钮必须且只能设置一种动作。支持 `url`、`callback_data`、`login_url`、`web_app`、`switch_inline_query`、`switch_inline_query_current_chat`、`switch_inline_query_chosen_chat`、`copy_text`、`callback_game`、`pay`，以及 Bot API 支持时的 `style`、`icon_custom_emoji_id`。`callback_data` 必须是 1-64 UTF-8 字节。
 
-插件可以通过回调事件实现审批、确认、翻页等交互：
+也可以发送 Telegram Reply Keyboard、移除键盘或强制用户回复：
+
+```python
+chain = MessageChain()
+chain.message("请选择联系方式")
+chain.chain.append(
+    TelegramReplyKeyboard(
+        [[TelegramKeyboardButton("分享手机号", request_contact=True), "取消"]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+        input_field_placeholder="请选择",
+    )
+)
+yield event.chain_result(chain)
+
+remove = MessageChain()
+remove.message("已取消")
+remove.chain.append(TelegramRemoveKeyboard(selective=True))
+yield event.chain_result(remove)
+
+force = MessageChain()
+force.message("请回复审批理由")
+force.chain.append(TelegramForceReply(input_field_placeholder="理由"))
+yield event.chain_result(force)
+```
+
+插件可以通过 Telegram 自定义过滤器监听按钮回调，实现审批、确认、翻页等交互。关键是使用 `@filter.custom_filter(telegram_event_filter(...))`，否则普通命令过滤器不会专门匹配 Telegram 的 callback/inline/member 类事件：
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.core.platform.sources.telegram.filters import telegram_event_filter
 
-@filter.event_message_type(filter.EventMessageType.ALL)
+@filter.custom_filter(telegram_event_filter("callback_query"))
 async def on_telegram_button(self, event: AstrMessageEvent):
-    if not hasattr(event, "is_button_interaction") or not event.is_button_interaction():
+    action = event.get_interaction_data()
+    await event.ack_interaction()
+
+    if action == "approve:42":
+        yield event.plain_result("已通过")
         return
 
-    action = event.get_interaction_data()
-    user_id = event.get_interaction_user_id()
-    await event.answer_interaction(f"已收到 {user_id}: {action}", show_alert=False)
+    if action == "reject:42":
+        await event.answer_interaction("已拒绝", show_alert=True)
+        return
+
+    await event.answer_interaction(f"未知操作：{action}", show_alert=True)
 ```
 
-`event.ack_interaction()` 可以快速确认回调；`event.get_interaction_custom_id()` 与 `event.get_interaction_data()` 都会返回 Telegram 的 `callback_data`。
+`event.ack_interaction()` 可以快速确认回调，避免 Telegram 客户端一直显示按钮加载状态；`event.answer_interaction(text, show_alert=False)` 可以回应 callback query，`show_alert=True` 时会弹出提示框。`event.get_interaction_custom_id()` 与 `event.get_interaction_data()` 都会返回 Telegram 的 `callback_data`，也就是上面 `TelegramInlineButton(..., callback_data="approve:42")` 中设置的值。
+
+同一个过滤器入口也可以监听 Telegram inline/member 类事件。处理这些事件时，通常需要从 `event.message_obj.raw_message` 读取 Telegram 原始 `Update` 对象中的字段：
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.core.platform.sources.telegram.components import (
+    TelegramInlineQueryResult,
+    TelegramInputTextMessageContent,
+)
+from astrbot.core.platform.sources.telegram.filters import telegram_event_filter
+
+@filter.custom_filter(telegram_event_filter("inline_query"))
+async def on_telegram_inline_query(self, event: AstrMessageEvent):
+    query = event.get_inline_query_text()
+    await event.answer_inline_query(
+        [
+            TelegramInlineQueryResult(
+                "article",
+                id="echo",
+                title=f"发送：{query}",
+                input_message_content=TelegramInputTextMessageContent(query or "空查询"),
+            )
+        ],
+        cache_time=0,
+        is_personal=True,
+    )
+
+@filter.custom_filter(telegram_event_filter("chat_member"))
+async def on_telegram_chat_member(self, event: AstrMessageEvent):
+    member_update = event.get_chat_member_update()
+    yield event.plain_result(f"成员状态变更：{member_update.new_chat_member.status}")
+```
+
+可用事件类型包括 `callback_query`、`inline_query`、`chosen_inline_result`、`chat_member`、`my_chat_member`、`member_joined`、`member_left`、`poll`、`dice`。按钮回调是最常见的交互增强场景，建议将 `callback_data` 设计成 `动作:资源ID` 这类可解析格式，并在处理函数里显式分支处理。
+
+如果 AstrBot 尚未封装某个 Telegram Bot API，可以在 Telegram 事件里用 `event.get_telegram_client()` 获取只读暴露的 `python-telegram-bot` Bot 客户端自行调用；原始 `Update` 可通过 `event.get_telegram_update()` 获取。
 
 ## 发送群合并转发消息
 
