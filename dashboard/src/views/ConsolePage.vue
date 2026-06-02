@@ -2,6 +2,7 @@
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import axios from 'axios';
+import { useToast } from '@/utils/toast';
 
 const { tm } = useModuleI18n('features/console');
 </script>
@@ -37,10 +38,6 @@ const { tm } = useModuleI18n('features/console');
               <v-text-field v-model="pipInstallPayload.package" :label="tm('pipInstall.packageLabel')" variant="outlined"></v-text-field>
               <v-text-field v-model="pipInstallPayload.mirror" :label="tm('pipInstall.mirrorLabel')" variant="outlined"></v-text-field>
               <small>{{ tm('pipInstall.mirrorHint') }}</small>
-              <div>
-                <small>{{ status }}</small>
-              </div>
-              
             </v-card-text>
             <v-card-actions>
               <v-spacer></v-spacer>
@@ -69,8 +66,7 @@ export default {
         package: '',
         mirror: ''
       },
-      loading: false,
-      status: ''
+      loading: false
     }
   },
   mounted() {
@@ -88,17 +84,19 @@ export default {
   },
   methods: {
     pipInstall() {
+      const toast = useToast();
       this.loading = true;
       axios.post('/api/update/pip-install', this.pipInstallPayload)
         .then(res => {
-          this.status = res.data.message;
-          setTimeout(() => {
-            this.status = '';
+          if (res.data.status === 'ok') {
+            toast.success(res.data.message || tm('pipInstall.installSuccess'));
             this.pipDialog = false;
-          }, 2000);
+          } else {
+            toast.error(res.data.message || tm('pipInstall.installFailed'));
+          }
         })
         .catch(err => {
-          this.status = err.response.data.message;
+          toast.error(err.response?.data?.message || tm('pipInstall.requestFailed'));
         }).finally(() => {
           this.loading = false;
         });
