@@ -49,7 +49,35 @@ permission: str | None = None
 
 使用 `None` 而不是直接默认 `member`，可以让旧插件统一受全局默认策略控制，方便后续渐进式收紧。
 
-### 2. 增加统一权限决策模块
+### 2. 为 @llm_tool 装饰器增加 permission 参数
+
+维护者提到当前 `@llm_tool` 装饰器应该还不支持 permission 参数。建议后续实现时为装饰器补充该能力，使插件开发者可以在声明工具时直接给出默认权限。
+
+示例：
+
+```python
+@llm_tool(
+    name="write_sensitive_file",
+    desc="Write sensitive files",
+    permission="admin",
+)
+async def write_sensitive_file(event: AstrMessageEvent, path: str, content: str):
+    ...
+```
+
+如果 `permission` 未传，则保持向后兼容：
+
+```python
+@llm_tool(name="query_info", desc="Query public info")
+async def query_info(event: AstrMessageEvent, keyword: str):
+    ...
+```
+
+此时工具权限为 `None`，最终由全局 `undeclared_default` 决定。
+
+建议装饰器侧只负责把声明值写入对应 `FunctionTool.permission`，最终是否生效仍由统一权限决策模块计算。
+
+### 3. 增加统一权限决策模块
 
 建议新增类似模块：
 
@@ -85,7 +113,7 @@ unknown:{tool_name}
 2. 工具自身声明；
 3. 全局未声明工具默认策略。
 
-### 3. 权限配置存储位置
+### 4. 权限配置存储位置
 
 工具权限不建议存放在 `provider_settings` 内。
 
@@ -115,7 +143,7 @@ unknown:{tool_name}
 - permission key 本身保持稳定，不携带 UMO；
 - 覆盖表的来源由当前会话配置决定，避免多租户 / 多空间场景下来源不清。
 
-### 4. 请求阶段过滤 tool schema
+### 5. 请求阶段过滤 tool schema
 
 在 LLM 请求真正发出前，根据当前事件用户权限过滤 `req.func_tool`。
 
@@ -145,7 +173,7 @@ AgentRunner.reset / provider request 之前
 
 这样可以避免普通用户请求过滤工具时影响管理员请求，或并发请求之间互相污染。
 
-### 5. 执行阶段二次兜底校验
+### 6. 执行阶段二次兜底校验
 
 在 `ToolLoopAgentRunner._handle_function_tools()` 中，在构造 `valid_params` 与真正执行工具前增加权限检查。
 
@@ -166,7 +194,7 @@ AgentRunner.reset / provider request 之前
 - `member`：允许继续执行；
 - 无法确认上下文安全性时：拒绝。
 
-### 6. 系统上下文的安全识别
+### 7. 系统上下文的安全识别
 
 无 `event` 的系统任务 / cron / 后台任务不应简单视为普通用户，否则可能误伤内部系统上下文。
 
@@ -189,21 +217,33 @@ trusted_system_context: bool = False
 
 这样既能避免误伤系统任务，又能避免把 `event is None` 变成权限绕过条件。
 
-### 7. 与工具内部鉴权的关系
+### 8. 与工具内部鉴权的关系
 
 统一权限模型不应替代工具 handler 内部的业务校验。
+
+维护者也提到，Tool 的 `call` 方法中通常可以拿到 event，开发者仍然可以通过 `event.is_admin()` 判断用户是不是管理员。因此文档中需要明确说明：统一权限是框架兜底，不是禁止工具自己继续鉴权。
 
 建议采用“最小权限优先 / 任一拒绝即拒绝”的策略：
 
 - 统一权限模型负责 LLM schema 可见性与执行前基础权限兜底；
-- 工具 handler 内部仍可根据业务场景执行更细粒度检查；
+- 工具 handler / Tool.call 内部仍可通过 event 做业务级权限检查；
 - 如果统一权限允许，但 handler 内部拒绝，则最终拒绝；
 - 如果统一权限拒绝，则不应进入 handler；
 - 对高危工具，建议同时保留 handler 内部鉴权作为纵深防御。
 
+示例：
+
+```python
+async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs):
+    event = context.context.event
+    if not event.is_admin():
+        return "error: permission denied"
+    ...
+```
+
 也就是说，统一权限模型是框架级最低安全线，工具内部鉴权是业务级补充安全线。
 
-### 8. 高危框架工具默认收紧
+### 9. 高危框架工具默认收紧
 
 建议默认标记为 `admin`：
 
@@ -214,7 +254,7 @@ trusted_system_context: bool = False
 
 旧插件为了兼容可以默认 `member`，但建议 WebUI 中清晰展示未声明权限的工具，并允许管理员手动调整。
 
-### 9. WebUI 提供工具权限管理
+### 10. WebUI 提供工具权限管理和 override 接口
 
 希望 WebUI 工具管理页展示：
 
@@ -242,6 +282,56 @@ trusted_system_context: bool = False
 }
 ```
 
+维护者建议可以在前端加上 override 的权限接口。建议后端提供一个专门接口，例如：
+
+```text
+POST /tools/set-permission
+```
+
+请求体示例：
+
+```json
+{
+  "permission_key": "mcp:playwright:browser_navigate",
+  "permission": "admin"
+}
+```
+
+接口行为：
+
+1. 校验 `permission_key` 非空；
+2. 校验 `permission` 必须是 `member` / `admin` / `disabled`；
+3. 写入当前配置的 `llm_tool_permission_settings.overrides`；
+4. 持久化配置；
+5. 返回更新后的有效权限。
+
+WebUI 可以基于 `/tools/list` 返回的 `permission` 和 `permission_key` 渲染下拉框，用户修改后调用该接口保存 override。
+
+### 11. 开发者文档补充
+
+建议新增或更新插件开发文档，明确说明 LLM Tool 权限问题。
+
+文档应包含：
+
+1. `@llm_tool(permission="admin")` 的用法；
+2. 未声明权限时走全局默认策略；
+3. 高危工具建议声明为 `admin`；
+4. Tool 的 `call` 方法或 handler 内可以通过 event 判断用户身份；
+5. 统一权限模型和工具内部鉴权的关系；
+6. WebUI override 会覆盖工具默认声明。
+
+示例文档片段：
+
+```python
+@llm_tool(name="dangerous_action", desc="Run dangerous action", permission="admin")
+async def dangerous_action(event: AstrMessageEvent, arg: str):
+    if not event.is_admin():
+        return "error: permission denied"
+    ...
+```
+
+这样可以让插件开发者既知道如何声明默认权限，也知道在业务逻辑中继续保留必要的细粒度鉴权。
+
 ## 预期收益
 
 - 第三方插件即使遗漏鉴权，也有后端统一兜底；
@@ -256,9 +346,11 @@ trusted_system_context: bool = False
 MVP 阶段可先做：
 
 1. `FunctionTool.permission: str | None = None`；
-2. 新增 `tool_permission.py`；
-3. 执行层权限兜底；
-4. WebUI 工具列表返回 `permission` / `permission_key`；
-5. 插件文档补充权限声明方式。
+2. `@llm_tool` 支持 `permission` 参数；
+3. 新增 `tool_permission.py`；
+4. 执行层权限兜底；
+5. WebUI 工具列表返回 `permission` / `permission_key`；
+6. WebUI / 后端提供 override 权限接口；
+7. 插件文档补充权限声明和 handler 内鉴权说明。
 
-请求层过滤、WebUI set-permission 接口和高危工具默认收紧可以作为后续迭代补齐。
+请求层过滤和高危工具默认收紧可以作为后续迭代补齐，也可以在 MVP 后逐步启用。
