@@ -49,3 +49,49 @@ async def test_aiocqhttp_send_message_dispatches_onebot_v11_poke_payload():
         group_id=123456,
         message=[{"type": "poke", "data": {"type": "126", "id": "2003"}}],
     )
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_send_group_file_uses_upload_action(tmp_path):
+    bot = AsyncMock()
+    file_path = tmp_path / "report.md"
+    file_path.write_text("report", encoding="utf-8")
+    chain = MessageChain([Comp.File(name="report.md", file=str(file_path))])
+
+    await AiocqhttpMessageEvent.send_message(
+        bot=bot,
+        message_chain=chain,
+        event=None,
+        is_group=True,
+        session_id="123456",
+    )
+
+    bot.upload_group_file.assert_awaited_once_with(
+        group_id=123456,
+        file=str(file_path),
+        name="report.md",
+    )
+    bot.send_group_msg.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_send_private_file_uses_upload_action(tmp_path):
+    bot = AsyncMock()
+    file_path = tmp_path / "report.md"
+    file_path.write_text("report", encoding="utf-8")
+    chain = MessageChain([Comp.File(name="report.md", file=str(file_path))])
+
+    await AiocqhttpMessageEvent.send_message(
+        bot=bot,
+        message_chain=chain,
+        event=None,
+        is_group=False,
+        session_id="654321",
+    )
+
+    bot.upload_private_file.assert_awaited_once_with(
+        user_id=654321,
+        file=str(file_path),
+        name="report.md",
+    )
+    bot.send_private_msg.assert_not_awaited()
