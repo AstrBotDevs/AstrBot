@@ -71,11 +71,11 @@ class SessionController:
 
         asyncio.create_task(self._holding(new_event, timeout))  # 开始新的 keep
 
-    async def _holding(self, event: asyncio.Event, timeout: float) -> None:
+    async def _holding(self, event: asyncio.Event, timeout_seconds: float) -> None:
         """等待事件结束或超时"""
         try:
-            await asyncio.wait_for(event.wait(), timeout)
-        except asyncio.TimeoutError:
+            await asyncio.wait_for(event.wait(), timeout_seconds)
+        except TimeoutError:
             if not self.future.done():
                 self.future.set_exception(TimeoutError("等待超时"))
         except asyncio.CancelledError:
@@ -124,14 +124,14 @@ class SessionWaiter:
     async def register_wait(
         self,
         handler: Callable[[SessionController, AstrMessageEvent], Awaitable[Any]],
-        timeout: int = 30,
+        timeout_seconds: int = 30,
     ) -> Any:
         """等待外部输入并处理"""
         self.handler = handler
         USER_SESSIONS[self.session_id] = self
 
         # 开始一个会话保持事件
-        self.session_controller.keep(timeout, reset_timeout=True)
+        self.session_controller.keep(timeout_seconds, reset_timeout=True)
 
         try:
             return await self.session_controller.future

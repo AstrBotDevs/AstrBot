@@ -2,9 +2,10 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from typing import Literal, TypeAlias, Union
+from pathlib import Path
+from typing import Any
 
-from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
+from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -15,13 +16,9 @@ from astrbot.core.provider.entities import (
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
-Providers: TypeAlias = Union[
-    "Provider",
-    "STTProvider",
-    "TTSProvider",
-    "EmbeddingProvider",
-    "RerankProvider",
-]
+type Providers = (
+    "Provider" | "STTProvider" | "TTSProvider" | "EmbeddingProvider" | "RerankProvider"
+)
 
 
 class AbstractProvider(abc.ABC):
@@ -98,14 +95,12 @@ class Provider(AbstractProvider):
         prompt: str | None = None,
         session_id: str | None = None,
         image_urls: list[str] | None = None,
-        audio_urls: list[str] | None = None,
         func_tool: ToolSet | None = None,
         contexts: list[Message] | list[dict] | None = None,
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
-        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
@@ -114,9 +109,7 @@ class Provider(AbstractProvider):
             prompt: 提示词，和 contexts 二选一使用，如果都指定，则会将 prompt（以及可能的 image_urls） 作为最新的一条记录添加到 contexts 中
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
-            audio_urls: 音频 URL 列表，也支持本地路径
             tools: tool set
-            tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
             contexts: 上下文，和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
             extra_user_content_parts: 额外的内容块列表，用于在用户消息后添加额外的文本块（如系统提醒、指令等）
@@ -124,7 +117,6 @@ class Provider(AbstractProvider):
 
         Notes:
             - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
-            - 如果传入了 audio_urls，将会在对话时附上音频。如果模型不支持音频输入，将会抛出错误或降级处理。
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """
@@ -135,13 +127,11 @@ class Provider(AbstractProvider):
         prompt: str | None = None,
         session_id: str | None = None,
         image_urls: list[str] | None = None,
-        audio_urls: list[str] | None = None,
         func_tool: ToolSet | None = None,
         contexts: list[Message] | list[dict] | None = None,
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
-        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。
@@ -150,16 +140,13 @@ class Provider(AbstractProvider):
             prompt: 提示词，和 contexts 二选一使用，如果都指定，则会将 prompt（以及可能的 image_urls） 作为最新的一条记录添加到 contexts 中
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
-            audio_urls: 音频 URL 列表，也支持本地路径
             tools: tool set
-            tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
             contexts: 上下文，和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
             kwargs: 其他参数
 
         Notes:
             - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
-            - 如果传入了 audio_urls，将会在对话时附上音频。如果模型不支持音频输入，将会抛出错误或降级处理。
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """
@@ -191,8 +178,6 @@ class Provider(AbstractProvider):
             return []
         dicts: list[dict] = []
         for message in messages:
-            if is_checkpoint_message(message):
-                continue
             if isinstance(message, Message):
                 dicts.append(message.model_dump())
             else:
@@ -200,10 +185,13 @@ class Provider(AbstractProvider):
 
         return dicts
 
-    async def test(self, timeout: float = 45.0) -> None:
+    async def test(self, timeout_seconds: float = 45.0, **kwargs: Any) -> None:
+        legacy_timeout = kwargs.pop("timeout", None)
+        if legacy_timeout is not None:
+            timeout_seconds = float(legacy_timeout)
         await asyncio.wait_for(
             self.text_chat(prompt="REPLY `PONG` ONLY"),
-            timeout=timeout,
+            timeout=timeout_seconds,
         )
 
 
@@ -280,8 +268,9 @@ class TTSProvider(AbstractProvider):
                         # 调用原有的 get_audio 方法获取音频文件路径
                         audio_path = await self.get_audio(accumulated_text)
                         # 读取音频文件内容
-                        with open(audio_path, "rb") as f:
-                            audio_data = f.read()
+                        audio_data = await asyncio.to_thread(
+                            Path(audio_path).read_bytes
+                        )
                         await audio_queue.put((accumulated_text, audio_data))
                     except Exception:
                         # 出错时也要发送 None 结束标记
@@ -293,24 +282,7 @@ class TTSProvider(AbstractProvider):
             accumulated_text += text_part
 
     async def test(self) -> None:
-        audio_path = await self.get_audio("hi")
-
-        # 检查生成的音频文件是否有效
-        if not os.path.exists(audio_path):
-            raise Exception("TTS test failed: audio file was not created")
-
-        file_size = os.path.getsize(audio_path)
-        if file_size == 0:
-            raise Exception(
-                "TTS test failed: generated audio file is empty (0 bytes). "
-                "Please check your TTS provider configuration, especially required parameters like group_id for MiniMax."
-            )
-
-        # 清理测试文件
-        try:
-            os.remove(audio_path)
-        except Exception:
-            pass
+        await self.get_audio("hi")
 
 
 class EmbeddingProvider(AbstractProvider):

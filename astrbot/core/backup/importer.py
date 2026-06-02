@@ -7,12 +7,13 @@
 - 版本匹配时也需要用户确认
 """
 
+import asyncio
 import json
 import os
 import shutil
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -379,7 +380,7 @@ class AstrBotImporter:
         """
         result = ImportResult()
 
-        if not os.path.exists(zip_path):
+        if not await asyncio.to_thread(os.path.exists, zip_path):
             result.add_error(f"备份文件不存在: {zip_path}")
             return result
 
@@ -461,12 +462,13 @@ class AstrBotImporter:
                     try:
                         config_content = zf.read("config/cmd_config.json")
                         # 备份现有配置
-                        if os.path.exists(self.config_path):
+                        if await asyncio.to_thread(os.path.exists, self.config_path):
                             backup_path = f"{self.config_path}.bak"
                             shutil.copy2(self.config_path, backup_path)
 
-                        with open(self.config_path, "wb") as f:
-                            f.write(config_content)
+                        await asyncio.to_thread(
+                            Path(self.config_path).write_bytes, config_content
+                        )
                         result.imported_files["config"] = 1
                     except Exception as e:
                         result.add_warning(f"导入配置文件失败: {e}")
@@ -690,9 +692,9 @@ class AstrBotImporter:
         if isinstance(value, datetime):
             dt = value
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             else:
-                dt = dt.astimezone(timezone.utc)
+                dt = dt.astimezone(UTC)
             return dt.isoformat()
         if isinstance(value, str):
             timestamp = value.strip()
@@ -703,9 +705,9 @@ class AstrBotImporter:
             try:
                 dt = datetime.fromisoformat(timestamp)
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                    dt = dt.replace(tzinfo=UTC)
                 else:
-                    dt = dt.astimezone(timezone.utc)
+                    dt = dt.astimezone(UTC)
                 return dt.isoformat()
             except ValueError:
                 return None
@@ -768,8 +770,8 @@ class AstrBotImporter:
             if faiss_path in zf.namelist():
                 try:
                     target_path = kb_dir / "index.faiss"
-                    with zf.open(faiss_path) as src, open(target_path, "wb") as dst:
-                        dst.write(src.read())
+                    with zf.open(faiss_path) as src:
+                        await asyncio.to_thread(target_path.write_bytes, src.read())
                 except Exception as e:
                     result.add_warning(f"导入知识库 {kb_id} 的 FAISS 索引失败: {e}")
 
@@ -785,8 +787,8 @@ class AstrBotImporter:
                             logger.warning(f"媒体文件路径越界，已跳过: {target_path}")
                             continue
                         target_path.parent.mkdir(parents=True, exist_ok=True)
-                        with zf.open(name) as src, open(target_path, "wb") as dst:
-                            dst.write(src.read())
+                        with zf.open(name) as src:
+                            await asyncio.to_thread(target_path.write_bytes, src.read())
                     except Exception as e:
                         result.add_warning(f"导入媒体文件 {name} 失败: {e}")
 
@@ -852,8 +854,8 @@ class AstrBotImporter:
                         continue
 
                     target_path.parent.mkdir(parents=True, exist_ok=True)
-                    with zf.open(name) as src, open(target_path, "wb") as dst:
-                        dst.write(src.read())
+                    with zf.open(name) as src:
+                        await asyncio.to_thread(target_path.write_bytes, src.read())
                     count += 1
                 except Exception as e:
                     logger.warning(f"导入附件 {name} 失败: {e}")
@@ -909,15 +911,15 @@ class AstrBotImporter:
                     continue
 
                 # 备份现有目录（如果存在）
-                if target_dir.exists():
+                if await asyncio.to_thread(target_dir.exists):
                     backup_path = Path(f"{target_dir}.bak")
-                    if backup_path.exists():
+                    if await asyncio.to_thread(backup_path.exists):
                         shutil.rmtree(backup_path)
                     shutil.move(str(target_dir), str(backup_path))
                     logger.debug(f"已备份现有目录 {target_dir} 到 {backup_path}")
 
                 # 创建目标目录
-                target_dir.mkdir(parents=True, exist_ok=True)
+                await asyncio.to_thread(target_dir.mkdir, parents=True, exist_ok=True)
 
                 # 解压文件
                 for name in dir_files:
@@ -939,8 +941,8 @@ class AstrBotImporter:
 
                         target_path.parent.mkdir(parents=True, exist_ok=True)
 
-                        with zf.open(name) as src, open(target_path, "wb") as dst:
-                            dst.write(src.read())
+                        with zf.open(name) as src:
+                            await asyncio.to_thread(target_path.write_bytes, src.read())
                         file_count += 1
                     except Exception as e:
                         result.add_warning(f"导入文件 {name} 失败: {e}")

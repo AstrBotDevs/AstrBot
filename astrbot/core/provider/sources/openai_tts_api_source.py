@@ -1,5 +1,7 @@
+import asyncio
 import os
 import uuid
+from pathlib import Path
 
 import httpx
 from openai import NOT_GIVEN, AsyncOpenAI
@@ -54,9 +56,10 @@ class ProviderOpenAITTSAPI(TTSProvider):
             response_format="wav",
             input=text,
         ) as response:
-            with open(path, "wb") as f:
-                async for chunk in response.iter_bytes(chunk_size=1024):
-                    f.write(chunk)
+            audio_data = bytearray()
+            async for chunk in response.iter_bytes(chunk_size=1024):
+                audio_data.extend(chunk)
+            await asyncio.to_thread(Path(path).write_bytes, bytes(audio_data))
         return path
 
     async def terminate(self):

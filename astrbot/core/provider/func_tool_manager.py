@@ -8,6 +8,7 @@ import threading
 import urllib.parse
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -17,18 +18,12 @@ from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.tools.registry import (
-    ensure_builtin_tools_loaded,
-    get_builtin_tool_class,
-    get_builtin_tool_name,
-    iter_builtin_tool_classes,
-)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
-DEFAULT_MCP_INIT_TIMEOUT_SECONDS = 180.0
-DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS = 180.0
+DEFAULT_MCP_INIT_TIMEOUT_SECONDS = 20.0
+DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS = 30.0
 MCP_INIT_TIMEOUT_ENV = "ASTRBOT_MCP_INIT_TIMEOUT"
 ENABLE_MCP_TIMEOUT_ENV = "ASTRBOT_MCP_ENABLE_TIMEOUT"
 MAX_MCP_TIMEOUT_SECONDS = 300.0
@@ -204,7 +199,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                         return True, ""
                     return False, f"HTTP {response.status}: {response.reason}"
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return False, f"连接超时: {timeout}秒"
     except Exception as e:
         return False, f"{e!s}"
@@ -213,12 +208,8 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 class FunctionToolManager:
     def __init__(self) -> None:
         self.func_list: list[FuncTool] = []
-        """All tools include mcp tools and plugin tools, except astrbot builtin tools."""
-        self.builtin_func_list: dict[type[FuncTool], FuncTool] = {}
-        """All astrbot builtin tools, keyed by their class. Values are instantiated tool objects, created on demand."""
-
         self._mcp_server_runtime: dict[str, _MCPServerRuntime] = {}
-        """MCP runtime metadata, keyed by server name. Updated atomically on MCP lifecycle changes."""
+        """MCP 服务运行时状态（唯一事实来源）"""
         self._mcp_server_runtime_view = MappingProxyType(self._mcp_server_runtime)
         self._mcp_client_dict_view = _MCPClientDictView(self._mcp_server_runtime)
         self._timeout_mismatch_warned = False
@@ -311,7 +302,7 @@ class FunctionToolManager:
                 handler=handler,
             ),
         )
-        logger.info(f"Added llm tool: {name}")
+        logger.info(f"添加函数调用工具: {name}")
 
     def remove_func(self, name: str) -> None:
         """删除一个函数调用工具。"""
@@ -321,72 +312,13 @@ class FunctionToolManager:
                 break
 
     def get_func(self, name) -> FuncTool | None:
-        # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
-        # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致：没有 active 属性的工具视为已激活
-        for f in reversed(self.func_list):
-            if f.name == name and getattr(f, "active", True):
-                return f
-        # 退化则拿最后一个同名工具
-        for f in reversed(self.func_list):
+        for f in self.func_list:
             if f.name == name:
                 return f
-        if isinstance(name, str):
-            try:
-                builtin_tool = self.get_builtin_tool(name)
-            except KeyError:
-                return None
-            if getattr(builtin_tool, "active", True):
-                return builtin_tool
-            return builtin_tool
-        return None
-
-    def get_builtin_tool(self, tool: str | type[FuncTool]) -> FuncTool:
-        ensure_builtin_tools_loaded()
-
-        if isinstance(tool, str):
-            tool_cls = get_builtin_tool_class(tool)
-            if tool_cls is None:
-                raise KeyError(f"Builtin tool {tool} is not registered.")
-        elif isinstance(tool, type) and issubclass(tool, FunctionTool):
-            tool_cls = tool
-            if get_builtin_tool_name(tool_cls) is None:
-                raise KeyError(
-                    f"Builtin tool class {tool_cls.__module__}.{tool_cls.__name__} is not registered.",
-                )
-        else:
-            raise TypeError("tool must be a builtin tool name or FunctionTool class.")
-
-        cached_tool = self.builtin_func_list.get(tool_cls)
-        if cached_tool is not None:
-            return cached_tool
-
-        builtin_tool = tool_cls()  # type: ignore
-        self.builtin_func_list[tool_cls] = builtin_tool
-        return builtin_tool
-
-    def iter_builtin_tools(self) -> list[FuncTool]:
-        ensure_builtin_tools_loaded()
-        return [
-            self.get_builtin_tool(tool_cls) for tool_cls in iter_builtin_tool_classes()
-        ]
-
-    def is_builtin_tool(self, name: str) -> bool:
-        ensure_builtin_tools_loaded()
-        return get_builtin_tool_class(name) is not None
 
     def get_full_tool_set(self) -> ToolSet:
-        """获取完整工具集
-
-        使用 ToolSet.add_tool 进行填充。对于同名工具，去重规则为：
-        - 优先保留 active=True 的工具；
-        - 当 active 状态相同时，后加载的工具会覆盖前面的工具。
-
-        因此，后加载的 inactive 工具不会覆盖已激活的工具；
-        同时，MCP 工具在需要时仍可覆盖被禁用的内置工具。
-        """
-        tool_set = ToolSet()
-        for tool in self.func_list:
-            tool_set.add_tool(tool)
+        """获取完整工具集"""
+        tool_set = ToolSet(self.func_list.copy())
         return tool_set
 
     @staticmethod
@@ -442,15 +374,24 @@ class FunctionToolManager:
         data_dir = get_astrbot_data_path()
 
         mcp_json_file = os.path.join(data_dir, "mcp_server.json")
-        if not os.path.exists(mcp_json_file):
+        if not await asyncio.to_thread(os.path.exists, mcp_json_file):
             # 配置文件不存在错误处理
-            with open(mcp_json_file, "w", encoding="utf-8") as f:
-                json.dump(DEFAULT_MCP_CONFIG, f, ensure_ascii=False, indent=4)
+            config_text = json.dumps(DEFAULT_MCP_CONFIG, ensure_ascii=False, indent=4)
+            await asyncio.to_thread(
+                Path(mcp_json_file).write_text,
+                config_text,
+                encoding="utf-8",
+            )
             logger.info(f"未找到 MCP 服务配置文件，已创建默认配置文件 {mcp_json_file}")
             return MCPInitSummary(total=0, success=0, failed=[])
 
-        with open(mcp_json_file, encoding="utf-8") as f:
-            mcp_server_json_obj: dict[str, dict] = json.load(f)["mcpServers"]
+        mcp_json_content = await asyncio.to_thread(
+            Path(mcp_json_file).read_text,
+            encoding="utf-8",
+        )
+        mcp_server_json_obj: dict[str, dict] = json.loads(mcp_json_content)[
+            "mcpServers"
+        ]
 
         init_timeout = self._init_timeout_default
         timeout_display = f"{init_timeout:g}"
@@ -486,11 +427,9 @@ class FunctionToolManager:
         for (name, cfg, _), result in zip(active_configs, results, strict=False):
             if isinstance(result, Exception):
                 if isinstance(result, MCPInitTimeoutError):
-                    logger.error(
-                        f"Connected to MCP server {name} timeout ({timeout_display} seconds)"
-                    )
+                    logger.error(f"MCP 服务 {name} 初始化超时（{timeout_display}秒）")
                 else:
-                    logger.error(f"Failed to initialize MCP server {name}: {result}")
+                    logger.error(f"MCP 服务 {name} 初始化失败: {result}")
                 self._log_safe_mcp_debug_config(cfg)
                 failed_services.append(name)
                 async with self._runtime_lock:
@@ -501,18 +440,16 @@ class FunctionToolManager:
 
         if failed_services:
             logger.warning(
-                f"The following MCP services failed to initialize: {', '.join(failed_services)}. "
-                f"Please check the mcp_server.json file and server availability."
+                f"以下 MCP 服务初始化失败: {', '.join(failed_services)}。"
+                f"请检查配置文件 mcp_server.json 和服务器可用性。"
             )
 
         summary = MCPInitSummary(
             total=len(active_configs), success=success_count, failed=failed_services
         )
-        logger.info(
-            f"MCP services initialization completed: {summary.success}/{summary.total} successful, {len(summary.failed)} failed."
-        )
+        logger.info(f"MCP 服务初始化完成: {summary.success}/{summary.total} 成功")
         if summary.total > 0 and summary.success == 0:
-            msg = "All MCP services failed to initialize, please check the mcp_server.json and server availability."
+            msg = "全部 MCP 服务初始化失败，请检查 mcp_server.json 配置和服务器可用性。"
             if raise_on_all_failed:
                 raise MCPAllServicesFailedError(msg)
             logger.error(msg)
@@ -524,7 +461,7 @@ class FunctionToolManager:
         cfg: dict,
         *,
         shutdown_event: asyncio.Event | None = None,
-        timeout: float,
+        timeout_seconds: float,
     ) -> None:
         """Initialize MCP server with timeout and register task/event together.
 
@@ -534,7 +471,7 @@ class FunctionToolManager:
         async with self._runtime_lock:
             if name in self._mcp_server_runtime or name in self._mcp_starting:
                 logger.warning(
-                    f"Connected to MCP server {name}, ignoring this startup request (timeout={timeout:g})."
+                    f"MCP 服务 {name} 已在运行，忽略本次启用请求（timeout={timeout_seconds:g}）。"
                 )
                 self._log_safe_mcp_debug_config(cfg)
                 return
@@ -547,14 +484,14 @@ class FunctionToolManager:
         try:
             mcp_client = await asyncio.wait_for(
                 self._init_mcp_client(name, cfg),
-                timeout=timeout,
+                timeout=timeout_seconds,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise MCPInitTimeoutError(
-                f"Connected to MCP server {name} timeout ({timeout:g} seconds)"
+                f"MCP 服务 {name} 初始化超时（{timeout_seconds:g} 秒）"
             ) from exc
         except Exception:
-            logger.error(f"Failed to initialize MCP client {name}", exc_info=True)
+            logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
             raise
         finally:
             if mcp_client is None:
@@ -564,9 +501,9 @@ class FunctionToolManager:
         async def lifecycle() -> None:
             try:
                 await shutdown_event.wait()
-                logger.info(f"Received shutdown signal for MCP client {name}")
+                logger.info(f"收到 MCP 客户端 {name} 终止信号")
             except asyncio.CancelledError:
-                logger.debug(f"MCP client {name} task was cancelled")
+                logger.debug(f"MCP 客户端 {name} 任务被取消")
                 raise
             finally:
                 await self._terminate_mcp_client(name)
@@ -584,7 +521,7 @@ class FunctionToolManager:
     async def _shutdown_runtimes(
         self,
         runtimes: list[_MCPServerRuntime],
-        timeout: float,
+        timeout_seconds: float,
         *,
         strict: bool = True,
     ) -> list[str]:
@@ -603,9 +540,9 @@ class FunctionToolManager:
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*lifecycle_tasks, return_exceptions=True),
-                timeout=timeout,
+                timeout=timeout_seconds,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pending_names = [
                 runtime.name
                 for runtime in runtimes
@@ -616,10 +553,10 @@ class FunctionToolManager:
                     task.cancel()
             await asyncio.gather(*lifecycle_tasks, return_exceptions=True)
             if strict:
-                raise MCPShutdownTimeoutError(pending_names, timeout)
+                raise MCPShutdownTimeoutError(pending_names, timeout_seconds)
             logger.warning(
-                "MCP server shutdown timeout (%s seconds), the following servers were not fully closed: %s",
-                f"{timeout:g}",
+                "MCP 服务关闭超时（%s 秒），以下服务未完全关闭：%s",
+                f"{timeout_seconds:g}",
                 ", ".join(pending_names),
             )
             return pending_names
@@ -641,9 +578,7 @@ class FunctionToolManager:
         try:
             await mcp_client.cleanup()
         except Exception as cleanup_exc:  # noqa: BLE001 - only log here
-            logger.error(
-                f"Failed to cleanup MCP client resources {name}: {cleanup_exc}"
-            )
+            logger.error(f"清理 MCP 客户端资源 {name} 失败: {cleanup_exc}")
 
     async def _init_mcp_client(self, name: str, config: dict) -> MCPClient:
         """初始化单个MCP客户端"""
@@ -677,7 +612,7 @@ class FunctionToolManager:
             )
             self.func_list.append(func_tool)
 
-        logger.info(f"Connected to MCP server {name}, Tools: {tool_names}")
+        logger.info(f"已连接 MCP 服务 {name}, Tools: {tool_names}")
         return mcp_client
 
     async def _terminate_mcp_client(self, name: str) -> None:
@@ -697,7 +632,7 @@ class FunctionToolManager:
             async with self._runtime_lock:
                 self._mcp_server_runtime.pop(name, None)
                 self._mcp_starting.discard(name)
-            logger.info(f"Disconnected from MCP server {name}")
+            logger.info(f"已关闭 MCP 服务 {name}")
             return
 
         # Runtime missing but stale tools may still exist after failed flows.
@@ -732,7 +667,8 @@ class FunctionToolManager:
         name: str,
         config: dict,
         shutdown_event: asyncio.Event | None = None,
-        timeout: float | int | str | None = None,
+        timeout_seconds: float | int | str | None = None,
+        **kwargs: Any,
     ) -> None:
         """Enable a new MCP server and initialize it.
 
@@ -740,18 +676,22 @@ class FunctionToolManager:
             name: The name of the MCP server.
             config: Configuration for the MCP server.
             shutdown_event: Event to signal when the MCP client should shut down.
-            timeout: Timeout in seconds for initialization.
+            timeout_seconds: Timeout in seconds for initialization.
                 Uses ASTRBOT_MCP_ENABLE_TIMEOUT by default (separate from init timeout).
 
         Raises:
             MCPInitTimeoutError: If initialization does not complete within timeout.
             Exception: If there is an error during initialization.
         """
-        if timeout is None:
+        legacy_timeout = kwargs.pop("timeout", None)
+        if legacy_timeout is not None:
+            timeout_seconds = legacy_timeout
+
+        if timeout_seconds is None:
             timeout_value = self._enable_timeout_default
         else:
             timeout_value = _resolve_timeout(
-                timeout=timeout,
+                timeout=timeout_seconds,
                 env_name=ENABLE_MCP_TIMEOUT_ENV,
                 default=self._enable_timeout_default,
             )
@@ -759,36 +699,45 @@ class FunctionToolManager:
             name=name,
             cfg=config,
             shutdown_event=shutdown_event,
-            timeout=timeout_value,
+            timeout_seconds=timeout_value,
         )
 
     async def disable_mcp_server(
         self,
         name: str | None = None,
-        timeout: float = 10,
+        timeout_seconds: float = 10,
+        **kwargs: Any,
     ) -> None:
         """Disable an MCP server by its name.
 
         Args:
             name (str): The name of the MCP server to disable. If None, ALL MCP servers will be disabled.
-            timeout (int): Timeout.
+            timeout_seconds (int): Timeout.
 
         Raises:
             MCPShutdownTimeoutError: If shutdown does not complete within timeout.
                 Only raised when disabling a specific server (name is not None).
 
         """
+        legacy_timeout = kwargs.pop("timeout", None)
+        if legacy_timeout is not None:
+            timeout_seconds = float(legacy_timeout)
+
         if name:
             async with self._runtime_lock:
                 runtime = self._mcp_server_runtime.get(name)
             if runtime is None:
                 return
 
-            await self._shutdown_runtimes([runtime], timeout, strict=True)
+            await self._shutdown_runtimes(
+                [runtime], timeout_seconds=timeout_seconds, strict=True
+            )
         else:
             async with self._runtime_lock:
                 runtimes = list(self._mcp_server_runtime.values())
-            await self._shutdown_runtimes(runtimes, timeout, strict=False)
+            await self._shutdown_runtimes(
+                runtimes, timeout_seconds=timeout_seconds, strict=False
+            )
 
     def _warn_on_timeout_mismatch(
         self,

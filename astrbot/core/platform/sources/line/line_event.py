@@ -161,7 +161,7 @@ class LineMessageEvent(AstrMessageEvent):
         try:
             video_path = await segment.convert_to_file_path()
             temp_dir = Path(get_astrbot_temp_path())
-            temp_dir.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
             thumb_path = temp_dir / f"line_video_preview_{uuid.uuid4().hex}.jpg"
 
             process = await asyncio.create_subprocess_exec(
@@ -201,8 +201,8 @@ class LineMessageEvent(AstrMessageEvent):
     async def _resolve_file_size(segment: File) -> int:
         try:
             file_path = await segment.get_file(allow_return_url=False)
-            if file_path and os.path.exists(file_path):
-                return int(os.path.getsize(file_path))
+            if file_path and await asyncio.to_thread(os.path.exists, file_path):
+                return int(await asyncio.to_thread(os.path.getsize, file_path))
         except Exception as e:
             logger.debug("[LINE] resolve file size failed: %s", e)
         return 0

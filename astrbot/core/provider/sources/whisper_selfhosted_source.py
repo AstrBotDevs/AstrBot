@@ -1,7 +1,7 @@
 import asyncio
 import os
 import uuid
-from functools import partial
+from pathlib import Path
 from typing import cast
 
 import whisper
@@ -29,46 +29,27 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.set_model(provider_config["model"])
-        self.device = str(provider_config.get("whisper_device", "cpu")).strip().lower()
         self.model = None
 
-    def _resolve_device(self) -> str:
-        if self.device == "mps":
-            import torch  # torch is a dependency of openai-whisper
-
-            mps_backend = getattr(torch.backends, "mps", None)
-            if mps_backend and mps_backend.is_available():
-                return "mps"
-            logger.warning("Whisper 已配置为使用 MPS，但当前环境不可用，将回退到 CPU。")
-            return "cpu"
-        if self.device != "cpu":
-            logger.warning(
-                "Whisper 配置了未知 device=%s，将回退到 CPU。",
-                self.device,
-            )
-        return "cpu"
-
     async def initialize(self) -> None:
-        loop = asyncio.get_running_loop()
-        device = self._resolve_device()
+        loop = asyncio.get_event_loop()
         logger.info("下载或者加载 Whisper 模型中，这可能需要一些时间 ...")
         self.model = await loop.run_in_executor(
             None,
-            partial(whisper.load_model, self.model_name, device=device),
+            whisper.load_model,
+            self.model_name,
         )
-        logger.info("Whisper 模型加载完成。device=%s", device)
+        logger.info("Whisper 模型加载完成。")
 
     async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
-        with open(file_path, "rb") as f:
-            file_header = f.read(8)
-
+        file_header = (await asyncio.to_thread(Path(file_path).read_bytes))[:8]
         if silk_header in file_header:
             return True
         return False
 
     async def get_text(self, audio_url: str) -> str:
-        loop = asyncio.get_running_loop()
+        loop = asyncio.get_event_loop()
 
         is_tencent = False
 
@@ -84,7 +65,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
             await download_file(audio_url, path)
             audio_url = path
 
-        if not os.path.exists(audio_url):
+        if not await asyncio.to_thread(os.path.exists, audio_url):
             raise FileNotFoundError(f"文件不存在: {audio_url}")
 
         if audio_url.endswith(".amr") or audio_url.endswith(".silk") or is_tencent:

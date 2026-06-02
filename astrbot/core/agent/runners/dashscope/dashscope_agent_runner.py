@@ -2,9 +2,9 @@ import asyncio
 import functools
 import queue
 import re
-import sys
 import threading
 import typing as T
+from typing import override
 
 from dashscope import Application
 from dashscope.app.application_response import ApplicationResponse
@@ -21,11 +21,6 @@ from ...hooks import BaseAgentRunHooks
 from ...response import AgentResponseData
 from ...run_context import ContextWrapper, TContext
 from ..base import AgentResponse, AgentState, BaseAgentRunner
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 class DashscopeAgentRunner(BaseAgentRunner[TContext]):

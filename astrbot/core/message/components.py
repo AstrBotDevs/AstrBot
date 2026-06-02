@@ -27,8 +27,8 @@ import json
 import os
 import sys
 import uuid
-from enum import Enum
-from pathlib import Path, PurePosixPath
+from enum import StrEnum
+from pathlib import Path
 
 if sys.version_info >= (3, 14):
     from pydantic import BaseModel
@@ -40,7 +40,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
 
 
-class ComponentType(str, Enum):
+class ComponentType(StrEnum):
     # Basic Segment Types
     Plain = "Plain"  # plain text message
     Image = "Image"  # image
@@ -65,6 +65,7 @@ class ComponentType(str, Enum):
     Music = "Music"
     Json = "Json"
     Unknown = "Unknown"
+    WechatEmoji = "WechatEmoji"  # Wechat 下的 emoji 表情包
 
 
 class BaseMessageComponent(BaseModel):
@@ -91,14 +92,15 @@ class BaseMessageComponent(BaseModel):
 class Plain(BaseMessageComponent):
     type: ComponentType = ComponentType.Plain
     text: str
+    convert: bool | None = True
 
     def __init__(self, text: str, convert: bool = True, **_) -> None:
         super().__init__(text=text, convert=convert, **_)
 
-    def toDict(self) -> dict:
-        return {"type": "text", "data": {"text": self.text}}
+    def toDict(self):
+        return {"type": "text", "data": {"text": self.text.strip()}}
 
-    async def to_dict(self) -> dict:
+    async def to_dict(self):
         return {"type": "text", "data": {"text": self.text}}
 
 
@@ -113,11 +115,15 @@ class Face(BaseMessageComponent):
 class Record(BaseMessageComponent):
     type: ComponentType = ComponentType.Record
     file: str | None = ""
+    magic: bool | None = False
     url: str | None = ""
+    cache: bool | None = True
+    proxy: bool | None = True
+    timeout: int | None = 0
     # Original text content (e.g. TTS source text), used as caption in fallback scenarios
     text: str | None = None
     # 额外
-    path: str | None = None
+    path: str | None
 
     def __init__(self, file: str | None, **_) -> None:
         for k in _:
@@ -153,18 +159,17 @@ class Record(BaseMessageComponent):
             return self.file[8:]
         if self.file.startswith("http"):
             file_path = await download_image_by_url(self.file)
-            return os.path.abspath(file_path)
+            return await asyncio.to_thread(os.path.abspath, file_path)
         if self.file.startswith("base64://"):
             bs64_data = self.file.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
             file_path = os.path.join(
                 get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.jpg"
             )
-            with open(file_path, "wb") as f:
-                f.write(image_bytes)
-            return os.path.abspath(file_path)
-        if os.path.exists(self.file):
-            return os.path.abspath(self.file)
+            await asyncio.to_thread(Path(file_path).write_bytes, image_bytes)
+            return await asyncio.to_thread(os.path.abspath, file_path)
+        if await asyncio.to_thread(os.path.exists, self.file):
+            return await asyncio.to_thread(os.path.abspath, self.file)
         raise Exception(f"not a valid file: {self.file}")
 
     async def convert_to_base64(self) -> str:
@@ -178,14 +183,14 @@ class Record(BaseMessageComponent):
         if not self.file:
             raise Exception(f"not a valid file: {self.file}")
         if self.file.startswith("file:///"):
-            bs64_data = file_to_base64(self.file[8:])
+            bs64_data = await file_to_base64(self.file[8:])
         elif self.file.startswith("http"):
             file_path = await download_image_by_url(self.file)
-            bs64_data = file_to_base64(file_path)
+            bs64_data = await file_to_base64(file_path)
         elif self.file.startswith("base64://"):
             bs64_data = self.file
-        elif os.path.exists(self.file):
-            bs64_data = file_to_base64(self.file)
+        elif await asyncio.to_thread(os.path.exists, self.file):
+            bs64_data = await file_to_base64(self.file)
         else:
             raise Exception(f"not a valid file: {self.file}")
         bs64_data = bs64_data.removeprefix("base64://")
@@ -219,6 +224,7 @@ class Video(BaseMessageComponent):
     type: ComponentType = ComponentType.Video
     file: str
     cover: str | None = ""
+    c: int | None = 2
     # 额外
     path: str | None = ""
 
@@ -250,11 +256,11 @@ class Video(BaseMessageComponent):
                 get_astrbot_temp_path(), f"videoseg_{uuid.uuid4().hex}"
             )
             await download_file(url, video_file_path)
-            if os.path.exists(video_file_path):
-                return os.path.abspath(video_file_path)
+            if await asyncio.to_thread(os.path.exists, video_file_path):
+                return await asyncio.to_thread(os.path.abspath, video_file_path)
             raise Exception(f"download failed: {url}")
-        if os.path.exists(url):
-            return os.path.abspath(url)
+        if await asyncio.to_thread(os.path.exists, url):
+            return await asyncio.to_thread(os.path.abspath, url)
         raise Exception(f"not a valid file: {url}")
 
     async def register_to_file_service(self) -> str:
@@ -395,9 +401,14 @@ class Image(BaseMessageComponent):
     type: ComponentType = ComponentType.Image
     file: str | None = ""
     _type: str | None = ""
+    subType: int | None = 0
     url: str | None = ""
+    cache: bool | None = True
+    id: int | None = 40000
+    c: int | None = 2
     # 额外
     path: str | None = ""
+    file_unique: str | None = ""  # 某些平台可能有图片缓存的唯一标识
 
     def __init__(self, file: str | None, **_) -> None:
         super().__init__(file=file, **_)
@@ -438,18 +449,17 @@ class Image(BaseMessageComponent):
             return url[8:]
         if url.startswith("http"):
             image_file_path = await download_image_by_url(url)
-            return os.path.abspath(image_file_path)
+            return await asyncio.to_thread(os.path.abspath, image_file_path)
         if url.startswith("base64://"):
             bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
             image_file_path = os.path.join(
                 get_astrbot_temp_path(), f"imgseg_{uuid.uuid4()}.jpg"
             )
-            with open(image_file_path, "wb") as f:
-                f.write(image_bytes)
-            return os.path.abspath(image_file_path)
-        if os.path.exists(url):
-            return os.path.abspath(url)
+            await asyncio.to_thread(Path(image_file_path).write_bytes, image_bytes)
+            return await asyncio.to_thread(os.path.abspath, image_file_path)
+        if await asyncio.to_thread(os.path.exists, url):
+            return await asyncio.to_thread(os.path.abspath, url)
         raise Exception(f"not a valid file: {url}")
 
     async def convert_to_base64(self) -> str:
@@ -464,14 +474,14 @@ class Image(BaseMessageComponent):
         if not url:
             raise ValueError("No valid file or URL provided")
         if url.startswith("file:///"):
-            bs64_data = file_to_base64(url[8:])
+            bs64_data = await file_to_base64(url[8:])
         elif url.startswith("http"):
             image_file_path = await download_image_by_url(url)
-            bs64_data = file_to_base64(image_file_path)
+            bs64_data = await file_to_base64(image_file_path)
         elif url.startswith("base64://"):
             bs64_data = url
-        elif os.path.exists(url):
-            bs64_data = file_to_base64(url)
+        elif await asyncio.to_thread(os.path.exists, url):
+            bs64_data = await file_to_base64(url)
         else:
             raise Exception(f"not a valid file: {url}")
         bs64_data = bs64_data.removeprefix("base64://")
@@ -526,42 +536,15 @@ class Reply(BaseMessageComponent):
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
-    def toDict(self):
-        """仅输出 id 字段，符合 OneBot V11 reply 段标准格式。"""
-        return {"type": "reply", "data": {"id": str(self.id)}}
-
 
 class Poke(BaseMessageComponent):
-    type: ComponentType = ComponentType.Poke
-    _type: str | int = "126"
-    id: int | str | None = 0
-    qq: int | str | None = 0  # deprecated: legacy field, kept for compatibility
+    type: str = ComponentType.Poke
+    id: int | None = 0
+    qq: int | None = 0
 
-    def __init__(self, poke_type: str | int | None = None, **_) -> None:
-        # Backward compatible with old signature: Poke(type="poke", ...)
-        legacy_type = _.pop("type", None)
-        if poke_type is None:
-            poke_type = legacy_type
-        if poke_type in (None, "", "poke", "Poke"):
-            poke_type = "126"
-        super().__init__(_type=str(poke_type), **_)
-
-    def target_id(self) -> str | None:
-        """Return normalized target id, compatible with old `qq` field."""
-        for value in (self.id, self.qq):
-            if value is None:
-                continue
-            text = str(value).strip()
-            if text and text != "0":
-                return text
-        return None
-
-    def toDict(self):
-        target_id = self.target_id()
-        data = {"type": str(self._type or "126")}
-        if target_id:
-            data["id"] = target_id
-        return {"type": "poke", "data": data}
+    def __init__(self, type: str, **_) -> None:
+        type = f"Poke:{type}"
+        super().__init__(type=type, **_)
 
 
 class Forward(BaseMessageComponent):
@@ -667,19 +650,6 @@ class Unknown(BaseMessageComponent):
     text: str
 
 
-def _sanitize_file_component_name(name: str | None) -> str:
-    if not name:
-        return "file"
-
-    normalized = str(name).replace("\\", "/")
-    basename = PurePosixPath(normalized).name.replace("\x00", "").strip()
-    for char in ':*?"<>|':
-        basename = basename.replace(char, "_")
-    if basename in {"", ".", ".."}:
-        return "file"
-    return basename
-
-
 class File(BaseMessageComponent):
     """文件消息段"""
 
@@ -705,24 +675,21 @@ class File(BaseMessageComponent):
 
         if self.url:
             try:
-                # 检查是否有正在运行的 event loop
-                asyncio.get_running_loop()
-                logger.warning(
-                    "不可以在异步上下文中同步等待下载! "
-                    "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
-                    "请使用 await get_file() 代替直接获取 <File>.file 字段",
-                )
-                return ""
-            except RuntimeError:
-                # 没有运行中的 event loop，可以同步执行
-                try:
-                    # 使用 asyncio.run 安全地创建和关闭事件循环
-                    asyncio.run(self._download_file())
-                except Exception:
-                    logger.exception("文件下载失败")
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    logger.warning(
+                        "不可以在异步上下文中同步等待下载! "
+                        "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
+                        "请使用 await get_file() 代替直接获取 <File>.file 字段",
+                    )
+                    return ""
+                # 等待下载完成
+                loop.run_until_complete(self._download_file())
 
                 if self.file_ and os.path.exists(self.file_):
                     return os.path.abspath(self.file_)
+            except Exception as e:
+                logger.error(f"文件下载失败: {e}")
 
         return ""
 
@@ -767,8 +734,8 @@ class File(BaseMessageComponent):
                 ):
                     path = path[1:]
 
-            if os.path.exists(path):
-                return os.path.abspath(path)
+            if await asyncio.to_thread(os.path.exists, path):
+                return await asyncio.to_thread(os.path.abspath, path)
 
         if self.url:
             await self._download_file()
@@ -783,7 +750,7 @@ class File(BaseMessageComponent):
                         and path[2] == ":"
                     ):
                         path = path[1:]
-                return os.path.abspath(path)
+                return await asyncio.to_thread(os.path.abspath, path)
 
         return ""
 
@@ -791,18 +758,15 @@ class File(BaseMessageComponent):
         """下载文件"""
         if not self.url:
             raise ValueError("Download failed: No URL provided in File component.")
-        download_dir = Path(get_astrbot_temp_path())
-        download_dir.mkdir(parents=True, exist_ok=True)
+        download_dir = get_astrbot_temp_path()
         if self.name:
-            safe_name = _sanitize_file_component_name(self.name)
-            name = Path(safe_name).stem
-            ext = Path(safe_name).suffix
+            name, ext = os.path.splitext(self.name)
             filename = f"fileseg_{name}_{uuid.uuid4().hex[:8]}{ext}"
         else:
             filename = f"fileseg_{uuid.uuid4().hex}"
-        file_path = download_dir / filename
-        await download_file(self.url, str(file_path))
-        self.file_ = str(file_path.resolve())
+        file_path = os.path.join(download_dir, filename)
+        await download_file(self.url, file_path)
+        self.file_ = await asyncio.to_thread(os.path.abspath, file_path)
 
     async def register_to_file_service(self) -> str:
         """将文件注册到文件服务。
@@ -848,6 +812,16 @@ class File(BaseMessageComponent):
         }
 
 
+class WechatEmoji(BaseMessageComponent):
+    type: ComponentType = ComponentType.WechatEmoji
+    md5: str | None = ""
+    md5_len: int | None = 0
+    cdnurl: str | None = ""
+
+    def __init__(self, **_) -> None:
+        super().__init__(**_)
+
+
 ComponentTypes = {
     # Basic Message Segments
     "plain": Plain,
@@ -873,4 +847,5 @@ ComponentTypes = {
     "nodes": Nodes,
     "json": Json,
     "unknown": Unknown,
+    "WechatEmoji": WechatEmoji,
 }

@@ -8,14 +8,13 @@ on:
 
 jobs:
   build:
-    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.8
+        uses: pnpm/action-setup@v4
         with:
           version: 10.28.2
 
@@ -26,11 +25,11 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
-      - name: Install and Build
-        working-directory: dashboard
+      - name: Install and build
         run: |
-          pnpm install --frozen-lockfile
-          pnpm run build
+          pnpm --dir dashboard install --frozen-lockfile
+          pnpm --dir dashboard run typecheck
+          pnpm --dir dashboard run build
 
       - name: Inject Commit SHA
         id: get_sha
@@ -51,7 +50,7 @@ jobs:
 
       - name: Create GitHub Release
         if: github.event_name == 'push'
-        uses: ncipollo/release-action@v1.21.0
+        uses: ncipollo/release-action@v1
         with:
           tag: release-${{ github.sha }}
           owner: AstrBotDevs

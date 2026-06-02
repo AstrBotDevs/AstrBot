@@ -3,6 +3,7 @@ import base64
 import logging
 import os
 import uuid
+from pathlib import Path
 
 import aiohttp
 import dashscope
@@ -59,8 +60,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             )
 
         path = os.path.join(temp_dir, f"dashscope_tts_{uuid.uuid4()}{ext}")
-        with open(path, "wb") as f:
-            f.write(audio_bytes)
+        await asyncio.to_thread(Path(path).write_bytes, audio_bytes)
         return path
 
     def _call_qwen_tts(self, model: str, text: str):
@@ -129,7 +129,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
                 ) as response,
             ):
                 return await response.read()
-        except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
+        except (TimeoutError, aiohttp.ClientError, OSError) as e:
             logging.exception(f"Failed to download audio from URL {url}: {e}")
             return None
 

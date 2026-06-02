@@ -215,7 +215,7 @@ class KookClient:
                     logger.error(f"[KOOK] 原始响应内容: {msg}")
                     continue
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # 超时检查，继续循环
                     continue
                 except websockets.exceptions.ConnectionClosed:
@@ -419,12 +419,14 @@ class KookClient:
             b64_str = file_url.removeprefix("base64://")
             bytes_data = base64.b64decode(b64_str)
 
-        elif file_url.startswith("file://") or os.path.exists(file_url):
+        elif file_url.startswith("file://") or await asyncio.to_thread(
+            os.path.exists, file_url
+        ):
             file_url = file_url.removeprefix("file:///")
             file_url = file_url.removeprefix("file://")
 
             try:
-                target_path = Path(file_url).resolve()
+                target_path = await asyncio.to_thread(Path(file_url).resolve)
             except Exception as exp:
                 logger.error(f'[KOOK] 获取文件 "{file_url}" 绝对路径失败: "{exp}"')
                 raise FileNotFoundError(

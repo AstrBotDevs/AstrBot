@@ -1,9 +1,9 @@
 import asyncio
 import os
-import sys
 import time
 from collections.abc import Callable, Coroutine
-from typing import Any, cast
+from pathlib import Path
+from typing import Any, cast, override
 
 import quart
 from requests import Response
@@ -30,11 +30,6 @@ from astrbot.core.utils.media_utils import convert_audio_to_wav
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .weixin_offacc_event import WeixinOfficialAccountPlatformEvent
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 class WeixinOfficialAccountServer:
@@ -377,7 +372,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                     )  # wait for 180s
                 logger.debug(f"Got future result: {result}")
                 return result
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.info(f"callback 处理消息超时: message_id={msg.id}")
                 return create_reply("处理消息超时，请稍后再试。", msg)
             except Exception as e:
@@ -466,8 +461,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             )
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"weixin_offacc_{msg.media_id}.amr")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
                 path_wav = os.path.join(

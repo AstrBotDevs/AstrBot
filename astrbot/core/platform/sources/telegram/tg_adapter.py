@@ -1,16 +1,12 @@
 import asyncio
 import os
 import re
-import sys
 import uuid
-from contextlib import suppress
-from typing import cast
+from typing import cast, override
 
-from apscheduler.events import EVENT_JOB_ERROR
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
 from telegram.constants import ChatType
-from telegram.error import Forbidden, InvalidToken, NetworkError
 from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
 from telegram.ext import MessageHandler as TelegramMessageHandler
 
@@ -36,11 +32,6 @@ from astrbot.core.utils.media_utils import convert_audio_to_wav
 
 from .tg_event import TelegramPlatformEvent
 
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
-
 
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
@@ -52,6 +43,7 @@ class TelegramPlatformAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
+        self.client_self_id = uuid.uuid4().hex[:8]
 
         base_url = self.config.get(
             "telegram_api_base_url",
@@ -68,7 +60,6 @@ class TelegramPlatformAdapter(Platform):
             file_base_url = "https://api.telegram.org/file/bot"
 
         self.base_url = base_url
-        self.file_base_url = file_base_url
 
         self.enable_command_register = self.config.get(
             "telegram_command_register",
@@ -80,44 +71,22 @@ class TelegramPlatformAdapter(Platform):
         )
         self.last_command_hash = None
 
-        self.scheduler = AsyncIOScheduler()
-        self.scheduler.add_listener(
-            lambda ev: logger.error(
-                "Scheduled job %s raised: %s",
-                ev.job_id,
-                ev.exception,
-                exc_info=ev.exception,
-            ),
-            EVENT_JOB_ERROR,
+        self.application = (
+            ApplicationBuilder()
+            .token(self.config["telegram_token"])
+            .base_url(base_url)
+            .base_file_url(file_base_url)
+            .build()
         )
-        self._terminating = False
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._polling_recovery_requested = asyncio.Event()
-        self._consecutive_polling_failures = 0
-        self._last_polling_failure_at = 0.0
-        raw_delay = self.config.get("telegram_polling_restart_delay", 5.0)
-        try:
-            delay = float(raw_delay)
-        except (TypeError, ValueError):
-            logger.warning(
-                "Invalid 'telegram_polling_restart_delay' value %r in config, "
-                "falling back to default 5.0s",
-                raw_delay,
-            )
-            delay = 5.0
+        message_handler = TelegramMessageHandler(
+            filters=filters.ALL,  # receive all messages
+            callback=self.message_handler,
+        )
+        self.application.add_handler(message_handler)
+        self.client = self.application.bot
+        logger.debug(f"Telegram base url: {self.client.base_url}")
 
-        if delay < 0.1:
-            logger.warning(
-                "Configured 'telegram_polling_restart_delay' (%s) is too small; "
-                "enforcing minimum of 0.1s to avoid tight restart loops",
-                delay,
-            )
-            delay = 0.1
-        self._polling_restart_delay = delay
-        self._polling_recovery_threshold = 3
-        self._polling_failure_window = 60.0
-        self._application_started = False
-        self._build_application()
+        self.scheduler = AsyncIOScheduler()
 
         # Media group handling
         # Cache structure: {media_group_id: {"created_at": datetime, "items": [(update, context), ...]}}
@@ -128,85 +97,6 @@ class TelegramPlatformAdapter(Platform):
         self.media_group_max_wait = self.config.get(
             "telegram_media_group_max_wait", 10.0
         )  # max seconds - hard cap to prevent indefinite delay
-
-    def _build_application(self) -> None:
-        self.application = (
-            ApplicationBuilder()
-            .token(self.config["telegram_token"])
-            .base_url(self.base_url)
-            .base_file_url(self.file_base_url)
-            .build()
-        )
-        message_handler = TelegramMessageHandler(
-            filters=filters.ALL,
-            callback=self.message_handler,
-        )
-        self.application.add_handler(message_handler)
-        self.client = self.application.bot
-        logger.debug(f"Telegram base url: {self.client.base_url}")
-
-    async def _start_application(self) -> None:
-        await self.application.initialize()
-        await self.application.start()
-
-        if self.enable_command_register:
-            await self.register_commands()
-
-        self._application_started = True
-
-    async def _shutdown_application(
-        self,
-        *,
-        delete_commands: bool,
-    ) -> None:
-        self._application_started = False
-
-        updater = self.application.updater
-        if updater is not None:
-            with suppress(Exception):
-                await updater.stop()
-
-        if delete_commands and self.enable_command_register:
-            with suppress(Exception):
-                await self.client.delete_my_commands()
-
-        with suppress(Exception):
-            await self.application.stop()
-
-        shutdown = getattr(self.application, "shutdown", None)
-        if shutdown is not None:
-            with suppress(Exception):
-                await shutdown()
-
-    async def _recreate_application(self) -> None:
-        if self._terminating:
-            self._polling_recovery_requested.clear()
-            return
-
-        logger.warning(
-            "Telegram polling hit repeated network errors; rebuilding the "
-            "Telegram application and HTTP client.",
-        )
-        await self._shutdown_application(delete_commands=False)
-        self._build_application()
-        self._consecutive_polling_failures = 0
-        self._last_polling_failure_at = 0.0
-        self._polling_recovery_requested.clear()
-
-    def _start_command_scheduler(self) -> None:
-        if not self.enable_command_refresh or not self.enable_command_register:
-            return
-        if self.scheduler.running:
-            return
-
-        self.scheduler.add_job(
-            self.register_commands,
-            "interval",
-            seconds=self.config.get("telegram_command_register_interval", 300),
-            id="telegram_command_register",
-            misfire_grace_time=60,
-        )
-        self.scheduler.start()
 
     @override
     async def send_by_session(
@@ -229,94 +119,29 @@ class TelegramPlatformAdapter(Platform):
 
     @override
     async def run(self) -> None:
-        self._loop = asyncio.get_running_loop()
-        self._start_command_scheduler()
+        await self.application.initialize()
+        await self.application.start()
 
-        while not self._terminating:
-            try:
-                if not self._application_started:
-                    await self._start_application()
+        if self.enable_command_register:
+            await self.register_commands()
 
-                self._polling_recovery_requested.clear()
-                updater = self.application.updater
-                if updater is None:
-                    logger.error(
-                        "Telegram Updater is not initialized. Cannot start polling."
-                    )
-                    self._application_started = False
-                    await asyncio.sleep(self._polling_restart_delay)
-                    continue
-                logger.info("Starting Telegram polling...")
-                await updater.start_polling(error_callback=self._on_polling_error)
-                logger.info("Telegram Platform Adapter is running.")
-                while updater.running and not self._terminating:  # noqa: ASYNC110
-                    if self._polling_recovery_requested.is_set():
-                        await self._recreate_application()
-                        break
-                    await asyncio.sleep(1)
-                else:
-                    if not self._terminating:
-                        logger.warning(
-                            "Telegram polling loop exited unexpectedly, "
-                            f"retrying in {self._polling_restart_delay}s."
-                        )
-                    continue
+        if self.enable_command_refresh and self.enable_command_register:
+            self.scheduler.add_job(
+                self.register_commands,
+                "interval",
+                seconds=self.config.get("telegram_command_register_interval", 300),
+                id="telegram_command_register",
+                misfire_grace_time=60,
+            )
+            self.scheduler.start()
 
-                if not self._terminating:
-                    logger.info("Telegram polling restarted with a fresh client.")
-                    continue
-            except asyncio.CancelledError:
-                raise
-            except (Forbidden, InvalidToken) as e:
-                logger.error(
-                    f"Telegram token is invalid or unauthorized: {e}. Polling stopped."
-                )
-                break
-            except Exception as e:
-                logger.exception(
-                    "Telegram polling crashed with exception: "
-                    f"{type(e).__name__}: {e!s}. "
-                    f"Retrying in {self._polling_restart_delay}s.",
-                )
-                with suppress(Exception):
-                    await self._shutdown_application(delete_commands=False)
-                self._build_application()
-
-            if not self._terminating:
-                await asyncio.sleep(self._polling_restart_delay)
-
-    def _on_polling_error(self, error: Exception) -> None:
-        logger.error(
-            f"Telegram polling request failed: {type(error).__name__}: {error!s}",
-            exc_info=error,
-        )
-        if not isinstance(error, NetworkError):
+        if not self.application.updater:
+            logger.error("Telegram Updater is not initialized. Cannot start polling.")
             return
 
-        if self._loop is None:
-            return
-
-        now = self._loop.time()
-        if now - self._last_polling_failure_at > self._polling_failure_window:
-            self._consecutive_polling_failures = 0
-        self._last_polling_failure_at = now
-        self._consecutive_polling_failures += 1
-
-        if self._consecutive_polling_failures < self._polling_recovery_threshold:
-            return
-
-        logger.warning(
-            "Telegram polling encountered %s network failures within %.1fs; "
-            "scheduling client rebuild.",
-            self._consecutive_polling_failures,
-            self._polling_failure_window,
-        )
-        if self._loop.is_closed():
-            return
-        try:
-            self._loop.call_soon_threadsafe(self._polling_recovery_requested.set)
-        except RuntimeError:
-            return
+        queue = self.application.updater.start_polling()
+        logger.info("Telegram Platform Adapter is running.")
+        await queue
 
     async def register_commands(self) -> None:
         """收集所有注册的指令并注册到 Telegram"""
@@ -343,10 +168,7 @@ class TelegramPlatformAdapter(Platform):
 
         for handler_md in star_handlers_registry:
             handler_metadata = handler_md
-            if (
-                handler_metadata.handler_module_path not in star_map
-                or not star_map[handler_metadata.handler_module_path].activated
-            ):
+            if not star_map[handler_metadata.handler_module_path].activated:
                 continue
             if not handler_metadata.enabled:
                 continue
@@ -452,20 +274,6 @@ class TelegramPlatformAdapter(Platform):
             logger.warning("Received an update without a message.")
             return None
 
-        def _apply_caption() -> None:
-            if not update.message:
-                return
-            if update.message.caption:
-                message.message_str = update.message.caption
-                message.message.append(Comp.Plain(message.message_str))
-            if update.message.caption and update.message.caption_entities:
-                for entity in update.message.caption_entities:
-                    if entity.type == "mention":
-                        name = update.message.caption[
-                            entity.offset + 1 : entity.offset + entity.length
-                        ]
-                        message.message.append(Comp.At(qq=name, name=name))
-
         message = AstrBotMessage()
         message.session_id = str(update.message.chat.id)
 
@@ -475,8 +283,8 @@ class TelegramPlatformAdapter(Platform):
         else:
             message.type = MessageType.GROUP_MESSAGE
             message.group_id = str(update.message.chat.id)
-            if update.message.is_topic_message and update.message.message_thread_id:
-                # Telegram Topic Group: include thread id to isolate per-topic sessions.
+            if update.message.message_thread_id:
+                # Topic Group
                 message.group_id += "#" + str(update.message.message_thread_id)
                 message.session_id = message.group_id
         message.message_id = str(update.message.message_id)
@@ -577,15 +385,24 @@ class TelegramPlatformAdapter(Platform):
             )
             path_wav = await convert_audio_to_wav(temp_path, path_wav)
 
-            record = Comp.Record(file=path_wav, url=path_wav)
-            record.path = path_wav
-            message.message = [record]
+            message.message = [
+                Comp.Record(file=path_wav, url=path_wav),
+            ]
 
         elif update.message.photo:
             photo = update.message.photo[-1]  # get the largest photo
             file = await photo.get_file()
             message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
-            _apply_caption()
+            if update.message.caption:
+                message.message_str = update.message.caption
+                message.message.append(Comp.Plain(message.message_str))
+            if update.message.caption_entities:
+                for entity in update.message.caption_entities:
+                    if entity.type == "mention":
+                        name = message.message_str[
+                            entity.offset + 1 : entity.offset + entity.length
+                        ]
+                        message.message.append(Comp.At(qq=name, name=name))
 
         elif update.message.sticker:
             # 将sticker当作图片处理
@@ -608,7 +425,6 @@ class TelegramPlatformAdapter(Platform):
                 message.message.append(
                     Comp.File(file=file_path, name=file_name, url=file_path)
                 )
-                _apply_caption()
 
         elif update.message.video:
             file = await update.message.video.get_file()
@@ -620,7 +436,6 @@ class TelegramPlatformAdapter(Platform):
                 )
             else:
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))
-                _apply_caption()
 
         return message
 
@@ -705,36 +520,31 @@ class TelegramPlatformAdapter(Platform):
             f"Processing media group {media_group_id}, total {len(updates_and_contexts)} items"
         )
 
-        try:
-            # Use the first update to create the base message (with reply, caption, etc.)
-            first_update, first_context = updates_and_contexts[0]
-            abm = await self.convert_message(first_update, first_context)
+        # Use the first update to create the base message (with reply, caption, etc.)
+        first_update, first_context = updates_and_contexts[0]
+        abm = await self.convert_message(first_update, first_context)
 
-            if not abm:
-                logger.warning(
-                    f"Failed to convert the first message of media group {media_group_id}"
-                )
-                return
-
-            # Add additional media from remaining updates by reusing convert_message
-            for update, context in updates_and_contexts[1:]:
-                # Convert the message but skip reply chains (get_reply=False)
-                extra = await self.convert_message(update, context, get_reply=False)
-                if not extra:
-                    continue
-
-                # Merge only the message components (keep base session/meta from first)
-                abm.message.extend(extra.message)
-                logger.debug(
-                    f"Added {len(extra.message)} components to media group {media_group_id}"
-                )
-
-            # Process the merged message
-            await self.handle_msg(abm)
-        except Exception:
-            logger.error(
-                f"Failed to process media group {media_group_id}", exc_info=True
+        if not abm:
+            logger.warning(
+                f"Failed to convert the first message of media group {media_group_id}"
             )
+            return
+
+        # Add additional media from remaining updates by reusing convert_message
+        for update, context in updates_and_contexts[1:]:
+            # Convert the message but skip reply chains (get_reply=False)
+            extra = await self.convert_message(update, context, get_reply=False)
+            if not extra:
+                continue
+
+            # Merge only the message components (keep base session/meta from first)
+            abm.message.extend(extra.message)
+            logger.debug(
+                f"Added {len(extra.message)} components to media group {media_group_id}"
+            )
+
+        # Process the merged message
+        await self.handle_msg(abm)
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = TelegramPlatformEvent(
@@ -751,11 +561,17 @@ class TelegramPlatformAdapter(Platform):
 
     async def terminate(self) -> None:
         try:
-            self._terminating = True
             if self.scheduler.running:
                 self.scheduler.shutdown()
-            self._polling_recovery_requested.set()
-            await self._shutdown_application(delete_commands=True)
+
+            await self.application.stop()
+
+            if self.enable_command_register:
+                await self.client.delete_my_commands()
+
+            # 保险起见先判断是否存在updater对象
+            if self.application.updater is not None:
+                await self.application.updater.stop()
 
             logger.info("Telegram adapter has been closed.")
         except Exception as e:

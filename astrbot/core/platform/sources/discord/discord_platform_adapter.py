@@ -1,7 +1,6 @@
 import asyncio
 import re
-import sys
-from typing import Any, cast
+from typing import Any, cast, override
 
 import discord
 from discord.abc import GuildChannel, Messageable, PrivateChannel
@@ -26,11 +25,6 @@ from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_re
 
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 # 注册平台适配器
