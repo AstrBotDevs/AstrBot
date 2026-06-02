@@ -117,7 +117,8 @@ class WebChatMessageEvent(AstrMessageEvent):
                 name_part, ext_part = os.path.splitext(safe_name)
                 # dedup: if file with same name exists, append a counter
                 counter = 1
-                while os.path.exists(dest_path):
+                max_attempts = 10_000
+                while os.path.exists(dest_path) and counter <= max_attempts:
                     dest_path = os.path.join(attachments_dir, f"{name_part}_{counter}{ext_part}")
                     counter += 1
                 shutil.copy2(file_path, dest_path)
