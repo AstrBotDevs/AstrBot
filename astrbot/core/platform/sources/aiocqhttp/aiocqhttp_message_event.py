@@ -190,7 +190,13 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     payload["user_id"] = session_id
                     await bot.call_action("send_private_forward_msg", **payload)
             elif isinstance(seg, File):
-                await cls._upload_file_segment(bot, seg, is_group, session_id)
+                try:
+                    await cls._upload_file_segment(bot, seg, is_group, session_id)
+                except Exception:
+                    messages = await cls._parse_onebot_json(MessageChain([seg]))
+                    await cls._dispatch_send(
+                        bot, event, is_group, session_id, messages
+                    )
             else:
                 messages = await cls._parse_onebot_json(MessageChain([seg]))
                 if not messages:
