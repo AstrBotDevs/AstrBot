@@ -28,9 +28,7 @@ class MockStar:
         self.info = {"repo": TEST_PLUGIN_REPO, "readme": ""}
 
 
-def _write_local_test_plugin(
-    plugin_path: Path, repo_url: str, version: str = "1.0.0"
-):
+def _write_local_test_plugin(plugin_path: Path, repo_url: str, version: str = "1.0.0"):
     """Creates a minimal valid plugin structure."""
     plugin_path.mkdir(parents=True, exist_ok=True)
     metadata = {
@@ -148,9 +146,20 @@ def _clear_module_cache():
     """Clear test-specific modules from sys.modules to allow reloading."""
     import sys
 
-    to_del = [m for m in sys.modules if m.startswith("data.plugins.helloworld")]
+    to_del = [
+        m
+        for m in sys.modules
+        if m.startswith("data.plugins.helloworld")
+        or m.startswith("data.plugins.broken_plugin")
+    ]
     for m in to_del:
         del sys.modules[m]
+
+
+def _clear_star_runtime_state():
+    star_manager_module.star_map.clear()
+    star_manager_module.star_registry.clear()
+    star_manager_module.star_handlers_registry.clear()
 
 
 def _build_load_mock(events):
@@ -465,6 +474,107 @@ async def test_reload_failed_plugin_dependency_install_flow(
             expected_content="networkx\n",
         )
         assert events[1] == ("load", TEST_PLUGIN_DIR)
+
+
+@pytest.mark.asyncio
+async def test_reload_all_unbinds_every_registered_plugin(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    _clear_star_runtime_state()
+    plugin_names = ["plugin_one", "plugin_two", "plugin_three"]
+    for plugin_name in plugin_names:
+        module_path = f"data.plugins.{plugin_name}.main"
+        metadata = star_manager_module.StarMetadata(
+            name=plugin_name,
+            root_dir_name=plugin_name,
+            module_path=module_path,
+        )
+        star_manager_module.star_map[module_path] = metadata
+        star_manager_module.star_registry.append(metadata)
+
+    terminated = []
+    unbound = []
+
+    async def mock_terminate(plugin):
+        terminated.append(plugin.name)
+
+    async def mock_unbind(plugin_name, plugin_module_path):
+        unbound.append(plugin_name)
+        star_manager_module.star_map.pop(plugin_module_path, None)
+        for index, metadata in enumerate(star_manager_module.star_registry):
+            if metadata.name == plugin_name:
+                del star_manager_module.star_registry[index]
+                break
+
+    async def mock_load(
+        specified_module_path=None,
+        specified_dir_name=None,
+        ignore_version_check=False,
+    ):
+        del specified_module_path, specified_dir_name, ignore_version_check
+        return True, None
+
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
+    monkeypatch.setattr(plugin_manager_pm, "_unbind_plugin", mock_unbind)
+    monkeypatch.setattr(plugin_manager_pm, "load", mock_load)
+
+    try:
+        await plugin_manager_pm.reload()
+    finally:
+        _clear_star_runtime_state()
+
+    assert terminated == plugin_names
+    assert unbound == plugin_names
+
+
+@pytest.mark.asyncio
+async def test_load_reports_unregistered_plugin_without_index_error(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    _clear_star_runtime_state()
+    plugin_root = Path(plugin_manager_pm.plugin_store_path).parents[1]
+    plugin_name = "broken_plugin"
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / plugin_name
+    plugin_path.mkdir(parents=True)
+    (plugin_path / "metadata.yaml").write_text(
+        yaml.dump(
+            {
+                "name": plugin_name,
+                "author": "AstrBot Team",
+                "desc": "Broken test plugin",
+                "version": "1.0.0",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (plugin_path / "main.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    async def mock_global_get(key, default=None):
+        del key
+        return default
+
+    async def mock_sync_command_configs():
+        return None
+
+    monkeypatch.syspath_prepend(str(plugin_root))
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        mock_sync_command_configs,
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+    finally:
+        _clear_star_runtime_state()
+        _clear_module_cache()
+
+    assert success is False
+    assert error is not None
+    assert "未通过 Star 注册" in error
+    assert "list index out of range" not in error
+    assert plugin_name in plugin_manager_pm.failed_plugin_dict
 
 
 @pytest.mark.asyncio

@@ -170,6 +170,15 @@
     {{ save_message }}
   </v-snackbar>
 
+  <DashboardTwoFactorDialog
+    v-model="configSave2faDialogVisible"
+    :error-message="configSave2faError"
+    :saving="configSave2faSaving"
+    :rotation-hint="configSave2faRotationHint"
+    @confirm="handleConfigSave2faConfirm"
+    @cancel="handleConfigSave2faCancel"
+  />
+
   <WaitingForRestart ref="wfr"></WaitingForRestart>
 
   <!-- 测试聊天抽屉 -->
@@ -219,6 +228,7 @@ import {
   useConfirmDialog
 } from '@/utils/confirmDialog';
 import UnsavedChangesConfirmDialog from '@/components/config/UnsavedChangesConfirmDialog.vue';
+import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
 import { normalizeTextInput } from '@/utils/inputValue';
 
 export default {
@@ -228,7 +238,8 @@ export default {
     VueMonacoEditor,
     WaitingForRestart,
     StandaloneChat,
-    UnsavedChangesConfirmDialog
+    UnsavedChangesConfirmDialog,
+    DashboardTwoFactorDialog
   },
   props: {
     initialConfigId: {
@@ -239,11 +250,13 @@ export default {
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n('features/config');
+    const { tm: tmMeta } = useModuleI18n('features/config-metadata');
     const confirmDialog = useConfirmDialog();
 
     return {
       t,
       tm,
+      tmMeta,
       confirmDialog
     };
   },
@@ -373,8 +386,13 @@ export default {
       save_message_snack: false,
       save_message: "",
       save_message_success: "",
-  configContentKey: 0,
+      configContentKey: 0,
       lastSavedConfigSnapshot: '',
+      configSave2faDialogVisible: false,
+      configSave2faError: '',
+      configSave2faSaving: false,
+      configSave2faRotationHint: '',
+      configSavePendingPostData: null,
 
       // 配置类型切换
       configType: 'normal', // 'normal' 或 'system'
@@ -527,7 +545,7 @@ export default {
         this.save_message_success = "error";
       });
     },
-    updateConfig() {
+    async updateConfig() {
       if (!this.fetched) return;
 
       const postData = {
@@ -540,8 +558,32 @@ export default {
         postData.conf_id = this.selectedConfigID;
       }
 
-      return axios.post('/api/config/astrbot/update', postData).then((res) => {
+      return this.saveAstrbotConfig(postData);
+    },
+    async saveAstrbotConfig(postData, headers = {}, allow2faPrompt = true) {
+      try {
+        const res = await axios.post('/api/config/astrbot/update', postData, {
+          headers,
+          validateStatus: (status) => (status >= 200 && status < 300) || status === 401,
+        });
+
+        if (res.status === 401 && res.data?.data?.totp_required) {
+          if (allow2faPrompt && !headers['X-2FA-Code']) {
+            this.configSavePendingPostData = JSON.parse(JSON.stringify(postData));
+            this.configSave2faError = '';
+            this.configSave2faRotationHint = this._getConfigSaveRotationHint(postData);
+            this.configSave2faDialogVisible = true;
+            return { success: false, requires2fa: true };
+          }
+          this.configSave2faError = this.tmMeta('system_group.system.dashboard.totp.configSaveError');
+          this.configSave2faDialogVisible = true;
+          return { success: false, requires2fa: true };
+        }
+
         if (res.data.status === "ok") {
+          this.configSavePendingPostData = null;
+          this.configSave2faDialogVisible = false;
+          this.configSave2faError = '';
           this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
           this.save_message = res.data.message || this.messages.saveSuccess;
           this.save_message_snack = true;
@@ -552,18 +594,62 @@ export default {
             restartAstrBotRuntime(this.$refs.wfr).catch(() => {})
           }
           return { success: true };
-        } else {
-          this.save_message = res.data.message || this.messages.saveError;
-          this.save_message_snack = true;
-          this.save_message_success = "error";
-          return { success: false };
         }
-      }).catch((err) => {
+
+        this.save_message = res.data.message || this.messages.saveError;
+        this.save_message_snack = true;
+        this.save_message_success = "error";
+        return { success: false };
+      } catch (err) {
         this.save_message = this.messages.saveError;
         this.save_message_snack = true;
         this.save_message_success = "error";
         return { success: false };
-      });
+      }
+    },
+    async handleConfigSave2faConfirm(payload) {
+      if (!this.configSavePendingPostData || this.configSave2faSaving) {
+        return;
+      }
+      this.configSave2faSaving = true;
+      this.configSave2faError = '';
+      const headers = {
+        'X-2FA-Code': payload,
+      };
+      try {
+        await this.saveAstrbotConfig(
+          JSON.parse(JSON.stringify(this.configSavePendingPostData)),
+          headers,
+          false,
+        );
+      } finally {
+        this.configSave2faSaving = false;
+      }
+    },
+    handleConfigSave2faCancel() {
+      if (this.lastSavedConfigSnapshot && this.config_data?.dashboard?.totp) {
+        try {
+          const savedConfig = JSON.parse(this.lastSavedConfigSnapshot);
+          const savedTotp = savedConfig?.dashboard?.totp;
+          if (savedTotp) {
+            this.config_data.dashboard.totp.enable = savedTotp.enable;
+            this.config_data.dashboard.totp.secret = savedTotp.secret;
+            this.config_data.dashboard.totp.recovery_code_hash = savedTotp.recovery_code_hash;
+          }
+        } catch (_) {
+          // ignore parse errors
+        }
+      }
+      this.configSavePendingPostData = null;
+      this.configSave2faError = '';
+      this.configSave2faDialogVisible = false;
+    },
+    _getConfigSaveRotationHint(postData) {
+      const postedSecret = postData?.config?.dashboard?.totp?.secret;
+      if (postedSecret && typeof postedSecret === 'string' && postedSecret.trim()) {
+        return this.tmMeta('system_group.system.dashboard.totp.configSaveRotationHint');
+      }
+      return '';
     },
     // 重置未保存状态
     onConfigSaved() {

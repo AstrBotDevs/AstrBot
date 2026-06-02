@@ -19,7 +19,7 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     build_main_agent,
 )
-from astrbot.core.message.components import File, Image, Record, Video
+from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -97,7 +97,9 @@ class InternalAgentSubStage(Stage):
         self.llm_compress_instruction: str = settings.get(
             "llm_compress_instruction", ""
         )
-        self.llm_compress_keep_recent: int = settings.get("llm_compress_keep_recent", 4)
+        self.llm_compress_keep_recent: int = settings.get(
+            "llm_compress_keep_recent", 10
+        )
         self.llm_compress_provider_id: str = settings.get(
             "llm_compress_provider_id", ""
         )
@@ -175,11 +177,15 @@ class InternalAgentSubStage(Stage):
                 isinstance(comp, (Image, File, Record, Video))
                 for comp in event.message_obj.message
             )
+            has_reply = any(
+                isinstance(comp, Reply) for comp in event.message_obj.message
+            )
 
             if (
                 not has_provider_request
                 and not has_valid_message
                 and not has_media_content
+                and not has_reply
             ):
                 logger.debug("skip llm request: empty message and no provider_request")
                 return
@@ -476,6 +482,18 @@ class InternalAgentSubStage(Stage):
                 continue
             if message.role in ["assistant", "user"] and message._no_save:
                 continue
+            # Truncate long tool results before persisting (8192 chars)
+            if (
+                message.role == "tool"
+                and isinstance(message.content, str)
+                and len(message.content) > 8192
+            ):
+                message = Message(
+                    role="tool",
+                    tool_call_id=message.tool_call_id,
+                    content=message.content[:8192]
+                    + f"\n...[truncated {len(message.content) - 8192} chars]",
+                )
             messages_to_save.append(message)
 
         checkpoint_id = event.get_extra("llm_checkpoint_id")

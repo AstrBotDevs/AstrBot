@@ -241,13 +241,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_result_overflow_dir = tool_result_overflow_dir
         self.read_tool = read_tool
         self._tool_result_token_counter = EstimateTokenCounter()
-        # we will do compress when:
-        # 1. before requesting LLM
-        # TODO: 2. after LLM output a tool call
-        self.context_config = ContextConfig(
-            # <=0 will never do compress
+        self.request_context_manager_config = ContextConfig(
+            # <=0 disables token-based guarding.
             max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
-            # enforce max turns before compression
+            # Enforce max turns before token-based guarding.
             enforce_max_turns=self.enforce_max_turns,
             truncate_turns=self.truncate_turns,
             llm_compress_instruction=self.llm_compress_instruction,
@@ -256,7 +253,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )
-        self.context_manager = ContextManager(self.context_config)
+        self.request_context_manager = ContextManager(
+            self.request_context_manager_config
+        )
 
         self.provider = provider
         self.fallback_providers: list[Provider] = []
@@ -332,7 +331,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request: ProviderRequest,
     ) -> dict[str, T.Any]:
         modalities = self.provider.provider_config.get("modalities", None)
-        if not isinstance(modalities, list):
+        if not modalities:  # Unconfigured (None or empty list) defaults to support all modalities for backward compatibility
             return await request.assemble_context()
 
         supports_image = "image" in modalities
@@ -459,8 +458,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        messages_for_provider = getattr(
+            self, "_provider_messages", self.run_context.messages
+        )
         payload = {
-            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
+            "contexts": self._sanitize_contexts_for_provider(messages_for_provider),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
@@ -592,13 +594,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     def _should_fix_modalities_for_provider(self) -> bool:
         modalities = self.provider.provider_config.get("modalities", None)
-        return isinstance(modalities, list)
+        return (
+            isinstance(modalities, list) and modalities
+        )  # Empty list is treated as unconfigured
 
     def _func_tool_for_provider(self) -> ToolSet | None:
         if not self.req.func_tool:
             return None
         modalities = self.provider.provider_config.get("modalities", None)
-        if isinstance(modalities, list) and "tool_use" not in modalities:
+        if isinstance(modalities, list) and modalities and "tool_use" not in modalities:
             logger.debug(
                 "Provider %s does not support tool_use, clearing tools for request.",
                 self.provider,
@@ -704,10 +708,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
-        # do truncate and compress
+        # Process request-time context on a copy so the runner's canonical
+        # messages are never mutated. The processed result is only used for this
+        # provider call. Persistent compaction is owned by the conversation /
+        # memory layer.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]")
-        self.run_context.messages = await self.context_manager.process(
+        self._provider_messages = await self.request_context_manager.process(
             self.run_context.messages, trusted_token_usage=token_usage
         )
         self._simple_print_message_role("[AftCompact]")
@@ -908,7 +915,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # append a user message with images so LLM can see them
             if cached_images:
                 modalities = self.provider.provider_config.get("modalities", [])
-                supports_image = "image" in modalities
+                supports_image = (
+                    not modalities or "image" in modalities
+                )  # Empty list is treated as unconfigured for backward compatibility
                 if supports_image:
                     # Build user message with images for LLM to review
                     image_parts = []
@@ -1403,6 +1412,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         executor: AsyncIterator[ToolExecutorResultT],
     ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+        async def _next_executor_result() -> ToolExecutorResultT:
+            return await anext(executor)
+
         while True:
             if self._is_stop_requested():
                 await self._close_executor(executor)
@@ -1410,7 +1422,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "Tool execution interrupted before reading the next tool result."
                 )
 
-            next_result_task = asyncio.create_task(anext(executor))
+            next_result_task = asyncio.create_task(_next_executor_result())
             abort_task = asyncio.create_task(self._abort_signal.wait())
             try:
                 done, _ = await asyncio.wait(
