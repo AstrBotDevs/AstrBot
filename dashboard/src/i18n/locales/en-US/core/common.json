@@ -38,6 +38,8 @@
   "no": "No",
   "imagePreview": "Image Preview",
   "autoDetect": "Auto Detect",
+  "embeddingDimensionsRequestParam": "Request Param",
+  "embeddingDimensionsRequestParamHint": "When enabled, the embedding dimension is sent as the API dimensions parameter. Disabled by default; enable only for models that explicitly support it.",
   "dialog": {
     "confirmTitle": "Confirm Action",
     "confirmMessage": "Are you sure you want to perform this action?",

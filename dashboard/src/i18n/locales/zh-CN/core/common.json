@@ -38,6 +38,8 @@
   "no": "否",
   "imagePreview": "图片预览",
   "autoDetect": "自动检测",
+  "embeddingDimensionsRequestParam": "请求参数",
+  "embeddingDimensionsRequestParamHint": "开启后会把嵌入维度作为 dimensions 参数发送给 API。默认关闭；仅在模型明确支持时开启。",
   "dialog": {
     "confirmTitle": "确认操作",
     "confirmMessage": "你确定要执行此操作吗？",

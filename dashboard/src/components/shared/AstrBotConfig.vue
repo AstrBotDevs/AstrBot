@@ -272,6 +272,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 :plugin-name="pluginName"
                 :plugin-i18n="pluginI18n"
                 :config-key="getItemPath(key)"
+                :config-root="iterable"
                 :loading="loadingEmbeddingDim"
                 :show-fullscreen-btn="!!metadata[metadataKey].items[key]?.editor_mode"
                 @get-embedding-dim="getEmbeddingDimensions(iterable)"
@@ -322,6 +323,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
             :plugin-name="pluginName"
             :plugin-i18n="pluginI18n"
             :config-key="getItemPath(metadataKey)"
+            :config-root="iterable"
           />
         </v-col>
       </v-row>

@@ -64,15 +64,23 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     def _embedding_kwargs(self) -> dict:
         """构建嵌入请求的可选参数"""
-        kwargs = {}
-        if "embedding_dimensions" in self.provider_config:
-            try:
-                kwargs["dimensions"] = int(self.provider_config["embedding_dimensions"])
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored."
-                )
-        return kwargs
+        if not self.provider_config.get("embedding_dimensions_as_request_param", False):
+            return {}
+
+        if "embedding_dimensions" not in self.provider_config:
+            return {}
+
+        try:
+            dimensions = int(self.provider_config["embedding_dimensions"])
+        except (ValueError, TypeError):
+            logger.warning(
+                f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored."
+            )
+            return {}
+
+        if dimensions <= 0:
+            return {}
+        return {"dimensions": dimensions}
 
     def get_dim(self) -> int:
         """获取向量的维度"""

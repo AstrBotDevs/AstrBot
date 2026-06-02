@@ -38,6 +38,8 @@
     "no": "Нет",
     "imagePreview": "Предпросмотр изображения",
     "autoDetect": "Автоопределение",
+    "embeddingDimensionsRequestParam": "Параметр API",
+    "embeddingDimensionsRequestParamHint": "Если включено, размерность эмбеддинга отправляется как параметр dimensions. По умолчанию выключено; включайте только для моделей, которые явно поддерживают этот параметр.",
     "dialog": {
         "confirmTitle": "Подтверждение",
         "confirmMessage": "Вы уверены, что хотите выполнить это действие?",
