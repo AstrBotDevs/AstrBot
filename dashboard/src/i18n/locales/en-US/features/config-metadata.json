@@ -265,9 +265,9 @@
           "description": "Context Compression Instruction",
           "hint": "If empty, the default prompt will be used."
         },
-        "llm_compress_keep_recent": {
-          "description": "Keep Recent Turns When Compressing",
-          "hint": "Always keep the most recent N turns of conversation when compressing context."
+        "llm_compress_keep_recent_ratio": {
+          "description": "Recent Context Token Ratio to Keep",
+          "hint": "Keep recent exact context by current context token ratio, from 0-0.3. 0.15 means keeping 15%; values above 0 keep at least the latest round."
         },
         "llm_compress_provider_id": {
           "description": "Model Provider ID for Context Compression",

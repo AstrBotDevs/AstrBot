@@ -130,7 +130,7 @@ DEFAULT_CONFIG = {
             "4. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "5. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent": 10,
+        "llm_compress_keep_recent_ratio": 0.15,
         "llm_compress_provider_id": "",
         "max_context_length": 50,
         "dequeue_context_length": 10,
@@ -3581,10 +3581,11 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.llm_compress_keep_recent": {
-                        "description": "压缩时保留最近对话轮数",
-                        "type": "int",
-                        "hint": "始终保留的最近 N 轮对话。",
+                    "provider_settings.llm_compress_keep_recent_ratio": {
+                        "description": "压缩时保留最近上下文比例",
+                        "type": "float",
+                        "slider": {"min": 0, "max": 0.3, "step": 0.01},
+                        "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
                             "provider_settings.agent_runner_type": "local",

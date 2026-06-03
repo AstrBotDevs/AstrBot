@@ -25,9 +25,11 @@ class MockProvider:
             "model": "gpt-4",
             "modalities": ["text", "image", "tool_use"],
         }
+        self.last_text_chat_kwargs = None
 
     async def text_chat(self, **kwargs):
         """模拟 LLM 调用，返回摘要"""
+        self.last_text_chat_kwargs = kwargs
         return LLMResponse(
             role="assistant",
             completion_text="Summary of conversation: Hello and discussed various topics.",
@@ -74,7 +76,7 @@ class TestContextManager:
         mock_provider = MockProvider()
         config = ContextConfig(
             llm_compress_provider=mock_provider,  # type: ignore
-            llm_compress_keep_recent=5,
+            llm_compress_keep_recent_ratio=0.15,
             llm_compress_instruction="Summarize the conversation",
         )
         manager = ContextManager(config)
@@ -100,7 +102,7 @@ class TestContextManager:
         provider.text_chat = AsyncMock(
             return_value=LLMResponse(role="assistant", completion_text="  ")
         )
-        compressor = LLMSummaryCompressor(provider=provider, keep_recent=2)  # type: ignore[arg-type]
+        compressor = LLMSummaryCompressor(provider=provider, keep_recent_ratio=0.15)  # type: ignore[arg-type]
         messages = self.create_messages(6)
 
         with patch("astrbot.core.agent.context.compressor.logger") as mock_logger:
@@ -116,7 +118,7 @@ class TestContextManager:
         from astrbot.core.agent.context.compressor import LLMSummaryCompressor
 
         provider = MockProvider()
-        compressor = LLMSummaryCompressor(provider=provider, keep_recent=1)  # type: ignore[arg-type]
+        compressor = LLMSummaryCompressor(provider=provider, keep_recent_ratio=0.01)  # type: ignore[arg-type]
         messages = [
             Message(role="user", content=[TextPart(text="Hello")]),
             Message(role="assistant", content=[TextPart(text="Hi there")]),
@@ -126,12 +128,158 @@ class TestContextManager:
 
         result = await compressor(messages)
 
+        assert provider.last_text_chat_kwargs is not None
+        assert "prompt" not in provider.last_text_chat_kwargs
+        assert "system_prompt" not in provider.last_text_chat_kwargs
+        summary_contexts = provider.last_text_chat_kwargs["contexts"]
+        assert summary_contexts[:2] == messages[:2]
+        assert summary_contexts[0].content == [TextPart(text="Hello")]
+        assert summary_contexts[-1].role == "user"
+        assert compressor.instruction_text in summary_contexts[-1].content
+        assert compressor.TASK_CONTINUATION_INSTRUCTION in summary_contexts[-1].content
+
         assert len(result) == 4
         assert result[0].role == "user"
         assert isinstance(result[0].content, str)
         assert result[0].content.strip()
         assert "Hello" in result[0].content
         assert result[-1].content == [TextPart(text="Sure")]
+
+    @pytest.mark.asyncio
+    async def test_llm_compressor_preserves_system_and_pads_before_instruction(self):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        instruction = "Summarize the old context."
+        compressor = LLMSummaryCompressor(
+            provider=provider,
+            keep_recent_ratio=0.01,
+            instruction_text=instruction,
+        )  # type: ignore[arg-type]
+        messages = [
+            Message(role="system", content="System prompt"),
+            Message(role="user", content="Old question"),
+            Message(role="user", content="Current question"),
+        ]
+
+        result = await compressor(messages)
+
+        summary_contexts = provider.last_text_chat_kwargs["contexts"]
+        assert summary_contexts[0] is messages[0]
+        assert summary_contexts[1] is messages[1]
+        assert summary_contexts[2].role == "assistant"
+        assert summary_contexts[2].content
+        assert summary_contexts[3].role == "user"
+        assert instruction in summary_contexts[3].content
+        assert compressor.TASK_CONTINUATION_INSTRUCTION in summary_contexts[3].content
+
+        assert result[0] is messages[0]
+        assert result[-1] is messages[-1]
+
+    @pytest.mark.asyncio
+    async def test_llm_compressor_summarizes_single_long_round(self):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        compressor = LLMSummaryCompressor(
+            provider=provider,
+            keep_recent_ratio=0.15,
+            instruction_text="Summarize the whole trajectory.",
+        )  # type: ignore[arg-type]
+        messages = [
+            Message(role="user", content="Run the tool."),
+            Message(
+                role="assistant",
+                content="Calling tool",
+                tool_calls=[
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "search", "arguments": "{}"},
+                    }
+                ],
+            ),
+            Message(role="tool", content="x" * 1000, tool_call_id="call_1"),
+        ]
+
+        result = await compressor(messages)
+
+        summary_contexts = provider.last_text_chat_kwargs["contexts"]
+        assert summary_contexts[:3] == messages
+        assert summary_contexts[3].role == "assistant"
+        assert summary_contexts[4].role == "user"
+        assert "Summarize the whole trajectory." in summary_contexts[4].content
+        assert compressor.TASK_CONTINUATION_INSTRUCTION in summary_contexts[4].content
+        assert all(original not in result for original in messages)
+        assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_llm_compressor_preserves_active_user_request(self):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        compressor = LLMSummaryCompressor(
+            provider=provider,
+            keep_recent_ratio=0,
+            instruction_text="Summarize old context.",
+        )  # type: ignore[arg-type]
+        messages = [
+            Message(role="user", content="Old question"),
+            Message(role="assistant", content="Old answer"),
+            Message(role="user", content="Current question"),
+        ]
+
+        result = await compressor(messages)
+
+        summary_contexts = provider.last_text_chat_kwargs["contexts"]
+        assert summary_contexts[0] is messages[0]
+        assert summary_contexts[1] is messages[1]
+        assert messages[2] not in summary_contexts
+        assert result[-1] is messages[2]
+
+    @pytest.mark.asyncio
+    async def test_llm_compressor_does_not_summarize_only_active_user_request(self):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        compressor = LLMSummaryCompressor(
+            provider=provider,
+            keep_recent_ratio=0.15,
+            instruction_text="Summarize old context.",
+        )  # type: ignore[arg-type]
+        messages = [Message(role="user", content="Current question")]
+
+        result = await compressor(messages)
+
+        assert result == messages
+        assert provider.last_text_chat_kwargs is None
+
+    @pytest.mark.asyncio
+    async def test_llm_compressor_keeps_recent_by_token_ratio(self):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        compressor = LLMSummaryCompressor(
+            provider=provider,
+            keep_recent_ratio=0.3,
+            instruction_text="Summarize.",
+        )  # type: ignore[arg-type]
+        messages = [
+            Message(role="user", content="a" * 200),
+            Message(role="assistant", content="b" * 200),
+            Message(role="user", content="c" * 10),
+            Message(role="assistant", content="d" * 10),
+            Message(role="user", content="e" * 10),
+            Message(role="assistant", content="f" * 10),
+        ]
+
+        result = await compressor(messages)
+
+        summary_contexts = provider.last_text_chat_kwargs["contexts"]
+        assert summary_contexts[0] is messages[0]
+        assert summary_contexts[1] is messages[1]
+        assert messages[2] not in summary_contexts
+        assert result[-4:] == messages[2:]
 
     # ==================== Empty and Edge Cases ====================
 
@@ -633,7 +781,7 @@ class TestContextManager:
             max_context_tokens=500,
             enforce_max_turns=5,
             truncate_turns=2,
-            llm_compress_keep_recent=3,
+            llm_compress_keep_recent_ratio=0.15,
         )
         manager = ContextManager(config)
 
@@ -641,7 +789,7 @@ class TestContextManager:
         assert manager.config.max_context_tokens == 500
         assert manager.config.enforce_max_turns == 5
         assert manager.config.truncate_turns == 2
-        assert manager.config.llm_compress_keep_recent == 3
+        assert manager.config.llm_compress_keep_recent_ratio == 0.15
 
     # ==================== Run Compression Tests ====================
 
@@ -705,7 +853,7 @@ class TestContextManager:
         mock_provider = MockProvider()
         config = ContextConfig(
             llm_compress_provider=mock_provider,  # type: ignore
-            llm_compress_keep_recent=3,
+            llm_compress_keep_recent_ratio=0.15,
             llm_compress_instruction="请总结对话内容",
             max_context_tokens=100,
         )
@@ -782,3 +930,21 @@ class TestContextManager:
 
         rounds = split_into_rounds([])
         assert len(rounds) == 0
+
+    def test_split_rounds_accepts_message_objects(self):
+        """Message objects can be split without converting them to dictionaries."""
+        from astrbot.core.agent.context.round_utils import split_into_rounds
+
+        messages = [
+            Message(role="system", content="System prompt"),
+            Message(role="user", content=[TextPart(text="hello")]),
+            Message(role="assistant", content="hi"),
+            Message(role="user", content="next"),
+        ]
+
+        rounds = split_into_rounds(messages)
+
+        assert len(rounds) == 3
+        assert rounds[0][0] is messages[0]
+        assert rounds[1][0] is messages[1]
+        assert rounds[2][0] is messages[3]
