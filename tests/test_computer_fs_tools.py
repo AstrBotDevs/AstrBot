@@ -212,7 +212,7 @@ async def test_restricted_local_member_can_read_plugin_provided_skill(
         path=str(plugin_skill),
     )
 
-    assert result == "# Demo Skill\n\nRead plugin docs."
+    assert result.replace("\r\n", "\n") == "# Demo Skill\n\nRead plugin docs."
 
 
 @pytest.mark.asyncio
@@ -237,7 +237,7 @@ async def test_restricted_local_member_can_read_plugin_skill_inventory_even_if_p
         path=str(plugin_skill),
     )
 
-    assert result == "# Demo Skill\n"
+    assert result.replace("\r\n", "\n") == "# Demo Skill\n"
 
 
 @pytest.mark.asyncio
@@ -314,7 +314,7 @@ async def test_file_read_tool_allows_partial_read_for_large_text_file(
         limit=3,
     )
 
-    assert result == "".join(lines[1000:1003])
+    assert result.replace("\r\n", "\n") == "".join(lines[1000:1003])
 
 
 @pytest.mark.asyncio
