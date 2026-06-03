@@ -267,9 +267,9 @@
           "description": "上下文压缩提示词",
           "hint": "如果为空则使用默认提示词。"
         },
-        "llm_compress_keep_recent": {
-          "description": "压缩时保留最近对话轮数",
-          "hint": "始终保留的最近 N 轮对话。"
+        "llm_compress_keep_recent_ratio": {
+          "description": "压缩时保留最近上下文比例",
+          "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。"
         },
         "llm_compress_provider_id": {
           "description": "用于上下文压缩的模型提供商 ID",
