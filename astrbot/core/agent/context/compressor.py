@@ -1,5 +1,9 @@
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from ...provider.modalities import (
+    log_context_sanitize_stats,
+    sanitize_contexts_by_modalities,
+)
 from ..message import Message
 from .token_counter import EstimateTokenCounter, TokenCounter
 
@@ -233,11 +237,15 @@ class LLMSummaryCompressor:
             old_rounds = message_rounds
             recent_rounds = []
 
-        summary_contexts = [
-            msg for rnd in old_rounds for msg in rnd if isinstance(msg, Message)
-        ]
+        summary_contexts = [msg for rnd in old_rounds for msg in rnd]
         if not any(msg.role != "system" for msg in summary_contexts):
-            return messages
+            if recent_rounds and messages and messages[-1].role == "user":
+                return messages
+            old_rounds = message_rounds
+            recent_rounds = []
+            summary_contexts = [msg for rnd in old_rounds for msg in rnd]
+            if not any(msg.role != "system" for msg in summary_contexts):
+                return messages
 
         if summary_contexts[-1].role != "assistant":
             summary_contexts.append(
@@ -257,11 +265,16 @@ class LLMSummaryCompressor:
                 ),
             )
         )
+        sanitized_summary_contexts, sanitize_stats = sanitize_contexts_by_modalities(
+            summary_contexts,
+            self.provider.provider_config.get("modalities", None),
+        )
+        log_context_sanitize_stats(sanitize_stats)
 
         # Generate summary
         try:
             response = await self.provider.text_chat(
-                contexts=summary_contexts,
+                contexts=sanitized_summary_contexts,
             )
             summary_content = (response.completion_text or "").strip()
         except Exception as e:
