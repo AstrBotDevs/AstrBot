@@ -114,12 +114,16 @@
                     <v-icon size="small" class="me-1">mdi-send-outline</v-icon>
                     {{ deliveryTargetText(item) }}
                   </span>
-                  <span class="task-meta-item">
-                    <v-icon size="small" class="me-1">
-                      mdi-clock-time-four-outline
-                    </v-icon>
-                    {{ nextRunText(item) }}
-                  </span>
+                  <v-tooltip :text="lastRunTooltipText(item)" location="top">
+                    <template #activator="{ props }">
+                      <span v-bind="props" class="task-meta-item">
+                        <v-icon size="small" class="me-1">
+                          mdi-clock-time-four-outline
+                        </v-icon>
+                        {{ nextRunText(item) }}
+                      </span>
+                    </template>
+                  </v-tooltip>
                 </div>
 
                 <template #actions>
@@ -580,6 +584,15 @@ function nextRunText(item: any): string {
   return tm("card.nextRun", {
     time: formatTime(item.next_run_time, tm("table.notAvailable")),
   });
+}
+
+function lastRunTooltipText(item: any): string {
+  const lastRun = `${tm("table.headers.lastRun")}: ${formatTime(item.last_run_at)}`;
+  const lastError = String(item.last_error || "").trim();
+  if (!lastError) {
+    return lastRun;
+  }
+  return `${lastRun} · ${lastError}`;
 }
 
 function scheduleProductLabel(item: any): string {
