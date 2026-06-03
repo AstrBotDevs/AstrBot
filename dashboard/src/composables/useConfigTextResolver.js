@@ -7,7 +7,8 @@ export function useConfigTextResolver(props = {}) {
 
   const translateIfKey = (value) => {
     if (!value || typeof value !== 'string') return value
-    return getRaw(value) ? tm(value) : value
+    if (!value.includes('.')) return value
+    return getRaw(value) ? tm(value) : null
   }
 
   const hasPluginI18n = () => {
