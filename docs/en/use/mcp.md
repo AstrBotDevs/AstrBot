@@ -72,21 +72,22 @@ We extract the necessary information:
 }
 ```
 
-If the MCP server you need requires environment variables to configure something (e.g. access token), you could use the command-line tool `env`:
+If the MCP server you need requires environment variables to configure something (e.g. access token), you could use the `env` field:
 
 ```json
 {
-    "command": "env",
+    "command": "uv",
     "args": [
-        "XXX_RESOURCE_FROM=local",
-        "XXX_API_URL=https://xxx.com",
-        "XXX_API_TOKEN=sk-xxxxx",
-        "uv",
         "tool",
         "run",
         "xxx-mcp-server",
         "--storage-path", "data/res"
-    ]
+    ],
+    "env": {
+        "XXX_RESOURCE_FROM": "local",
+        "XXX_API_URL": "https://xxx.com",
+        "XXX_API_TOKEN": "sk-xxxxx"
+    }
 }
 ```
 
