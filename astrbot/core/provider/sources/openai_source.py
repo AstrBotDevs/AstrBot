@@ -496,6 +496,7 @@ class ProviderOpenAIOfficial(Provider):
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = None
+        self._context_bloat_last_warn: dict[str, float] = {}
         self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
@@ -788,9 +789,10 @@ class ProviderOpenAIOfficial(Provider):
     # Warn when a single request carries an unusually large input context.
     # Helps users notice runaway context growth (e.g. unbounded history) before
     # it silently burns tokens. Configurable via provider_settings.
+    # Throttled per-model (once per interval) to avoid log spam; uses
+    # time.monotonic() so it is unaffected by system clock changes.
     _CONTEXT_BLOAT_DEFAULT_THRESHOLD = 48000
     _CONTEXT_BLOAT_WARN_INTERVAL_S = 300
-    _context_bloat_last_warn: dict[str, float] = {}
 
     def _maybe_warn_context_bloat(self, prompt_tokens: int) -> None:
         settings = self.provider_settings if isinstance(self.provider_settings, dict) else {}
@@ -802,7 +804,7 @@ class ProviderOpenAIOfficial(Provider):
         if not threshold or prompt_tokens < threshold:
             return
         model = self.get_model()
-        now = time.time()
+        now = time.monotonic()
         last = self._context_bloat_last_warn.get(model, 0)
         if now - last < self._CONTEXT_BLOAT_WARN_INTERVAL_S:
             return
