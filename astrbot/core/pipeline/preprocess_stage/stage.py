@@ -108,6 +108,7 @@ class PreProcessStage(Stage):
                     f"会话 {event.unified_msg_origin} 未配置语音转文本模型。",
                 )
                 return
+
             async def _stt_record(record_comp: Record, is_reply: bool = False):
                 """对单个 Record 组件执行语音转文本，成功返回 Plain，失败返回 None。"""
                 prefix = "引用消息" if is_reply else ""
