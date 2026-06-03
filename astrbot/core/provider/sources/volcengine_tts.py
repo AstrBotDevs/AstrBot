@@ -229,57 +229,42 @@ class ProviderVolcengineTTS(TTSProvider):
                         f"火山引擎 TTS 返回空响应 (logid={logid})，请检查 API Key 和 resource_id 是否正确"
                     )
 
-                # PATCH: 2026-06-03 - V3 unidirectional API returns either single JSON or NDJSON streaming.
-                # Shorter texts → single JSON {"code":0,"data":"<base64>"}
-                # Longer texts → NDJSON stream with multiple {"code":...,"data":"<base64>",...} lines
                 audio_chunks: list[bytes] = []
                 last_event = ""
                 raw_text = raw_body.decode("utf-8", errors="replace")
 
-                # --- Approach 1: NDJSON (streaming format — primary for unidirectional API) ---
                 lines = [l for l in raw_text.strip().split("\n") if l.strip()]
-                if len(lines) > 1:
-                    logger.debug(f"[VolcengineTTS V3] NDJSON mode: {len(lines)} lines, {len(raw_body)} bytes")
-                    for line in lines:
-                        line = line.strip()
-                        try:
-                            data = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
+                logger.debug(f"[VolcengineTTS V3] Parsing {len(lines)} lines, {len(raw_body)} bytes")
+                for line in lines:
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
 
-                        if "error" in data:
+                    if "error" in data:
+                        raise Exception(
+                            f"火山引擎 TTS API 错误 (logid={logid}): {json.dumps(data['error'], ensure_ascii=False)}"
+                        )
+                    if "code" in data:
+                        code = data.get("code", 0)
+                        if code not in (0, 20000000):
                             raise Exception(
-                                f"火山引擎 TTS API 错误 (logid={logid}): {json.dumps(data['error'], ensure_ascii=False)}"
+                                f"火山引擎 TTS API 错误 (logid={logid}): "
+                                f"code={code}, message={data.get('message', 'unknown')}"
                             )
-                        if "code" in data:
-                            code = data.get("code", 0)
-                            if code not in (0, 20000000):
-                                raise Exception(
-                                    f"火山引擎 TTS API 错误 (logid={logid}): "
-                                    f"code={code}, message={data.get('message', 'unknown')}"
-                                )
 
-                        event = data.get("event", "")
-                        if event:
-                            last_event = event
+                    event = data.get("event", "")
+                    if event:
+                        last_event = event
 
-                        # NDJSON: each line may have either "data" at top level or "audio.data" nested
-                        if "data" in data and isinstance(data["data"], str):
-                            b64_str = re.sub(r'\s+', '', data["data"])
-                            try:
-                                audio_chunks.append(base64.b64decode(b64_str))
-                            except Exception:
-                                pass
-                        elif "audio" in data and "data" in data["audio"]:
-                            audio_chunks.append(base64.b64decode(data["audio"]["data"]))
-
-                # --- Approach 2: single JSON (fallback for short texts) ---
-                if not audio_chunks:
-                    logger.debug(f"[VolcengineTTS V3] single JSON mode, {len(raw_body)} bytes")
-                    obj = json.loads(raw_text)
-                    if "data" in obj and obj["data"] and isinstance(obj["data"], str):
-                        b64_str = re.sub(r'\s+', '', obj["data"])
-                        audio_chunks.append(base64.b64decode(b64_str))
+                    if "data" in data and isinstance(data["data"], str):
+                        b64_str = re.sub(r'\s+', '', data["data"])
+                        try:
+                            audio_chunks.append(base64.b64decode(b64_str))
+                        except Exception:
+                            pass
+                    elif "audio" in data and isinstance(data["audio"], dict) and "data" in data["audio"]:
+                        audio_chunks.append(base64.b64decode(data["audio"]["data"]))
 
                 if not audio_chunks:
                     raise Exception(
