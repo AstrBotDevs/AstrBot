@@ -79,7 +79,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if (
             provider_api_base
             # Hard-code SiliconFlow API Base Prefix and Model Name, as it's just a temporary workaround.
-            and provider_api_base.strip().startswith("https://api.siliconflow.cn")
+            and "siliconflow" in provider_api_base.lower()
             and not self.model.lower().startswith("qwen")
         ):
             # For SiliconFlow and Non-Qwen models, dimensions parameter is not supported. so remove it.
