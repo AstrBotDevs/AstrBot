@@ -507,7 +507,9 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
             logger.info("Uploading skills bundle to sandbox...")
             await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
-            upload_result = await booter.upload_file(str(zip_path), remote_zip.as_posix())
+            upload_result = await booter.upload_file(
+                str(zip_path), remote_zip.as_posix()
+            )
             if not upload_result.get("success", False):
                 raise RuntimeError("Failed to upload skills bundle to sandbox.")
         else:
