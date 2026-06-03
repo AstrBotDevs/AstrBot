@@ -75,6 +75,9 @@ class StarMetadata:
     pages: list[dict] = field(default_factory=list)
     """插件注册的 Pages 元数据。"""
 
+    icon: str | None = None
+    """插件图标（MDI icon 名称，如 mdi-brain），用于仪表盘侧边栏。未设置时前端使用 mdi-puzzle 作为默认值。"""
+
     def __str__(self) -> str:
         return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"
 

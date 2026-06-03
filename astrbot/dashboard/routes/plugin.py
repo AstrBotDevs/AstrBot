@@ -1296,6 +1296,7 @@ class PluginRoute(Route):
                 "installed_at": self._get_plugin_installed_at(plugin),
                 "i18n": plugin.i18n,
                 "pages": [p.name for p in pages],
+                "icon": plugin.icon,
             }
             # 检查是否为全空的幽灵插件
             if not any(

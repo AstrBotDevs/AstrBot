@@ -522,6 +522,7 @@ class PluginManager:
                 pages=metadata["pages"]
                 if isinstance(metadata.get("pages"), list)
                 else [],
+                icon=metadata.get("icon") if isinstance(metadata.get("icon"), str) else None,
                 i18n=PluginManager._load_plugin_i18n(plugin_path),
             )
 
@@ -1016,6 +1017,7 @@ class PluginManager:
                             metadata.support_platforms = metadata_yaml.support_platforms
                             metadata.astrbot_version = metadata_yaml.astrbot_version
                             metadata.pages = metadata_yaml.pages
+                            metadata.icon = metadata_yaml.icon
                             metadata.i18n = metadata_yaml.i18n
                     except Exception as e:
                         logger.warning(
