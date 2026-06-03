@@ -633,6 +633,22 @@ def test_unsupported_image_content_error_matches_quoted_expected_text():
     assert provider._is_unsupported_image_content_error(err) is True
 
 
+def test_unsupported_image_content_error_matches_curly_quotes():
+    provider = _make_provider()
+    err = _ErrorWithBody(
+        "upstream error",
+        {
+            "error": {
+                "message": (
+                    "messages[918]: unknown variant “image_url”, expected ‘text’"
+                ),
+            }
+        },
+    )
+
+    assert provider._is_unsupported_image_content_error(err) is True
+
+
 @pytest.mark.asyncio
 async def test_handle_api_error_invalid_attachment_without_images_raises():
     provider = _make_provider()
