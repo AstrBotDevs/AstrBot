@@ -27,11 +27,11 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
         # GenAI SDK 的 timeout 单位是毫秒
         http_options = types.HttpOptions(timeout=timeout * 1000)
-        
+
         if api_base:
             api_base = api_base.removesuffix("/")
             http_options.base_url = api_base
-            
+
         proxy = provider_config.get("proxy", "")
         if proxy:
             # 确保 proxy 配置包含协议头 (如 http://...)
@@ -49,7 +49,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         # 获取文本的嵌入
         if not text or not text.strip():
             raise ValueError("输入文本不能为空")
-            
+
         try:
             result = await self.client.models.embed_content(
                 model=self.model,
@@ -58,11 +58,11 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                     output_dimensionality=self.get_dim(),
                 ),
             )
-            
+
             # 使用显式检查替代 assert，防止生产环境下 -O 优化跳过 assert 校验
             if not result.embeddings or not result.embeddings[0].values:
                 raise ValueError("API 响应异常：未返回有效的 embedding 数据")
-                
+
             return result.embeddings[0].values
         except APIError as e:
             raise Exception(f"Gemini Embedding API请求失败: {e.message}")
@@ -73,13 +73,13 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         # 批量获取文本的嵌入
         if not text:
             return []
-            
+
         try:
             # 构造 Content 列表以规避 gemini-embedding-2 批处理单返回 bug
             contents = [
                 types.Content(parts=[types.Part.from_text(text=s)]) for s in text
             ]
-            
+
             result = await self.client.models.embed_content(
                 model=self.model,
                 contents=contents,
@@ -87,18 +87,20 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                     output_dimensionality=self.get_dim(),
                 ),
             )
-            
+
             # 校验返回的数量是否和请求数量匹配
             if not result.embeddings or len(result.embeddings) != len(text):
                 actual_len = len(result.embeddings) if result.embeddings else 0
-                raise ValueError(f"API 响应异常：向量数量不匹配 (期望 {len(text)}, 实际 {actual_len})")
+                raise ValueError(
+                    f"API 响应异常：向量数量不匹配 (期望 {len(text)}, 实际 {actual_len})"
+                )
 
             embeddings: list[list[float]] = []
             for embedding in result.embeddings:
                 if not embedding.values:
                     raise ValueError("API 响应异常：返回的部分 embedding 缺失 values")
                 embeddings.append(embedding.values)
-                
+
             return embeddings
         except APIError as e:
             raise Exception(f"Gemini Embedding API批量请求失败: {e.message}")
@@ -111,5 +113,5 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
     async def terminate(self):
         # 释放资源
-        if getattr(self, 'client', None):
+        if getattr(self, "client", None):
             await self.client.aclose()
