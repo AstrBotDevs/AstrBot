@@ -788,6 +788,7 @@ def test_find_missing_requirements_honors_version_specifiers(monkeypatch, tmp_pa
 
 
 def test_find_missing_requirements_skips_unmatched_markers(monkeypatch, tmp_path):
+    monkeypatch.setattr("sys.platform", "linux")
     requirements_path = tmp_path / "requirements.txt"
     requirements_path.write_text(
         'demo-package; sys_platform == "win32"\n',
