@@ -1,0 +1,21 @@
+{
+  "metadata": {
+    "display_name": "內建指令",
+    "desc": "AstrBot 自帶插件，提供 /reset、/help、/sid 等內建指令。"
+  },
+  "config": {
+    "builtin_commands": {
+      "配置": "配置"
+    },
+    "help_language": {
+      "description": "指令回復語言",
+      "hint": "選擇 /help 等指令的回復語言",
+      "labels": {
+        "en-US": "英語",
+        "zh-CN": "簡體中文",
+        "zh-TW": "繁體中文",
+        "ru-RU": "俄語"
+      }
+    }
+  }
+}
