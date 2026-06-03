@@ -200,9 +200,18 @@ class CronJobManager:
             return None
         return aps_job.next_run_time.astimezone(timezone.utc)
 
-    async def _run_job(self, job_id: str) -> None:
+    async def run_job_now(self, job_id: str) -> None:
+        await self._run_job(job_id, ignore_enabled=True, delete_run_once=False)
+
+    async def _run_job(
+        self,
+        job_id: str,
+        *,
+        ignore_enabled: bool = False,
+        delete_run_once: bool = True,
+    ) -> None:
         job = await self.db.get_cron_job(job_id)
-        if not job or not job.enabled:
+        if not job or (not job.enabled and not ignore_enabled):
             return
         start_time = datetime.now(timezone.utc)
         await self.db.update_cron_job(
@@ -230,7 +239,7 @@ class CronJobManager:
                 last_error=last_error,
                 next_run_time=next_run,
             )
-            if job.run_once:
+            if job.run_once and delete_run_once:
                 # one-shot: remove after execution regardless of success
                 await self.delete_job(job_id)
 

@@ -1,3 +1,4 @@
+import asyncio
 import traceback
 from datetime import datetime, timezone
 
@@ -20,6 +21,7 @@ class CronRoute(Route):
             ("/cron/jobs", ("POST", self.create_job)),
             ("/cron/jobs/<job_id>", ("PATCH", self.update_job)),
             ("/cron/jobs/<job_id>", ("DELETE", self.delete_job)),
+            ("/cron/jobs/<job_id>/run", ("POST", self.run_job_now)),
         ]
         self.register_routes()
 
@@ -281,3 +283,19 @@ class CronRoute(Route):
         except Exception as e:  # noqa: BLE001
             logger.error(traceback.format_exc())
             return jsonify(Response().error(f"Failed to delete job: {e!s}").__dict__)
+
+    async def run_job_now(self, job_id: str):
+        try:
+            cron_mgr = self.core_lifecycle.cron_manager
+            if cron_mgr is None:
+                return jsonify(
+                    Response().error("Cron manager not initialized").__dict__
+                )
+            job = await cron_mgr.db.get_cron_job(job_id)
+            if not job:
+                return jsonify(Response().error("Job not found").__dict__)
+            asyncio.create_task(cron_mgr.run_job_now(job_id))
+            return jsonify(Response().ok(message="started").__dict__)
+        except Exception as e:  # noqa: BLE001
+            logger.error(traceback.format_exc())
+            return jsonify(Response().error(f"Failed to run job: {e!s}").__dict__)
