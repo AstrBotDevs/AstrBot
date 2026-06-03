@@ -241,7 +241,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_result_overflow_dir = tool_result_overflow_dir
         self.read_tool = read_tool
         self._tool_result_token_counter = EstimateTokenCounter()
-        self.request_context_manager_config = ContextConfig(
+        self.context_config = ContextConfig(
             # <=0 disables token-based guarding.
             max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
             # Enforce max turns before token-based guarding.
@@ -253,9 +253,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )
-        self.request_context_manager = ContextManager(
-            self.request_context_manager_config
-        )
+        self.context_manager = ContextManager(self.context_config)
 
         self.provider = provider
         self.fallback_providers: list[Provider] = []
@@ -708,7 +706,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # Process request-time context before sending it to the provider.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
-        self.run_context.messages = await self.request_context_manager.process(
+        self.run_context.messages = await self.context_manager.process(
             self.run_context.messages, trusted_token_usage=token_usage
         )
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
