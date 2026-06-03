@@ -9,6 +9,7 @@ from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
+from astrbot.core.config.default import ASTRBOT_USER_AGENT
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
@@ -24,6 +25,17 @@ class _ErrorWithResponse(Exception):
     def __init__(self, message: str, response_text: str):
         super().__init__(message)
         self.response = SimpleNamespace(text=response_text)
+
+
+class _FakeChatCompletions:
+    def create(self):
+        return None
+
+
+class _FakeAsyncOpenAI:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.chat = SimpleNamespace(completions=_FakeChatCompletions())
 
 
 def _make_provider(overrides: dict | None = None) -> ProviderOpenAIOfficial:
@@ -54,6 +66,39 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
         provider_config=provider_config,
         provider_settings={},
     )
+
+
+def test_openai_provider_uses_astrbot_default_user_agent(monkeypatch):
+    monkeypatch.setattr(openai_source_module, "AsyncOpenAI", _FakeAsyncOpenAI)
+
+    provider = _make_provider()
+
+    assert provider.custom_headers == {"User-Agent": ASTRBOT_USER_AGENT}
+    assert provider.client.kwargs["default_headers"] == {
+        "User-Agent": ASTRBOT_USER_AGENT,
+    }
+
+
+def test_openai_provider_preserves_custom_user_agent(monkeypatch):
+    monkeypatch.setattr(openai_source_module, "AsyncOpenAI", _FakeAsyncOpenAI)
+
+    provider = _make_provider(
+        {
+            "custom_headers": {
+                "User-Agent": "custom-agent/1.0",
+                "X-Test-Header": 123,
+            },
+        },
+    )
+
+    assert provider.custom_headers == {
+        "User-Agent": "custom-agent/1.0",
+        "X-Test-Header": "123",
+    }
+    assert provider.client.kwargs["default_headers"] == {
+        "User-Agent": "custom-agent/1.0",
+        "X-Test-Header": "123",
+    }
 
 
 def test_create_http_client_uses_openai_httpx_module(monkeypatch):

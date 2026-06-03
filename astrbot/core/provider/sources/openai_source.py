@@ -34,10 +34,12 @@ from astrbot.core.agent.message import (
     TextPart,
 )
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.config.default import ASTRBOT_USER_AGENT
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.http_headers import apply_default_headers, normalize_headers
 from astrbot.core.utils.io import download_file, download_image_by_url
 from astrbot.core.utils.media_utils import ensure_wav
 from astrbot.core.utils.network_utils import (
@@ -67,6 +69,13 @@ class ProviderOpenAIOfficial(Provider):
         "TIFF": "image/tiff",
         "AVIF": "image/avif",
     }
+
+    @staticmethod
+    def _resolve_custom_headers(provider_config: dict) -> dict[str, str]:
+        return apply_default_headers(
+            normalize_headers(provider_config.get("custom_headers", {})),
+            {"User-Agent": ASTRBOT_USER_AGENT},
+        )
 
     @classmethod
     def _truncate_error_text_candidate(cls, text: str) -> str:
@@ -498,15 +507,9 @@ class ProviderOpenAIOfficial(Provider):
         self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
-        self.custom_headers = provider_config.get("custom_headers", {})
+        self.custom_headers = self._resolve_custom_headers(provider_config)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
-
-        if not isinstance(self.custom_headers, dict) or not self.custom_headers:
-            self.custom_headers = None
-        else:
-            for key in self.custom_headers:
-                self.custom_headers[key] = str(self.custom_headers[key])
 
         if "api_version" in provider_config:
             # Using Azure OpenAI API

@@ -4,6 +4,7 @@ import pytest
 
 import astrbot.core.provider.sources.anthropic_source as anthropic_source
 import astrbot.core.provider.sources.kimi_code_source as kimi_code_source
+from astrbot.core.config.default import ASTRBOT_USER_AGENT
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 
@@ -14,6 +15,25 @@ class _FakeAsyncAnthropic:
 
     async def close(self):
         return None
+
+
+def test_anthropic_provider_uses_astrbot_default_user_agent(monkeypatch):
+    monkeypatch.setattr(anthropic_source, "AsyncAnthropic", _FakeAsyncAnthropic)
+
+    provider = anthropic_source.ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-test",
+            "type": "anthropic_chat_completion",
+            "model": "claude-test",
+            "key": ["test-key"],
+        },
+        provider_settings={},
+    )
+
+    assert provider.custom_headers == {"User-Agent": ASTRBOT_USER_AGENT}
+    assert provider.client.kwargs["default_headers"] == {
+        "User-Agent": ASTRBOT_USER_AGENT,
+    }
 
 
 def test_anthropic_provider_passes_custom_headers_via_default_headers(monkeypatch):
