@@ -75,7 +75,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         - At + Plain 文本:确保一个空格分隔,避免粘连或双空格
         - At + 非 Plain(图片/文件等):插入空格文本段分隔
         - At 在链末尾:不添加多余空格
-        - 纯空白 Plain(如仅含换行/空格):跳过,重置 At 标志位
+        - 纯空白 Plain(如仅含换行/空格):跳过,不重置 At 标志位
         """
         ret = []
 
@@ -103,7 +103,6 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     # result_decorate 阶段可能已在文本前加了空格或换行，
                     # 直接拼接会导致 "@用户  \n你好" 这样的双空白
                     # 统一用 " " 替换所有前导空白，确保 @ 与正文之间仅有一个空格
-                    segment.text = " " + segment.text.lstrip()
                     # 注意：不修改 segment.text，避免污染原始 MessageChain（影响 hook 等消费者）
                     text = " " + segment.text.lstrip()
                     prev_is_at = False
