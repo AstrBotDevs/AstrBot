@@ -196,7 +196,7 @@ def _build_skill_read_command_example(path: str) -> str:
         return f"cat {path}"
     if _is_windows_prompt_path(path):
         command = "type"
-        path_arg = f'"{path.replace("\\", "/")}"'
+        path_arg = f'"{path.replace(chr(92), "/")}"'
     else:
         command = "cat"
         path_arg = shlex.quote(path)
