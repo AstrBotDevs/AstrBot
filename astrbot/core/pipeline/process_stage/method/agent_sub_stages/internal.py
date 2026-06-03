@@ -424,10 +424,10 @@ class InternalAgentSubStage(Stage):
             custom_error_message = extract_persona_custom_error_message_from_event(
                 event
             )
-            error_text = custom_error_message or (
-                f"Error occurred while processing agent request: {e}"
-            )
-            await event.send(MessageChain().message(error_text))
+            # PATCH: 2026-06-03 - only send custom persona error message to chat;
+            # do not leak raw exception text when no custom message is configured.
+            if custom_error_message:
+                await event.send(MessageChain().message(custom_error_message))
         finally:
             if typing_requested:
                 try:

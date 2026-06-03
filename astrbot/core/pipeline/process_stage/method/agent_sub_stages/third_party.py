@@ -80,15 +80,10 @@ async def run_third_party_agent(
             elif resp.type == "err":
                 yield resp.data["chain"], True
     except Exception as e:
-        logger.error(f"Third party agent runner error: {e}")
-        err_msg = custom_error_message
-        if not err_msg:
-            err_msg = (
-                f"Error occurred during AI execution.\n"
-                f"Error Type: {type(e).__name__} (3rd party)\n"
-                f"Error Message: {str(e)}"
-            )
-        yield MessageChain().message(err_msg), True
+        logger.error(f"Third party agent runner error: {e}", exc_info=True)
+        # PATCH: 2026-06-03 - do not leak raw exception details when no persona error message is set
+        if custom_error_message:
+            yield MessageChain().message(custom_error_message), True
 
 
 class _RunnerResultAggregator:
