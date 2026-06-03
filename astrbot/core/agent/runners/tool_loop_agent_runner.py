@@ -241,7 +241,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_result_overflow_dir = tool_result_overflow_dir
         self.read_tool = read_tool
         self._tool_result_token_counter = EstimateTokenCounter()
-        self.request_context_manager_config = ContextConfig(
+        self.context_config = ContextConfig(
             # <=0 disables token-based guarding.
             max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
             # Enforce max turns before token-based guarding.
@@ -253,9 +253,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )
-        self.request_context_manager = ContextManager(
-            self.request_context_manager_config
-        )
+        self.context_manager = ContextManager(self.context_config)
 
         self.provider = provider
         self.fallback_providers: list[Provider] = []
@@ -458,11 +456,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
-        messages_for_provider = getattr(
-            self, "_provider_messages", self.run_context.messages
-        )
         payload = {
-            "contexts": self._sanitize_contexts_for_provider(messages_for_provider),
+            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
@@ -583,7 +578,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         contexts: list[Message] | list[dict[str, T.Any]],
     ) -> list[Message] | list[dict[str, T.Any]]:
-        if not self._should_fix_modalities_for_provider():
+        modalities = self.provider.provider_config.get("modalities", None)
+        if not modalities:  # Unconfigured (None or empty list) defaults to support all modalities
             return contexts
         sanitized_contexts, stats = sanitize_contexts_by_modalities(
             contexts,
@@ -591,12 +587,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
         log_context_sanitize_stats(stats)
         return sanitized_contexts
-
-    def _should_fix_modalities_for_provider(self) -> bool:
-        modalities = self.provider.provider_config.get("modalities", None)
-        return (
-            isinstance(modalities, list) and modalities
-        )  # Empty list is treated as unconfigured
 
     def _func_tool_for_provider(self) -> ToolSet | None:
         if not self.req.func_tool:
@@ -714,7 +704,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # memory layer.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]")
-        self._provider_messages = await self.request_context_manager.process(
+        self.run_context.messages = await self.context_manager.process(
             self.run_context.messages, trusted_token_usage=token_usage
         )
         self._simple_print_message_role("[AftCompact]")
