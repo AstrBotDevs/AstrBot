@@ -583,7 +583,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         contexts: list[Message] | list[dict[str, T.Any]],
     ) -> list[Message] | list[dict[str, T.Any]]:
-        if not self._should_fix_modalities_for_provider():
+        modalities = self.provider.provider_config.get("modalities", None)
+        if (
+            not modalities
+        ):  # Unconfigured (None or empty list) defaults to support all modalities
             return contexts
         sanitized_contexts, stats = sanitize_contexts_by_modalities(
             contexts,
@@ -591,12 +594,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
         log_context_sanitize_stats(stats)
         return sanitized_contexts
-
-    def _should_fix_modalities_for_provider(self) -> bool:
-        modalities = self.provider.provider_config.get("modalities", None)
-        return (
-            isinstance(modalities, list) and modalities
-        )  # Empty list is treated as unconfigured
 
     def _func_tool_for_provider(self) -> ToolSet | None:
         if not self.req.func_tool:
