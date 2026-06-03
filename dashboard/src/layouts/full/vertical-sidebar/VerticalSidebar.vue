@@ -7,11 +7,37 @@ import sidebarItems from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { applySidebarCustomization } from '@/utils/sidebarCustomization';
 import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
+import { usePluginSidebarItems } from '@/composables/usePluginSidebarItems';
 
 const { t, locale } = useI18n();
 
 const customizer = useCustomizerStore();
 const theme = useTheme();
+const { pluginItems } = usePluginSidebarItems();
+
+function buildSidebarMenu() {
+  const base = applySidebarCustomization(sidebarItems);
+  if (!pluginItems.value?.length) return base;
+
+  const result = [];
+
+  for (const item of base) {
+    if (item.title === 'core.navigation.groups.more') {
+      // 在「更多」之前插入插件项
+      result.push(...pluginItems.value);
+      result.push(item);
+    } else {
+      result.push(item);
+    }
+  }
+
+  // 如果没找到「更多」分组，追加到末尾
+  if (!base.some((item) => item.title === 'core.navigation.groups.more')) {
+    result.push(...pluginItems.value);
+  }
+
+  return result;
+}
 
 function collectGroupValues(items, values = new Set()) {
   items.forEach((item) => {
@@ -41,7 +67,7 @@ function getInitialOpenedItems(menuItems) {
   }
 }
 
-const sidebarMenu = shallowRef(applySidebarCustomization(sidebarItems));
+const sidebarMenu = shallowRef(buildSidebarMenu());
 
 // 侧边栏分组展开状态持久化
 const openedItems = ref(getInitialOpenedItems(sidebarMenu.value));
@@ -49,8 +75,14 @@ watch(openedItems, (val) => {
   localStorage.setItem('sidebar_openedItems', JSON.stringify(sanitizeOpenedItems(val, sidebarMenu.value)));
 }, { deep: true });
 
+// 当插件项变化时（如插件启用/停用），刷新菜单
+watch(pluginItems, () => {
+  sidebarMenu.value = buildSidebarMenu();
+  openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
+});
+
 function refreshSidebarMenu() {
-  sidebarMenu.value = applySidebarCustomization(sidebarItems);
+  sidebarMenu.value = buildSidebarMenu();
   openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
 }
 
