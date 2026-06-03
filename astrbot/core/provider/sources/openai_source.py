@@ -795,7 +795,9 @@ class ProviderOpenAIOfficial(Provider):
     _CONTEXT_BLOAT_WARN_INTERVAL_S = 300
 
     def _maybe_warn_context_bloat(self, prompt_tokens: int) -> None:
-        settings = self.provider_settings if isinstance(self.provider_settings, dict) else {}
+        settings = (
+            self.provider_settings if isinstance(self.provider_settings, dict) else {}
+        )
         if not settings.get("context_bloat_warn_enable", True):
             return
         threshold = settings.get(
