@@ -6,6 +6,7 @@ import inspect
 import json
 import random
 import re
+import time
 import uuid
 from collections.abc import AsyncGenerator
 from io import BytesIO
@@ -784,6 +785,34 @@ class ProviderOpenAIOfficial(Provider):
             return None
         return reasoning_attr
 
+    # Warn when a single request carries an unusually large input context.
+    # Helps users notice runaway context growth (e.g. unbounded history) before
+    # it silently burns tokens. Configurable via provider_settings.
+    _CONTEXT_BLOAT_DEFAULT_THRESHOLD = 48000
+    _CONTEXT_BLOAT_WARN_INTERVAL_S = 300
+    _context_bloat_last_warn: dict[str, float] = {}
+
+    def _maybe_warn_context_bloat(self, prompt_tokens: int) -> None:
+        settings = self.provider_settings if isinstance(self.provider_settings, dict) else {}
+        if not settings.get("context_bloat_warn_enable", True):
+            return
+        threshold = settings.get(
+            "context_bloat_warn_threshold", self._CONTEXT_BLOAT_DEFAULT_THRESHOLD
+        )
+        if not threshold or prompt_tokens < threshold:
+            return
+        model = self.get_model()
+        now = time.time()
+        last = self._context_bloat_last_warn.get(model, 0)
+        if now - last < self._CONTEXT_BLOAT_WARN_INTERVAL_S:
+            return
+        self._context_bloat_last_warn[model] = now
+        logger.warning(
+            f"单次请求输入上下文达 {prompt_tokens} tokens（模型 {model}，阈值 {threshold}）。"
+            "如非预期，请检查会话历史长度或 max_context_length / max_context_tokens "
+            "配置，以免持续产生过高的 token 开销。可在配置中关闭此提醒。"
+        )
+
     def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
         ptd = getattr(usage, "prompt_tokens_details", None)
         cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
@@ -795,6 +824,7 @@ class ProviderOpenAIOfficial(Provider):
         cached = cached or 0
         prompt_tokens = prompt_tokens or 0
         completion_tokens = completion_tokens or 0
+        self._maybe_warn_context_bloat(prompt_tokens)
         return TokenUsage(
             input_other=prompt_tokens - cached,
             input_cached=cached,

@@ -154,6 +154,8 @@ DEFAULT_CONFIG = {
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
         "max_agent_step": 30,
+        "context_bloat_warn_enable": True,
+        "context_bloat_warn_threshold": 48000,
         "tool_call_timeout": 120,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
@@ -3607,6 +3609,19 @@ CONFIG_METADATA_3 = {
                         "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_bloat_warn_enable": {
+                        "description": "启用上下文膨胀告警",
+                        "type": "bool",
+                        "hint": "当单次请求的输入上下文 token 超过阈值时，输出 warning 日志，提醒可能存在上下文异常膨胀（如历史无限累积导致 token 开销激增）。",
+                    },
+                    "provider_settings.context_bloat_warn_threshold": {
+                        "description": "上下文膨胀告警阈值",
+                        "type": "int",
+                        "hint": "单次请求输入上下文超过此 token 数时触发告警。默认 48000。",
+                        "condition": {
+                            "provider_settings.context_bloat_warn_enable": True,
                         },
                     },
                 },
