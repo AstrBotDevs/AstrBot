@@ -145,7 +145,7 @@
     "cron": "Cron 表达式 *",
     "cronPlaceholder": "0 9 * * *",
     "runAt": "执行时间 *",
-    "session": "投递到",
+    "session": "投递到（可选）",
     "noUmos": "暂无可用会话",
     "timezone": "时区（可选，如 Asia/Shanghai）",
     "enabled": "启用"
