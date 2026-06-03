@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 import httpx
 from openai import AsyncOpenAI
 
@@ -74,21 +76,27 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 )
 
         # Fix: SiliconFlow provider does not support dimensions parameter, except for Qwen models.
-        provider_api_base = self.provider_config.get("embedding_api_base")
+        provider_api_base = self.provider_config.get("embedding_api_base", "")
         provider_id = self.provider_config.get("id", "unknown_id")
-        if (
-            provider_api_base
-            # Hard-code SiliconFlow API Base Prefix and Model Name, as it's just a temporary workaround.
-            and "siliconflow" in provider_api_base.lower()
-            and not self.model.lower().startswith("qwen")
-        ):
-            # For SiliconFlow and Non-Qwen models, dimensions parameter is not supported. so remove it.
-            removed_dimensions = kwargs.pop("dimensions", None)
-            if removed_dimensions is not None:
-                # Log a warning message if dimensions parameter is removed.
-                logger.warning(
-                    f"dimensions not supported for model '{self.model}' of provider '{provider_id}' as SiliconFlow does not support this parameter for non-Qwen models: '{removed_dimensions}'."
-                )
+        if provider_api_base:
+            api_base = provider_api_base.strip().lower()
+            # 兼容不带 http:// 或 https:// 头的 api_base，确保 urlparse 能正常解析 hostname
+            if not api_base.startswith(("http://", "https://")):
+                api_base = "https://" + api_base
+            hostname = urlparse(api_base).hostname or ""
+
+            if hostname in {
+                "api.siliconflow.cn",
+                "api.siliconflow.com",
+            } and not self.model.lower().startswith("qwen"):
+                # For SiliconFlow and Non-Qwen models, dimensions parameter is not supported, so remove it.
+                removed_dimensions = kwargs.pop("dimensions", None)
+                if removed_dimensions is not None:
+                    # Log a warning message if dimensions parameter is removed.
+                    logger.warning(
+                        f"dimensions not supported for model '{self.model}' of provider '{provider_id}' "
+                        f"as SiliconFlow does not support this parameter for non-Qwen models: '{removed_dimensions}'."
+                    )
         return kwargs
 
     def get_dim(self) -> int:
