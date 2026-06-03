@@ -116,14 +116,11 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
                 audio_url = output_path
 
-        audio_file = open(audio_url, "rb")
-        try:
+        with open(audio_url, "rb") as audio_file:
             result = await self.client.audio.transcriptions.create(
                 model=self.model_name,
                 file=("audio.wav", audio_file),
             )
-        finally:
-            audio_file.close()
 
         # remove temp file
         if output_path and os.path.exists(output_path):
