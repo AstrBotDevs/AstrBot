@@ -803,6 +803,10 @@ class PluginRoute(Route):
             response.headers["Content-Security-Policy"] = (
                 "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
             )
+        else:
+            response.headers["Content-Security-Policy"] = (
+                "object-src 'none'; base-uri 'self'"
+            )
 
         return response
 
