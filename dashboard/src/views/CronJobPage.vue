@@ -1,348 +1,744 @@
 <template>
   <div class="dashboard-page cron-page" :class="{ 'is-dark': isDark }">
-    <v-container fluid class="dashboard-shell pa-4 pa-md-6">
-      <div class="dashboard-header">
-        <div class="dashboard-header-main">
-          <div class="d-flex align-center flex-wrap" style="gap: 8px;">
-            <h1 class="dashboard-title">{{ tm('page.title') }}</h1>
-            <v-chip size="x-small" color="orange-darken-2" variant="tonal" label>
-              {{ tm('page.beta') }}
-            </v-chip>
+    <v-container fluid class="dashboard-shell cron-shell pa-4 pa-md-6">
+      <div class="cron-detail-width">
+        <div class="cron-header mb-4 pb-4">
+          <div class="cron-header-copy">
+            <h1 class="dashboard-title">{{ tm("page.title") }}</h1>
+            <div class="dashboard-subtitle">
+              {{ tm("page.subtitle") }}
+              <v-btn
+                variant="text"
+                color="primary"
+                density="compact"
+                class="supported-platform-link"
+                @click="platformDialog = true"
+              >
+                {{ tm("page.proactive.link") }}
+              </v-btn>
+            </div>
           </div>
-          <p class="dashboard-subtitle">
-            {{ tm('page.subtitle') }}
-          </p>
-        </div>
 
-        <div class="dashboard-header-actions">
-          <v-btn variant="text" color="primary" :loading="loading" prepend-icon="mdi-refresh" @click="loadJobs">
-            {{ tm('actions.refresh') }}
-          </v-btn>
-          <v-btn variant="tonal" color="primary" prepend-icon="mdi-plus" @click="openCreate">
-            {{ tm('actions.create') }}
-          </v-btn>
-        </div>
-      </div>
-
-      <div class="dashboard-section-head">
-        <div>
-          <div class="dashboard-section-title">{{ tm('section.platforms.title') }}</div>
-          <div class="dashboard-section-subtitle">
-            {{
-              proactivePlatforms.length
-                ? tm('page.proactive.supported', { platforms: proactivePlatformText })
-                : tm('page.proactive.unsupported')
-            }}
+          <div class="cron-header-actions">
+            <v-btn
+              variant="text"
+              color="primary"
+              :loading="loading"
+              prepend-icon="mdi-refresh"
+              @click="loadJobs"
+            >
+              {{ tm("actions.refresh") }}
+            </v-btn>
+            <v-btn
+              variant="tonal"
+              color="primary"
+              prepend-icon="mdi-plus"
+              @click="openCreate"
+            >
+              {{ tm("actions.create") }}
+            </v-btn>
           </div>
         </div>
-      </div>
 
-      <section v-if="proactivePlatforms.length" class="platform-section">
-        <div class="platform-chip-wrap">
-          <v-chip
-            v-for="platform in proactivePlatforms"
-            :key="platform.id"
-            size="small"
-            variant="tonal"
+        <section class="task-surface">
+          <v-progress-linear
+            v-if="loading && !jobs.length"
+            indeterminate
             color="primary"
-          >
-            {{ platform.display_name || platform.name }} · {{ platform.id }}
-          </v-chip>
-        </div>
-      </section>
-      <div v-else class="dashboard-empty platform-empty">
-        {{ tm('page.proactive.unsupported') }}
-      </div>
+          />
 
-      <div class="dashboard-section-head">
-        <div>
-          <div class="dashboard-section-title">{{ tm('table.title') }}</div>
-          <div class="dashboard-section-subtitle">{{ tm('table.subtitle') }}</div>
-        </div>
-      </div>
+          <div v-else-if="!jobs.length" class="text-center pa-8">
+            <v-icon size="64" color="grey-lighten-1">
+              mdi-calendar-blank-outline
+            </v-icon>
+            <p class="text-grey mt-4">{{ tm("table.empty") }}</p>
+          </div>
 
-      <section class="task-surface">
-        <div v-if="loading && !jobs.length" class="state-panel">
-          <v-progress-circular indeterminate size="22" width="2" color="primary" />
-          <span>{{ tm('actions.refresh') }}...</span>
-        </div>
-
-        <div v-else-if="!jobs.length" class="state-panel">
-          <v-icon size="20" color="primary">mdi-calendar-blank-outline</v-icon>
-          <span>{{ tm('table.empty') }}</span>
-        </div>
-
-        <div v-else class="task-table-wrap">
-          <table class="task-table">
-            <colgroup>
-              <col class="col-name" />
-              <col class="col-type" />
-              <col class="col-cron" />
-              <col class="col-session" />
-              <col class="col-next-run" />
-              <col class="col-last-run" />
-              <col class="col-actions" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>{{ tm('table.headers.name') }}</th>
-                <th>{{ tm('table.headers.type') }}</th>
-                <th>{{ tm('table.headers.cron') }}</th>
-                <th>{{ tm('table.headers.session') }}</th>
-                <th>{{ tm('table.headers.nextRun') }}</th>
-                <th>{{ tm('table.headers.lastRun') }}</th>
-                <th class="actions-col">{{ tm('table.headers.actions') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in sortedJobs" :key="item.job_id">
-                <td class="name-col">
-                  <div class="task-name">{{ item.name || tm('table.notAvailable') }}</div>
-                  <div class="task-subline">{{ item.description || item.job_id }}</div>
-                </td>
-                <td>
-                  <v-chip size="small" :color="item.run_once ? 'orange' : 'primary'" variant="tonal">
-                    {{ jobTypeLabel(item) }}
-                  </v-chip>
-                </td>
-                <td>
-                  <div class="task-text">{{ scheduleLabel(item) }}</div>
-                  <div class="task-subline">{{ scheduleMeta(item) }}</div>
-                </td>
-                <td>
-                  <div class="task-session">{{ item.session || tm('table.notAvailable') }}</div>
-                </td>
-                <td>
-                  <div class="task-text">{{ formatTime(item.next_run_time) }}</div>
-                </td>
-                <td>
-                  <div class="task-text">{{ formatTime(item.last_run_at) }}</div>
-                </td>
-                <td class="actions-col">
-                  <div class="table-actions">
-                    <div class="table-actions-toggle">
-                      <v-switch
-                        v-model="item.enabled"
-                        inset
-                        density="compact"
-                        hide-details
-                        color="primary"
-                        class="table-actions-switch mt-0"
-                        @change="toggleJob(item)"
-                      />
-                    </div>
-                    <div class="table-actions-buttons">
-                      <v-btn
-                        v-if="item.job_type === 'active_agent'"
-                        size="small"
-                        variant="text"
-                        color="primary"
-                        @click="openEdit(item)"
-                      >
-                        {{ tm('actions.edit') }}
-                      </v-btn>
-                      <v-btn size="small" variant="text" color="error" @click="deleteJob(item)">
-                        {{ tm('actions.delete') }}
-                      </v-btn>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="2600">
-        {{ snackbar.message }}
-      </v-snackbar>
-
-      <v-dialog v-model="createDialog" max-width="640">
-        <v-card class="dashboard-dialog-card">
-          <v-card-title class="text-h6 pt-5 px-5">{{ dialogTitle }}</v-card-title>
-          <v-card-subtitle class="px-5 text-body-2 text-medium-emphasis">
-            {{ tm('form.chatHint') }}
-          </v-card-subtitle>
-          <v-card-text class="px-5 pb-2">
-            <div class="dashboard-form-grid dashboard-form-grid--single">
-              <v-switch
-                v-model="newJob.run_once"
-                :label="tm('form.runOnce')"
-                inset
-                color="primary"
+          <template v-else>
+            <div class="task-filter-bar">
+              <v-text-field
+                v-model="taskSearch"
+                :label="tm('filters.search')"
+                prepend-inner-icon="mdi-magnify"
+                variant="solo-filled"
+                density="compact"
+                clearable
                 hide-details
               />
-              <v-text-field v-model="newJob.name" :label="tm('form.name')" variant="outlined" density="comfortable" />
-              <v-text-field v-model="newJob.note" :label="tm('form.note')" variant="outlined" density="comfortable" />
-              <v-text-field
-                v-if="!newJob.run_once"
-                v-model="newJob.cron_expression"
-                :label="tm('form.cron')"
-                :placeholder="tm('form.cronPlaceholder')"
-                variant="outlined"
-                density="comfortable"
-              />
-              <v-text-field
-                v-else
-                v-model="newJob.run_at"
-                :label="tm('form.runAt')"
-                type="datetime-local"
-                variant="outlined"
-                density="comfortable"
-              />
-              <v-text-field v-model="newJob.session" :label="tm('form.session')" variant="outlined" density="comfortable" />
-              <v-text-field v-model="newJob.timezone" :label="tm('form.timezone')" variant="outlined" density="comfortable" />
-              <v-switch
-                v-model="newJob.enabled"
-                :label="tm('form.enabled')"
-                inset
-                color="primary"
+              <v-autocomplete
+                v-model="selectedUmoFilter"
+                :items="jobUmoFilterOptions"
+                item-title="label"
+                item-value="value"
+                :label="tm('filters.umo')"
+                prepend-inner-icon="mdi-send-outline"
+                variant="solo-filled"
+                density="compact"
+                clearable
                 hide-details
+                :no-data-text="tm('filters.noUmos')"
               />
             </div>
-          </v-card-text>
-          <v-card-actions class="justify-end px-5 pb-5">
-            <v-btn variant="text" @click="createDialog = false">{{ tm('actions.cancel') }}</v-btn>
-            <v-btn variant="tonal" color="primary" :loading="creating" @click="submitJob">
-              {{ dialogSubmitText }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+
+            <div v-if="!sortedJobs.length" class="text-center pa-8">
+              <v-icon size="64" color="grey-lighten-1">
+                mdi-file-search-outline
+              </v-icon>
+              <p class="text-grey mt-4">{{ tm("filters.noMatches") }}</p>
+            </div>
+
+            <div v-else class="task-list pb-3">
+              <OutlinedActionListItem
+                v-for="item in sortedJobs"
+                :key="item.job_id"
+                :title="item.name || tm('table.notAvailable')"
+                clickable
+                @click="openEdit(item)"
+              >
+                <template #title-extra>
+                  <v-chip
+                    size="x-small"
+                    :color="item.run_once ? 'orange' : 'primary'"
+                    variant="tonal"
+                  >
+                    {{ scheduleProductLabel(item) }}
+                  </v-chip>
+                </template>
+
+                <div class="task-description text-body-2 text-medium-emphasis">
+                  {{ taskPreview(item) }}
+                </div>
+
+                <div class="task-meta text-caption text-medium-emphasis">
+                  <span class="task-meta-item">
+                    <v-icon size="small" class="me-1">mdi-send-outline</v-icon>
+                    {{ deliveryTargetText(item) }}
+                  </span>
+                  <v-tooltip :text="lastRunTooltipText(item)" location="top">
+                    <template #activator="{ props }">
+                      <span v-bind="props" class="task-meta-item">
+                        <v-icon size="small" class="me-1">
+                          mdi-clock-time-four-outline
+                        </v-icon>
+                        {{ nextRunText(item) }}
+                      </span>
+                    </template>
+                  </v-tooltip>
+                </div>
+
+                <template #actions>
+                  <StyledMenu location="bottom end" offset="8">
+                    <template #activator="{ props: menuProps }">
+                      <v-btn
+                        v-bind="menuProps"
+                        icon="mdi-dots-horizontal"
+                        variant="text"
+                        size="small"
+                        class="list-action-icon-btn"
+                        :title="tm('actions.more')"
+                        @click.stop
+                      />
+                    </template>
+                    <v-list-item
+                      class="styled-menu-item"
+                      prepend-icon="mdi-pencil-outline"
+                      @click.stop="openEdit(item)"
+                    >
+                      <v-list-item-title>
+                        {{ tm("actions.edit") }}
+                      </v-list-item-title>
+                    </v-list-item>
+                    <v-list-item
+                      class="styled-menu-item"
+                      prepend-icon="mdi-play-circle-outline"
+                      :disabled="runningJobIds.has(item.job_id)"
+                      @click.stop="runJobNow(item)"
+                    >
+                      <v-list-item-title>
+                        {{ tm("actions.runNow") }}
+                      </v-list-item-title>
+                    </v-list-item>
+                    <v-list-item
+                      class="styled-menu-item"
+                      prepend-icon="mdi-delete-outline"
+                      @click.stop="deleteJob(item)"
+                    >
+                      <v-list-item-title class="text-error">
+                        {{ tm("actions.delete") }}
+                      </v-list-item-title>
+                    </v-list-item>
+                  </StyledMenu>
+                </template>
+
+                <template #control>
+                  <v-switch
+                    v-model="item.enabled"
+                    inset
+                    density="compact"
+                    hide-details
+                    color="primary"
+                    @click.stop
+                    @change="toggleJob(item)"
+                  />
+                </template>
+              </OutlinedActionListItem>
+            </div>
+          </template>
+        </section>
+
+        <v-dialog v-model="platformDialog" max-width="520">
+          <v-card class="dashboard-dialog-card">
+            <v-card-title class="text-h3 pt-5 px-5">
+              {{ tm("platformDialog.title") }}
+            </v-card-title>
+            <v-card-text class="px-5 pb-2">
+              <p class="platform-dialog-description">
+                {{ tm("platformDialog.description") }}
+              </p>
+              <div v-if="proactivePlatforms.length" class="platform-list">
+                <div
+                  v-for="platform in proactivePlatforms"
+                  :key="platform.id"
+                  class="platform-list-item"
+                >
+                  <div class="platform-name">
+                    {{ platform.display_name || platform.name }}
+                  </div>
+                  <div class="platform-id">{{ platform.id }}</div>
+                </div>
+              </div>
+              <div v-else class="dashboard-empty platform-dialog-empty">
+                {{ tm("page.proactive.unsupported") }}
+              </div>
+            </v-card-text>
+            <v-card-actions class="justify-end px-5 pb-5">
+              <v-btn variant="text" @click="platformDialog = false">
+                {{ tm("actions.close") }}
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
+        <v-snackbar
+          v-model="snackbar.show"
+          :color="snackbar.color"
+          timeout="2600"
+        >
+          {{ snackbar.message }}
+        </v-snackbar>
+
+        <v-dialog v-model="createDialog" max-width="620">
+          <v-card class="dashboard-dialog-card">
+            <v-card-title class="text-h3 pt-5 px-5">{{
+              dialogTitle
+            }}</v-card-title>
+            <v-card-text class="px-5 pb-2">
+              <div class="dashboard-form-grid dashboard-form-grid--single">
+                <v-text-field
+                  v-model="newJob.name"
+                  :label="tm('form.name')"
+                  variant="outlined"
+                  density="comfortable"
+                />
+                <v-textarea
+                  v-model="newJob.note"
+                  :label="tm('form.note')"
+                  variant="outlined"
+                  density="comfortable"
+                  rows="5"
+                />
+
+                <div class="schedule-field">
+                  <v-select
+                    v-model="newJob.schedule_mode"
+                    class="schedule-mode-select"
+                    :items="scheduleModeOptions"
+                    item-title="label"
+                    item-value="value"
+                    :label="tm('form.scheduleMode')"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details
+                  />
+
+                  <v-text-field
+                    v-if="newJob.schedule_mode === 'once'"
+                    v-model="newJob.run_at"
+                    :label="tm('form.runAt')"
+                    type="datetime-local"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details
+                  />
+
+                  <div
+                    v-else-if="newJob.schedule_mode === 'interval'"
+                    class="schedule-inline-fields"
+                  >
+                    <v-text-field
+                      v-model.number="newJob.interval_value"
+                      :label="tm('form.intervalEvery')"
+                      type="number"
+                      min="1"
+                      variant="outlined"
+                      density="comfortable"
+                      hide-details
+                    />
+                    <v-select
+                      v-model="newJob.interval_unit"
+                      :items="intervalUnitOptions"
+                      item-title="label"
+                      item-value="value"
+                      :label="tm('form.intervalUnit')"
+                      variant="outlined"
+                      density="comfortable"
+                      hide-details
+                    />
+                  </div>
+
+                  <v-text-field
+                    v-else-if="newJob.schedule_mode === 'daily'"
+                    v-model="newJob.daily_time"
+                    :label="tm('form.dailyTime')"
+                    type="time"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details
+                  />
+
+                  <div
+                    v-else-if="newJob.schedule_mode === 'weekly'"
+                    class="schedule-inline-fields"
+                  >
+                    <v-select
+                      v-model="newJob.weekly_day"
+                      :items="weekdayOptions"
+                      item-title="label"
+                      item-value="value"
+                      :label="tm('form.weeklyDay')"
+                      variant="outlined"
+                      density="comfortable"
+                      hide-details
+                    />
+                    <v-text-field
+                      v-model="newJob.weekly_time"
+                      :label="tm('form.weeklyTime')"
+                      type="time"
+                      variant="outlined"
+                      density="comfortable"
+                      hide-details
+                    />
+                  </div>
+
+                  <div
+                    v-else-if="newJob.schedule_mode === 'monthly'"
+                    class="schedule-inline-fields"
+                  >
+                    <v-text-field
+                      v-model.number="newJob.monthly_day"
+                      :label="tm('form.monthlyDay')"
+                      type="number"
+                      min="1"
+                      max="31"
+                      variant="outlined"
+                      density="comfortable"
+                      hide-details
+                    />
+                    <v-text-field
+                      v-model="newJob.monthly_time"
+                      :label="tm('form.monthlyTime')"
+                      type="time"
+                      variant="outlined"
+                      density="comfortable"
+                      hide-details
+                    />
+                  </div>
+
+                  <v-text-field
+                    v-else
+                    v-model="newJob.cron_expression"
+                    :label="tm('form.cron')"
+                    :placeholder="tm('form.cronPlaceholder')"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details
+                  />
+                </div>
+
+                <v-autocomplete
+                  v-model="newJob.session"
+                  :items="availableUmos"
+                  :loading="loadingUmos"
+                  :label="tm('form.session')"
+                  variant="outlined"
+                  density="comfortable"
+                  clearable
+                  hide-details
+                  :no-data-text="tm('form.noUmos')"
+                  @focus="loadUmos()"
+                />
+              </div>
+            </v-card-text>
+            <v-card-actions class="justify-end px-5 pb-5">
+              <v-btn variant="text" @click="createDialog = false">{{
+                tm("actions.cancel")
+              }}</v-btn>
+              <v-btn
+                variant="tonal"
+                color="primary"
+                :loading="creating"
+                @click="submitJob"
+              >
+                {{ dialogSubmitText }}
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+      </div>
     </v-container>
   </div>
 </template>
 
 <script setup lang="ts">
-import axios from 'axios'
-import { computed, onMounted, ref } from 'vue'
-import { useTheme } from 'vuetify'
-import { useModuleI18n } from '@/i18n/composables'
+import axios from "axios";
+import { computed, onMounted, ref } from "vue";
+import { useTheme } from "vuetify";
+import { useModuleI18n } from "@/i18n/composables";
+import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
 
-const { tm } = useModuleI18n('features/cron')
-const theme = useTheme()
+const { tm } = useModuleI18n("features/cron");
+const theme = useTheme();
 
-const isDark = computed(() => theme.global.current.value.dark)
-const loading = ref(false)
-const jobs = ref<any[]>([])
-const proactivePlatforms = ref<{ id: string; name: string; display_name?: string }[]>([])
-const createDialog = ref(false)
-const creating = ref(false)
-const editingJobId = ref('')
+const isDark = computed(() => theme.global.current.value.dark);
+const loading = ref(false);
+const jobs = ref<any[]>([]);
+const taskSearch = ref("");
+const selectedUmoFilter = ref<string | null>(null);
+const proactivePlatforms = ref<
+  { id: string; name: string; display_name?: string }[]
+>([]);
+const availableUmos = ref<string[]>([]);
+const loadingUmos = ref(false);
+const platformDialog = ref(false);
+const createDialog = ref(false);
+const creating = ref(false);
+const editingJobId = ref("");
+const runningJobIds = ref(new Set<string>());
+const NO_DELIVERY_TARGET_FILTER = "__astrbot_no_delivery_target__";
+type ScheduleMode =
+  | "once"
+  | "interval"
+  | "daily"
+  | "weekly"
+  | "monthly"
+  | "cron";
+type IntervalUnit = "minutes" | "hours" | "days";
+
 const newJob = ref({
-  run_once: false,
-  name: '',
-  note: '',
-  cron_expression: '',
-  run_at: '',
-  session: '',
-  timezone: '',
-  enabled: true
-})
+  schedule_mode: "once" as ScheduleMode,
+  name: "",
+  note: "",
+  cron_expression: "",
+  run_at: "",
+  interval_value: 1,
+  interval_unit: "hours" as IntervalUnit,
+  daily_time: "09:00",
+  weekly_day: 1,
+  weekly_time: "09:00",
+  monthly_day: 1,
+  monthly_time: "09:00",
+  session: "",
+  timezone: "",
+  enabled: true,
+});
 
-const snackbar = ref({ show: false, message: '', color: 'success' })
+const snackbar = ref({ show: false, message: "", color: "success" });
 
-const proactivePlatformText = computed(() =>
-  proactivePlatforms.value.map((p) => `${p.display_name || p.name}(${p.id})`).join(' / ')
-)
+const jobUmoFilterOptions = computed(() => [
+  ...(jobs.value.some((job) => !getJobSession(job))
+    ? [
+        {
+          label: tm("filters.noDeliveryTarget"),
+          value: NO_DELIVERY_TARGET_FILTER,
+        },
+      ]
+    : []),
+  ...Array.from(new Set(jobs.value.map(getJobSession).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b))
+    .map((umo) => ({ label: umo, value: umo })),
+]);
+
+const filteredJobs = computed(() => {
+  const query = taskSearch.value.trim().toLowerCase();
+  const umo = selectedUmoFilter.value;
+  return jobs.value.filter((job) => {
+    const session = getJobSession(job);
+    if (umo === NO_DELIVERY_TARGET_FILTER && session) {
+      return false;
+    }
+    if (umo && umo !== NO_DELIVERY_TARGET_FILTER && session !== umo) {
+      return false;
+    }
+
+    if (!query) {
+      return true;
+    }
+
+    const title = String(job.name || "").toLowerCase();
+    const content = String(job.note || job.description || "").toLowerCase();
+    return title.includes(query) || content.includes(query);
+  });
+});
 
 const sortedJobs = computed(() =>
-  [...jobs.value].sort((a, b) => {
+  [...filteredJobs.value].sort((a, b) => {
     if (a.enabled !== b.enabled) {
-      return a.enabled ? -1 : 1
+      return a.enabled ? -1 : 1;
     }
 
-    const nextA = parseTimeValue(a.next_run_time ?? a.run_at)
-    const nextB = parseTimeValue(b.next_run_time ?? b.run_at)
+    const nextA = parseTimeValue(a.next_run_time ?? a.run_at);
+    const nextB = parseTimeValue(b.next_run_time ?? b.run_at);
 
     if (nextA !== nextB) {
-      if (!nextA) return 1
-      if (!nextB) return -1
-      return nextA - nextB
+      if (!nextA) return 1;
+      if (!nextB) return -1;
+      return nextA - nextB;
     }
 
-    return String(a.name || '').localeCompare(String(b.name || ''))
-  })
-)
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  }),
+);
 
-const isEditing = computed(() => !!editingJobId.value)
-const dialogTitle = computed(() => tm(isEditing.value ? 'form.editTitle' : 'form.title'))
-const dialogSubmitText = computed(() => tm(isEditing.value ? 'actions.save' : 'actions.submit'))
+const isEditing = computed(() => !!editingJobId.value);
+const dialogTitle = computed(() =>
+  tm(isEditing.value ? "form.editTitle" : "form.title"),
+);
+const dialogSubmitText = computed(() =>
+  tm(isEditing.value ? "actions.save" : "actions.submit"),
+);
+const scheduleModeOptions = computed(() => [
+  { label: tm("form.scheduleModes.once"), value: "once" },
+  { label: tm("form.scheduleModes.interval"), value: "interval" },
+  { label: tm("form.scheduleModes.daily"), value: "daily" },
+  { label: tm("form.scheduleModes.weekly"), value: "weekly" },
+  { label: tm("form.scheduleModes.monthly"), value: "monthly" },
+  { label: tm("form.scheduleModes.cron"), value: "cron" },
+]);
+const intervalUnitOptions = computed(() => [
+  { label: tm("form.intervalUnits.minutes"), value: "minutes" },
+  { label: tm("form.intervalUnits.hours"), value: "hours" },
+  { label: tm("form.intervalUnits.days"), value: "days" },
+]);
+const weekdayOptions = computed(() => [
+  { label: tm("form.weekdays.sunday"), value: 0 },
+  { label: tm("form.weekdays.monday"), value: 1 },
+  { label: tm("form.weekdays.tuesday"), value: 2 },
+  { label: tm("form.weekdays.wednesday"), value: 3 },
+  { label: tm("form.weekdays.thursday"), value: 4 },
+  { label: tm("form.weekdays.friday"), value: 5 },
+  { label: tm("form.weekdays.saturday"), value: 6 },
+]);
 
-function toast(message: string, color: 'success' | 'error' | 'warning' = 'success') {
-  snackbar.value = { show: true, message, color }
+function toast(
+  message: string,
+  color: "success" | "error" | "warning" = "success",
+) {
+  snackbar.value = { show: true, message, color };
 }
 
 function parseTimeValue(value: any): number {
-  if (!value) return 0
-  const ts = new Date(value).getTime()
-  return Number.isNaN(ts) ? 0 : ts
+  if (!value) return 0;
+  const ts = new Date(value).getTime();
+  return Number.isNaN(ts) ? 0 : ts;
 }
 
-function formatTime(val: any): string {
-  if (!val) return tm('table.notAvailable')
+function formatTime(val: any, fallback = tm("table.notAvailable")): string {
+  if (!val) return fallback;
   try {
-    return new Date(val).toLocaleString()
+    const date = new Date(val);
+    return Number.isNaN(date.getTime()) ? fallback : date.toLocaleString();
   } catch {
-    return String(val)
+    return String(val);
   }
 }
 
-function jobTypeLabel(item: any): string {
-  if (item.run_once) return tm('table.type.once')
-  const type = item.job_type || 'active_agent'
-  const map: Record<string, string> = {
-    active_agent: tm('table.type.activeAgent'),
-    workflow: tm('table.type.workflow')
-  }
-  return map[type] || tm('table.type.unknown', { type })
+function taskPreview(item: any): string {
+  const text = String(item.note || item.description || "").trim();
+  if (!text) return item.job_id || tm("table.notAvailable");
+  return text.length > 86 ? `${text.slice(0, 86)}...` : text;
 }
 
-function scheduleLabel(item: any): string {
+function getJobSession(job: any): string {
+  return String(job.session || job?.payload?.session || "").trim();
+}
+
+function deliveryTargetText(item: any): string {
+  return getJobSession(item) || tm("card.noDeliveryTarget");
+}
+
+function nextRunText(item: any): string {
   if (item.run_once) {
-    return formatTime(item.run_at)
+    return tm("card.runAt", { time: formatTime(item.run_at) });
   }
-  return item.cron_expression || tm('table.notAvailable')
+  return tm("card.nextRun", {
+    time: formatTime(item.next_run_time, tm("table.notAvailable")),
+  });
 }
 
-function scheduleMeta(item: any): string {
-  if (item.run_once) {
-    return tm('table.type.once')
+function lastRunTooltipText(item: any): string {
+  const lastRun = `${tm("table.headers.lastRun")}: ${formatTime(item.last_run_at)}`;
+  const lastError = String(item.last_error || "").trim();
+  if (!lastError) {
+    return lastRun;
   }
-  return item.timezone || tm('table.timezoneLocal')
+  return `${lastRun} · ${lastError}`;
+}
+
+function scheduleProductLabel(item: any): string {
+  if (item.run_once) {
+    return tm("card.onceAt", { time: formatTime(item.run_at) });
+  }
+
+  const cron = String(item.cron_expression || "").trim();
+  const parts = cron.split(/\s+/);
+  if (parts.length !== 5) {
+    return cron || tm("table.notAvailable");
+  }
+
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+  const minuteInterval = /^\*\/(\d+)$/.exec(minute);
+  if (
+    minuteInterval &&
+    hour === "*" &&
+    dayOfMonth === "*" &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return tm("card.everyMinutes", { count: Number(minuteInterval[1]) });
+  }
+
+  const hourInterval = /^\*\/(\d+)$/.exec(hour);
+  if (
+    minute === "0" &&
+    hourInterval &&
+    dayOfMonth === "*" &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return tm("card.everyHours", { count: Number(hourInterval[1]) });
+  }
+
+  const dayInterval = /^\*\/(\d+)$/.exec(dayOfMonth);
+  if (
+    minute === "0" &&
+    hour === "0" &&
+    dayInterval &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return tm("card.everyDays", { count: Number(dayInterval[1]) });
+  }
+
+  const minuteNumber = Number(minute);
+  const hourNumber = Number(hour);
+  const dayOfMonthNumber = Number(dayOfMonth);
+  const dayOfWeekNumber = Number(dayOfWeek);
+  if (!isCronTime(minuteNumber, hourNumber)) {
+    return tm("card.customCron", { cron });
+  }
+  const time = `${padTimePart(hourNumber)}:${padTimePart(minuteNumber)}`;
+  if (dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
+    return tm("card.dailyAt", { time });
+  }
+  if (
+    dayOfMonth === "*" &&
+    month === "*" &&
+    Number.isInteger(dayOfWeekNumber) &&
+    dayOfWeekNumber >= 0 &&
+    dayOfWeekNumber <= 6
+  ) {
+    return tm("card.weeklyAt", {
+      day: weekdayText(dayOfWeekNumber),
+      time,
+    });
+  }
+  if (
+    Number.isInteger(dayOfMonthNumber) &&
+    dayOfMonthNumber >= 1 &&
+    dayOfMonthNumber <= 31 &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return tm("card.monthlyAt", { day: dayOfMonthNumber, time });
+  }
+  return tm("card.customCron", { cron });
+}
+
+function weekdayText(value: number): string {
+  const keyMap = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ];
+  return tm(`form.weekdays.${keyMap[value]}`);
+}
+
+async function loadUmos(force = false) {
+  if (loadingUmos.value || (!force && availableUmos.value.length)) return;
+  loadingUmos.value = true;
+  try {
+    const res = await axios.get("/api/session/active-umos");
+    if (res.data.status === "ok") {
+      const loadedUmos = Array.isArray(res.data.data?.umos)
+        ? res.data.data.umos
+        : [];
+      availableUmos.value = Array.from(
+        new Set([...availableUmos.value, ...loadedUmos]),
+      );
+    }
+  } catch {
+    // The field remains editable through free search only when a UMO list is available.
+  } finally {
+    loadingUmos.value = false;
+  }
 }
 
 async function loadJobs() {
-  loading.value = true
+  loading.value = true;
   try {
-    const res = await axios.get('/api/cron/jobs')
-    if (res.data.status === 'ok') {
-      const data = Array.isArray(res.data.data) ? res.data.data : []
+    const res = await axios.get("/api/cron/jobs");
+    if (res.data.status === "ok") {
+      const data = Array.isArray(res.data.data) ? res.data.data : [];
       jobs.value = data.map((job: any) => ({
         ...job,
-        session: job?.payload?.session || job?.session || ''
-      }))
+        session: job?.payload?.session || job?.session || "",
+      }));
     } else {
-      toast(res.data.message || tm('messages.loadFailed'), 'error')
+      toast(res.data.message || tm("messages.loadFailed"), "error");
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.loadFailed'), 'error')
+    toast(e?.response?.data?.message || tm("messages.loadFailed"), "error");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function loadPlatforms() {
   try {
-    const res = await axios.get('/api/platform/stats')
-    if (res.data.status === 'ok' && Array.isArray(res.data.data?.platforms)) {
+    const res = await axios.get("/api/platform/stats");
+    if (res.data.status === "ok" && Array.isArray(res.data.data?.platforms)) {
       proactivePlatforms.value = res.data.data.platforms
         .filter((p: any) => p?.meta?.support_proactive_message)
         .map((p: any) => ({
-          id: p?.id || p?.meta?.id || 'unknown',
-          name: p?.meta?.name || p?.type || '',
-          display_name: p?.meta?.display_name || p?.display_name
-        }))
+          id: p?.id || p?.meta?.id || "unknown",
+          name: p?.meta?.name || p?.type || "",
+          display_name: p?.meta?.display_name || p?.display_name,
+        }));
     }
   } catch {
     // Ignore platform fetch failures and keep the fallback state.
@@ -351,348 +747,657 @@ async function loadPlatforms() {
 
 async function toggleJob(job: any) {
   try {
-    const res = await axios.patch(`/api/cron/jobs/${job.job_id}`, { enabled: job.enabled })
-    if (res.data.status !== 'ok') {
-      toast(res.data.message || tm('messages.updateFailed'), 'error')
-      await loadJobs()
+    const res = await axios.patch(`/api/cron/jobs/${job.job_id}`, {
+      enabled: job.enabled,
+    });
+    if (res.data.status !== "ok") {
+      toast(res.data.message || tm("messages.updateFailed"), "error");
+      await loadJobs();
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.updateFailed'), 'error')
-    await loadJobs()
+    toast(e?.response?.data?.message || tm("messages.updateFailed"), "error");
+    await loadJobs();
   }
 }
 
 async function deleteJob(job: any) {
   try {
-    const res = await axios.delete(`/api/cron/jobs/${job.job_id}`)
-    if (res.data.status === 'ok') {
-      toast(tm('messages.deleteSuccess'))
-      jobs.value = jobs.value.filter((item) => item.job_id !== job.job_id)
+    const res = await axios.delete(`/api/cron/jobs/${job.job_id}`);
+    if (res.data.status === "ok") {
+      toast(tm("messages.deleteSuccess"));
+      jobs.value = jobs.value.filter((item) => item.job_id !== job.job_id);
     } else {
-      toast(res.data.message || tm('messages.deleteFailed'), 'error')
+      toast(res.data.message || tm("messages.deleteFailed"), "error");
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.deleteFailed'), 'error')
+    toast(e?.response?.data?.message || tm("messages.deleteFailed"), "error");
+  }
+}
+
+async function runJobNow(job: any) {
+  const jobId = String(job.job_id || "");
+  if (!jobId || runningJobIds.value.has(jobId)) return;
+  runningJobIds.value = new Set([...runningJobIds.value, jobId]);
+  try {
+    const res = await axios.post(`/api/cron/jobs/${jobId}/run`);
+    if (res.data.status === "ok") {
+      toast(tm("messages.runStarted"));
+      await loadJobs();
+    } else {
+      toast(res.data.message || tm("messages.runFailed"), "error");
+    }
+  } catch (e: any) {
+    toast(e?.response?.data?.message || tm("messages.runFailed"), "error");
+  } finally {
+    const next = new Set(runningJobIds.value);
+    next.delete(jobId);
+    runningJobIds.value = next;
   }
 }
 
 function openCreate() {
-  editingJobId.value = ''
-  resetNewJob()
-  createDialog.value = true
+  editingJobId.value = "";
+  resetNewJob();
+  createDialog.value = true;
+  loadUmos();
 }
 
 function toDatetimeLocalValue(value: any): string {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const offset = date.getTimezoneOffset()
-  const local = new Date(date.getTime() - offset * 60_000)
-  return local.toISOString().slice(0, 16)
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60_000);
+  return local.toISOString().slice(0, 16);
 }
 
 function toIsoDatetime(value: string): string {
-  if (!value) return ''
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toISOString()
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
 function resetNewJob() {
   newJob.value = {
-    run_once: false,
-    name: '',
-    note: '',
-    cron_expression: '',
-    run_at: '',
-    session: '',
-    timezone: '',
-    enabled: true
-  }
+    schedule_mode: "once",
+    name: "",
+    note: "",
+    cron_expression: "",
+    run_at: "",
+    interval_value: 1,
+    interval_unit: "hours",
+    daily_time: "09:00",
+    weekly_day: 1,
+    weekly_time: "09:00",
+    monthly_day: 1,
+    monthly_time: "09:00",
+    session: "",
+    timezone: "",
+    enabled: true,
+  };
 }
 
 function openEdit(job: any) {
-  editingJobId.value = job.job_id
-  newJob.value = {
-    run_once: !!job.run_once,
-    name: job.name || '',
-    note: job.note || job.description || '',
-    cron_expression: job.cron_expression || '',
-    run_at: toDatetimeLocalValue(job.run_at),
-    session: job.session || job?.payload?.session || '',
-    timezone: job.timezone || '',
-    enabled: job.enabled !== false
+  editingJobId.value = job.job_id;
+  const schedule = readScheduleFromJob(job);
+  if (job.session && !availableUmos.value.includes(job.session)) {
+    availableUmos.value = [job.session, ...availableUmos.value];
   }
-  createDialog.value = true
+  newJob.value = {
+    schedule_mode: schedule.schedule_mode,
+    name: job.name || "",
+    note: job.note || job.description || "",
+    cron_expression: schedule.cron_expression,
+    run_at: toDatetimeLocalValue(job.run_at),
+    interval_value: schedule.interval_value,
+    interval_unit: schedule.interval_unit,
+    daily_time: schedule.daily_time,
+    weekly_day: schedule.weekly_day,
+    weekly_time: schedule.weekly_time,
+    monthly_day: schedule.monthly_day,
+    monthly_time: schedule.monthly_time,
+    session: job.session || job?.payload?.session || "",
+    timezone: job.timezone || "",
+    enabled: job.enabled !== false,
+  };
+  createDialog.value = true;
+  loadUmos(true);
+}
+
+function parseTimeParts(
+  value: string,
+): { hour: number; minute: number } | null {
+  const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(value || "");
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+}
+
+function padTimePart(value: string | number): string {
+  return String(value).padStart(2, "0");
+}
+
+function isCronTime(minute: number, hour: number): boolean {
+  return (
+    Number.isInteger(minute) &&
+    minute >= 0 &&
+    minute <= 59 &&
+    Number.isInteger(hour) &&
+    hour >= 0 &&
+    hour <= 23
+  );
+}
+
+function buildCronExpression(): string {
+  const mode = newJob.value.schedule_mode;
+  if (mode === "interval") {
+    const value = Math.max(1, Number(newJob.value.interval_value || 1));
+    if (newJob.value.interval_unit === "minutes") {
+      return `*/${Math.min(value, 59)} * * * *`;
+    }
+    if (newJob.value.interval_unit === "hours") {
+      return `0 */${Math.min(value, 23)} * * *`;
+    }
+    return `0 0 */${Math.min(value, 31)} * *`;
+  }
+  if (mode === "daily") {
+    const time = parseTimeParts(newJob.value.daily_time);
+    if (!time) return "";
+    return `${time.minute} ${time.hour} * * *`;
+  }
+  if (mode === "weekly") {
+    const time = parseTimeParts(newJob.value.weekly_time);
+    if (!time) return "";
+    const weekday = Math.min(Math.max(Number(newJob.value.weekly_day), 0), 6);
+    return `${time.minute} ${time.hour} * * ${weekday}`;
+  }
+  if (mode === "monthly") {
+    const time = parseTimeParts(newJob.value.monthly_time);
+    if (!time) return "";
+    const day = Math.min(
+      Math.max(Number(newJob.value.monthly_day || 1), 1),
+      31,
+    );
+    return `${time.minute} ${time.hour} ${day} * *`;
+  }
+  return newJob.value.cron_expression.trim();
+}
+
+function readScheduleFromJob(job: any) {
+  const fallback = {
+    schedule_mode: "cron" as ScheduleMode,
+    cron_expression: job.cron_expression || "",
+    interval_value: 1,
+    interval_unit: "hours" as IntervalUnit,
+    daily_time: "09:00",
+    weekly_day: 1,
+    weekly_time: "09:00",
+    monthly_day: 1,
+    monthly_time: "09:00",
+  };
+  if (job.run_once) {
+    return { ...fallback, schedule_mode: "once" as ScheduleMode };
+  }
+
+  const cron = String(job.cron_expression || "").trim();
+  const parts = cron.split(/\s+/);
+  if (parts.length !== 5) {
+    return fallback;
+  }
+
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+  const minuteNumber = Number(minute);
+  const hourNumber = Number(hour);
+  const dayOfMonthNumber = Number(dayOfMonth);
+  const dayOfWeekNumber = Number(dayOfWeek);
+  const hasCronTime = isCronTime(minuteNumber, hourNumber);
+  const time = hasCronTime
+    ? `${padTimePart(hourNumber)}:${padTimePart(minuteNumber)}`
+    : "09:00";
+
+  const minuteInterval = /^\*\/(\d+)$/.exec(minute);
+  if (
+    minuteInterval &&
+    hour === "*" &&
+    dayOfMonth === "*" &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return {
+      ...fallback,
+      schedule_mode: "interval" as ScheduleMode,
+      interval_value: Number(minuteInterval[1]),
+      interval_unit: "minutes" as IntervalUnit,
+    };
+  }
+
+  const hourInterval = /^\*\/(\d+)$/.exec(hour);
+  if (
+    minute === "0" &&
+    hourInterval &&
+    dayOfMonth === "*" &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return {
+      ...fallback,
+      schedule_mode: "interval" as ScheduleMode,
+      interval_value: Number(hourInterval[1]),
+      interval_unit: "hours" as IntervalUnit,
+    };
+  }
+
+  const dayInterval = /^\*\/(\d+)$/.exec(dayOfMonth);
+  if (
+    minute === "0" &&
+    hour === "0" &&
+    dayInterval &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return {
+      ...fallback,
+      schedule_mode: "interval" as ScheduleMode,
+      interval_value: Number(dayInterval[1]),
+      interval_unit: "days" as IntervalUnit,
+    };
+  }
+
+  if (hasCronTime && dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
+    return {
+      ...fallback,
+      schedule_mode: "daily" as ScheduleMode,
+      daily_time: time,
+    };
+  }
+
+  if (
+    hasCronTime &&
+    dayOfMonth === "*" &&
+    month === "*" &&
+    Number.isInteger(dayOfWeekNumber) &&
+    dayOfWeekNumber >= 0 &&
+    dayOfWeekNumber <= 6
+  ) {
+    return {
+      ...fallback,
+      schedule_mode: "weekly" as ScheduleMode,
+      weekly_day: dayOfWeekNumber,
+      weekly_time: time,
+    };
+  }
+
+  if (
+    hasCronTime &&
+    Number.isInteger(dayOfMonthNumber) &&
+    dayOfMonthNumber >= 1 &&
+    dayOfMonthNumber <= 31 &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return {
+      ...fallback,
+      schedule_mode: "monthly" as ScheduleMode,
+      monthly_day: dayOfMonthNumber,
+      monthly_time: time,
+    };
+  }
+
+  return fallback;
+}
+
+function buildPayload() {
+  const runOnce = newJob.value.schedule_mode === "once";
+  const cronExpression = runOnce ? "" : buildCronExpression();
+  return {
+    run_once: runOnce,
+    name: newJob.value.name.trim(),
+    note: newJob.value.note.trim(),
+    cron_expression: cronExpression,
+    run_at: runOnce ? toIsoDatetime(newJob.value.run_at) : "",
+    session: newJob.value.session,
+    timezone: newJob.value.timezone,
+    enabled: newJob.value.enabled,
+  };
+}
+
+function validateJobForm(): boolean {
+  if (!newJob.value.name.trim()) {
+    toast(tm("messages.nameRequired"), "warning");
+    return false;
+  }
+  if (!newJob.value.note.trim()) {
+    toast(tm("messages.noteRequired"), "warning");
+    return false;
+  }
+  return validateScheduleFields();
+}
+
+function validateScheduleFields(): boolean {
+  const mode = newJob.value.schedule_mode;
+  if (mode === "once") {
+    if (!newJob.value.run_at) {
+      toast(tm("messages.runAtRequired"), "warning");
+      return false;
+    }
+    return true;
+  }
+
+  if (mode === "interval") {
+    const value = Number(newJob.value.interval_value);
+    const validUnit = ["minutes", "hours", "days"].includes(
+      newJob.value.interval_unit,
+    );
+    if (!Number.isInteger(value) || value < 1 || !validUnit) {
+      toast(tm("messages.intervalRequired"), "warning");
+      return false;
+    }
+    return true;
+  }
+
+  if (mode === "daily") {
+    if (!parseTimeParts(newJob.value.daily_time)) {
+      toast(tm("messages.dailyTimeRequired"), "warning");
+      return false;
+    }
+    return true;
+  }
+
+  if (mode === "weekly") {
+    const weekday = Number(newJob.value.weekly_day);
+    if (
+      !parseTimeParts(newJob.value.weekly_time) ||
+      !Number.isInteger(weekday) ||
+      weekday < 0 ||
+      weekday > 6
+    ) {
+      toast(tm("messages.weeklyTimeRequired"), "warning");
+      return false;
+    }
+    return true;
+  }
+
+  if (mode === "monthly") {
+    const day = Number(newJob.value.monthly_day);
+    if (
+      !parseTimeParts(newJob.value.monthly_time) ||
+      !Number.isInteger(day) ||
+      day < 1 ||
+      day > 31
+    ) {
+      toast(tm("messages.monthlyTimeRequired"), "warning");
+      return false;
+    }
+    return true;
+  }
+
+  if (!newJob.value.cron_expression.trim()) {
+    toast(tm("messages.cronRequired"), "warning");
+    return false;
+  }
+  return true;
 }
 
 async function createJob() {
-  if (!newJob.value.session) {
-    toast(tm('messages.sessionRequired'), 'warning')
-    return
-  }
-  if (!newJob.value.note) {
-    toast(tm('messages.noteRequired'), 'warning')
-    return
-  }
-  if (!newJob.value.run_once && !newJob.value.cron_expression) {
-    toast(tm('messages.cronRequired'), 'warning')
-    return
-  }
-  if (newJob.value.run_once && !newJob.value.run_at) {
-    toast(tm('messages.runAtRequired'), 'warning')
-    return
+  if (!validateJobForm()) {
+    return;
   }
 
-  creating.value = true
+  creating.value = true;
   try {
-    const payload = {
-      ...newJob.value,
-      run_at: newJob.value.run_once ? toIsoDatetime(newJob.value.run_at) : ''
-    }
-    const res = await axios.post('/api/cron/jobs', payload)
-    if (res.data.status === 'ok') {
-      toast(tm('messages.createSuccess'))
-      createDialog.value = false
-      editingJobId.value = ''
-      resetNewJob()
-      await loadJobs()
+    const payload = buildPayload();
+    const res = await axios.post("/api/cron/jobs", payload);
+    if (res.data.status === "ok") {
+      toast(tm("messages.createSuccess"));
+      createDialog.value = false;
+      editingJobId.value = "";
+      resetNewJob();
+      await loadJobs();
     } else {
-      toast(res.data.message || tm('messages.createFailed'), 'error')
+      toast(res.data.message || tm("messages.createFailed"), "error");
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.createFailed'), 'error')
+    toast(e?.response?.data?.message || tm("messages.createFailed"), "error");
   } finally {
-    creating.value = false
+    creating.value = false;
   }
 }
 
 async function updateJob() {
   if (!editingJobId.value) {
-    return
+    return;
   }
-  if (!newJob.value.session) {
-    toast(tm('messages.sessionRequired'), 'warning')
-    return
-  }
-  if (!newJob.value.note) {
-    toast(tm('messages.noteRequired'), 'warning')
-    return
-  }
-  if (!newJob.value.run_once && !newJob.value.cron_expression) {
-    toast(tm('messages.cronRequired'), 'warning')
-    return
-  }
-  if (newJob.value.run_once && !newJob.value.run_at) {
-    toast(tm('messages.runAtRequired'), 'warning')
-    return
+  if (!validateJobForm()) {
+    return;
   }
 
-  creating.value = true
+  creating.value = true;
   try {
     const payload = {
-      ...newJob.value,
-      run_at: newJob.value.run_once ? toIsoDatetime(newJob.value.run_at) : '',
-      description: newJob.value.note
-    }
-    const res = await axios.patch(`/api/cron/jobs/${editingJobId.value}`, payload)
-    if (res.data.status === 'ok') {
-      toast(tm('messages.updateSuccess'))
-      createDialog.value = false
-      editingJobId.value = ''
-      resetNewJob()
-      await loadJobs()
+      ...buildPayload(),
+      description: newJob.value.note,
+    };
+    const res = await axios.patch(
+      `/api/cron/jobs/${editingJobId.value}`,
+      payload,
+    );
+    if (res.data.status === "ok") {
+      toast(tm("messages.updateSuccess"));
+      createDialog.value = false;
+      editingJobId.value = "";
+      resetNewJob();
+      await loadJobs();
     } else {
-      toast(res.data.message || tm('messages.updateFailed'), 'error')
+      toast(res.data.message || tm("messages.updateFailed"), "error");
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.updateFailed'), 'error')
+    toast(e?.response?.data?.message || tm("messages.updateFailed"), "error");
   } finally {
-    creating.value = false
+    creating.value = false;
   }
 }
 
 async function submitJob() {
   if (isEditing.value) {
-    await updateJob()
-    return
+    await updateJob();
+    return;
   }
-  await createJob()
+  await createJob();
 }
 
 onMounted(() => {
-  loadJobs()
-  loadPlatforms()
-})
+  loadJobs();
+  loadPlatforms();
+});
 </script>
 
 <style scoped>
-@import '@/styles/dashboard-shell.css';
+@import "@/styles/dashboard-shell.css";
 
 .cron-page {
   padding-bottom: 40px;
+  background: transparent;
+}
+
+.cron-shell {
+  max-width: none;
+}
+
+.cron-detail-width {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.cron-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.cron-header-copy {
+  min-width: 0;
+}
+
+.cron-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .task-surface {
   min-width: 0;
 }
 
-.platform-section {
-  margin-bottom: 24px;
-}
-
-.platform-chip-wrap {
+.task-filter-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
 }
 
-.platform-empty {
-  margin-bottom: 24px;
+.task-filter-bar :deep(.v-field) {
+  box-shadow: none;
 }
 
-.task-table-wrap {
-  border: 1px solid var(--dashboard-border);
-  border-radius: 14px;
-  overflow: auto;
-  background: var(--dashboard-surface);
+.task-filter-bar :deep(.v-input) {
+  flex: 0 1 auto;
 }
 
-.task-table {
-  width: 100%;
-  min-width: 1120px;
-  border-collapse: collapse;
-}
-
-.task-table .col-name {
-  width: 220px;
-}
-
-.task-table .col-type {
-  width: 120px;
-}
-
-.task-table .col-cron {
+.task-filter-bar :deep(.v-text-field) {
   width: 260px;
 }
 
-.task-table .col-session {
-  width: 340px;
+.task-filter-bar :deep(.v-autocomplete) {
+  width: 300px;
 }
 
-.task-table .col-next-run,
-.task-table .col-last-run {
-  width: 180px;
+.supported-platform-link {
+  min-width: 0;
+  padding-inline: 4px;
+  vertical-align: baseline;
 }
 
-.task-table .col-actions {
-  width: 220px;
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.task-table th {
-  padding: 14px 16px;
-  text-align: left;
-  background: rgba(var(--v-theme-primary), 0.04);
-  color: var(--dashboard-muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  border-bottom: 1px solid var(--dashboard-border);
+.task-description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 6px;
+}
+
+.task-meta-item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.task-table td {
-  padding: 16px;
-  vertical-align: top;
-  border-bottom: 1px solid var(--dashboard-border);
+.list-action-icon-btn {
+  color: rgba(var(--v-theme-on-surface), 0.78);
 }
 
-.task-table tbody tr:last-child td {
-  border-bottom: 0;
+.list-action-icon-btn:hover {
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgb(var(--v-theme-on-surface));
 }
 
-.name-col {
-  min-width: 220px;
-}
-
-.task-name,
-.task-text {
-  color: var(--dashboard-text);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.task-name {
-  font-weight: 600;
-}
-
-.task-subline {
-  margin-top: 6px;
+.platform-dialog-description {
+  margin: 0 0 16px;
   color: var(--dashboard-muted);
-  font-size: 12px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.task-session {
-  max-width: 340px;
-  color: var(--dashboard-text);
   font-size: 14px;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
+  line-height: 1.7;
 }
 
-.actions-col {
-  width: 220px;
-}
-
-.table-actions {
+.platform-list {
   display: grid;
   gap: 10px;
-  justify-items: start;
-  min-width: 190px;
 }
 
-.table-actions-toggle {
-  display: flex;
-  align-items: center;
-}
-
-.table-actions-switch {
-  flex: 0 0 auto;
-}
-
-.cron-page :deep(.table-actions-switch .v-selection-control) {
-  min-width: auto;
-}
-
-.table-actions-buttons {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-}
-
-.state-panel {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.platform-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
-  min-height: 220px;
-  border: 1px dashed var(--dashboard-border-strong);
-  border-radius: 14px;
-  color: var(--dashboard-muted);
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--dashboard-border);
+  border-radius: 8px;
+}
+
+.platform-name {
+  min-width: 0;
+  color: var(--dashboard-text);
   font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platform-id {
+  color: var(--dashboard-muted);
+  font-size: 12px;
+}
+
+.platform-dialog-empty {
+  min-height: 120px;
+}
+
+.schedule-field {
+  display: grid;
+  grid-template-columns: minmax(150px, 180px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.schedule-mode-select {
+  min-width: 0;
+}
+
+.schedule-inline-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
 }
 
 @media (max-width: 900px) {
-  .table-actions {
-    justify-items: start;
+  .cron-header {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .table-actions-buttons,
-  .table-actions-toggle {
+  .cron-header-actions {
     justify-content: flex-start;
+  }
+
+  .task-filter-bar {
+    align-items: stretch;
+  }
+
+  .schedule-field,
+  .schedule-inline-fields {
+    grid-template-columns: 1fr;
   }
 }
 </style>
