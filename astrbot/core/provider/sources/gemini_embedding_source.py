@@ -20,8 +20,13 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         self.provider_config = provider_config
         self.provider_settings = provider_settings
 
-        # 使用 .get() 避免缺少配置时引发 KeyError 崩溃
+        # 校验必需的配置，避免静默使用空字符串导致后续难以排查的问题
         api_key: str = provider_config.get("embedding_api_key", "")
+        if not api_key:
+            raise ValueError(
+                "Gemini embedding provider 配置错误: 缺少必需的 'embedding_api_key'"
+            )
+
         api_base: str = provider_config.get("embedding_api_base", "")
         timeout: int = int(provider_config.get("timeout", 20))
 
@@ -65,14 +70,18 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
             return result.embeddings[0].values
         except APIError as e:
-            raise Exception(f"Gemini Embedding API请求失败: {e.message}")
+            raise Exception(f"Gemini Embedding API请求失败: {e.message}") from e
         except Exception as e:
-            raise Exception(f"Gemini Embedding 发生异常: {str(e)}")
+            raise Exception(f"Gemini Embedding 发生异常: {e}") from e
 
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
         # 批量获取文本的嵌入
         if not text:
             return []
+
+        # 显式校验输入列表中的元素，防止传入空/空格文本导致后续接口或维度计算异常
+        if any(not s or not s.strip() for s in text):
+            raise ValueError("批量输入文本列表中不能包含空文本")
 
         try:
             # 构造 Content 列表以规避 gemini-embedding-2 批处理单返回 bug
@@ -103,9 +112,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
             return embeddings
         except APIError as e:
-            raise Exception(f"Gemini Embedding API批量请求失败: {e.message}")
+            raise Exception(f"Gemini Embedding API批量请求失败: {e.message}") from e
         except Exception as e:
-            raise Exception(f"Gemini Embedding 批量请求发生异常: {str(e)}")
+            raise Exception(f"Gemini Embedding 批量请求发生异常: {e}") from e
 
     def get_dim(self) -> int:
         # 获取向量的维度
