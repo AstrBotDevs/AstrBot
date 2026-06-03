@@ -798,15 +798,11 @@ class PluginRoute(Route):
         # cross-origin iframe (the Tauri webview).  Since frame-ancestors and
         # X-Frame-Options inspect the *entire* ancestor chain, enforcing them here
         # would block plugin pages from loading inside the nested iframe.
-        if not os.environ.get("ASTRBOT_LAUNCHER"):
+        csp = "object-src 'none'; base-uri 'self'"
+        if os.environ.get("ASTRBOT_LAUNCHER") not in ("1", "true"):
             response.headers["X-Frame-Options"] = "SAMEORIGIN"
-            response.headers["Content-Security-Policy"] = (
-                "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
-            )
-        else:
-            response.headers["Content-Security-Policy"] = (
-                "object-src 'none'; base-uri 'self'"
-            )
+            csp = f"frame-ancestors 'self'; {csp}"
+        response.headers["Content-Security-Policy"] = csp
 
         return response
 
