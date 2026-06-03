@@ -2391,13 +2391,13 @@ CONFIG_METADATA_2 = {
                             "type": {
                                 "description": "思考类型",
                                 "type": "string",
-                                "options": ["", "adaptive", "enabled"],
+                                "options": ["", "adaptive", "enabled", "disabled"],
                                 "hint": "'adaptive' 自适应模式 (推荐 Opus 4.6+/Sonnet 4.6+)。'enabled' 手动启用思考。留空则使用手动 budget 模式。参见: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking",
                             },
                             "budget": {
                                 "description": "思考预算",
                                 "type": "int",
-                                "hint": "手动 budget_tokens，需 >= 1024。仅在 type 为空时生效。Opus 4.6 / Sonnet 4.6 上已弃用。参见: https://platform.claude.com/docs/en/build-with-claude/extended-thinking",
+                                "hint": "手动 budget_tokens，需 >= 1024。在 type 为空或 enabled 时生效。Opus 4.6 / Sonnet 4.6 上已弃用。参见: https://platform.claude.com/docs/en/build-with-claude/extended-thinking",
                             },
                             "effort": {
                                 "description": "思考深度",

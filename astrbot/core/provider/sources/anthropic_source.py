@@ -147,11 +147,17 @@ class ProviderAnthropic(Provider):
                 payloads["output_config"] = output_cfg
         elif thinking_type == "enabled":
             payloads["thinking"] = {"type": "enabled"}
+            if self.thinking_config.get("budget"):
+                payloads["thinking"]["budget_tokens"] = self.thinking_config.get(
+                    "budget"
+                )
         elif not thinking_type and self.thinking_config.get("budget"):
             payloads["thinking"] = {
                 "type": "enabled",
                 "budget_tokens": self.thinking_config.get("budget"),
             }
+        elif thinking_type == "disabled":
+            payloads["thinking"] = {"type": "disabled"}
 
     def _prepare_payload(self, messages: list[dict]):
         """准备 Anthropic API 的请求 payload
