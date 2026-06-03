@@ -51,11 +51,9 @@ class RetrievalManager:
         """初始化检索管理器
 
         Args:
-            vec_db_factory: 向量数据库工厂
             sparse_retriever: 稀疏检索器
             rank_fusion: 结果融合器
             kb_db: 知识库数据库实例
-
         """
         self.sparse_retriever = sparse_retriever
         self.rank_fusion = rank_fusion
@@ -80,13 +78,18 @@ class RetrievalManager:
         Args:
             query: 查询文本
             kb_ids: 知识库 ID 列表
+            kb_id_helper_map: 知识库助手映射
+            top_k_fusion: 融合召回的数量
             top_m_final: 最终返回数量
-            enable_rerank: 是否启用 Rerank
 
         Returns:
             List[RetrievalResult]: 检索结果列表
 
         """
+        if not isinstance(query, str) or not query.strip():
+            # skip retrieval for empty / non-string queries (e.g. images, stickers)
+            return []
+
         if not kb_ids:
             return []
 
@@ -152,22 +155,30 @@ class RetrievalManager:
         retrieval_results = []
         for fr in fused_results:
             metadata_dict = metadata_map.get(fr.doc_id)
-            if metadata_dict:
-                retrieval_results.append(
-                    RetrievalResult(
-                        chunk_id=fr.chunk_id,
-                        doc_id=fr.doc_id,
-                        doc_name=metadata_dict["document"].doc_name,
-                        kb_id=fr.kb_id,
-                        kb_name=metadata_dict["knowledge_base"].kb_name,
-                        content=fr.content,
-                        score=fr.score,
-                        metadata={
-                            "chunk_index": fr.chunk_index,
-                            "char_count": len(fr.content),
-                        },
-                    ),
+            if not metadata_dict:
+                logger.warning(
+                    "Metadata for doc_id %s (kb %s, chunk %s) not found; skipping.",
+                    getattr(fr, "doc_id", "unknown"),
+                    getattr(fr, "kb_id", "unknown"),
+                    getattr(fr, "chunk_id", "unknown"),
                 )
+                continue
+
+            retrieval_results.append(
+                RetrievalResult(
+                    chunk_id=getattr(fr, "chunk_id", None),
+                    doc_id=fr.doc_id,
+                    doc_name=metadata_dict["document"].doc_name,
+                    kb_id=fr.kb_id,
+                    kb_name=metadata_dict["knowledge_base"].kb_name,
+                    content=fr.content,
+                    score=fr.score,
+                    metadata={
+                        "chunk_index": getattr(fr, "chunk_index", None),
+                        "char_count": len(fr.content),
+                    },
+                ),
+            )
 
         # 5. Rerank
         first_rerank = None
