@@ -417,7 +417,7 @@ class ResultDecorateStage(Stage):
                         # At 与正文之间用一个空格分隔，不强制换行
                         # 各平台适配器（如 aiocqhttp）会在发送时进一步处理前导空白，
                         # 确保最终渲染为 "@用户 你好" 而非 "@用户\n你好"
-                        result.chain[1].text = " " + result.chain[1].text
+                        result.chain[1] = Plain(" " + result.chain[1].text)
 
                 # 引用回复
                 if self.reply_with_quote:

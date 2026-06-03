@@ -92,8 +92,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
             elif isinstance(segment, Plain):
                 # 跳过纯空白文本(如单独的换行符、空格等)
+                # 注意:不重置 prev_is_at,避免 [At, Plain("\n"), Plain("你好")]
+                #   这种场景下空白 Plain 阻断空格插入
                 if not segment.text.strip():
-                    prev_is_at = False
                     continue
 
                 if prev_is_at:
@@ -103,7 +104,11 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     # 直接拼接会导致 "@用户  \n你好" 这样的双空白
                     # 统一用 " " 替换所有前导空白，确保 @ 与正文之间仅有一个空格
                     segment.text = " " + segment.text.lstrip()
+                    # 注意：不修改 segment.text，避免污染原始 MessageChain（影响 hook 等消费者）
+                    text = " " + segment.text.lstrip()
                     prev_is_at = False
+                    ret.append({"type": "text", "data": {"text": text}})
+                    continue
 
                 d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
                 ret.append(d)
