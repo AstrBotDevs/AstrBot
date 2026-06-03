@@ -43,7 +43,7 @@
   },
   "filters": {
     "search": "Search title and content",
-    "umo": "Filter by UMO",
+    "umo": "Filter by delivery target",
     "noUmos": "No UMOs",
     "noMatches": "No matching future tasks."
   },

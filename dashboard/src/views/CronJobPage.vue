@@ -2,7 +2,7 @@
   <div class="dashboard-page cron-page" :class="{ 'is-dark': isDark }">
     <v-container fluid class="dashboard-shell cron-shell pa-4 pa-md-6">
       <div class="cron-detail-width">
-        <div class="cron-header mb-4 pt-4 pb-4">
+        <div class="cron-header mb-4 pb-4">
           <div class="cron-header-copy">
             <h1 class="dashboard-title">{{ tm("page.title") }}</h1>
             <div class="dashboard-subtitle">

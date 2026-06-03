@@ -43,7 +43,7 @@
   },
   "filters": {
     "search": "搜索任务名称和内容",
-    "umo": "按 UMO 筛选",
+    "umo": "按投递地筛选",
     "noUmos": "暂无 UMO",
     "noMatches": "没有匹配的未来任务。"
   },
