@@ -15,6 +15,7 @@ from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.utils.history_saver import persist_agent_history
 
@@ -254,9 +255,14 @@ class CronJobManager:
 
     async def _run_active_agent_job(self, job: CronJob, start_time: datetime) -> None:
         payload = job.payload or {}
-        session_str = payload.get("session")
-        if not session_str:
-            raise ValueError("ActiveAgentCronJob missing session.")
+        delivery_session_str = str(payload.get("session") or "").strip()
+        session_str = delivery_session_str or str(
+            MessageSession(
+                platform_name="cron",
+                message_type=MessageType.OTHER_MESSAGE,
+                session_id=job.job_id,
+            )
+        )
         note = payload.get("note") or job.description or job.name
 
         extras = {
@@ -271,7 +277,7 @@ class CronJobManager:
                 "run_at": (
                     job.payload.get("run_at") if isinstance(job.payload, dict) else None
                 ),
-                "session": session_str,
+                "session": delivery_session_str,
             },
             "cron_payload": payload,
         }
@@ -280,6 +286,7 @@ class CronJobManager:
             message=note,
             session_str=session_str,
             extras=extras,
+            delivery_session_str=delivery_session_str,
         )
 
     async def _woke_main_agent(
@@ -288,6 +295,7 @@ class CronJobManager:
         message: str,
         session_str: str,
         extras: dict,
+        delivery_session_str: str = "",
     ) -> None:
         """Woke the main agent to handle the cron job message."""
         from astrbot.core.astr_main_agent import (
@@ -362,11 +370,12 @@ class CronJobManager:
             "Output using same language as previous conversation. "
             "After completing your task, summarize and output your actions and results."
         )
-        if not req.func_tool:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(
-            self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
-        )
+        if delivery_session_str:
+            if not req.func_tool:
+                req.func_tool = ToolSet()
+            req.func_tool.add_tool(
+                self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
+            )
 
         result = await build_main_agent(
             event=cron_event, plugin_context=self.ctx, config=config, req=req

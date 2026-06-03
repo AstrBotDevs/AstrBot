@@ -16,6 +16,7 @@ class CronRoute(Route):
     ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
+        self._background_tasks: set[asyncio.Task] = set()
         self.routes = [
             ("/cron/jobs", ("GET", self.list_jobs)),
             ("/cron/jobs", ("POST", self.create_job)),
@@ -73,7 +74,7 @@ class CronRoute(Route):
             name = payload.get("name") or "active_agent_task"
             cron_expression = payload.get("cron_expression")
             note = payload.get("note") or payload.get("description") or name
-            session = payload.get("session")
+            session = str(payload.get("session") or "").strip()
             persona_id = payload.get("persona_id")
             provider_id = payload.get("provider_id")
             timezone = payload.get("timezone")
@@ -81,8 +82,6 @@ class CronRoute(Route):
             run_once = bool(payload.get("run_once", False))
             run_at = payload.get("run_at")
 
-            if not session:
-                return jsonify(Response().error("session is required").__dict__)
             if run_once and not run_at:
                 return jsonify(
                     Response().error("run_at is required when run_once=true").__dict__
@@ -174,11 +173,10 @@ class CronRoute(Route):
 
                 if "session" in payload:
                     session = str(payload.get("session") or "").strip()
-                    if not session:
-                        return jsonify(
-                            Response().error("session cannot be empty").__dict__
-                        )
-                    merged_payload["session"] = session
+                    if session:
+                        merged_payload["session"] = session
+                    else:
+                        merged_payload.pop("session", None)
 
                 note_updated = False
                 if "note" in payload:
@@ -294,7 +292,9 @@ class CronRoute(Route):
             job = await cron_mgr.db.get_cron_job(job_id)
             if not job:
                 return jsonify(Response().error("Job not found").__dict__)
-            asyncio.create_task(cron_mgr.run_job_now(job_id))
+            task = asyncio.create_task(cron_mgr.run_job_now(job_id))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
             return jsonify(Response().ok(message="started").__dict__)
         except Exception as e:  # noqa: BLE001
             logger.error(traceback.format_exc())

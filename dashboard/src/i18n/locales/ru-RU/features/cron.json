@@ -39,12 +39,14 @@
     "everyMinutes": "Каждые {count} мин.",
     "everyHours": "Каждые {count} ч.",
     "everyDays": "Каждые {count} дн.",
-    "customCron": "Вручную · {cron}"
+    "customCron": "Вручную · {cron}",
+    "noDeliveryTarget": "Цель доставки не задана"
   },
   "filters": {
     "search": "Поиск по названию и содержанию",
     "umo": "Фильтр по цели доставки",
     "noUmos": "Нет UMO",
+    "noDeliveryTarget": "Цель доставки не задана",
     "noMatches": "Нет подходящих будущих задач."
   },
   "overview": {
@@ -108,9 +110,9 @@
     "editTitle": "Редактировать задачу",
     "chatHint": "Вы можете ставить задачи прямо в чате, AstrBot создаст их автоматически без заполнения этой формы.",
     "runOnce": "Разовая задача",
-    "name": "Имя задачи",
-    "note": "Требования задачи",
-    "scheduleMode": "Время выполнения",
+    "name": "Имя задачи *",
+    "note": "Требования задачи *",
+    "scheduleMode": "Время выполнения *",
     "scheduleModes": {
       "once": "Один раз",
       "interval": "Интервал",
@@ -119,18 +121,18 @@
       "monthly": "Каждый месяц",
       "cron": "Cron вручную"
     },
-    "intervalEvery": "Каждые",
-    "intervalUnit": "Единица",
+    "intervalEvery": "Каждые *",
+    "intervalUnit": "Единица *",
     "intervalUnits": {
       "minutes": "Минуты",
       "hours": "Часы",
       "days": "Дни"
     },
-    "dailyTime": "Время",
-    "weeklyDay": "День недели",
-    "weeklyTime": "Время",
-    "monthlyDay": "День",
-    "monthlyTime": "Время",
+    "dailyTime": "Время *",
+    "weeklyDay": "День недели *",
+    "weeklyTime": "Время *",
+    "monthlyDay": "День *",
+    "monthlyTime": "Время *",
     "weekdays": {
       "sunday": "Воскресенье",
       "monday": "Понедельник",
@@ -140,9 +142,9 @@
       "friday": "Пятница",
       "saturday": "Суббота"
     },
-    "cron": "Cron-выражения",
+    "cron": "Cron-выражения *",
     "cronPlaceholder": "0 9 * * *",
-    "runAt": "Время запуска",
+    "runAt": "Время запуска *",
     "session": "Доставить в",
     "noUmos": "Нет доступных сессий",
     "timezone": "Часовой пояс (опционально, напр. Europe/Moscow)",
@@ -159,6 +161,10 @@
     "noteRequired": "Заполните требования задачи",
     "cronRequired": "Укажите Cron-выражение",
     "runAtRequired": "Выберите время запуска",
+    "intervalRequired": "Укажите корректный интервал",
+    "dailyTimeRequired": "Выберите ежедневное время запуска",
+    "weeklyTimeRequired": "Выберите день недели и время запуска",
+    "monthlyTimeRequired": "Выберите день месяца и время запуска",
     "createSuccess": "Задача создана",
     "createFailed": "Ошибка создания",
     "runStarted": "Запущено",

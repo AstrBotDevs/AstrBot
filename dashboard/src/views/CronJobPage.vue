@@ -68,6 +68,8 @@
               <v-autocomplete
                 v-model="selectedUmoFilter"
                 :items="jobUmoFilterOptions"
+                item-title="label"
+                item-value="value"
                 :label="tm('filters.umo')"
                 prepend-inner-icon="mdi-send-outline"
                 variant="solo-filled"
@@ -110,7 +112,7 @@
                 <div class="task-meta text-caption text-medium-emphasis">
                   <span class="task-meta-item">
                     <v-icon size="small" class="me-1">mdi-send-outline</v-icon>
-                    {{ item.session || tm("table.notAvailable") }}
+                    {{ deliveryTargetText(item) }}
                   </span>
                   <span class="task-meta-item">
                     <v-icon size="small" class="me-1">
@@ -419,6 +421,7 @@ const createDialog = ref(false);
 const creating = ref(false);
 const editingJobId = ref("");
 const runningJobIds = ref(new Set<string>());
+const NO_DELIVERY_TARGET_FILTER = "__astrbot_no_delivery_target__";
 type ScheduleMode =
   | "once"
   | "interval"
@@ -448,22 +451,29 @@ const newJob = ref({
 
 const snackbar = ref({ show: false, message: "", color: "success" });
 
-const jobUmoFilterOptions = computed(() =>
-  Array.from(
-    new Set(
-      jobs.value
-        .map((job) => String(job.session || job?.payload?.session || "").trim())
-        .filter(Boolean),
-    ),
-  ).sort((a, b) => a.localeCompare(b)),
-);
+const jobUmoFilterOptions = computed(() => [
+  ...(jobs.value.some((job) => !getJobSession(job))
+    ? [
+        {
+          label: tm("filters.noDeliveryTarget"),
+          value: NO_DELIVERY_TARGET_FILTER,
+        },
+      ]
+    : []),
+  ...Array.from(new Set(jobs.value.map(getJobSession).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b))
+    .map((umo) => ({ label: umo, value: umo })),
+]);
 
 const filteredJobs = computed(() => {
   const query = taskSearch.value.trim().toLowerCase();
   const umo = selectedUmoFilter.value;
   return jobs.value.filter((job) => {
-    const session = String(job.session || job?.payload?.session || "").trim();
-    if (umo && session !== umo) {
+    const session = getJobSession(job);
+    if (umo === NO_DELIVERY_TARGET_FILTER && session) {
+      return false;
+    }
+    if (umo && umo !== NO_DELIVERY_TARGET_FILTER && session !== umo) {
       return false;
     }
 
@@ -553,6 +563,14 @@ function taskPreview(item: any): string {
   const text = String(item.note || item.description || "").trim();
   if (!text) return item.job_id || tm("table.notAvailable");
   return text.length > 86 ? `${text.slice(0, 86)}...` : text;
+}
+
+function getJobSession(job: any): string {
+  return String(job.session || job?.payload?.session || "").trim();
+}
+
+function deliveryTargetText(item: any): string {
+  return getJobSession(item) || tm("card.noDeliveryTarget");
 }
 
 function nextRunText(item: any): string {
@@ -836,7 +854,7 @@ function openEdit(job: any) {
 function parseTimeParts(
   value: string,
 ): { hour: number; minute: number } | null {
-  const match = /^(\d{2}):(\d{2})$/.exec(value || "");
+  const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(value || "");
   if (!match) return null;
   const hour = Number(match[1]);
   const minute = Number(match[2]);
@@ -1037,19 +1055,72 @@ function validateJobForm(): boolean {
     toast(tm("messages.nameRequired"), "warning");
     return false;
   }
-  if (!newJob.value.session) {
-    toast(tm("messages.sessionRequired"), "warning");
-    return false;
-  }
   if (!newJob.value.note.trim()) {
     toast(tm("messages.noteRequired"), "warning");
     return false;
   }
-  if (newJob.value.schedule_mode === "once" && !newJob.value.run_at) {
-    toast(tm("messages.runAtRequired"), "warning");
-    return false;
+  return validateScheduleFields();
+}
+
+function validateScheduleFields(): boolean {
+  const mode = newJob.value.schedule_mode;
+  if (mode === "once") {
+    if (!newJob.value.run_at) {
+      toast(tm("messages.runAtRequired"), "warning");
+      return false;
+    }
+    return true;
   }
-  if (newJob.value.schedule_mode !== "once" && !buildCronExpression()) {
+
+  if (mode === "interval") {
+    const value = Number(newJob.value.interval_value);
+    const validUnit = ["minutes", "hours", "days"].includes(
+      newJob.value.interval_unit,
+    );
+    if (!Number.isInteger(value) || value < 1 || !validUnit) {
+      toast(tm("messages.intervalRequired"), "warning");
+      return false;
+    }
+    return true;
+  }
+
+  if (mode === "daily") {
+    if (!parseTimeParts(newJob.value.daily_time)) {
+      toast(tm("messages.dailyTimeRequired"), "warning");
+      return false;
+    }
+    return true;
+  }
+
+  if (mode === "weekly") {
+    const weekday = Number(newJob.value.weekly_day);
+    if (
+      !parseTimeParts(newJob.value.weekly_time) ||
+      !Number.isInteger(weekday) ||
+      weekday < 0 ||
+      weekday > 6
+    ) {
+      toast(tm("messages.weeklyTimeRequired"), "warning");
+      return false;
+    }
+    return true;
+  }
+
+  if (mode === "monthly") {
+    const day = Number(newJob.value.monthly_day);
+    if (
+      !parseTimeParts(newJob.value.monthly_time) ||
+      !Number.isInteger(day) ||
+      day < 1 ||
+      day > 31
+    ) {
+      toast(tm("messages.monthlyTimeRequired"), "warning");
+      return false;
+    }
+    return true;
+  }
+
+  if (!newJob.value.cron_expression.trim()) {
     toast(tm("messages.cronRequired"), "warning");
     return false;
   }
