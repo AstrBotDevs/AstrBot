@@ -21,6 +21,8 @@ def make_event(umo: str = "aiocqhttp:GroupMessage:user_123_group_456"):
     event.message_obj = SimpleNamespace(message=[Plain("hello")])
     event.message_str = "hello"
     event.session_id = "session-1"
+    # Simulate a regular message: no command handler matched.
+    event.get_extra.return_value = {}
     return event
 
 
