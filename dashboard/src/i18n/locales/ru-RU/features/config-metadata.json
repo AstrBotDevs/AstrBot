@@ -1356,7 +1356,7 @@
             },
             "model": {
                 "description": "Подтип модели",
-                "hint": "Только для Voice Cloning 2.0: seed-tts-2.0-standard / seed-tts-2.0-expressive"
+                "hint": "Только для seed-icl-2.0 (Voice Cloning 2.0): seed-icl-2.0-standard / seed-icl-2.0-expressive"
             },
             "azure_tts_voice": {
                 "description": "Стиль голоса",
