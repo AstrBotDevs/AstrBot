@@ -1,4 +1,4 @@
-import { reactive, shallowRef, computed, onMounted, watch } from "vue";
+import { reactive, shallowRef, onMounted, watch } from "vue";
 import axios from "axios";
 import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 
@@ -22,21 +22,31 @@ export const pluginSidebarState = reactive<{
   plugins: [],
 });
 
-/** MDI SVG 缓存，iconName → raw SVG string */
-const svgCache = reactive<Record<string, string | null>>({});
+/** MDI SVG 缓存，iconName → sanitized SVG string */
+const svgCache = new Map<string, string | null>();
+
+function sanitizeSvg(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("<svg")) return null;
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("<script")) return null;
+  if (/\bon\w+\s*=/.test(lower)) return null;
+  return trimmed;
+}
 
 async function loadSvgIcon(iconName: string): Promise<string | null> {
-  if (iconName in svgCache) return svgCache[iconName];
+  if (svgCache.has(iconName)) return svgCache.get(iconName)!;
 
   const name = iconName.startsWith("mdi-") ? iconName.slice(4) : iconName;
   try {
     const res = await fetch(`${MDI_SVG_BASE}/${name}.svg`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const svgText = await res.text();
-    svgCache[iconName] = svgText;
-    return svgText;
+    const raw = await res.text();
+    const sanitized = sanitizeSvg(raw);
+    svgCache.set(iconName, sanitized);
+    return sanitized;
   } catch {
-    svgCache[iconName] = null;
+    svgCache.set(iconName, null);
     return null;
   }
 }
@@ -56,7 +66,6 @@ function buildPluginItems(plugins: PluginEntry[]): (menu & { iconSvg?: string })
     return {
       title: displayName,
       icon,
-      iconSvg: svgCache[icon] ?? undefined,
       to: `/plugin-page/${encodeURIComponent(p.name)}/${encodeURIComponent(firstPage)}`,
       isRawTitle: true,
     };
@@ -88,20 +97,21 @@ export function usePluginSidebarItems() {
   const pluginItems = shallowRef<(menu & { iconSvg?: string }) | null>(null);
 
   async function refreshItems() {
-    const plugins = pluginSidebarState.plugins;
-    const items = buildPluginItems(plugins);
+    const items = buildPluginItems(pluginSidebarState.plugins);
     pluginItems.value = items;
     if (!items?.children) return;
 
-    // 后台加载 SVG，加载完成后逐个更新
-    for (const child of items.children) {
-      const iconName = child.icon;
-      if (!iconName || svgCache[iconName] !== undefined) continue;
-
-      const svg = await loadSvgIcon(iconName);
-      // 触发响应式更新
-      pluginItems.value = buildPluginItems(pluginSidebarState.plugins);
-    }
+    // 并行加载 SVG，失败时降级到默认图标
+    await Promise.all(
+      items.children.map(async (child) => {
+        if (!child.icon) return;
+        let svg = await loadSvgIcon(child.icon);
+        if (!svg && child.icon !== DEFAULT_ICON) {
+          svg = await loadSvgIcon(DEFAULT_ICON);
+        }
+        (child as any).iconSvg = svg ?? undefined;
+      }),
+    );
   }
 
   onMounted(async () => {
@@ -109,9 +119,12 @@ export function usePluginSidebarItems() {
     refreshItems();
   });
 
-  watch(() => pluginSidebarState.plugins, () => {
-    refreshItems();
-  });
+  watch(
+    () => pluginSidebarState.plugins,
+    () => {
+      refreshItems();
+    },
+  );
 
   return { pluginItems };
 }

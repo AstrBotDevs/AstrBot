@@ -3,7 +3,7 @@ import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useTheme } from 'vuetify';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useI18n } from '@/i18n/composables';
-import sidebarItems from './sidebarItem';
+import sidebarItems, { MORE_GROUP_KEY } from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { applySidebarCustomization } from '@/utils/sidebarCustomization';
 import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
@@ -22,7 +22,7 @@ function buildSidebarMenu() {
   const result = [];
 
   for (const item of base) {
-    if (item.title === 'core.navigation.groups.more') {
+    if (item.title === MORE_GROUP_KEY) {
       result.push(pluginItems.value);
       result.push(item);
     } else {
@@ -30,7 +30,7 @@ function buildSidebarMenu() {
     }
   }
 
-  if (!base.some((item) => item.title === 'core.navigation.groups.more')) {
+  if (!base.some((item) => item.title === MORE_GROUP_KEY)) {
     result.push(pluginItems.value);
   }
 
