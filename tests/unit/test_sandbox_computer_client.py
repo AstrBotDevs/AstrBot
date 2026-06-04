@@ -615,6 +615,49 @@ async def test_cleanup_sandbox_provider_destroys_temporary_and_preserves_persist
 
 
 @pytest.mark.asyncio
+async def test_cleanup_sandbox_provider_preserves_temporary_record_when_destroy_fails(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeProvider()
+
+    async def fake_destroy_booter(booter, record):
+        raise RuntimeError("destroy failed")
+
+    provider.destroy_booter = fake_destroy_booter
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={provider.provider_id: provider},
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-temp",
+        sandbox_name="Temp",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        retention_policy="temporary",
+        status="running",
+    )
+    booter = FakeBooter()
+    booter.provider_id = provider.provider_id
+    manager.session_booter["generic-temp"] = booter
+
+    await computer_client.cleanup_sandbox_provider("generic")
+
+    record = manager.registry.get_sandbox("generic-temp")
+    assert record is not None
+    assert record["status"] == "error"
+    assert manager.session_booter["generic-temp"] is booter
+
+
+@pytest.mark.asyncio
 async def test_cleanup_sandbox_provider_cleans_live_booter_without_registry_record(
     monkeypatch, tmp_path
 ):

@@ -205,7 +205,13 @@ async def cleanup_sandbox_provider(provider_id: str) -> None:
             preserved += 1
             continue
         if booter is not None and provider is not None:
-            await _safe_destroy_booter(provider, booter, record)
+            if not await _safe_destroy_booter(provider, booter, record):
+                sandbox_manager.session_booter[sandbox_id] = booter
+                sandbox_manager.registry.update_sandbox_status(
+                    sandbox_id,
+                    "error",
+                )
+                continue
         sandbox_manager.registry.delete_sandbox(sandbox_id)
         removed += 1
 
@@ -225,7 +231,14 @@ async def cleanup_sandbox_provider(provider_id: str) -> None:
         sandbox_manager.clear_idle_state(sandbox_id)
         sandbox_manager.drop_boot_lock(sandbox_id)
         if provider is not None:
-            await _safe_destroy_booter(provider, booter, record)
+            if not await _safe_destroy_booter(provider, booter, record):
+                sandbox_manager.session_booter[sandbox_id] = booter
+                if sandbox_manager.registry.get_sandbox(sandbox_id) is not None:
+                    sandbox_manager.registry.update_sandbox_status(
+                        sandbox_id,
+                        "error",
+                    )
+                continue
         if sandbox_manager.registry.get_sandbox(sandbox_id) is not None:
             sandbox_manager.registry.delete_sandbox(sandbox_id)
         removed += 1
@@ -252,15 +265,17 @@ def detach_sandbox_provider(provider_id: str) -> None:
 
 async def _safe_destroy_booter(
     provider: SandboxProvider, booter: ComputerBooter, record: dict
-) -> None:
+) -> bool:
     try:
         await provider.destroy_booter(booter, record)
+        return True
     except Exception as exc:
         logger.warning(
             "Background destroy_booter failed for sandbox %s: %s",
             record.get("sandbox_id"),
             exc,
         )
+        return False
 
 
 async def _safe_shutdown_booter(booter: ComputerBooter, record: dict) -> None:

@@ -297,6 +297,44 @@ async def test_build_handoff_toolset_uses_registered_provider_tools_only(
 
 
 @pytest.mark.asyncio
+async def test_build_handoff_toolset_uses_scoped_tool_manager_for_all_tools():
+    from astrbot.core.agent.tool import FunctionTool
+
+    allowed_tool = FunctionTool(
+        name="allowed_tool",
+        parameters={"type": "object", "properties": {}},
+        description="allowed",
+    )
+    disallowed_tool = FunctionTool(
+        name="disallowed_tool",
+        parameters={"type": "object", "properties": {}},
+        description="disallowed",
+    )
+    previous_tools = list(llm_tools.func_list)
+    FunctionToolExecutor._runtime_computer_tools_cache.clear()
+    llm_tools.func_list = [allowed_tool, disallowed_tool]
+    tool_mgr = SimpleNamespace(func_list=[allowed_tool], get_func=lambda name: None)
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {"computer_use_runtime": "none"}
+        },
+        get_llm_tool_manager=lambda: tool_mgr,
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=_DummyEvent([]), context=context)
+    )
+
+    try:
+        toolset = FunctionToolExecutor._build_handoff_toolset(run_context, None)
+        assert toolset is not None
+        assert "allowed_tool" in toolset.names()
+        assert "disallowed_tool" not in toolset.names()
+    finally:
+        llm_tools.func_list = previous_tools
+        FunctionToolExecutor._runtime_computer_tools_cache.clear()
+
+
+@pytest.mark.asyncio
 async def test_background_wake_preserves_computer_runtime_config(
     monkeypatch: pytest.MonkeyPatch,
 ):

@@ -194,9 +194,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     await cls._upload_file_segment(bot, seg, is_group, session_id)
                 except Exception:
                     messages = await cls._parse_onebot_json(MessageChain([seg]))
-                    await cls._dispatch_send(
-                        bot, event, is_group, session_id, messages
-                    )
+                    await cls._dispatch_send(bot, event, is_group, session_id, messages)
             else:
                 messages = await cls._parse_onebot_json(MessageChain([seg]))
                 if not messages:

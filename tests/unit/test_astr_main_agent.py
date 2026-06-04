@@ -742,6 +742,22 @@ class TestEnsurePersonaAndSkills:
 
         assert req.func_tool is not None
 
+    def test_apply_sandbox_tools_respects_explicit_empty_persona_tool_list(self):
+        module = ama
+        req = ProviderRequest(func_tool=ToolSet())
+        req._persona_tools_configured = True
+        req._persona_allowed_tool_names = set()
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            provider_settings={"computer_use_runtime": "sandbox"},
+        )
+
+        module._apply_sandbox_tools(config, req)
+
+        assert req.func_tool is not None
+        assert req.func_tool.empty()
+
     @pytest.mark.asyncio
     async def test_ensure_persona_keeps_all_sandbox_provider_tools_in_sandbox_runtime(
         self, mock_event, mock_context

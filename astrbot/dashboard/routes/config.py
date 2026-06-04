@@ -308,15 +308,8 @@ async def _validate_neo_connectivity(
 
     access_token = sandbox.get("shipyard_neo_access_token", "")
     if not access_token:
-        # Try auto-discovery
-        from astrbot.core.computer.computer_client import _discover_bay_credentials
-
-        access_token = _discover_bay_credentials(endpoint)
-
-    if not access_token:
         return (
-            "⚠️ 未找到 Bay API Key。请填写访问令牌，"
-            "或确保 Bay 的 credentials.json 可被自动发现。"
+            "⚠️ 未找到 Bay API Key。请填写访问令牌，或切换到新的 Sandbox Provider 配置。"
         )
 
     # Connectivity check

@@ -520,6 +520,13 @@ async def _ensure_persona_and_skills(
                     "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
                 )
     tmgr = plugin_context.get_llm_tool_manager()
+    persona_tools_configured = bool(persona and persona.get("tools") is not None)
+    req._persona_tools_configured = persona_tools_configured
+    req._persona_allowed_tool_names = (
+        {str(tool_name) for tool_name in persona.get("tools", [])}
+        if persona_tools_configured
+        else None
+    )
 
     # inject toolset in the persona
     if (persona and persona.get("tools") is None) or not persona:
@@ -1068,28 +1075,42 @@ def _apply_sandbox_tools(
         req.func_tool = ToolSet()
     if req.system_prompt is None:
         req.system_prompt = ""
+    allowed_tool_names = getattr(req, "_persona_allowed_tool_names", None)
+    persona_tools_configured = bool(getattr(req, "_persona_tools_configured", False))
+
     tool_mgr = llm_tools
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSandboxesTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSandboxProvidersTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetCurrentSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(SwitchSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(KeepAliveSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ReleaseSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(SetSandboxRetentionPolicyTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(TakeoverSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(DestroySandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ScreenshotSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(CopyFileBetweenSandboxesTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(PythonTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileUploadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileDownloadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
+    added_tool = False
+
+    def add_sandbox_tool(tool_cls) -> None:
+        nonlocal added_tool
+        tool = tool_mgr.get_builtin_tool(tool_cls)
+        if persona_tools_configured and tool.name not in allowed_tool_names:
+            return
+        req.func_tool.add_tool(tool)
+        added_tool = True
+
+    add_sandbox_tool(ExecuteShellTool)
+    add_sandbox_tool(ListSandboxesTool)
+    add_sandbox_tool(ListSandboxProvidersTool)
+    add_sandbox_tool(GetCurrentSandboxTool)
+    add_sandbox_tool(CreateSandboxTool)
+    add_sandbox_tool(SwitchSandboxTool)
+    add_sandbox_tool(KeepAliveSandboxTool)
+    add_sandbox_tool(ReleaseSandboxTool)
+    add_sandbox_tool(SetSandboxRetentionPolicyTool)
+    add_sandbox_tool(TakeoverSandboxTool)
+    add_sandbox_tool(DestroySandboxTool)
+    add_sandbox_tool(ScreenshotSandboxTool)
+    add_sandbox_tool(CopyFileBetweenSandboxesTool)
+    add_sandbox_tool(PythonTool)
+    add_sandbox_tool(FileUploadTool)
+    add_sandbox_tool(FileDownloadTool)
+    add_sandbox_tool(FileReadTool)
+    add_sandbox_tool(FileWriteTool)
+    add_sandbox_tool(FileEditTool)
+    add_sandbox_tool(GrepTool)
+    if added_tool:
+        req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
 
 def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> None:

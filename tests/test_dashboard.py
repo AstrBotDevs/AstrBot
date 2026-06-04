@@ -1081,7 +1081,11 @@ async def test_auth_rate_limit_uses_same_bucket_across_paths(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
-    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
     cfg["trust_proxy_headers"] = True
 
     try:
@@ -1113,7 +1117,11 @@ async def test_auth_rate_limit_separates_different_client_ips(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
-    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
     cfg["trust_proxy_headers"] = True
 
     try:
@@ -1157,7 +1165,11 @@ async def test_auth_rate_limit_ignores_proxy_headers_by_default(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
-    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
     cfg["trust_proxy_headers"] = False
 
     try:
@@ -1568,6 +1580,27 @@ async def test_config_save_rejects_recovery_code_for_protected_totp_changes(
             core_lifecycle_td,
             original_dashboard_config,
         )
+
+
+@pytest.mark.asyncio
+async def test_validate_neo_connectivity_without_token_returns_warning_not_import_error():
+    from astrbot.dashboard.routes.config import _validate_neo_connectivity
+
+    warning = await _validate_neo_connectivity(
+        {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {
+                    "booter": "shipyard_neo",
+                    "shipyard_neo_endpoint": "http://127.0.0.1:65535",
+                    "shipyard_neo_access_token": "",
+                },
+            }
+        }
+    )
+
+    assert warning is not None
+    assert "API Key" in warning
 
 
 @pytest.mark.asyncio

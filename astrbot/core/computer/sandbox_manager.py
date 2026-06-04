@@ -1313,24 +1313,32 @@ class SandboxManager:
         sandbox_id: str,
         record: dict,
     ) -> None:
+        destroy_err: Exception | None = None
         async with self._sandbox_boot_lock(sandbox_id):
             current = self.registry.get_sandbox(sandbox_id) or record
             booter = self.session_booter.get(sandbox_id)
             if booter is not None:
                 try:
                     await provider.destroy_booter(booter, current)
-                except Exception as destroy_err:
+                except Exception as exc:
+                    destroy_err = exc
                     logger.warning(
                         "[Computer] destroy_booter failed for %s: %s",
                         sandbox_id,
-                        destroy_err,
+                        exc,
                     )
-                finally:
+                    self.registry.update_sandbox_status(sandbox_id, SandboxStatus.ERROR)
+                    await self.save_registry_async()
+                else:
                     self.clear_runtime_state(sandbox_id)
-            self.registry.delete_sandbox(sandbox_id)
-            await self.save_registry_async()
+            if destroy_err is None:
+                self.registry.delete_sandbox(sandbox_id)
+                await self.save_registry_async()
 
         self.drop_boot_lock(sandbox_id)
+
+        if destroy_err is not None:
+            raise destroy_err
 
         if hasattr(provider, "on_sandbox_destroyed"):
             try:

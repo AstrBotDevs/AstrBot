@@ -217,6 +217,11 @@ class AlwaysFailingIdleDestroyProvider(FakeProvider):
         raise RuntimeError("destroy failed")
 
 
+class AlwaysFailingDestroyProvider(FakeProvider):
+    async def destroy_booter(self, booter, record):
+        raise RuntimeError("destroy failed")
+
+
 class FailingReconnectProvider(FakeProvider):
     async def create_booter(self, context, session_id, sandbox_id, config):
         raise RuntimeError("boot failed")
@@ -799,6 +804,21 @@ async def test_destroy_persistent_sandbox_removes_record(tmp_path):
     assert destroyed["sandbox_id"] == created["sandbox_id"]
     assert manager.registry.get_sandbox(created["sandbox_id"]) is None
     assert provider.destroyed[0][1] == created["sandbox_id"]
+
+
+@pytest.mark.asyncio
+async def test_destroy_sandbox_preserves_record_when_provider_destroy_fails(tmp_path):
+    provider = AlwaysFailingDestroyProvider()
+    manager, _provider = _manager(tmp_path, provider)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+
+    with pytest.raises(RuntimeError, match="destroy failed"):
+        await manager.destroy_sandbox("session-a", created["sandbox_id"])
+
+    record = manager.registry.get_sandbox(created["sandbox_id"])
+    assert record is not None
+    assert record["status"] == "error"
+    assert created["sandbox_id"] in manager.session_booter
 
 
 @pytest.mark.asyncio
