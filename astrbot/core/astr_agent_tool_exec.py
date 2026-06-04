@@ -55,6 +55,7 @@ from astrbot.core.tools.computer_tools import (
     TakeoverSandboxTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.registry import get_builtin_tool_config_rule
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
@@ -297,6 +298,25 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return tools
         return {}
 
+    @staticmethod
+    def _tool_available_for_runtime_config(tool: FunctionTool, runtime: str) -> bool:
+        if not tool_available_in_runtime(tool, runtime):
+            return False
+        rule = get_builtin_tool_config_rule(tool.name)
+        if rule is None:
+            return True
+        conditions = rule.evaluate(
+            {"provider_settings": {"computer_use_runtime": runtime}}
+        )
+        runtime_conditions = [
+            condition
+            for condition in conditions
+            if str(condition.get("key")) == "provider_settings.computer_use_runtime"
+        ]
+        if not runtime_conditions:
+            return True
+        return all(bool(condition.get("matched")) for condition in runtime_conditions)
+
     @classmethod
     def _build_handoff_toolset(
         cls,
@@ -325,7 +345,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             for registered_tool in llm_tools.func_list:
                 if isinstance(registered_tool, HandoffTool):
                     continue
-                if registered_tool.active and tool_available_in_runtime(
+                if registered_tool.active and cls._tool_available_for_runtime_config(
                     registered_tool, runtime
                 ):
                     toolset.add_tool(registered_tool)
@@ -340,13 +360,19 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         for tool_name_or_obj in tools:
             if isinstance(tool_name_or_obj, str):
                 registered_tool = llm_tools.get_func(tool_name_or_obj)
-                if registered_tool and registered_tool.active:
+                if (
+                    registered_tool
+                    and registered_tool.active
+                    and cls._tool_available_for_runtime_config(registered_tool, runtime)
+                ):
                     toolset.add_tool(registered_tool)
                     continue
                 runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
                 if runtime_tool:
                     toolset.add_tool(runtime_tool)
-            elif isinstance(tool_name_or_obj, FunctionTool):
+            elif isinstance(
+                tool_name_or_obj, FunctionTool
+            ) and cls._tool_available_for_runtime_config(tool_name_or_obj, runtime):
                 toolset.add_tool(tool_name_or_obj)
         return None if toolset.empty() else toolset
 

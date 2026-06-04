@@ -124,6 +124,18 @@ class ImmediateDestroyProvider(FakeProvider):
         await super().destroy_booter(booter, record)
 
 
+class FailsOnceDestroyProvider(FakeProvider):
+    def __init__(self):
+        super().__init__()
+        self.destroy_attempts = 0
+
+    async def destroy_booter(self, booter, record):
+        self.destroy_attempts += 1
+        if self.destroy_attempts == 1:
+            raise RuntimeError("transient destroy failure")
+        await super().destroy_booter(booter, record)
+
+
 class SlowCreatedHookProvider(FakeProvider):
     def __init__(self):
         super().__init__()
@@ -2112,6 +2124,54 @@ async def test_manager_cleanup_clears_persistent_runtime_memory_state(tmp_path):
     assert persistent_id not in manager.boot_locks
     assert provider.destroyed == []
     assert persistent_booter.shutdown_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_ttl_cleanup_retries_transient_destroy_failure(monkeypatch, tmp_path):
+    from astrbot.core.computer import sandbox_manager as sandbox_manager_module
+
+    manager, provider = _manager(tmp_path, FailsOnceDestroyProvider())
+    monkeypatch.setattr(
+        sandbox_manager_module, "SANDBOX_TTL_DESTROY_RETRY_SECONDS", 0, raising=False
+    )
+    sandbox = await manager.create_sandbox(
+        FakeContext({"sandbox_idle_timeout": 0, "sandbox_ttl": 60}),
+        "session-a",
+        "generic",
+    )
+    sandbox_id = sandbox["sandbox_id"]
+    expired_at = time.time() - 1
+    manager.registry.update_sandbox_config(sandbox_id, expires_at=expired_at)
+    manager.schedule_ttl_cleanup(sandbox_id, expired_at)
+    cleanup_task = manager.expiration_state[sandbox_id].task
+
+    await asyncio.wait_for(cleanup_task, timeout=5)
+
+    assert provider.destroy_attempts == 2
+    assert manager.registry.get_sandbox(sandbox_id) is None
+    assert sandbox_id not in manager.session_booter
+
+
+@pytest.mark.asyncio
+async def test_destroy_persistent_sandbox_with_missing_provider_removes_stale_record(
+    tmp_path,
+):
+    manager, _provider = _manager(tmp_path)
+    sandbox = await manager.create_sandbox(None, "session-a", "generic")
+    sandbox_id = sandbox["sandbox_id"]
+    manager.update_sandbox_config(
+        sandbox_id,
+        idle_timeout=None,
+        expires_at=None,
+        retention_policy="persistent",
+    )
+    manager.providers.pop("generic")
+
+    removed = await manager.destroy_sandbox_deferred("session-a", sandbox_id)
+
+    assert removed["sandbox_id"] == sandbox_id
+    assert manager.registry.get_sandbox(sandbox_id) is None
+    assert sandbox_id not in manager.session_booter
 
 
 def test_manager_update_sandbox_config_rejects_duplicate_name(tmp_path):

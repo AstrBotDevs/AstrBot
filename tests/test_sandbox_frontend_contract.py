@@ -170,6 +170,18 @@ def test_sandbox_management_page_destroy_closes_dialog_before_backend_cleanup():
     assert "destroyQueued" not in content
 
 
+def test_sandbox_management_page_starts_destroy_polling_only_after_backend_accepts():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "if (res.data.status === 'ok') {\n      startDestroyPolling(targetId)"
+        in content
+    )
+    assert "stopDestroyPollingForSandbox(targetId)" in content
+
+
 def test_sandbox_management_page_polls_until_destroyed_sandbox_disappears():
     content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
         encoding="utf-8"
@@ -239,6 +251,17 @@ def test_sandbox_management_page_strips_console_cwd_markers_from_output():
     assert "stripConsoleCwdMarkers(stdout)" in content
     assert "stripConsoleCwdMarkers(visibleStdout)" in content
     assert "!line.includes('__ASTRBOT_CWD__')" in content
+
+
+def test_sandbox_management_page_records_console_api_errors_in_history():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "throw new Error(res.data.message || tm('messages.operationFailed'))" in content
+    )
+    assert "entry.stderr = normalizeTerminalOutput(e?.message || String(e))" in content
 
 
 def test_sandbox_management_page_console_cwd_prefix_does_not_hide_failed_cd():

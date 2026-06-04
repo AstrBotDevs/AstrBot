@@ -2280,11 +2280,27 @@ class TestApplySandboxTools:
         provider_tool.sandbox_provider_id = "provider_a"
         toolset.add_tool(provider_tool)
 
-        filtered = module._filter_tools_for_current_config(
-            toolset, cfg, "session-a"
-        )
+        filtered = module._filter_tools_for_current_config(toolset, cfg, "session-a")
 
         assert "provider_a_screenshot" in filtered.names()
+
+    def test_filter_tools_for_current_config_applies_builtin_runtime_rules(self):
+        module = ama
+        toolset = ToolSet()
+        toolset.add_tool(module.LocalPythonTool())
+        toolset.add_tool(module.CreateSandboxTool())
+
+        sandbox_filtered = module._filter_tools_for_current_config(
+            toolset, {"computer_use_runtime": "sandbox"}, "session-a"
+        )
+        none_filtered = module._filter_tools_for_current_config(
+            toolset, {"computer_use_runtime": "none"}, "session-a"
+        )
+
+        assert "astrbot_execute_python" not in sandbox_filtered.names()
+        assert "astrbot_create_sandbox" in sandbox_filtered.names()
+        assert "astrbot_execute_python" not in none_filtered.names()
+        assert "astrbot_create_sandbox" not in none_filtered.names()
 
     def test_handoff_runtime_computer_tools_include_sandbox_lifecycle_tools(self):
         tool_mgr = MagicMock()

@@ -683,7 +683,8 @@ async function sandboxAction(
   path: string,
   payload?: Record<string, unknown>,
   successMessage?: string,
-  config: AxiosRequestConfig = {}
+  config: AxiosRequestConfig = {},
+  throwOnError = false
 ) {
   try {
     let res
@@ -699,8 +700,10 @@ async function sandboxAction(
       await loadSandboxes()
       return res.data.data
     }
+    if (throwOnError) throw new Error(res.data.message || tm('messages.operationFailed'))
     toast(res.data.message || tm('messages.operationFailed'), 'error')
   } catch (e: any) {
+    if (throwOnError) throw e
     toast(e?.response?.data?.message || tm('messages.operationFailed'), 'error')
   }
   return null
@@ -733,6 +736,11 @@ function clearDestroyPollingTimer(sandboxId: string) {
     delete next[sandboxId]
     destroyPollingTimers.value = next
   }
+}
+
+function stopDestroyPollingForSandbox(sandboxId: string) {
+  clearDestroyPollingTimer(sandboxId)
+  removePendingDestroySandbox(sandboxId)
 }
 
 function stopDestroyPolling() {
@@ -1030,22 +1038,24 @@ async function confirmDestroySandbox() {
   const targetId = target.sandbox_id
   destroyDialog.value = false
   destroySandboxTarget.value = null
-  startDestroyPolling(targetId)
   try {
     const res = await axios.delete(sandboxApiPath(targetId), {
       params: { session_id: 'dashboard', _t: Date.now() }
     })
     if (res.data.status === 'ok') {
+      startDestroyPolling(targetId)
       const sandbox = res.data.data?.sandbox as SandboxRecord | undefined
       if (sandbox?.sandbox_id) {
         upsertSandboxRecord(sandbox)
       }
       void loadSandboxes({ silent: true })
     } else {
+      stopDestroyPollingForSandbox(targetId)
       toast(res.data.message || tm('messages.operationFailed'), 'error')
       await loadSandboxes({ silent: true })
     }
   } catch (e: any) {
+    stopDestroyPollingForSandbox(targetId)
     toast(e?.response?.data?.message || tm('messages.operationFailed'), 'error')
     await loadSandboxes({ silent: true })
   }
@@ -1088,7 +1098,10 @@ async function runConsoleCommand() {
     const data = await sandboxAction('post', sandboxApiPath(sandboxId, '/shell'), {
       command: shellCommand,
       timeout: 300
-    })
+    }, undefined, {}, true)
+    if (!data?.result) {
+      throw new Error(tm('messages.operationFailed'))
+    }
     if (data?.result) {
       const { stdout, nextCwd } = parseConsoleShellResult(String(data.result.stdout ?? ''), cwd)
       entry.stdout = normalizeTerminalOutput(stdout)
@@ -1107,7 +1120,7 @@ async function runConsoleCommand() {
       consoleHistory.value = [...consoleHistory.value]
     }
   } catch (e: any) {
-    entry.stderr = e?.message || String(e)
+    entry.stderr = normalizeTerminalOutput(e?.message || String(e))
     entry.running = false
     consoleHistory.value = [...consoleHistory.value]
   } finally {

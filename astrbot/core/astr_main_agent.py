@@ -78,6 +78,7 @@ from astrbot.core.tools.knowledge_base_tools import (
     retrieve_knowledge_base,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.registry import get_builtin_tool_config_rule
 from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
@@ -427,7 +428,20 @@ def _filter_skills_for_current_config(
 
 def _tool_available_for_current_runtime(tool: FunctionTool, cfg: dict) -> bool:
     runtime = str(cfg.get("computer_use_runtime", "local"))
-    return tool_available_in_runtime(tool, runtime)
+    if not tool_available_in_runtime(tool, runtime):
+        return False
+    rule = get_builtin_tool_config_rule(tool.name)
+    if rule is None:
+        return True
+    conditions = rule.evaluate({"provider_settings": cfg})
+    runtime_conditions = [
+        condition
+        for condition in conditions
+        if str(condition.get("key")) == "provider_settings.computer_use_runtime"
+    ]
+    if not runtime_conditions:
+        return True
+    return all(bool(condition.get("matched")) for condition in runtime_conditions)
 
 
 def _filter_tools_for_current_config(
