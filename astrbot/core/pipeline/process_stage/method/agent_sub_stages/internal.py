@@ -525,22 +525,10 @@ PROVIDER_STATS_SQLITE_LOCK_RETRY_ATTEMPTS = 3
 PROVIDER_STATS_SQLITE_LOCK_RETRY_BASE_DELAY = 0.2
 
 
-def _iter_exception_messages(exc: BaseException):
-    yield str(exc)
-    orig = getattr(exc, "orig", None)
-    if orig is not None and orig is not exc:
-        yield str(orig)
-        yield from (str(arg) for arg in getattr(orig, "args", ()) if arg)
-    yield from (str(arg) for arg in getattr(exc, "args", ()) if arg)
-
-
-def _is_sqlite_database_locked_error(exc: Exception) -> bool:
-    if not isinstance(exc, OperationalError):
-        return False
-    return any(
-        "database" in message.lower() and "locked" in message.lower()
-        for message in _iter_exception_messages(exc)
-    )
+def _is_sqlite_database_locked_error(exc: OperationalError) -> bool:
+    raw = getattr(exc, "orig", exc)
+    message = str(raw).lower()
+    return "database" in message and "locked" in message
 
 
 async def _record_internal_agent_stats(
@@ -558,21 +546,28 @@ async def _record_internal_agent_stats(
     if provider is None or stats is None:
         return
 
-    provider_config = getattr(provider, "provider_config", {}) or {}
-    conversation_id = (
-        req.conversation.cid
-        if req is not None and req.conversation is not None
-        else None
-    )
+    try:
+        provider_config = getattr(provider, "provider_config", {}) or {}
+        conversation_id = (
+            req.conversation.cid
+            if req is not None and req.conversation is not None
+            else None
+        )
 
-    if agent_runner.was_aborted():
-        status = "aborted"
-    elif final_resp is not None and final_resp.role == "err":
-        status = "error"
-    else:
-        status = "completed"
+        if agent_runner.was_aborted():
+            status = "aborted"
+        elif final_resp is not None and final_resp.role == "err":
+            status = "error"
+        else:
+            status = "completed"
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.warning("Persist provider stats failed: %s", e, exc_info=True)
+        return
 
     for attempt in range(PROVIDER_STATS_SQLITE_LOCK_RETRY_ATTEMPTS):
+        last_attempt = attempt == PROVIDER_STATS_SQLITE_LOCK_RETRY_ATTEMPTS - 1
         try:
             await db_helper.insert_provider_stat(
                 umo=event.unified_msg_origin,
@@ -583,20 +578,17 @@ async def _record_internal_agent_stats(
                 stats=stats.to_dict(),
                 agent_type="internal",
             )
-            return
+            break
+        except asyncio.CancelledError:
+            raise
         except OperationalError as e:
-            if (
-                _is_sqlite_database_locked_error(e)
-                and attempt < PROVIDER_STATS_SQLITE_LOCK_RETRY_ATTEMPTS - 1
-            ):
+            if _is_sqlite_database_locked_error(e) and not last_attempt:
                 await asyncio.sleep(
                     PROVIDER_STATS_SQLITE_LOCK_RETRY_BASE_DELAY * (2**attempt)
                 )
                 continue
             logger.warning("Persist provider stats failed: %s", e, exc_info=True)
-            return
-        except asyncio.CancelledError:
-            raise
+            break
         except Exception as e:
             logger.warning("Persist provider stats failed: %s", e, exc_info=True)
-            return
+            break

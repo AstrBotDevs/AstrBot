@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -148,7 +149,12 @@ async def test_record_internal_agent_stats_logs_after_exhausting_database_lock_r
     await internal._record_internal_agent_stats(*_provider_stats_recording_args())
 
     assert attempts == internal.PROVIDER_STATS_SQLITE_LOCK_RETRY_ATTEMPTS
-    assert sleep_delays == [0.2, 0.4]
+    base_delay = internal.PROVIDER_STATS_SQLITE_LOCK_RETRY_BASE_DELAY
+    expected_sleep_delays = [
+        base_delay * (2**attempt)
+        for attempt in range(internal.PROVIDER_STATS_SQLITE_LOCK_RETRY_ATTEMPTS - 1)
+    ]
+    assert sleep_delays == expected_sleep_delays
     assert len(warnings) == 1
 
 
@@ -176,3 +182,26 @@ async def test_record_internal_agent_stats_does_not_retry_other_operational_erro
 
     assert attempts == 1
     assert len(warnings) == 1
+
+
+@pytest.mark.asyncio
+async def test_record_internal_agent_stats_propagates_cancelled_error(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    warnings = []
+
+    class CancellingDb:
+        async def insert_provider_stat(self, **kwargs):
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(internal, "db_helper", CancellingDb())
+    monkeypatch.setattr(
+        internal.logger,
+        "warning",
+        lambda *args, **kwargs: warnings.append((args, kwargs)),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await internal._record_internal_agent_stats(*_provider_stats_recording_args())
+
+    assert warnings == []
