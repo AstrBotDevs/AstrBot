@@ -49,6 +49,10 @@
           "description": "默认图片转述模型",
           "hint": "留空代表不使用,可用于非多模态模型"
         },
+        "image_caption_cache_ttl": {
+          "description": "图片转述缓存时长（秒）",
+          "hint": "在缓存时间内再次收到相同图片时，直接复用已缓存的视觉识别结果；设为 0 表示禁用缓存"
+        },
         "image_caption_prompt": {
           "description": "图片转述提示词"
         }

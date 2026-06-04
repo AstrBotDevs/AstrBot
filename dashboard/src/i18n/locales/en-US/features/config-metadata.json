@@ -49,6 +49,10 @@
           "description": "Default Image Caption Model",
           "hint": "Leave empty to disable; useful for non-multimodal models"
         },
+        "image_caption_cache_ttl": {
+          "description": "Image caption cache TTL (seconds)",
+          "hint": "Reuse the cached vision result when the same image is received again within this period; set to 0 to disable caching"
+        },
         "image_caption_prompt": {
           "description": "Image Caption Prompt"
         }

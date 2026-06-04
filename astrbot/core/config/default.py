@@ -103,6 +103,7 @@ DEFAULT_CONFIG = {
         "fallback_chat_models": [],
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
+        "image_caption_cache_ttl": 600,
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
         "wake_prefix": "",
         "web_search": False,
@@ -3192,6 +3193,11 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_caption_prompt": {
                         "description": "图片转述提示词",
                         "type": "text",
+                    },
+                    "provider_settings.image_caption_cache_ttl": {
+                        "description": "Image caption cache TTL (seconds)",
+                        "type": "int",
+                        "hint": "Set to 0 to disable cache",
                     },
                 },
                 "condition": {

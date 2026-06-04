@@ -16,6 +16,7 @@ from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.star import StarMetadata
+from astrbot.core.utils.image_caption_cache import image_caption_cache
 
 
 @pytest.fixture
@@ -1172,6 +1173,46 @@ class TestBuildMainAgent:
             for part in result.provider_request.extra_user_content_parts
         )
         mock_provider.text_chat.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_request_img_caption_reuses_cached_result(
+        self, tmp_path, mock_context
+    ):
+        """Test repeated image caption requests reuse the cached vision result."""
+        module = ama
+        image_caption_cache.clear()
+
+        image_path = tmp_path / "same-image.png"
+        image_path.write_bytes(b"same-image")
+
+        caption_provider = MagicMock(spec=Provider)
+        caption_provider.text_chat = AsyncMock(
+            return_value=MagicMock(completion_text="cached caption")
+        )
+        mock_context.get_provider_by_id.return_value = caption_provider
+
+        cfg = {
+            "image_caption_prompt": "Please describe the image using Chinese.",
+            "image_caption_cache_ttl": 600,
+        }
+
+        caption1 = await module._request_img_caption(
+            "caption-provider",
+            cfg,
+            [str(image_path)],
+            mock_context,
+        )
+        caption2 = await module._request_img_caption(
+            "caption-provider",
+            cfg,
+            [str(image_path)],
+            mock_context,
+        )
+
+        assert caption1 == "cached caption"
+        assert caption2 == "cached caption"
+        caption_provider.text_chat.assert_awaited_once()
+        image_caption_cache.clear()
 
     @pytest.mark.asyncio
     async def test_build_main_agent_uses_image_fallback_provider(

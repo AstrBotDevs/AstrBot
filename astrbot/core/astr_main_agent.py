@@ -96,6 +96,10 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_workspaces_path,
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
+from astrbot.core.utils.image_caption_cache import (
+    image_caption_cache,
+    resolve_image_caption_cache_ttl,
+)
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.media_utils import (
     IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
@@ -583,6 +587,7 @@ async def _request_img_caption(
     cfg: dict,
     image_urls: list[str],
     plugin_context: Context,
+    prompt: str | None = None,
 ) -> str:
     prov = plugin_context.get_provider_by_id(provider_id)
     if prov is None:
@@ -594,16 +599,27 @@ async def _request_img_caption(
             f"Cannot get image caption because provider `{provider_id}` is not a valid Provider, it is {type(prov)}.",
         )
 
-    img_cap_prompt = cfg.get(
+    img_cap_prompt = prompt or cfg.get(
         "image_caption_prompt",
         "Please describe the image.",
     )
+    cache_ttl = resolve_image_caption_cache_ttl(cfg)
     logger.debug("Processing image caption with provider: %s", provider_id)
-    llm_resp = await prov.text_chat(
+
+    async def _caption_factory() -> str:
+        llm_resp = await prov.text_chat(
+            prompt=img_cap_prompt,
+            image_urls=image_urls,
+        )
+        return llm_resp.completion_text
+
+    return await image_caption_cache.get_or_create(
+        provider_id=provider_id,
         prompt=img_cap_prompt,
         image_urls=image_urls,
+        ttl_seconds=cache_ttl,
+        caption_factory=_caption_factory,
     )
-    return llm_resp.completion_text
 
 
 async def _ensure_img_caption(
@@ -808,13 +824,21 @@ async def _process_quote_message(
                 )
                 if path and _is_generated_compressed_image_path(path, compress_path):
                     event.track_temporary_local_file(compress_path)
-                llm_resp = await prov.text_chat(
+                caption = await _request_img_caption(
+                    prov.provider_config.get("id", img_cap_prov_id or ""),
+                    {
+                        "image_caption_prompt": "Please describe the image content.",
+                        "image_caption_cache_ttl": resolve_image_caption_cache_ttl(
+                            config.provider_settings if config else None
+                        ),
+                    },
+                    [compress_path],
+                    _QuotedImageCaptionContext(prov),
                     prompt="Please describe the image content.",
-                    image_urls=[compress_path],
                 )
-                if llm_resp.completion_text:
+                if caption:
                     content_parts.append(
-                        f"[Image Caption in quoted message]: {llm_resp.completion_text}"
+                        f"[Image Caption in quoted message]: {caption}"
                     )
             else:
                 logger.warning("No provider found for image captioning in quote.")
@@ -834,6 +858,14 @@ async def _process_quote_message(
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
     req.extra_user_content_parts.append(TextPart(text=quoted_text))
+
+
+class _QuotedImageCaptionContext:
+    def __init__(self, provider: Provider) -> None:
+        self._provider = provider
+
+    def get_provider_by_id(self, provider_id: str) -> Provider:
+        return self._provider
 
 
 def _append_system_reminders(
