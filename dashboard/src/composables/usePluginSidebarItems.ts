@@ -5,6 +5,7 @@ import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 const DEFAULT_ICON = "mdi-puzzle";
 const GROUP_I18N_KEY = "core.navigation.pluginWebui";
 const GROUP_ICON = "mdi-puzzle-outline";
+const MDI_SVG_BASE = "https://cdn.jsdelivr.net/npm/@mdi/svg@7/svg";
 
 interface PluginEntry {
   name: string;
@@ -21,6 +22,12 @@ export const pluginSidebarState = reactive<{
   plugins: [],
 });
 
+function mdiIconSrc(iconName: string): string {
+  // mdi-brain → brain.svg
+  const name = iconName.startsWith("mdi-") ? iconName.slice(4) : iconName;
+  return `${MDI_SVG_BASE}/${name}.svg`;
+}
+
 function buildPluginItems(plugins: PluginEntry[]): menu | null {
   const activeWithPages = plugins.filter(
     (p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0,
@@ -36,6 +43,7 @@ function buildPluginItems(plugins: PluginEntry[]): menu | null {
     return {
       title: displayName,
       icon,
+      iconSrc: mdiIconSrc(icon),
       to: `/plugin-page/${encodeURIComponent(p.name)}/${encodeURIComponent(firstPage)}`,
       isRawTitle: true,
     };
