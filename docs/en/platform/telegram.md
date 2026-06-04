@@ -8,10 +8,10 @@
 | Message Type | Receive Support | Send Support | Notes |
 | --- | --- | --- | --- |
 | Text | Yes | Yes | |
-| Image | Yes | Yes | |
+| Image | Yes | Yes | Supports photo albums |
 | Voice | Yes | Yes | |
-| Video | Yes | Yes | |
-| File | Yes | Yes | |
+| Video | Yes | Yes | Supports mixed video/photo albums |
+| File | Yes | Yes | Consecutive `File` components are sent as document albums |
 | Inline Keyboard | Yes | Yes | Supports button callback events |
 | Reply Keyboard | - | Yes | Supports custom reply keyboard, keyboard removal, and force reply |
 | Inline Query | Yes | Yes | Plugins can listen for and answer inline queries |
@@ -38,6 +38,17 @@ async def on_telegram_button(self, event: AstrMessageEvent):
 
 For complete Inline Keyboard, Reply Keyboard, inline query answer, and callback handling examples, see "Telegram-Specific Send Options" in the developer guide.
 
+## Albums and Media Sending
+
+The Telegram adapter automatically sends consecutive `Image`, `Video`, and `File` components as Telegram media groups:
+
+- `Image` is sent as photo, `Video` is sent as video, and the two can be mixed in the same visual album.
+- `File` is sent as document; consecutive `File` components form a document album.
+- `Record` still means voice message and is not mapped to audio album.
+- Adjacent `Plain` components become the media or album caption. Telegram Bot API limits captions to 1024 characters; longer captions raise an error.
+- Telegram media groups do not support `reply_markup`. Send Inline Keyboard buttons in a separate message.
+- Use `TelegramMediaGroup` from the developer guide when you need Telegram audio albums or common advanced media options such as spoiler, video streaming, and thumbnails.
+
 ## 1. Create a Telegram Bot
 
 First, open Telegram and search for `BotFather`. Click `Start`, then send `/newbot` and follow the prompts to enter your bot's name and username.
@@ -61,8 +72,7 @@ Fill in the configuration fields that appear:
 
 Please ensure your network environment can access Telegram. You can configure a global proxy in `Configuration -> Other Settings -> HTTP Proxy`, or configure Telegram-specific proxies in the Telegram adapter:
 
-- `telegram_proxy`: Used only for this Telegram adapter's Bot API requests.
-- `telegram_get_updates_proxy`: Used only for this Telegram adapter's `getUpdates` polling requests.
+- `telegram_proxy`: Used only for this Telegram adapter's Bot API requests and `getUpdates` polling requests.
 
 ### Update Mode
 
@@ -86,8 +96,8 @@ The Telegram adapter can register AstrBot plugin commands as Telegram Bot Comman
 - `telegram_command_register`: Whether command registration is enabled.
 - `telegram_command_auto_refresh`: Whether commands are refreshed at runtime.
 - `telegram_command_register_interval`: Auto-refresh interval in seconds.
-- `telegram_command_registered_plugins`: Only register commands from selected plugins. Leave empty to register commands from all enabled plugins.
-- `telegram_command_scopes`: Scope configs for command registration. The default is `[{"type": "default"}]`.
+- `telegram_command_registered_plugins`: Plugin selector. The default is `["*"]`, which registers commands from all enabled plugins. After selecting specific plugins, only commands from those plugins are registered. Selecting "Disable all plugins" saves `[]` and clears plugin commands already registered on Telegram. Disabled plugins remain ineffective even if selected here.
+- `telegram_command_scopes`: Template-list scope configs. The default is `[{"__template_key": "default", "type": "default"}]`.
 
 `telegram_command_scopes` supports these Telegram Bot API scopes: `default`, `all_private_chats`, `all_group_chats`, `all_chat_administrators`, `chat`, `chat_administrators`, and `chat_member`. `chat` and `chat_administrators` require `chat_id`; `chat_member` requires both `chat_id` and `user_id`. Each scope can also set `language_code`.
 
@@ -95,10 +105,12 @@ Example:
 
 ```json
 [
-  {"type": "default", "language_code": "en"},
-  {"type": "chat", "chat_id": 123456789}
+  {"__template_key": "default", "type": "default", "language_code": "en"},
+  {"__template_key": "chat", "type": "chat", "chat_id": 123456789}
 ]
 ```
+
+When editing the config file directly, `__template_key` is only used by the dashboard to select a template. The runtime remains compatible with the old shape, for example `{"type": "chat", "chat_id": 123456789}`.
 
 Telegram supports at most 100 commands per scope. If registration fails, use `telegram_command_registered_plugins` to narrow the plugin set.
 

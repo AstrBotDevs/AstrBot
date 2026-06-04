@@ -151,6 +151,62 @@ async def review(self, event: AstrMessageEvent):
 
 `TelegramInlineButton` 每个按钮必须且只能设置一种动作。支持 `url`、`callback_data`、`login_url`、`web_app`、`switch_inline_query`、`switch_inline_query_current_chat`、`switch_inline_query_chosen_chat`、`copy_text`、`callback_game`、`pay`，以及 Bot API 支持时的 `style`、`icon_custom_emoji_id`。`callback_data` 必须是 1-64 UTF-8 字节。
 
+### Telegram Album / MediaGroup
+
+Telegram 适配器会自动把同一段连续的媒体发送为 album。`Plain` 会作为 caption 合并到同一段媒体上，不会自动插入换行；如果你需要换行，请在文本中显式写入 `\n`。
+
+```python
+import astrbot.api.message_components as Comp
+
+chain = MessageChain()
+chain.chain.extend(
+    [
+        Comp.Plain("今日图片\n"),
+        Comp.Image.fromURL("https://example.com/1.jpg"),
+        Comp.Image.fromURL("https://example.com/2.jpg"),
+        Comp.Video.fromURL("https://example.com/demo.mp4"),
+    ]
+)
+yield event.chain_result(chain)
+```
+
+自动 album 规则：
+
+- `Image` 和 `Video` 可以组成 photo/video 混合 album。
+- 连续 `File` 会组成 document album。
+- `Record` 表示 Telegram voice message，不会作为 audio album 发送。
+- 每个 album 最多 10 个媒体；超过时会按顺序分批发送，caption 只放在第一批。
+- caption 受 Telegram Bot API 限制，最多 1024 字符；超出会报错，不会截断或拆分。
+- Telegram media group 不支持 `reply_markup`，需要按钮时请另发一条带 `TelegramInlineKeyboard` 的消息。
+
+需要 Telegram audio album，或 spoiler、视频 streaming、缩略图等常用高级媒体参数时，可以使用显式 `TelegramMediaGroup`：
+
+```python
+from astrbot.core.platform.sources.telegram.components import TelegramMediaGroup
+
+chain = MessageChain()
+chain.chain.append(
+    TelegramMediaGroup(
+        [
+            TelegramMediaGroup.photo(
+                "https://example.com/secret.jpg",
+                has_spoiler=True,
+            ),
+            TelegramMediaGroup.video(
+                "https://example.com/movie.mp4",
+                supports_streaming=True,
+                thumbnail="path/to/thumb.jpg",
+            ),
+        ],
+        caption="<b>媒体预览</b>",
+        parse_mode="HTML",
+    )
+)
+yield event.chain_result(chain)
+```
+
+`TelegramMediaGroup.audio(...)` 支持显式 audio album；这不会改变通用 `Record` 的 voice 语义。更细的 Telegram Bot API 参数仍建议通过 `event.get_telegram_client()` 直接调用 `python-telegram-bot`。
+
 也可以发送 Telegram Reply Keyboard、移除键盘或强制用户回复：
 
 ```python

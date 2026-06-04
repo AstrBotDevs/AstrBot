@@ -3,10 +3,10 @@
     <!-- 顶部操作区域 -->
     <div class="d-flex align-center justify-space-between mb-2">
       <div class="flex-grow-1">
-        <span v-if="!modelValue || modelValue.length === 0" style="color: rgb(var(--v-theme-primaryText));">
+        <span v-if="isEmptySelection" style="color: rgb(var(--v-theme-primaryText));">
           {{ tm('pluginSetSelector.notSelected') }}
         </span>
-        <span v-else-if="isAllPlugins" style="color: rgb(var(--v-theme-primaryText));">
+        <span v-else-if="isAllPluginsSelection" style="color: rgb(var(--v-theme-primaryText));">
           {{ tm('pluginSetSelector.allPlugins') }}
         </span>
         <span v-else style="color: rgb(var(--v-theme-primaryText));">
@@ -37,7 +37,8 @@
               :label="tm('pluginSetSelector.enableAll')" 
               color="primary"
             ></v-radio>
-            <v-radio 
+            <v-radio
+              v-if="allowNone"
               value="none" 
               :label="tm('pluginSetSelector.enableNone')" 
               color="primary"
@@ -93,6 +94,7 @@
         <v-btn variant="text" @click="cancelSelection">{{ tm('pluginSetSelector.cancelSelection') }}</v-btn>
         <v-btn 
           color="primary" 
+          :disabled="!canConfirmSelection"
           @click="confirmSelection">
           {{ tm('pluginSetSelector.confirmSelection') }}
         </v-btn>
@@ -119,6 +121,14 @@ const props = defineProps({
   maxDisplayItems: {
     type: Number,
     default: 3
+  },
+  allowNone: {
+    type: Boolean,
+    default: true
+  },
+  emptyAsAll: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -136,8 +146,20 @@ const pluginDisplayName = (plugin) => pluginName(plugin) || plugin.name
 const pluginDescription = (plugin) => pluginDesc(plugin)
 
 // 判断是否为"所有插件"模式
-const isAllPlugins = computed(() => {
+const isExplicitAllPlugins = computed(() => {
   return props.modelValue && props.modelValue.length === 1 && props.modelValue[0] === '*'
+})
+
+const isEmptySelection = computed(() => {
+  return !props.emptyAsAll && (!props.modelValue || props.modelValue.length === 0)
+})
+
+const isAllPluginsSelection = computed(() => {
+  return isExplicitAllPlugins.value || (props.emptyAsAll && (!props.modelValue || props.modelValue.length === 0))
+})
+
+const canConfirmSelection = computed(() => {
+  return props.allowNone || selectionMode.value !== 'custom' || selectedPlugins.value.length > 0
 })
 
 // 移除插件
@@ -151,7 +173,7 @@ function removePlugin(pluginName) {
 // 监听 modelValue 变化，同步内部状态
 watch(() => props.modelValue, (newValue) => {
   if (!newValue || newValue.length === 0) {
-    selectionMode.value = 'none'
+    selectionMode.value = props.emptyAsAll || !props.allowNone ? 'all' : 'none'
     selectedPlugins.value = []
   } else if (newValue.length === 1 && newValue[0] === '*') {
     selectionMode.value = 'all'
@@ -197,7 +219,7 @@ function confirmSelection() {
       newValue = ['*']
       break
     case 'none':
-      newValue = []
+      newValue = props.allowNone ? [] : ['*']
       break
     case 'custom':
       newValue = [...selectedPlugins.value]
@@ -212,7 +234,7 @@ function cancelSelection() {
   // 恢复到原始状态
   const currentValue = props.modelValue || []
   if (currentValue.length === 0) {
-    selectionMode.value = 'none'
+    selectionMode.value = props.emptyAsAll || !props.allowNone ? 'all' : 'none'
     selectedPlugins.value = []
   } else if (currentValue.length === 1 && currentValue[0] === '*') {
     selectionMode.value = 'all'

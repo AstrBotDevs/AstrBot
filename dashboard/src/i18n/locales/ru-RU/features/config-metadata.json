@@ -590,14 +590,113 @@
             },
             "telegram_command_registered_plugins": {
                 "description": "Плагины команд Telegram",
-                "hint": "Регистрировать команды только выбранных плагинов. Можно указать имя плагина, отображаемое имя, имя папки или путь модуля. Пусто — команды всех включенных плагинов."
+                "hint": "Регистрировать команды только выбранных плагинов. По умолчанию выбраны все включенные плагины; можно также не регистрировать команды плагинов. Отключенные на странице плагинов здесь не сработают."
             },
             "telegram_command_scopes": {
                 "description": "Области команд Telegram",
-                "hint": "Конфигурации Telegram BotCommandScope, например {\"type\":\"default\",\"language_code\":\"ru\"} или {\"type\":\"chat\",\"chat_id\":12345}."
+                "hint": "Выберите области Telegram BotCommandScope. Для chat/chat_administrators нужен chat_id, для chat_member также нужен user_id.",
+                "templates": {
+                    "default": {
+                        "name": "Область по умолчанию",
+                        "hint": "BotCommandScopeDefault по умолчанию.",
+                        "type": {
+                            "description": "Тип области"
+                        },
+                        "language_code": {
+                            "description": "Код языка",
+                            "hint": "Необязательно, например zh, en или ja. Пусто означает все языки."
+                        }
+                    },
+                    "all_private_chats": {
+                        "name": "Все личные чаты",
+                        "hint": "BotCommandScopeAllPrivateChats.",
+                        "type": {
+                            "description": "Тип области"
+                        },
+                        "language_code": {
+                            "description": "Код языка",
+                            "hint": "Необязательно, например zh, en или ja. Пусто означает все языки."
+                        }
+                    },
+                    "all_group_chats": {
+                        "name": "Все групповые чаты",
+                        "hint": "BotCommandScopeAllGroupChats.",
+                        "type": {
+                            "description": "Тип области"
+                        },
+                        "language_code": {
+                            "description": "Код языка",
+                            "hint": "Необязательно, например zh, en или ja. Пусто означает все языки."
+                        }
+                    },
+                    "all_chat_administrators": {
+                        "name": "Все администраторы чатов",
+                        "hint": "BotCommandScopeAllChatAdministrators.",
+                        "type": {
+                            "description": "Тип области"
+                        },
+                        "language_code": {
+                            "description": "Код языка",
+                            "hint": "Необязательно, например zh, en или ja. Пусто означает все языки."
+                        }
+                    },
+                    "chat": {
+                        "name": "Указанный чат",
+                        "hint": "BotCommandScopeChat, требует chat_id.",
+                        "type": {
+                            "description": "Тип области"
+                        },
+                        "chat_id": {
+                            "description": "Chat ID",
+                            "hint": "Telegram chat_id. Используйте числовой ID или @channelusername."
+                        },
+                        "language_code": {
+                            "description": "Код языка",
+                            "hint": "Необязательно, например zh, en или ja. Пусто означает все языки."
+                        }
+                    },
+                    "chat_administrators": {
+                        "name": "Администраторы указанного чата",
+                        "hint": "BotCommandScopeChatAdministrators, требует chat_id.",
+                        "type": {
+                            "description": "Тип области"
+                        },
+                        "chat_id": {
+                            "description": "Chat ID",
+                            "hint": "Telegram chat_id. Используйте числовой ID или @channelusername."
+                        },
+                        "language_code": {
+                            "description": "Код языка",
+                            "hint": "Необязательно, например zh, en или ja. Пусто означает все языки."
+                        }
+                    },
+                    "chat_member": {
+                        "name": "Участник указанного чата",
+                        "hint": "BotCommandScopeChatMember, требует chat_id и user_id.",
+                        "type": {
+                            "description": "Тип области"
+                        },
+                        "chat_id": {
+                            "description": "Chat ID",
+                            "hint": "Telegram chat_id. Используйте числовой ID или @channelusername."
+                        },
+                        "user_id": {
+                            "description": "User ID",
+                            "hint": "Telegram user ID."
+                        },
+                        "language_code": {
+                            "description": "Код языка",
+                            "hint": "Необязательно, например zh, en или ja. Пусто означает все языки."
+                        }
+                    }
+                }
             },
             "telegram_update_mode": {
                 "description": "Режим обновлений Telegram",
+                "labels": [
+                    "Polling getUpdates",
+                    "Отдельный Webhook"
+                ],
                 "hint": "polling использует getUpdates; webhook запускает отдельный listener Telegram-адаптера и требует публичный URL, доступный Telegram."
             },
             "telegram_webhook_listen": {
@@ -632,9 +731,13 @@
                 "description": "Путь к приватному ключу Telegram Webhook",
                 "hint": "Необязательно. Используйте только если PTB обслуживает HTTPS напрямую без reverse proxy."
             },
-            "telegram_get_updates_proxy": {
-                "description": "Прокси Telegram getUpdates",
-                "hint": "Прокси только для polling getUpdates этого Telegram-адаптера. Оставьте пустым для стандартных сетевых настроек."
+            "telegram_api_base_url": {
+                "description": "Базовый URL Telegram Bot API",
+                "hint": "Базовый адрес Telegram Bot API. По умолчанию используется официальный endpoint; меняйте только для self-hosted Bot API Server или reverse proxy."
+            },
+            "telegram_file_base_url": {
+                "description": "Базовый URL Telegram File API",
+                "hint": "Базовый адрес загрузки файлов Telegram. По умолчанию используется официальный endpoint; при self-hosted сервере или reverse proxy держите его согласованным с Bot API URL."
             },
             "telegram_polling_restart_delay": {
                 "description": "Задержка перезапуска polling Telegram",
@@ -642,7 +745,7 @@
             },
             "telegram_proxy": {
                 "description": "Прокси Telegram API",
-                "hint": "Прокси только для Bot API запросов этого Telegram-адаптера, например http://127.0.0.1:7890. Оставьте пустым для стандартных сетевых настроек."
+                "hint": "Прокси только для Bot API запросов и polling getUpdates этого Telegram-адаптера, например http://127.0.0.1:7890. Оставьте пустым для стандартных сетевых настроек."
             },
             "telegram_token": {
                 "description": "Токен бота",
@@ -677,6 +780,10 @@
             },
             "wecom_ai_bot_connection_mode": {
                 "description": "Режим соединения WeCom AI",
+                "labels": [
+                    "Webhook callback",
+                    "Долгое соединение"
+                ],
                 "hint": "webhook требует Token/AESKey; long_connection требует BotID/Secret."
             },
             "wecomaibot_friend_message_welcome_text": {

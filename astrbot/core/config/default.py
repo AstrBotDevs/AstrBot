@@ -448,12 +448,13 @@ CONFIG_METADATA_2 = {
                         "telegram_api_base_url": "https://api.telegram.org/bot",
                         "telegram_file_base_url": "https://api.telegram.org/file/bot",
                         "telegram_proxy": "",
-                        "telegram_get_updates_proxy": "",
                         "telegram_command_register": True,
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
-                        "telegram_command_registered_plugins": [],
-                        "telegram_command_scopes": [{"type": "default"}],
+                        "telegram_command_registered_plugins": ["*"],
+                        "telegram_command_scopes": [
+                            {"__template_key": "default", "type": "default"}
+                        ],
                         "telegram_update_mode": "polling",
                         "telegram_webhook_listen": "0.0.0.0",
                         "telegram_webhook_port": 8443,
@@ -682,6 +683,16 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
                     },
+                    "telegram_api_base_url": {
+                        "description": "Telegram Bot API 地址",
+                        "type": "string",
+                        "hint": "Telegram Bot API 基础地址。默认使用官方地址；只有使用自建 Bot API Server 或反向代理时才需要修改。",
+                    },
+                    "telegram_file_base_url": {
+                        "description": "Telegram 文件 API 地址",
+                        "type": "string",
+                        "hint": "Telegram 文件下载基础地址。默认使用官方地址；使用自建 Bot API Server 或反向代理时应与 Bot API 地址配套修改。",
+                    },
                     "mattermost_url": {
                         "description": "Mattermost URL",
                         "type": "string",
@@ -782,13 +793,161 @@ CONFIG_METADATA_2 = {
                         "description": "Telegram 命令注册插件",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "只注册所选插件提供的指令，填写插件名、展示名、目录名或模块路径。留空表示注册全部已启用插件的指令。",
+                        "default": ["*"],
+                        "hint": "只注册所选插件提供的指令。默认选择全部已启用插件；也可以选择不注册任何插件指令。若插件在插件页面被禁用，此处选择不会生效。",
+                        "_special": "select_plugin_set",
+                        "_plugin_set_allow_none": True,
+                        "_plugin_set_empty_as_all": False,
                     },
                     "telegram_command_scopes": {
                         "description": "Telegram 命令注册范围",
-                        "type": "list",
-                        "items": {"type": "object"},
-                        "hint": '每项可填写 Telegram BotCommandScope 配置，如 {"type":"default","language_code":"zh"} 或 {"type":"chat","chat_id":12345}。',
+                        "type": "template_list",
+                        "default": [{"__template_key": "default", "type": "default"}],
+                        "hint": "选择 Telegram BotCommandScope 注册范围。chat/chat_administrators 需要 chat_id，chat_member 还需要 user_id。",
+                        "templates": {
+                            "default": {
+                                "name": "默认范围",
+                                "hint": "默认 BotCommandScopeDefault。",
+                                "items": {
+                                    "type": {
+                                        "description": "范围类型",
+                                        "type": "string",
+                                        "default": "default",
+                                        "invisible": True,
+                                    },
+                                    "language_code": {
+                                        "description": "语言代码",
+                                        "type": "string",
+                                        "hint": "可选，例如 zh、en、ja。留空表示所有语言。",
+                                    },
+                                },
+                            },
+                            "all_private_chats": {
+                                "name": "全部私聊",
+                                "hint": "BotCommandScopeAllPrivateChats。",
+                                "items": {
+                                    "type": {
+                                        "description": "范围类型",
+                                        "type": "string",
+                                        "default": "all_private_chats",
+                                        "invisible": True,
+                                    },
+                                    "language_code": {
+                                        "description": "语言代码",
+                                        "type": "string",
+                                        "hint": "可选，例如 zh、en、ja。留空表示所有语言。",
+                                    },
+                                },
+                            },
+                            "all_group_chats": {
+                                "name": "全部群聊",
+                                "hint": "BotCommandScopeAllGroupChats。",
+                                "items": {
+                                    "type": {
+                                        "description": "范围类型",
+                                        "type": "string",
+                                        "default": "all_group_chats",
+                                        "invisible": True,
+                                    },
+                                    "language_code": {
+                                        "description": "语言代码",
+                                        "type": "string",
+                                        "hint": "可选，例如 zh、en、ja。留空表示所有语言。",
+                                    },
+                                },
+                            },
+                            "all_chat_administrators": {
+                                "name": "全部群管理员",
+                                "hint": "BotCommandScopeAllChatAdministrators。",
+                                "items": {
+                                    "type": {
+                                        "description": "范围类型",
+                                        "type": "string",
+                                        "default": "all_chat_administrators",
+                                        "invisible": True,
+                                    },
+                                    "language_code": {
+                                        "description": "语言代码",
+                                        "type": "string",
+                                        "hint": "可选，例如 zh、en、ja。留空表示所有语言。",
+                                    },
+                                },
+                            },
+                            "chat": {
+                                "name": "指定聊天",
+                                "hint": "BotCommandScopeChat，需要 chat_id。",
+                                "display_item": "chat_id",
+                                "items": {
+                                    "type": {
+                                        "description": "范围类型",
+                                        "type": "string",
+                                        "default": "chat",
+                                        "invisible": True,
+                                    },
+                                    "chat_id": {
+                                        "description": "Chat ID",
+                                        "type": "string",
+                                        "hint": "Telegram chat_id，可填写数字 ID 或 @channelusername。",
+                                    },
+                                    "language_code": {
+                                        "description": "语言代码",
+                                        "type": "string",
+                                        "hint": "可选，例如 zh、en、ja。留空表示所有语言。",
+                                    },
+                                },
+                            },
+                            "chat_administrators": {
+                                "name": "指定聊天管理员",
+                                "hint": "BotCommandScopeChatAdministrators，需要 chat_id。",
+                                "display_item": "chat_id",
+                                "items": {
+                                    "type": {
+                                        "description": "范围类型",
+                                        "type": "string",
+                                        "default": "chat_administrators",
+                                        "invisible": True,
+                                    },
+                                    "chat_id": {
+                                        "description": "Chat ID",
+                                        "type": "string",
+                                        "hint": "Telegram chat_id，可填写数字 ID 或 @channelusername。",
+                                    },
+                                    "language_code": {
+                                        "description": "语言代码",
+                                        "type": "string",
+                                        "hint": "可选，例如 zh、en、ja。留空表示所有语言。",
+                                    },
+                                },
+                            },
+                            "chat_member": {
+                                "name": "指定聊天成员",
+                                "hint": "BotCommandScopeChatMember，需要 chat_id 和 user_id。",
+                                "display_item": "chat_id",
+                                "items": {
+                                    "type": {
+                                        "description": "范围类型",
+                                        "type": "string",
+                                        "default": "chat_member",
+                                        "invisible": True,
+                                    },
+                                    "chat_id": {
+                                        "description": "Chat ID",
+                                        "type": "string",
+                                        "hint": "Telegram chat_id，可填写数字 ID 或 @channelusername。",
+                                    },
+                                    "user_id": {
+                                        "description": "User ID",
+                                        "type": "string",
+                                        "hint": "Telegram 用户 ID。",
+                                    },
+                                    "language_code": {
+                                        "description": "语言代码",
+                                        "type": "string",
+                                        "hint": "可选，例如 zh、en、ja。留空表示所有语言。",
+                                    },
+                                },
+                            },
+                        },
                     },
                     "telegram_update_mode": {
                         "description": "Telegram 更新模式",
@@ -848,12 +1007,7 @@ CONFIG_METADATA_2 = {
                     "telegram_proxy": {
                         "description": "Telegram API 代理",
                         "type": "string",
-                        "hint": "仅用于此 Telegram 适配器的 Bot API 请求代理，例如 http://127.0.0.1:7890。留空则使用默认网络设置。",
-                    },
-                    "telegram_get_updates_proxy": {
-                        "description": "Telegram getUpdates 代理",
-                        "type": "string",
-                        "hint": "仅用于此 Telegram 适配器轮询 getUpdates 的代理。留空时与 Bot API 请求使用相同网络设置。",
+                        "hint": "仅用于此 Telegram 适配器的 Bot API 请求代理，也会用于 getUpdates 轮询请求，例如 http://127.0.0.1:7890。留空则使用默认网络设置。",
                     },
                     "telegram_polling_restart_delay": {
                         "description": "Telegram 轮询重启延迟",

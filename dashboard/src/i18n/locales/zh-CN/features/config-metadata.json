@@ -592,14 +592,113 @@
       },
       "telegram_command_registered_plugins": {
         "description": "Telegram 命令注册插件",
-        "hint": "只注册所选插件提供的指令。可填写插件名、展示名、目录名或模块路径。留空表示注册全部已启用插件的指令。"
+        "hint": "只注册所选插件提供的指令。默认选择全部已启用插件；也可以选择不注册任何插件指令。若插件在插件页面被禁用，此处选择不会生效。"
       },
       "telegram_command_scopes": {
         "description": "Telegram 命令注册范围",
-        "hint": "Telegram BotCommandScope 配置，例如 {\"type\":\"default\",\"language_code\":\"zh\"} 或 {\"type\":\"chat\",\"chat_id\":12345}。"
+        "hint": "选择 Telegram BotCommandScope 注册范围。chat/chat_administrators 需要 chat_id，chat_member 还需要 user_id。",
+        "templates": {
+          "default": {
+            "name": "默认范围",
+            "hint": "默认 BotCommandScopeDefault。",
+            "type": {
+              "description": "范围类型"
+            },
+            "language_code": {
+              "description": "语言代码",
+              "hint": "可选，例如 zh、en、ja。留空表示所有语言。"
+            }
+          },
+          "all_private_chats": {
+            "name": "全部私聊",
+            "hint": "BotCommandScopeAllPrivateChats。",
+            "type": {
+              "description": "范围类型"
+            },
+            "language_code": {
+              "description": "语言代码",
+              "hint": "可选，例如 zh、en、ja。留空表示所有语言。"
+            }
+          },
+          "all_group_chats": {
+            "name": "全部群聊",
+            "hint": "BotCommandScopeAllGroupChats。",
+            "type": {
+              "description": "范围类型"
+            },
+            "language_code": {
+              "description": "语言代码",
+              "hint": "可选，例如 zh、en、ja。留空表示所有语言。"
+            }
+          },
+          "all_chat_administrators": {
+            "name": "全部群管理员",
+            "hint": "BotCommandScopeAllChatAdministrators。",
+            "type": {
+              "description": "范围类型"
+            },
+            "language_code": {
+              "description": "语言代码",
+              "hint": "可选，例如 zh、en、ja。留空表示所有语言。"
+            }
+          },
+          "chat": {
+            "name": "指定聊天",
+            "hint": "BotCommandScopeChat，需要 chat_id。",
+            "type": {
+              "description": "范围类型"
+            },
+            "chat_id": {
+              "description": "Chat ID",
+              "hint": "Telegram chat_id，可填写数字 ID 或 @channelusername。"
+            },
+            "language_code": {
+              "description": "语言代码",
+              "hint": "可选，例如 zh、en、ja。留空表示所有语言。"
+            }
+          },
+          "chat_administrators": {
+            "name": "指定聊天管理员",
+            "hint": "BotCommandScopeChatAdministrators，需要 chat_id。",
+            "type": {
+              "description": "范围类型"
+            },
+            "chat_id": {
+              "description": "Chat ID",
+              "hint": "Telegram chat_id，可填写数字 ID 或 @channelusername。"
+            },
+            "language_code": {
+              "description": "语言代码",
+              "hint": "可选，例如 zh、en、ja。留空表示所有语言。"
+            }
+          },
+          "chat_member": {
+            "name": "指定聊天成员",
+            "hint": "BotCommandScopeChatMember，需要 chat_id 和 user_id。",
+            "type": {
+              "description": "范围类型"
+            },
+            "chat_id": {
+              "description": "Chat ID",
+              "hint": "Telegram chat_id，可填写数字 ID 或 @channelusername。"
+            },
+            "user_id": {
+              "description": "User ID",
+              "hint": "Telegram 用户 ID。"
+            },
+            "language_code": {
+              "description": "语言代码",
+              "hint": "可选，例如 zh、en、ja。留空表示所有语言。"
+            }
+          }
+        }
       },
       "telegram_update_mode": {
         "description": "Telegram 更新模式",
+        "labels": [
+          "轮询 getUpdates",
+          "独立 Webhook"
+        ],
         "hint": "polling 使用 getUpdates 轮询；webhook 使用 Telegram 适配器独立监听并需要可被 Telegram 访问的公开 URL。"
       },
       "telegram_webhook_listen": {
@@ -634,9 +733,13 @@
         "description": "Telegram Webhook 私钥路径",
         "hint": "可选。仅在不通过反向代理、直接让 PTB 提供 HTTPS 时填写私钥路径。"
       },
-      "telegram_get_updates_proxy": {
-        "description": "Telegram getUpdates 代理",
-        "hint": "仅用于此 Telegram 适配器轮询 getUpdates 的代理。留空则使用默认网络设置。"
+      "telegram_api_base_url": {
+        "description": "Telegram Bot API 地址",
+        "hint": "Telegram Bot API 基础地址。默认使用官方地址；只有使用自建 Bot API Server 或反向代理时才需要修改。"
+      },
+      "telegram_file_base_url": {
+        "description": "Telegram 文件 API 地址",
+        "hint": "Telegram 文件下载基础地址。默认使用官方地址；使用自建 Bot API Server 或反向代理时应与 Bot API 地址配套修改。"
       },
       "telegram_polling_restart_delay": {
         "description": "Telegram 轮询重启延迟",
@@ -644,7 +747,7 @@
       },
       "telegram_proxy": {
         "description": "Telegram API 代理",
-        "hint": "仅用于此 Telegram 适配器 Bot API 请求的代理，例如 http://127.0.0.1:7890。留空则使用默认网络设置。"
+        "hint": "仅用于此 Telegram 适配器 Bot API 请求的代理，也会用于 getUpdates 轮询请求，例如 http://127.0.0.1:7890。留空则使用默认网络设置。"
       },
       "telegram_token": {
         "description": "Bot Token",
@@ -679,6 +782,10 @@
       },
       "wecom_ai_bot_connection_mode": {
         "description": "企业微信智能机器人连接模式",
+        "labels": [
+          "Webhook 回调",
+          "长连接"
+        ],
         "hint": "Webhook 回调模式需要配置 Token/EncodingAESKey；长连接模式需要配置 BotID/Secret。"
       },
       "wecomaibot_friend_message_welcome_text": {

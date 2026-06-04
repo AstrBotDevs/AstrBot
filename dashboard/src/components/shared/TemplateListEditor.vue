@@ -56,7 +56,7 @@
             <v-icon>{{ expandedEntries[entryIndex] ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
           </v-btn>
           <div class="d-flex flex-column">
-            <v-list-item-title class="property-name">{{ templateLabel(entry.__template_key) }}</v-list-item-title>
+            <v-list-item-title class="property-name">{{ templateLabel(entryTemplateKey(entry)) }}</v-list-item-title>
             <v-list-item-subtitle class="property-hint entry-display-text" v-if="templateDisplayText(entry)">
               {{ templateDisplayText(entry) }}
             </v-list-item-subtitle>
@@ -85,10 +85,10 @@
               >
                 <div class="config-section mb-2">
                   <v-list-item-title class="config-title">
-                    {{ templateItemText(entry.__template_key, itemKey, 'description', itemMeta?.description) || itemKey }}
+                    {{ templateItemText(entryTemplateKey(entry), itemKey, 'description', itemMeta?.description) || itemKey }}
                   </v-list-item-title>
                   <v-list-item-subtitle class="config-hint" v-if="itemMeta?.hint">
-                    {{ templateItemText(entry.__template_key, itemKey, 'hint', itemMeta.hint) }}
+                    {{ templateItemText(entryTemplateKey(entry), itemKey, 'hint', itemMeta.hint) }}
                   </v-list-item-subtitle>
                 </div>
                 <div v-for="(childMeta, childKey, childIndex) in itemMeta.items" :key="childKey">
@@ -97,10 +97,10 @@
                       <v-col cols="12" sm="6" class="property-info">
                         <v-list-item density="compact">
                           <v-list-item-title class="property-name">
-                            {{ templateItemText(entry.__template_key, `${itemKey}.${childKey}`, 'description', childMeta?.description) || childKey }}
+                            {{ templateItemText(entryTemplateKey(entry), `${itemKey}.${childKey}`, 'description', childMeta?.description) || childKey }}
                           </v-list-item-title>
                           <v-list-item-subtitle class="property-hint">
-                            {{ templateItemText(entry.__template_key, `${itemKey}.${childKey}`, 'hint', childMeta?.hint) }}
+                            {{ templateItemText(entryTemplateKey(entry), `${itemKey}.${childKey}`, 'hint', childMeta?.hint) }}
                           </v-list-item-subtitle>
                         </v-list-item>
                       </v-col>
@@ -110,7 +110,7 @@
                           :item-meta="childMeta"
                           :plugin-name="pluginName"
                           :plugin-i18n="pluginI18n"
-                          :config-key="templateItemPath(entry.__template_key, `${itemKey}.${childKey}`)"
+                          :config-key="templateItemPath(entryTemplateKey(entry), `${itemKey}.${childKey}`)"
                         />
                       </v-col>
                     </v-row>
@@ -128,11 +128,11 @@
                   <v-col cols="12" sm="6" class="property-info">
                     <v-list-item density="compact">
                       <v-list-item-title class="property-name">
-                        <span v-if="itemMeta?.description">{{ templateItemText(entry.__template_key, itemKey, 'description', itemMeta?.description) }} <span class="property-key">({{ itemKey }})</span></span>
+                        <span v-if="itemMeta?.description">{{ templateItemText(entryTemplateKey(entry), itemKey, 'description', itemMeta?.description) }} <span class="property-key">({{ itemKey }})</span></span>
                         <span v-else>{{ itemKey }}</span>
                       </v-list-item-title>
                       <v-list-item-subtitle class="property-hint">
-                        {{ templateItemText(entry.__template_key, itemKey, 'hint', itemMeta?.hint) }}
+                        {{ templateItemText(entryTemplateKey(entry), itemKey, 'hint', itemMeta?.hint) }}
                       </v-list-item-subtitle>
                     </v-list-item>
                   </v-col>
@@ -142,7 +142,7 @@
                       :item-meta="itemMeta"
                       :plugin-name="pluginName"
                       :plugin-i18n="pluginI18n"
-                      :config-key="templateItemPath(entry.__template_key, itemKey)"
+                      :config-key="templateItemPath(entryTemplateKey(entry), itemKey)"
                     />
                   </v-col>
                 </v-row>
@@ -222,6 +222,11 @@ function templateLabel(key) {
   return templateText(key, 'name', props.templates?.[key]?.name || key)
 }
 
+function entryTemplateKey(entry) {
+  if (!entry || typeof entry !== 'object') return ''
+  return entry.__template_key || entry.template || entry.type || ''
+}
+
 function templatePath(templateKey) {
   return props.configPath ? `${props.configPath}.templates.${templateKey}` : `templates.${templateKey}`
 }
@@ -292,7 +297,7 @@ function ensureEntryDefaults() {
     let entryChanged = applyDefaults(newEntry, template.items)
     
     if (!Object.prototype.hasOwnProperty.call(newEntry, '__template_key')) {
-      newEntry.__template_key = ''
+      newEntry.__template_key = entryTemplateKey(entry)
       entryChanged = true
     }
     
@@ -347,7 +352,7 @@ function toggleEntry(index) {
 
 function getTemplate(entry) {
   if (!entry) return null
-  const key = entry.__template_key
+  const key = entryTemplateKey(entry)
   if (!key) return null
   return props.templates?.[key] || null
 }
@@ -355,7 +360,7 @@ function getTemplate(entry) {
 function templateHintText(entry) {
   const template = getTemplate(entry)
   if (!template || template.hide_hint_in_list) return ''
-  return templateText(entry.__template_key, 'hint', template.hint || template.description || '')
+  return templateText(entryTemplateKey(entry), 'hint', template.hint || template.description || '')
 }
 
 function getItemMetaBySelector(itemsMeta = {}, selector = '') {
@@ -387,7 +392,7 @@ function templateDisplayText(entry) {
   if (typeof value !== 'string' || !value.trim()) return ''
 
   const label = templateItemText(
-    entry.__template_key,
+    entryTemplateKey(entry),
     displayItem,
     'description',
     displayMeta.description || displayItem,

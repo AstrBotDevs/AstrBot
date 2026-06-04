@@ -138,6 +138,14 @@ function getItemHint(itemKey, itemMeta) {
   return resolveConfigText(getItemPath(itemKey), 'hint', itemMeta?.hint)
 }
 
+function pluginSetPreviewItems(itemKey, itemMeta) {
+  const value = createSelectorModel(itemKey).value || []
+  if (value.length === 0 && itemMeta?._plugin_set_empty_as_all) {
+    return ['*']
+  }
+  return value
+}
+
 function openEditorDialog(key, value, theme, language) {
   currentEditingKey.value = key
   currentEditingLanguage.value = language || 'json'
@@ -320,13 +328,13 @@ function getSpecialSubtype(value) {
         <v-row v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
           class="plugin-set-display-row">
           <v-col cols="12" class="plugin-set-display">
-            <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
+            <div v-if="pluginSetPreviewItems(itemKey, itemMeta).length > 0"
               class="selected-plugins-full-width">
               <div class="plugins-header">
                 <small class="text-grey">{{ t('core.shared.pluginSetSelector.selectedPluginsLabel') }}</small>
               </div>
               <div class="d-flex flex-wrap ga-2 mt-2">
-                <v-chip v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
+                <v-chip v-for="plugin in pluginSetPreviewItems(itemKey, itemMeta)" :key="plugin" size="small" label
                   color="primary" variant="outlined">
                   {{ plugin === '*' ? t('core.shared.pluginSetSelector.allPluginsLabel') : plugin }}
                 </v-chip>
@@ -407,13 +415,13 @@ function getSpecialSubtype(value) {
               <v-row v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
                 class="plugin-set-display-row">
                 <v-col cols="12" class="plugin-set-display">
-                  <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
+                  <div v-if="pluginSetPreviewItems(itemKey, itemMeta).length > 0"
                     class="selected-plugins-full-width">
                     <div class="plugins-header">
                       <small class="text-grey">{{ t('core.shared.pluginSetSelector.selectedPluginsLabel') }}</small>
                     </div>
                     <div class="d-flex flex-wrap ga-2 mt-2">
-                      <v-chip v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
+                      <v-chip v-for="plugin in pluginSetPreviewItems(itemKey, itemMeta)" :key="plugin" size="small" label
                         color="primary" variant="outlined">
                         {{ plugin === '*' ? t('core.shared.pluginSetSelector.allPluginsLabel') : plugin }}
                       </v-chip>

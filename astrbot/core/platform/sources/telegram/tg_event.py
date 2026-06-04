@@ -2,11 +2,21 @@ import asyncio
 import os
 import re
 from collections.abc import Callable
+from contextlib import ExitStack
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 import telegramify_markdown
-from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
-from telegram.constants import ChatAction
+from telegram import (
+    InputFile,
+    InputMediaAudio,
+    InputMediaDocument,
+    InputMediaPhoto,
+    InputMediaVideo,
+    ReactionTypeCustomEmoji,
+    ReactionTypeEmoji,
+)
+from telegram.constants import ChatAction, MessageLimit
 from telegram.error import BadRequest
 from telegram.ext import ExtBot
 
@@ -30,6 +40,8 @@ from .components import (
     TelegramInlineKeyboard,
     TelegramInlineQueryResult,
     TelegramInlineQueryResultsButton,
+    TelegramMediaGroup,
+    TelegramMediaGroupItem,
     TelegramMessageOptions,
     TelegramRemoveKeyboard,
     TelegramReplyKeyboard,
@@ -41,6 +53,13 @@ TelegramReplyMarkup = (
     | TelegramRemoveKeyboard
     | TelegramForceReply
 )
+TelegramAlbumInputMedia = (
+    InputMediaPhoto | InputMediaVideo | InputMediaDocument | InputMediaAudio
+)
+TelegramMediaComponent = Image | Video | File
+
+MEDIA_GROUP_LIMIT = 10
+MEDIA_GROUP_MIN_ITEMS = 2
 
 
 def _is_gif(path: str) -> bool:
@@ -51,6 +70,18 @@ def _is_gif(path: str) -> bool:
             return f.read(6) in (b"GIF87a", b"GIF89a")
     except OSError:
         return False
+
+
+def _is_http_url(value: str) -> bool:
+    return value.startswith(("http://", "https://"))
+
+
+def _is_gif_url(value: str) -> bool:
+    return urlsplit(value).path.lower().endswith(".gif")
+
+
+def _is_webpage_curl_failed_error(error: Exception) -> bool:
+    return "webpage_curl_failed" in str(error).lower()
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -404,6 +435,679 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     **cast(Any, payload),
                 )
 
+    @classmethod
+    def _prepare_caption_payload(
+        cls,
+        caption: str | None,
+        *,
+        use_markdown: bool | None = None,
+        options: TelegramMessageOptions | None = None,
+        parse_mode: str | None = None,
+    ) -> dict[str, Any]:
+        """构造 Telegram caption 参数，遵守 Bot API 的 caption 长度限制。"""
+        if caption is None:
+            return {}
+        if len(caption) > int(MessageLimit.CAPTION_LENGTH):
+            raise ValueError(
+                "Telegram media caption must be 1024 characters or fewer.",
+            )
+
+        effective_options = options or TelegramMessageOptions(parse_mode=parse_mode)
+        if parse_mode is not None:
+            effective_options = TelegramMessageOptions(parse_mode=parse_mode)
+        normalized_parse_mode = cls._normalize_parse_mode(effective_options.parse_mode)
+        if normalized_parse_mode is not None:
+            return {"caption": caption, "parse_mode": normalized_parse_mode}
+        if use_markdown is False or cls._is_plaintext_parse_mode(
+            effective_options.parse_mode,
+        ):
+            return {"caption": caption}
+        try:
+            markdown_caption = telegramify_markdown.markdownify(caption)
+        except Exception as e:
+            logger.warning(
+                f"Failed to convert media caption to Markdown，using normal text: {e!s}"
+            )
+            return {"caption": caption}
+        return {"caption": markdown_caption, "parse_mode": "MarkdownV2"}
+
+    @staticmethod
+    def _media_family(item: BaseMessageComponent) -> str | None:
+        if isinstance(item, Image | Video):
+            return "visual"
+        if isinstance(item, File):
+            return "document"
+        return None
+
+    @staticmethod
+    def _component_reference(item: TelegramMediaComponent) -> str:
+        if isinstance(item, Image):
+            return str(item.url or item.file or "")
+        if isinstance(item, Video):
+            return str(item.file or "")
+        return str(item.url or item.file_ or item.file or "")
+
+    @staticmethod
+    async def _component_path(item: TelegramMediaComponent) -> str:
+        if isinstance(item, Image | Video):
+            return await item.convert_to_file_path()
+        return await item.get_file()
+
+    @staticmethod
+    async def _explicit_item_path(item: TelegramMediaGroupItem) -> str:
+        media = item.media
+        if isinstance(media, Image | Video):
+            return await media.convert_to_file_path()
+        if isinstance(media, File):
+            return await media.get_file()
+        if isinstance(media, str):
+            if media.startswith("file://"):
+                path = media[7:]
+                if (
+                    os.name == "nt"
+                    and len(path) > 2
+                    and path[0] == "/"
+                    and path[2] == ":"
+                ):
+                    path = path[1:]
+                return os.path.abspath(path)
+            return os.path.abspath(media)
+        raise ValueError("Telegram media group item media must be a component or path.")
+
+    @staticmethod
+    def _explicit_item_reference(item: TelegramMediaGroupItem) -> str:
+        media = item.media
+        if isinstance(media, Image | Video):
+            return str(media.url or media.file or "")
+        if isinstance(media, File):
+            return str(media.url or media.file_ or media.file or "")
+        if isinstance(media, str):
+            return media
+        return ""
+
+    @staticmethod
+    def _input_file_from_path(
+        path: str,
+        opened_files: ExitStack,
+        *,
+        filename: str | None = None,
+    ) -> InputFile:
+        # Bot API media group 的本地文件必须走 multipart；让文件句柄活到 await 完成。
+        file_handle = opened_files.enter_context(open(path, "rb"))
+        return InputFile(
+            file_handle,
+            filename=filename or os.path.basename(path),
+            attach=True,
+        )
+
+    @classmethod
+    async def _thumbnail_input(
+        cls,
+        thumbnail: Any,
+        opened_files: ExitStack,
+        *,
+        force_upload: bool = False,
+    ) -> Any:
+        if thumbnail is None:
+            return None
+        if isinstance(thumbnail, Image):
+            reference = str(thumbnail.url or thumbnail.file or "")
+            if _is_http_url(reference) and not force_upload:
+                return reference
+            return cls._input_file_from_path(
+                await thumbnail.convert_to_file_path(),
+                opened_files,
+            )
+        if isinstance(thumbnail, str):
+            if _is_http_url(thumbnail) and not force_upload:
+                return thumbnail
+            path = thumbnail[7:] if thumbnail.startswith("file://") else thumbnail
+            return cls._input_file_from_path(os.path.abspath(path), opened_files)
+        return thumbnail
+
+    @classmethod
+    async def _build_album_item(
+        cls,
+        item: TelegramMediaComponent,
+        opened_files: ExitStack,
+        *,
+        force_upload: bool = False,
+        caption_payload: dict[str, Any] | None = None,
+    ) -> TelegramAlbumInputMedia | None:
+        caption_payload = caption_payload or {}
+        reference = cls._component_reference(item)
+        if isinstance(item, Image):
+            if _is_http_url(reference) and not force_upload:
+                if _is_gif_url(reference):
+                    return None
+                return InputMediaPhoto(media=reference, **caption_payload)
+            path = await item.convert_to_file_path()
+            if _is_gif(path):
+                return None
+            return InputMediaPhoto(
+                media=cls._input_file_from_path(path, opened_files),
+                **caption_payload,
+            )
+
+        if isinstance(item, Video):
+            if _is_http_url(reference) and not force_upload:
+                return InputMediaVideo(media=reference, **caption_payload)
+            path = await item.convert_to_file_path()
+            return InputMediaVideo(
+                media=cls._input_file_from_path(path, opened_files),
+                **caption_payload,
+            )
+
+        if isinstance(item, File):
+            if _is_http_url(reference) and not force_upload:
+                return InputMediaDocument(
+                    media=reference,
+                    filename=item.name or None,
+                    **caption_payload,
+                )
+            path = await item.get_file()
+            return InputMediaDocument(
+                media=cls._input_file_from_path(
+                    path,
+                    opened_files,
+                    filename=item.name or None,
+                ),
+                filename=item.name or None,
+                **caption_payload,
+            )
+        return None
+
+    @classmethod
+    async def _build_explicit_album_item(
+        cls,
+        item: TelegramMediaGroupItem,
+        opened_files: ExitStack,
+        *,
+        force_upload: bool = False,
+        caption_payload: dict[str, Any] | None = None,
+    ) -> TelegramAlbumInputMedia:
+        caption_payload = caption_payload or {}
+        reference = cls._explicit_item_reference(item)
+        if _is_http_url(reference) and not force_upload:
+            media: Any = reference
+        else:
+            media = cls._input_file_from_path(
+                await cls._explicit_item_path(item),
+                opened_files,
+                filename=item.filename,
+            )
+
+        if item.media_type == "photo":
+            return InputMediaPhoto(
+                media=media,
+                has_spoiler=item.has_spoiler,
+                show_caption_above_media=item.show_caption_above_media,
+                **caption_payload,
+            )
+
+        thumbnail = await cls._thumbnail_input(
+            item.thumbnail,
+            opened_files,
+            force_upload=force_upload,
+        )
+        if item.media_type == "video":
+            return InputMediaVideo(
+                media=media,
+                thumbnail=thumbnail,
+                has_spoiler=item.has_spoiler,
+                show_caption_above_media=item.show_caption_above_media,
+                supports_streaming=item.supports_streaming,
+                **caption_payload,
+            )
+        if item.media_type == "document":
+            return InputMediaDocument(
+                media=media,
+                filename=item.filename,
+                thumbnail=thumbnail,
+                disable_content_type_detection=item.disable_content_type_detection,
+                **caption_payload,
+            )
+        if item.media_type == "audio":
+            return InputMediaAudio(
+                media=media,
+                filename=item.filename,
+                thumbnail=thumbnail,
+                duration=item.duration,
+                performer=item.performer,
+                title=item.title,
+                **caption_payload,
+            )
+        raise ValueError(
+            f"Unsupported Telegram media group item type: {item.media_type}"
+        )
+
+    @classmethod
+    async def _build_album_media(
+        cls,
+        items: list[TelegramMediaComponent],
+        opened_files: ExitStack,
+        *,
+        force_upload: bool = False,
+        caption_payload: dict[str, Any] | None = None,
+    ) -> list[TelegramAlbumInputMedia]:
+        media: list[TelegramAlbumInputMedia] = []
+        for index, item in enumerate(items):
+            built = await cls._build_album_item(
+                item,
+                opened_files,
+                force_upload=force_upload,
+                caption_payload=caption_payload if index == 0 else None,
+            )
+            if built is None:
+                break
+            media.append(built)
+        return media
+
+    @classmethod
+    async def _build_explicit_album_media(
+        cls,
+        items: list[TelegramMediaGroupItem],
+        opened_files: ExitStack,
+        *,
+        force_upload: bool = False,
+        caption_payload: dict[str, Any] | None = None,
+    ) -> list[TelegramAlbumInputMedia]:
+        return [
+            await cls._build_explicit_album_item(
+                item,
+                opened_files,
+                force_upload=force_upload,
+                caption_payload=caption_payload if index == 0 else None,
+            )
+            for index, item in enumerate(items)
+        ]
+
+    @classmethod
+    def _items_have_remote_url(cls, items: list[Any]) -> bool:
+        for item in items:
+            if isinstance(item, TelegramMediaGroupItem):
+                reference = cls._explicit_item_reference(item)
+            else:
+                reference = cls._component_reference(cast(TelegramMediaComponent, item))
+            if _is_http_url(reference):
+                return True
+        return False
+
+    @classmethod
+    async def _send_media_group_with_fallback(
+        cls,
+        client: ExtBot,
+        items: list[TelegramMediaComponent],
+        payload: dict[str, Any],
+        *,
+        caption_payload: dict[str, Any] | None = None,
+    ) -> None:
+        with ExitStack() as opened_files:
+            media = await cls._build_album_media(
+                items,
+                opened_files,
+                caption_payload=caption_payload,
+            )
+            try:
+                await client.send_media_group(media=media, **cast(Any, payload))
+            except BadRequest as e:
+                if not (
+                    _is_webpage_curl_failed_error(e)
+                    and cls._items_have_remote_url(items)
+                ):
+                    raise
+                logger.warning(
+                    "Telegram failed to fetch a remote media group item; "
+                    "retrying by uploading local copies: %s",
+                    e,
+                )
+                with ExitStack() as upload_files:
+                    upload_media = await cls._build_album_media(
+                        items,
+                        upload_files,
+                        force_upload=True,
+                        caption_payload=caption_payload,
+                    )
+                    if len(upload_media) != len(media):
+                        raise
+                    await client.send_media_group(
+                        media=upload_media,
+                        **cast(Any, payload),
+                    )
+
+    @classmethod
+    async def _send_explicit_media_group(
+        cls,
+        client: ExtBot,
+        group: TelegramMediaGroup,
+        payload: dict[str, Any],
+        *,
+        use_markdown: bool | None = None,
+    ) -> None:
+        cls._validate_media_group_families(group.items)
+        batches = [
+            group.items[index : index + MEDIA_GROUP_LIMIT]
+            for index in range(0, len(group.items), MEDIA_GROUP_LIMIT)
+        ]
+        for batch_index, batch in enumerate(batches):
+            caption_payload = (
+                cls._prepare_caption_payload(
+                    group.caption,
+                    use_markdown=use_markdown,
+                    parse_mode=group.parse_mode,
+                )
+                if batch_index == 0
+                else {}
+            )
+            if len(batch) == 1:
+                await cls._send_explicit_single_media(
+                    client,
+                    batch[0],
+                    payload,
+                    caption_payload=caption_payload,
+                )
+                continue
+            with ExitStack() as opened_files:
+                media = await cls._build_explicit_album_media(
+                    batch,
+                    opened_files,
+                    caption_payload=caption_payload,
+                )
+                try:
+                    await client.send_media_group(media=media, **cast(Any, payload))
+                except BadRequest as e:
+                    if not (
+                        _is_webpage_curl_failed_error(e)
+                        and cls._items_have_remote_url(batch)
+                    ):
+                        raise
+                    logger.warning(
+                        "Telegram failed to fetch a remote explicit media group item; "
+                        "retrying by uploading local copies: %s",
+                        e,
+                    )
+                    with ExitStack() as upload_files:
+                        upload_media = await cls._build_explicit_album_media(
+                            batch,
+                            upload_files,
+                            force_upload=True,
+                            caption_payload=caption_payload,
+                        )
+                        await client.send_media_group(
+                            media=upload_media,
+                            **cast(Any, payload),
+                        )
+
+    @staticmethod
+    def _validate_media_group_families(items: list[TelegramMediaGroupItem]) -> None:
+        media_types = {item.media_type for item in items}
+        if "audio" in media_types and media_types != {"audio"}:
+            raise ValueError(
+                "Telegram audio media groups can only contain audio items."
+            )
+        if "document" in media_types and media_types != {"document"}:
+            raise ValueError(
+                "Telegram document media groups can only contain document items.",
+            )
+
+    @classmethod
+    async def _send_explicit_single_media(
+        cls,
+        client: ExtBot,
+        item: TelegramMediaGroupItem,
+        payload: dict[str, Any],
+        *,
+        caption_payload: dict[str, Any] | None = None,
+    ) -> None:
+        caption_payload = caption_payload or {}
+        reference = cls._explicit_item_reference(item)
+        if _is_http_url(reference):
+            media = reference
+        else:
+            with ExitStack() as opened_files:
+                path = await cls._explicit_item_path(item)
+                media = cls._input_file_from_path(
+                    path, opened_files, filename=item.filename
+                )
+                await cls._send_single_media_by_type(
+                    client,
+                    item.media_type,
+                    media,
+                    payload,
+                    filename=item.filename,
+                    **caption_payload,
+                )
+                return
+        await cls._send_single_media_by_type(
+            client,
+            item.media_type,
+            media,
+            payload,
+            filename=item.filename,
+            **caption_payload,
+        )
+
+    @staticmethod
+    async def _send_single_media_by_type(
+        client: ExtBot,
+        media_type: str,
+        media: Any,
+        payload: dict[str, Any],
+        *,
+        filename: str | None = None,
+        **caption_payload: Any,
+    ) -> None:
+        if media_type == "photo":
+            await client.send_photo(
+                photo=media, **caption_payload, **cast(Any, payload)
+            )
+        elif media_type == "video":
+            await client.send_video(
+                video=media, **caption_payload, **cast(Any, payload)
+            )
+        elif media_type == "document":
+            await client.send_document(
+                document=media,
+                filename=filename,
+                **caption_payload,
+                **cast(Any, payload),
+            )
+        elif media_type == "audio":
+            await client.send_audio(
+                audio=media,
+                filename=filename,
+                **caption_payload,
+                **cast(Any, payload),
+            )
+        else:
+            raise ValueError(f"Unsupported Telegram media type: {media_type}")
+
+    @classmethod
+    def _collect_media_segment(
+        cls,
+        chain: list[BaseMessageComponent],
+        start_idx: int,
+    ) -> tuple[str, list[str], list[TelegramMediaComponent], int]:
+        family: str | None = None
+        captions: list[str] = []
+        media: list[TelegramMediaComponent] = []
+        idx = start_idx
+        while idx < len(chain):
+            item = chain[idx]
+            if isinstance(item, Plain):
+                captions.append(item.text)
+                idx += 1
+                continue
+            item_family = cls._media_family(item)
+            if item_family is None:
+                break
+            if family is None:
+                family = item_family
+            if item_family != family:
+                break
+            media.append(cast(TelegramMediaComponent, item))
+            idx += 1
+        return family or "", captions, media, idx
+
+    @classmethod
+    def _next_media_index(
+        cls,
+        chain: list[BaseMessageComponent],
+        start_idx: int,
+    ) -> int | None:
+        idx = start_idx
+        while idx < len(chain):
+            item = chain[idx]
+            if isinstance(item, Plain):
+                idx += 1
+                continue
+            if cls._media_family(item) is not None:
+                return idx
+            return None
+        return None
+
+    @classmethod
+    async def _send_single_component_media(
+        cls,
+        client: ExtBot,
+        item: TelegramMediaComponent,
+        payload: dict[str, Any],
+        *,
+        caption_payload: dict[str, Any] | None = None,
+    ) -> None:
+        caption_payload = caption_payload or {}
+        if isinstance(item, Image):
+            path = await item.convert_to_file_path()
+            if _is_gif(path):
+                await client.send_animation(
+                    animation=path,
+                    **caption_payload,
+                    **cast(Any, payload),
+                )
+            else:
+                await client.send_photo(
+                    photo=path,
+                    **caption_payload,
+                    **cast(Any, payload),
+                )
+        elif isinstance(item, Video):
+            path = await item.convert_to_file_path()
+            await client.send_video(
+                video=path,
+                **caption_payload,
+                **cast(Any, payload),
+            )
+        elif isinstance(item, File):
+            path = await item.get_file()
+            name = item.name or os.path.basename(path)
+            await client.send_document(
+                document=path,
+                filename=name,
+                **caption_payload,
+                **cast(Any, payload),
+            )
+
+    @classmethod
+    async def _is_album_photo_component(cls, item: Image) -> bool:
+        reference = cls._component_reference(item)
+        if _is_http_url(reference):
+            return not _is_gif_url(reference)
+        return not _is_gif(await item.convert_to_file_path())
+
+    @classmethod
+    async def _send_albumable_component_media(
+        cls,
+        client: ExtBot,
+        items: list[TelegramMediaComponent],
+        payload: dict[str, Any],
+        *,
+        caption: str | None,
+        use_markdown: bool | None,
+        options: TelegramMessageOptions,
+    ) -> None:
+        batches = [
+            items[index : index + MEDIA_GROUP_LIMIT]
+            for index in range(0, len(items), MEDIA_GROUP_LIMIT)
+        ]
+        for batch_index, batch in enumerate(batches):
+            caption_payload = (
+                cls._prepare_caption_payload(
+                    caption,
+                    use_markdown=use_markdown,
+                    options=options,
+                )
+                if batch_index == 0
+                else {}
+            )
+            if len(batch) == 1:
+                await cls._send_single_component_media(
+                    client,
+                    batch[0],
+                    payload,
+                    caption_payload=caption_payload,
+                )
+                continue
+            await cls._send_media_group_with_fallback(
+                client,
+                batch,
+                payload,
+                caption_payload=caption_payload,
+            )
+
+    @classmethod
+    async def _send_component_media_segment(
+        cls,
+        client: ExtBot,
+        items: list[TelegramMediaComponent],
+        payload: dict[str, Any],
+        *,
+        caption: str | None,
+        use_markdown: bool | None,
+        options: TelegramMessageOptions,
+    ) -> None:
+        caption_consumed = False
+        current_batch: list[TelegramMediaComponent] = []
+
+        async def flush_batch() -> None:
+            nonlocal caption_consumed, current_batch
+            if not current_batch:
+                return
+            batch_caption = caption if not caption_consumed else None
+            if batch_caption is not None:
+                caption_consumed = True
+            await cls._send_albumable_component_media(
+                client,
+                current_batch,
+                payload,
+                caption=batch_caption,
+                use_markdown=use_markdown,
+                options=options,
+            )
+            current_batch = []
+
+        for item in items:
+            if isinstance(item, Image) and not await cls._is_album_photo_component(
+                item
+            ):
+                await flush_batch()
+                single_caption = caption if not caption_consumed else None
+                if single_caption is not None:
+                    caption_consumed = True
+                await cls._send_single_component_media(
+                    client,
+                    item,
+                    payload,
+                    caption_payload=cls._prepare_caption_payload(
+                        single_caption,
+                        use_markdown=use_markdown,
+                        options=options,
+                    ),
+                )
+                continue
+            current_batch.append(item)
+
+        await flush_batch()
+
     async def _ensure_typing(
         self,
         user_name: str,
@@ -433,7 +1137,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
         message: MessageChain,
         user_name: str,
     ) -> None:
-        image_path = None
         chain, options, reply_markup = cls._extract_send_options(message)
 
         has_reply = False
@@ -457,7 +1160,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
         await cls._send_chat_action(client, user_name, action, message_thread_id)
 
         extra_payload = cls._build_text_payload({}, options, reply_markup)
-        for i in chain:
+        idx = 0
+        while idx < len(chain):
+            i = chain[idx]
             payload = {
                 "chat_id": user_name,
             }
@@ -471,32 +1176,85 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 if key != "link_preview_options"
             }
 
-            if isinstance(i, Plain):
+            if isinstance(i, TelegramMediaGroup):
+                if "reply_markup" in media_payload and len(i.items) > 1:
+                    raise ValueError(
+                        "Telegram media groups do not support reply_markup. "
+                        "Send buttons in a separate message.",
+                    )
+                album_payload = {
+                    key: value
+                    for key, value in media_payload.items()
+                    if key != "reply_markup"
+                }
+                await cls._send_explicit_media_group(
+                    client,
+                    i,
+                    album_payload,
+                    use_markdown=message.use_markdown_,
+                )
+            elif isinstance(i, Plain):
                 if at_user_id and not at_flag:
                     i.text = f"@{at_user_id} {i.text}"
                     at_flag = True
-                await cls._send_text_chunks(
-                    client,
-                    i.text,
-                    payload | extra_payload,
-                    use_markdown=message.use_markdown_,
-                    options=options,
-                )
-            elif isinstance(i, Image):
-                image_path = await i.convert_to_file_path()
-                if _is_gif(image_path):
-                    send_coro = client.send_animation
-                    media_kwarg = {"animation": image_path}
+                next_media_idx = cls._next_media_index(chain, idx + 1)
+                if next_media_idx is None:
+                    await cls._send_text_chunks(
+                        client,
+                        i.text,
+                        payload | extra_payload,
+                        use_markdown=message.use_markdown_,
+                        options=options,
+                    )
                 else:
-                    send_coro = client.send_photo
-                    media_kwarg = {"photo": image_path}
-                await send_coro(**media_kwarg, **cast(Any, media_payload))
-            elif isinstance(i, File):
-                path = await i.get_file()
-                name = i.name or os.path.basename(path)
-                await client.send_document(
-                    document=path, filename=name, **cast(Any, media_payload)
-                )
+                    _, captions, media, next_idx = cls._collect_media_segment(
+                        chain,
+                        idx,
+                    )
+                    if media:
+                        if "reply_markup" in media_payload and len(media) > 1:
+                            raise ValueError(
+                                "Telegram media groups do not support reply_markup. "
+                                "Send buttons in a separate message.",
+                            )
+                        album_payload = {
+                            key: value
+                            for key, value in media_payload.items()
+                            if key != "reply_markup"
+                        }
+                        await cls._send_component_media_segment(
+                            client,
+                            media,
+                            album_payload if len(media) > 1 else media_payload,
+                            caption="".join(captions) or None,
+                            use_markdown=message.use_markdown_,
+                            options=options,
+                        )
+                        idx = next_idx
+                        continue
+            elif isinstance(i, Image | Video | File):
+                _, captions, media, next_idx = cls._collect_media_segment(chain, idx)
+                if media:
+                    if "reply_markup" in media_payload and len(media) > 1:
+                        raise ValueError(
+                            "Telegram media groups do not support reply_markup. "
+                            "Send buttons in a separate message.",
+                        )
+                    album_payload = {
+                        key: value
+                        for key, value in media_payload.items()
+                        if key != "reply_markup"
+                    }
+                    await cls._send_component_media_segment(
+                        client,
+                        media,
+                        album_payload if len(media) > 1 else media_payload,
+                        caption="".join(captions) or None,
+                        use_markdown=message.use_markdown_,
+                        options=options,
+                    )
+                    idx = next_idx
+                    continue
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
                 await cls._send_voice_with_fallback(
@@ -513,6 +1271,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     caption=getattr(i, "text", None) or None,
                     **cast(Any, media_payload),
                 )
+            idx += 1
 
     async def send(self, message: MessageChain) -> None:
         if self.get_message_type() == MessageType.GROUP_MESSAGE:

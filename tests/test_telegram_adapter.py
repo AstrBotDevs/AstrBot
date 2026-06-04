@@ -15,6 +15,7 @@ from tests.fixtures.helpers import (
     make_platform_config,
 )
 from tests.fixtures.mocks.telegram import (
+    MockTelegramBadRequest,
     MockTelegramBuilder,
     MockTelegramNetworkError,
     create_mock_telegram_modules,
@@ -494,6 +495,459 @@ async def test_telegram_send_respects_plaintext_markdown_toggle():
 
 
 @pytest.mark.asyncio
+async def test_telegram_send_groups_remote_images_as_media_album():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_media_group = AsyncMock()
+    client.send_photo = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    message = MessageChain()
+    urls = []
+    for index in range(4):
+        url = f"https://example.com/image-{index}.jpg"
+        urls.append(url)
+        message.chain.append(Comp.Image.fromURL(url))
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    client.send_media_group.assert_awaited_once()
+    client.send_photo.assert_not_awaited()
+    call = client.send_media_group.await_args.kwargs
+    assert call["chat_id"] == "123456"
+    assert [item.media for item in call["media"]] == urls
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_retries_remote_album_as_upload_when_telegram_cannot_fetch(
+    tmp_path,
+    monkeypatch,
+):
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_media_group = AsyncMock(
+        side_effect=[
+            MockTelegramBadRequest('Failed to send message #3: "webpage_curl_failed"'),
+            None,
+        ],
+    )
+    client.send_photo = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    message = MessageChain()
+    downloaded_paths = {}
+    urls = []
+    for index in range(4):
+        url = f"https://example.com/image-{index}.jpg"
+        image_path = tmp_path / f"downloaded-{index}.jpg"
+        image_path.write_bytes(b"\xff\xd8\xff demo")
+        downloaded_paths[url] = str(image_path)
+        urls.append(url)
+        message.chain.append(Comp.Image.fromURL(url))
+
+    async def fake_convert_to_file_path(image):
+        return downloaded_paths[image.file]
+
+    monkeypatch.setattr(Comp.Image, "convert_to_file_path", fake_convert_to_file_path)
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    assert client.send_media_group.await_count == 2
+    first_call = client.send_media_group.await_args_list[0].kwargs
+    second_call = client.send_media_group.await_args_list[1].kwargs
+    assert [item.media for item in first_call["media"]] == urls
+    uploaded_media = [item.media for item in second_call["media"]]
+    assert [media.filename for media in uploaded_media] == [
+        "downloaded-0.jpg",
+        "downloaded-1.jpg",
+        "downloaded-2.jpg",
+        "downloaded-3.jpg",
+    ]
+    assert all(media.attach is True for media in uploaded_media)
+    assert all(media.args[0].closed for media in uploaded_media)
+    client.send_photo.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_groups_local_images_as_uploaded_media_album(tmp_path):
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_media_group = AsyncMock()
+    client.send_photo = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    message = MessageChain()
+    filenames = []
+    for index in range(4):
+        image_path = tmp_path / f"image-{index}.jpg"
+        image_path.write_bytes(b"\xff\xd8\xff demo")
+        filenames.append(image_path.name)
+        message.chain.append(Comp.Image(file=str(image_path)))
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    client.send_media_group.assert_awaited_once()
+    client.send_photo.assert_not_awaited()
+    call = client.send_media_group.await_args.kwargs
+    assert call["chat_id"] == "123456"
+    media_files = [item.media for item in call["media"]]
+    assert [media.filename for media in media_files] == filenames
+    assert all(media.attach is True for media in media_files)
+    assert all(media.args[0].closed for media in media_files)
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_plain_text_is_album_caption(tmp_path):
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_media_group = AsyncMock()
+    client.send_photo = AsyncMock()
+    client.send_message = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    image_path = tmp_path / "single.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff demo")
+    message = MessageChain()
+    message.chain.extend(
+        [
+            Comp.Plain("before "),
+            Comp.Image.fromURL("https://example.com/1.jpg"),
+            Comp.Plain("between"),
+            Comp.Image.fromURL("https://example.com/2.jpg"),
+            Comp.Image(file=str(image_path)),
+        ]
+    )
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    client.send_media_group.assert_awaited_once()
+    client.send_message.assert_not_awaited()
+    client.send_photo.assert_not_awaited()
+    album_call = client.send_media_group.await_args.kwargs
+    assert [item.media for item in album_call["media"][:2]] == [
+        "https://example.com/1.jpg",
+        "https://example.com/2.jpg",
+    ]
+    assert album_call["media"][2].media.filename == image_path.name
+    assert album_call["media"][0].caption == "before between"
+    assert album_call["media"][0].parse_mode == "MarkdownV2"
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_plain_text_caption_on_single_media(tmp_path):
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_photo = AsyncMock()
+    client.send_message = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    image_path = tmp_path / "single.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff demo")
+    message = MessageChain()
+    message.use_markdown_ = False
+    message.chain.extend([Comp.Plain("caption"), Comp.Image(file=str(image_path))])
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    client.send_message.assert_not_awaited()
+    call = client.send_photo.await_args.kwargs
+    assert call["photo"] == str(image_path)
+    assert call["caption"] == "caption"
+    assert "parse_mode" not in call
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_groups_image_and_video_as_visual_album():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_media_group = AsyncMock()
+    client.send_video = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    message = MessageChain()
+    message.chain.extend(
+        [
+            Comp.Image.fromURL("https://example.com/photo.jpg"),
+            Comp.Video.fromURL("https://example.com/video.mp4"),
+        ]
+    )
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    client.send_media_group.assert_awaited_once()
+    client.send_video.assert_not_awaited()
+    call = client.send_media_group.await_args.kwargs
+    assert [item.media for item in call["media"]] == [
+        "https://example.com/photo.jpg",
+        "https://example.com/video.mp4",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_groups_files_as_document_album(tmp_path):
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_media_group = AsyncMock()
+    client.send_document = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+    first.write_text("first")
+    second.write_text("second")
+    message = MessageChain()
+    message.chain.extend(
+        [
+            Comp.File(name="first.txt", file=str(first)),
+            Comp.File(name="second.txt", file=str(second)),
+        ]
+    )
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    client.send_media_group.assert_awaited_once()
+    client.send_document.assert_not_awaited()
+    call = client.send_media_group.await_args.kwargs
+    media_files = [item.media for item in call["media"]]
+    assert [media.filename for media in media_files] == ["first.txt", "second.txt"]
+    assert all(media.attach is True for media in media_files)
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_splits_visual_and_document_album_families(tmp_path):
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_media_group = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    file_path = tmp_path / "report.txt"
+    file_path.write_text("report")
+    message = MessageChain()
+    message.chain.extend(
+        [
+            Comp.Image.fromURL("https://example.com/1.jpg"),
+            Comp.Image.fromURL("https://example.com/2.jpg"),
+            Comp.File(name="report.txt", file=str(file_path)),
+            Comp.File(name="report-copy.txt", file=str(file_path)),
+        ]
+    )
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    assert client.send_media_group.await_count == 2
+    first_call = client.send_media_group.await_args_list[0].kwargs
+    second_call = client.send_media_group.await_args_list[1].kwargs
+    assert [item.media for item in first_call["media"]] == [
+        "https://example.com/1.jpg",
+        "https://example.com/2.jpg",
+    ]
+    assert [item.media.filename for item in second_call["media"]] == [
+        "report.txt",
+        "report-copy.txt",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_caption_stays_on_first_family_segment(tmp_path):
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_photo = AsyncMock()
+    client.send_media_group = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    file_path = tmp_path / "report.txt"
+    file_path.write_text("report")
+    message = MessageChain()
+    message.chain.extend(
+        [
+            Comp.Plain("caption"),
+            Comp.Image.fromURL("https://example.com/1.jpg"),
+            Comp.Plain("ignored for later family"),
+            Comp.File(name="report.txt", file=str(file_path)),
+            Comp.File(name="report-copy.txt", file=str(file_path)),
+        ]
+    )
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    photo_call = client.send_photo.await_args.kwargs
+    document_album_call = client.send_media_group.await_args.kwargs
+    assert photo_call["caption"] == "captionignored for later family"
+    assert all(not hasattr(item, "caption") for item in document_album_call["media"])
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_splits_album_at_telegram_limit():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_media_group = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    message = MessageChain()
+    message.chain.append(Comp.Plain("caption"))
+    for index in range(12):
+        message.chain.append(Comp.Image.fromURL(f"https://example.com/{index}.jpg"))
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    assert client.send_media_group.await_count == 2
+    first_call = client.send_media_group.await_args_list[0].kwargs
+    second_call = client.send_media_group.await_args_list[1].kwargs
+    assert len(first_call["media"]) == 10
+    assert len(second_call["media"]) == 2
+    assert first_call["media"][0].caption == "caption"
+    assert not hasattr(second_call["media"][0], "caption")
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_rejects_album_caption_over_limit():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_media_group = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    message = MessageChain()
+    message.chain.extend(
+        [
+            Comp.Plain("x" * 1025),
+            Comp.Image.fromURL("https://example.com/1.jpg"),
+            Comp.Image.fromURL("https://example.com/2.jpg"),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="1024"):
+        await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_rejects_reply_markup_on_album():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    components = _load_telegram_components()
+    client = MagicMock()
+    client.send_media_group = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    message = MessageChain()
+    message.chain.extend(
+        [
+            Comp.Image.fromURL("https://example.com/1.jpg"),
+            Comp.Image.fromURL("https://example.com/2.jpg"),
+            components.TelegramInlineKeyboard(
+                [[components.TelegramInlineButton("OK", callback_data="ok")]],
+            ),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="reply_markup"):
+        await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+
+@pytest.mark.asyncio
+async def test_telegram_explicit_media_group_supports_common_media_options(tmp_path):
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    components = _load_telegram_components()
+    client = MagicMock()
+    client.send_media_group = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    thumb_path = tmp_path / "thumb.jpg"
+    thumb_path.write_bytes(b"\xff\xd8\xff thumb")
+    message = MessageChain()
+    message.chain.append(
+        components.TelegramMediaGroup(
+            [
+                components.TelegramMediaGroup.photo(
+                    "https://example.com/photo.jpg",
+                    has_spoiler=True,
+                    show_caption_above_media=True,
+                ),
+                components.TelegramMediaGroup.video(
+                    "https://example.com/video.mp4",
+                    thumbnail=str(thumb_path),
+                    supports_streaming=True,
+                ),
+            ],
+            caption="<b>album</b>",
+            parse_mode="HTML",
+        ),
+    )
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    client.send_media_group.assert_awaited_once()
+    call = client.send_media_group.await_args.kwargs
+    first, second = call["media"]
+    assert first.media == "https://example.com/photo.jpg"
+    assert first.caption == "<b>album</b>"
+    assert first.parse_mode == "HTML"
+    assert first.has_spoiler is True
+    assert first.show_caption_above_media is True
+    assert second.media == "https://example.com/video.mp4"
+    assert second.supports_streaming is True
+    assert second.thumbnail.filename == thumb_path.name
+    assert second.thumbnail.args[0].closed
+
+
+@pytest.mark.asyncio
+async def test_telegram_explicit_media_group_supports_audio_without_record_mapping():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    components = _load_telegram_components()
+    client = MagicMock()
+    client.send_media_group = AsyncMock()
+    client.send_voice = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    message = MessageChain()
+    message.chain.append(
+        components.TelegramMediaGroup(
+            [
+                components.TelegramMediaGroup.audio(
+                    "https://example.com/a.mp3",
+                    performer="Alice",
+                    title="A",
+                    duration=12,
+                ),
+                components.TelegramMediaGroup.audio(
+                    "https://example.com/b.mp3",
+                    performer="Bob",
+                    title="B",
+                ),
+            ],
+            caption="audio album",
+        ),
+    )
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    client.send_voice.assert_not_awaited()
+    client.send_media_group.assert_awaited_once()
+    call = client.send_media_group.await_args.kwargs
+    first, second = call["media"]
+    assert [item.media for item in call["media"]] == [
+        "https://example.com/a.mp3",
+        "https://example.com/b.mp3",
+    ]
+    assert first.performer == "Alice"
+    assert first.title == "A"
+    assert first.duration == 12
+    assert first.caption == "audio album"
+    assert second.performer == "Bob"
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_gif_is_not_grouped_into_photo_album(tmp_path):
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_media_group = AsyncMock()
+    client.send_photo = AsyncMock()
+    client.send_animation = AsyncMock()
+    client.send_chat_action = AsyncMock()
+    gif_path = tmp_path / "animation.gif"
+    gif_path.write_bytes(b"GIF89a demo")
+    image_path = tmp_path / "photo.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff demo")
+    message = MessageChain()
+    message.chain.extend(
+        [
+            Comp.Image(file=str(gif_path)),
+            Comp.Image(file=str(image_path)),
+        ]
+    )
+
+    await TelegramPlatformEvent.send_with_client(client, message, "123456")
+
+    client.send_media_group.assert_not_awaited()
+    client.send_animation.assert_awaited_once()
+    client.send_photo.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_telegram_send_by_session_preserves_markdown_options_and_keyboard():
     TelegramPlatformAdapter = _load_telegram_adapter()
     components = _load_telegram_components()
@@ -921,14 +1375,13 @@ def test_telegram_application_builder_uses_adapter_proxy_config():
             make_platform_config(
                 "telegram",
                 telegram_proxy="http://127.0.0.1:7890",
-                telegram_get_updates_proxy="http://127.0.0.1:7891",
             ),
             {},
             asyncio.Queue(),
         )
 
     builder.proxy.assert_called_once_with("http://127.0.0.1:7890")
-    builder.get_updates_proxy.assert_called_once_with("http://127.0.0.1:7891")
+    builder.get_updates_proxy.assert_called_once_with("http://127.0.0.1:7890")
     app = builder.build.return_value
     handlers = [call.args[0] for call in app.add_handler.call_args_list]
     assert app.add_handler.call_count == 6
@@ -938,6 +1391,39 @@ def test_telegram_application_builder_uses_adapter_proxy_config():
     assert "MockInlineQueryHandler" in handler_type_names
     assert "MockChosenInlineResultHandler" in handler_type_names
     assert handler_type_names.count("MockChatMemberHandler") == 2
+
+
+def test_telegram_command_scope_normalizer_accepts_template_list_entries():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+
+    scopes = TelegramPlatformAdapter._normalize_command_scope_configs(
+        [
+            {
+                "__template_key": "chat",
+                "template": "legacy_chat",
+                "chat_id": 12345,
+                "language_code": "zh",
+            },
+            {
+                "__template_key": "chat_member",
+                "type": "chat_member",
+                "chat_id": 12345,
+                "user_id": 67890,
+            },
+        ],
+    )
+
+    assert scopes == [
+        {"type": "chat", "chat_id": 12345, "language_code": "zh"},
+        {"type": "chat_member", "chat_id": 12345, "user_id": 67890},
+    ]
+
+
+def test_telegram_command_plugin_allowlist_treats_star_as_all_and_empty_as_none():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+
+    assert TelegramPlatformAdapter._normalize_command_plugin_allowlist(["*"]) is None
+    assert TelegramPlatformAdapter._normalize_command_plugin_allowlist([]) == set()
 
 
 @pytest.mark.asyncio
@@ -1018,6 +1504,60 @@ async def test_telegram_command_registration_filters_plugins_and_uses_scopes():
     assert second_kwargs["language_code"] == "zh"
     assert "BotCommandScopeDefault" in repr(type(first_kwargs["scope"]))
     assert "BotCommandScopeChat" in repr(type(second_kwargs["scope"]))
+
+
+@pytest.mark.asyncio
+async def test_telegram_command_registration_clears_commands_when_no_plugins_enabled():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+
+    @dataclass
+    class _Plugin:
+        name: str
+        display_name: str
+        root_dir_name: str
+        module_path: str
+        activated: bool = True
+
+    @dataclass
+    class _Handler:
+        handler_module_path: str
+        event_filters: list
+        desc: str
+        enabled: bool = True
+
+    handlers = [
+        _Handler(
+            "plugins.allowed.main",
+            [module_globals["CommandFilter"]("allowed")],
+            "Allowed command",
+        ),
+    ]
+    star_map = {
+        "plugins.allowed.main": _Plugin(
+            "allowed_plugin",
+            "Allowed",
+            "allowed",
+            "plugins.allowed.main",
+        ),
+    }
+    adapter = TelegramPlatformAdapter(
+        make_platform_config(
+            "telegram",
+            telegram_command_registered_plugins=[],
+            telegram_command_scopes=[{"type": "default"}],
+        ),
+        {},
+        asyncio.Queue(),
+    )
+
+    with patch.dict(
+        module_globals, {"star_handlers_registry": handlers, "star_map": star_map}
+    ):
+        await adapter.register_commands()
+
+    adapter.client.delete_my_commands.assert_awaited_once()
+    adapter.client.set_my_commands.assert_not_awaited()
 
 
 def test_telegram_event_filter_does_not_pollute_bot_command_collection():
@@ -1270,3 +1810,53 @@ async def test_telegram_common_inbound_message_types_are_converted():
     assert dice_event.get_extra("telegram_event_type") == "dice"
     assert dice_event.get_extra("telegram_payload").value == 6
     assert dice_event.call_llm is False
+
+
+@pytest.mark.asyncio
+async def test_telegram_inbound_media_group_merges_cached_photo_updates():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    first_file = create_mock_file("https://api.telegram.org/file/test/one.jpg")
+    second_file = create_mock_file("https://api.telegram.org/file/test/two.jpg")
+    first_photo = MagicMock()
+    first_photo.get_file = AsyncMock(return_value=first_file)
+    second_photo = MagicMock()
+    second_photo.get_file = AsyncMock(return_value=second_file)
+    first_update = create_mock_update(
+        message_text=None,
+        media_group_id="album-1",
+        photo=[first_photo],
+        caption="album caption",
+    )
+    second_update = create_mock_update(
+        message_text=None,
+        media_group_id="album-1",
+        photo=[second_photo],
+    )
+    context = _build_context()
+    adapter.media_group_cache["album-1"] = {
+        "created_at": MagicMock(),
+        "items": [(first_update, context), (second_update, context)],
+    }
+
+    await adapter.process_media_group("album-1")
+
+    assert "album-1" not in adapter.media_group_cache
+    event = adapter._event_queue.get_nowait()
+    images = [
+        component
+        for component in event.message_obj.message
+        if isinstance(component, Comp.Image)
+    ]
+    assert [image.file for image in images] == [
+        "https://api.telegram.org/file/test/one.jpg",
+        "https://api.telegram.org/file/test/two.jpg",
+    ]
+    assert any(
+        isinstance(component, Comp.Plain) and component.text == "album caption"
+        for component in event.message_obj.message
+    )

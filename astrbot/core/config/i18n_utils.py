@@ -87,6 +87,51 @@ class ConfigMetadataI18n:
                         f"{field_path}.template_schema",
                     )
 
+                if "templates" in field_data and isinstance(
+                    field_data["templates"], dict
+                ):
+                    templates_result: dict[str, Any] = {}
+                    for template_key, template_data in field_data["templates"].items():
+                        if not isinstance(template_data, dict):
+                            templates_result[template_key] = template_data
+                            continue
+
+                        template_path = f"{field_path}.templates.{template_key}"
+                        template_result = {
+                            key: value
+                            for key, value in template_data.items()
+                            if key not in {"description", "hint", "labels", "name"}
+                        }
+                        if "name" in template_data:
+                            template_result["name"] = (
+                                f"{group}.{section}.{template_path}.name"
+                            )
+                        if "description" in template_data:
+                            template_result["description"] = (
+                                f"{group}.{section}.{template_path}.description"
+                            )
+                        if "hint" in template_data:
+                            template_result["hint"] = (
+                                f"{group}.{section}.{template_path}.hint"
+                            )
+                        if "labels" in template_data:
+                            template_result["labels"] = (
+                                f"{group}.{section}.{template_path}.labels"
+                            )
+                        if "items" in template_data and isinstance(
+                            template_data["items"], dict
+                        ):
+                            template_result["items"] = convert_items(
+                                group,
+                                section,
+                                template_data["items"],
+                                template_path,
+                            )
+
+                        templates_result[template_key] = template_result
+
+                    field_result["templates"] = templates_result
+
                 items_result[field_key] = field_result
 
             return items_result

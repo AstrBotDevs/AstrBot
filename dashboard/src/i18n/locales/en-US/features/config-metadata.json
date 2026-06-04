@@ -590,14 +590,113 @@
       },
       "telegram_command_registered_plugins": {
         "description": "Telegram Command Plugins",
-        "hint": "Only register commands from the selected plugins. Accepts plugin name, display name, directory name, or module path. Leave empty to register commands from all enabled plugins."
+        "hint": "Only register commands from the selected plugins. All enabled plugins are selected by default; you can also choose to register no plugin commands. Disabled plugins stay ineffective even if selected here."
       },
       "telegram_command_scopes": {
         "description": "Telegram Command Scopes",
-        "hint": "Telegram BotCommandScope configs, e.g. {\"type\":\"default\",\"language_code\":\"en\"} or {\"type\":\"chat\",\"chat_id\":12345}."
+        "hint": "Select Telegram BotCommandScope entries. chat/chat_administrators require chat_id, and chat_member also requires user_id.",
+        "templates": {
+          "default": {
+            "name": "Default Scope",
+            "hint": "Default BotCommandScopeDefault.",
+            "type": {
+              "description": "Scope Type"
+            },
+            "language_code": {
+              "description": "Language Code",
+              "hint": "Optional, for example zh, en, or ja. Leave empty for all languages."
+            }
+          },
+          "all_private_chats": {
+            "name": "All Private Chats",
+            "hint": "BotCommandScopeAllPrivateChats.",
+            "type": {
+              "description": "Scope Type"
+            },
+            "language_code": {
+              "description": "Language Code",
+              "hint": "Optional, for example zh, en, or ja. Leave empty for all languages."
+            }
+          },
+          "all_group_chats": {
+            "name": "All Group Chats",
+            "hint": "BotCommandScopeAllGroupChats.",
+            "type": {
+              "description": "Scope Type"
+            },
+            "language_code": {
+              "description": "Language Code",
+              "hint": "Optional, for example zh, en, or ja. Leave empty for all languages."
+            }
+          },
+          "all_chat_administrators": {
+            "name": "All Chat Administrators",
+            "hint": "BotCommandScopeAllChatAdministrators.",
+            "type": {
+              "description": "Scope Type"
+            },
+            "language_code": {
+              "description": "Language Code",
+              "hint": "Optional, for example zh, en, or ja. Leave empty for all languages."
+            }
+          },
+          "chat": {
+            "name": "Specific Chat",
+            "hint": "BotCommandScopeChat, requires chat_id.",
+            "type": {
+              "description": "Scope Type"
+            },
+            "chat_id": {
+              "description": "Chat ID",
+              "hint": "Telegram chat_id. Use a numeric ID or @channelusername."
+            },
+            "language_code": {
+              "description": "Language Code",
+              "hint": "Optional, for example zh, en, or ja. Leave empty for all languages."
+            }
+          },
+          "chat_administrators": {
+            "name": "Specific Chat Administrators",
+            "hint": "BotCommandScopeChatAdministrators, requires chat_id.",
+            "type": {
+              "description": "Scope Type"
+            },
+            "chat_id": {
+              "description": "Chat ID",
+              "hint": "Telegram chat_id. Use a numeric ID or @channelusername."
+            },
+            "language_code": {
+              "description": "Language Code",
+              "hint": "Optional, for example zh, en, or ja. Leave empty for all languages."
+            }
+          },
+          "chat_member": {
+            "name": "Specific Chat Member",
+            "hint": "BotCommandScopeChatMember, requires chat_id and user_id.",
+            "type": {
+              "description": "Scope Type"
+            },
+            "chat_id": {
+              "description": "Chat ID",
+              "hint": "Telegram chat_id. Use a numeric ID or @channelusername."
+            },
+            "user_id": {
+              "description": "User ID",
+              "hint": "Telegram user ID."
+            },
+            "language_code": {
+              "description": "Language Code",
+              "hint": "Optional, for example zh, en, or ja. Leave empty for all languages."
+            }
+          }
+        }
       },
       "telegram_update_mode": {
         "description": "Telegram Update Mode",
+        "labels": [
+          "Polling getUpdates",
+          "Independent Webhook"
+        ],
         "hint": "polling uses getUpdates polling; webhook starts an independent Telegram adapter listener and requires a public URL reachable by Telegram."
       },
       "telegram_webhook_listen": {
@@ -632,9 +731,13 @@
         "description": "Telegram Webhook Private Key Path",
         "hint": "Optional. Only set this when PTB serves HTTPS directly instead of going through a reverse proxy."
       },
-      "telegram_get_updates_proxy": {
-        "description": "Telegram getUpdates Proxy",
-        "hint": "Proxy used only for this Telegram adapter's getUpdates polling. Leave empty to use the default network settings."
+      "telegram_api_base_url": {
+        "description": "Telegram Bot API Base URL",
+        "hint": "Telegram Bot API base URL. The official endpoint is used by default; change it only for a self-hosted Bot API server or reverse proxy."
+      },
+      "telegram_file_base_url": {
+        "description": "Telegram File API Base URL",
+        "hint": "Telegram file download base URL. The official endpoint is used by default; keep it aligned with Bot API Base URL when using a self-hosted server or reverse proxy."
       },
       "telegram_polling_restart_delay": {
         "description": "Telegram Polling Restart Delay",
@@ -642,7 +745,7 @@
       },
       "telegram_proxy": {
         "description": "Telegram API Proxy",
-        "hint": "Proxy used only for this Telegram adapter's Bot API requests, for example http://127.0.0.1:7890. Leave empty to use the default network settings."
+        "hint": "Proxy used only for this Telegram adapter's Bot API requests and getUpdates polling, for example http://127.0.0.1:7890. Leave empty to use the default network settings."
       },
       "telegram_token": {
         "description": "Bot Token",
@@ -677,6 +780,10 @@
       },
       "wecom_ai_bot_connection_mode": {
         "description": "WeCom AI Bot Connection Mode",
+        "labels": [
+          "Webhook Callback",
+          "Long Connection"
+        ],
         "hint": "Webhook mode requires Token/EncodingAESKey; long_connection mode requires BotID/Secret."
       },
       "wecomaibot_friend_message_welcome_text": {

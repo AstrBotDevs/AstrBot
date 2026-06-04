@@ -40,7 +40,12 @@
       <KnowledgeBaseSelector :model-value="modelValue" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_plugin_set'">
-      <PluginSetSelector :model-value="modelValue" @update:model-value="emitUpdate" />
+      <PluginSetSelector
+        :model-value="modelValue"
+        :allow-none="itemMeta?._plugin_set_allow_none !== false"
+        :empty-as-all="Boolean(itemMeta?._plugin_set_empty_as_all)"
+        @update:model-value="emitUpdate"
+      />
     </template>
     <template v-else-if="itemMeta?._special === 't2i_template'">
       <T2ITemplateEditor />

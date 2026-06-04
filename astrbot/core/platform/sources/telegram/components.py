@@ -507,6 +507,149 @@ class TelegramMessageOptions(BaseMessageComponent):
         )
 
 
+class TelegramMediaGroupItem(BaseMessageComponent):
+    """Telegram media group item for explicit album sending."""
+
+    type: str = "telegram_media_group_item"
+    media_type: str
+    media: Any
+    filename: str | None = None
+    thumbnail: Any = None
+    has_spoiler: bool | None = None
+    show_caption_above_media: bool | None = None
+    supports_streaming: bool | None = None
+    disable_content_type_detection: bool | None = None
+    duration: int | None = None
+    performer: str | None = None
+    title: str | None = None
+
+    def __init__(
+        self,
+        media_type: str,
+        media: Any,
+        *,
+        filename: str | None = None,
+        thumbnail: Any = None,
+        has_spoiler: bool | None = None,
+        show_caption_above_media: bool | None = None,
+        supports_streaming: bool | None = None,
+        disable_content_type_detection: bool | None = None,
+        duration: int | None = None,
+        performer: str | None = None,
+        title: str | None = None,
+    ) -> None:
+        normalized_media_type = media_type.strip().lower()
+        if normalized_media_type not in {"photo", "video", "document", "audio"}:
+            raise ValueError(
+                "Telegram media group item type must be one of photo, video, document, or audio.",
+            )
+        super().__init__(
+            media_type=normalized_media_type,
+            media=media,
+            filename=filename,
+            thumbnail=thumbnail,
+            has_spoiler=has_spoiler,
+            show_caption_above_media=show_caption_above_media,
+            supports_streaming=supports_streaming,
+            disable_content_type_detection=disable_content_type_detection,
+            duration=duration,
+            performer=performer,
+            title=title,
+        )
+
+
+class TelegramMediaGroup(BaseMessageComponent):
+    """Explicit Telegram album component with common InputMedia options."""
+
+    type: str = "telegram_media_group"
+    items: list[TelegramMediaGroupItem]
+    caption: str | None = None
+    parse_mode: str | None = None
+
+    def __init__(
+        self,
+        items: list[TelegramMediaGroupItem],
+        *,
+        caption: str | None = None,
+        parse_mode: str | None = None,
+    ) -> None:
+        if not items:
+            raise ValueError("TelegramMediaGroup requires at least one media item.")
+        super().__init__(items=items, caption=caption, parse_mode=parse_mode)
+
+    @staticmethod
+    def photo(
+        media: Any,
+        *,
+        filename: str | None = None,
+        has_spoiler: bool | None = None,
+        show_caption_above_media: bool | None = None,
+    ) -> TelegramMediaGroupItem:
+        return TelegramMediaGroupItem(
+            "photo",
+            media,
+            filename=filename,
+            has_spoiler=has_spoiler,
+            show_caption_above_media=show_caption_above_media,
+        )
+
+    @staticmethod
+    def video(
+        media: Any,
+        *,
+        filename: str | None = None,
+        thumbnail: Any = None,
+        has_spoiler: bool | None = None,
+        show_caption_above_media: bool | None = None,
+        supports_streaming: bool | None = None,
+    ) -> TelegramMediaGroupItem:
+        return TelegramMediaGroupItem(
+            "video",
+            media,
+            filename=filename,
+            thumbnail=thumbnail,
+            has_spoiler=has_spoiler,
+            show_caption_above_media=show_caption_above_media,
+            supports_streaming=supports_streaming,
+        )
+
+    @staticmethod
+    def document(
+        media: Any,
+        *,
+        filename: str | None = None,
+        thumbnail: Any = None,
+        disable_content_type_detection: bool | None = None,
+    ) -> TelegramMediaGroupItem:
+        return TelegramMediaGroupItem(
+            "document",
+            media,
+            filename=filename,
+            thumbnail=thumbnail,
+            disable_content_type_detection=disable_content_type_detection,
+        )
+
+    @staticmethod
+    def audio(
+        media: Any,
+        *,
+        filename: str | None = None,
+        thumbnail: Any = None,
+        duration: int | None = None,
+        performer: str | None = None,
+        title: str | None = None,
+    ) -> TelegramMediaGroupItem:
+        return TelegramMediaGroupItem(
+            "audio",
+            media,
+            filename=filename,
+            thumbnail=thumbnail,
+            duration=duration,
+            performer=performer,
+            title=title,
+        )
+
+
 def _convert_telegram_payload(value: Any) -> Any:
     if isinstance(value, TelegramInlineKeyboard):
         return value.to_telegram_markup()

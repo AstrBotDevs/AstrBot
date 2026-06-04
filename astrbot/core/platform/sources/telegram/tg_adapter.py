@@ -171,9 +171,7 @@ class TelegramPlatformAdapter(Platform):
         telegram_proxy = self.config.get("telegram_proxy")
         if telegram_proxy:
             builder = builder.proxy(telegram_proxy)
-        telegram_get_updates_proxy = self.config.get("telegram_get_updates_proxy")
-        if telegram_get_updates_proxy:
-            builder = builder.get_updates_proxy(telegram_get_updates_proxy)
+            builder = builder.get_updates_proxy(telegram_proxy)
 
         self.application = builder.build()
         message_handler = TelegramMessageHandler(
@@ -547,6 +545,9 @@ class TelegramPlatformAdapter(Platform):
         try:
             commands = self.collect_commands()
             if not commands:
+                if self.command_registered_plugins == set():
+                    await self.delete_registered_commands()
+                    self.last_command_hashes.clear()
                 return
             if len(commands) > 100:
                 raise ValueError(
@@ -589,7 +590,7 @@ class TelegramPlatformAdapter(Platform):
 
     @staticmethod
     def _normalize_command_plugin_allowlist(value: Any) -> set[str] | None:
-        if value in (None, "", []):
+        if value in (None, ""):
             return None
         if isinstance(value, str):
             raw_items = [item.strip() for item in value.split(",")]
@@ -602,7 +603,7 @@ class TelegramPlatformAdapter(Platform):
         allowlist = {item for item in raw_items if item}
         if "*" in allowlist:
             return None
-        return allowlist or None
+        return allowlist
 
     @staticmethod
     def _normalize_command_scope_configs(value: Any) -> list[dict[str, Any]]:
@@ -616,7 +617,13 @@ class TelegramPlatformAdapter(Platform):
             if isinstance(item, str):
                 configs.append({"type": item})
             elif isinstance(item, dict):
-                configs.append(dict(item))
+                normalized = dict(item)
+                template_key = str(normalized.pop("__template_key", "") or "").strip()
+                legacy_template_key = str(normalized.pop("template", "") or "").strip()
+                template_key = template_key or legacy_template_key
+                if not normalized.get("type") and template_key:
+                    normalized["type"] = template_key
+                configs.append(normalized)
             else:
                 raise ValueError(
                     "telegram_command_scopes items must be strings or dicts.",

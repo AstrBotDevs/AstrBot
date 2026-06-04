@@ -151,6 +151,62 @@ async def review(self, event: AstrMessageEvent):
 
 Each `TelegramInlineButton` must set exactly one action. Supported actions are `url`, `callback_data`, `login_url`, `web_app`, `switch_inline_query`, `switch_inline_query_current_chat`, `switch_inline_query_chosen_chat`, `copy_text`, `callback_game`, and `pay`, plus `style` and `icon_custom_emoji_id` when supported by the Bot API. `callback_data` must be 1-64 UTF-8 bytes.
 
+### Telegram Album / MediaGroup
+
+The Telegram adapter automatically sends consecutive media in the same segment as an album. Adjacent `Plain` components become the media caption. The adapter does not insert line breaks automatically; write `\n` in the text when you want a line break.
+
+```python
+import astrbot.api.message_components as Comp
+
+chain = MessageChain()
+chain.chain.extend(
+    [
+        Comp.Plain("Today's media\n"),
+        Comp.Image.fromURL("https://example.com/1.jpg"),
+        Comp.Image.fromURL("https://example.com/2.jpg"),
+        Comp.Video.fromURL("https://example.com/demo.mp4"),
+    ]
+)
+yield event.chain_result(chain)
+```
+
+Automatic album rules:
+
+- `Image` and `Video` can form a mixed photo/video album.
+- Consecutive `File` components form a document album.
+- `Record` means Telegram voice message and is not sent as an audio album.
+- Each album can contain at most 10 media items. Longer sequences are sent in order as multiple batches, with the caption only on the first batch.
+- Telegram Bot API limits captions to 1024 characters. Longer captions raise an error and are not truncated or split.
+- Telegram media groups do not support `reply_markup`; send a separate message with `TelegramInlineKeyboard` when you need buttons.
+
+Use explicit `TelegramMediaGroup` when you need Telegram audio albums or common advanced media options such as spoiler, video streaming, and thumbnails:
+
+```python
+from astrbot.core.platform.sources.telegram.components import TelegramMediaGroup
+
+chain = MessageChain()
+chain.chain.append(
+    TelegramMediaGroup(
+        [
+            TelegramMediaGroup.photo(
+                "https://example.com/secret.jpg",
+                has_spoiler=True,
+            ),
+            TelegramMediaGroup.video(
+                "https://example.com/movie.mp4",
+                supports_streaming=True,
+                thumbnail="path/to/thumb.jpg",
+            ),
+        ],
+        caption="<b>Media preview</b>",
+        parse_mode="HTML",
+    )
+)
+yield event.chain_result(chain)
+```
+
+`TelegramMediaGroup.audio(...)` supports explicit audio albums without changing the generic `Record` voice-message meaning. For more detailed Telegram Bot API parameters, use `event.get_telegram_client()` and call `python-telegram-bot` directly.
+
 You can also send Telegram Reply Keyboard, remove an existing keyboard, or force a reply:
 
 ```python

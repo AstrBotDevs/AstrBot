@@ -13,6 +13,14 @@ class MockTelegramNetworkError(Exception):
     """Mock telegram.error.NetworkError used in tests."""
 
 
+class MockTelegramBadRequest(Exception):
+    """Mock telegram.error.BadRequest with PTB-compatible message attribute."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
 class MockTelegramForbidden(Exception):
     """Mock telegram.error.Forbidden used in tests."""
 
@@ -146,6 +154,11 @@ def create_mock_telegram_modules():
     mock_telegram.CopyTextButton = MockTelegramObject
     mock_telegram.ForceReply = MockForceReply
     mock_telegram.InputTextMessageContent = MockTelegramObject
+    mock_telegram.InputFile = MockTelegramObject
+    mock_telegram.InputMediaAudio = MockTelegramObject
+    mock_telegram.InputMediaDocument = MockTelegramObject
+    mock_telegram.InputMediaPhoto = MockTelegramObject
+    mock_telegram.InputMediaVideo = MockTelegramObject
     mock_telegram.InlineKeyboardButton = MockInlineKeyboardButton
     mock_telegram.InlineKeyboardMarkup = MockInlineKeyboardMarkup
     inline_result_names = [
@@ -197,8 +210,11 @@ def create_mock_telegram_modules():
     mock_telegram.constants.ChatAction.UPLOAD_VOICE = "upload_voice"
     mock_telegram.constants.ChatAction.UPLOAD_DOCUMENT = "upload_document"
     mock_telegram.constants.ChatAction.UPLOAD_PHOTO = "upload_photo"
+    mock_telegram.constants.ChatAction.UPLOAD_VIDEO = "upload_video"
+    mock_telegram.constants.MessageLimit = MagicMock()
+    mock_telegram.constants.MessageLimit.CAPTION_LENGTH = 1024
     mock_telegram.error = MagicMock()
-    mock_telegram.error.BadRequest = Exception
+    mock_telegram.error.BadRequest = MockTelegramBadRequest
     mock_telegram.error.Forbidden = MockTelegramForbidden
     mock_telegram.error.InvalidToken = MockTelegramInvalidToken
     mock_telegram.error.NetworkError = MockTelegramNetworkError
@@ -286,6 +302,7 @@ class MockTelegramBuilder:
         bot.base_url = "https://api.telegram.org/bottest_token_123/"
         bot.send_message = AsyncMock()
         bot.send_photo = AsyncMock()
+        bot.send_media_group = AsyncMock()
         bot.send_document = AsyncMock()
         bot.send_voice = AsyncMock()
         bot.send_video = AsyncMock()

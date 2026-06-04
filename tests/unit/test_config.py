@@ -2,11 +2,12 @@
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig, RateLimitStrategy
-from astrbot.core.config.default import DEFAULT_VALUE_MAP
+from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.utils.auth_password import (
     DEFAULT_DASHBOARD_PASSWORD,
@@ -805,3 +806,154 @@ class TestConfigMetadataI18n:
             result["group"]["metadata"]["section"]["items"]["field"]["name"]
             == "group.section.field.name"
         )
+
+    def test_convert_to_i18n_keys_with_template_list_templates(self):
+        """Test converting template_list templates to i18n keys."""
+        metadata = {
+            "group": {
+                "metadata": {
+                    "section": {
+                        "items": {
+                            "scope": {
+                                "description": "Scopes",
+                                "type": "template_list",
+                                "templates": {
+                                    "chat": {
+                                        "name": "Chat",
+                                        "hint": "Requires chat_id",
+                                        "items": {
+                                            "chat_id": {
+                                                "description": "Chat ID",
+                                                "type": "string",
+                                                "hint": "Telegram chat_id",
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        }
+
+        result = ConfigMetadataI18n.convert_to_i18n_keys(metadata)
+        template = result["group"]["metadata"]["section"]["items"]["scope"][
+            "templates"
+        ]["chat"]
+
+        assert template["name"] == "group.section.scope.templates.chat.name"
+        assert template["hint"] == "group.section.scope.templates.chat.hint"
+        assert (
+            template["items"]["chat_id"]["description"]
+            == "group.section.scope.templates.chat.chat_id.description"
+        )
+        assert (
+            template["items"]["chat_id"]["hint"]
+            == "group.section.scope.templates.chat.chat_id.hint"
+        )
+
+    def test_telegram_command_config_metadata_uses_plugin_selector_and_templates(self):
+        """Test Telegram command config metadata uses dashboard-friendly editors."""
+        platform_items = CONFIG_METADATA_2["platform_group"]["metadata"]["platform"][
+            "items"
+        ]
+        command_plugins = platform_items["telegram_command_registered_plugins"]
+        command_scopes = platform_items["telegram_command_scopes"]
+        telegram_default = CONFIG_METADATA_2["platform_group"]["metadata"]["platform"][
+            "config_template"
+        ]["Telegram"]
+
+        assert command_plugins["_special"] == "select_plugin_set"
+        assert command_plugins["_plugin_set_allow_none"] is True
+        assert command_plugins["_plugin_set_empty_as_all"] is False
+        assert command_plugins["default"] == ["*"]
+        assert telegram_default["telegram_command_registered_plugins"] == ["*"]
+        assert command_scopes["type"] == "template_list"
+        assert "chat_member" in command_scopes["templates"]
+        assert command_scopes["default"] == [
+            {"__template_key": "default", "type": "default"}
+        ]
+        assert telegram_default["telegram_command_scopes"] == [
+            {"__template_key": "default", "type": "default"}
+        ]
+
+    def test_telegram_command_scope_template_i18n_paths_are_stable(self):
+        """Test Telegram scope template i18n paths used by the dashboard."""
+        result = ConfigMetadataI18n.convert_to_i18n_keys(
+            {
+                "platform_group": {
+                    "metadata": {
+                        "platform": CONFIG_METADATA_2["platform_group"]["metadata"][
+                            "platform"
+                        ],
+                    },
+                },
+            }
+        )
+
+        scope_templates = result["platform_group"]["metadata"]["platform"]["items"][
+            "telegram_command_scopes"
+        ]["templates"]
+
+        assert (
+            scope_templates["chat"]["items"]["chat_id"]["description"]
+            == "platform_group.platform.telegram_command_scopes.templates.chat.chat_id.description"
+        )
+        assert (
+            scope_templates["chat_member"]["items"]["user_id"]["description"]
+            == "platform_group.platform.telegram_command_scopes.templates.chat_member.user_id.description"
+        )
+
+    def test_platform_config_i18n_keys_exist_in_dashboard_locales(self):
+        """Test platform metadata i18n keys are backed by dashboard locale files."""
+        result = ConfigMetadataI18n.convert_to_i18n_keys(
+            {
+                "platform_group": {
+                    "metadata": {
+                        "platform": CONFIG_METADATA_2["platform_group"]["metadata"][
+                            "platform"
+                        ],
+                    },
+                },
+            }
+        )
+        platform_metadata = result["platform_group"]["metadata"]["platform"]
+        locale_dir = (
+            Path(__file__).parents[2] / "dashboard" / "src" / "i18n" / "locales"
+        )
+
+        def collect_i18n_keys(value):
+            keys = []
+            if isinstance(value, dict):
+                for attr, child in value.items():
+                    if (
+                        attr in {"description", "hint", "name", "labels"}
+                        and isinstance(child, str)
+                        and child.startswith("platform_group.")
+                    ):
+                        keys.append(child)
+                    else:
+                        keys.extend(collect_i18n_keys(child))
+            elif isinstance(value, list):
+                for child in value:
+                    keys.extend(collect_i18n_keys(child))
+            return keys
+
+        def has_locale_key(locale_data, key):
+            current = locale_data
+            for part in key.split("."):
+                if not isinstance(current, dict) or part not in current:
+                    return False
+                current = current[part]
+            return True
+
+        keys = collect_i18n_keys(platform_metadata)
+        assert keys
+
+        for locale_name in ("zh-CN", "en-US", "ru-RU"):
+            locale_path = locale_dir / locale_name / "features" / "config-metadata.json"
+            locale_data = json.loads(locale_path.read_text(encoding="utf-8-sig"))
+            missing_keys = [key for key in keys if not has_locale_key(locale_data, key)]
+
+            assert missing_keys == []
