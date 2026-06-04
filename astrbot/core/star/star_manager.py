@@ -522,7 +522,9 @@ class PluginManager:
                 pages=metadata["pages"]
                 if isinstance(metadata.get("pages"), list)
                 else [],
-                icon=metadata.get("icon") if isinstance(metadata.get("icon"), str) else None,
+                icon=metadata.get("icon")
+                if isinstance(metadata.get("icon"), str)
+                else None,
                 i18n=PluginManager._load_plugin_i18n(plugin_path),
             )
 
