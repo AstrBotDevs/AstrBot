@@ -1,4 +1,5 @@
-import { reactive, computed } from "vue";
+import { reactive, computed, onMounted } from "vue";
+import axios from "axios";
 import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 
 const DEFAULT_ICON = "mdi-puzzle";
@@ -47,7 +48,26 @@ function buildPluginItems(plugins: PluginEntry[]): menu | null {
   };
 }
 
+let initialFetched = false;
+
+async function initPluginState() {
+  if (initialFetched) return;
+  initialFetched = true;
+  try {
+    const res = await axios.get("/api/plugin/get");
+    if (res.data?.status === "ok") {
+      pluginSidebarState.plugins = res.data.data ?? [];
+    }
+  } catch {
+    // 静默失败，后续 getExtensions() 会补充
+  }
+}
+
 export function usePluginSidebarItems() {
+  onMounted(() => {
+    initPluginState();
+  });
+
   const pluginItems = computed(() => buildPluginItems(pluginSidebarState.plugins));
 
   return { pluginItems };
