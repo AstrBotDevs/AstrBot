@@ -192,3 +192,58 @@ class TestSparseRetrieverScoreDirection:
         # No out-of-range scores
         for r in results:
             assert r.score >= -1000.0, f"Unexpectedly low score: {r.score}"
+
+    @pytest.mark.asyncio
+    async def test_bm25_fallback_honors_chunk_limit(self):
+        """BM25 fallback caps loaded chunks at MAX_BM25_DOCS to prevent OOM."""
+        sr = SparseRetriever(kb_db=AsyncMock())
+
+        cap = sr.MAX_BM25_DOCS
+        # Create more docs than the cap
+        many_docs = [
+            _make_fake_doc(
+                f"chunk-{i}", f"document content {i}",
+                {"chunk_index": i, "kb_doc_id": f"d{i//10}", "kb_id": "kb-a"},
+            )
+            for i in range(cap + 100)
+        ]
+
+        vec_db = AsyncMock()
+        vec_db.document_storage.search_sparse = AsyncMock(return_value=None)
+        vec_db.document_storage.get_documents = AsyncMock(return_value=many_docs)
+
+        kb_options = {"kb-a": {"vec_db": vec_db, "top_k_sparse": 50}}
+
+        results = await sr.retrieve(query="test", kb_ids=["kb-a"], kb_options=kb_options)
+
+        # get_documents was called with the cap as limit
+        vec_db.document_storage.get_documents.assert_awaited_once_with(
+            metadata_filters={"kb_id": "kb-a"},
+            limit=cap,
+            offset=0,
+        )
+
+        # Results should not exceed the cap (minus what top_k_sparse filters)
+        assert len(results) <= 50  # top_k_sparse limit
+
+    @pytest.mark.asyncio
+    async def test_bm25_fallback_filters_by_kb_id(self):
+        """BM25 fallback now passes kb_id metadata filter to get_documents."""
+        sr = SparseRetriever(kb_db=AsyncMock())
+
+        vec_db = AsyncMock()
+        vec_db.document_storage.search_sparse = AsyncMock(return_value=None)
+        vec_db.document_storage.get_documents = AsyncMock(return_value=[])
+
+        kb_options = {
+            "kb-a": {"vec_db": vec_db, "top_k_sparse": 10},
+        }
+
+        await sr.retrieve(query="test", kb_ids=["kb-a"], kb_options=kb_options)
+
+        # Verify the kb_id filter is passed (previously was empty {})
+        vec_db.document_storage.get_documents.assert_awaited_once_with(
+            metadata_filters={"kb_id": "kb-a"},
+            limit=sr.MAX_BM25_DOCS,
+            offset=0,
+        )

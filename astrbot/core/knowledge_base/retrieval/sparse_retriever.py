@@ -112,6 +112,9 @@ class SparseRetriever:
 
         return results
 
+    # BM25 回退路径单次最多加载的文档数，防止 OOM
+    MAX_BM25_DOCS = 10_000
+
     async def _retrieve_with_bm25(
         self,
         query: str,
@@ -121,6 +124,7 @@ class SparseRetriever:
         """FTS5 不可用时的 BM25Okapi 回退路径。
 
         BM25Okapi 原始分值 higher-is-better → 取反统一为 lower-is-better。
+        单 KB 最多加载 MAX_BM25_DOCS 条 chunk，超限时截断并打 warning。
         """
         top_k_sparse = 0
         chunks = []
@@ -130,10 +134,15 @@ class SparseRetriever:
             if not vec_db:
                 continue
             result = await vec_db.document_storage.get_documents(
-                metadata_filters={},
-                limit=None,
-                offset=None,
+                metadata_filters={"kb_id": kb_id},
+                limit=self.MAX_BM25_DOCS,
+                offset=0,
             )
+            if len(result) >= self.MAX_BM25_DOCS:
+                logger.warning(
+                    f"知识库 {kb_id} 的 BM25 回退检索已触及 {self.MAX_BM25_DOCS} "
+                    f"条 chunk 上限，结果可能不完整。建议检查 FTS5 索引状态。",
+                )
             chunk_mds = [json.loads(doc["metadata"]) for doc in result]
             result = [
                 {
