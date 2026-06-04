@@ -1,5 +1,4 @@
-import { ref, shallowRef, onMounted, onUnmounted } from "vue";
-import axios from "axios";
+import { reactive, computed } from "vue";
 import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 
 const DEFAULT_ICON = "mdi-puzzle";
@@ -14,80 +13,42 @@ interface PluginEntry {
   icon?: string | null;
 }
 
-const pluginItems = shallowRef<menu | null>(null);
-const loading = ref(false);
-const error = ref<string | null>(null);
+/** 模块级共享状态，由 useExtensionPage.getExtensions() 更新 */
+export const pluginSidebarState = reactive<{
+  plugins: PluginEntry[];
+}>({
+  plugins: [],
+});
 
-let refreshTimer: ReturnType<typeof setInterval> | null = null;
+function buildPluginItems(plugins: PluginEntry[]): menu | null {
+  const activeWithPages = plugins.filter(
+    (p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0,
+  );
 
-async function fetchPluginSidebarItems() {
-  loading.value = true;
-  error.value = null;
+  if (activeWithPages.length === 0) return null;
 
-  try {
-    const response = await axios.get("/api/plugin/get");
-    if (response.data?.status === "error") {
-      error.value = response.data.message || "Failed to load plugins";
-      return;
-    }
+  const children: menu[] = activeWithPages.map((p) => {
+    const displayName = p.display_name || p.name || "Unknown Plugin";
+    const firstPage = p.pages[0];
+    const icon = p.icon || DEFAULT_ICON;
 
-    const plugins: PluginEntry[] = response.data?.data ?? [];
-
-    const activeWithPages = plugins.filter(
-      (p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0,
-    );
-
-    if (activeWithPages.length === 0) {
-      pluginItems.value = null;
-      return;
-    }
-
-    const children: menu[] = activeWithPages.map((p) => {
-      const displayName =
-        p.display_name || p.name || "Unknown Plugin";
-      const firstPage = p.pages[0];
-      const icon = p.icon || DEFAULT_ICON;
-
-      return {
-        title: displayName,
-        icon,
-        to: `/plugin-page/${encodeURIComponent(p.name)}/${encodeURIComponent(firstPage)}`,
-        isRawTitle: true,
-      };
-    });
-
-    pluginItems.value = {
-      title: GROUP_I18N_KEY,
-      icon: GROUP_ICON,
-      children,
+    return {
+      title: displayName,
+      icon,
+      to: `/plugin-page/${encodeURIComponent(p.name)}/${encodeURIComponent(firstPage)}`,
+      isRawTitle: true,
     };
-  } catch (e: any) {
-    error.value = e?.message || "Failed to load plugins";
-    pluginItems.value = null;
-  } finally {
-    loading.value = false;
-  }
-}
-
-export function usePluginSidebarItems() {
-  onMounted(() => {
-    fetchPluginSidebarItems();
-
-    // 每隔 60 秒刷新一次以响应插件激活/停用
-    refreshTimer = setInterval(fetchPluginSidebarItems, 60_000);
-  });
-
-  onUnmounted(() => {
-    if (refreshTimer !== null) {
-      clearInterval(refreshTimer);
-      refreshTimer = null;
-    }
   });
 
   return {
-    pluginItems,
-    loading,
-    error,
-    refresh: fetchPluginSidebarItems,
+    title: GROUP_I18N_KEY,
+    icon: GROUP_ICON,
+    children,
   };
+}
+
+export function usePluginSidebarItems() {
+  const pluginItems = computed(() => buildPluginItems(pluginSidebarState.plugins));
+
+  return { pluginItems };
 }
