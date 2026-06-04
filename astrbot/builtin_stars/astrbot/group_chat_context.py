@@ -1,5 +1,7 @@
 import asyncio
 import datetime
+import hashlib
+import json
 import random
 import uuid
 from collections import defaultdict, deque
@@ -90,14 +92,8 @@ class GroupChatContext:
     ) -> str:
         if not image_caption_provider_id:
             provider = self.context.get_using_provider()
-            provider_id = (
-                provider.provider_config.get("id", "")
-                if isinstance(provider, Provider)
-                else ""
-            )
         else:
             provider = self.context.get_provider_by_id(image_caption_provider_id)
-            provider_id = image_caption_provider_id
             if not provider:
                 raise Exception(
                     f"Provider `{image_caption_provider_id}` was not found."
@@ -107,6 +103,10 @@ class GroupChatContext:
             raise Exception(
                 f"Provider type is invalid for image captioning: {type(provider)}."
             )
+        provider_id = _resolve_provider_cache_identity(
+            provider,
+            configured_provider_id=image_caption_provider_id,
+        )
 
         async def _caption_factory() -> str:
             response = await provider.text_chat(
@@ -269,3 +269,32 @@ def _trim_left(
 
 def _format_group_history_block(records: list[str]) -> str:
     return GROUP_HISTORY_HEADER + "\n".join(records) + GROUP_HISTORY_FOOTER
+
+
+def _resolve_provider_cache_identity(
+    provider: Provider,
+    configured_provider_id: str,
+) -> str:
+    if configured_provider_id:
+        return configured_provider_id
+
+    provider_id = provider.provider_config.get("id", "")
+    if isinstance(provider_id, str) and provider_id:
+        return provider_id
+
+    payload = {
+        "provider_class": (
+            f"{provider.__class__.__module__}.{provider.__class__.__qualname__}"
+        ),
+        "provider_type": provider.provider_config.get("type", ""),
+        "model": provider.get_model(),
+        "provider_config": provider.provider_config,
+    }
+    raw_payload = json.dumps(
+        payload,
+        sort_keys=True,
+        ensure_ascii=True,
+        default=str,
+    )
+    digest = hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()[:16]
+    return f"default:{provider.__class__.__qualname__}:{digest}"

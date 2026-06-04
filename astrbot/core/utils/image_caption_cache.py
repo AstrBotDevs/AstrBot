@@ -14,17 +14,14 @@ DEFAULT_IMAGE_CAPTION_CACHE_TTL = 600
 
 
 def resolve_image_caption_cache_ttl(config: dict | None) -> int:
-    if not isinstance(config, dict):
-        return DEFAULT_IMAGE_CAPTION_CACHE_TTL
-
-    ttl = config.get(
+    raw = (config or {}).get(
         "image_caption_cache_ttl",
         DEFAULT_IMAGE_CAPTION_CACHE_TTL,
     )
-    if isinstance(ttl, bool):
+    if isinstance(raw, bool):
         return DEFAULT_IMAGE_CAPTION_CACHE_TTL
     try:
-        return max(int(ttl), 0)
+        return max(int(raw), 0)
     except (TypeError, ValueError):
         return DEFAULT_IMAGE_CAPTION_CACHE_TTL
 
@@ -35,10 +32,16 @@ class _ImageCaptionCacheEntry:
     expires_at: float
 
 
+@dataclass(slots=True)
+class _ImageCaptionCacheLockEntry:
+    lock: asyncio.Lock
+    users: int = 0
+
+
 class ImageCaptionCache:
     def __init__(self) -> None:
         self._entries: dict[str, _ImageCaptionCacheEntry] = {}
-        self._locks: dict[str, asyncio.Lock] = {}
+        self._locks: dict[str, _ImageCaptionCacheLockEntry] = {}
 
     def clear(self) -> None:
         self._entries.clear()
@@ -69,23 +72,26 @@ class ImageCaptionCache:
             )
             return cached_caption
 
-        lock = self._locks.setdefault(cache_key, asyncio.Lock())
-        async with lock:
-            cached_caption = self._get(cache_key)
-            if cached_caption is not None:
-                logger.debug(
-                    "Using cached image caption after lock wait. provider=%s",
-                    provider_id or "<default>",
-                )
-                return cached_caption
+        lock_entry = self._acquire_lock_entry(cache_key)
+        try:
+            async with lock_entry.lock:
+                cached_caption = self._get(cache_key)
+                if cached_caption is not None:
+                    logger.debug(
+                        "Using cached image caption after lock wait. provider=%s",
+                        provider_id or "<default>",
+                    )
+                    return cached_caption
 
-            caption = await caption_factory()
-            self._entries[cache_key] = _ImageCaptionCacheEntry(
-                caption=caption,
-                expires_at=time.monotonic() + ttl_seconds,
-            )
-            self._cleanup_expired_entries()
-            return caption
+                caption = await caption_factory()
+                self._entries[cache_key] = _ImageCaptionCacheEntry(
+                    caption=caption,
+                    expires_at=time.monotonic() + ttl_seconds,
+                )
+                self._cleanup_expired_entries()
+                return caption
+        finally:
+            self._release_lock_entry(cache_key, lock_entry)
 
     def _get(self, cache_key: str) -> str | None:
         entry = self._entries.get(cache_key)
@@ -103,6 +109,26 @@ class ImageCaptionCache:
         ]
         for key in expired_keys:
             self._entries.pop(key, None)
+
+    def _acquire_lock_entry(self, cache_key: str) -> _ImageCaptionCacheLockEntry:
+        lock_entry = self._locks.get(cache_key)
+        if lock_entry is None:
+            lock_entry = _ImageCaptionCacheLockEntry(lock=asyncio.Lock())
+            self._locks[cache_key] = lock_entry
+        lock_entry.users += 1
+        return lock_entry
+
+    def _release_lock_entry(
+        self,
+        cache_key: str,
+        lock_entry: _ImageCaptionCacheLockEntry,
+    ) -> None:
+        current_lock_entry = self._locks.get(cache_key)
+        if current_lock_entry is not lock_entry:
+            return
+        current_lock_entry.users -= 1
+        if current_lock_entry.users <= 0:
+            self._locks.pop(cache_key, None)
 
     async def _build_cache_key(
         self,
