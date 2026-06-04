@@ -1,4 +1,4 @@
-import { reactive, computed, onMounted } from "vue";
+import { reactive, shallowRef, computed, onMounted, watch } from "vue";
 import axios from "axios";
 import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 
@@ -22,13 +22,26 @@ export const pluginSidebarState = reactive<{
   plugins: [],
 });
 
-function mdiIconSrc(iconName: string): string {
-  // mdi-brain → brain.svg
+/** MDI SVG 缓存，iconName → raw SVG string */
+const svgCache = reactive<Record<string, string | null>>({});
+
+async function loadSvgIcon(iconName: string): Promise<string | null> {
+  if (iconName in svgCache) return svgCache[iconName];
+
   const name = iconName.startsWith("mdi-") ? iconName.slice(4) : iconName;
-  return `${MDI_SVG_BASE}/${name}.svg`;
+  try {
+    const res = await fetch(`${MDI_SVG_BASE}/${name}.svg`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const svgText = await res.text();
+    svgCache[iconName] = svgText;
+    return svgText;
+  } catch {
+    svgCache[iconName] = null;
+    return null;
+  }
 }
 
-function buildPluginItems(plugins: PluginEntry[]): menu | null {
+function buildPluginItems(plugins: PluginEntry[]): (menu & { iconSvg?: string }) | null {
   const activeWithPages = plugins.filter(
     (p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0,
   );
@@ -43,7 +56,7 @@ function buildPluginItems(plugins: PluginEntry[]): menu | null {
     return {
       title: displayName,
       icon,
-      iconSrc: mdiIconSrc(icon),
+      iconSvg: svgCache[icon] ?? undefined,
       to: `/plugin-page/${encodeURIComponent(p.name)}/${encodeURIComponent(firstPage)}`,
       isRawTitle: true,
     };
@@ -72,11 +85,33 @@ async function initPluginState() {
 }
 
 export function usePluginSidebarItems() {
-  onMounted(() => {
-    initPluginState();
+  const pluginItems = shallowRef<(menu & { iconSvg?: string }) | null>(null);
+
+  async function refreshItems() {
+    const plugins = pluginSidebarState.plugins;
+    const items = buildPluginItems(plugins);
+    pluginItems.value = items;
+    if (!items?.children) return;
+
+    // 后台加载 SVG，加载完成后逐个更新
+    for (const child of items.children) {
+      const iconName = child.icon;
+      if (!iconName || svgCache[iconName] !== undefined) continue;
+
+      const svg = await loadSvgIcon(iconName);
+      // 触发响应式更新
+      pluginItems.value = buildPluginItems(pluginSidebarState.plugins);
+    }
+  }
+
+  onMounted(async () => {
+    await initPluginState();
+    refreshItems();
   });
 
-  const pluginItems = computed(() => buildPluginItems(pluginSidebarState.plugins));
+  watch(() => pluginSidebarState.plugins, () => {
+    refreshItems();
+  });
 
   return { pluginItems };
 }

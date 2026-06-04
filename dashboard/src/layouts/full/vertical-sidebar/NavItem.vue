@@ -29,6 +29,7 @@ const itemTitle = computed(() => {
   if (!props.item?.title) return '';
   return props.item.isRawTitle ? props.item.title : t(props.item.title);
 });
+
 </script>
 
 <template>
@@ -52,7 +53,7 @@ const itemTitle = computed(() => {
     :active="isItemActive" rounded class="mb-1" color="secondary" :disabled="item.disabled"
     :target="item.type === 'external' ? '_blank' : ''" :style="itemStyle">
     <template v-slot:prepend>
-      <img v-if="item.iconSrc" :src="item.iconSrc" class="plugin-icon-svg" alt="" />
+      <span v-if="item.iconSvg" class="plugin-icon-svg" v-html="item.iconSvg"></span>
       <v-icon v-else-if="item.icon" :size="item.iconSize" class="hide-menu" :icon="item.icon"></v-icon>
     </template>
     <v-list-item-title style="font-size: 14px;">{{ itemTitle }}</v-list-item-title>
@@ -73,6 +74,15 @@ const itemTitle = computed(() => {
   width: 24px;
   height: 24px;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plugin-icon-svg :deep(svg) {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
 }
 
 /* 在折叠(mini)状态下，分组展开时给整个分组（母项+子项）加边框以便区分 */
