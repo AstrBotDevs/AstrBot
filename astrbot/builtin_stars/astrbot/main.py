@@ -169,10 +169,14 @@ class Main(star.Star):
                 "provider_ltm_settings"
             ]["group_icl_enable"]
             if group_icl_enable:
-                try:
-                    await self.group_chat_context.handle_message(event)
-                except BaseException as e:
-                    logger.error(e)
+                # Skip recording if a command handler matched (e.g. /reset,
+                # /help, /new). Slash commands are bot instructions, not group
+                # chat context that should be injected into future LLM requests.
+                if not event.get_extra("handlers_parsed_params", {}):
+                    try:
+                        await self.group_chat_context.handle_message(event)
+                    except BaseException as e:
+                        logger.error(e)
 
             if need_active:
                 provider = self.context.get_using_provider(event.unified_msg_origin)
