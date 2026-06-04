@@ -75,10 +75,29 @@ def _convert_to_line_ending(text: str, ending: Literal["\n", "\r\n"]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _levenshtein(a: str, b: str) -> int:
+def _levenshtein(a: str, b: str, max_dist: int | None = None) -> int:
+    """Compute Levenshtein edit distance between two strings.
+
+    Args:
+        a: First string.
+        b: Second string.
+        max_dist: If provided, return early with ``max_dist + 1`` once the
+            distance is guaranteed to exceed this threshold.
+
+    Returns:
+        The edit distance, or ``max_dist + 1`` if the true distance exceeds
+        *max_dist*.
+    """
     if a == "" or b == "":
-        return max(len(a), len(b))
-    # Use a single row DP to reduce memory
+        d = max(len(a), len(b))
+        return d if max_dist is None or d <= max_dist else max_dist + 1
+
+    # Quick length-difference pre-check: if the lengths already differ by
+    # more than max_dist, the distance must exceed it.
+    if max_dist is not None and abs(len(a) - len(b)) > max_dist:
+        return max_dist + 1
+
+    # Single-row DP
     prev = list(range(len(b) + 1))
     for i in range(1, len(a) + 1):
         curr = [i]
@@ -87,6 +106,10 @@ def _levenshtein(a: str, b: str) -> int:
             cost = 0 if ai == b[j - 1] else 1
             curr.append(min(curr[-1] + 1, prev[j] + 1, prev[j - 1] + cost))
         prev = curr
+        # Early termination: if every value in the current row exceeds
+        # max_dist, the final distance will too.
+        if max_dist is not None and min(prev) > max_dist:
+            return max_dist + 1
     return prev[len(b)]
 
 
@@ -219,7 +242,7 @@ def _line_trimmed_replacer(content: str, find: str) -> Iterator[str]:
 def _block_anchor_replacer(content: str, find: str) -> Iterator[str]:
     """
     Use first and last line as anchors, then use Levenshtein similarity on middle lines.
-    Single candidate threshold: 0.0 (accept if anchors match)
+    Single candidate threshold: 0.1
     Multiple candidates threshold: 0.3 (pick best)
     """
     if not find:
@@ -263,13 +286,17 @@ def _block_anchor_replacer(content: str, find: str) -> Iterator[str]:
             max_len = max(len(ol), len(sl))
             if max_len == 0:
                 continue
-            dist = _levenshtein(ol, sl)
-            sim += (1 - dist / max_len) / lines_to_check
+            # Use max_len as the early-termination threshold: Levenshtein
+            # distance is bounded by max_len, so this preserves exact
+            # semantics while enabling length-difference pre-check and
+            # row-level early exit for wildly different lines.
+            dist = _levenshtein(ol, sl, max_dist=max_len)
+            sim += (1 - min(dist, max_len) / max_len) / lines_to_check
         return sim
 
     if len(candidates) == 1:
         start, end = candidates[0]
-        if _similarity(start, end) >= 0.0:
+        if _similarity(start, end) >= 0.1:
             yield "\n".join(original_lines[start : end + 1])
         return
 
@@ -398,7 +425,6 @@ def _context_aware_replacer(content: str, find: str) -> Iterator[str]:
             if total_nonempty == 0 or matching / total_nonempty >= 0.5:
                 yield "\n".join(block_lines)
                 return  # Only first match
-            break
 
 
 def _multi_occurrence_replacer(content: str, find: str) -> Iterator[str]:
