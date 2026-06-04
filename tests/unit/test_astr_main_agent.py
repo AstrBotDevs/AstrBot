@@ -986,6 +986,39 @@ class TestBuildMainAgent:
         assert isinstance(result, module.MainAgentBuildResult)
 
     @pytest.mark.asyncio
+    async def test_build_main_agent_passes_max_context_length_to_runner(
+        self, mock_event, mock_context, mock_provider
+    ):
+        module = ama
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    max_context_length=7,
+                ),
+            )
+
+        assert result is not None
+        mock_runner.reset.assert_awaited_once()
+        assert mock_runner.reset.await_args.kwargs["enforce_max_turns"] == 7
+
+    @pytest.mark.asyncio
     async def test_build_main_agent_no_provider(self, mock_event, mock_context):
         """Test building main agent when no provider is available."""
         module = ama
