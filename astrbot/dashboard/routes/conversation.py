@@ -1,5 +1,6 @@
 import json
 import traceback
+from dataclasses import asdict
 from datetime import datetime
 from io import BytesIO
 
@@ -8,6 +9,7 @@ from quart import request, send_file
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
 
 from .route import Response, Route, RouteContext
 
@@ -38,6 +40,28 @@ class ConversationRoute(Route):
         self.conv_mgr = core_lifecycle.conversation_manager
         self.core_lifecycle = core_lifecycle
         self.register_routes()
+
+    @staticmethod
+    def _parse_umo(umo: str) -> dict:
+        parts = umo.split(":")
+        return {
+            "platform": parts[0] if len(parts) >= 1 else "unknown",
+            "message_type": parts[1] if len(parts) >= 2 else "unknown",
+            "session_id": ":".join(parts[2:]) if len(parts) >= 3 else umo,
+        }
+
+    def _build_umo_info(self, umo: str, alias_map: dict) -> dict:
+        return {
+            "umo": umo,
+            **self._parse_umo(umo),
+            **serialize_umo_alias(alias_map.get(umo), umo),
+        }
+
+    def _serialize_conversation(self, conversation, alias_map: dict) -> dict:
+        return {
+            **asdict(conversation),
+            "umo_info": self._build_umo_info(conversation.user_id, alias_map),
+        }
 
     async def list_conversations(self):
         """获取对话列表，支持分页、排序和筛选"""
@@ -87,9 +111,14 @@ class ConversationRoute(Route):
             total_pages = (
                 (total_count + page_size - 1) // page_size if total_count > 0 else 1
             )
+            umos = sorted({conv.user_id for conv in conversations if conv.user_id})
+            alias_map = build_umo_alias_map(await self.db_helper.get_umo_aliases(umos))
 
             result = {
-                "conversations": conversations,
+                "conversations": [
+                    self._serialize_conversation(conversation, alias_map)
+                    for conversation in conversations
+                ],
                 "pagination": {
                     "page": page,
                     "page_size": page_size,
@@ -121,6 +150,9 @@ class ConversationRoute(Route):
             if not conversation:
                 return Response().error("对话不存在").__dict__
 
+            alias_map = build_umo_alias_map(
+                await self.db_helper.get_umo_aliases([user_id])
+            )
             return (
                 Response()
                 .ok(
@@ -132,6 +164,7 @@ class ConversationRoute(Route):
                         "history": conversation.history,
                         "created_at": conversation.created_at,
                         "updated_at": conversation.updated_at,
+                        "umo_info": self._build_umo_info(user_id, alias_map),
                     },
                 )
                 .__dict__
