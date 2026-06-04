@@ -3195,9 +3195,9 @@ CONFIG_METADATA_3 = {
                         "type": "text",
                     },
                     "provider_settings.image_caption_cache_ttl": {
-                        "description": "Image caption cache TTL (seconds)",
+                        "description": "图片转述缓存时长（秒）",
                         "type": "int",
-                        "hint": "Set to 0 to disable cache",
+                        "hint": "在缓存时间内再次收到相同图片时，直接复用已缓存的视觉识别结果；设为 0 表示禁用缓存",
                     },
                 },
                 "condition": {
