@@ -243,6 +243,7 @@ class KBHelper:
         doc_id = str(uuid.uuid4())
         media_paths: list[Path] = []
         file_size = 0
+        vectors_stored = False  # 标记向量是否已写入, 用于失败回滚
 
         # file_path = self.kb_files_dir / f"{doc_id}.{file_type}"
         # async with aiofiles.open(file_path, "wb") as f:
@@ -391,6 +392,7 @@ class KBHelper:
                     max_retries=max_retries,
                     progress_callback=embedding_progress_callback,
                 )
+                vectors_stored = True
             except KnowledgeBaseUploadError:
                 raise
             except Exception as exc:
@@ -453,6 +455,20 @@ class KBHelper:
                 logger.warning(f"上传文档失败: {e}", extra={"details": e.details})
             else:
                 logger.error(f"上传文档失败: {e}", exc_info=True)
+
+            # 回滚已写入的向量, 防止孤数据
+            if vectors_stored:
+                try:
+                    vec_db: FaissVecDB = self.vec_db  # type: ignore
+                    await vec_db.delete_documents(
+                        metadata_filters={"kb_doc_id": doc_id},
+                    )
+                    logger.info(f"已清理文档 {doc_id} 的孤数据向量")
+                except Exception as cleanup_err:
+                    logger.error(
+                        f"清理文档 {doc_id} 向量回滚失败: {cleanup_err}",
+                    )
+
             # if file_path.exists():
             #     file_path.unlink()
 
