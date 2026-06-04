@@ -87,6 +87,21 @@ class KnowledgeBaseRoute(Route):
         if task_id in self.upload_progress:
             self.upload_progress[task_id]["status"] = status
 
+    def _cleanup_task(self, task_id: str) -> None:
+        """清理已完成/失败的任务，释放内存。幂等操作。"""
+        self.upload_tasks.pop(task_id, None)
+        self.upload_progress.pop(task_id, None)
+
+    async def _schedule_delayed_cleanup(
+        self, task_id: str, delay_seconds: int = 300
+    ) -> None:
+        """延迟清理任务，作为客户端不轮询时的兜底机制。"""
+        try:
+            await asyncio.sleep(delay_seconds)
+        except asyncio.CancelledError:
+            return
+        self._cleanup_task(task_id)
+
     def _update_progress(
         self,
         task_id: str,
@@ -220,6 +235,9 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"后台上传任务 {task_id} 失败: {e}")
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
+        finally:
+            # 兜底清理：防止客户端不轮询 get_upload_progress 导致内存泄漏
+            asyncio.create_task(self._schedule_delayed_cleanup(task_id))
 
     async def _background_import_task(
         self,
@@ -310,6 +328,8 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"后台导入任务 {task_id} 失败: {e}")
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
+        finally:
+            asyncio.create_task(self._schedule_delayed_cleanup(task_id))
 
     async def list_kbs(self):
         """获取知识库列表
@@ -920,14 +940,14 @@ class KnowledgeBaseRoute(Route):
             # 如果任务完成，返回结果
             if status == "completed":
                 response_data["result"] = task_info["result"]
-                # 清理已完成的任务
-                # del self.upload_tasks[task_id]
-                # if task_id in self.upload_progress:
-                #     del self.upload_progress[task_id]
 
             # 如果任务失败，返回错误信息
             if status == "failed":
                 response_data["error"] = task_info["error"]
+
+            # 清理已完成/失败的任务，释放内存
+            if status in ("completed", "failed"):
+                self._cleanup_task(task_id)
 
             return Response().ok(response_data).__dict__
 
@@ -1286,3 +1306,5 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"后台上传URL任务 {task_id} 失败: {e}")
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
+        finally:
+            asyncio.create_task(self._schedule_delayed_cleanup(task_id))
