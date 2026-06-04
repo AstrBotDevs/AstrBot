@@ -147,8 +147,8 @@ class MainAgentBuildConfig:
     """The strategy to handle context length limit reached."""
     llm_compress_instruction: str = ""
     """The instruction for compression in llm_compress strategy."""
-    llm_compress_keep_recent: int = 10
-    """The number of most recent turns to keep during llm_compress strategy."""
+    llm_compress_keep_recent_ratio: float = 0.15
+    """Percent of current context tokens to keep as exact recent context during llm_compress strategy."""
     llm_compress_provider_id: str = ""
     """The provider ID for the LLM used in context compression."""
     max_context_length: int = 50
@@ -1177,6 +1177,8 @@ def _get_fallback_chat_providers(
 
 def _provider_supports_modality(provider: Provider, modality: str) -> bool:
     modalities = provider.provider_config.get("modalities", None)
+    if modalities == []:
+        return True  # Empty list from migration is treated as unconfigured for backward compatibility
     return isinstance(modalities, list) and modality in modalities
 
 
@@ -1496,9 +1498,10 @@ async def build_main_agent(
         agent_hooks=MAIN_AGENT_HOOKS,
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
-        llm_compress_keep_recent=config.llm_compress_keep_recent,
+        llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
         llm_compress_provider=_get_compress_provider(config, plugin_context, event),
         truncate_turns=config.dequeue_context_length,
+        enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=fallback_providers,
         tool_result_overflow_dir=(

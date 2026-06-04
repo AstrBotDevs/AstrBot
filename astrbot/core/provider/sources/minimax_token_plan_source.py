@@ -14,8 +14,8 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
     """MiniMax Token Plan provider.
 
     The model list is fetched dynamically from the MiniMax API's /v1/models
-    endpoint, so newly released models (e.g. MiniMax-M3) are automatically
-    discovered without a code change.
+    endpoint, so newly released models are automatically discovered without
+    a code change. The default model is MiniMax-M3, the current flagship.
     """
 
     def __init__(
@@ -37,7 +37,7 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
             provider_settings,
         )
 
-        configured_model = provider_config.get("model", "MiniMax-M2.7")
+        configured_model = provider_config.get("model", "MiniMax-M3")
         self.set_model(configured_model)
 
     async def get_models(self) -> list[str]:

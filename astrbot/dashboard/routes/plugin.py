@@ -789,14 +789,21 @@ class PluginRoute(Route):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
         # Sandboxed iframes without allow-same-origin load ES modules with Origin: null.
         # CORS read access is allowed here; JWT/asset_token still protects the assets.
         response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Content-Security-Policy"] = (
-            "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
-        )
+
+        # When running under the AstrBot Launcher the dashboard is embedded in a
+        # cross-origin iframe (the Tauri webview).  Since frame-ancestors and
+        # X-Frame-Options inspect the *entire* ancestor chain, enforcing them here
+        # would block plugin pages from loading inside the nested iframe.
+        csp = "object-src 'none'; base-uri 'self'"
+        if os.environ.get("ASTRBOT_LAUNCHER") not in ("1", "true"):
+            response.headers["X-Frame-Options"] = "SAMEORIGIN"
+            csp = f"frame-ancestors 'self'; {csp}"
+        response.headers["Content-Security-Policy"] = csp
+
         return response
 
     async def _serve_plugin_page_html_asset(

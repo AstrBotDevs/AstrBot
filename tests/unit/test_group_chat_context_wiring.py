@@ -14,13 +14,33 @@ def make_main_with_conversation_manager(conv_mgr):
     return main
 
 
-def make_event(umo: str = "aiocqhttp:GroupMessage:user_123_group_456"):
+def _make_extras_store():
+    """Return a mutable dict and get_extra / set_extra side_effects bound to it."""
+    store: dict[str, object] = {}
+    get_extra = lambda key, default=None: store.get(key, default)  # noqa: E731
+    set_extra = store.__setitem__  # type: ignore[assignment]
+    return store, get_extra, set_extra
+
+
+def make_event(
+    umo: str = "aiocqhttp:GroupMessage:user_123_group_456",
+    *,
+    handlers_parsed_params: dict | None = None,
+):
     event = MagicMock()
     event.unified_msg_origin = umo
     event.get_platform_id.return_value = "aiocqhttp"
     event.message_obj = SimpleNamespace(message=[Plain("hello")])
     event.message_str = "hello"
     event.session_id = "session-1"
+
+    store, get_extra, set_extra = _make_extras_store()
+    # Simulate WakingCheckStage output: an empty dict means no command matched.
+    store["handlers_parsed_params"] = (
+        {} if handlers_parsed_params is None else handlers_parsed_params
+    )
+    event.get_extra.side_effect = get_extra
+    event.set_extra.side_effect = set_extra
     return event
 
 
@@ -118,3 +138,30 @@ async def test_on_message_does_not_clear_group_context_on_first_enabled_message(
     main.group_chat_context.need_active_reply.assert_awaited_once_with(event)
     main.group_chat_context.handle_message.assert_awaited_once_with(event)
     main.group_chat_context.remove_session.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_on_message_skips_recording_when_command_handler_matched():
+    """A slash-command message (handlers_parsed_params non-empty) must not be
+    recorded into the group context buffer."""
+    main = Main.__new__(Main)
+    main.context = MagicMock()
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "group_icl_enable": True,
+            "active_reply": {"enable": False},
+        },
+    }
+    main.group_chat_context = SimpleNamespace(
+        need_active_reply=AsyncMock(return_value=False),
+        handle_message=AsyncMock(),
+    )
+    event = make_event(
+        handlers_parsed_params={"astrbot.builtin_stars.builtin_commands.main_reset": {}},
+    )
+
+    async for _ in main.on_message(event):
+        pass
+
+    main.group_chat_context.need_active_reply.assert_awaited_once_with(event)
+    main.group_chat_context.handle_message.assert_not_awaited()
