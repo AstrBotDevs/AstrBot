@@ -6,6 +6,7 @@
 import json
 from dataclasses import dataclass
 
+from astrbot.core import logger
 from astrbot.core.db.vec_db.base import Result
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseResult
@@ -107,6 +108,15 @@ class RankFusion:
             key=lambda cid: rrf_scores[cid],
             reverse=True,
         )[:top_k]
+
+        if logger.isEnabledFor(10):  # DEBUG
+            details = []
+            for cid in sorted_ids[:5]:
+                d_rank = dense_ranks.get(cid, "-")
+                s_rank = sparse_ranks.get(cid, "-")
+                rrf = rrf_scores[cid]
+                details.append(f"{cid[:8]}(d={d_rank},s={s_rank},rrf={rrf:.4f})")
+            logger.debug(f"RRF top-5: {' | '.join(details)}")
 
         # 5. 构建融合结果
         fused_results = []

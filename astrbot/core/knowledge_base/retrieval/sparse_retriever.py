@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from rank_bm25 import BM25Okapi
 
+from astrbot.core import logger
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.tokenizer import (
     load_stopwords,
@@ -22,7 +23,10 @@ if TYPE_CHECKING:
 
 @dataclass
 class SparseResult:
-    """稀疏检索结果"""
+    """稀疏检索结果
+
+    score 语义: 越低越相关 (0 = 最佳匹配), 统一按升序排列后送入 RRF 融合。
+    """
 
     chunk_index: int
     chunk_id: str
@@ -33,22 +37,11 @@ class SparseResult:
 
 
 class SparseRetriever:
-    """BM25 稀疏检索器
-
-    职责:
-    - 基于关键词的文档检索
-    - 使用 BM25 算法计算相关度
-    """
+    """BM25 稀疏检索器"""
 
     def __init__(self, kb_db: KBSQLiteDatabase) -> None:
-        """初始化稀疏检索器
-
-        Args:
-            kb_db: 知识库数据库实例
-
-        """
         self.kb_db = kb_db
-        self._index_cache = {}  # 缓存 BM25 索引
+        self._index_cache = {}
 
         self.hit_stopwords = load_stopwords(
             os.path.join(os.path.dirname(__file__), "hit_stopwords.txt"),
@@ -62,18 +55,13 @@ class SparseRetriever:
     ) -> list[SparseResult]:
         """执行稀疏检索
 
-        Args:
-            query: 查询文本
-            kb_ids: 知识库 ID 列表
-            kb_options: 每个知识库的检索选项
-
-        Returns:
-            List[SparseResult]: 检索结果列表
-
+        优先使用 FTS5 全文索引; 不可用时回退到内存 BM25。
+        结果按 score 升序排列 (lower-is-better), 直接喂给 RRF。
         """
         fts_results = []
         fallback_kb_ids = []
         query_tokens = tokenize_text(query, self.hit_stopwords)
+
         for kb_id in kb_ids:
             vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
             if not vec_db:
@@ -89,6 +77,7 @@ class SparseRetriever:
 
             for doc in result:
                 chunk_md = json.loads(doc["metadata"])
+                # FTS5 bm25(): 0=最佳, 极短文档可能为负值 → clamp 到 0
                 fts_results.append(
                     SparseResult(
                         chunk_id=doc["doc_id"],
@@ -96,7 +85,7 @@ class SparseRetriever:
                         doc_id=chunk_md["kb_doc_id"],
                         kb_id=kb_id,
                         content=doc["text"],
-                        score=-float(doc["score"]),
+                        score=max(0.0, float(doc["score"])),
                     ),
                 )
 
@@ -107,8 +96,20 @@ class SparseRetriever:
                 kb_ids=fallback_kb_ids,
                 kb_options=kb_options,
             )
+
         results = fts_results + fallback_results
-        results.sort(key=lambda x: x.score, reverse=True)
+        results.sort(key=lambda x: x.score)
+
+        if logger.isEnabledFor(10):  # DEBUG
+            fts_top = [f"{r.chunk_id[:8]}={r.score:.4f}" for r in fts_results[:5]]
+            bm_top = [f"{r.chunk_id[:8]}={r.score:.4f}" for r in fallback_results[:5]]
+            merged_top = [f"{r.chunk_id[:8]}={r.score:.4f}" for r in results[:5]]
+            logger.debug(
+                f"Sparse top-5 | FTS5({len(fts_results)}): [{', '.join(fts_top)}] | "
+                f"BM25({len(fallback_results)}): [{', '.join(bm_top)}] | "
+                f"Merged({len(results)}): [{', '.join(merged_top)}]",
+            )
+
         return results
 
     async def _retrieve_with_bm25(
@@ -117,8 +118,13 @@ class SparseRetriever:
         kb_ids: list[str],
         kb_options: dict,
     ) -> list[SparseResult]:
+        """FTS5 不可用时的 BM25Okapi 回退路径。
+
+        BM25Okapi 原始分值 higher-is-better → 取反统一为 lower-is-better。
+        """
         top_k_sparse = 0
         chunks = []
+
         for kb_id in kb_ids:
             vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
             if not vec_db:
@@ -145,18 +151,13 @@ class SparseRetriever:
         if not chunks:
             return []
 
-        # 2. 准备文档和索引
         corpus = [chunk["text"] for chunk in chunks]
         tokenized_corpus = [tokenize_text(doc, self.hit_stopwords) for doc in corpus]
-
-        # 3. 构建 BM25 索引
         bm25 = BM25Okapi(tokenized_corpus)
 
-        # 4. 执行检索
         tokenized_query = tokenize_text(query, self.hit_stopwords)
         scores = bm25.get_scores(tokenized_query)
 
-        # 5. 排序并返回 Top-K
         results = []
         for idx, score in enumerate(scores):
             chunk = chunks[idx]
@@ -167,10 +168,9 @@ class SparseRetriever:
                     doc_id=chunk["doc_id"],
                     kb_id=chunk["kb_id"],
                     content=chunk["text"],
-                    score=float(score),
+                    score=-float(score),
                 ),
             )
 
-        results.sort(key=lambda x: x.score, reverse=True)
-        # return results[: len(results) // len(kb_ids)]
+        results.sort(key=lambda x: x.score)
         return results[:top_k_sparse]
