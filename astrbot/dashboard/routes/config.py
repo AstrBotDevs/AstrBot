@@ -285,6 +285,22 @@ def _protected_2fa_config_changed(old_config: dict, new_config: dict) -> bool:
     )
 
 
+def _normalize_unavailable_sandbox_booter(config: dict) -> dict:
+    sandbox = config.get("provider_settings", {}).get("sandbox", {})
+    if not isinstance(sandbox, dict):
+        return config
+    booter = str(sandbox.get("booter") or "").strip()
+    if not booter:
+        return config
+    provider_ids = {
+        str(provider.get("provider_id") or "")
+        for provider in computer_client.list_sandbox_providers()
+    }
+    if booter not in provider_ids:
+        sandbox["booter"] = ""
+    return config
+
+
 async def _validate_neo_connectivity(
     post_config: dict,
 ) -> str | None:
@@ -629,7 +645,8 @@ class ConfigRoute(Route):
         metadata = ConfigMetadataI18n.convert_to_i18n_keys(
             self._inject_sandbox_provider_options(copy.deepcopy(CONFIG_METADATA_3))
         )
-        return Response().ok({"config": DEFAULT_CONFIG, "metadata": metadata}).__dict__
+        config = _normalize_unavailable_sandbox_booter(copy.deepcopy(DEFAULT_CONFIG))
+        return Response().ok({"config": config, "metadata": metadata}).__dict__
 
     async def get_abconf_list(self):
         """获取所有 AstrBot 配置文件的列表"""
@@ -660,7 +677,9 @@ class ConfigRoute(Route):
 
         try:
             if system_config:
-                abconf = self.acm.confs["default"]
+                abconf = _normalize_unavailable_sandbox_booter(
+                    copy.deepcopy(dict(self.acm.confs["default"]))
+                )
                 metadata = ConfigMetadataI18n.convert_to_i18n_keys(
                     self._inject_sandbox_provider_options(
                         copy.deepcopy(CONFIG_METADATA_3_SYSTEM)
@@ -669,7 +688,9 @@ class ConfigRoute(Route):
                 return Response().ok({"config": abconf, "metadata": metadata}).__dict__
             if abconf_id is None:
                 raise ValueError("abconf_id cannot be None")
-            abconf = self.acm.confs[abconf_id]
+            abconf = _normalize_unavailable_sandbox_booter(
+                copy.deepcopy(dict(self.acm.confs[abconf_id]))
+            )
             metadata = ConfigMetadataI18n.convert_to_i18n_keys(
                 self._inject_sandbox_provider_options(copy.deepcopy(CONFIG_METADATA_3))
             )
@@ -1085,6 +1106,8 @@ class ConfigRoute(Route):
                 _set_nested_value(
                     config, ("dashboard", "totp", "recovery_code_hash"), ""
                 )
+
+            _normalize_unavailable_sandbox_booter(config)
 
             set_pending_totp_secret(None)
             await self._save_astrbot_configs(config, conf_id)

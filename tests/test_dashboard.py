@@ -481,6 +481,79 @@ async def test_config_metadata_includes_registered_sandbox_providers(
 
 
 @pytest.mark.asyncio
+async def test_config_abconf_clears_unavailable_sandbox_booter_for_display(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    manager = SandboxManager(registry=SandboxRegistry(), providers={})
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    original_booter = core_lifecycle_td.astrbot_config["provider_settings"][
+        "sandbox"
+    ].get("booter")
+    core_lifecycle_td.astrbot_config["provider_settings"]["sandbox"]["booter"] = (
+        "shipyard"
+    )
+
+    try:
+        test_client = app.test_client()
+        response = await test_client.get(
+            "/api/config/abconf?id=default", headers=authenticated_header
+        )
+        data = await response.get_json()
+
+        assert response.status_code == 200
+        assert data["status"] == "ok"
+        assert data["data"]["config"]["provider_settings"]["sandbox"]["booter"] == ""
+    finally:
+        core_lifecycle_td.astrbot_config["provider_settings"]["sandbox"]["booter"] = (
+            original_booter
+        )
+
+
+@pytest.mark.asyncio
+async def test_config_save_clears_unavailable_sandbox_booter(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    manager = SandboxManager(registry=SandboxRegistry(), providers={})
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    original_config = copy.deepcopy(dict(core_lifecycle_td.astrbot_config))
+    post_config = copy.deepcopy(original_config)
+    post_config["provider_settings"]["computer_use_runtime"] = "sandbox"
+    post_config["provider_settings"]["sandbox"]["booter"] = "shipyard"
+
+    try:
+        test_client = app.test_client()
+        response = await test_client.post(
+            "/api/config/astrbot/update",
+            headers=authenticated_header,
+            json={"conf_id": "default", "config": post_config},
+        )
+        data = await response.get_json()
+
+        assert response.status_code == 200
+        assert data["status"] == "ok"
+        assert (
+            core_lifecycle_td.astrbot_config["provider_settings"]["sandbox"]["booter"]
+            == ""
+        )
+    finally:
+        core_lifecycle_td.astrbot_config.save_config(original_config)
+
+
+@pytest.mark.asyncio
 async def test_sandbox_dashboard_lists_managed_sandboxes(
     app: Quart,
     authenticated_header: dict,
