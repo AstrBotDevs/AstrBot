@@ -125,7 +125,17 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         return data
 
     @staticmethod
-    def _extract_plain_text_from_chain(message_chain: MessageChain | None) -> str:
+    def _extract_plain_text_from_chain(
+        message_chain: MessageChain | None,
+        strip_result: bool = True,
+    ) -> str:
+        """从消息链中提取纯文本
+
+        Args:
+            message_chain: 消息链
+            strip_result: 是否去除首尾空白。流式输出时应设为 False，
+                          以保留换行等格式字符；非流式发送时可保留默认 True
+        """
         if not message_chain:
             return ""
         plain_parts: list[str] = []
@@ -134,7 +144,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 plain_parts.append(f"@{comp.name} ")
             elif isinstance(comp, Plain):
                 plain_parts.append(comp.text)
-        return "".join(plain_parts).strip()
+        result = "".join(plain_parts)
+        return result.strip() if strip_result else result
 
     async def send(self, message: MessageChain | None) -> None:
         """发送消息"""
@@ -254,7 +265,10 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     )
 
                 chain.squash_plain()
-                chunk_text = self._extract_plain_text_from_chain(chain)
+                # 流式输出不 strip，保留换行等格式字符
+                chunk_text = self._extract_plain_text_from_chain(
+                    chain, strip_result=False
+                )
                 if chunk_text:
                     increment_plain += chunk_text
                 now = asyncio.get_running_loop().time()
@@ -334,7 +348,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 increment_plain = ""
                 continue
 
-            chunk_text = self._extract_plain_text_from_chain(chain)
+            # 流式输出不 strip，保留换行等格式字符
+            chunk_text = self._extract_plain_text_from_chain(chain, strip_result=False)
             if chunk_text:
                 increment_plain += chunk_text
                 final_data += chunk_text
