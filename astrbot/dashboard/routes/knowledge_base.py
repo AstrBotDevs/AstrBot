@@ -55,6 +55,7 @@ class KnowledgeBaseRoute(Route):
             "/kb/document/upload/progress": ("GET", self.get_upload_progress),
             "/kb/document/get": ("GET", self.get_document),
             "/kb/document/delete": ("POST", self.delete_document),
+            "/kb/document/batch-delete": ("POST", self.batch_delete_documents),
             # # 块管理
             "/kb/chunk/list": ("GET", self.list_chunks),
             "/kb/chunk/delete": ("POST", self.delete_chunk),
@@ -1018,6 +1019,56 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"删除文档失败: {e}")
             logger.error(traceback.format_exc())
             return Response().error(f"删除文档失败: {e!s}").__dict__
+
+    async def batch_delete_documents(self):
+        """批量删除文档
+
+        Body:
+        - kb_id: 知识库 ID (必填)
+        - doc_ids: 文档 ID 列表 (必填, 最多 100 个)
+        """
+        try:
+            kb_manager = self._get_kb_manager()
+            data = await request.json
+
+            kb_id = data.get("kb_id")
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+            doc_ids = data.get("doc_ids")
+            if not doc_ids or not isinstance(doc_ids, list):
+                return Response().error("缺少参数 doc_ids 或格式错误").__dict__
+            if len(doc_ids) > 100:
+                return Response().error("最多只能批量删除 100 个文档").__dict__
+
+            kb_helper = await kb_manager.get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+
+            results = await kb_helper.delete_documents(doc_ids)
+
+            success_count = sum(1 for v in results.values() if v)
+            failed_count = len(doc_ids) - success_count
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "results": results,
+                        "total": len(doc_ids),
+                        "success_count": success_count,
+                        "failed_count": failed_count,
+                    },
+                    "批量删除完成",
+                )
+                .__dict__
+            )
+
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"批量删除文档失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"批量删除文档失败: {e!s}").__dict__
 
     async def delete_chunk(self):
         """删除文本块

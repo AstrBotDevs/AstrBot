@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -310,6 +311,44 @@ class KBSQLiteDatabase:
 
         # 在 vec db 中删除相关向量
         await vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
+
+    async def delete_documents_by_ids(
+        self, doc_ids: list[str], vec_db: "FaissVecDB",
+    ) -> dict[str, bool]:
+        """批量删除文档及其向量数据。
+
+        单个文档的 vec_db 删除失败不影响其他文档（best-effort）。
+        """
+        if not doc_ids:
+            return {}
+
+        # 批量从知识库表中删除
+        async with self.get_db() as session, session.begin():
+            delete_stmt = delete(KBDocument).where(
+                col(KBDocument.doc_id).in_(doc_ids),
+            )
+            await session.execute(delete_stmt)
+
+        # 并行清理 vec_db（向量 + SQLite 文档存储）
+        async def _delete_one(doc_id: str) -> tuple[str, bool]:
+            try:
+                await vec_db.delete_documents(
+                    metadata_filters={"kb_doc_id": doc_id},
+                )
+                return doc_id, True
+            except Exception as e:
+                logger.error(
+                    f"删除文档 {doc_id} 的向量数据失败: {e}",
+                )
+                return doc_id, False
+
+        results: dict[str, bool] = {}
+        tasks = [_delete_one(doc_id) for doc_id in doc_ids]
+        vec_results = await asyncio.gather(*tasks)
+        for doc_id, success in vec_results:
+            results[doc_id] = success
+
+        return results
 
     # ===== 多媒体查询 =====
 

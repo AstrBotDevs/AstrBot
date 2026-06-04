@@ -507,6 +507,22 @@ class KBHelper:
         )
         await self.refresh_kb()
 
+    async def delete_documents(self, doc_ids: list[str]) -> dict[str, bool]:
+        """批量删除文档，单次更新统计。
+
+        vec_db 删除失败不阻塞其他文档（best-effort）。
+        """
+        results = await self.kb_db.delete_documents_by_ids(
+            doc_ids=doc_ids,
+            vec_db=self.vec_db,  # type: ignore
+        )
+        await self.kb_db.update_kb_stats(
+            kb_id=self.kb.kb_id,
+            vec_db=self.vec_db,  # type: ignore
+        )
+        await self.refresh_kb()
+        return results
+
     async def delete_chunk(self, chunk_id: str, doc_id: str) -> None:
         """删除单个文本块及其相关数据"""
         vec_db: FaissVecDB = self.vec_db  # type: ignore
