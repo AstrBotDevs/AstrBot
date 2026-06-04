@@ -5,6 +5,8 @@ import base64
 from collections.abc import AsyncGenerator
 from dataclasses import replace
 
+from sqlalchemy.exc import OperationalError
+
 from astrbot.core import db_helper, logger
 from astrbot.core.agent.message import (
     CheckpointData,
@@ -520,6 +522,12 @@ BLOCKED = {"dGZid2h2d3IuY2xvdWQuc2VhbG9zLmlv", "a291cmljaGF0"}
 decoded_blocked = [base64.b64decode(b).decode("utf-8") for b in BLOCKED]
 
 
+def _is_sqlite_database_locked_error(exc: Exception) -> bool:
+    return (
+        isinstance(exc, OperationalError) and "database is locked" in str(exc).lower()
+    )
+
+
 async def _record_internal_agent_stats(
     event: AstrMessageEvent,
     req: ProviderRequest | None,
@@ -535,29 +543,35 @@ async def _record_internal_agent_stats(
     if provider is None or stats is None:
         return
 
-    try:
-        provider_config = getattr(provider, "provider_config", {}) or {}
-        conversation_id = (
-            req.conversation.cid
-            if req is not None and req.conversation is not None
-            else None
-        )
+    provider_config = getattr(provider, "provider_config", {}) or {}
+    conversation_id = (
+        req.conversation.cid
+        if req is not None and req.conversation is not None
+        else None
+    )
 
-        if agent_runner.was_aborted():
-            status = "aborted"
-        elif final_resp is not None and final_resp.role == "err":
-            status = "error"
-        else:
-            status = "completed"
+    if agent_runner.was_aborted():
+        status = "aborted"
+    elif final_resp is not None and final_resp.role == "err":
+        status = "error"
+    else:
+        status = "completed"
 
-        await db_helper.insert_provider_stat(
-            umo=event.unified_msg_origin,
-            conversation_id=conversation_id,
-            provider_id=provider_config.get("id", "") or provider.meta().id,
-            provider_model=provider.get_model(),
-            status=status,
-            stats=stats.to_dict(),
-            agent_type="internal",
-        )
-    except Exception as e:
-        logger.warning("Persist provider stats failed: %s", e, exc_info=True)
+    for attempt in range(3):
+        try:
+            await db_helper.insert_provider_stat(
+                umo=event.unified_msg_origin,
+                conversation_id=conversation_id,
+                provider_id=provider_config.get("id", "") or provider.meta().id,
+                provider_model=provider.get_model(),
+                status=status,
+                stats=stats.to_dict(),
+                agent_type="internal",
+            )
+            return
+        except Exception as e:
+            if _is_sqlite_database_locked_error(e) and attempt < 2:
+                await asyncio.sleep(0.2 * (2**attempt))
+                continue
+            logger.warning("Persist provider stats failed: %s", e, exc_info=True)
+            return
