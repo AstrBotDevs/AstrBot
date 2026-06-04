@@ -77,13 +77,6 @@ from astrbot.core.tools.computer_tools import (
     SyncSkillReleaseTool,
     normalize_umo_for_workspace,
 )
-from astrbot.core.tools.computer_tools.interactive_shell import (
-    InteractiveShellListTool,
-    InteractiveShellReadTool,
-    InteractiveShellSendTool,
-    InteractiveShellStartTool,
-    InteractiveShellStopTool,
-)
 from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
@@ -176,11 +169,6 @@ class MainAgentBuildConfig:
     safety_mode_strategy: str = "system_prompt"
     computer_use_runtime: str = "local"
     """The runtime for agent computer use: none, local, or sandbox."""
-    enable_default_workspace_path: bool = True
-    """Whether to inject the default workspace path into the tool prompt.
-    When enabled, the main agent will tell the LLM the current workspace path
-    for file-related operations. When disabled, no workspace path hint is injected.
-    """
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
@@ -392,11 +380,6 @@ def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> Non
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellStartTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellStopTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellSendTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellReadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellListTool))
     req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
 
 
@@ -568,20 +551,19 @@ async def _ensure_persona_and_skills(
         if req.func_tool is None:
             req.func_tool = ToolSet()
 
-        # Static handoff tools are no longer injected individually.
-        # They are accessible via the fixed transfer_to_subagent tool
-        # registered in _apply_subagent_manager_tools.
+        # add static subagent handoff tools
+        for tool in so.handoffs:
+            req.func_tool.add_tool(tool)
 
-        # add subagent manager tools (includes transfer_to_subagent)
+        # add subagent manager tools
         await _apply_subagent_manager_tools(plugin_context.get_config(), req, event, so)
 
-        # Remove tools assigned to subagents from the main agent's toolset.
-        # NOTE: Previously this loop skipped HandoffTool names (transfer_to_*)
-        # because they were individually injected into func_tool. Since we now
-        # use a single fixed ``transfer_to_subagent`` tool, individual handoff
-        # tools are no longer in func_tool, so the skip logic has been removed.
+        # check duplicates (static subagents)
         if remove_dup:
+            handoff_names = {tool.name for tool in so.handoffs}
             for tool_name in assigned_tools:
+                if tool_name in handoff_names:
+                    continue
                 req.func_tool.remove_tool(tool_name)
 
         router_prompt = (
@@ -973,7 +955,7 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 continue
             mp = tool.handler_module_path
             if not mp:
-                # 没有 plugin 归属信息的工具（如 subagent transfer_to_subagent）
+                # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
                 # 不应受到会话插件过滤影响。
                 new_tool_set.add_tool(tool)
                 continue
@@ -1052,7 +1034,7 @@ async def _apply_subagent_manager_tools(
     When enabled:
     1. Inject subagent capability prompt into system prompt
     2. Register SubAgent management tools
-    3. Register the fixed transfer_to_subagent tool
+    3. Register a unified transfer_to_subagent tool for dynamic subagents
     """
     orch_cfg = cfg.get("subagent_orchestrator", {})
 
@@ -1114,6 +1096,13 @@ async def _apply_subagent_manager_tools(
         if dag_cfg:
             req.func_tool.add_tool(ORCHESTRATE_TASKS_TOOL)
         if enable_dynamic:
+            from astrbot.core.subagent_tools import TRANSFER_TO_SUBAGENT_TOOL
+
+            # Register the fixed transfer_to_subagent tool instead of individual
+            # dynamic handoff tools. This preserves LLM prefix cache since the
+            # tools list no longer changes when subagents are created/removed.
+            req.func_tool.add_tool(TRANSFER_TO_SUBAGENT_TOOL)
+
             req.func_tool.add_tool(CREATE_SUBAGENT_TOOL)
             req.func_tool.add_tool(REMOVE_SUBAGENT_TOOL)
             req.func_tool.add_tool(LIST_SUBAGENTS_TOOL)
@@ -1129,12 +1118,6 @@ async def _apply_subagent_manager_tools(
             task_router_prompt = SubAgentManager.build_task_router_prompt(session_id)
             req.system_prompt = f"{req.system_prompt or ''}\n{task_router_prompt}\n"
 
-        # Register the fixed transfer_to_subagent tool instead of individual
-        # dynamic handoff tools. This preserves LLM prefix cache since the
-        # tools list no longer changes when subagents are created/removed.
-        from astrbot.core.subagent_tools import TRANSFER_TO_SUBAGENT_TOOL
-
-        req.func_tool.add_tool(TRANSFER_TO_SUBAGENT_TOOL)
     except ImportError as e:
         logger.warning(f"[SubAgent] Cannot import module: {e}")
 
@@ -1628,10 +1611,7 @@ async def build_main_agent(
             else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
         )
 
-        if (
-            config.computer_use_runtime == "local"
-            and config.enable_default_workspace_path
-        ):
+        if config.computer_use_runtime == "local":
             tool_prompt += (
                 f"\nCurrent workspace you can use: "
                 f"`{_get_workspace_path_for_umo(event.unified_msg_origin)}`\n"

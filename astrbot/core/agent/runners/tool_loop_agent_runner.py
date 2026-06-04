@@ -47,7 +47,6 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
-from astrbot.core.subagent_manager import RET_DYNAMIC_TOOL_CREATED
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -1174,10 +1173,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         "The tool has returned a data type that is not supported."
                                     )
                         if result_parts:
-                            result_content = "\n\n".join(result_parts)
-                            # Log dynamic tool creation (no longer registers tools)
-                            self._maybe_log_dynamic_tool_creation(result_content)
-
                             inline_result = "\n\n".join(result_parts)
                             inline_result = await self._materialize_large_tool_result(
                                 tool_call_id=func_tool_id,
@@ -1484,24 +1479,3 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     abort_task.cancel()
                     with suppress(asyncio.CancelledError):
                         await abort_task
-
-    def _maybe_log_dynamic_tool_creation(self, result_content: str) -> None:
-        """Log dynamic tool creation events.
-
-        Previously this method also registered dynamic transfer_to_{name} tools
-        into the func_tool set. Since we now use a single fixed
-        ``transfer_to_subagent`` tool, individual handoff tools are resolved
-        at execution time by FunctionToolExecutor, so dynamic registration is
-        no longer needed. We keep logging for observability.
-        """
-        if not result_content.startswith(f"{RET_DYNAMIC_TOOL_CREATED}:"):
-            return
-
-        parts = result_content.split(":", 3)
-        if len(parts) < 4:
-            return
-
-        new_tool_name = parts[1]
-        # Extract the human-readable subagent name from "transfer_to_{name}"
-        subagent_name = new_tool_name.removeprefix("transfer_to_")
-        logger.info(f"[SubAgent] Subagent created: name={subagent_name}")
