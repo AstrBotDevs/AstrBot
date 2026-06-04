@@ -152,7 +152,7 @@ class ProviderVolcengineTTS(TTSProvider):
         # --- 主请求体 ---
         payload: dict = {
             "user": {"uid": str(uuid.uuid4())[:8]},
-            "namespace": "BidirectionalTTS",
+            "namespace": "TTS",
             "req_params": {
                 "text": text,
                 "speaker": self.speaker,
