@@ -329,7 +329,7 @@ class KBSQLiteDatabase:
 
     async def update_kb_stats(self, kb_id: str, vec_db: "FaissVecDB") -> None:
         """更新知识库统计信息"""
-        chunk_cnt = await vec_db.count_documents()
+        chunk_cnt = await vec_db.count_documents(metadata_filter={"kb_id": kb_id})
 
         async with self.get_db() as session, session.begin():
             update_stmt = (
