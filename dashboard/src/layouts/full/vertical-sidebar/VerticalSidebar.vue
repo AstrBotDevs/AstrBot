@@ -17,23 +17,21 @@ const { pluginItems } = usePluginSidebarItems();
 
 function buildSidebarMenu() {
   const base = applySidebarCustomization(sidebarItems);
-  if (!pluginItems.value?.length) return base;
+  if (!pluginItems.value?.children?.length) return base;
 
   const result = [];
 
   for (const item of base) {
     if (item.title === 'core.navigation.groups.more') {
-      // 在「更多」之前插入插件项
-      result.push(...pluginItems.value);
+      result.push(pluginItems.value);
       result.push(item);
     } else {
       result.push(item);
     }
   }
 
-  // 如果没找到「更多」分组，追加到末尾
   if (!base.some((item) => item.title === 'core.navigation.groups.more')) {
-    result.push(...pluginItems.value);
+    result.push(pluginItems.value);
   }
 
   return result;

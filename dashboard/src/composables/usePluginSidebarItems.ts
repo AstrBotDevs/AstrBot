@@ -3,6 +3,8 @@ import axios from "axios";
 import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 
 const DEFAULT_ICON = "mdi-puzzle";
+const GROUP_I18N_KEY = "core.navigation.pluginWebui";
+const GROUP_ICON = "mdi-puzzle-outline";
 
 interface PluginEntry {
   name: string;
@@ -12,7 +14,7 @@ interface PluginEntry {
   icon?: string | null;
 }
 
-const pluginItems = shallowRef<menu[]>([]);
+const pluginItems = shallowRef<menu | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
@@ -35,7 +37,12 @@ async function fetchPluginSidebarItems() {
       (p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0,
     );
 
-    pluginItems.value = activeWithPages.map((p) => {
+    if (activeWithPages.length === 0) {
+      pluginItems.value = null;
+      return;
+    }
+
+    const children: menu[] = activeWithPages.map((p) => {
       const displayName =
         p.display_name || p.name || "Unknown Plugin";
       const firstPage = p.pages[0];
@@ -48,9 +55,15 @@ async function fetchPluginSidebarItems() {
         isRawTitle: true,
       };
     });
+
+    pluginItems.value = {
+      title: GROUP_I18N_KEY,
+      icon: GROUP_ICON,
+      children,
+    };
   } catch (e: any) {
     error.value = e?.message || "Failed to load plugins";
-    pluginItems.value = [];
+    pluginItems.value = null;
   } finally {
     loading.value = false;
   }
