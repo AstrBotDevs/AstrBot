@@ -1359,7 +1359,7 @@
       },
       "model": {
         "description": "Model Subtype",
-        "hint": "Only for Voice Cloning 2.0: seed-tts-2.0-standard / seed-tts-2.0-expressive"
+        "hint": "Only for seed-icl-2.0 (Voice Cloning 2.0): seed-icl-2.0-standard / seed-icl-2.0-expressive"
       },
       "azure_tts_voice": {
         "description": "Voice style",
