@@ -112,3 +112,97 @@ async def test_record_internal_agent_stats_retries_transient_database_lock(
     )
 
     assert attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_record_internal_agent_stats_retries_database_table_lock(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    attempts = 0
+
+    class LockedOnceDb:
+        async def insert_provider_stat(self, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise OperationalError(
+                    "insert into provider_stats",
+                    {},
+                    Exception("database table is locked"),
+                )
+            return SimpleNamespace(**kwargs)
+
+    monkeypatch.setattr(internal, "db_helper", LockedOnceDb())
+
+    async def no_sleep(delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(internal.asyncio, "sleep", no_sleep)
+
+    event = SimpleNamespace(unified_msg_origin="webchat:FriendMessage:session-42")
+    provider = SimpleNamespace(
+        provider_config={"id": "provider-1"},
+        meta=lambda: SimpleNamespace(id="provider-1", type="openai"),
+        get_model=lambda: "gpt-4.1",
+    )
+    agent_runner = SimpleNamespace(
+        provider=provider,
+        stats=AgentStats(),
+        was_aborted=lambda: False,
+    )
+
+    await internal._record_internal_agent_stats(
+        event,
+        ProviderRequest(conversation=SimpleNamespace(cid="conv-123")),
+        agent_runner,
+        SimpleNamespace(role="assistant"),
+    )
+
+    assert attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_record_internal_agent_stats_does_not_retry_other_operational_errors(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    attempts = 0
+    warnings = []
+
+    class FailingDb:
+        async def insert_provider_stat(self, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            raise OperationalError(
+                "insert into provider_stats",
+                {},
+                Exception("no such table: provider_stats"),
+            )
+
+    monkeypatch.setattr(internal, "db_helper", FailingDb())
+    monkeypatch.setattr(
+        internal.logger,
+        "warning",
+        lambda *args, **kwargs: warnings.append((args, kwargs)),
+    )
+
+    event = SimpleNamespace(unified_msg_origin="webchat:FriendMessage:session-42")
+    provider = SimpleNamespace(
+        provider_config={"id": "provider-1"},
+        meta=lambda: SimpleNamespace(id="provider-1", type="openai"),
+        get_model=lambda: "gpt-4.1",
+    )
+    agent_runner = SimpleNamespace(
+        provider=provider,
+        stats=AgentStats(),
+        was_aborted=lambda: False,
+    )
+
+    await internal._record_internal_agent_stats(
+        event,
+        ProviderRequest(conversation=SimpleNamespace(cid="conv-123")),
+        agent_runner,
+        SimpleNamespace(role="assistant"),
+    )
+
+    assert attempts == 1
+    assert len(warnings) == 1

@@ -521,10 +521,25 @@ class InternalAgentSubStage(Stage):
 BLOCKED = {"dGZid2h2d3IuY2xvdWQuc2VhbG9zLmlv", "a291cmljaGF0"}
 decoded_blocked = [base64.b64decode(b).decode("utf-8") for b in BLOCKED]
 
+PROVIDER_STATS_SQLITE_LOCK_RETRY_ATTEMPTS = 3
+PROVIDER_STATS_SQLITE_LOCK_RETRY_BASE_DELAY = 0.2
+
+
+def _iter_exception_messages(exc: BaseException):
+    yield str(exc)
+    orig = getattr(exc, "orig", None)
+    if orig is not None and orig is not exc:
+        yield str(orig)
+        yield from (str(arg) for arg in getattr(orig, "args", ()) if arg)
+    yield from (str(arg) for arg in getattr(exc, "args", ()) if arg)
+
 
 def _is_sqlite_database_locked_error(exc: Exception) -> bool:
-    return (
-        isinstance(exc, OperationalError) and "database is locked" in str(exc).lower()
+    if not isinstance(exc, OperationalError):
+        return False
+    return any(
+        "database" in message.lower() and "locked" in message.lower()
+        for message in _iter_exception_messages(exc)
     )
 
 
@@ -557,7 +572,7 @@ async def _record_internal_agent_stats(
     else:
         status = "completed"
 
-    for attempt in range(3):
+    for attempt in range(PROVIDER_STATS_SQLITE_LOCK_RETRY_ATTEMPTS):
         try:
             await db_helper.insert_provider_stat(
                 umo=event.unified_msg_origin,
@@ -569,9 +584,19 @@ async def _record_internal_agent_stats(
                 agent_type="internal",
             )
             return
-        except Exception as e:
-            if _is_sqlite_database_locked_error(e) and attempt < 2:
-                await asyncio.sleep(0.2 * (2**attempt))
+        except OperationalError as e:
+            if (
+                _is_sqlite_database_locked_error(e)
+                and attempt < PROVIDER_STATS_SQLITE_LOCK_RETRY_ATTEMPTS - 1
+            ):
+                await asyncio.sleep(
+                    PROVIDER_STATS_SQLITE_LOCK_RETRY_BASE_DELAY * (2**attempt)
+                )
                 continue
+            logger.warning("Persist provider stats failed: %s", e, exc_info=True)
+            return
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
             logger.warning("Persist provider stats failed: %s", e, exc_info=True)
             return
