@@ -262,26 +262,31 @@ function startSidebarResize(event) {
   isResizing.value = true;
   document.body.style.userSelect = 'none';
   document.body.style.cursor = 'ew-resize';
-  
+
+  // 拖拽时禁用 iframe 的 pointer-events，防止 iframe 截获 mousemove 事件导致拖拽卡住
+  const iframes = document.querySelectorAll('.plugin-page-frame');
+  iframes.forEach((el) => { el.style.pointerEvents = 'none'; });
+
   const startX = event.clientX;
   const startWidth = sidebarWidth.value;
-  
+
   function onMouseMoveResize(event) {
     if (!isResizing.value) return;
-    
+
     const deltaX = event.clientX - startX;
     const newWidth = Math.max(minSidebarWidth, Math.min(maxSidebarWidth, startWidth + deltaX));
     sidebarWidth.value = newWidth;
   }
-  
+
   function onMouseUpResize() {
     isResizing.value = false;
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
+    iframes.forEach((el) => { el.style.pointerEvents = ''; });
     document.removeEventListener('mousemove', onMouseMoveResize);
     document.removeEventListener('mouseup', onMouseUpResize);
   }
-  
+
   document.addEventListener('mousemove', onMouseMoveResize);
   document.addEventListener('mouseup', onMouseUpResize);
 }

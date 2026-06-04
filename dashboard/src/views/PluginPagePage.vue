@@ -476,18 +476,20 @@ watch(locale, () => {
 
 <style scoped>
 .plugin-page-page {
-  margin: -16px;
-  height: calc(100vh - 64px);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
 }
 
 .plugin-page-frame {
   width: 100%;
-  height: 100%;
+  flex: 1;
   border: 0;
   background: transparent;
-  flex: 1;
 }
 
 .plugin-page-state {
