@@ -156,8 +156,8 @@ Create sub-agents ONLY when:
 | Tools | **Minimum necessary only** |
 
 ### 2. Manual Delegate
-- Sequential: `transfer_to_*(...)` — block until return
-- Parallel: `transfer_to_*(..., background_task=True)` → `wait_for_subagent(name, timeout=secs)`
+- Sequential: `transfer_to_subagent(name=..., input=...)` — block until return
+- Parallel: `transfer_to_subagent(name=..., input=..., background_task=True)` → `wait_for_subagent(name, timeout=secs)`
 
 ### 3. Collect
 - Merge independent outputs by concatenation
@@ -1008,6 +1008,10 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
             config.name,
             protected,
         )
+        # Return (tool_name, handoff_tool). The tool_name "transfer_to_{name}"
+        # is kept for display/logging purposes only — it is no longer registered
+        # as an individual tool in the main agent's func_tool set. The unified
+        # ``transfer_to_subagent(name=...)`` tool handles all delegations.
         return f"transfer_to_{config.name}", handoff_tool
 
     @classmethod
@@ -1030,7 +1034,7 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
             tools=agent.tools,
             skills=skills,
             provider_id=getattr(handoff_tool, "provider_id", None),
-            description=f"Delegate to {agent.name} agent",
+            description=handoff_tool.description or f"Delegate to {agent.name} agent",
             workdir=workdir,
         )
 
@@ -1079,6 +1083,7 @@ DAG Orchestration automatically delegate subagents. When you have 2+ independent
             session.protected_agents.add(config.name)
         else:
             pass
+        # tool_name is for display/logging only; see create_subagent() comment.
         return f"transfer_to_{config.name}", handoff_tool
 
     @classmethod

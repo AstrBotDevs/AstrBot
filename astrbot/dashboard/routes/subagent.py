@@ -120,7 +120,7 @@ class SubAgentRoute(Route):
             tools_dict = []
             for tool in tool_mgr.func_list:
                 # Prevent recursive routing: subagents should not be able to select
-                # the handoff (transfer_to_*) tools as their own mounted tools.
+                # the handoff (transfer_to_subagent) tools as their own mounted tools.
                 if isinstance(tool, HandoffTool):
                     continue
                 if tool.handler_module_path == "core.subagent_orchestrator":

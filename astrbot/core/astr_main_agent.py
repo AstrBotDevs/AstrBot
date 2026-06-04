@@ -551,14 +551,14 @@ async def _ensure_persona_and_skills(
         if req.func_tool is None:
             req.func_tool = ToolSet()
 
-        # add subagent handoff tools
+        # add static subagent handoff tools
         for tool in so.handoffs:
             req.func_tool.add_tool(tool)
 
         # add subagent manager tools
         await _apply_subagent_manager_tools(plugin_context.get_config(), req, event, so)
 
-        # check duplicates
+        # check duplicates (static subagents)
         if remove_dup:
             handoff_names = {tool.name for tool in so.handoffs}
             for tool_name in assigned_tools:
@@ -1034,7 +1034,7 @@ async def _apply_subagent_manager_tools(
     When enabled:
     1. Inject subagent capability prompt into system prompt
     2. Register SubAgent management tools
-    3. Register session's transfer_to_xxx tools
+    3. Register a unified transfer_to_subagent tool for dynamic subagents
     """
     orch_cfg = cfg.get("subagent_orchestrator", {})
 
@@ -1096,6 +1096,13 @@ async def _apply_subagent_manager_tools(
         if dag_cfg:
             req.func_tool.add_tool(ORCHESTRATE_TASKS_TOOL)
         if enable_dynamic:
+            from astrbot.core.subagent_tools import TRANSFER_TO_SUBAGENT_TOOL
+
+            # Register the fixed transfer_to_subagent tool instead of individual
+            # dynamic handoff tools. This preserves LLM prefix cache since the
+            # tools list no longer changes when subagents are created/removed.
+            req.func_tool.add_tool(TRANSFER_TO_SUBAGENT_TOOL)
+
             req.func_tool.add_tool(CREATE_SUBAGENT_TOOL)
             req.func_tool.add_tool(REMOVE_SUBAGENT_TOOL)
             req.func_tool.add_tool(LIST_SUBAGENTS_TOOL)
@@ -1111,10 +1118,6 @@ async def _apply_subagent_manager_tools(
             task_router_prompt = SubAgentManager.build_task_router_prompt(session_id)
             req.system_prompt = f"{req.system_prompt or ''}\n{task_router_prompt}\n"
 
-        # Register dynamically created handoff tools
-        dynamic_handoffs = SubAgentManager.get_handoff_tools_for_session(session_id)
-        for handoff in dynamic_handoffs:
-            req.func_tool.add_tool(handoff)
     except ImportError as e:
         logger.warning(f"[SubAgent] Cannot import module: {e}")
 
