@@ -132,6 +132,46 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         return sanitized
 
     @classmethod
+    def _get_session_from_context(cls, run_context: ContextWrapper[AstrAgentContext]):
+        """Extract the SubAgentSession from run_context.
+
+        Walks through run_context -> context -> event -> unified_msg_origin
+        to locate the session_id, then returns the corresponding session
+        from SubAgentManager.  Returns ``None`` when any step fails.
+        """
+        run_context_context = getattr(run_context, "context", None)
+        event = (
+            getattr(run_context_context, "event", None) if run_context_context else None
+        )
+        session_id = getattr(event, "unified_msg_origin", None) if event else None
+        if not session_id:
+            return None
+
+        return SubAgentManager.get_session(session_id)
+
+    @classmethod
+    def _resolve_handoff_by_name(
+        cls, run_context: ContextWrapper[AstrAgentContext], name: str
+    ) -> HandoffTool | None:
+        """Resolve a HandoffTool from SubAgentManager by subagent name."""
+        session = cls._get_session_from_context(run_context)
+        if not session:
+            return None
+
+        return session.handoff_tools.get(name, None)
+
+    @classmethod
+    def _list_available_subagents(
+        cls, run_context: ContextWrapper[AstrAgentContext]
+    ) -> list[str]:
+        """List available subagent names for the current session."""
+        session = cls._get_session_from_context(run_context)
+        if not session:
+            return []
+
+        return list(session.handoff_tools.keys())
+
+    @classmethod
     async def execute(cls, tool, run_context, **tool_args):
         """执行函数调用。
 
@@ -143,6 +183,51 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             AsyncGenerator[None | mcp.types.CallToolResult, None]
 
         """
+        # 防止subagent的名字叫"subagent"造成工具歧义（在create中已经不会发生，此处用于兜底）
+        if (
+            isinstance(tool, FunctionTool)
+            and not isinstance(tool, HandoffTool)
+            and tool.name == "transfer_to_subagent"
+        ):
+            tool_args = dict(tool_args)
+            subagent_name = tool_args.pop("name", None)
+            if not subagent_name:
+                yield mcp.types.CallToolResult(
+                    content=[
+                        mcp.types.TextContent(
+                            type="text",
+                            text="Error: 'name' parameter is required for transfer_to_subagent. Use list_subagents to see available names.",
+                        )
+                    ]
+                )
+                return
+
+            handoff_tool = cls._resolve_handoff_by_name(run_context, subagent_name)
+            if handoff_tool is None:
+                available = cls._list_available_subagents(run_context)
+                yield mcp.types.CallToolResult(
+                    content=[
+                        mcp.types.TextContent(
+                            type="text",
+                            text=f"Error: Subagent '{subagent_name}' not found. Available subagents: {available}. Use create_subagent to create new ones.",
+                        )
+                    ]
+                )
+                return
+
+            is_bg = tool_args.pop("background_task", False)
+            if is_bg:
+                async for r in cls._execute_handoff_background(
+                    handoff_tool, run_context, **tool_args
+                ):
+                    yield r
+            else:
+                async for r in cls._execute_handoff(
+                    handoff_tool, run_context, **tool_args
+                ):
+                    yield r
+            return
+
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
             if is_bg:
