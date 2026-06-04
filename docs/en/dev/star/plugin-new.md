@@ -69,7 +69,11 @@ If your plugin provides a WebUI page (a `pages/` directory), the sidebar automat
 icon: brain
 ```
 
-Copy the icon name from the MDI website. If `icon` is not set, the sidebar uses a default icon.
+Copy the icon name from the MDI website and add an `mdi-` prefix:
+
+```yaml
+icon: mdi-brain
+```
 
 ### Bundle Skills with a Plugin (Optional)
 
