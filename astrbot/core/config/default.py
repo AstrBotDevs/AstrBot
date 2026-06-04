@@ -2224,7 +2224,7 @@ CONFIG_METADATA_2 = {
                     "model": {
                         "type": "string",
                         "description": "模型子类型",
-                        "hint": "仅声音复刻2.0生效: seed-tts-2.0-standard(标准) / seed-tts-2.0-expressive(表现力)",
+                        "hint": "仅 seed-icl-2.0 (声音复刻2.0) 生效: seed-icl-2.0-standard(标准) / seed-icl-2.0-expressive(表现力)",
                     },
                     "azure_tts_voice": {
                         "type": "string",
