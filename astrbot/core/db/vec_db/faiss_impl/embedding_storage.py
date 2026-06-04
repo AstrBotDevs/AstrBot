@@ -4,6 +4,7 @@ except ModuleNotFoundError:
     raise ImportError(
         "faiss 未安装。请使用 'pip install faiss-cpu' 或 'pip install faiss-gpu' 安装。",
     )
+import asyncio
 import os
 
 import numpy as np
@@ -84,7 +85,7 @@ class EmbeddingStorage:
         await self.save_index()
 
     async def save_index(self) -> None:
-        """保存索引
+        """保存索引（在单独线程中执行以避免阻塞事件循环）
 
         Args:
             path (str): 保存索引的路径
@@ -92,4 +93,4 @@ class EmbeddingStorage:
         """
         if self.index is None:
             return
-        faiss.write_index(self.index, self.path)
+        await asyncio.to_thread(faiss.write_index, self.index, self.path)
