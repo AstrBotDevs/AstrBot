@@ -36,7 +36,7 @@ from astrbot.core.subagent_manager import (
 @dataclass
 class CreateSubAgentTool(FunctionTool):
     name: str = "create_subagent"
-    description: str = "Create a subagent. After creation, use transfer_to_{name} tool."
+    description: str = "Create a subagent. After creation, use transfer_to_subagent(name=...) to delegate."
 
     parameters: dict = field(
         default_factory=lambda: {
@@ -46,6 +46,10 @@ class CreateSubAgentTool(FunctionTool):
                 "system_prompt": {
                     "type": "string",
                     "description": "Subagent system_prompt",
+                },
+                "subagent_description": {
+                    "type": "string",
+                    "description": "Brief description of what this subagent does and when to use it (e.g., 'Analyzes Python code for bugs and performance issues'). Shown in list_subagents output.",
                 },
                 "tools": {
                     "type": "array",
@@ -148,6 +152,8 @@ class CreateSubAgentTool(FunctionTool):
 
         if not name:
             return "Error: subagent name required"
+        if name == "subagent":
+            return "Error: 'subagent' cannot be a name"
         # 验证名称格式：只允许英文字母、数字和下划线，长度限制；避免Windows保留名
         SAFE_IDENTIFIER = re.compile(
             r"^(?!^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$)[a-zA-Z][a-zA-Z0-9_]{0,32}$",
@@ -157,6 +163,7 @@ class CreateSubAgentTool(FunctionTool):
             return "Error: SubAgent name must start with letter, contain only letters/numbers/underscores, max 32 characters"
 
         system_prompt = kwargs.get("system_prompt", "")
+        subagent_description = kwargs.get("subagent_description", "")
         tools = kwargs.get("tools", {})
         skills = kwargs.get("skills", {})
         workdir = kwargs.get("workdir")
@@ -172,13 +179,14 @@ class CreateSubAgentTool(FunctionTool):
             skills=set(skills),
             workdir=workdir,
             provider_id=provider_id,
+            description=subagent_description,
         )
 
         tool_name, handoff_tool = await SubAgentManager.create_subagent(
             session_id=session_id, config=config
         )
         if handoff_tool:
-            return f"{RET_DYNAMIC_TOOL_CREATED}:{tool_name}:{handoff_tool.name}:Created. Use {tool_name} to delegate."
+            return f"{RET_DYNAMIC_TOOL_CREATED}:{tool_name}:{handoff_tool.name}:Created. Use transfer_to_subagent(name='{name}', ...) to delegate."
         else:
             return f"{RET_DYNAMIC_TOOL_CREATE_FAILED}:{tool_name}"
 
@@ -234,16 +242,30 @@ class ListSubagentsTool(FunctionTool):
         session_id = context.context.event.unified_msg_origin
         session = SubAgentManager.get_session(session_id)
         if not session or not session.subagents:
-            return "No subagents"
+            return "No subagents available."
 
-        lines = ["Subagents:"]
+        count = len(session.subagents)
+        lines = [f"Available Subagents ({count}):"]
+        lines.append("---")
+
         for name, config in session.subagents.items():
-            protected = " (protected)" if name in session.protected_agents else ""
+            lines.append(f"Name: {name}")
+
             if include_status:
                 status = SubAgentManager.get_subagent_status(session_id, name)
-                lines.append(f" {name}{protected} [{status}]\ttools:{config.tools}")
-            else:
-                lines.append(f" - {name}{protected}\ttools:{config.tools}")
+                lines.append(f"Status: {status}")
+
+            protected = name in session.protected_agents
+            lines.append(f"Protected: {'Yes' if protected else 'No'}")
+
+            if config.description:
+                lines.append(f"Description: {config.description}")
+
+            tools_list = ", ".join(sorted(config.tools)) if config.tools else "none"
+            lines.append(f"Tools: {tools_list}")
+
+            lines.append("---")
+
         return "\n".join(lines)
 
 
@@ -569,6 +591,61 @@ parameter
 
 
 @dataclass
+class TransferToSubagentTool(FunctionTool):
+    """Unified handoff tool that delegates to a specific subagent by name.
+
+    This replaces the dynamic transfer_to_{name} tools with a single fixed tool,
+    preserving LLM prefix cache across subagent creation.
+    """
+
+    name: str = "transfer_to_subagent"
+    description: str = (
+        "Delegate a task to a specific subagent by name. "
+        "The subagent must have been created previously using create_subagent, "
+        "or be a statically configured subagent. "
+        "Use list_subagents to see available subagent names."
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Name of the subagent to delegate to. Use list_subagents to see available names.",
+                },
+                "input": {
+                    "type": "string",
+                    "description": "The input/task to be handed off to the subagent. This should be a clear and concise request or task.",
+                },
+                "image_urls": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional: An array of image sources (public HTTP URLs or local file paths) used as references in multimodal tasks.",
+                },
+                "background_task": {
+                    "type": "boolean",
+                    "description": (
+                        "Defaults to false. "
+                        "Set to true if the task may take noticeable time, involves external tools, or the user does not need to wait. "
+                        "Use false only for quick, immediate tasks."
+                    ),
+                },
+            },
+            "required": ["name", "input"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> str:
+        # This tool is a "virtual" tool — its actual execution is intercepted by
+        # FunctionToolExecutor.execute() which resolves the target HandoffTool
+        # from SubAgentManager and delegates. This call() is a fallback.
+        name = kwargs.get("name", "")
+        if not name:
+            return "Error: subagent name is required for transfer_to_subagent"
+        return f"Error: transfer_to_subagent execution should be handled by FunctionToolExecutor. name={name}"
+
+
+@dataclass
 class OrchestrateTasksTool(FunctionTool):
     """Orchestrate multiple subagent tasks with DAG dependency management."""
 
@@ -581,7 +658,7 @@ class OrchestrateTasksTool(FunctionTool):
         " (3) Auto-inject predecessor results as context for successor tasks,"
         " (4) Aggregate all results into a single summary."
         "  Use this when you have 2+ subtasks where some produce output that others"
-        " consume. For simple single-agent delegation, use transfer_to_* directly."
+        " consume. For simple single-agent delegation, use transfer_to_subagent directly."
     )
 
     parameters: dict = field(
@@ -856,3 +933,4 @@ SEND_SHARED_CONTEXT_TOOL = SendSharedContextTool()
 BROADCAST_SHARED_CONTEXT_TOOL = BroadCastSharedContextTool()
 VIEW_SHARED_CONTEXT_TOOL = ViewSharedContextTool()
 WAIT_FOR_SUBAGENT_TOOL = WaitForSubagentTool()
+TRANSFER_TO_SUBAGENT_TOOL = TransferToSubagentTool()

@@ -568,19 +568,20 @@ async def _ensure_persona_and_skills(
         if req.func_tool is None:
             req.func_tool = ToolSet()
 
-        # add subagent handoff tools
-        for tool in so.handoffs:
-            req.func_tool.add_tool(tool)
+        # Static handoff tools are no longer injected individually.
+        # They are accessible via the fixed transfer_to_subagent tool
+        # registered in _apply_subagent_manager_tools.
 
-        # add subagent manager tools
+        # add subagent manager tools (includes transfer_to_subagent)
         await _apply_subagent_manager_tools(plugin_context.get_config(), req, event, so)
 
-        # check duplicates
+        # Remove tools assigned to subagents from the main agent's toolset.
+        # NOTE: Previously this loop skipped HandoffTool names (transfer_to_*)
+        # because they were individually injected into func_tool. Since we now
+        # use a single fixed ``transfer_to_subagent`` tool, individual handoff
+        # tools are no longer in func_tool, so the skip logic has been removed.
         if remove_dup:
-            handoff_names = {tool.name for tool in so.handoffs}
             for tool_name in assigned_tools:
-                if tool_name in handoff_names:
-                    continue
                 req.func_tool.remove_tool(tool_name)
 
         router_prompt = (
@@ -972,7 +973,7 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 continue
             mp = tool.handler_module_path
             if not mp:
-                # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
+                # 没有 plugin 归属信息的工具（如 subagent transfer_to_subagent）
                 # 不应受到会话插件过滤影响。
                 new_tool_set.add_tool(tool)
                 continue
@@ -1051,7 +1052,7 @@ async def _apply_subagent_manager_tools(
     When enabled:
     1. Inject subagent capability prompt into system prompt
     2. Register SubAgent management tools
-    3. Register session's transfer_to_xxx tools
+    3. Register the fixed transfer_to_subagent tool
     """
     orch_cfg = cfg.get("subagent_orchestrator", {})
 
@@ -1128,10 +1129,12 @@ async def _apply_subagent_manager_tools(
             task_router_prompt = SubAgentManager.build_task_router_prompt(session_id)
             req.system_prompt = f"{req.system_prompt or ''}\n{task_router_prompt}\n"
 
-        # Register dynamically created handoff tools
-        dynamic_handoffs = SubAgentManager.get_handoff_tools_for_session(session_id)
-        for handoff in dynamic_handoffs:
-            req.func_tool.add_tool(handoff)
+        # Register the fixed transfer_to_subagent tool instead of individual
+        # dynamic handoff tools. This preserves LLM prefix cache since the
+        # tools list no longer changes when subagents are created/removed.
+        from astrbot.core.subagent_tools import TRANSFER_TO_SUBAGENT_TOOL
+
+        req.func_tool.add_tool(TRANSFER_TO_SUBAGENT_TOOL)
     except ImportError as e:
         logger.warning(f"[SubAgent] Cannot import module: {e}")
 
