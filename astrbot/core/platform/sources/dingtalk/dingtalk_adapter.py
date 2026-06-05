@@ -3,6 +3,7 @@ import json
 import threading
 import time
 import uuid
+from concurrent.futures import CancelledError as FutureCancelledError
 from pathlib import Path
 from typing import Literal, NoReturn, cast
 
@@ -95,7 +96,8 @@ class DingtalkPlatformAdapter(Platform):
             self.client,
         )
         self.client_ = client  # 用于 websockets 的 client
-        self._shutdown_event: threading.Event | None = None
+        self._shutdown_event = threading.Event()
+        self._terminated_event = threading.Event()
 
     def _id_to_sid(self, dingtalk_id: str | None) -> str:
         if not dingtalk_id:
@@ -776,22 +778,29 @@ class DingtalkPlatformAdapter(Platform):
                 logger.info(
                     f"钉钉适配器将在 {delay} 秒后重连 (第 {retry_count} 次)...",
                 )
-                time.sleep(delay)
+                self._terminated_event.wait(delay)
 
-            while True:
+            while not self._terminated_event.is_set():
                 task = None
                 should_cancel_task = False
                 start_time = time.monotonic()
                 try:
-                    self._shutdown_event = threading.Event()
-                    task = loop.create_task(self.client_.start())
+                    self._shutdown_event.clear()
+                    if self._terminated_event.is_set():
+                        return
+                    task = asyncio.run_coroutine_threadsafe(self.client_.start(), loop)
                     # 当 task 完成时唤醒线程（无论是正常退出还是异常退出）
                     task.add_done_callback(lambda _: self._shutdown_event.set())
+                    if self._terminated_event.is_set():
+                        should_cancel_task = True
+                        self._shutdown_event.set()
                     self._shutdown_event.wait()
+                    if self._terminated_event.is_set():
+                        return
                     if task.done():
                         try:
                             exc = task.exception()
-                        except asyncio.CancelledError:
+                        except (asyncio.CancelledError, FutureCancelledError):
                             logger.info("钉钉适配器 task 已取消")
                             return
                         if exc:
@@ -828,11 +837,11 @@ class DingtalkPlatformAdapter(Platform):
         def monkey_patch_close() -> NoReturn:
             raise KeyboardInterrupt("Graceful shutdown")
 
+        self._terminated_event.set()
+        self._shutdown_event.set()
         if self.client_.websocket is not None:
             self.client_.open_connection = monkey_patch_close
             await self.client_.websocket.close(code=1000, reason="Graceful shutdown")
-        if self._shutdown_event is not None:
-            self._shutdown_event.set()
 
     def get_client(self):
         return self.client
