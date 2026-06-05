@@ -478,9 +478,9 @@ class LLMResponse:
         """The same as to_openai_tool_calls but return pydantic model."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
-            if not self.tools_call_name[idx]:
+            if idx >= len(self.tools_call_name) or not self.tools_call_name[idx]:
                 logger.warning(
-                    f"Skipping tool call at index {idx} because function.name is empty/None. "
+                    f"Skipping tool call at index {idx} because function.name is empty/None or out of bounds. "
                     f"tool_call_id={self.tools_call_ids[idx] if idx < len(self.tools_call_ids) else 'N/A'}, "
                     f"arguments={tool_call_arg}"
                 )
