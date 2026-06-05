@@ -3,8 +3,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import delete, event, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from sqlmodel import col, desc
 
 from astrbot.core import logger
@@ -212,15 +213,22 @@ class KBSQLiteDatabase:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def list_kbs(self, offset: int = 0, limit: int = 100) -> list[KnowledgeBase]:
+    async def list_kbs(
+        self,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> list[KnowledgeBase]:
         """列出所有知识库"""
         async with self.get_db() as session:
             stmt = (
                 select(KnowledgeBase)
                 .offset(offset)
-                .limit(limit)
-                .order_by(desc(KnowledgeBase.created_at))
+                .order_by(
+                    desc(KnowledgeBase.created_at),
+                )
             )
+            if limit is not None:
+                stmt = stmt.limit(limit)
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
@@ -245,12 +253,22 @@ class KBSQLiteDatabase:
         kb_id: str,
         offset: int = 0,
         limit: int = 100,
+        search: str | None = None,
     ) -> list[KBDocument]:
         """列出知识库的所有文档"""
         async with self.get_db() as session:
+            conditions = [col(KBDocument.kb_id) == kb_id]
+            if search:
+                pattern = f"%{search}%"
+                conditions.append(
+                    or_(
+                        col(KBDocument.doc_name).ilike(pattern),
+                        col(KBDocument.file_type).ilike(pattern),
+                    ),
+                )
             stmt = (
                 select(KBDocument)
-                .where(col(KBDocument.kb_id) == kb_id)
+                .where(*conditions)
                 .offset(offset)
                 .limit(limit)
                 .order_by(desc(KBDocument.created_at))
@@ -258,12 +276,23 @@ class KBSQLiteDatabase:
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def count_documents_by_kb(self, kb_id: str) -> int:
+    async def count_documents_by_kb(
+        self,
+        kb_id: str,
+        search: str | None = None,
+    ) -> int:
         """统计知识库的文档数量"""
         async with self.get_db() as session:
-            stmt = select(func.count(col(KBDocument.id))).where(
-                col(KBDocument.kb_id) == kb_id,
-            )
+            conditions = [col(KBDocument.kb_id) == kb_id]
+            if search:
+                pattern = f"%{search}%"
+                conditions.append(
+                    or_(
+                        col(KBDocument.doc_name).ilike(pattern),
+                        col(KBDocument.file_type).ilike(pattern),
+                    ),
+                )
+            stmt = select(func.count(col(KBDocument.id))).where(*conditions)
             result = await session.execute(stmt)
             return result.scalar() or 0
 

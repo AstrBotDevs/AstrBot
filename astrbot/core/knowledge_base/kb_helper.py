@@ -490,10 +490,20 @@ class KBHelper:
         self,
         offset: int = 0,
         limit: int = 100,
+        search: str | None = None,
     ) -> list[KBDocument]:
         """列出知识库的所有文档"""
-        docs = await self.kb_db.list_documents_by_kb(self.kb.kb_id, offset, limit)
+        docs = await self.kb_db.list_documents_by_kb(
+            self.kb.kb_id,
+            offset,
+            limit,
+            search,
+        )
         return docs
+
+    async def count_documents(self, search: str | None = None) -> int:
+        """统计知识库的所有文档数量"""
+        return await self.kb_db.count_documents_by_kb(self.kb.kb_id, search)
 
     async def get_document(self, doc_id: str) -> KBDocument | None:
         """获取单个文档"""
