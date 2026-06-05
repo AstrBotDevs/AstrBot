@@ -12,6 +12,7 @@ in the astrbot core module chain.
 
 import sys
 import types
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -219,6 +220,99 @@ async def test_update_kb_switches_instance_only_after_new_reinit_success(
 
 
 @pytest.mark.asyncio
+async def test_get_kb_waits_for_update_instance_swap(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+):
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    old_helper = KBHelper.__new__(KBHelper)
+    old_helper.kb = mock_knowledge_base
+    old_helper.init_error = None
+    old_helper.terminate = AsyncMock()
+
+    kb_mgr = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    kb_mgr.provider_manager = mock_provider_manager
+    kb_mgr.kb_db = mock_kb_db
+    kb_mgr.kb_insts = {mock_knowledge_base.kb_id: old_helper}
+
+    commit_started = asyncio.Event()
+    release_commit = asyncio.Event()
+
+    async def commit():
+        commit_started.set()
+        await release_commit.wait()
+
+    mock_session = MagicMock()
+    mock_session.add = MagicMock()
+    mock_session.commit = AsyncMock(side_effect=commit)
+    mock_session.refresh = AsyncMock()
+    mock_db_context = MagicMock()
+    mock_db_context.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_db_context.__aexit__ = AsyncMock(return_value=False)
+    mock_kb_db.get_db.return_value = mock_db_context
+
+    with patch.object(KBHelper, "initialize", new_callable=AsyncMock):
+        update_task = asyncio.create_task(
+            kb_mgr.update_kb(
+                kb_id=mock_knowledge_base.kb_id,
+                kb_name="updated_kb",
+            )
+        )
+        await commit_started.wait()
+
+        get_task = asyncio.create_task(kb_mgr.get_kb(mock_knowledge_base.kb_id))
+        await asyncio.sleep(0)
+        assert not get_task.done()
+
+        release_commit.set()
+        updated_helper = await update_task
+        observed_helper = await get_task
+
+    assert updated_helper is observed_helper
+    assert observed_helper is kb_mgr.kb_insts[mock_knowledge_base.kb_id]
+    assert observed_helper is not old_helper
+
+
+@pytest.mark.asyncio
+async def test_get_kb_does_not_retry_failed_helper_during_cooldown(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+):
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import (
+        INIT_RETRY_COOLDOWN_SECONDS,
+        KnowledgeBaseManager,
+    )
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = mock_knowledge_base
+    helper.init_error = "provider unavailable"
+    helper.init_retry_count = 0
+    helper.last_init_retry_at = 100.0
+    helper.initialize = AsyncMock()
+
+    kb_mgr = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    kb_mgr.provider_manager = mock_provider_manager
+    kb_mgr.kb_db = mock_kb_db
+    kb_mgr.kb_insts = {mock_knowledge_base.kb_id: helper}
+
+    with patch(
+        "astrbot.core.knowledge_base.kb_mgr.time.monotonic",
+        return_value=100.0 + INIT_RETRY_COOLDOWN_SECONDS - 1,
+    ):
+        result = await kb_mgr.get_kb(mock_knowledge_base.kb_id)
+
+    assert result is helper
+    helper.initialize.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_ensure_vec_db_clears_stale_init_error(
     stub_provider_manager_module,
     mock_provider_manager,
@@ -262,6 +356,87 @@ async def test_ensure_vec_db_clears_stale_init_error(
         # Verify: init_error should be cleared
         assert helper.init_error is None
         assert helper.vec_db is mock_vec_db
+
+
+@pytest.mark.asyncio
+async def test_update_kb_omitted_rerank_provider_preserves_existing_value(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+):
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    mock_knowledge_base.rerank_provider_id = "rerank-1"
+    old_helper = KBHelper.__new__(KBHelper)
+    old_helper.kb = mock_knowledge_base
+    old_helper.init_error = None
+    old_helper.terminate = AsyncMock()
+
+    kb_mgr = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    kb_mgr.provider_manager = mock_provider_manager
+    kb_mgr.kb_db = mock_kb_db
+    kb_mgr.kb_insts = {mock_knowledge_base.kb_id: old_helper}
+
+    mock_session = MagicMock()
+    mock_session.add = MagicMock()
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock()
+    mock_db_context = MagicMock()
+    mock_db_context.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_db_context.__aexit__ = AsyncMock()
+    mock_kb_db.get_db.return_value = mock_db_context
+
+    with patch.object(KBHelper, "initialize", new_callable=AsyncMock):
+        result = await kb_mgr.update_kb(
+            kb_id=mock_knowledge_base.kb_id,
+            kb_name="updated_kb",
+        )
+
+    assert result is not None
+    assert result.kb.rerank_provider_id == "rerank-1"
+
+
+@pytest.mark.asyncio
+async def test_update_kb_explicit_none_clears_rerank_provider(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+):
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    mock_knowledge_base.rerank_provider_id = "rerank-1"
+    old_helper = KBHelper.__new__(KBHelper)
+    old_helper.kb = mock_knowledge_base
+    old_helper.init_error = None
+    old_helper.terminate = AsyncMock()
+
+    kb_mgr = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    kb_mgr.provider_manager = mock_provider_manager
+    kb_mgr.kb_db = mock_kb_db
+    kb_mgr.kb_insts = {mock_knowledge_base.kb_id: old_helper}
+
+    mock_session = MagicMock()
+    mock_session.add = MagicMock()
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock()
+    mock_db_context = MagicMock()
+    mock_db_context.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_db_context.__aexit__ = AsyncMock()
+    mock_kb_db.get_db.return_value = mock_db_context
+
+    with patch.object(KBHelper, "initialize", new_callable=AsyncMock):
+        result = await kb_mgr.update_kb(
+            kb_id=mock_knowledge_base.kb_id,
+            kb_name="updated_kb",
+            rerank_provider_id=None,
+        )
+
+    assert result is not None
+    assert result.kb.rerank_provider_id is None
 
 
 @pytest.mark.asyncio
