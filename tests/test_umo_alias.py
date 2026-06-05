@@ -7,7 +7,12 @@ from astrbot.builtin_stars.builtin_commands import main as builtin_main
 from astrbot.builtin_stars.builtin_commands.commands.name import NameCommand
 from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
 from astrbot.core.star.star_handler import star_handlers_registry
-from astrbot.core.umo_alias import serialize_umo_alias
+from astrbot.core.umo_alias import (
+    get_event_auto_name,
+    normalize_umo_name,
+    parse_umo,
+    serialize_umo_alias,
+)
 
 
 def make_group_event() -> SimpleNamespace:
@@ -105,3 +110,31 @@ def test_name_command_requires_admin_permission():
         and filter_.permission_type == PermissionType.ADMIN
         for filter_ in handler.event_filters
     )
+
+
+def test_umo_name_helpers_accept_numeric_ids():
+    assert normalize_umo_name(123456) == "123456"
+    assert (
+        get_event_auto_name(
+            SimpleNamespace(
+                message_obj=SimpleNamespace(group=SimpleNamespace(group_name=None)),
+                get_group_id=lambda: 123456,
+                get_sender_id=lambda: 789,
+                get_sender_name=lambda: "",
+            )
+        )
+        == "123456"
+    )
+
+
+def test_parse_umo_handles_empty_values():
+    assert parse_umo(None) == {
+        "platform": "unknown",
+        "message_type": "unknown",
+        "session_id": "",
+    }
+    assert parse_umo("qq:GroupMessage:1000:extra") == {
+        "platform": "qq",
+        "message_type": "GroupMessage",
+        "session_id": "1000:extra",
+    }

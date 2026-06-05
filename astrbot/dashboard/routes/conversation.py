@@ -9,7 +9,7 @@ from quart import request, send_file
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
+from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
 
 from .route import Response, Route, RouteContext
 
@@ -41,20 +41,12 @@ class ConversationRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.register_routes()
 
-    @staticmethod
-    def _parse_umo(umo: str) -> dict:
-        parts = umo.split(":")
+    def _build_umo_info(self, umo: str | None, alias_map: dict) -> dict:
+        umo_str = umo or ""
         return {
-            "platform": parts[0] if len(parts) >= 1 else "unknown",
-            "message_type": parts[1] if len(parts) >= 2 else "unknown",
-            "session_id": ":".join(parts[2:]) if len(parts) >= 3 else umo,
-        }
-
-    def _build_umo_info(self, umo: str, alias_map: dict) -> dict:
-        return {
-            "umo": umo,
-            **self._parse_umo(umo),
-            **serialize_umo_alias(alias_map.get(umo), umo),
+            "umo": umo_str,
+            **parse_umo(umo_str),
+            **serialize_umo_alias(alias_map.get(umo_str), umo_str),
         }
 
     def _serialize_conversation(self, conversation, alias_map: dict) -> dict:

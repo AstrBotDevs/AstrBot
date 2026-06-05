@@ -7,7 +7,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, Preference
 from astrbot.core.provider.entities import ProviderType
-from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
+from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
 
 from .route import Response, Route, RouteContext
 
@@ -50,15 +50,6 @@ class SessionManagementRoute(Route):
         self.register_routes()
 
     @staticmethod
-    def _parse_umo(umo: str) -> dict:
-        parts = umo.split(":")
-        return {
-            "platform": parts[0] if len(parts) >= 1 else "unknown",
-            "message_type": parts[1] if len(parts) >= 2 else "unknown",
-            "session_id": ":".join(parts[2:]) if len(parts) >= 3 else umo,
-        }
-
-    @staticmethod
     def _is_group_umo(umo: str) -> bool:
         umo_lower = umo.lower()
         return ":group:" in umo_lower or ":groupmessage:" in umo_lower
@@ -76,20 +67,21 @@ class SessionManagementRoute(Route):
         async with self.db_helper.get_db() as session:
             session: AsyncSession
             result = await session.execute(select(ConversationV2.user_id).distinct())
-            umos = {row[0] for row in result.fetchall()}
+            umos = {str(row[0]) for row in result.fetchall() if row[0]}
 
         aliases = await self.db_helper.get_umo_aliases()
-        umos.update(alias.umo for alias in aliases)
+        umos.update(str(alias.umo) for alias in aliases if alias.umo)
         return sorted(umos)
 
     async def _get_umo_alias_map(self, umos: list[str]) -> dict:
         return build_umo_alias_map(await self.db_helper.get_umo_aliases(umos))
 
-    def _build_umo_info(self, umo: str, alias_map: dict) -> dict:
+    def _build_umo_info(self, umo: str | None, alias_map: dict) -> dict:
+        umo_str = umo or ""
         return {
-            "umo": umo,
-            **self._parse_umo(umo),
-            **serialize_umo_alias(alias_map.get(umo), umo),
+            "umo": umo_str,
+            **parse_umo(umo_str),
+            **serialize_umo_alias(alias_map.get(umo_str), umo_str),
         }
 
     async def _get_umos_by_scope(

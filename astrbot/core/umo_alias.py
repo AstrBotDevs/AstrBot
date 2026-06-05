@@ -5,8 +5,20 @@ from astrbot.core.db.po import UmoAlias
 MAX_UMO_NAME_LENGTH = 255
 
 
-def normalize_umo_name(name: str | None) -> str:
-    return (name or "").strip()[:MAX_UMO_NAME_LENGTH]
+def normalize_umo_name(name: Any) -> str:
+    if name is None:
+        return ""
+    return str(name).strip()[:MAX_UMO_NAME_LENGTH]
+
+
+def parse_umo(umo: Any) -> dict[str, str]:
+    umo_str = "" if umo is None else str(umo)
+    parts = umo_str.split(":")
+    return {
+        "platform": parts[0] if len(parts) >= 1 and parts[0] else "unknown",
+        "message_type": parts[1] if len(parts) >= 2 and parts[1] else "unknown",
+        "session_id": ":".join(parts[2:]) if len(parts) >= 3 else umo_str,
+    }
 
 
 def get_event_auto_name(event: Any) -> str:
