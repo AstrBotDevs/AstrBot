@@ -63,28 +63,27 @@ class RankFusion:
             List[FusedResult]: 融合后的结果列表
 
         """
-        # 1. 构建排名映射
+        # 1. Build rank maps keyed by vector-storage chunk IDs.
         dense_ranks = {
             r.data["doc_id"]: (idx + 1) for idx, r in enumerate(dense_results)
-        }  # 这里的 doc_id 实际上是 chunk_id
+        }
         sparse_ranks = {r.chunk_id: (idx + 1) for idx, r in enumerate(sparse_results)}
 
-        # 2. 收集所有唯一的 ID
-        # 需要统一为 chunk_id
+        # 2. Collect all unique chunk IDs.
         all_chunk_ids = set()
-        vec_doc_id_to_dense: dict[str, Result] = {}  # vec_doc_id -> Result
-        chunk_id_to_sparse: dict[str, SparseResult] = {}  # chunk_id -> SparseResult
+        chunk_id_to_dense: dict[str, Result] = {}
+        chunk_id_to_sparse: dict[str, SparseResult] = {}
 
         # 处理稀疏检索结果
         for r in sparse_results:
             all_chunk_ids.add(r.chunk_id)
             chunk_id_to_sparse[r.chunk_id] = r
 
-        # 处理稠密检索结果 (需要转换 vec_doc_id 到 chunk_id)
+        # Dense results use Document.doc_id, which stores the chunk UUID.
         for r in dense_results:
-            vec_doc_id = r.data["doc_id"]
-            all_chunk_ids.add(vec_doc_id)
-            vec_doc_id_to_dense[vec_doc_id] = r
+            chunk_id = r.data["doc_id"]
+            all_chunk_ids.add(chunk_id)
+            chunk_id_to_dense[chunk_id] = r
 
         # 3. 计算 RRF 分数
         rrf_scores: dict[str, float] = {}
@@ -134,9 +133,9 @@ class RankFusion:
                         score=rrf_scores[identifier],
                     ),
                 )
-            elif identifier in vec_doc_id_to_dense:
+            elif identifier in chunk_id_to_dense:
                 # 从向量检索获取信息,需要从数据库获取块的详细信息
-                vec_result = vec_doc_id_to_dense[identifier]
+                vec_result = chunk_id_to_dense[identifier]
                 chunk_md = json.loads(vec_result.data["metadata"])
                 fused_results.append(
                     FusedResult(

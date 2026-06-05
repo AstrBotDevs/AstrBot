@@ -163,8 +163,8 @@ class SparseRetriever:
         if not any(all_kb_chunks):
             return []
 
-        # 每个知识库独立计算 BM25 分数并截断，再合并
-        merged_results = []
+        # 每个知识库独立计算 BM25 分数并截断，再合并。
+        merged_results: list[SparseResult] = []
         for kb_chunks in all_kb_chunks:
             if not kb_chunks:
                 continue
@@ -179,9 +179,10 @@ class SparseRetriever:
             tokenized_query = tokenize_text(query, self.hit_stopwords)
             scores = bm25.get_scores(tokenized_query)
 
+            kb_results: list[SparseResult] = []
             for idx, score in enumerate(scores):
                 chunk = kb_chunks[idx]
-                merged_results.append(
+                kb_results.append(
                     SparseResult(
                         chunk_id=chunk["chunk_id"],
                         chunk_index=chunk["chunk_index"],
@@ -192,9 +193,7 @@ class SparseRetriever:
                     ),
                 )
 
-            # 截断当前 KB 的结果
-            kb_sorted = sorted(merged_results[-len(kb_chunks):], key=lambda x: x.score)
-            merged_results = merged_results[:-len(kb_chunks)] + kb_sorted[:kb_top_k]
+            merged_results.extend(sorted(kb_results, key=lambda x: x.score)[:kb_top_k])
 
         merged_results.sort(key=lambda x: x.score)
         return merged_results[:top_k_sparse]

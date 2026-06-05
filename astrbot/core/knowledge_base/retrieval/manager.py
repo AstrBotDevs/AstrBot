@@ -238,7 +238,8 @@ class RetrievalManager:
                 return vec_results
             except Exception as e:
                 logger.error(
-                    f"知识库 {kb_id} 稠密检索失败: {e}", exc_info=True,
+                    f"知识库 {kb_id} 稠密检索失败: {e}",
+                    exc_info=True,
                 )
                 if len(kb_ids) == 1:
                     raise RuntimeError(
