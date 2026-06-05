@@ -1,13 +1,49 @@
 import asyncio
 import os
+import signal
 import sys
 import traceback
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import click
 from filelock import FileLock, Timeout
 
 from ..utils import check_astrbot_root, check_dashboard, get_astrbot_root
+
+ShutdownCallback = Callable[[signal.Signals], None]
+
+
+def _install_shutdown_signal_handlers(
+    loop: asyncio.AbstractEventLoop,
+    callback: ShutdownCallback,
+) -> Callable[[], None]:
+    """Install SIGINT/SIGTERM handlers and return a cleanup callback."""
+    handled_signals = (signal.SIGINT, signal.SIGTERM)
+    previous_handlers: dict[signal.Signals, Any] = {}
+    installed: list[signal.Signals] = []
+
+    for signum in handled_signals:
+        previous_handlers[signum] = signal.getsignal(signum)
+        try:
+            loop.add_signal_handler(signum, callback, signum)
+            installed.append(signum)
+        except (NotImplementedError, RuntimeError):
+            signal.signal(
+                signum, lambda _signum, _frame: callback(signal.Signals(_signum))
+            )
+            installed.append(signum)
+
+    def cleanup() -> None:
+        for signum in installed:
+            try:
+                loop.remove_signal_handler(signum)
+            except (NotImplementedError, RuntimeError):
+                pass
+            signal.signal(signum, previous_handlers[signum])
+
+    return cleanup
 
 
 async def run_astrbot(astrbot_root: Path) -> None:
@@ -23,7 +59,36 @@ async def run_astrbot(astrbot_root: Path) -> None:
 
     core_lifecycle = InitialLoader(db, log_broker)
 
-    await core_lifecycle.start()
+    loop = asyncio.get_running_loop()
+    shutdown_requested = asyncio.Event()
+    shutdown_signal: signal.Signals | None = None
+
+    def request_shutdown(signum: signal.Signals) -> None:
+        nonlocal shutdown_signal
+        shutdown_signal = signum
+        shutdown_requested.set()
+
+    cleanup_signal_handlers = _install_shutdown_signal_handlers(loop, request_shutdown)
+    runner_task = asyncio.create_task(core_lifecycle.start(), name="astrbot")
+    shutdown_task = asyncio.create_task(
+        shutdown_requested.wait(), name="astrbot_shutdown"
+    )
+
+    try:
+        done, _ = await asyncio.wait(
+            {runner_task, shutdown_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if shutdown_task in done and not runner_task.done():
+            signal_name = shutdown_signal.name if shutdown_signal else "unknown"
+            logger.info(f"Received {signal_name}; stopping AstrBot...")
+            runner_task.cancel()
+        await runner_task
+    finally:
+        cleanup_signal_handlers()
+        if not shutdown_task.done():
+            shutdown_task.cancel()
+        await LogManager.shutdown()
 
 
 @click.option("--reload", "-r", is_flag=True, help="Auto-reload plugins")
