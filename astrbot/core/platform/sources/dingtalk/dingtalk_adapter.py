@@ -34,6 +34,18 @@ from astrbot.core.utils.media_utils import (
 from ...register import register_platform_adapter
 from .dingtalk_event import DingtalkMessageEvent
 
+DINGTALK_RECONNECT_INITIAL_DELAY = 10
+DINGTALK_RECONNECT_MAX_DELAY = 300
+DINGTALK_RECONNECT_STABLE_SECONDS = 300
+
+
+def _dingtalk_reconnect_delay(retry_count: int) -> int:
+    safe_retry_count = max(retry_count, 1)
+    return min(
+        DINGTALK_RECONNECT_INITIAL_DELAY * 2 ** (safe_retry_count - 1),
+        DINGTALK_RECONNECT_MAX_DELAY,
+    )
+
 
 class MyEventHandler(dingtalk_stream.EventHandler):
     async def process(self, event: dingtalk_stream.EventMessage):
@@ -750,26 +762,26 @@ class DingtalkPlatformAdapter(Platform):
         # 钉钉的 SDK 并没有实现真正的异步，start() 里面有堵塞方法。
         # SDK 内部已有 while True 重连循环，但需要监控 task 状态，
         # 如果 task 意外退出则重新启动。
-        MAX_RETRIES = 5
-        RETRY_INTERVAL = 10
 
         def start_client(loop: asyncio.AbstractEventLoop) -> None:
             retry_count = 0
 
-            def handle_retry(error_msg: str) -> bool:
-                """处理重试逻辑，返回 True 表示需要继续重试，False 表示放弃。"""
+            def handle_retry(error_msg: str, run_seconds: float) -> None:
                 nonlocal retry_count
                 logger.error(error_msg)
+                if run_seconds >= DINGTALK_RECONNECT_STABLE_SECONDS:
+                    retry_count = 0
                 retry_count += 1
-                if retry_count < MAX_RETRIES:
-                    logger.info(f"钉钉适配器尝试重连 ({retry_count}/{MAX_RETRIES})...")
-                    time.sleep(RETRY_INTERVAL)
-                    return True
-                logger.error("钉钉适配器重连失败，已达最大重试次数")
-                return False
+                delay = _dingtalk_reconnect_delay(retry_count)
+                logger.info(
+                    f"钉钉适配器将在 {delay} 秒后重连 (第 {retry_count} 次)...",
+                )
+                time.sleep(delay)
 
-            while retry_count < MAX_RETRIES:
+            while True:
                 task = None
+                should_cancel_task = False
+                start_time = time.monotonic()
                 try:
                     self._shutdown_event = threading.Event()
                     task = loop.create_task(self.client_.start())
@@ -786,20 +798,27 @@ class DingtalkPlatformAdapter(Platform):
                             if "Graceful shutdown" in str(exc):
                                 logger.info("钉钉适配器已被关闭")
                                 return
-                            if handle_retry(f"钉钉 SDK task 异常退出: {exc}"):
-                                continue
-                            return
+                            should_cancel_task = True
+                            handle_retry(
+                                f"钉钉 SDK task 异常退出: {exc}",
+                                time.monotonic() - start_time,
+                            )
+                            continue
                     # task 仍在运行，shutdown_event 被设置（正常关闭）
                     return
                 except Exception as e:
                     if "Graceful shutdown" in str(e):
                         logger.info("钉钉适配器已被关闭")
                         return
-                    if not handle_retry(f"钉钉机器人启动失败: {e}"):
-                        return
+                    should_cancel_task = True
+                    handle_retry(
+                        f"钉钉机器人启动失败: {e}",
+                        time.monotonic() - start_time,
+                    )
+                    continue
                 finally:
                     # 仅在重试/失败路径取消 task，正常关闭不取消
-                    if task is not None and not task.done() and retry_count > 0:
+                    if task is not None and not task.done() and should_cancel_task:
                         task.cancel()
 
         loop = asyncio.get_running_loop()
