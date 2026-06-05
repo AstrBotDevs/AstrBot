@@ -1,3 +1,4 @@
+import importlib
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -100,16 +101,24 @@ async def test_name_command_without_alias_shows_current_names(temp_db):
 
 
 def test_name_command_requires_admin_permission():
-    handler = star_handlers_registry.get_handler_by_full_name(
-        f"{builtin_main.Main.name.__module__}_{builtin_main.Main.name.__name__}"
-    )
+    original_handlers = list(star_handlers_registry)
+    try:
+        star_handlers_registry.clear()
+        reloaded_main = importlib.reload(builtin_main)
+        handler = star_handlers_registry.get_handler_by_full_name(
+            f"{reloaded_main.Main.name.__module__}_{reloaded_main.Main.name.__name__}"
+        )
 
-    assert handler is not None
-    assert any(
-        isinstance(filter_, PermissionTypeFilter)
-        and filter_.permission_type == PermissionType.ADMIN
-        for filter_ in handler.event_filters
-    )
+        assert handler is not None
+        assert any(
+            isinstance(filter_, PermissionTypeFilter)
+            and filter_.permission_type == PermissionType.ADMIN
+            for filter_ in handler.event_filters
+        )
+    finally:
+        star_handlers_registry.clear()
+        for handler in original_handlers:
+            star_handlers_registry.append(handler)
 
 
 def test_umo_name_helpers_accept_numeric_ids():
