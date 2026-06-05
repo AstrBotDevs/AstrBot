@@ -100,7 +100,7 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 沙盒由 AstrBot 托管后，会有“占用”和“保留策略”两层状态。占用表示某个会话暂时控制这个沙盒；占用租约到期后，其他会话才可以重新占用或接管。保留策略决定沙盒释放后是保留下来复用，还是按空闲/过期规则清理。
 
-沙盒驱动需要先安装对应插件。插件安装并加载后，才可以在 `配置 -> 普通配置 -> 使用电脑能力` 的沙盒配置中选择和填写参数。当前可用选项包括：
+沙盒驱动需要先安装对应插件。推荐在 WebUI 的“插件管理”页面点击右下角 `+`，输入插件仓库地址安装；插件安装并加载后，才可以在 `配置 -> 普通配置 -> 使用电脑能力` 的沙盒配置中选择和填写参数。当前可用选项包括：
 
 - [`Shipyard Neo`](https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo)：AstrBot 推荐的远程/独立部署沙盒服务，适合长期运行和多人使用。
 - [`BoxLite`](https://github.com/AstrBotDevs/astrbot_sandbox_boxlite)：轻量本地沙盒，适合只需要 Shell、Python 和文件操作的场景。

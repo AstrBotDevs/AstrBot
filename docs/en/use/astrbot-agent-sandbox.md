@@ -34,7 +34,16 @@ If you just want to get started, choose based on the task:
 - Use `CUA` when you need screenshots, mouse clicks, or keyboard input.
 - Keep using `Shipyard` only if you already have an old deployment.
 
-Installation example:
+Recommended installation method: open the WebUI plugin management page, click the `+` button in the lower-right corner, choose URL installation, and enter the plugin repository URL:
+
+```text
+https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo
+https://github.com/AstrBotDevs/astrbot_sandbox_boxlite
+https://github.com/AstrBotDevs/astrbot_sandbox_shipyard
+https://github.com/AstrBotDevs/astrbot_sandbox_cua
+```
+
+If the plugin panel is not available in your deployment, you can manually install plugins under `data/plugins`. This is not recommended as the default path, because updates, enable/disable actions, and status checks are easier from the plugin panel.
 
 ```bash
 git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
@@ -80,7 +89,13 @@ Driver TTL and AstrBot leases are different. For example, `CUA Sandbox TTL` cont
 
 `CUA` is a sandbox runtime designed for computer-use scenarios. It can create Linux, macOS, Windows, Android, and other sandbox types through a unified Python SDK, and exposes shell, screenshot, mouse, keyboard, and filesystem interfaces.
 
-Before configuring the `CUA` driver in AstrBot, install the plugin first:
+Before configuring the `CUA` driver in AstrBot, install the plugin from the WebUI plugin management page. Click the `+` button in the lower-right corner and install it from this URL:
+
+```text
+https://github.com/AstrBotDevs/astrbot_sandbox_cua
+```
+
+If the plugin panel is not available, install it manually under `data/plugins`:
 
 ```bash
 git clone https://github.com/AstrBotDevs/astrbot_sandbox_cua.git data/plugins/astrbot_sandbox_cua
@@ -133,7 +148,13 @@ We recommend that your host machine have at least 2 CPUs, 4 GB of memory, and sw
 
 ### Deploy Shipyard Neo Separately (Recommended)
 
-Before configuring `Shipyard Neo` in AstrBot, install the plugin on the AstrBot side first:
+Before configuring `Shipyard Neo` in AstrBot, install its plugin from the WebUI plugin management page. Click the `+` button in the lower-right corner and install it from this URL:
+
+```text
+https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo
+```
+
+If the plugin panel is not available, install it manually under `data/plugins`:
 
 ```bash
 git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
@@ -374,7 +395,14 @@ For more detailed explanations of TTL and persistence behavior, see the later se
 
 ### Install the BoxLite Plugin
 
-Before configuring `BoxLite`, install the plugin into AstrBot's plugin directory and keep the `Shipyard` plugin source available in the same plugin tree:
+Before configuring `BoxLite`, install it from the WebUI plugin management page. Click the `+` button in the lower-right corner and install it from this URL. `BoxLite` currently depends on part of the legacy `Shipyard` plugin code, so install the `Shipyard` plugin as well.
+
+```text
+https://github.com/AstrBotDevs/astrbot_sandbox_boxlite
+https://github.com/AstrBotDevs/astrbot_sandbox_shipyard
+```
+
+If the plugin panel is not available, install both plugins manually under `data/plugins`:
 
 ```bash
 git clone https://github.com/AstrBotDevs/astrbot_sandbox_boxlite.git data/plugins/astrbot_sandbox_boxlite
