@@ -430,7 +430,6 @@ class AstrBotDashboard:
                 r = jsonify(Response().error("Token 无效").__dict__)
                 r.status_code = 401
                 return r
-
             username = payload.get("username")
             if not isinstance(username, str) or not username.strip():
                 raise jwt.InvalidTokenError("missing username in token payload")
@@ -565,15 +564,37 @@ class AstrBotDashboard:
     def _build_dashboard_credentials_display(self) -> str:
         username = self.config["dashboard"].get("username", "astrbot")
         generated_password = getattr(self.config, "_generated_dashboard_password", None)
-        if not generated_password:
+        temporary_login_token = getattr(
+            self.config,
+            "_dashboard_temporary_login_token",
+            None,
+        )
+        if not generated_password and not temporary_login_token:
             return f"   ➜  Username: {username}\n ✨✨✨\n"
 
-        credentials_display = (
-            f"   ➜  Initial username: {username}\n"
-            f"   ➜  Initial password: {generated_password}\n"
-            "   ➜  Change it after logging in\n ✨✨✨\n"
-        )
-        object.__setattr__(self.config, "_generated_dashboard_password", None)
+        lines = [f"   ➜  Initial username: {username}\n"]
+        if generated_password:
+            lines.extend(
+                [
+                    f"   ➜  Initial password: {generated_password}\n",
+                    "   ➜  Change it after logging in\n",
+                ]
+            )
+            object.__setattr__(self.config, "_generated_dashboard_password", None)
+        if temporary_login_token:
+            lines.extend(
+                [
+                    f"   ➜  Temporary login token: {temporary_login_token}\n",
+                    "   ➜  The token is valid until this AstrBot process exits\n",
+                ]
+            )
+            object.__setattr__(
+                self.config,
+                "_dashboard_temporary_login_token",
+                None,
+            )
+        lines.append(" ✨✨✨\n")
+        credentials_display = "".join(lines)
         return credentials_display
 
     @staticmethod

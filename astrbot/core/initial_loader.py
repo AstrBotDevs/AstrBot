@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import hashlib
 import traceback
 
 from astrbot.core import LogBroker, logger
@@ -17,11 +18,17 @@ from astrbot.dashboard.server import AstrBotDashboard
 class InitialLoader:
     """AstrBot 启动器，负责初始化和启动核心组件和仪表板服务器。"""
 
-    def __init__(self, db: BaseDatabase, log_broker: LogBroker) -> None:
+    def __init__(
+        self,
+        db: BaseDatabase,
+        log_broker: LogBroker,
+        dashboard_temporary_login_token: str | None = None,
+    ) -> None:
         self.db = db
         self.logger = logger
         self.log_broker = log_broker
         self.webui_dir: str | None = None
+        self.dashboard_temporary_login_token = dashboard_temporary_login_token
 
     async def start(self) -> None:
         core_lifecycle = AstrBotCoreLifecycle(self.log_broker, self.db)
@@ -32,6 +39,22 @@ class InitialLoader:
             logger.critical(traceback.format_exc())
             logger.critical(f"😭 初始化 AstrBot 失败：{e} !!!")
             return
+
+        if self.dashboard_temporary_login_token:
+            token_hash = hashlib.sha256(
+                self.dashboard_temporary_login_token.encode("utf-8")
+            ).hexdigest()
+            object.__setattr__(
+                core_lifecycle.astrbot_config,
+                "_dashboard_temporary_login_token_hash",
+                token_hash,
+            )
+            object.__setattr__(
+                core_lifecycle.astrbot_config,
+                "_dashboard_temporary_login_token",
+                self.dashboard_temporary_login_token,
+            )
+            self.dashboard_temporary_login_token = None
 
         core_task = core_lifecycle.start()
 

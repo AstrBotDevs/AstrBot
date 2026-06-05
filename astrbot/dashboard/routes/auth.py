@@ -1,6 +1,8 @@
 import asyncio
 import datetime
+import hashlib
 import os
+import secrets
 
 import jwt
 import pyotp
@@ -43,6 +45,7 @@ from .route import Response, Route, RouteContext
 
 DASHBOARD_JWT_COOKIE_NAME = "astrbot_dashboard_jwt"
 DASHBOARD_JWT_COOKIE_MAX_AGE = 7 * 24 * 60 * 60
+DASHBOARD_TEMPORARY_LOGIN_JWT_MAX_AGE = 3 * 24 * 60 * 60
 SKIP_DEFAULT_PASSWORD_AUTH_ENV = "ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH"
 SKIP_DEFAULT_PASSWORD_AUTH_ENV_LEGACY = "DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH"
 LOCAL_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -62,6 +65,15 @@ LEGACY_PASSWORD_LOGIN_FAILURE_MESSAGE = (
     "用户名或密码错误。如果你在升级 AstrBot 后遇到了密码正确但无法登录的情况，"
     "请参考 https://docs.astrbot.app/faq.html"
 )
+
+
+def verify_dashboard_temporary_login_token(config, token: str) -> bool:
+    token = token.strip()
+    token_hash = getattr(config, "_dashboard_temporary_login_token_hash", "")
+    if not token or not isinstance(token_hash, str) or not token_hash:
+        return False
+    candidate_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return secrets.compare_digest(candidate_hash, token_hash)
 
 
 class AuthRoute(Route):
@@ -87,6 +99,7 @@ class AuthRoute(Route):
                 {
                     "setup_required": await self._is_setup_required(),
                     "skip_default_password_auth": self._can_skip_default_password_auth(),
+                    "temporary_login_token_enabled": self._temporary_login_token_enabled(),
                     "password_upgrade_required": not await is_password_storage_upgraded(
                         self.db,
                         self.config,
@@ -221,19 +234,28 @@ class AuthRoute(Route):
         storage_upgraded = await is_password_storage_upgraded(self.db, self.config)
         password = get_dashboard_password_hash(self.config, upgraded=storage_upgraded)
         post_data = await request.json
+        if not isinstance(post_data, dict):
+            return Response().error("Invalid request payload").__dict__
 
-        req_username = (
-            post_data.get("username") if isinstance(post_data, dict) else None
-        )
-        req_password = (
-            post_data.get("password") if isinstance(post_data, dict) else None
-        )
-        totp_code = post_data.get("code") if isinstance(post_data, dict) else None
-        trust_device_flag = (
-            post_data.get("trust_device_flag") is True
-            if isinstance(post_data, dict)
-            else False
-        )
+        login_type = post_data.get("login_type")
+        if login_type == "temporary_token":
+            req_token = post_data.get("temporary_token")
+            if not isinstance(req_token, str) or not self._verify_temporary_login_token(
+                req_token
+            ):
+                await asyncio.sleep(3)
+                return await self._error_response("临时 Token 无效", 401)
+            return await self._create_login_response(
+                username,
+                storage_upgraded,
+                password,
+                jwt_max_age=DASHBOARD_TEMPORARY_LOGIN_JWT_MAX_AGE,
+            )
+
+        req_username = post_data.get("username")
+        req_password = post_data.get("password")
+        totp_code = post_data.get("code")
+        trust_device_flag = post_data.get("trust_device_flag") is True
         if not isinstance(req_username, str) or not isinstance(req_password, str):
             return Response().error("Invalid request payload").__dict__
 
@@ -291,6 +313,24 @@ class AuthRoute(Route):
                 else:
                     return await self._error_response("恢复码无效", 401)
 
+        return await self._create_login_response(
+            username,
+            storage_upgraded,
+            password,
+            totp_verified=totp_verified,
+            trust_device_flag=trust_device_flag,
+        )
+
+    async def _create_login_response(
+        self,
+        username: str,
+        storage_upgraded: bool,
+        password: str,
+        *,
+        totp_verified: bool = False,
+        trust_device_flag: bool = False,
+        jwt_max_age: int = DASHBOARD_JWT_COOKIE_MAX_AGE,
+    ):
         change_pwd_hint = False
         legacy_pwd_hint = is_legacy_dashboard_password(password)
         password_change_required = await is_password_change_required(
@@ -308,7 +348,7 @@ class AuthRoute(Route):
             logger.warning("为了保证安全，请尽快修改默认密码。")
         if password_change_required and not DEMO_MODE:
             change_pwd_hint = True
-        token = self.generate_jwt(username)
+        token = self.generate_jwt(username, max_age=jwt_max_age)
         login_data = {
             "token": token,
             "username": username,
@@ -318,7 +358,7 @@ class AuthRoute(Route):
         }
         payload = Response().ok(login_data)
         response = await make_response(jsonify(payload.__dict__))
-        self._set_dashboard_jwt_cookie(response, token)
+        self._set_dashboard_jwt_cookie(response, token, max_age=jwt_max_age)
 
         if totp_verified and trust_device_flag:
             raw_token = await issue_totp_trusted_device(self.config, self.db)
@@ -333,6 +373,13 @@ class AuthRoute(Route):
                     path="/api/auth",
                 )
         return response
+
+    def _temporary_login_token_enabled(self) -> bool:
+        token_hash = getattr(self.config, "_dashboard_temporary_login_token_hash", "")
+        return isinstance(token_hash, str) and bool(token_hash)
+
+    def _verify_temporary_login_token(self, token: str) -> bool:
+        return verify_dashboard_temporary_login_token(self.config, token)
 
     async def logout(self):
         response = await make_response(
@@ -396,11 +443,11 @@ class AuthRoute(Route):
 
         return Response().ok(None, "Updated account successfully").__dict__
 
-    def generate_jwt(self, username):
+    def generate_jwt(self, username, *, max_age: int = DASHBOARD_JWT_COOKIE_MAX_AGE):
         payload = {
             "username": username,
             "exp": datetime.datetime.now(datetime.timezone.utc)
-            + datetime.timedelta(days=7),
+            + datetime.timedelta(seconds=max_age),
         }
         jwt_token = self.config["dashboard"].get("jwt_secret", None)
         if not jwt_token:
@@ -463,11 +510,15 @@ class AuthRoute(Route):
         )
 
     @staticmethod
-    def _set_dashboard_jwt_cookie(response, token: str) -> None:
+    def _set_dashboard_jwt_cookie(
+        response,
+        token: str,
+        max_age: int = DASHBOARD_JWT_COOKIE_MAX_AGE,
+    ) -> None:
         response.set_cookie(
             DASHBOARD_JWT_COOKIE_NAME,
             token,
-            max_age=DASHBOARD_JWT_COOKIE_MAX_AGE,
+            max_age=max_age,
             httponly=True,
             samesite="Strict",
             secure=AuthRoute._use_secure_dashboard_jwt_cookie(),

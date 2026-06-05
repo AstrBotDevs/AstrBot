@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import hashlib
 import io
 import os
 import re
@@ -12,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
+import jwt
 import pyotp
 import pytest
 import pytest_asyncio
@@ -40,7 +42,10 @@ from astrbot.dashboard.password_state import (
     set_password_change_required,
     set_password_storage_upgraded,
 )
-from astrbot.dashboard.routes.auth import DASHBOARD_JWT_COOKIE_NAME
+from astrbot.dashboard.routes.auth import (
+    DASHBOARD_JWT_COOKIE_NAME,
+    DASHBOARD_TEMPORARY_LOGIN_JWT_MAX_AGE,
+)
 from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
@@ -335,6 +340,100 @@ async def test_auth_login(
 
 
 @pytest.mark.asyncio
+async def test_auth_login_with_temporary_token(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def skip_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr("astrbot.dashboard.routes.auth.asyncio.sleep", skip_sleep)
+    monkeypatch.setitem(app.config, "DASHBOARD_JWT_COOKIE_SECURE", False)
+
+    token = f"temporary-token-{uuid.uuid4()}"
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    previous_hash = getattr(
+        core_lifecycle_td.astrbot_config,
+        "_dashboard_temporary_login_token_hash",
+        None,
+    )
+    try:
+        object.__setattr__(
+            core_lifecycle_td.astrbot_config,
+            "_dashboard_temporary_login_token_hash",
+            token_hash,
+        )
+
+        test_client = app.test_client()
+        response = await test_client.get("/api/auth/setup-status")
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["temporary_login_token_enabled"] is True
+
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "login_type": "temporary_token",
+                "temporary_token": "wrong-token",
+            },
+        )
+        data = await response.get_json()
+        assert response.status_code == 401
+        assert data["status"] == "error"
+
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "login_type": "temporary_token",
+                "temporary_token": token,
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert (
+            data["data"]["username"]
+            == core_lifecycle_td.astrbot_config["dashboard"]["username"]
+        )
+        dashboard_jwt = data["data"]["token"]
+        assert dashboard_jwt
+        set_cookie_headers = response.headers.getlist("Set-Cookie")
+        jwt_cookie_header = next(
+            (
+                value
+                for value in set_cookie_headers
+                if DASHBOARD_JWT_COOKIE_NAME in value
+            ),
+            "",
+        )
+        assert jwt_cookie_header
+        assert f"Max-Age={DASHBOARD_TEMPORARY_LOGIN_JWT_MAX_AGE}" in jwt_cookie_header
+
+        jwt_payload = jwt.decode(
+            dashboard_jwt,
+            core_lifecycle_td.astrbot_config["dashboard"]["jwt_secret"],
+            algorithms=["HS256"],
+        )
+        now_ts = datetime.now().timestamp()
+        expires_in = jwt_payload["exp"] - now_ts
+        assert 0 < expires_in <= DASHBOARD_TEMPORARY_LOGIN_JWT_MAX_AGE
+
+        response = await test_client.get(
+            "/api/stat/version",
+            headers={"Authorization": f"Bearer {dashboard_jwt}"},
+        )
+        data = await response.get_json()
+        assert response.status_code == 200
+        assert data["status"] == "ok"
+    finally:
+        object.__setattr__(
+            core_lifecycle_td.astrbot_config,
+            "_dashboard_temporary_login_token_hash",
+            previous_hash,
+        )
+
+
+@pytest.mark.asyncio
 async def test_auth_login_secure_cookie_override(
     app: Quart,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -374,7 +473,11 @@ async def test_auth_rate_limit_uses_same_bucket_across_paths(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
-    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
     cfg["trust_proxy_headers"] = True
 
     try:
@@ -406,7 +509,11 @@ async def test_auth_rate_limit_separates_different_client_ips(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
-    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
     cfg["trust_proxy_headers"] = True
 
     try:
@@ -450,7 +557,11 @@ async def test_auth_rate_limit_ignores_proxy_headers_by_default(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
-    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
     cfg["trust_proxy_headers"] = False
 
     try:
