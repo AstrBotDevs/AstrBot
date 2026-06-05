@@ -16,7 +16,9 @@ from asyncio import Queue
 from astrbot.core import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.pipeline.scheduler import PipelineScheduler
+from astrbot.core.utils.number_utils import safe_positive_float
 
+from .event_dedup import EventDeduplicator
 from .platform import AstrMessageEvent
 
 
@@ -33,10 +35,22 @@ class EventBus:
         # abconf uuid -> scheduler
         self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
         self.astrbot_config_mgr = astrbot_config_mgr
+        dedup_ttl_seconds = safe_positive_float(
+            self.astrbot_config_mgr.g(
+                None,
+                "event_bus_dedup_ttl_seconds",
+                0.5,
+            ),
+            default=0.5,
+        )
+        self._deduplicator = EventDeduplicator(ttl_seconds=dedup_ttl_seconds)
 
     async def dispatch(self) -> None:
+        # event_queue 由单一消费者处理；去重结构不是线程安全的，按设计仅在此循环中使用。
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
+            if self._deduplicator.is_duplicate(event):
+                continue
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
             conf_id = conf_info["id"]
             conf_name = conf_info.get("name") or conf_id
