@@ -1,17 +1,6 @@
-"""Tests for #3: Batch delete documents API.
+"""Tests for batch knowledge-base document deletion."""
 
-Verifies:
-- Batch delete from kb.db (single SQL IN clause)
-- Parallel vec_db cleanup
-- Single update_kb_stats call (not N calls)
-- Best-effort semantics: one failure doesn't block others
-- Empty list edge case
-
-NOTE: The knowledge_base package has a circular import chain:
-  kb_helper → provider.manager → persona_mgr → ... → kb_mgr → provider.manager
-We break the chain by stubbing provider.manager in sys.modules before any import.
-"""
-
+import sqlite3
 import sys
 from unittest.mock import AsyncMock, MagicMock, call
 
@@ -58,7 +47,7 @@ class TestBatchDeleteKbDb:
 
     @pytest.mark.asyncio
     async def test_delete_documents_by_ids_batch_kb_db(self):
-        """Documents deleted from kb.db via single IN-clause SQL."""
+        """Vector cleanup succeeds before kb.db metadata is deleted."""
         from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 
         kb_db = KBSQLiteDatabase.__new__(KBSQLiteDatabase)
@@ -85,6 +74,7 @@ class TestBatchDeleteKbDb:
             ],
             any_order=True,
         )
+        session.execute.assert_called()
 
     @pytest.mark.asyncio
     async def test_delete_documents_best_effort(self):
@@ -114,6 +104,57 @@ class TestBatchDeleteKbDb:
         assert results == {"doc-1": True, "doc-2": False, "doc-3": True}
         assert vec_db.delete_documents.await_count == 3
 
+    @pytest.mark.asyncio
+    async def test_delete_document_keeps_metadata_when_vec_delete_fails(self):
+        """Metadata remains visible when vector deletion fails."""
+        from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+        from astrbot.core.knowledge_base.models import KBDocument
+
+        kb_db = KBSQLiteDatabase.__new__(KBSQLiteDatabase)
+        doc = KBDocument(
+            doc_id="doc-1",
+            kb_id="kb-a",
+            doc_name="a.txt",
+            file_type="txt",
+            file_size=1,
+            file_path="",
+        )
+        kb_db.get_document_by_id = AsyncMock(return_value=doc)
+        session = AsyncMock()
+        session.__aenter__.return_value = session
+        session.begin = MagicMock(return_value=session)
+        kb_db.get_db = MagicMock(return_value=session)
+        vec_db = AsyncMock()
+        vec_db.delete_documents = AsyncMock(side_effect=RuntimeError("boom"))
+
+        with pytest.raises(RuntimeError, match="boom"):
+            await kb_db.delete_document_by_id("doc-1", vec_db, kb_id="kb-a")
+
+        session.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_document_rejects_wrong_kb_id(self):
+        """A document from another KB must not be deleted."""
+        from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+        from astrbot.core.knowledge_base.models import KBDocument
+
+        kb_db = KBSQLiteDatabase.__new__(KBSQLiteDatabase)
+        doc = KBDocument(
+            doc_id="doc-1",
+            kb_id="kb-other",
+            doc_name="a.txt",
+            file_type="txt",
+            file_size=1,
+            file_path="",
+        )
+        kb_db.get_document_by_id = AsyncMock(return_value=doc)
+        vec_db = AsyncMock()
+
+        deleted = await kb_db.delete_document_by_id("doc-1", vec_db, kb_id="kb-a")
+
+        assert deleted is False
+        vec_db.delete_documents.assert_not_awaited()
+
 
 class TestHelperBatchDelete:
     """Verify batch delete at the kb_helper layer."""
@@ -129,6 +170,11 @@ class TestHelperBatchDelete:
         results = await helper.delete_documents(["doc-1", "doc-2"])
 
         assert results == {"doc-1": True, "doc-2": True}
+        helper.kb_db.delete_documents_by_ids.assert_awaited_once_with(
+            doc_ids=["doc-1", "doc-2"],
+            vec_db=helper.vec_db,
+            kb_id="kb-test-1",
+        )
         helper.kb_db.update_kb_stats.assert_awaited_once_with(
             kb_id="kb-test-1", vec_db=helper.vec_db,
         )
@@ -160,3 +206,91 @@ class TestHelperBatchDelete:
         # stats still updated once even with partial failures
         helper.kb_db.update_kb_stats.assert_awaited_once()
         helper.refresh_kb.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_chunk_raises_when_chunk_is_missing(self):
+        helper = _build_helper()
+        helper.vec_db.delete = AsyncMock(return_value=False)
+
+        with pytest.raises(ValueError, match="无法找到 ID 为 chunk-missing 的文本块"):
+            await helper.delete_chunk("chunk-missing", "doc-1")
+
+        helper.vec_db.delete.assert_awaited_once_with("chunk-missing")
+        helper.kb_db.update_kb_stats.assert_not_awaited()
+        helper.refresh_kb.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_kb_sqlite_migration_adds_index_type_to_legacy_table(tmp_path):
+    from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+
+    db_path = tmp_path / "kb.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE knowledge_bases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kb_id VARCHAR(36) NOT NULL UNIQUE,
+            kb_name VARCHAR(100) NOT NULL,
+            description TEXT,
+            emoji VARCHAR(10),
+            embedding_provider_id VARCHAR(100),
+            rerank_provider_id VARCHAR(100),
+            chunk_size INTEGER,
+            chunk_overlap INTEGER,
+            top_k_dense INTEGER,
+            top_k_sparse INTEGER,
+            top_m_final INTEGER,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            doc_count INTEGER NOT NULL,
+            chunk_count INTEGER NOT NULL
+        )
+        """,
+    )
+    conn.execute(
+        """
+        CREATE TABLE kb_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id VARCHAR(36) NOT NULL UNIQUE,
+            kb_id VARCHAR(36) NOT NULL,
+            doc_name VARCHAR(255) NOT NULL,
+            file_type VARCHAR(20) NOT NULL,
+            file_size INTEGER NOT NULL,
+            file_path VARCHAR(512) NOT NULL,
+            chunk_count INTEGER NOT NULL,
+            media_count INTEGER NOT NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL
+        )
+        """,
+    )
+    conn.execute(
+        """
+        CREATE TABLE kb_media (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            media_id VARCHAR(36) NOT NULL UNIQUE,
+            doc_id VARCHAR(36) NOT NULL,
+            kb_id VARCHAR(36) NOT NULL,
+            media_type VARCHAR(20) NOT NULL,
+            file_name VARCHAR(255) NOT NULL,
+            file_path VARCHAR(512) NOT NULL,
+            file_size INTEGER NOT NULL,
+            mime_type VARCHAR(100) NOT NULL,
+            created_at DATETIME NOT NULL
+        )
+        """,
+    )
+    conn.commit()
+    conn.close()
+
+    kb_db = KBSQLiteDatabase(str(db_path))
+    await kb_db.initialize()
+    await kb_db.migrate_to_v1()
+
+    conn = sqlite3.connect(db_path)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(knowledge_bases)")}
+    conn.close()
+    await kb_db.close()
+
+    assert "index_type" in columns
