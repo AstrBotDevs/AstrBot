@@ -76,6 +76,12 @@ class DocumentStorage:
                         "GENERATED ALWAYS AS (json_extract(metadata, '$.user_id')) STORED",
                     ),
                 )
+                await conn.execute(
+                    text(
+                        "ALTER TABLE documents ADD COLUMN kb_id TEXT "
+                        "GENERATED ALWAYS AS (json_extract(metadata, '$.kb_id')) STORED",
+                    ),
+                )
 
                 # Create indexes
                 await conn.execute(
@@ -86,6 +92,11 @@ class DocumentStorage:
                 await conn.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)",
+                    ),
+                )
+                await conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_documents_kb_id ON documents(kb_id)",
                     ),
                 )
             except BaseException:
@@ -257,9 +268,15 @@ class DocumentStorage:
             query = select(Document)
 
             for key, val in metadata_filters.items():
-                query = query.where(
-                    text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
-                ).params(**{f"filter_{key}": val})
+                # kb_id 和 kb_doc_id 有生成列和索引，直接用列名过滤避免全表扫描
+                if key in ("kb_id", "kb_doc_id"):
+                    query = query.where(
+                        text(f"{key} = :filter_{key}"),
+                    ).params(**{f"filter_{key}": val})
+                else:
+                    query = query.where(
+                        text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
+                    ).params(**{f"filter_{key}": val})
 
             if ids is not None and len(ids) > 0:
                 valid_ids = [int(i) for i in ids if i != -1]
@@ -453,9 +470,15 @@ class DocumentStorage:
 
             if metadata_filters:
                 for key, val in metadata_filters.items():
-                    query = query.where(
-                        text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
-                    ).params(**{f"filter_{key}": val})
+                    # 使用生成列避免全表扫描
+                    if key in ("kb_id", "kb_doc_id"):
+                        query = query.where(
+                            text(f"{key} = :filter_{key}"),
+                        ).params(**{f"filter_{key}": val})
+                    else:
+                        query = query.where(
+                            text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
+                        ).params(**{f"filter_{key}": val})
 
             result = await session.execute(query)
             count = result.scalar_one_or_none()

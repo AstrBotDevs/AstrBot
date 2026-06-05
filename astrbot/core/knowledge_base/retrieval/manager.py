@@ -209,7 +209,7 @@ class RetrievalManager:
     ):
         """稠密检索 (向量相似度)
 
-        为每个知识库使用独立的向量数据库进行检索,然后合并结果。
+        为每个知识库使用独立的向量数据库进行并行检索，然后合并结果。
 
         Args:
             query: 查询文本
@@ -220,10 +220,11 @@ class RetrievalManager:
             List[Result]: 检索结果列表
 
         """
-        all_results: list[Result] = []
-        for kb_id in kb_ids:
+        import asyncio
+
+        async def _retrieve_one(kb_id: str) -> list[Result]:
             if kb_id not in kb_options:
-                continue
+                return []
             try:
                 vec_db: FaissVecDB = kb_options[kb_id]["vec_db"]
                 dense_k = int(kb_options[kb_id]["top_k_dense"])
@@ -234,17 +235,30 @@ class RetrievalManager:
                     rerank=False,  # 稠密检索阶段不进行 rerank
                     metadata_filters={"kb_id": kb_id},
                 )
-
-                all_results.extend(vec_results)
+                return vec_results
             except Exception as e:
-                logger.error(f"知识库 {kb_id} 稠密检索失败: {e}", exc_info=True)
+                logger.error(
+                    f"知识库 {kb_id} 稠密检索失败: {e}", exc_info=True,
+                )
                 if len(kb_ids) == 1:
-                    raise RuntimeError(f"知识库 {kb_id} 稠密检索失败: {e}") from e
+                    raise RuntimeError(
+                        f"知识库 {kb_id} 稠密检索失败: {e}",
+                    ) from e
                 # multi-KB: skip the faulty KB and continue
+                return []
 
-        # 按相似度排序并返回 top_k
+        tasks = [_retrieve_one(kb_id) for kb_id in kb_ids]
+        results_per_kb = await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_results: list[Result] = []
+        for result in results_per_kb:
+            if isinstance(result, Exception):
+                logger.error(f"稠密检索异常: {result}", exc_info=True)
+                continue
+            all_results.extend(result)
+
+        # 按相似度排序并返回
         all_results.sort(key=lambda x: x.similarity, reverse=True)
-        # return all_results[: len(all_results) // len(kb_ids)]
         return all_results
 
     async def _rerank(
