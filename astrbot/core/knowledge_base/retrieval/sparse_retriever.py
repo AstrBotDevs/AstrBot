@@ -127,12 +127,15 @@ class SparseRetriever:
         单 KB 最多加载 MAX_BM25_DOCS 条 chunk，超限时截断并打 warning。
         """
         top_k_sparse = 0
-        chunks = []
+        all_kb_chunks: list[dict] = []
 
         for kb_id in kb_ids:
             vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
             if not vec_db:
                 continue
+            kb_top_k = kb_options.get(kb_id, {}).get("top_k_sparse", 50)
+            top_k_sparse = max(top_k_sparse, kb_top_k)
+
             result = await vec_db.document_storage.get_documents(
                 metadata_filters={"kb_id": kb_id},
                 limit=self.MAX_BM25_DOCS,
@@ -144,42 +147,54 @@ class SparseRetriever:
                     f"条 chunk 上限，结果可能不完整。建议检查 FTS5 索引状态。",
                 )
             chunk_mds = [json.loads(doc["metadata"]) for doc in result]
-            result = [
+            kb_chunks = [
                 {
                     "chunk_id": doc["doc_id"],
                     "chunk_index": chunk_md["chunk_index"],
                     "doc_id": chunk_md["kb_doc_id"],
                     "kb_id": kb_id,
                     "text": doc["text"],
+                    "kb_top_k": kb_top_k,
                 }
                 for doc, chunk_md in zip(result, chunk_mds)
             ]
-            chunks.extend(result)
-            top_k_sparse += kb_options.get(kb_id, {}).get("top_k_sparse", 50)
+            all_kb_chunks.append(kb_chunks)
 
-        if not chunks:
+        if not any(all_kb_chunks):
             return []
 
-        corpus = [chunk["text"] for chunk in chunks]
-        tokenized_corpus = [tokenize_text(doc, self.hit_stopwords) for doc in corpus]
-        bm25 = BM25Okapi(tokenized_corpus)
+        # 每个知识库独立计算 BM25 分数并截断，再合并
+        merged_results = []
+        for kb_chunks in all_kb_chunks:
+            if not kb_chunks:
+                continue
+            kb_top_k = kb_chunks[0]["kb_top_k"]
 
-        tokenized_query = tokenize_text(query, self.hit_stopwords)
-        scores = bm25.get_scores(tokenized_query)
+            corpus = [chunk["text"] for chunk in kb_chunks]
+            tokenized_corpus = [
+                tokenize_text(doc, self.hit_stopwords) for doc in corpus
+            ]
+            bm25 = BM25Okapi(tokenized_corpus)
 
-        results = []
-        for idx, score in enumerate(scores):
-            chunk = chunks[idx]
-            results.append(
-                SparseResult(
-                    chunk_id=chunk["chunk_id"],
-                    chunk_index=chunk["chunk_index"],
-                    doc_id=chunk["doc_id"],
-                    kb_id=chunk["kb_id"],
-                    content=chunk["text"],
-                    score=-float(score),
-                ),
-            )
+            tokenized_query = tokenize_text(query, self.hit_stopwords)
+            scores = bm25.get_scores(tokenized_query)
 
-        results.sort(key=lambda x: x.score)
-        return results[:top_k_sparse]
+            for idx, score in enumerate(scores):
+                chunk = kb_chunks[idx]
+                merged_results.append(
+                    SparseResult(
+                        chunk_id=chunk["chunk_id"],
+                        chunk_index=chunk["chunk_index"],
+                        doc_id=chunk["doc_id"],
+                        kb_id=chunk["kb_id"],
+                        content=chunk["text"],
+                        score=-float(score),
+                    ),
+                )
+
+            # 截断当前 KB 的结果
+            kb_sorted = sorted(merged_results[-len(kb_chunks):], key=lambda x: x.score)
+            merged_results = merged_results[:-len(kb_chunks)] + kb_sorted[:kb_top_k]
+
+        merged_results.sort(key=lambda x: x.score)
+        return merged_results[:top_k_sparse]
