@@ -26,6 +26,36 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 其中的 `UiYVpZxnW8k22IWqf0ru5pOy` 就是默认密码。在使用默认密码登录后，会自动进入设置账户环节。
 
+### 管理面板登录相关安全配置
+
+如果需要在本机初始化场景中跳过默认密码验证，可以设置环境变量 `ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH=true`。兼容旧变量名 `DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH`。该能力只会在管理面板监听地址为 `127.0.0.1`、`localhost` 或 `::1` 时生效；如果 `dashboard.host` 是 `0.0.0.0` 或其他非本机地址，即使设置了环境变量也不会跳过密码验证。
+
+管理面板还内置了登录相关限流配置，位于 `data/cmd_config.json` 的 `dashboard.auth_rate_limit`：
+
+```json
+{
+  "dashboard": {
+    "auth_rate_limit": {
+      "enable": true,
+      "average_interval": 1.0,
+      "max_burst": 3
+    }
+  }
+}
+```
+
+该限流只应用于以下接口：
+
+| 接口 | 说明 |
+| --- | --- |
+| `/api/auth/login` | 管理面板账号密码登录，以及临时 Token 登录 |
+| `/api/auth/totp/setup` | TOTP 配置/验证 |
+| `/api/config/astrbot/update` | 触发 AstrBot 更新 |
+
+限流按客户端 IP 统计，上述接口共享同一个令牌桶。默认配置表示同一 IP 最多可瞬时请求 3 次，之后平均每 1 秒恢复 1 次请求额度。达到限制时会返回 HTTP 429。
+
+如果 AstrBot 部署在反向代理后，默认会使用直接连接 IP 统计限流。只有在确认代理会正确传递客户端 IP 时，才建议开启 `dashboard.trust_proxy_headers`，开启后会尝试读取 `X-Forwarded-For` 或 `X-Real-IP`。
+
 ### 管理面板的密码忘记了
 
 如果你忘记了 AstrBot 管理面板的密码，你可以在 `AstrBot/data/cmd_config.json` 配置文件中找到 `"dashboard"` 字段，如下：

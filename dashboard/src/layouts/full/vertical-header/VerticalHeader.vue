@@ -390,6 +390,11 @@ function accountEdit() {
     });
 }
 
+function logout() {
+  const authStore = useAuthStore();
+  authStore.logout();
+}
+
 function getVersion() {
   axios
     .get("/api/stat/version")
@@ -1132,6 +1137,15 @@ onMounted(async () => {
         </template>
         <v-list-item-title>{{
           t("core.header.accountDialog.title")
+        }}</v-list-item-title>
+      </v-list-item>
+
+      <v-list-item @click="logout" class="styled-menu-item" rounded="md">
+        <template v-slot:prepend>
+          <v-icon>mdi-logout</v-icon>
+        </template>
+        <v-list-item-title>{{
+          t("core.header.buttons.logout")
         }}</v-list-item-title>
       </v-list-item>
     </StyledMenu>

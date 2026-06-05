@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import mimetypes
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -116,7 +117,9 @@ async def check_dashboard_files(webui_dir: str | None = None):
     return data_dist_path
 
 
-async def main_async(webui_dir_arg: str | None) -> None:
+async def main_async(
+    webui_dir_arg: str | None, print_login_token: bool = False
+) -> None:
     """主异步入口"""
     # 检查仪表板文件
     webui_dir = await check_dashboard_files(webui_dir_arg)
@@ -131,7 +134,12 @@ async def main_async(webui_dir_arg: str | None) -> None:
     # 打印 logo
     logger.info(logo_tmpl)
 
-    core_lifecycle = InitialLoader(db, log_broker)
+    temporary_login_token = secrets.token_urlsafe(32) if print_login_token else None
+    core_lifecycle = InitialLoader(
+        db,
+        log_broker,
+        dashboard_temporary_login_token=temporary_login_token,
+    )
     core_lifecycle.webui_dir = webui_dir
     await core_lifecycle.start()
 
@@ -144,6 +152,11 @@ if __name__ == "__main__":
         help="Specify the directory path for WebUI static files",
         default=None,
     )
+    parser.add_argument(
+        "--print-login-token",
+        action="store_true",
+        help="Print a temporary dashboard login token for this process",
+    )
     args = parser.parse_args()
 
     check_env()
@@ -153,4 +166,4 @@ if __name__ == "__main__":
     LogManager.set_queue_handler(logger, log_broker)
 
     # 只使用一次 asyncio.run()
-    asyncio.run(main_async(args.webui_dir))
+    asyncio.run(main_async(args.webui_dir, args.print_login_token))
