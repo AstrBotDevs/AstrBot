@@ -51,7 +51,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         )
 
     async def get_embedding(self, text: str) -> list[float]:
-        # 获取文本的嵌入
+        """获取文本的嵌入"""
         if not text or not text.strip():
             raise ValueError("输入文本不能为空")
 
@@ -70,16 +70,18 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
             return result.embeddings[0].values
         except APIError as e:
+            # 使用 from e 保留原始调用栈
             raise Exception(f"Gemini Embedding API请求失败: {e.message}") from e
 
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
-        # 批量获取文本的嵌入
+        """批量获取文本的嵌入"""
+        # 即使是列表，也要确保不是 None 或空列表，与 get_embedding 保持逻辑严谨
         if not text:
-            return []
+            raise ValueError("批量输入列表不能为空")
 
         # 显式校验输入列表中的元素，防止传入空/空格文本导致后续接口或维度计算异常
         if any(not s or not s.strip() for s in text):
-            raise ValueError("批量输入文本列表中不能包含空文本")
+            raise ValueError("批量输入文本列表中不能包含空/空格文本")
 
         try:
             # 构造 Content 列表以规避 gemini-embedding-2 批处理单返回 bug
@@ -110,13 +112,14 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
             return embeddings
         except APIError as e:
+            # 使用 from e 保留原始调用栈
             raise Exception(f"Gemini Embedding API批量请求失败: {e.message}") from e
 
     def get_dim(self) -> int:
-        # 获取向量的维度
+        """获取向量的维度"""
         return int(self.provider_config.get("embedding_dimensions", 768))
 
     async def terminate(self):
-        # 释放资源
+        """释放资源"""
         if getattr(self, "client", None):
             await self.client.aclose()
