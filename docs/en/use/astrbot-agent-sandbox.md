@@ -18,7 +18,7 @@ That means enabling sandbox mode always has two steps:
 1. Install the sandbox plugin you want to use
 2. Then select and configure that driver in the AstrBot WebUI
 
-If you only switch `Computer Use Runtime` to `sandbox` in the WebUI without installing a matching plugin first, AstrBot will not have that sandbox driver available.
+Install and load the sandbox driver plugin first. The driver only appears in the WebUI after its plugin is installed and loaded. If you only switch `Computer Use Runtime` to `sandbox` without installing a matching plugin, there will be no driver to select or configure.
 
 AstrBot currently supports the following sandbox drivers:
 

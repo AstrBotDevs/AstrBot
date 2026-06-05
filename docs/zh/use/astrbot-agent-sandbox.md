@@ -13,11 +13,15 @@
 
 ### 先看这 3 个配置
 
+先安装并加载沙盒驱动插件，WebUI 里才会出现对应的驱动选项。只把 `Computer Use Runtime` 改成 `sandbox` 还不够；如果插件没装好，后面就没法选择和配置这个沙盒驱动。
+
+插件安装完成后，再回到 WebUI 配置：
+
 1. `Computer Use Runtime` 设为 `sandbox`。
-2. 在 `沙盒驱动` 里选择 `Shipyard Neo`、`BoxLite`、`Shipyard` 或 `CUA`。
+2. 在 `沙盒驱动` 里选择已经安装的驱动，例如 `Shipyard Neo`、`BoxLite`、`Shipyard` 或 `CUA`。
 3. 按所选驱动补齐对应配置，比如 `Shipyard Neo API Endpoint`、`Shipyard Neo Access Token`、`CUA Image`、`CUA Sandbox TTL`。
 
-这几个驱动现在都以独立插件的形式提供，所以顺序一定是：先装插件，再回到 WebUI 配置。
+这几个驱动现在都以独立插件的形式提供，所以顺序一定是：先装插件，重启 AstrBot 或重载插件，再回到 WebUI 选择和配置沙盒。
 
 当前可用的沙盒驱动包括：
 
