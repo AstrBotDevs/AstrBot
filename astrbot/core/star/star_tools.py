@@ -18,9 +18,9 @@
 """
 
 import inspect
+import logging
 import os
 import uuid
-import logging
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, ClassVar
@@ -52,9 +52,11 @@ def _resolve_plugin_from_prefix(module, star_map):
         return None
     caller_name = module.__name__
     # Prefer main modules or shorter paths deterministically
-    sorted_keys = sorted(star_map.keys(), key=lambda k: (not k.endswith('.main'), len(k)))
+    sorted_keys = sorted(
+        star_map.keys(), key=lambda k: (not k.endswith(".main"), len(k))
+    )
     for mod_name in sorted_keys:
-        mod_package = mod_name.rpartition('.')[0] if "." in mod_name else mod_name
+        mod_package = mod_name.rpartition(".")[0] if "." in mod_name else mod_name
         if caller_name == mod_package or caller_name.startswith(mod_package + "."):
             return star_map[mod_name]
     return None
@@ -65,6 +67,7 @@ def _resolve_plugin_from_path(module):
         return None
     try:
         from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
+
         plugin_root = Path(get_astrbot_plugin_path()).resolve()
         module_path = Path(module.__file__).resolve()
         return module_path.relative_to(plugin_root).parts[0]
@@ -330,15 +333,16 @@ class StarTools:
             if not module:
                 raise RuntimeError("无法获取调用者模块信息")
 
-            metadata = (
-                _resolve_plugin_from_star_map(module, star_map)
-                or _resolve_plugin_from_prefix(module, star_map)
-            )
+            metadata = _resolve_plugin_from_star_map(
+                module, star_map
+            ) or _resolve_plugin_from_prefix(module, star_map)
 
             if metadata:
                 plugin_name = metadata.name
             else:
-                plugin_name = _resolve_plugin_from_path(module) or _fallback_plugin_name(module)
+                plugin_name = _resolve_plugin_from_path(
+                    module
+                ) or _fallback_plugin_name(module)
 
         data_dir = Path(
             os.path.join(get_astrbot_data_path(), "plugin_data", plugin_name),
