@@ -251,6 +251,11 @@ async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
     if not audio_path:
         return audio_path
 
+    if not os.path.exists(audio_path):
+        # File not available yet (e.g. napcat race condition);
+        # return the path as-is so upstream retry logic can handle it later.
+        return audio_path
+
     audio_type = _get_audio_magic_type(audio_path)
     if audio_type == "wav":
         return audio_path

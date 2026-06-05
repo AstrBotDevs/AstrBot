@@ -114,6 +114,9 @@
   },
   "reasoning": {
     "thinking": "Thinking Process",
+    "summarySeparator": ", ",
+    "thinkSummary": "Thought {count} times",
+    "toolSummary": "used {count} tools",
     "think": "Thinking",
     "toolUsed": "Using Tool"
   },

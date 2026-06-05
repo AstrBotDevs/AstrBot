@@ -27,7 +27,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         "Send message to the user. "
         "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
         "Use this tool to send media files (`image`, `record`, `video`, `file`), "
-        "or when you need to proactively message the user(such as cron job). For normal text replies, you can output directly."
+        "or when you need to proactively message the user(such as cron job). For other normal text replies, you can output directly and no need to use this tool."
     )
     parameters: dict = Field(
         default_factory=lambda: {

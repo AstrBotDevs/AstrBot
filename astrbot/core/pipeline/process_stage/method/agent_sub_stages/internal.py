@@ -5,6 +5,8 @@ import base64
 from collections.abc import AsyncGenerator
 from dataclasses import replace
 
+from sqlalchemy.exc import OperationalError
+
 from astrbot.core import db_helper, logger
 from astrbot.core.agent.message import (
     CheckpointData,
@@ -19,7 +21,7 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     build_main_agent,
 )
-from astrbot.core.message.components import File, Image, Record, Video
+from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -97,7 +99,9 @@ class InternalAgentSubStage(Stage):
         self.llm_compress_instruction: str = settings.get(
             "llm_compress_instruction", ""
         )
-        self.llm_compress_keep_recent: int = settings.get("llm_compress_keep_recent", 4)
+        self.llm_compress_keep_recent_ratio: float = settings.get(
+            "llm_compress_keep_recent_ratio", 0.15
+        )
         self.llm_compress_provider_id: str = settings.get(
             "llm_compress_provider_id", ""
         )
@@ -136,7 +140,7 @@ class InternalAgentSubStage(Stage):
             file_extract_msh_api_key=self.file_extract_msh_api_key,
             context_limit_reached_strategy=self.context_limit_reached_strategy,
             llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent=self.llm_compress_keep_recent,
+            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
             llm_compress_provider_id=self.llm_compress_provider_id,
             max_context_length=self.max_context_length,
             dequeue_context_length=self.dequeue_context_length,
@@ -175,11 +179,15 @@ class InternalAgentSubStage(Stage):
                 isinstance(comp, (Image, File, Record, Video))
                 for comp in event.message_obj.message
             )
+            has_reply = any(
+                isinstance(comp, Reply) for comp in event.message_obj.message
+            )
 
             if (
                 not has_provider_request
                 and not has_valid_message
                 and not has_media_content
+                and not has_reply
             ):
                 logger.debug("skip llm request: empty message and no provider_request")
                 return
@@ -513,6 +521,15 @@ class InternalAgentSubStage(Stage):
 BLOCKED = {"dGZid2h2d3IuY2xvdWQuc2VhbG9zLmlv", "a291cmljaGF0"}
 decoded_blocked = [base64.b64decode(b).decode("utf-8") for b in BLOCKED]
 
+PROVIDER_STATS_SQLITE_LOCK_RETRY_ATTEMPTS = 3
+PROVIDER_STATS_SQLITE_LOCK_RETRY_BASE_DELAY = 0.2
+
+
+def _is_sqlite_database_locked_error(exc: OperationalError) -> bool:
+    raw = getattr(exc, "orig", exc)
+    message = str(raw).lower()
+    return "database" in message and "locked" in message
+
 
 async def _record_internal_agent_stats(
     event: AstrMessageEvent,
@@ -543,15 +560,35 @@ async def _record_internal_agent_stats(
             status = "error"
         else:
             status = "completed"
-
-        await db_helper.insert_provider_stat(
-            umo=event.unified_msg_origin,
-            conversation_id=conversation_id,
-            provider_id=provider_config.get("id", "") or provider.meta().id,
-            provider_model=provider.get_model(),
-            status=status,
-            stats=stats.to_dict(),
-            agent_type="internal",
-        )
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.warning("Persist provider stats failed: %s", e, exc_info=True)
+        return
+
+    for attempt in range(PROVIDER_STATS_SQLITE_LOCK_RETRY_ATTEMPTS):
+        last_attempt = attempt == PROVIDER_STATS_SQLITE_LOCK_RETRY_ATTEMPTS - 1
+        try:
+            await db_helper.insert_provider_stat(
+                umo=event.unified_msg_origin,
+                conversation_id=conversation_id,
+                provider_id=provider_config.get("id", "") or provider.meta().id,
+                provider_model=provider.get_model(),
+                status=status,
+                stats=stats.to_dict(),
+                agent_type="internal",
+            )
+            break
+        except asyncio.CancelledError:
+            raise
+        except OperationalError as e:
+            if _is_sqlite_database_locked_error(e) and not last_attempt:
+                await asyncio.sleep(
+                    PROVIDER_STATS_SQLITE_LOCK_RETRY_BASE_DELAY * (2**attempt)
+                )
+                continue
+            logger.warning("Persist provider stats failed: %s", e, exc_info=True)
+            break
+        except Exception as e:
+            logger.warning("Persist provider stats failed: %s", e, exc_info=True)
+            break

@@ -64,6 +64,12 @@
     "editMode": "编辑",
     "noRouteRules": "该平台暂无路由规则，将使用默认配置文件",
     "sessionIdPlaceholder": "会话ID或*",
+    "routeSource": {
+      "selectPlaceholder": "选择会话来源",
+      "noData": "暂无与该机器人的统一会话来源，在对应的消息平台与该机器人产生一次对话后才会显示在这里。",
+      "switchToKnown": "切换为从已有来源选择",
+      "switchToManual": "切换为手动输入"
+    },
     "allSessions": "全部会话",
     "configMissing": "配置文件不存在",
     "routeHint": "*消息下发时，根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。使用 /sid 指令获取会话 ID。全部不匹配时将使用默认配置文件。",
@@ -188,4 +194,4 @@
     "traceback": "错误堆栈",
     "close": "关闭"
   }
-} 
+}
