@@ -15,6 +15,7 @@
     "index": "序号",
     "content": "内容",
     "charCount": "字符数",
+    "charCountValue": "{count} 字符",
     "actions": "操作",
     "view": "查看",
     "edit": "编辑",
@@ -51,5 +52,12 @@
     "charCount": "字符数",
     "vecDocId": "向量ID",
     "close": "关闭"
+  },
+  "actions": {
+    "retry": "重试"
+  },
+  "messages": {
+    "loadDocumentFailed": "加载文档详情失败",
+    "loadChunksFailed": "加载分块列表失败"
   }
 }

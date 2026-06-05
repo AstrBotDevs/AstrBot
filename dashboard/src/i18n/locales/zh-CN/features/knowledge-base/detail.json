@@ -29,6 +29,7 @@
     "title": "文档列表",
     "upload": "上传文档",
     "empty": "暂无文档",
+    "searchPlaceholder": "搜索文档...",
     "name": "文档名称",
     "type": "类型",
     "size": "大小",
@@ -37,11 +38,13 @@
     "actions": "操作",
     "view": "查看",
     "delete": "删除",
+    "cancel": "取消",
     "deleteConfirm": "确定要删除文档「{name}」吗?",
     "deleteWarning": "此操作将删除文档及其所有分块,不可恢复。",
     "uploading": "正在上传...",
     "uploadSuccess": "文档上传成功",
     "uploadFailed": "文档上传失败",
+    "loadFailed": "加载文档列表失败",
     "deleteSuccess": "文档删除成功",
     "deleteFailed": "文档删除失败"
   },
@@ -51,6 +54,14 @@
     "dropzone": "拖放文件到这里或点击选择",
     "supportedFormats": "支持的格式: .txt, .md, .markdown, .rst, .adoc, .pdf, .docx, .epub, .xls, .xlsx",
     "maxSize": "最大文件大小: 128MB",
+    "maxFiles": "最多可上传 10 个文件",
+    "maxFilesWarning": "最多只能选择 {count} 个文件",
+    "selectedFiles": "已选择 {count} 个文件",
+    "clear": "清空",
+    "someFilesRejected": "部分文件未加入上传队列",
+    "unsupportedFile": "{name}: 不支持的文件类型",
+    "fileTooLarge": "{name}: 文件超过 128MB",
+    "invalidSettings": "请检查上传参数",
     "chunkSettings": "分块设置",
     "batchSettings": "批处理设置",
     "cleaningSettings": "清洗设置",
@@ -75,6 +86,24 @@
     "urlPlaceholder": "请输入要提取内容的网页 URL",
     "urlRequired": "请输入 URL",
     "urlHint": "将自动从目标 URL 提取主要内容作为文档。目前支持 {supported} 页面，请确保目标网页允许爬虫访问。",
+    "tavilyCheckFailed": "检查网页搜索配置失败",
+    "tavilyRequired": "使用此功能需要配置 Tavily Key",
+    "configure": "配置",
+    "tavilyConfigured": "Tavily API Key 配置成功",
+    "backgroundUploading": "正在后台上传 {count} 个文件...",
+    "backgroundUrlUploading": "正在从 URL 后台提取内容...",
+    "successCount": "成功上传 {count} 个文档",
+    "partialSuccess": "上传完成: {success} 个成功, {failed} 个失败",
+    "failedWithReason": "上传失败: {reason}",
+    "unknownError": "未知错误",
+    "stages": {
+      "waiting": "等待中...",
+      "extracting": "提取内容...",
+      "cleaning": "清洗内容...",
+      "parsing": "解析文档...",
+      "chunking": "文本分块...",
+      "embedding": "生成向量..."
+    },
     "beta": "测试版"
   },
   "retrieval": {
@@ -88,6 +117,8 @@
     "noResults": "没有找到相关内容",
     "tryDifferentQuery": "尝试使用不同的查询词",
     "settings": "检索设置",
+    "debugMode": "调试模式",
+    "tsneVisualization": "t-SNE 可视化",
     "topK": "返回结果数量",
     "topKHint": "最多返回多少条检索结果",
     "enableRerank": "启用重排序",
@@ -113,9 +144,42 @@
     "enableRerank": "启用重排序",
     "embeddingProvider": "嵌入模型提供商",
     "rerankProvider": "重排序模型提供商",
+    "embeddingProviderHint": "嵌入模型与现有向量索引绑定，如需更换请创建新的知识库。",
+    "indexType": "索引类型",
+    "indexTypeHint": "Flat 更精确，HNSW 更适合大规模知识库。",
+    "indexTypes": {
+      "flat": "Flat 精确索引",
+      "hnsw": "HNSW 近似索引"
+    },
     "save": "保存设置",
     "saveSuccess": "设置保存成功",
     "saveFailed": "设置保存失败",
+    "providersLoadFailed": "加载模型提供商失败",
     "tips": "提示: 修改检索设置后,将影响后续的知识库查询效果。"
+  },
+  "validation": {
+    "integer": "请输入整数",
+    "positiveInteger": "请输入大于 0 的整数",
+    "nonNegativeInteger": "请输入不小于 0 的整数",
+    "overlapLessThanSize": "分块重叠必须小于分块大小",
+    "topKRange": "返回结果数量必须是 1 到 100 的整数"
+  },
+  "actions": {
+    "retry": "重试"
+  },
+  "messages": {
+    "loadFailed": "加载知识库详情失败"
+  },
+  "tavily": {
+    "title": "配置 Tavily API Key",
+    "description": "为了使用基于网页的知识库功能，需要提供 Tavily API Key。您可以从",
+    "officialSite": "Tavily 官网",
+    "apiKeyLabel": "Tavily API Key",
+    "cancel": "取消",
+    "save": "保存",
+    "keyRequired": "API Key 不能为空",
+    "loadConfigFailed": "获取当前配置失败",
+    "saveFailed": "保存失败，请检查 Key 是否正确",
+    "unknownSaveFailed": "保存失败，发生未知错误"
   }
 }

@@ -29,6 +29,7 @@
     "title": "Documents",
     "upload": "Upload Document",
     "empty": "No documents",
+    "searchPlaceholder": "Search documents...",
     "name": "Name",
     "type": "Type",
     "size": "Size",
@@ -37,11 +38,13 @@
     "actions": "Actions",
     "view": "View",
     "delete": "Delete",
+    "cancel": "Cancel",
     "deleteConfirm": "Are you sure you want to delete document '{name}'?",
     "deleteWarning": "This will delete the document and all its chunks. This action cannot be undone.",
     "uploading": "Uploading...",
     "uploadSuccess": "Document uploaded successfully",
     "uploadFailed": "Failed to upload document",
+    "loadFailed": "Failed to load documents",
     "deleteSuccess": "Document deleted successfully",
     "deleteFailed": "Failed to delete document"
   },
@@ -51,6 +54,14 @@
     "dropzone": "Drop files here or click to select",
     "supportedFormats": "Supported formats: .txt, .md, .markdown, .rst, .adoc, .pdf, .docx, .epub, .xls, .xlsx",
     "maxSize": "Max file size: 128MB",
+    "maxFiles": "Upload up to 10 files",
+    "maxFilesWarning": "You can select up to {count} files",
+    "selectedFiles": "{count} files selected",
+    "clear": "Clear",
+    "someFilesRejected": "Some files were not added",
+    "unsupportedFile": "{name}: unsupported file type",
+    "fileTooLarge": "{name}: file exceeds 128MB",
+    "invalidSettings": "Please check the upload settings",
     "chunkSettings": "Chunk Settings",
     "batchSettings": "Batch Settings",
     "cleaningSettings": "Cleaning Settings",
@@ -75,6 +86,24 @@
     "urlPlaceholder": "Enter the URL of the web page to extract content from",
     "urlRequired": "Please enter a URL",
     "urlHint": "The main content will be automatically extracted from the target URL as a document. Currently supports {supported} pages. Before use, please ensure that the target web page allows crawler access.",
+    "tavilyCheckFailed": "Failed to check web search configuration",
+    "tavilyRequired": "Tavily Key is required for this feature",
+    "configure": "Configure",
+    "tavilyConfigured": "Tavily API Key configured",
+    "backgroundUploading": "Uploading {count} files in the background...",
+    "backgroundUrlUploading": "Extracting URL content in the background...",
+    "successCount": "Successfully uploaded {count} documents",
+    "partialSuccess": "Upload finished: {success} succeeded, {failed} failed",
+    "failedWithReason": "Upload failed: {reason}",
+    "unknownError": "Unknown error",
+    "stages": {
+      "waiting": "Waiting...",
+      "extracting": "Extracting content...",
+      "cleaning": "Cleaning content...",
+      "parsing": "Parsing document...",
+      "chunking": "Chunking text...",
+      "embedding": "Generating embeddings..."
+    },
     "beta": "Beta"
   },
   "retrieval": {
@@ -88,6 +117,8 @@
     "noResults": "No results found",
     "tryDifferentQuery": "Try a different query",
     "settings": "Retrieval Settings",
+    "debugMode": "Debug Mode",
+    "tsneVisualization": "t-SNE Visualization",
     "topK": "Number of Results",
     "topKHint": "Maximum number of results to return",
     "enableRerank": "Enable Rerank",
@@ -113,9 +144,42 @@
     "enableRerank": "Enable Rerank",
     "embeddingProvider": "Embedding Provider",
     "rerankProvider": "Rerank Provider",
+    "embeddingProviderHint": "The embedding model is bound to the current vector index. Create a new knowledge base to change it.",
+    "indexType": "Index Type",
+    "indexTypeHint": "Flat is exact; HNSW is better for larger knowledge bases.",
+    "indexTypes": {
+      "flat": "Flat exact index",
+      "hnsw": "HNSW approximate index"
+    },
     "save": "Save Settings",
     "saveSuccess": "Settings saved successfully",
     "saveFailed": "Failed to save settings",
+    "providersLoadFailed": "Failed to load model providers",
     "tips": "Tip: Modifying retrieval settings will affect subsequent knowledge base queries."
+  },
+  "validation": {
+    "integer": "Enter an integer",
+    "positiveInteger": "Enter an integer greater than 0",
+    "nonNegativeInteger": "Enter an integer no less than 0",
+    "overlapLessThanSize": "Chunk overlap must be less than chunk size",
+    "topKRange": "Number of results must be an integer from 1 to 100"
+  },
+  "actions": {
+    "retry": "Retry"
+  },
+  "messages": {
+    "loadFailed": "Failed to load knowledge base details"
+  },
+  "tavily": {
+    "title": "Configure Tavily API Key",
+    "description": "A Tavily API Key is required to use web-based knowledge base features. You can get one from",
+    "officialSite": "Tavily",
+    "apiKeyLabel": "Tavily API Key",
+    "cancel": "Cancel",
+    "save": "Save",
+    "keyRequired": "API Key is required",
+    "loadConfigFailed": "Failed to load current configuration",
+    "saveFailed": "Failed to save. Please check the key.",
+    "unknownSaveFailed": "Failed to save due to an unknown error"
   }
 }

@@ -15,6 +15,7 @@
     "index": "Index",
     "content": "Content",
     "charCount": "Characters",
+    "charCountValue": "{count} characters",
     "actions": "Actions",
     "view": "View",
     "edit": "Edit",
@@ -51,5 +52,12 @@
     "charCount": "Characters",
     "vecDocId": "Vector ID",
     "close": "Close"
+  },
+  "actions": {
+    "retry": "Retry"
+  },
+  "messages": {
+    "loadDocumentFailed": "Failed to load document details",
+    "loadChunksFailed": "Failed to load chunks"
   }
 }

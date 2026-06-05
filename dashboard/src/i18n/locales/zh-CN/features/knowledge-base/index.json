@@ -11,7 +11,9 @@
     "documents": "文档",
     "chunks": "分块",
     "sessionConfig": "会话配置",
-    "initError": "初始化失败"
+    "initError": "初始化失败",
+    "noDescription": "暂无描述",
+    "switchToLegacy": "切换到旧版知识库"
   },
   "card": {
     "edit": "编辑",
@@ -31,9 +33,12 @@
     "rerankModelLabel": "重排序模型 (Rerank Model, 可选)",
     "providerInfo": "提供商: {id} | 维度: {dimensions}",
     "rerankProviderInfo": "提供商: {id}",
+    "nameHint": "如果后续修改知识库名称，请同步更新仍按名称引用的配置。",
+    "embeddingModelHint": "嵌入模型选择后无法修改，如需更换请创建新的知识库。",
     "cancel": "取消",
     "submit": "创建",
-    "nameRequired": "请输入知识库名称"
+    "nameRequired": "请输入知识库名称",
+    "embeddingRequired": "请选择嵌入模型"
   },
   "edit": {
     "title": "编辑知识库",
@@ -63,6 +68,7 @@
     "updateFailed": "更新失败",
     "deleteSuccess": "知识库删除成功",
     "deleteFailed": "删除失败",
-    "loadError": "加载知识库列表失败"
+    "loadError": "加载知识库列表失败",
+    "providersLoadError": "加载模型提供商失败"
   }
 }

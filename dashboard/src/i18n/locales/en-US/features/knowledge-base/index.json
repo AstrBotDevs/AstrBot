@@ -11,7 +11,9 @@
     "documents": "Documents",
     "chunks": "Chunks",
     "sessionConfig": "Session Config",
-    "initError": "Initialization Failed"
+    "initError": "Initialization Failed",
+    "noDescription": "No description",
+    "switchToLegacy": "Switch to legacy knowledge base"
   },
   "card": {
     "edit": "Edit",
@@ -31,9 +33,12 @@
     "rerankModelLabel": "Rerank Model (Optional)",
     "providerInfo": "Provider: {id} | Dimensions: {dimensions}",
     "rerankProviderInfo": "Provider: {id}",
+    "nameHint": "If you rename this knowledge base later, update any configuration that still references names.",
+    "embeddingModelHint": "The embedding model cannot be changed after creation. Create a new knowledge base to use another model.",
     "cancel": "Cancel",
     "submit": "Create",
-    "nameRequired": "Please enter knowledge base name"
+    "nameRequired": "Please enter knowledge base name",
+    "embeddingRequired": "Please select an embedding model"
   },
   "edit": {
     "title": "Edit Knowledge Base",
@@ -63,6 +68,7 @@
     "updateFailed": "Failed to update",
     "deleteSuccess": "Knowledge base deleted successfully",
     "deleteFailed": "Failed to delete",
-    "loadError": "Failed to load knowledge base list"
+    "loadError": "Failed to load knowledge base list",
+    "providersLoadError": "Failed to load model providers"
   }
 }
