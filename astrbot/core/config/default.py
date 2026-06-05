@@ -178,6 +178,7 @@ DEFAULT_CONFIG = {
             "shipyard_neo_endpoint": "",
             "shipyard_neo_access_token": "",
             "shipyard_neo_profile": "python-default",
+            "shipyard_neo_cargo_id": "",
             "shipyard_neo_ttl": 3600,
             "cua_image": CUA_DEFAULT_CONFIG["image"],
             "cua_os_type": CUA_DEFAULT_CONFIG["os_type"],
@@ -3425,6 +3426,15 @@ CONFIG_METADATA_3 = {
                         "description": "Shipyard Neo Profile",
                         "type": "string",
                         "hint": "Shipyard Neo 沙箱 profile，如 python-default。留空时自动选择能力更完整的 profile。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_cargo_id": {
+                        "description": "Shipyard Neo Cargo ID",
+                        "type": "string",
+                        "hint": "可选的外部 Cargo ID，用于将沙箱绑定到指定的 Cargo 资源。留空时不绑定。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "shipyard_neo",

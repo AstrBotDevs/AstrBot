@@ -354,11 +354,13 @@ class ShipyardNeoBooter(ComputerBooter):
         endpoint_url: str,
         access_token: str,
         profile: str = "",
+        cargo_id: str = "",
         ttl: int = 3600,
     ) -> None:
         self._endpoint_url = endpoint_url
         self._access_token = access_token
         self._profile = profile.strip() if profile else ""
+        self._cargo_id = cargo_id.strip() if cargo_id else ""
         self._ttl = ttl
         self._client: BayClient | None = None
         self._sandbox: Sandbox | None = None
@@ -438,6 +440,7 @@ class ShipyardNeoBooter(ComputerBooter):
 
         self._sandbox = await self._client.create_sandbox(
             profile=resolved_profile,
+            cargo_id=self._cargo_id or None,
             ttl=self._ttl,
         )
 
@@ -454,9 +457,10 @@ class ShipyardNeoBooter(ComputerBooter):
         )
 
         logger.info(
-            "Got Shipyard Neo sandbox: %s (profile=%s, capabilities=%s, auto=%s)",
+            "Got Shipyard Neo sandbox: %s (profile=%s, cargo_id=%s, capabilities=%s, auto=%s)",
             self._sandbox.id,
             resolved_profile,
+            self._cargo_id or "(none)",
             list(caps),
             bool(self._bay_manager),
         )

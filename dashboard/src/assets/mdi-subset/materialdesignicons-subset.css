@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 271 icons */
+/* Auto-generated MDI subset – 273 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -462,6 +462,10 @@
 
 .mdi-file-question-outline::before {
   content: "\F1036";
+}
+
+.mdi-file-search-outline::before {
+  content: "\F0C7D";
 }
 
 .mdi-file-upload::before {
@@ -1054,6 +1058,10 @@
 
 .mdi-upload::before {
   content: "\F0552";
+}
+
+.mdi-upload-outline::before {
+  content: "\F0E07";
 }
 
 .mdi-vector-intersection::before {
