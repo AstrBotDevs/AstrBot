@@ -23,9 +23,6 @@ from .base import ComputerBooter
 from .shipyard_search_file_util import _truncate_long_lines
 
 _BLOCKED_COMMAND_PATTERNS = [
-    " rm -rf ",
-    " rm -fr ",
-    " rm -r ",
     " mkfs",
     " dd if=",
     " shutdown",
