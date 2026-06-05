@@ -125,6 +125,12 @@
       ...(context || {}),
       ...nextContext,
     };
+    if (typeof nextContext.isDark === "boolean") {
+      document.documentElement.setAttribute(
+        "data-theme",
+        nextContext.isDark ? "dark" : "light",
+      );
+    }
     if (resolveReady) {
       resolveReady(context);
       resolveReady = null;

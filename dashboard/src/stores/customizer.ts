@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
 import config from '@/config';
 
+const DARK_THEMES: ReadonlySet<string> = new Set(['PurpleThemeDark']);
+
 export const useCustomizerStore = defineStore("customizer", {
   state: () => ({
     Sidebar_drawer: config.Sidebar_drawer,
@@ -12,7 +14,9 @@ export const useCustomizerStore = defineStore("customizer", {
     chatSidebarOpen: false // chat mode mobile sidebar state
   }),
 
-  getters: {},
+  getters: {
+    isDark: (state) => state.uiTheme ? DARK_THEMES.has(state.uiTheme) : false,
+  },
   actions: {
     SET_SIDEBAR_DRAWER() {
       this.Sidebar_drawer = !this.Sidebar_drawer;

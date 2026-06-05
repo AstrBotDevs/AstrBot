@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
+import { useCustomizerStore } from "@/stores/customizer";
 
 const BRIDGE_CHANNEL = "astrbot-plugin-page";
 
@@ -15,6 +16,7 @@ const {
   pluginName: pluginDisplayName,
   pluginPageTitle,
 } = usePluginI18n();
+const customizer = useCustomizerStore();
 
 const loading = ref(true);
 const errorMessage = ref("");
@@ -36,6 +38,7 @@ const localizedPageTitle = computed(() =>
   ),
 );
 const getIframeWindow = () => iframeRef.value?.contentWindow || null;
+const themeParam = computed(() => customizer.isDark ? "dark" : "light");
 
 const toPostMessageData = (value, fallback = null) => {
   try {
@@ -202,6 +205,7 @@ const sendIframeContext = () => {
       pageTitle: localizedPageTitle.value,
       locale: locale.value,
       i18n: toPostMessageData(plugin.value.i18n, {}),
+      isDark: customizer.isDark,
     },
   });
 };
@@ -432,7 +436,9 @@ const loadPluginPage = async () => {
 
     plugin.value = pluginData;
     page.value = pageEntry;
-    iframeSrc.value = pageEntry.content_path;
+    const contentUrl = new URL(pageEntry.content_path, window.location.origin);
+    contentUrl.searchParams.set('theme', themeParam.value);
+    iframeSrc.value = contentUrl.pathname + contentUrl.search + contentUrl.hash;
   } catch (error) {
     errorMessage.value =
       error?.response?.data?.message ||
@@ -454,6 +460,9 @@ onBeforeUnmount(() => {
 
 watch([pluginName, pageName], loadPluginPage, { immediate: true });
 watch(locale, () => {
+  sendIframeContext();
+});
+watch(() => customizer.uiTheme, () => {
   sendIframeContext();
 });
 </script>

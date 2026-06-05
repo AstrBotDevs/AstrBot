@@ -116,7 +116,8 @@ The current `ready()` context looks like this:
   "pageName": "bridge-demo",
   "pageTitle": "Bridge Demo",
   "locale": "en-US",
-  "i18n": {}
+  "i18n": {},
+  "isDark": false
 }
 ```
 
@@ -167,6 +168,56 @@ If an inline script needs to access `window.AstrBotPluginPage` synchronously, mo
 ```html
 <script src="/api/plugin/page/bridge-sdk.js"></script>
 ```
+
+## Light/Dark Theme Adaptation
+
+When the user toggles light/dark mode in AstrBot, the theme state is automatically synced to Plugin Pages. The bridge SDK maintains a `data-theme` attribute on the `<html>` element:
+
+- Light mode: `<html data-theme="light">`
+- Dark mode: `<html data-theme="dark">`
+
+### CSS Adaptation
+
+CSS variables are the recommended approach:
+
+```css
+:root {
+  --bg: #ffffff;
+  --text: #1a1a1a;
+}
+
+[data-theme="dark"] {
+  --bg: #1a1a1a;
+  --text: #e0e0e0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+```
+
+AstrBot injects the `data-theme` attribute on the `<html>` tag server-side when serving HTML, so there is no initial flash.
+
+### Responding to Theme Changes in JavaScript
+
+The `isDark` field in the context indicates whether dark mode is active. Use `onContext()` to listen for theme changes:
+
+```js
+const bridge = window.AstrBotPluginPage;
+
+function render() {
+  if (bridge.getContext()?.isDark) {
+    // JS logic for dark mode (e.g. chart filters)
+  }
+}
+
+await bridge.ready();
+render();
+bridge.onContext(render);
+```
+
+When the theme is toggled, the Dashboard sends the updated context to the iframe via the bridge. As long as the Page listens with `onContext()`, it will be notified.
 
 ## Asset Path Rules
 
@@ -232,7 +283,8 @@ The context usually contains:
   "pageName": "bridge-demo",
   "pageTitle": "Bridge Demo",
   "locale": "en-US",
-  "i18n": {}
+  "i18n": {},
+  "isDark": false
 }
 ```
 
