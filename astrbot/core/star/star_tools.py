@@ -291,12 +291,39 @@ class StarTools:
             if not module:
                 raise RuntimeError("无法获取调用者模块信息")
 
+            # 1. Try direct match in star_map
             metadata = star_map.get(module.__name__, None)
 
-            if not metadata:
-                raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
+            # 2. Try prefix match for submodule calls
+            if not metadata and "." in module.__name__:
+                caller_parts = module.__name__.split('.')
+                for mod_name, meta in star_map.items():
+                    mod_parts = mod_name.split('.')
+                    if mod_parts and caller_parts and mod_parts[0] == caller_parts[0]:
+                        metadata = meta
+                        break
 
-            plugin_name = metadata.name
+            if metadata:
+                plugin_name = metadata.name
+            else:
+                # 3. Try to resolve from file path if it resides in plugins/
+                if hasattr(module, "__file__") and module.__file__:
+                    try:
+                        path_parts = Path(module.__file__).resolve().parts
+                        if "plugins" in path_parts:
+                            idx = path_parts.index("plugins")
+                            if idx + 1 < len(path_parts):
+                                plugin_name = path_parts[idx + 1]
+                    except Exception:
+                        pass
+
+            # 4. Safe fallback to avoid breaking the bot
+            if not plugin_name:
+                import logging
+                logging.getLogger("astrbot").warning(
+                    f"无法获取模块 {module.__name__} 的元数据信息，已安全回退到 'unknown_plugin'"
+                )
+                plugin_name = 'unknown_plugin'
 
         if not plugin_name:
             raise ValueError("无法获取插件名称")
