@@ -53,6 +53,34 @@ async def test_insert_batch_raises_friendly_error_for_embedding_count_mismatch()
     vec_db.embedding_storage.insert_batch.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_delete_returns_false_when_chunk_is_missing() -> None:
+    vec_db = _make_vecdb()
+    vec_db.document_storage.get_document_by_doc_id.return_value = None
+    vec_db.document_storage.delete_document_by_doc_id = AsyncMock()
+    vec_db.embedding_storage.delete = AsyncMock()
+
+    deleted = await FaissVecDB.delete(vec_db, "missing-chunk")
+
+    assert deleted is False
+    vec_db.document_storage.delete_document_by_doc_id.assert_not_called()
+    vec_db.embedding_storage.delete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_returns_true_when_chunk_exists() -> None:
+    vec_db = _make_vecdb()
+    vec_db.document_storage.get_document_by_doc_id.return_value = {"id": 42}
+    vec_db.document_storage.delete_document_by_doc_id = AsyncMock()
+    vec_db.embedding_storage.delete = AsyncMock()
+
+    deleted = await FaissVecDB.delete(vec_db, "chunk-1")
+
+    assert deleted is True
+    vec_db.document_storage.delete_document_by_doc_id.assert_awaited_once_with("chunk-1")
+    vec_db.embedding_storage.delete.assert_awaited_once_with([42])
+
+
 class TestEmbeddingCache:
     """Phase 2B: 嵌入缓存测试"""
 

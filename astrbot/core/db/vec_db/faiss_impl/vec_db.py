@@ -181,7 +181,7 @@ class FaissVecDB(BaseVecDB):
         )
 
         # 只对未缓存的文本生成嵌入
-        vectors = [np.empty(0, dtype=np.float32)] * len(contents)
+        vectors = [np.empty(0, dtype=np.float32) for _ in contents]
         if uncached_texts:
             new_embeddings = await self.embedding_provider.get_embeddings_batch(
                 uncached_texts,
@@ -301,7 +301,8 @@ class FaissVecDB(BaseVecDB):
         else:
             embedding = await self.embedding_provider.get_embedding(query)
             await self.embedding_cache.put(
-                query, np.asarray(embedding, dtype=np.float32),
+                query,
+                np.asarray(embedding, dtype=np.float32),
             )
         scores, indices = await self.embedding_storage.search(
             vector=np.array([embedding]).astype("float32"),
@@ -346,17 +347,18 @@ class FaissVecDB(BaseVecDB):
 
         return top_k_results
 
-    async def delete(self, doc_id: str) -> None:
+    async def delete(self, doc_id: str) -> bool:
         """删除一条文档块（chunk）"""
         # 获得对应的 int id
         result = await self.document_storage.get_document_by_doc_id(doc_id)
         int_id = result["id"] if result else None
         if int_id is None:
-            return
+            return False
 
         # 使用 DocumentStorage 的删除方法
         await self.document_storage.delete_document_by_doc_id(doc_id)
         await self.embedding_storage.delete([int_id])
+        return True
 
     async def close(self) -> None:
         await self.document_storage.close()
