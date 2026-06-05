@@ -44,6 +44,13 @@ def test_resolve_sandbox_timeout_falls_back_for_invalid_values():
     )
 
 
+def test_resolve_sandbox_timeout_rejects_boolean_values():
+    assert (
+        resolve_sandbox_timeout({"sandbox_ttl": True}, "sandbox_ttl", default=3600)
+        == 3600
+    )
+
+
 def test_zero_lease_timeout_is_an_indefinite_active_lease():
     assert lease_is_active("session-a", None, now=100.0) is True
     assert lease_is_active(None, None, now=100.0) is False

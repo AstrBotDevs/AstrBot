@@ -37,6 +37,7 @@ class SandboxIdleState:
 @dataclass(slots=True)
 class SandboxExpirationState:
     expires_at: float
+    monotonic_expires_at: float
     task: asyncio.Task
 
 
@@ -143,7 +144,7 @@ class SandboxManager:
         try:
             max_sandboxes = int(sandbox_cfg.get("max_sandboxes", 10))
         except (TypeError, ValueError):
-            return 0
+            return 10
         if max_sandboxes < 0:
             return 0
         return max_sandboxes
@@ -1679,11 +1680,18 @@ class SandboxManager:
         self.clear_expiration_state(sandbox_id)
         if expires_at is None:
             return
+        monotonic_expires_at = time.monotonic() + max(
+            0.0, float(expires_at) - time.time()
+        )
         task = asyncio.create_task(
-            self._expire_at_fixed_time(sandbox_id, float(expires_at))
+            self._expire_at_fixed_time(
+                sandbox_id, float(expires_at), monotonic_expires_at
+            )
         )
         self.expiration_state[sandbox_id] = SandboxExpirationState(
-            expires_at=float(expires_at), task=task
+            expires_at=float(expires_at),
+            monotonic_expires_at=monotonic_expires_at,
+            task=task,
         )
 
     def schedule_lifecycle_cleanup(
@@ -1699,12 +1707,17 @@ class SandboxManager:
         self.clear_idle_state(sandbox_id)
         self.schedule_ttl_cleanup(sandbox_id, expires_at)
 
-    async def _expire_at_fixed_time(self, sandbox_id: str, expires_at: float) -> None:
+    async def _expire_at_fixed_time(
+        self,
+        sandbox_id: str,
+        expires_at: float,
+        monotonic_expires_at: float,
+    ) -> None:
         current_task = asyncio.current_task()
         destroy_attempts = 0
         try:
             while True:
-                remaining = float(expires_at) - time.time()
+                remaining = monotonic_expires_at - time.monotonic()
                 if remaining > 0:
                     await asyncio.sleep(remaining)
                 state = self.expiration_state.get(sandbox_id)

@@ -25,6 +25,10 @@ def _dump(data) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
 
 
+def _remote_basename(path: str) -> str:
+    return path.replace("\\", "/").rstrip("/").split("/")[-1]
+
+
 def _format_agent_time(value: int | float | None) -> str | None:
     if value is None:
         return None
@@ -656,7 +660,9 @@ class CopyFileBetweenSandboxesTool(FunctionTool):
             )
             temp_dir = Path(get_astrbot_temp_path()) / "sandbox_copy"
             temp_dir.mkdir(parents=True, exist_ok=True)
-            local_path = temp_dir / f"{uuid.uuid4().hex}-{Path(target_path).name}"
+            local_path = (
+                temp_dir / f"{uuid.uuid4().hex}-{_remote_basename(target_path)}"
+            )
             try:
                 await source.download_file(source_path, str(local_path))
                 upload_result = await target.upload_file(str(local_path), target_path)

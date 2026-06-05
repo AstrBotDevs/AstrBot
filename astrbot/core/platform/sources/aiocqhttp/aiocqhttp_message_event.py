@@ -33,6 +33,13 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         self.bot = bot
 
     @staticmethod
+    def _parse_session_id_int(session_id: str | None) -> int | None:
+        try:
+            return int(str(session_id).strip())
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
     async def _from_segment_to_dict(segment: BaseMessageComponent) -> dict:
         """修复部分字段"""
         if isinstance(segment, Image | Record):
@@ -94,9 +101,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         is_group: bool,
         session_id: str | None,
     ) -> None:
-        session_id_int = (
-            int(session_id) if session_id and session_id.isdigit() else None
-        )
+        session_id_int = AiocqhttpMessageEvent._parse_session_id_int(session_id)
         if not isinstance(session_id_int, int):
             raise ValueError(
                 f"无法发送文件：缺少有效的数字 session_id({session_id})",
@@ -129,10 +134,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         session_id: str | None,
         messages: list[dict],
     ) -> None:
-        # session_id 必须是纯数字字符串
-        session_id_int = (
-            int(session_id) if session_id and session_id.isdigit() else None
-        )
+        # session_id 必须是数字字符串
+        session_id_int = cls._parse_session_id_int(session_id)
 
         if is_group and isinstance(session_id_int, int):
             await bot.send_group_msg(group_id=session_id_int, message=messages)

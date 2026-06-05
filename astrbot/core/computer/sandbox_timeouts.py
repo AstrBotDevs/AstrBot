@@ -9,6 +9,8 @@ DEFAULT_SANDBOX_LEASE_TIMEOUT_SECONDS = 600.0
 
 
 def _coerce_timeout(value: Any, default: float) -> float:
+    if isinstance(value, bool):
+        return default
     try:
         timeout = float(value)
     except (TypeError, ValueError):

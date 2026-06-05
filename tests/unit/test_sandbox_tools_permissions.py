@@ -1,5 +1,6 @@
 import json
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -112,6 +113,50 @@ async def test_copy_file_between_sandboxes_tool_requires_admin_permission():
     )
 
     assert "Permission denied" in str(result)
+
+
+@pytest.mark.asyncio
+async def test_copy_file_between_sandboxes_handles_windows_target_filename(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.tools.computer_tools import sandbox as sandbox_tools
+
+    copied: dict[str, str] = {}
+
+    class SourceBooter:
+        async def download_file(self, source_path, local_path):
+            copied["source_path"] = source_path
+            copied["local_path"] = local_path
+            Path(local_path).write_text("payload", encoding="utf-8")
+
+    class TargetBooter:
+        async def upload_file(self, local_path, target_path):
+            copied["upload_local_path"] = local_path
+            copied["target_path"] = target_path
+            return {"ok": True}
+
+    class Manager:
+        async def get_observer_booter_by_id(self, sandbox_id, *args, **kwargs):
+            return SourceBooter() if sandbox_id == "source-1" else TargetBooter()
+
+    monkeypatch.setattr(sandbox_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        sandbox_tools.computer_client,
+        "sandbox_manager",
+        Manager(),
+    )
+
+    result = await CopyFileBetweenSandboxesTool().call(
+        _admin_context_without_admin_requirement(),
+        "source-1",
+        "/tmp/source.txt",
+        "target-1",
+        r"C:\Users\AstrBot\target.txt",
+    )
+
+    assert json.loads(result)["upload_result"] == {"ok": True}
+    assert Path(copied["local_path"]).name.endswith("-target.txt")
+    assert copied["target_path"] == r"C:\Users\AstrBot\target.txt"
 
 
 @pytest.mark.asyncio

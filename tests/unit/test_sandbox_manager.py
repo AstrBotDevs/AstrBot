@@ -465,6 +465,17 @@ async def test_create_sandbox_uses_default_max_sandboxes_when_config_missing(tmp
 
 
 @pytest.mark.asyncio
+async def test_create_sandbox_uses_default_max_sandboxes_when_config_invalid(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    context = FakeContext({"max_sandboxes": "invalid"})
+    for index in range(10):
+        await manager.create_sandbox(context, f"session-{index}", "generic")
+
+    with pytest.raises(RuntimeError, match="Maximum managed sandboxes: 10"):
+        await manager.create_sandbox(context, "session-over-limit", "generic")
+
+
+@pytest.mark.asyncio
 async def test_create_sandbox_uncontrolled_blank_name_falls_back_to_sandbox_id(
     tmp_path,
 ):
@@ -1420,6 +1431,28 @@ async def test_manager_ttl_cleanup_removes_temporary_sandbox_when_idle_cleanup_d
     )
 
     await asyncio.sleep(0.05)
+
+    assert manager.registry.get_sandbox(sandbox["sandbox_id"]) is None
+    assert provider.destroyed[0][1] == sandbox["sandbox_id"]
+
+
+@pytest.mark.asyncio
+async def test_manager_ttl_cleanup_uses_monotonic_delay_when_wall_clock_moves_back(
+    tmp_path,
+    monkeypatch,
+):
+    manager, provider = _manager(tmp_path)
+    original_time = time.time
+
+    sandbox = await manager.create_sandbox(
+        FakeContext({"sandbox_idle_timeout": 0, "sandbox_ttl": 0.02}),
+        "session-a",
+        "generic",
+        "TTL",
+    )
+    monkeypatch.setattr(time, "time", lambda: original_time() - 3600)
+
+    await asyncio.sleep(0.08)
 
     assert manager.registry.get_sandbox(sandbox["sandbox_id"]) is None
     assert provider.destroyed[0][1] == sandbox["sandbox_id"]

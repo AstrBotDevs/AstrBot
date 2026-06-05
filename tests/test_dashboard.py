@@ -951,6 +951,55 @@ async def test_sandbox_dashboard_runs_shell_in_managed_sandbox(
 
 
 @pytest.mark.asyncio
+async def test_sandbox_dashboard_shell_uses_default_timeout_for_invalid_value(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    class FakeShell:
+        async def exec(self, command, cwd=None, env=None, timeout=300, shell=True):
+            return {"timeout": timeout, "stdout": "ok\n", "stderr": "", "exit_code": 0}
+
+    async def available():
+        return True
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        available=available, shell=FakeShell()
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/shell",
+        json={"command": "pwd", "timeout": "not-a-number"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["result"]["timeout"] == 300
+
+
+@pytest.mark.asyncio
 async def test_sandbox_dashboard_shell_bypasses_lease_for_admin_access(
     app: Quart,
     authenticated_header: dict,

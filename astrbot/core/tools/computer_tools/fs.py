@@ -71,7 +71,7 @@ _IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 def _remote_basename(path: str) -> str:
-    return path.replace("\\", "/").split("/")[-1]
+    return path.replace("\\", "/").rstrip("/").split("/")[-1]
 
 
 def _restricted_env_path_labels(umo: str, *, include_plugin_skills: bool) -> list[str]:

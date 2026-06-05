@@ -1,3 +1,4 @@
+import math
 import traceback
 
 from quart import jsonify, request
@@ -30,6 +31,18 @@ def _is_sandbox_user_error(error: Exception) -> bool:
         or "retention_policy must be" in message
         or "sandbox_name must be" in message
     )
+
+
+def _sanitize_shell_timeout(value, default: float = 300) -> float:
+    if isinstance(value, bool):
+        return default
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(timeout) or timeout <= 0:
+        return default
+    return timeout
 
 
 class SandboxRoute(Route):
@@ -222,7 +235,7 @@ class SandboxRoute(Route):
                 command,
                 cwd=data.get("cwd"),
                 env=data.get("env"),
-                timeout=data.get("timeout", 300),
+                timeout=_sanitize_shell_timeout(data.get("timeout", 300)),
                 shell=data.get("shell", True),
             )
             return jsonify(Response().ok(data={"result": result}).__dict__)

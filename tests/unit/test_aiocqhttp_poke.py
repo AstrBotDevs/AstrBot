@@ -75,6 +75,28 @@ async def test_aiocqhttp_send_group_file_uses_upload_action(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_aiocqhttp_send_group_file_accepts_whitespace_session_id(tmp_path):
+    bot = AsyncMock()
+    file_path = tmp_path / "report.md"
+    file_path.write_text("report", encoding="utf-8")
+    chain = MessageChain([Comp.File(name="report.md", file=str(file_path))])
+
+    await AiocqhttpMessageEvent.send_message(
+        bot=bot,
+        message_chain=chain,
+        event=None,
+        is_group=True,
+        session_id=" 123456 ",
+    )
+
+    bot.upload_group_file.assert_awaited_once_with(
+        group_id=123456,
+        file=str(file_path),
+        name="report.md",
+    )
+
+
+@pytest.mark.asyncio
 async def test_aiocqhttp_send_private_file_uses_upload_action(tmp_path):
     bot = AsyncMock()
     file_path = tmp_path / "report.md"
