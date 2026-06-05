@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 import signal
 import sys
@@ -30,9 +31,11 @@ def _install_shutdown_signal_handlers(
             loop.add_signal_handler(signum, callback, signum)
             installed.append(signum)
         except (NotImplementedError, RuntimeError):
-            signal.signal(
-                signum, lambda _signum, _frame: callback(signal.Signals(_signum))
-            )
+            def fallback_handler(received_signum, frame):
+                _ = frame
+                callback(signal.Signals(received_signum))
+
+            signal.signal(signum, fallback_handler)
             installed.append(signum)
 
     def cleanup() -> None:
@@ -79,15 +82,22 @@ async def run_astrbot(astrbot_root: Path) -> None:
             {runner_task, shutdown_task},
             return_when=asyncio.FIRST_COMPLETED,
         )
-        if shutdown_task in done and not runner_task.done():
+        shutdown_requested_by_signal = shutdown_task in done
+        if shutdown_requested_by_signal and not runner_task.done():
             signal_name = shutdown_signal.name if shutdown_signal else "unknown"
             logger.info(f"Received {signal_name}; stopping AstrBot...")
             runner_task.cancel()
-        await runner_task
+        try:
+            await runner_task
+        except asyncio.CancelledError:
+            if not shutdown_requested_by_signal:
+                raise
     finally:
         cleanup_signal_handlers()
         if not shutdown_task.done():
             shutdown_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await shutdown_task
         await LogManager.shutdown()
 
 

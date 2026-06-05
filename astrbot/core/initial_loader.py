@@ -58,5 +58,15 @@ class InitialLoader:
             logger.info("🌈 正在关闭 AstrBot...")
             if initialized:
                 await core_lifecycle.stop()
+        except Exception:
+            if initialized:
+                try:
+                    await core_lifecycle.stop()
+                except Exception:
+                    logger.error(
+                        "AstrBot shutdown during runtime-error handling failed",
+                        exc_info=True,
+                    )
+            raise
         finally:
             await LogManager.shutdown()
