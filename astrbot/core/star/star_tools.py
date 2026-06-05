@@ -50,12 +50,12 @@ def _resolve_plugin_from_star_map(module, star_map):
 def _resolve_plugin_from_prefix(module, star_map):
     if "." not in module.__name__:
         return None
-    caller_parts = module.__name__.split('.')
+    caller_name = module.__name__
     # Prefer main modules or shorter paths deterministically
     sorted_keys = sorted(star_map.keys(), key=lambda k: (not k.endswith('.main'), len(k)))
     for mod_name in sorted_keys:
-        mod_parts = mod_name.split('.')
-        if mod_parts and caller_parts and mod_parts[0] == caller_parts[0]:
+        mod_package = mod_name.rpartition('.')[0] if "." in mod_name else mod_name
+        if caller_name == mod_package or caller_name.startswith(mod_package + "."):
             return star_map[mod_name]
     return None
 
@@ -64,14 +64,12 @@ def _resolve_plugin_from_path(module):
     if not (hasattr(module, "__file__") and module.__file__):
         return None
     try:
-        path_parts = Path(module.__file__).resolve().parts
-        if "plugins" in path_parts:
-            idx = path_parts.index("plugins")
-            if idx + 1 < len(path_parts):
-                return path_parts[idx + 1]
+        from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
+        plugin_root = Path(get_astrbot_plugin_path()).resolve()
+        module_path = Path(module.__file__).resolve()
+        return module_path.relative_to(plugin_root).parts[0]
     except Exception:
         return None
-    return None
 
 
 def _fallback_plugin_name(module):
