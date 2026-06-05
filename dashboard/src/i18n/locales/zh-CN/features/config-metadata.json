@@ -1179,6 +1179,10 @@
       },
       "no_proxy": {
         "description": "直连地址列表"
+      },
+      "computer.blocked_command_patterns": {
+        "description": "本地 Shell 命令拦截规则",
+        "hint": "本地计算机工具执行 shell 命令前会将命令转为小写并在首尾补空格，然后检查是否包含列表中的任意片段。命中则拒绝执行。请谨慎修改，删除默认项可能降低安全性。"
       }
     }
   },

@@ -243,6 +243,20 @@ DEFAULT_CONFIG = {
     "t2i_active_template": "base",
     "http_proxy": "",
     "no_proxy": ["localhost", "127.0.0.1", "::1", "10.*", "192.168.*"],
+    "computer": {
+        "blocked_command_patterns": [
+            " mkfs",
+            " dd if=",
+            " shutdown",
+            " reboot",
+            " poweroff",
+            " halt",
+            " sudo ",
+            ":(){:|:&};:",
+            " kill -9 ",
+            " killall ",
+        ],
+    },
     "dashboard": {
         "enable": True,
         "username": "astrbot",
@@ -2982,6 +2996,12 @@ CONFIG_METADATA_2 = {
                 "items": {"type": "string"},
                 "hint": "在此处添加不希望通过代理访问的地址，例如内部服务地址。回车添加，可添加多个，如未设置代理请忽略此配置",
             },
+            "computer.blocked_command_patterns": {
+                "description": "本地 Shell 命令拦截规则",
+                "type": "list",
+                "items": {"type": "string"},
+                "hint": "本地计算机工具执行 shell 命令前会将命令转为小写并在首尾补空格，然后检查是否包含列表中的任意片段。命中则拒绝执行。请谨慎修改，删除默认项可能降低安全性。",
+            },
             "timezone": {
                 "type": "string",
             },
@@ -4355,6 +4375,12 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "直连地址列表",
                         "type": "list",
                         "items": {"type": "string"},
+                    },
+                    "computer.blocked_command_patterns": {
+                        "description": "本地 Shell 命令拦截规则",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "本地计算机工具执行 shell 命令前会将命令转为小写并在首尾补空格，然后检查是否包含列表中的任意片段。命中则拒绝执行。请谨慎修改，删除默认项可能降低安全性。",
                     },
                 },
             },

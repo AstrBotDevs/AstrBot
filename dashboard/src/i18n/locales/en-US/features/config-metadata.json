@@ -1177,6 +1177,10 @@
       },
       "no_proxy": {
         "description": "Direct Connection Address List"
+      },
+      "computer.blocked_command_patterns": {
+        "description": "Local shell command block patterns",
+        "hint": "Before the local computer tool runs a shell command, it lowercases the command, pads it with spaces, and blocks execution if it contains any pattern in this list. Edit carefully; removing defaults may reduce safety."
       }
     }
   },

@@ -12,6 +12,7 @@ from typing import Any
 from python_ripgrep import search
 
 from astrbot.api import logger
+from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.computer.file_read_utils import (
     detect_text_encoding,
     read_local_text_range_sync,
@@ -22,7 +23,7 @@ from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
 from .shipyard_search_file_util import _truncate_long_lines
 
-_BLOCKED_COMMAND_PATTERNS = [
+DEFAULT_BLOCKED_COMMAND_PATTERNS = [
     " mkfs",
     " dd if=",
     " shutdown",
@@ -36,9 +37,31 @@ _BLOCKED_COMMAND_PATTERNS = [
 ]
 
 
+def _get_blocked_command_patterns() -> list[str]:
+    """Return user-configured blocked command patterns.
+
+    The configuration is read on each shell execution so dashboard changes take
+    effect without recreating the local booter. If the config cannot be loaded
+    or the value has an unexpected type, fall back to the built-in defaults.
+    """
+    try:
+        computer_config = AstrBotConfig().get("computer", {})
+        patterns = computer_config.get("blocked_command_patterns")
+    except Exception as e:
+        logger.warning(
+            f"Failed to load computer.blocked_command_patterns, using defaults: {e}"
+        )
+        return DEFAULT_BLOCKED_COMMAND_PATTERNS
+
+    if not isinstance(patterns, list):
+        return DEFAULT_BLOCKED_COMMAND_PATTERNS
+
+    return [str(pattern).lower() for pattern in patterns if str(pattern)]
+
+
 def _is_safe_command(command: str) -> bool:
     cmd = f" {command.strip().lower()} "
-    return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
+    return not any(pat in cmd for pat in _get_blocked_command_patterns())
 
 
 def _decode_bytes_with_fallback(
