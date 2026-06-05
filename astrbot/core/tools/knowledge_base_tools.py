@@ -53,7 +53,7 @@ async def retrieve_knowledge_base(
                 f"[知识库] 会话 {umo} 配置的以下知识库无效: {invalid_kb_ids}",
             )
         if not kb_names:
-            return None
+            return "会话配置的知识库均不存在或未加载，请检查知识库设置。"
         logger.debug(f"[知识库] 使用会话级配置，知识库数量: {len(kb_names)}")
     else:
         kb_names = config.get("kb_names", [])

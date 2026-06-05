@@ -147,7 +147,7 @@ class KnowledgeBaseRoute(Route):
     @staticmethod
     def _format_failed_doc_error(file_name: str, error: Exception) -> str:
         message = str(error).strip() or "上传失败：发生未知错误。"
-        if message.startswith(file_name):
+        if message.startswith(f"{file_name}:"):
             return message
         return f"{file_name}: {message}"
 
@@ -516,34 +516,36 @@ class KnowledgeBaseRoute(Route):
             if not kb_id:
                 return Response().error("缺少参数 kb_id").__dict__
 
+            update_fields = [
+                "kb_name",
+                "description",
+                "emoji",
+                "embedding_provider_id",
+                "rerank_provider_id",
+                "chunk_size",
+                "chunk_overlap",
+                "top_k_dense",
+                "top_k_sparse",
+                "top_m_final",
+                "index_type",
+            ]
+            if not any(field in data for field in update_fields):
+                return Response().error("至少需要提供一个更新字段").__dict__
+
             kb_name = data.get("kb_name")
             description = data.get("description")
             emoji = data.get("emoji")
             embedding_provider_id = data.get("embedding_provider_id")
-            rerank_provider_id = data.get("rerank_provider_id")
+            rerank_provider_provided = "rerank_provider_id" in data
+            rerank_provider_id = (
+                data.get("rerank_provider_id") if rerank_provider_provided else None
+            )
             chunk_size = data.get("chunk_size")
             chunk_overlap = data.get("chunk_overlap")
             top_k_dense = data.get("top_k_dense")
             top_k_sparse = data.get("top_k_sparse")
             top_m_final = data.get("top_m_final")
-
-            # 检查是否至少提供了一个更新字段
-            if all(
-                v is None
-                for v in [
-                    kb_name,
-                    description,
-                    emoji,
-                    embedding_provider_id,
-                    rerank_provider_id,
-                    chunk_size,
-                    chunk_overlap,
-                    top_k_dense,
-                    top_k_sparse,
-                    top_m_final,
-                ]
-            ):
-                return Response().error("至少需要提供一个更新字段").__dict__
+            index_type = data.get("index_type")
 
             kb_helper = await kb_manager.update_kb(
                 kb_id=kb_id,
@@ -551,12 +553,17 @@ class KnowledgeBaseRoute(Route):
                 description=description,
                 emoji=emoji,
                 embedding_provider_id=embedding_provider_id,
-                rerank_provider_id=rerank_provider_id,
+                **(
+                    {"rerank_provider_id": rerank_provider_id}
+                    if rerank_provider_provided
+                    else {}
+                ),
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
                 top_k_dense=top_k_dense,
                 top_k_sparse=top_k_sparse,
                 top_m_final=top_m_final,
+                index_type=index_type,
             )
 
             if not kb_helper:

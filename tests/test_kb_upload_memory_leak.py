@@ -18,6 +18,25 @@ import pytest
 class TestUploadTaskCleanup:
     """Verify task cleanup in get_upload_progress."""
 
+    def test_format_failed_doc_error_only_skips_exact_file_prefix(self):
+        """File names that are only a prefix of another word still get prepended."""
+        from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
+
+        assert (
+            KnowledgeBaseRoute._format_failed_doc_error(
+                "doc",
+                ValueError("document parse error"),
+            )
+            == "doc: document parse error"
+        )
+        assert (
+            KnowledgeBaseRoute._format_failed_doc_error(
+                "doc",
+                ValueError("doc: parse error"),
+            )
+            == "doc: parse error"
+        )
+
     @pytest.mark.asyncio
     async def test_cleanup_on_completed_poll(self):
         """Completed task cleaned up when client polls for result."""
