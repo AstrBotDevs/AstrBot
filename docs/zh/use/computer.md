@@ -98,6 +98,8 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 在沙盒中，Agent 仍然可以使用 Shell、Python、文件系统工具；如果所选沙盒 profile 支持 `browser` capability，还会挂载浏览器自动化工具。
 
+沙盒由 AstrBot 托管后，会有“占用”和“保留策略”两层状态。占用表示某个会话暂时控制这个沙盒；占用租约到期后，其他会话才可以重新占用或接管。保留策略决定沙盒释放后是保留下来复用，还是按空闲/过期规则清理。
+
 沙盒驱动可在 `配置 -> 普通配置 -> 使用电脑能力` 的沙盒配置中选择。当前常用选项包括：
 
 - `Shipyard Neo`：AstrBot 推荐的远程/独立部署沙盒服务，适合长期运行和多人使用。
@@ -123,7 +125,7 @@ result.txt
 
 使用 `CUA` 时，工作目录和可用命令取决于所选 CUA image 与运行方式。Linux CUA 容器通常提供类 Unix Shell；Windows、Android 等非 POSIX 镜像不保证支持 `sh`、`ls`、`rm`、`base64` 等命令，AstrBot 会对部分 shell fallback 操作返回明确错误。
 
-沙盒部署、驱动选择、CUA 配置、profile、TTL、数据持久化、浏览器能力等内容请参考：[Agent 沙盒环境](/use/astrbot-agent-sandbox)。
+沙盒部署、驱动选择、CUA 配置、profile、占用租约、TTL、数据持久化、浏览器能力等内容请参考：[Agent 沙盒环境](/use/astrbot-agent-sandbox)。
 
 > [!NOTE]
 > 即使在 `sandbox` 模式下，“需要 AstrBot 管理员权限”仍会影响 Shell、Python、浏览器、上传下载等工具的调用权限。具体权限取决于你的配置。

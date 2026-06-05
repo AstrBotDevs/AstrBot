@@ -3,9 +3,9 @@
 > [!TIP]
 > 此功能目前处于技术预览阶段，可能会存在一些 Bug。如果您遇到了问题，请在 [GitHub](https://github.com/AstrBotDevs/AstrBot/issues) 上提交 issue。
 
-从 `v4.12.0` 开始，AstrBot 引入了 Agent 沙盒环境，用来替代之前的代码执行器功能。它为 Agent 提供了更安全、更灵活的代码执行和自动化能力。
+从 `v4.12.0` 开始，AstrBot 引入了 Agent 沙盒环境，用来替代之前的代码执行器功能。它让 Agent 在隔离环境里运行 Shell、Python、文件操作或桌面自动化任务，不必直接碰 AstrBot 主机。
 
-如果你是从旧配置迁移过来的，建议先看清楚配置是怎么对应的。现在沙盒运行时已经拆成独立插件，AstrBot Core 只负责调度、复用和清理；你需要做的，就是把 `Computer Use Runtime`、`沙盒驱动`，以及各驱动自己的参数填正确。
+如果你是从旧配置迁移过来的，先看清楚配置是怎么对应的。现在沙盒运行时已经拆成独立插件，AstrBot Core 只负责调度、复用、占用和清理；你需要做的是：先装驱动插件，再把 `Computer Use Runtime`、`沙盒驱动` 和驱动自己的参数填好。
 
 ![](https://files.astrbot.app/docs/source/images/astrbot-agent-sandbox/image.png)
 
@@ -25,6 +25,13 @@
 - `BoxLite`（轻量本地沙盒，适合只需要 Shell、Python 和文件操作的场景）
 - `Shipyard`（旧方案，仍可继续使用）
 - `CUA`（本地或云端电脑使用沙盒，适合需要桌面操作的场景）
+
+如果你只是想先跑通沙盒，建议这样选：
+
+- 需要稳定的 Shell、Python、文件系统和 Skills 同步：优先选 `Shipyard Neo`。
+- 只想要轻量本地执行环境：选 `BoxLite`。
+- 需要截图、鼠标、键盘这类桌面操作：选 `CUA`。
+- 还在用旧部署：继续用 `Shipyard`，但新环境不建议再从它开始。
 
 安装示例：
 
@@ -52,6 +59,24 @@ git clone https://github.com/AstrBotDevs/astrbot_sandbox_cua.git data/plugins/as
 
 > [!TIP]
 > `Shipyard Neo` 的浏览器能力不是所有 profile 都支持。只有 profile 带有 `browser` capability 时，AstrBot 才会挂载浏览器相关工具。一个常见示例是 `browser-python`。
+
+## 托管沙盒、占用和保留策略
+
+启用沙盒后，你可以在 WebUI 的“沙盒管理”页面看到 AstrBot 管理的沙盒。这里有几个容易混淆的词：
+
+- **托管沙盒**：AstrBot 记录并管理的沙盒。它可能来自 `Shipyard Neo`、`BoxLite`、`CUA` 或旧版 `Shipyard`。
+- **默认沙盒**：某个驱动下优先复用的沙盒。Agent 没有明确指定时，会优先尝试复用它。
+- **占用**：某个会话正在控制这个沙盒。占用期间，其他会话不能直接抢用，除非管理员或配置允许接管。
+- **占用租约**：占用的有效时间。默认 600 秒。Agent 可以调用续租工具延长它；续租后，后续普通工具调用不会把更长的租约缩短。
+- **临时沙盒**：释放后可以按空闲时间或过期时间自动清理。
+- **持久沙盒**：环境会保留，适合准备好依赖后反复使用。它仍然会有“占用”状态，只是释放后不会因为临时清理策略被删掉。
+
+排障时可以先看这两项：
+
+- `最后使用`：最近一次由 Agent 占用、续租或切换到这个沙盒的时间。
+- `占用到期时间`：当前会话控制权的到期时间。它和驱动自己的 TTL 不是一回事。
+
+驱动 TTL 通常表示沙盒实例本身最多保留多久；占用租约只表示当前会话还能控制它多久。比如 CUA 的 `CUA Sandbox TTL` 管的是 CUA 实例生命周期，而 AstrBot 的 `沙盒占用超时` 管的是会话占用时间。
 
 ## CUA 驱动
 
@@ -170,7 +195,7 @@ CUA API Key = <your-cua-api-key>
 
 AstrBot 给每个沙盒环境限制最高 1 CPU 和 512 MB 内存。
 
-我们建议您的宿主机至少有 2 个 CPU 和 4 GB 内存，并开启 Swap，以保证多个沙盒环境实例可以稳定运行。
+建议宿主机至少有 2 个 CPU 和 4 GB 内存，并开启 Swap。这样同时跑多个沙盒时更稳。
 
 ## 推荐：使用 Shipyard Neo
 
@@ -182,7 +207,7 @@ AstrBot 给每个沙盒环境限制最高 1 CPU 和 512 MB 内存。
 git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
 ```
 
-如果您准备长期使用 `Shipyard Neo`，更推荐将它**单独部署在一台资源更充足的机器上**，例如您的 homelab、局域网服务器，或独立云主机，然后再让 AstrBot 远程接入 Bay。
+如果你准备长期使用 `Shipyard Neo`，更推荐将它**单独部署在一台资源更充足的机器上**，例如 homelab、局域网服务器，或独立云主机，然后再让 AstrBot 远程接入 Bay。
 
 原因是：`Shipyard Neo` 在启用浏览器能力时需要运行较重的浏览器运行时。对于资源紧张的云服务器，把 AstrBot 和 `Shipyard Neo` 部署在同一台机器上，通常会让 CPU 和内存压力都比较大，稳定性和体验都不理想。
 

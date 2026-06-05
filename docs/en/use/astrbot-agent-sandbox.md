@@ -3,7 +3,7 @@
 > [!TIP]
 > This feature is currently in technical preview and may have some bugs. If you encounter any issues, please submit an issue on [GitHub](https://github.com/AstrBotDevs/AstrBot/issues).
 
-Starting from version `v4.12.0`, AstrBot introduced the Agent sandbox environment to replace the previous code executor functionality. It gives Agents a safer and more flexible way to run code and automation tasks.
+Starting from version `v4.12.0`, AstrBot introduced the Agent sandbox environment to replace the previous code executor functionality. It lets Agents run shell, Python, file, and desktop automation tasks in an isolated environment instead of directly on the AstrBot host.
 
 ![](https://files.astrbot.app/docs/source/images/astrbot-agent-sandbox/image.png)
 
@@ -26,6 +26,13 @@ AstrBot currently supports the following sandbox drivers:
 - `BoxLite` (a lightweight local sandbox for shell, Python, and file operations only)
 - `Shipyard` (legacy option, still supported)
 - `CUA` (local or cloud computer-use sandbox, suitable for desktop interaction tasks)
+
+If you just want to get started, choose based on the task:
+
+- Use `Shipyard Neo` for stable shell, Python, filesystem access, and Skills sync.
+- Use `BoxLite` for a lightweight local runtime.
+- Use `CUA` when you need screenshots, mouse clicks, or keyboard input.
+- Keep using `Shipyard` only if you already have an old deployment.
 
 Installation example:
 
@@ -53,6 +60,21 @@ For `Shipyard Neo`, the workspace root is fixed at `/workspace`. When using file
 
 > [!TIP]
 > Browser capability is not available in every `Shipyard Neo` profile. AstrBot only mounts browser-related tools when the selected profile supports the `browser` capability. A common example is `browser-python`.
+
+## Managed sandboxes, leases, and retention
+
+After sandbox mode is enabled, the WebUI sandbox page shows the sandboxes managed by AstrBot. These terms are worth keeping separate:
+
+- **Managed sandbox**: a sandbox recorded and managed by AstrBot. It may come from `Shipyard Neo`, `BoxLite`, `CUA`, or legacy `Shipyard`.
+- **Default sandbox**: the sandbox AstrBot tries to reuse first for a driver.
+- **Occupied**: a session is currently controlling the sandbox. Other sessions cannot use it directly unless takeover is allowed.
+- **Lease**: how long the current session keeps control. The default is 600 seconds. Agents can renew the lease, and later normal tool calls will not shorten a longer active lease.
+- **Temporary sandbox**: can be cleaned up after it is released and stays idle or reaches its expiry time.
+- **Persistent sandbox**: keeps its environment for reuse. It can still be occupied or released, but release alone does not delete it.
+
+In the sandbox page, `Last used` means the last time AstrBot occupied, renewed, or switched to the sandbox. `Occupied until` is the lease expiry for the current controlling session.
+
+Driver TTL and AstrBot leases are different. For example, `CUA Sandbox TTL` controls the lifetime of the CUA instance, while AstrBot's `Sandbox lease timeout` controls how long one message session keeps control of it.
 
 ## CUA Runtime
 
