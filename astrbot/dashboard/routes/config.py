@@ -304,48 +304,8 @@ def _normalize_unavailable_sandbox_booter(config: dict) -> dict:
 async def _validate_neo_connectivity(
     post_config: dict,
 ) -> str | None:
-    """Check if Bay is reachable when Shipyard Neo sandbox is configured.
-
-    Returns a warning message string if Bay isn't reachable, or None if
-    everything looks fine (or Neo isn't configured).
-    """
-    ps = post_config.get("provider_settings", {})
-    runtime = ps.get("computer_use_runtime", "none")
-    sandbox = ps.get("sandbox", {})
-    booter = sandbox.get("booter", "")
-
-    # Only check when sandbox mode + shipyard_neo is selected
-    if runtime != "sandbox" or booter != "shipyard_neo":
-        return None
-
-    endpoint = sandbox.get("shipyard_neo_endpoint", "").rstrip("/")
-    if not endpoint:
-        return "⚠️ Shipyard Neo endpoint 未设置"
-
-    access_token = sandbox.get("shipyard_neo_access_token", "")
-    if not access_token:
-        return (
-            "⚠️ 未找到 Bay API Key。请填写访问令牌，或切换到新的 Sandbox Provider 配置。"
-        )
-
-    # Connectivity check
-    import aiohttp
-
-    health_url = f"{endpoint}/health"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                health_url,
-                timeout=aiohttp.ClientTimeout(total=5),
-            ) as resp:
-                if resp.status != 200:
-                    return (
-                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
-                        f"请确认 Bay 正在运行: {endpoint}"
-                    )
-    except Exception:
-        return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
-
+    """Concrete sandbox providers own their connectivity checks."""
+    del post_config
     return None
 
 

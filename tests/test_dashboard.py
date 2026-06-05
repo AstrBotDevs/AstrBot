@@ -628,6 +628,77 @@ async def test_sandbox_dashboard_create_does_not_auto_occupy_sandbox(
 
 
 @pytest.mark.asyncio
+async def test_sandbox_dashboard_create_rejects_cross_origin_cookie_auth(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    login_response = await test_client.post(
+        "/api/auth/login",
+        json={
+            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+            "password": _resolve_dashboard_password(core_lifecycle_td),
+        },
+    )
+    assert login_response.status_code == 200
+
+    response = await test_client.post(
+        "/api/sandbox?session_id=dashboard",
+        json={"provider_id": provider.provider_id, "sandbox_name": "Named"},
+        headers={"Origin": "http://evil.localhost:3000"},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 403
+    assert data["status"] == "error"
+    assert "Origin" in data["message"]
+    assert manager.list_sandboxes() == []
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_create_allows_cross_origin_authorization_header(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox?session_id=dashboard",
+        json={"provider_id": provider.provider_id, "sandbox_name": "Named"},
+        headers={
+            **authenticated_header,
+            "Origin": "http://api-client.example",
+        },
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["sandbox"]["sandbox_name"] == "Named"
+
+
+@pytest.mark.asyncio
 async def test_sandbox_dashboard_create_rejects_duplicate_name(
     app: Quart,
     authenticated_header: dict,
@@ -1705,7 +1776,7 @@ async def test_config_save_rejects_recovery_code_for_protected_totp_changes(
 
 
 @pytest.mark.asyncio
-async def test_validate_neo_connectivity_without_token_returns_warning_not_import_error():
+async def test_validate_neo_connectivity_noops_for_plugin_managed_provider_config():
     from astrbot.dashboard.routes.config import _validate_neo_connectivity
 
     warning = await _validate_neo_connectivity(
@@ -1721,8 +1792,7 @@ async def test_validate_neo_connectivity_without_token_returns_warning_not_impor
         }
     )
 
-    assert warning is not None
-    assert "API Key" in warning
+    assert warning is None
 
 
 @pytest.mark.asyncio
