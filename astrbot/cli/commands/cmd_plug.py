@@ -14,7 +14,7 @@ from ..utils import (
 )
 
 
-@click.group()
+@click.group(name="plugin")
 def plug() -> None:
     """Plugin management"""
 

@@ -153,7 +153,7 @@ def _set_dashboard_password(config: dict[str, Any], raw_password: str) -> None:
     _set_nested_item(config, "dashboard.password_change_required", False)
 
 
-@click.group(name="conf")
+@click.group(name="config")
 def conf() -> None:
     """Configuration management commands
 

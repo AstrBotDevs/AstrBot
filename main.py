@@ -9,6 +9,16 @@ import runtime_bootstrap
 
 runtime_bootstrap.initialize_runtime_bootstrap()
 
+DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_DASHBOARD_RESET_PASSWORD"
+
+
+def _prime_startup_flags(argv: list[str]) -> None:
+    if "--reset-password" in argv:
+        os.environ[DASHBOARD_RESET_PASSWORD_ENV] = "1"
+
+
+_prime_startup_flags(sys.argv[1:])
+
 from astrbot.core import LogBroker, LogManager, db_helper, logger  # noqa: E402
 from astrbot.core.config.default import VERSION  # noqa: E402
 from astrbot.core.initial_loader import InitialLoader  # noqa: E402
@@ -143,6 +153,11 @@ if __name__ == "__main__":
         type=str,
         help="Specify the directory path for WebUI static files",
         default=None,
+    )
+    parser.add_argument(
+        "--reset-password",
+        action="store_true",
+        help="Force reset the dashboard initial password on startup.",
     )
     args = parser.parse_args()
 

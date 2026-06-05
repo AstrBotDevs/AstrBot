@@ -5,7 +5,7 @@ import sys
 import click
 
 from . import __version__
-from .commands import conf, init, password, plug, run
+from .commands import config, init, password, plugin, run, service
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
@@ -17,7 +17,23 @@ logo_tmpl = r"""
 """
 
 
-@click.group()
+class AstrBotCLIGroup(click.Group):
+    COMMAND_ALIASES = {
+        "conf": "config",
+        "plug": "plugin",
+    }
+
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+        command = super().get_command(ctx, cmd_name)
+        if command is not None:
+            return command
+        alias_target = self.COMMAND_ALIASES.get(cmd_name)
+        if alias_target is None:
+            return None
+        return super().get_command(ctx, alias_target)
+
+
+@click.group(cls=AstrBotCLIGroup)
 @click.version_option(__version__, prog_name="AstrBot")
 def cli() -> None:
     """The AstrBot CLI"""
@@ -52,9 +68,10 @@ def help(command_name: str | None) -> None:
 cli.add_command(init)
 cli.add_command(run)
 cli.add_command(help)
-cli.add_command(plug)
-cli.add_command(conf)
+cli.add_command(plugin)
+cli.add_command(config)
 cli.add_command(password)
+cli.add_command(service)
 
 if __name__ == "__main__":
     cli()
