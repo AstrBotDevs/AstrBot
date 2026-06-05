@@ -765,7 +765,7 @@
       },
       "disable_builtin_commands": {
         "description": "禁用自带指令",
-        "hint": "禁用所有 AstrBot 自带指令,如 help, provider, model 等"
+        "hint": "禁用所有 AstrBot 自带指令,如 help, sid, new 等"
       }
     },
     "whitelist": {
