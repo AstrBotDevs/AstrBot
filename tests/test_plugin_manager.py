@@ -3,10 +3,12 @@ import json
 import os
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 import yaml
 
+from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
 from astrbot.core.utils.pip_installer import PipInstallError
@@ -160,6 +162,131 @@ def _clear_star_runtime_state():
     star_manager_module.star_map.clear()
     star_manager_module.star_registry.clear()
     star_manager_module.star_handlers_registry.clear()
+
+
+def _plugin_toggle_manager(plugin):
+    manager = object.__new__(PluginManager)
+    manager.context = type(
+        "Context",
+        (),
+        {"get_registered_star": lambda self, name: plugin if name == plugin.name else None},
+    )()
+    manager._pm_lock = asyncio.Lock()
+    manager._terminate_plugin = AsyncMock()
+    manager.reload = AsyncMock(return_value=(True, ""))
+    return manager
+
+
+def _tool(name: str, module_path: str, active: bool = True) -> FunctionTool:
+    return FunctionTool(
+        name=name,
+        description=name,
+        parameters={"type": "object", "properties": {}},
+        handler_module_path=module_path,
+        active=active,
+    )
+
+
+@pytest.fixture
+def plugin_toggle_preferences(monkeypatch):
+    values = {
+        "inactivated_plugins": [],
+        "inactivated_llm_tools": [],
+    }
+
+    async def global_get(key, default):
+        return values.get(key, default)
+
+    async def global_put(key, value):
+        values[key] = value
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", global_put)
+    return values
+
+
+@pytest.mark.asyncio
+async def test_turn_off_plugin_deactivates_tools_under_plugin_module(
+    monkeypatch,
+    plugin_toggle_preferences,
+):
+    plugin = star_manager_module.StarMetadata(
+        name="demo",
+        module_path="data.plugins.demo.main",
+        activated=True,
+    )
+    plugin_tool = _tool(
+        "demo_tool",
+        "data.plugins.demo.main.tools",
+    )
+    other_tool = _tool(
+        "other_tool",
+        "data.plugins.other.main.tools",
+    )
+    sibling_tool = _tool(
+        "sibling_tool",
+        "data.plugins.demo.main_extra.tools",
+    )
+    monkeypatch.setattr(
+        star_manager_module.llm_tools,
+        "func_list",
+        [plugin_tool, other_tool, sibling_tool],
+    )
+    manager = _plugin_toggle_manager(plugin)
+
+    await manager.turn_off_plugin("demo")
+
+    assert plugin_tool.active is False
+    assert other_tool.active is True
+    assert sibling_tool.active is True
+    assert plugin_toggle_preferences["inactivated_plugins"] == [
+        "data.plugins.demo.main"
+    ]
+    assert plugin_toggle_preferences["inactivated_llm_tools"] == ["demo_tool"]
+
+
+@pytest.mark.asyncio
+async def test_turn_on_plugin_reactivates_tools_under_plugin_module(
+    monkeypatch,
+    plugin_toggle_preferences,
+):
+    plugin = star_manager_module.StarMetadata(
+        name="demo",
+        module_path="data.plugins.demo.main",
+        activated=False,
+    )
+    plugin_toggle_preferences["inactivated_plugins"] = ["data.plugins.demo.main"]
+    plugin_toggle_preferences["inactivated_llm_tools"] = ["demo_tool", "manual_tool"]
+    plugin_tool = _tool(
+        "demo_tool",
+        "data.plugins.demo.main.tools",
+        active=False,
+    )
+    manual_tool = _tool(
+        "manual_tool",
+        "data.plugins.other.main.tools",
+        active=False,
+    )
+    sibling_tool = _tool(
+        "sibling_tool",
+        "data.plugins.demo.main_extra.tools",
+        active=False,
+    )
+    monkeypatch.setattr(
+        star_manager_module.llm_tools,
+        "func_list",
+        [plugin_tool, manual_tool, sibling_tool],
+    )
+    manager = _plugin_toggle_manager(plugin)
+
+    await manager.turn_on_plugin("demo")
+
+    assert plugin_tool.active is True
+    assert manual_tool.active is False
+    assert sibling_tool.active is False
+    assert plugin_toggle_preferences["inactivated_plugins"] == []
+    assert plugin_toggle_preferences["inactivated_llm_tools"] == ["manual_tool"]
+    manager.reload.assert_awaited_once_with("demo")
 
 
 def _build_load_mock(events):
