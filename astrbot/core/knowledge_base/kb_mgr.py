@@ -25,6 +25,38 @@ CHUNKER = RecursiveCharacterChunker()
 _UNSET = object()
 INIT_RETRY_COOLDOWN_SECONDS = 60.0
 INIT_RETRY_MAX_ATTEMPTS = 3
+VALID_INDEX_TYPES = {"flat", "hnsw"}
+
+
+def _validate_kb_options(
+    *,
+    chunk_size: int | None,
+    chunk_overlap: int | None,
+    top_k_dense: int | None,
+    top_k_sparse: int | None,
+    top_m_final: int | None,
+    index_type: str | None,
+) -> None:
+    if chunk_size is not None and chunk_size <= 0:
+        raise ValueError("chunk_size 必须大于 0")
+    if chunk_overlap is not None and chunk_overlap < 0:
+        raise ValueError("chunk_overlap 不能为负数")
+    if (
+        chunk_size is not None
+        and chunk_overlap is not None
+        and chunk_overlap >= chunk_size
+    ):
+        raise ValueError("chunk_overlap 必须小于 chunk_size")
+    if top_k_dense is not None and top_k_dense <= 0:
+        raise ValueError("top_k_dense 必须大于 0")
+    if top_k_sparse is not None and top_k_sparse <= 0:
+        raise ValueError("top_k_sparse 必须大于 0")
+    if top_m_final is not None and top_m_final <= 0:
+        raise ValueError("top_m_final 必须大于 0")
+    if index_type is not None and index_type not in VALID_INDEX_TYPES:
+        raise ValueError(
+            f"index_type 必须是 {', '.join(sorted(VALID_INDEX_TYPES))} 之一"
+        )
 
 
 class KnowledgeBaseManager:
@@ -182,18 +214,32 @@ class KnowledgeBaseManager:
         """创建新的知识库实例"""
         if embedding_provider_id is None:
             raise ValueError("创建知识库时必须提供embedding_provider_id")
+        effective_chunk_size = chunk_size if chunk_size is not None else 512
+        effective_chunk_overlap = chunk_overlap if chunk_overlap is not None else 50
+        effective_top_k_dense = top_k_dense if top_k_dense is not None else 50
+        effective_top_k_sparse = top_k_sparse if top_k_sparse is not None else 50
+        effective_top_m_final = top_m_final if top_m_final is not None else 5
+        effective_index_type = index_type if index_type is not None else "flat"
+        _validate_kb_options(
+            chunk_size=effective_chunk_size,
+            chunk_overlap=effective_chunk_overlap,
+            top_k_dense=effective_top_k_dense,
+            top_k_sparse=effective_top_k_sparse,
+            top_m_final=effective_top_m_final,
+            index_type=effective_index_type,
+        )
         kb = KnowledgeBase(
             kb_name=kb_name,
             description=description,
             emoji=emoji or "📚",
             embedding_provider_id=embedding_provider_id,
             rerank_provider_id=rerank_provider_id,
-            chunk_size=chunk_size if chunk_size is not None else 512,
-            chunk_overlap=chunk_overlap if chunk_overlap is not None else 50,
-            top_k_dense=top_k_dense if top_k_dense is not None else 50,
-            top_k_sparse=top_k_sparse if top_k_sparse is not None else 50,
-            top_m_final=top_m_final if top_m_final is not None else 5,
-            index_type=index_type if index_type is not None else "flat",
+            chunk_size=effective_chunk_size,
+            chunk_overlap=effective_chunk_overlap,
+            top_k_dense=effective_top_k_dense,
+            top_k_sparse=effective_top_k_sparse,
+            top_m_final=effective_top_m_final,
+            index_type=effective_index_type,
         )
         kb_helper: KBHelper | None = None
         try:
@@ -314,28 +360,48 @@ class KnowledgeBaseManager:
             }
             previous_init_error = kb_helper.init_error
 
+            candidate_state = previous_state.copy()
             if kb_name is not None:
-                kb.kb_name = kb_name
+                candidate_state["kb_name"] = kb_name
             if description is not None:
-                kb.description = description
+                candidate_state["description"] = description
             if emoji is not None:
-                kb.emoji = emoji
+                candidate_state["emoji"] = emoji
             if embedding_provider_id is not None:
-                kb.embedding_provider_id = embedding_provider_id
+                candidate_state["embedding_provider_id"] = embedding_provider_id
             if rerank_provider_id is not _UNSET:
-                kb.rerank_provider_id = rerank_provider_id  # type: ignore[assignment]
+                candidate_state["rerank_provider_id"] = rerank_provider_id
             if chunk_size is not None:
-                kb.chunk_size = chunk_size
+                candidate_state["chunk_size"] = chunk_size
             if chunk_overlap is not None:
-                kb.chunk_overlap = chunk_overlap
+                candidate_state["chunk_overlap"] = chunk_overlap
             if top_k_dense is not None:
-                kb.top_k_dense = top_k_dense
+                candidate_state["top_k_dense"] = top_k_dense
             if top_k_sparse is not None:
-                kb.top_k_sparse = top_k_sparse
+                candidate_state["top_k_sparse"] = top_k_sparse
             if top_m_final is not None:
-                kb.top_m_final = top_m_final
+                candidate_state["top_m_final"] = top_m_final
             if index_type is not None:
-                kb.index_type = index_type
+                candidate_state["index_type"] = index_type
+            _validate_kb_options(
+                chunk_size=candidate_state["chunk_size"],
+                chunk_overlap=candidate_state["chunk_overlap"],
+                top_k_dense=candidate_state["top_k_dense"],
+                top_k_sparse=candidate_state["top_k_sparse"],
+                top_m_final=candidate_state["top_m_final"],
+                index_type=candidate_state["index_type"],
+            )
+            kb.kb_name = candidate_state["kb_name"]
+            kb.description = candidate_state["description"]
+            kb.emoji = candidate_state["emoji"]
+            kb.embedding_provider_id = candidate_state["embedding_provider_id"]
+            kb.rerank_provider_id = candidate_state["rerank_provider_id"]  # type: ignore[assignment]
+            kb.chunk_size = candidate_state["chunk_size"]
+            kb.chunk_overlap = candidate_state["chunk_overlap"]
+            kb.top_k_dense = candidate_state["top_k_dense"]
+            kb.top_k_sparse = candidate_state["top_k_sparse"]
+            kb.top_m_final = candidate_state["top_m_final"]
+            kb.index_type = candidate_state["index_type"]
 
             # Build a new helper first. Keep current vec_db alive until new init succeeds.
             new_helper = KBHelper(
@@ -382,34 +448,49 @@ class KnowledgeBaseManager:
     async def retrieve(
         self,
         query: str,
-        kb_names: list[str],
+        kb_names: list[str] | None = None,
+        kb_ids: list[str] | None = None,
         top_k_fusion: int = 20,
         top_m_final: int = 5,
     ) -> dict | None:
         """从指定知识库中检索相关内容"""
-        kb_ids = []
+        resolved_kb_ids = []
         kb_id_helper_map = {}
         unavailable_kbs = []
-        for kb_name in kb_names:
-            if kb_helper := await self.get_kb_by_name(kb_name):
-                if kb_helper.init_error:
-                    unavailable_kbs.append((kb_name, kb_helper.init_error))
-                    logger.warning(f"知识库 {kb_name} 不可用: {kb_helper.init_error}")
-                    continue
-                kb_ids.append(kb_helper.kb.kb_id)
-                kb_id_helper_map[kb_helper.kb.kb_id] = kb_helper
+        if kb_ids:
+            for kb_id in kb_ids:
+                if kb_helper := await self.get_kb(kb_id):
+                    if kb_helper.init_error:
+                        unavailable_kbs.append((kb_id, kb_helper.init_error))
+                        logger.warning(f"知识库 {kb_id} 不可用: {kb_helper.init_error}")
+                        continue
+                    resolved_kb_ids.append(kb_helper.kb.kb_id)
+                    kb_id_helper_map[kb_helper.kb.kb_id] = kb_helper
+        elif kb_names:
+            for kb_name in kb_names:
+                if kb_helper := await self.get_kb_by_name(kb_name):
+                    if kb_helper.init_error:
+                        unavailable_kbs.append((kb_name, kb_helper.init_error))
+                        logger.warning(
+                            f"知识库 {kb_name} 不可用: {kb_helper.init_error}",
+                        )
+                        continue
+                    resolved_kb_ids.append(kb_helper.kb.kb_id)
+                    kb_id_helper_map[kb_helper.kb.kb_id] = kb_helper
+        else:
+            return {}
 
         # all requested KBs are unavailable
-        if not kb_ids and unavailable_kbs:
+        if not resolved_kb_ids and unavailable_kbs:
             errors = "; ".join(f"{n}: {e}" for n, e in unavailable_kbs)
             raise ValueError(f"所有请求的知识库均不可用: {errors}")
 
-        if not kb_ids:
+        if not resolved_kb_ids:
             return {}
 
         results = await self.retrieval_manager.retrieve(
             query=query,
-            kb_ids=kb_ids,
+            kb_ids=resolved_kb_ids,
             kb_id_helper_map=kb_id_helper_map,
             top_k_fusion=top_k_fusion,
             top_m_final=top_m_final,

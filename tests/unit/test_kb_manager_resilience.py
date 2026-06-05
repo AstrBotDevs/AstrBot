@@ -89,6 +89,59 @@ def mock_embedding_provider():
 
 
 @pytest.mark.asyncio
+async def test_load_kbs_does_not_limit_database_records(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+):
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    kb_mgr = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    kb_mgr.provider_manager = mock_provider_manager
+    kb_mgr.kb_db = mock_kb_db
+    kb_mgr.kb_insts = {}
+    kb_mgr._kb_name_index = {}
+
+    with patch.object(KBHelper, "initialize", new_callable=AsyncMock):
+        await kb_mgr.load_kbs()
+
+    mock_kb_db.list_kbs.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_update_kb_invalid_options_do_not_mutate_existing_kb(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+):
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    old_helper = KBHelper.__new__(KBHelper)
+    old_helper.kb = mock_knowledge_base
+    old_helper.init_error = None
+
+    kb_mgr = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    kb_mgr.provider_manager = mock_provider_manager
+    kb_mgr.kb_db = mock_kb_db
+    kb_mgr.kb_insts = {mock_knowledge_base.kb_id: old_helper}
+
+    with patch.object(KBHelper, "initialize", new_callable=AsyncMock) as mock_init:
+        with pytest.raises(ValueError, match="chunk_overlap"):
+            await kb_mgr.update_kb(
+                kb_id=mock_knowledge_base.kb_id,
+                chunk_size=100,
+                chunk_overlap=100,
+            )
+
+    mock_init.assert_not_awaited()
+    assert mock_knowledge_base.chunk_size == 512
+    assert mock_knowledge_base.chunk_overlap == 50
+
+
+@pytest.mark.asyncio
 async def test_update_kb_preserves_old_instance_when_reinit_fails(
     stub_provider_manager_module,
     mock_provider_manager,
