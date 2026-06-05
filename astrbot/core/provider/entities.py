@@ -452,6 +452,13 @@ class LLMResponse:
         """Convert to OpenAI tool calls format. Deprecated, use to_openai_to_calls_model instead."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
+            if not self.tools_call_name[idx]:
+                logger.warning(
+                    f"Skipping tool call at index {idx} because function.name is empty/None. "
+                    f"tool_call_id={self.tools_call_ids[idx] if idx < len(self.tools_call_ids) else 'N/A'}, "
+                    f"arguments={tool_call_arg}"
+                )
+                continue
             payload = {
                 "id": self.tools_call_ids[idx],
                 "function": {
@@ -471,6 +478,13 @@ class LLMResponse:
         """The same as to_openai_tool_calls but return pydantic model."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
+            if not self.tools_call_name[idx]:
+                logger.warning(
+                    f"Skipping tool call at index {idx} because function.name is empty/None. "
+                    f"tool_call_id={self.tools_call_ids[idx] if idx < len(self.tools_call_ids) else 'N/A'}, "
+                    f"arguments={tool_call_arg}"
+                )
+                continue
             ret.append(
                 ToolCall(
                     id=self.tools_call_ids[idx],
