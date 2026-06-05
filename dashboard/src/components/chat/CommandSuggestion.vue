@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from "vue";
+import { computed, reactive, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 export interface SuggestionCommand {
@@ -112,6 +112,15 @@ const panelStyle = computed(() => {
     zIndex: 1000,
   };
 });
+
+watch(
+  () => props.visible,
+  (val) => {
+    if (!val) {
+      tooltip.visible = false;
+    }
+  },
+);
 
 function handleSelect(index: number) {
   const cmd = props.commands[index];
@@ -224,7 +233,7 @@ function handleMouseLeave() {
 }
 
 .is-dark .command-description {
-  color: #999;
+  color: #e0e0e0;
 }
 
 .command-suggestion-hint {
