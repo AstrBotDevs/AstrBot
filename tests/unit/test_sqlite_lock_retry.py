@@ -130,6 +130,34 @@ async def test_run_in_tx_retries_sqlite_database_table_locked(monkeypatch, tmp_p
 
 
 @pytest.mark.asyncio
+async def test_run_in_tx_reraises_after_sqlite_locked_retries_exhausted(
+    monkeypatch,
+    tmp_path,
+):
+    db = SQLiteDatabase(str(tmp_path / "retry-exhausted.db"))
+    attempts = 0
+    sleep_delays = []
+
+    async def record_sleep(attempt: int) -> None:
+        sleep_delays.append(attempt)
+
+    monkeypatch.setattr(db, "_sleep_before_locked_retry", record_sleep)
+
+    async def op(session):
+        nonlocal attempts
+        attempts += 1
+        raise _operational_error("database is locked")
+
+    with pytest.raises(OperationalError):
+        await db._run_in_tx(op)
+
+    assert attempts == 2
+    assert sleep_delays == [0]
+
+    await db.engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_run_in_tx_does_not_retry_other_operational_errors(
     monkeypatch,
     tmp_path,
@@ -164,11 +192,9 @@ async def test_update_conversation_uses_retrying_transaction(monkeypatch, tmp_pa
         user_id="webchat:FriendMessage:user-1",
         content=[{"role": "user", "content": "old"}],
     )
-    run_in_tx = AsyncMock(return_value=None)
-    get_conversation_by_id = AsyncMock(return_value=conversation)
+    run_in_tx = AsyncMock(return_value=conversation)
 
     monkeypatch.setattr(db, "_run_in_tx", run_in_tx)
-    monkeypatch.setattr(db, "get_conversation_by_id", get_conversation_by_id)
 
     result = await db.update_conversation(
         "conv-1",
@@ -178,6 +204,5 @@ async def test_update_conversation_uses_retrying_transaction(monkeypatch, tmp_pa
 
     assert result is conversation
     run_in_tx.assert_awaited_once()
-    get_conversation_by_id.assert_awaited_once_with("conv-1")
 
     await db.engine.dispose()

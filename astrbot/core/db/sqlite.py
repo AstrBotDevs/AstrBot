@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import random
 import threading
 import typing as T
 from collections.abc import Awaitable, Callable
@@ -41,6 +43,8 @@ TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
 SQLITE_LOCK_RETRY_ATTEMPTS = 2
 SQLITE_LOCK_RETRY_BASE_DELAY = 0.1
+SQLITE_LOCK_RETRY_MAX_JITTER = 0.05
+logger = logging.getLogger("astrbot")
 
 
 class SQLiteDatabase(BaseDatabase):
@@ -57,7 +61,9 @@ class SQLiteDatabase(BaseDatabase):
         return "database" in message and "locked" in message
 
     async def _sleep_before_locked_retry(self, attempt: int) -> None:
-        await asyncio.sleep(SQLITE_LOCK_RETRY_BASE_DELAY * (2**attempt))
+        delay = SQLITE_LOCK_RETRY_BASE_DELAY * (2**attempt)
+        delay += random.uniform(0, SQLITE_LOCK_RETRY_MAX_JITTER)
+        await asyncio.sleep(delay)
 
     async def initialize(self) -> None:
         """Initialize the database by creating tables if they do not exist."""
@@ -392,15 +398,20 @@ class SQLiteDatabase(BaseDatabase):
         if not values:
             return None
 
-        async def _op(session: AsyncSession) -> None:
+        async def _op(session: AsyncSession) -> ConversationV2 | None:
             query = update(ConversationV2).where(
                 col(ConversationV2.conversation_id) == cid,
             )
             query = query.values(**values)
             await session.execute(query)
+            result = await session.execute(
+                select(ConversationV2).where(
+                    col(ConversationV2.conversation_id) == cid,
+                ),
+            )
+            return result.scalar_one_or_none()
 
-        await self._run_in_tx(_op)
-        return await self.get_conversation_by_id(cid)
+        return await self._run_in_tx(_op)
 
     async def delete_conversation(self, cid) -> None:
         async with self.get_db() as session:
@@ -1311,14 +1322,23 @@ class SQLiteDatabase(BaseDatabase):
                     async with session.begin():
                         return await fn(session)
             except OperationalError as exc:
-                if (
-                    not self._is_sqlite_database_locked_error(exc)
-                    or attempt == SQLITE_LOCK_RETRY_ATTEMPTS - 1
-                ):
+                is_locked = self._is_sqlite_database_locked_error(exc)
+                is_last_attempt = attempt == SQLITE_LOCK_RETRY_ATTEMPTS - 1
+                if not is_locked:
                     raise
+                if is_last_attempt:
+                    logger.warning(
+                        "SQLite database locked after %d attempts; giving up",
+                        SQLITE_LOCK_RETRY_ATTEMPTS,
+                    )
+                    raise
+                logger.debug(
+                    "SQLite database locked on attempt %d; retrying",
+                    attempt + 1,
+                )
                 await self._sleep_before_locked_retry(attempt)
 
-        raise RuntimeError("unreachable sqlite transaction retry state")
+        raise AssertionError("unreachable sqlite transaction retry state")
 
     @staticmethod
     def _apply_updates(model, **updates) -> None:
