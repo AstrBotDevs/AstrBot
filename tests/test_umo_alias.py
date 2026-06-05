@@ -1,10 +1,10 @@
 import importlib
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from astrbot.builtin_stars.builtin_commands import main as builtin_main
 from astrbot.builtin_stars.builtin_commands.commands.name import NameCommand
 from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
 from astrbot.core.star.star_handler import star_handlers_registry
@@ -14,6 +14,9 @@ from astrbot.core.umo_alias import (
     parse_umo,
     serialize_umo_alias,
 )
+
+BUILTIN_COMMANDS_PACKAGE = "astrbot.builtin_stars.builtin_commands"
+BUILTIN_MAIN_MODULE = f"{BUILTIN_COMMANDS_PACKAGE}.main"
 
 
 def make_group_event() -> SimpleNamespace:
@@ -101,10 +104,19 @@ async def test_name_command_without_alias_shows_current_names(temp_db):
 
 
 def test_name_command_requires_admin_permission():
+    missing_package_attr = object()
     original_handlers = list(star_handlers_registry)
+    original_module = sys.modules.get(BUILTIN_MAIN_MODULE)
+    commands_package = sys.modules.get(BUILTIN_COMMANDS_PACKAGE)
+    original_package_main = (
+        getattr(commands_package, "main", missing_package_attr)
+        if commands_package
+        else missing_package_attr
+    )
     try:
         star_handlers_registry.clear()
-        reloaded_main = importlib.reload(builtin_main)
+        sys.modules.pop(BUILTIN_MAIN_MODULE, None)
+        reloaded_main = importlib.import_module(BUILTIN_MAIN_MODULE)
         handler = star_handlers_registry.get_handler_by_full_name(
             f"{reloaded_main.Main.name.__module__}_{reloaded_main.Main.name.__name__}"
         )
@@ -116,6 +128,17 @@ def test_name_command_requires_admin_permission():
             for filter_ in handler.event_filters
         )
     finally:
+        if original_module is None:
+            sys.modules.pop(BUILTIN_MAIN_MODULE, None)
+        else:
+            sys.modules[BUILTIN_MAIN_MODULE] = original_module
+        commands_package = sys.modules.get(BUILTIN_COMMANDS_PACKAGE)
+        if commands_package:
+            if original_package_main is missing_package_attr:
+                if hasattr(commands_package, "main"):
+                    delattr(commands_package, "main")
+            else:
+                commands_package.main = original_package_main
         star_handlers_registry.clear()
         for handler in original_handlers:
             star_handlers_registry.append(handler)
