@@ -40,18 +40,20 @@ class RateLimiter:
         self.max_per_minute = max_rpm
         self.interval = 60.0 / max_rpm if max_rpm > 0 else 0
         self.last_call_time = 0
+        self._lock = asyncio.Lock()
 
     async def __aenter__(self):
         if self.interval == 0:
             return
 
-        now = time.monotonic()
-        elapsed = now - self.last_call_time
+        async with self._lock:
+            now = time.monotonic()
+            elapsed = now - self.last_call_time
 
-        if elapsed < self.interval:
-            await asyncio.sleep(self.interval - elapsed)
+            if elapsed < self.interval:
+                await asyncio.sleep(self.interval - elapsed)
 
-        self.last_call_time = time.monotonic()
+            self.last_call_time = time.monotonic()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
@@ -133,6 +135,8 @@ class KBHelper:
         self.kb_root_dir = kb_root_dir
         self.chunker = chunker
         self.init_error = None
+        self.init_retry_count = 0
+        self.last_init_retry_at = 0.0
 
         self.kb_dir = Path(self.kb_root_dir) / self.kb.kb_id
         self.kb_medias_dir = Path(self.kb_dir) / "medias" / self.kb.kb_id
@@ -498,10 +502,13 @@ class KBHelper:
 
     async def delete_document(self, doc_id: str) -> None:
         """删除单个文档及其相关数据"""
-        await self.kb_db.delete_document_by_id(
+        deleted = await self.kb_db.delete_document_by_id(
             doc_id=doc_id,
             vec_db=self.vec_db,  # type: ignore
+            kb_id=self.kb.kb_id,
         )
+        if not deleted:
+            raise ValueError(f"无法找到 ID 为 {doc_id} 的文档")
         await self.kb_db.update_kb_stats(
             kb_id=self.kb.kb_id,
             vec_db=self.vec_db,  # type: ignore
@@ -516,6 +523,7 @@ class KBHelper:
         results = await self.kb_db.delete_documents_by_ids(
             doc_ids=doc_ids,
             vec_db=self.vec_db,  # type: ignore
+            kb_id=self.kb.kb_id,
         )
         await self.kb_db.update_kb_stats(
             kb_id=self.kb.kb_id,
@@ -527,7 +535,9 @@ class KBHelper:
     async def delete_chunk(self, chunk_id: str, doc_id: str) -> None:
         """删除单个文本块及其相关数据"""
         vec_db: FaissVecDB = self.vec_db  # type: ignore
-        await vec_db.delete(chunk_id)
+        deleted = await vec_db.delete(chunk_id)
+        if not deleted:
+            raise ValueError(f"无法找到 ID 为 {chunk_id} 的文本块")
         await self.kb_db.update_kb_stats(
             kb_id=self.kb.kb_id,
             vec_db=self.vec_db,  # type: ignore
