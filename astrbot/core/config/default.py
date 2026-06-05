@@ -153,7 +153,7 @@ DEFAULT_CONFIG = {
         "deerflow_agent_runner_provider_id": "",
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
-        "max_agent_step": 30,
+        "max_agent_step": 114514,
         "tool_call_timeout": 120,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
