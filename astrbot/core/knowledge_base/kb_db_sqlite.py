@@ -89,6 +89,13 @@ class KBSQLiteDatabase:
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
+                await self._ensure_column(
+                    session,
+                    table_name="knowledge_bases",
+                    column_name="index_type",
+                    column_sql="index_type TEXT DEFAULT 'flat'",
+                )
+
                 # 创建知识库表索引
                 await session.execute(
                     text(
@@ -167,6 +174,24 @@ class KBSQLiteDatabase:
                 )
 
                 await session.commit()
+
+    async def _ensure_column(
+        self,
+        session: AsyncSession,
+        *,
+        table_name: str,
+        column_name: str,
+        column_sql: str,
+    ) -> None:
+        """Add a column when upgrading an existing SQLite table."""
+        result = await session.execute(text(f"PRAGMA table_xinfo({table_name})"))
+        columns = {row[1] for row in result.fetchall()}
+        if column_name in columns:
+            return
+        logger.info(
+            f"知识库数据库迁移: 为表 {table_name} 添加列 {column_name}",
+        )
+        await session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_sql}"))
 
     async def close(self) -> None:
         """关闭数据库连接"""
@@ -300,41 +325,69 @@ class KBSQLiteDatabase:
 
         return metadata_map
 
-    async def delete_document_by_id(self, doc_id: str, vec_db: "FaissVecDB") -> None:
+    async def delete_document_by_id(
+        self,
+        doc_id: str,
+        vec_db: "FaissVecDB",
+        kb_id: str | None = None,
+    ) -> bool:
         """删除单个文档及其相关数据"""
-        # 在知识库表中删除
-        async with self.get_db() as session, session.begin():
-            # 删除文档记录
-            delete_stmt = delete(KBDocument).where(col(KBDocument.doc_id) == doc_id)
-            await session.execute(delete_stmt)
-            await session.commit()
+        doc = await self.get_document_by_id(doc_id)
+        if not doc or (kb_id is not None and doc.kb_id != kb_id):
+            return False
 
-        # 在 vec db 中删除相关向量
-        await vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
+        metadata_filters = {"kb_doc_id": doc_id}
+        if kb_id is not None:
+            metadata_filters["kb_id"] = kb_id
+
+        # 先删向量库；如果失败，保留 metadata 以便重试/修复。
+        await vec_db.delete_documents(metadata_filters=metadata_filters)
+
+        async with self.get_db() as session, session.begin():
+            delete_stmt = delete(KBDocument).where(col(KBDocument.doc_id) == doc_id)
+            if kb_id is not None:
+                delete_stmt = delete_stmt.where(col(KBDocument.kb_id) == kb_id)
+            await session.execute(delete_stmt)
+            await session.execute(delete(KBMedia).where(col(KBMedia.doc_id) == doc_id))
+
+        return True
 
     async def delete_documents_by_ids(
-        self, doc_ids: list[str], vec_db: "FaissVecDB",
+        self,
+        doc_ids: list[str],
+        vec_db: "FaissVecDB",
+        kb_id: str | None = None,
     ) -> dict[str, bool]:
         """批量删除文档及其向量数据。
 
-        单个文档的 vec_db 删除失败不影响其他文档（best-effort）。
+        先删除向量数据，再删除 metadata；单个文档的 vec_db 删除失败
+        不影响其他文档（best-effort），失败项保留 metadata 以便重试。
         """
         if not doc_ids:
             return {}
 
-        # 批量从知识库表中删除
-        async with self.get_db() as session, session.begin():
-            delete_stmt = delete(KBDocument).where(
-                col(KBDocument.doc_id).in_(doc_ids),
-            )
-            await session.execute(delete_stmt)
+        requested_doc_ids = list(dict.fromkeys(doc_ids))
+        results = dict.fromkeys(requested_doc_ids, False)
 
-        # 并行清理 vec_db（向量 + SQLite 文档存储）
-        async def _delete_one(doc_id: str) -> tuple[str, bool]:
-            try:
-                await vec_db.delete_documents(
-                    metadata_filters={"kb_doc_id": doc_id},
+        candidates = requested_doc_ids
+        if kb_id is not None:
+            async with self.get_db() as session:
+                stmt = select(KBDocument.doc_id).where(
+                    col(KBDocument.doc_id).in_(requested_doc_ids),
+                    col(KBDocument.kb_id) == kb_id,
                 )
+                result = await session.execute(stmt)
+                candidates = [row[0] for row in result.fetchall()]
+
+        if not candidates:
+            return results
+
+        async def _delete_one(doc_id: str) -> tuple[str, bool]:
+            metadata_filters = {"kb_doc_id": doc_id}
+            if kb_id is not None:
+                metadata_filters["kb_id"] = kb_id
+            try:
+                await vec_db.delete_documents(metadata_filters=metadata_filters)
                 return doc_id, True
             except Exception as e:
                 logger.error(
@@ -342,11 +395,26 @@ class KBSQLiteDatabase:
                 )
                 return doc_id, False
 
-        results: dict[str, bool] = {}
-        tasks = [_delete_one(doc_id) for doc_id in doc_ids]
-        vec_results = await asyncio.gather(*tasks)
+        vec_results = await asyncio.gather(
+            *[_delete_one(doc_id) for doc_id in candidates],
+        )
+        successful_doc_ids = []
         for doc_id, success in vec_results:
             results[doc_id] = success
+            if success:
+                successful_doc_ids.append(doc_id)
+
+        if successful_doc_ids:
+            async with self.get_db() as session, session.begin():
+                delete_stmt = delete(KBDocument).where(
+                    col(KBDocument.doc_id).in_(successful_doc_ids),
+                )
+                if kb_id is not None:
+                    delete_stmt = delete_stmt.where(col(KBDocument.kb_id) == kb_id)
+                await session.execute(delete_stmt)
+                await session.execute(
+                    delete(KBMedia).where(col(KBMedia.doc_id).in_(successful_doc_ids)),
+                )
 
         return results
 
