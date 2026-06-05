@@ -297,9 +297,17 @@ class SandboxRegistry:
             return False
         record["controller_session_id"] = session_id
         record["controller_user_id"] = user_id
-        record["lease_expires_at"] = lease_expires_at_from_timeout(
-            ttl, now=current_time
-        )
+        next_lease_expires_at = lease_expires_at_from_timeout(ttl, now=current_time)
+        if controller_session_id == session_id and lease_is_active(
+            controller_session_id, lease_expires_at, now=current_time
+        ):
+            if lease_expires_at is None:
+                next_lease_expires_at = None
+            elif next_lease_expires_at is not None:
+                next_lease_expires_at = max(
+                    float(lease_expires_at), next_lease_expires_at
+                )
+        record["lease_expires_at"] = next_lease_expires_at
         return True
 
     def release_lease(self, sandbox_id: str) -> dict[str, Any] | None:

@@ -1343,6 +1343,24 @@ async def test_manager_renews_current_sandbox_lease_with_requested_ttl(tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_manager_same_session_lease_acquire_does_not_shorten_longer_lease(
+    tmp_path,
+):
+    manager, _provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    renewed = await manager.renew_current_sandbox_lease("session-a", ttl_seconds=7200)
+
+    switched = await manager.switch_current_sandbox_checked(
+        "session-a",
+        created["sandbox_id"],
+        context=FakeContext({"sandbox_lease_timeout": 12}),
+    )
+
+    assert switched["lease_expires_at"] == renewed["lease_expires_at"]
+    assert switched["last_used_at"] >= renewed["last_used_at"]
+
+
+@pytest.mark.asyncio
 async def test_manager_renew_current_sandbox_rejects_missing_current(tmp_path):
     manager, _provider = _manager(tmp_path)
 
