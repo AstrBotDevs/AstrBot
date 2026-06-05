@@ -1965,6 +1965,47 @@ async def test_manager_restore_persistent_sandboxes_times_out_and_keeps_record(
     assert record["status"] == "unknown"
 
 
+@pytest.mark.asyncio
+async def test_manager_restore_persistent_sandboxes_cancellation_restores_previous_status(
+    tmp_path,
+):
+    provider = FailingReconnectProvider()
+    manager, _provider = _manager(tmp_path, provider)
+    restore_started = asyncio.Event()
+
+    async def slow_create_booter(context, session_id, sandbox_id, config):
+        restore_started.set()
+        await asyncio.sleep(3600)
+        return await FakeProvider().create_booter(
+            context, session_id, sandbox_id, config
+        )
+
+    provider.create_booter = slow_create_booter
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    task = asyncio.create_task(manager.restore_persistent_sandboxes(object()))
+    await asyncio.wait_for(restore_started.wait(), timeout=1)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    record = manager.registry.get_sandbox("generic-1")
+    assert record is not None
+    assert record["status"] == "running"
+
+
 def test_manager_reconcile_on_startup_removes_temporary_records(tmp_path):
     manager, _provider = _manager(tmp_path)
     manager.registry.upsert_sandbox(

@@ -1078,6 +1078,15 @@ class SandboxManager:
                         sandbox_id,
                         create_config,
                     )
+                except asyncio.CancelledError:
+                    latest = self.registry.get_sandbox(sandbox_id)
+                    if (
+                        latest is not None
+                        and latest.get("status") == SandboxStatus.RESTORING
+                    ):
+                        self.registry.update_sandbox_status(sandbox_id, previous_status)
+                        await self.save_registry_async()
+                    raise
                 except Exception:
                     latest = self.registry.get_sandbox(sandbox_id)
                     if (
