@@ -11,11 +11,14 @@ import pytest
 
 def _make_storage(dimension: int = 128, path: str = "/tmp/test.index"):
     """Build an EmbeddingStorage instance with a minimal mocked FAISS index."""
+    import asyncio
+
     from astrbot.core.db.vec_db.faiss_impl.embedding_storage import EmbeddingStorage
 
     storage = EmbeddingStorage.__new__(EmbeddingStorage)
     storage.dimension = dimension
     storage.path = path
+    storage._write_lock = asyncio.Lock()
     # Mock FAISS index — just enough to satisfy the method guards
     storage.index = MagicMock()
     storage.index.ntotal = 100
@@ -57,11 +60,15 @@ class TestFaissSaveIndexAsync:
 
     @pytest.mark.asyncio
     async def test_insert_calls_save_index(self):
-        """insert() calls save_index after adding the vector."""
+        """insert() calls _save_index_locked after adding the vector."""
         storage = _make_storage()
         storage.index.add_with_ids = MagicMock()
 
-        with patch.object(storage, "save_index", return_value=None) as mock_save:
+        with patch.object(
+            storage, "_save_index_locked", return_value=None
+        ) as mock_save:
+            import faiss  # noqa: F811
+
             vector = np.random.rand(storage.dimension).astype(np.float32)
             await storage.insert(vector, id=42)
 
@@ -70,11 +77,13 @@ class TestFaissSaveIndexAsync:
 
     @pytest.mark.asyncio
     async def test_insert_batch_calls_save_index(self):
-        """insert_batch() calls save_index after batch-adding vectors."""
+        """insert_batch() calls _save_index_locked after batch-adding vectors."""
         storage = _make_storage()
         storage.index.add_with_ids = MagicMock()
 
-        with patch.object(storage, "save_index", return_value=None) as mock_save:
+        with patch.object(
+            storage, "_save_index_locked", return_value=None
+        ) as mock_save:
             vectors = np.random.rand(10, storage.dimension).astype(np.float32)
             ids = list(range(10))
             await storage.insert_batch(vectors, ids)
@@ -84,11 +93,13 @@ class TestFaissSaveIndexAsync:
 
     @pytest.mark.asyncio
     async def test_delete_calls_save_index(self):
-        """delete() calls save_index after removing vectors."""
+        """delete() calls _save_index_locked after removing vectors."""
         storage = _make_storage()
         storage.index.remove_ids = MagicMock()
 
-        with patch.object(storage, "save_index", return_value=None) as mock_save:
+        with patch.object(
+            storage, "_save_index_locked", return_value=None
+        ) as mock_save:
             await storage.delete([1, 2, 3])
 
         storage.index.remove_ids.assert_called_once()

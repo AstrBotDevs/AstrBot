@@ -10,16 +10,130 @@ import os
 import numpy as np
 
 
+def _safe_normalize_l2(vectors: np.ndarray) -> None:
+    """L2 归一化，对零向量抛出明确错误
+
+    正常的 embedding 模型不应产生零向量。零向量无法归一化（会产生 NaN），
+    说明 embedding provider 返回了异常数据，应当尽早暴露问题。
+    """
+    # 检测全零行
+    if vectors.ndim == 2:
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        zero_count = int((norms < 1e-12).sum())
+        if zero_count > 0:
+            raise ValueError(
+                f"向量归一化失败：检测到 {zero_count} 个零向量。"
+                "Embedding Provider 返回了全零向量，这可能说明 API 密钥无效、"
+                "模型不支持当前输入、或服务端异常。请检查 Embedding Provider 配置。"
+            )
+    elif vectors.ndim == 1:
+        if np.linalg.norm(vectors) < 1e-12:
+            raise ValueError(
+                "向量归一化失败：检测到零向量。"
+                "Embedding Provider 返回了全零向量，这可能说明 API 密钥无效、"
+                "模型不支持当前输入、或服务端异常。请检查 Embedding Provider 配置。"
+            )
+
+    faiss.normalize_L2(vectors)
+
+
 class EmbeddingStorage:
-    def __init__(self, dimension: int, path: str | None = None) -> None:
+    def __init__(
+        self,
+        dimension: int,
+        path: str | None = None,
+        index_type: str = "flat",
+    ) -> None:
         self.dimension = dimension
         self.path = path
         self.index = None
+        self.index_type = index_type  # "flat" | "hnsw"
+        self._write_lock = asyncio.Lock()
         if path and os.path.exists(path):
             self.index = faiss.read_index(path)
+            # 验证加载的索引维度是否匹配
+            loaded_dim = self.index.d
+            if loaded_dim != self.dimension:
+                raise ValueError(
+                    f"索引维度不匹配: 磁盘索引维度={loaded_dim}, "
+                    f"当前 Embedding Provider 维度={self.dimension}。"
+                    f"请确认 Embedding Provider 与已有索引一致，"
+                    f"或删除旧索引后重新创建知识库。"
+                )
+            self._migrate_l2_to_ip_if_needed()
         else:
-            base_index = faiss.IndexFlatL2(dimension)
+            self.index = self._create_index()
+
+    def _create_index(self):
+        """根据 index_type 创建 FAISS 索引"""
+        if self.index_type == "hnsw":
+            # HNSW32 with Inner Product metric for cosine similarity
+            base_index = faiss.index_factory(
+                self.dimension,
+                "HNSW32",
+                faiss.METRIC_INNER_PRODUCT,
+            )
+            return faiss.IndexIDMap(base_index)
+        # 默认: flat (精确搜索)
+        return faiss.IndexIDMap(faiss.IndexFlatIP(self.dimension))
+
+    def _migrate_l2_to_ip_if_needed(self) -> None:
+        """检测并迁移旧版 L2 索引到 IP (余弦相似度)
+
+        旧版使用 IndexFlatL2，新版使用 IndexFlatIP + 归一化向量。
+        迁移过程：reconstruct 所有向量 → L2 归一化 → 重建为 IP 索引。
+        """
+        assert self.index is not None
+        # IndexIDMap 包装了 base index，需要解包检查
+        base_index = (
+            self.index.index if hasattr(self.index, "index") else self.index
+        )
+        if not isinstance(base_index, faiss.IndexFlatL2):
+            return  # 已经是 IP 或其他类型，无需迁移
+
+        import warnings
+
+        ntotal = self.index.ntotal
+        if ntotal == 0:
+            warnings.warn(
+                "检测到空的旧版 L2 索引，将重建为 IP 索引。",
+                stacklevel=2,
+            )
+            base_index = faiss.IndexFlatIP(self.dimension)
             self.index = faiss.IndexIDMap(base_index)
+            return
+
+        warnings.warn(
+            f"检测到旧版 L2 索引 (含 {ntotal} 个向量)，正在自动迁移到 IP 索引..."
+            "这可能需要几秒钟。迁移后旧索引将被覆盖。",
+            stacklevel=2,
+        )
+
+        # 重建所有向量并归一化
+        # 注意: IndexIDMap.reconstruct 在某些 FAISS 构建版本中不可用
+        try:
+            vectors = np.zeros((ntotal, self.dimension), dtype=np.float32)
+            for i in range(ntotal):
+                vectors[i] = self.index.reconstruct(i)
+        except RuntimeError:
+            warnings.warn(
+                "无法从旧索引重建向量（reconstruct 不可用），"
+                "将重建空 IP 索引。请重新上传文档以生成新向量。",
+                stacklevel=2,
+            )
+            self.index = faiss.IndexIDMap(faiss.IndexFlatIP(self.dimension))
+            faiss.write_index(self.index, self.path)
+            return
+
+        _safe_normalize_l2(vectors)
+
+        # 重建为 IP 索引
+        new_index = faiss.IndexIDMap(faiss.IndexFlatIP(self.dimension))
+        new_index.add_with_ids(vectors, np.arange(ntotal, dtype=np.int64))
+
+        self.index = new_index
+        # 立即保存迁移后的索引
+        faiss.write_index(self.index, self.path)
 
     async def insert(self, vector: np.ndarray, id: int) -> None:
         """插入向量
@@ -31,13 +145,16 @@ class EmbeddingStorage:
             ValueError: 如果向量的维度与存储的维度不匹配
 
         """
-        assert self.index is not None, "FAISS index is not initialized."
-        if vector.shape[0] != self.dimension:
-            raise ValueError(
-                f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
-            )
-        self.index.add_with_ids(vector.reshape(1, -1), np.array([id]))
-        await self.save_index()
+        async with self._write_lock:
+            assert self.index is not None, "FAISS index is not initialized."
+            if vector.shape[0] != self.dimension:
+                raise ValueError(
+                    f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
+                )
+            v_2d = vector.reshape(1, -1)
+            _safe_normalize_l2(v_2d)
+            self.index.add_with_ids(v_2d, np.array([id]))
+            await self._save_index_locked()
 
     async def insert_batch(self, vectors: np.ndarray, ids: list[int]) -> None:
         """批量插入向量
@@ -49,13 +166,15 @@ class EmbeddingStorage:
             ValueError: 如果向量的维度与存储的维度不匹配
 
         """
-        assert self.index is not None, "FAISS index is not initialized."
-        if vectors.shape[1] != self.dimension:
-            raise ValueError(
-                f"向量维度不匹配, 期望: {self.dimension}, 实际: {vectors.shape[1]}",
-            )
-        self.index.add_with_ids(vectors, np.array(ids))
-        await self.save_index()
+        async with self._write_lock:
+            assert self.index is not None, "FAISS index is not initialized."
+            if vectors.shape[1] != self.dimension:
+                raise ValueError(
+                    f"向量维度不匹配, 期望: {self.dimension}, 实际: {vectors.shape[1]}",
+                )
+            _safe_normalize_l2(vectors)
+            self.index.add_with_ids(vectors, np.array(ids))
+            await self._save_index_locked()
 
     async def search(self, vector: np.ndarray, k: int) -> tuple:
         """搜索最相似的向量
@@ -68,7 +187,7 @@ class EmbeddingStorage:
 
         """
         assert self.index is not None, "FAISS index is not initialized."
-        faiss.normalize_L2(vector)
+        _safe_normalize_l2(vector)
         distances, indices = self.index.search(vector, k)
         return distances, indices
 
@@ -79,18 +198,25 @@ class EmbeddingStorage:
             ids (list[int]): 要删除的向量ID列表
 
         """
-        assert self.index is not None, "FAISS index is not initialized."
-        id_array = np.array(ids, dtype=np.int64)
-        self.index.remove_ids(id_array)
-        await self.save_index()
+        async with self._write_lock:
+            assert self.index is not None, "FAISS index is not initialized."
+            id_array = np.array(ids, dtype=np.int64)
+            self.index.remove_ids(id_array)
+            await self._save_index_locked()
 
-    async def save_index(self) -> None:
-        """保存索引（在单独线程中执行以避免阻塞事件循环）
+    async def _save_index_locked(self) -> None:
+        """内部方法：在已持有 _write_lock 的情况下保存索引到磁盘。
 
-        Args:
-            path (str): 保存索引的路径
-
+        调用者必须已经获取 _write_lock。
         """
         if self.index is None:
             return
         await asyncio.to_thread(faiss.write_index, self.index, self.path)
+
+    async def save_index(self) -> None:
+        """保存索引（在单独线程中执行以避免阻塞事件循环）
+
+        公共方法，自动获取写锁以确保线程安全。
+        """
+        async with self._write_lock:
+            await self._save_index_locked()
