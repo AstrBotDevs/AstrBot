@@ -74,6 +74,25 @@ class BaseMessageComponent(BaseModel):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
+    def __repr_args__(self):
+        """截断超长 / base64 字段值，避免 repr() 与日志输出被 base64 正文污染。
+
+        覆盖 pydantic 默认 repr，作用于所有消息组件（Image/Record/Video/File 等），
+        因此任何 logger、异常信息中的组件输出都自动安全，无需在调用点单独处理。
+        """
+        max_len = 64
+
+        def truncate(value):
+            if isinstance(value, str):
+                if value.startswith("base64://"):
+                    return f"base64://<{len(value) - 9} chars>"
+                if len(value) > max_len:
+                    return f"{value[:max_len]}...<{len(value)} chars>"
+            return value
+
+        for key, value in super().__repr_args__():
+            yield key, truncate(value)
+
     def toDict(self):
         data = {}
         for k, v in self.__dict__.items():
