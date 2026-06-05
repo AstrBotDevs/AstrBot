@@ -202,6 +202,23 @@ class TestIndexMigration:
             )
 
     @pytest.mark.asyncio
+    async def test_migration_preserves_external_ids(self):
+        faiss = pytest.importorskip("faiss")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index_path = Path(tmpdir) / "index.faiss"
+            old_index = faiss.IndexIDMap(faiss.IndexFlatL2(DIM))
+            vectors = make_random_batch(3)
+            ids = np.array([10, 42, 99], dtype=np.int64)
+            old_index.add_with_ids(vectors, ids)
+            faiss.write_index(old_index, str(index_path))
+
+            storage = EmbeddingStorage(dimension=DIM, path=str(index_path))
+
+            _, result_ids = await storage.search(vectors[1].copy().reshape(1, -1), k=1)
+            assert result_ids[0][0] == 42
+
+    @pytest.mark.asyncio
     async def test_no_crash_on_reload_existing_ip_index(self):
         """重新加载已有的 IP 索引不应报错"""
         with tempfile.TemporaryDirectory() as tmpdir:

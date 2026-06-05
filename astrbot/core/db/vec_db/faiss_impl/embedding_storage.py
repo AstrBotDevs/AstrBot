@@ -81,14 +81,12 @@ class EmbeddingStorage:
         """检测并迁移旧版 L2 索引到 IP (余弦相似度)
 
         旧版使用 IndexFlatL2，新版使用 IndexFlatIP + 归一化向量。
-        迁移过程：reconstruct 所有向量 → L2 归一化 → 重建为 IP 索引。
+        迁移过程：保留原 external ids → reconstruct 所有向量 → L2 归一化 → 重建为 IP 索引。
         """
         assert self.index is not None
         # IndexIDMap 包装了 base index，需要解包检查
-        base_index = (
-            self.index.index if hasattr(self.index, "index") else self.index
-        )
-        if not isinstance(base_index, faiss.IndexFlatL2):
+        base_index = self.index.index if hasattr(self.index, "index") else self.index
+        if getattr(base_index, "metric_type", None) != faiss.METRIC_L2:
             return  # 已经是 IP 或其他类型，无需迁移
 
         import warnings
@@ -112,28 +110,42 @@ class EmbeddingStorage:
         # 重建所有向量并归一化
         # 注意: IndexIDMap.reconstruct 在某些 FAISS 构建版本中不可用
         try:
+            ids = self._get_index_ids()
             vectors = np.zeros((ntotal, self.dimension), dtype=np.float32)
-            for i in range(ntotal):
-                vectors[i] = self.index.reconstruct(i)
-        except RuntimeError:
-            warnings.warn(
-                "无法从旧索引重建向量（reconstruct 不可用），"
-                "将重建空 IP 索引。请重新上传文档以生成新向量。",
-                stacklevel=2,
+            reconstruct_index = (
+                self.index.index if hasattr(self.index, "index") else self.index
             )
-            self.index = faiss.IndexIDMap(faiss.IndexFlatIP(self.dimension))
-            faiss.write_index(self.index, self.path)
-            return
+            for pos in range(ntotal):
+                vectors[pos] = reconstruct_index.reconstruct(pos)
+        except Exception as exc:
+            raise RuntimeError(
+                "无法从旧索引重建向量（reconstruct 不可用），"
+                "已保留旧索引文件未覆盖。请重新上传文档或手动重建知识库索引。"
+            ) from exc
 
         _safe_normalize_l2(vectors)
 
         # 重建为 IP 索引
         new_index = faiss.IndexIDMap(faiss.IndexFlatIP(self.dimension))
-        new_index.add_with_ids(vectors, np.arange(ntotal, dtype=np.int64))
+        new_index.add_with_ids(vectors, ids)
 
         self.index = new_index
         # 立即保存迁移后的索引
         faiss.write_index(self.index, self.path)
+
+    def _get_index_ids(self) -> np.ndarray:
+        assert self.index is not None
+        ntotal = self.index.ntotal
+        id_map = getattr(self.index, "id_map", None)
+        if id_map is None:
+            return np.arange(ntotal, dtype=np.int64)
+
+        ids = faiss.vector_to_array(id_map).astype(np.int64)
+        if len(ids) != ntotal:
+            raise RuntimeError(
+                f"FAISS IDMap 数量异常: ntotal={ntotal}, id_map={len(ids)}",
+            )
+        return ids
 
     async def insert(self, vector: np.ndarray, id: int) -> None:
         """插入向量
