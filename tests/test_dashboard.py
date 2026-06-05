@@ -517,7 +517,7 @@ async def test_config_abconf_clears_unavailable_sandbox_booter_for_display(
 
 
 @pytest.mark.asyncio
-async def test_config_save_clears_unavailable_sandbox_booter(
+async def test_config_save_preserves_unavailable_sandbox_booter(
     app: Quart,
     authenticated_header: dict,
     monkeypatch: pytest.MonkeyPatch,
@@ -547,7 +547,7 @@ async def test_config_save_clears_unavailable_sandbox_booter(
         assert data["status"] == "ok"
         assert (
             core_lifecycle_td.astrbot_config["provider_settings"]["sandbox"]["booter"]
-            == ""
+            == "shipyard"
         )
     finally:
         core_lifecycle_td.astrbot_config.save_config(original_config)

@@ -62,8 +62,6 @@ def test_idle_cleanup_at_from_record_uses_last_used_time():
         is None
     )
     assert (
-        idle_cleanup_at_from_record(
-            last_used_at=100.0, idle_timeout=30, now=100.0
-        )
+        idle_cleanup_at_from_record(last_used_at=100.0, idle_timeout=30, now=100.0)
         == 130.0
     )

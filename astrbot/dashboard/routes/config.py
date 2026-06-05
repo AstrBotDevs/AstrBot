@@ -1107,8 +1107,6 @@ class ConfigRoute(Route):
                     config, ("dashboard", "totp", "recovery_code_hash"), ""
                 )
 
-            _normalize_unavailable_sandbox_booter(config)
-
             set_pending_totp_secret(None)
             await self._save_astrbot_configs(config, conf_id)
             if protected_2fa_changed:

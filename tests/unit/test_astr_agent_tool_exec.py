@@ -334,6 +334,17 @@ async def test_build_handoff_toolset_uses_scoped_tool_manager_for_all_tools():
         FunctionToolExecutor._runtime_computer_tools_cache.clear()
 
 
+def test_clear_runtime_computer_tools_cache_provider_id_clears_all_entries():
+    FunctionToolExecutor._runtime_computer_tools_cache = {
+        (1, "sandbox", ""): {},
+        (2, "local", "other"): {},
+    }
+
+    FunctionToolExecutor.clear_runtime_computer_tools_cache("generic")
+
+    assert FunctionToolExecutor._runtime_computer_tools_cache == {}
+
+
 @pytest.mark.asyncio
 async def test_background_wake_preserves_computer_runtime_config(
     monkeypatch: pytest.MonkeyPatch,
