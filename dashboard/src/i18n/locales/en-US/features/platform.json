@@ -64,6 +64,12 @@
     "editMode": "Edit",
     "noRouteRules": "No route rules for this platform. The default config file will be used.",
     "sessionIdPlaceholder": "Session ID or *",
+    "routeSource": {
+      "selectPlaceholder": "Select session source",
+      "noData": "No unified message source for this bot is available yet. It will appear here after this bot receives at least one message from the corresponding messaging platform.",
+      "switchToKnown": "Switch to existing source selection",
+      "switchToManual": "Switch to manual input"
+    },
     "allSessions": "All sessions",
     "configMissing": "Config file not found",
     "routeHint": "When delivering messages, the first matching config file from top to bottom is used based on session source. Use * to match all. Use /sid to get the session ID. If none match, the default config file is used.",
@@ -188,4 +194,4 @@
     "traceback": "Traceback",
     "close": "Close"
   }
-} 
+}

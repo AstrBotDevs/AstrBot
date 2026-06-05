@@ -14,6 +14,7 @@ The following commands are shipped with AstrBot and loaded by default:
 
 - `/help`: View currently enabled commands and AstrBot version information.
 - `/sid`: View current message source information, including UMO, user ID, platform ID, message type, and session ID. This is commonly used when configuring admins, allowlists, or routing rules.
+- `/name`: Set a display alias for the current UMO, which means one concrete group or private-chat message source on a platform, so it is easier to recognize in WebUI. This command requires admin permission.
 - `/reset`: Reset the current conversation's LLM context.
 - `/stop`: Stop Agent tasks currently running in the current session.
 - `/new`: Create and switch to a new conversation.
@@ -46,6 +47,27 @@ Common uses:
 - Add an admin: run `/sid` to get the `UID`, then add it in WebUI under `Config -> Other Config -> Admin ID`.
 - Configure allowlists: use `UMO` or group ID to control which sessions can use the bot.
 - Configure routing rules: use `UMO` to distinguish different platforms, groups, or private chats.
+
+### `/name`
+
+`/name` sets a human-readable display alias for the current UMO. UMO stands for Unified Message Origin. It identifies one concrete message source in the form `platform ID:message type:session ID`, such as a QQ group, a Telegram group, or a private chat on a specific platform.
+
+Raw UMOs are often long and are not always easy to recognize at a glance. After setting `/name`, AstrBot shows this alias first in WebUI UMO lists, session source selectors, cron delivery targets, conversation data, and other places where administrators need to identify or select a target session. This reduces the chance of choosing the wrong source when configuring routing rules, cron delivery targets, or per-session rules.
+
+`/name` also records the readable auto name provided by the current platform when available, such as a group name in group chats or a sender nickname/ID in private chats. This lets WebUI show a readable name even when no manual alias has been set.
+
+Usage:
+
+- `/name <alias>`: Set or update the alias for the current UMO. This command can be used repeatedly; the latest value overwrites the previous alias.
+- `/name`: With no argument, it does not modify the alias. It only shows usage, the current UMO, the current auto name, and the saved alias.
+
+Display rules:
+
+- If both alias and auto name exist, AstrBot displays `alias (auto name)`.
+- If only the auto name exists, AstrBot displays the auto name.
+- If neither exists, AstrBot displays the raw UMO.
+
+`/name` requires admin permission.
 
 ### `/reset`
 
@@ -105,6 +127,6 @@ Install or enable the `builtin_commands_extension` plugin if you need these exte
 
 ## Permission Notes
 
-Some commands require AstrBot admin permission, such as `/dashboard_update`, `/op`, `/deop`, `/provider`, `/model`, and `/persona`.
+Some commands require AstrBot admin permission, such as `/dashboard_update`, `/name`, `/op`, `/deop`, `/provider`, `/model`, and `/persona`.
 
 You can use `/sid` to get a user ID, then add it in WebUI under `Config -> Other Config -> Admin ID`.

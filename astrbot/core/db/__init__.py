@@ -27,6 +27,7 @@ from astrbot.core.db.po import (
     ProviderStat,
     SessionProjectRelation,
     Stats,
+    UmoAlias,
     WebChatThread,
 )
 
@@ -830,6 +831,31 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def delete_platform_session(self, session_id: str) -> None:
         """Delete a Platform session by its ID."""
+        ...
+
+    # ====
+    # UMO Alias Management
+    # ====
+
+    @abc.abstractmethod
+    async def upsert_umo_alias(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str | None,
+        user_alias: str | None,
+    ) -> UmoAlias:
+        """Create or update the display alias metadata for a UMO."""
+        ...
+
+    @abc.abstractmethod
+    async def get_umo_alias(self, umo: str) -> UmoAlias | None:
+        """Get alias metadata for one UMO."""
+        ...
+
+    @abc.abstractmethod
+    async def get_umo_aliases(self, umos: list[str] | None = None) -> list[UmoAlias]:
+        """Get alias metadata, optionally restricted to the given UMO list."""
         ...
 
     # ====
