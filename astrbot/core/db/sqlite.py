@@ -360,6 +360,7 @@ class SQLiteDatabase(BaseDatabase):
             kwargs["created_at"] = created_at
         if updated_at:
             kwargs["updated_at"] = updated_at
+
         async def _op(session: AsyncSession) -> ConversationV2:
             new_conversation = ConversationV2(
                 user_id=user_id,
@@ -540,6 +541,7 @@ class SQLiteDatabase(BaseDatabase):
         llm_checkpoint_id=None,
     ):
         """Insert a new platform message history record."""
+
         async def _op(session: AsyncSession) -> PlatformMessageHistory:
             new_history = PlatformMessageHistory(
                 platform_id=platform_id,
