@@ -17,6 +17,20 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from ..utils import generate_tsne_visualization
 from .route import Response, Route, RouteContext
 
+ALLOWED_UPLOAD_EXTENSIONS = {
+    "adoc",
+    "docx",
+    "epub",
+    "md",
+    "markdown",
+    "pdf",
+    "rst",
+    "txt",
+    "xls",
+    "xlsx",
+}
+MAX_UPLOAD_FILE_SIZE = 128 * 1024 * 1024
+
 
 class KnowledgeBaseRoute(Route):
     """知识库管理路由
@@ -150,6 +164,85 @@ class KnowledgeBaseRoute(Route):
         if message.startswith(f"{file_name}:"):
             return message
         return f"{file_name}: {message}"
+
+    @staticmethod
+    def _coerce_optional_int(value: Any, field_name: str) -> int | None:
+        if value in (None, ""):
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"{field_name} 必须是整数") from e
+
+    @staticmethod
+    def _validate_chunk_options(
+        *,
+        chunk_size: int | None,
+        chunk_overlap: int | None,
+    ) -> None:
+        if chunk_size is not None and chunk_size <= 0:
+            raise ValueError("chunk_size 必须大于 0")
+        if chunk_overlap is not None and chunk_overlap < 0:
+            raise ValueError("chunk_overlap 不能为负数")
+        if (
+            chunk_size is not None
+            and chunk_overlap is not None
+            and chunk_overlap >= chunk_size
+        ):
+            raise ValueError("chunk_overlap 必须小于 chunk_size")
+
+    @staticmethod
+    def _validate_positive_int(value: int | None, field_name: str) -> None:
+        if value is not None and value <= 0:
+            raise ValueError(f"{field_name} 必须大于 0")
+
+    @classmethod
+    def _validate_kb_options(
+        cls,
+        *,
+        chunk_size: int | None,
+        chunk_overlap: int | None,
+        top_k_dense: int | None,
+        top_k_sparse: int | None,
+        top_m_final: int | None,
+        index_type: str | None,
+    ) -> None:
+        cls._validate_chunk_options(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+        cls._validate_positive_int(top_k_dense, "top_k_dense")
+        cls._validate_positive_int(top_k_sparse, "top_k_sparse")
+        cls._validate_positive_int(top_m_final, "top_m_final")
+        if index_type is not None and index_type not in {"flat", "hnsw"}:
+            raise ValueError("index_type 必须是 flat 或 hnsw")
+
+    @classmethod
+    def _validate_upload_options(
+        cls,
+        *,
+        chunk_size: int,
+        chunk_overlap: int,
+        batch_size: int,
+        tasks_limit: int,
+        max_retries: int,
+    ) -> None:
+        cls._validate_chunk_options(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+        cls._validate_positive_int(batch_size, "batch_size")
+        cls._validate_positive_int(tasks_limit, "tasks_limit")
+        if max_retries < 0:
+            raise ValueError("max_retries 不能为负数")
+
+    @staticmethod
+    def _validate_upload_file(file_name: str, file_size: int) -> None:
+        file_type = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+        if file_type not in ALLOWED_UPLOAD_EXTENSIONS:
+            raise ValueError(f"不支持的文件类型: {file_name}")
+        if file_size > MAX_UPLOAD_FILE_SIZE:
+            raise ValueError(f"文件超过 128MB 限制: {file_name}")
 
     async def _background_upload_task(
         self,
@@ -395,11 +488,32 @@ class KnowledgeBaseRoute(Route):
             emoji = data.get("emoji")
             embedding_provider_id = data.get("embedding_provider_id")
             rerank_provider_id = data.get("rerank_provider_id")
-            chunk_size = data.get("chunk_size")
-            chunk_overlap = data.get("chunk_overlap")
-            top_k_dense = data.get("top_k_dense")
-            top_k_sparse = data.get("top_k_sparse")
-            top_m_final = data.get("top_m_final")
+            chunk_size = self._coerce_optional_int(data.get("chunk_size"), "chunk_size")
+            chunk_overlap = self._coerce_optional_int(
+                data.get("chunk_overlap"),
+                "chunk_overlap",
+            )
+            top_k_dense = self._coerce_optional_int(
+                data.get("top_k_dense"),
+                "top_k_dense",
+            )
+            top_k_sparse = self._coerce_optional_int(
+                data.get("top_k_sparse"),
+                "top_k_sparse",
+            )
+            top_m_final = self._coerce_optional_int(
+                data.get("top_m_final"),
+                "top_m_final",
+            )
+            index_type = data.get("index_type")
+            self._validate_kb_options(
+                chunk_size=chunk_size if chunk_size is not None else 512,
+                chunk_overlap=chunk_overlap if chunk_overlap is not None else 50,
+                top_k_dense=top_k_dense if top_k_dense is not None else 50,
+                top_k_sparse=top_k_sparse if top_k_sparse is not None else 50,
+                top_m_final=top_m_final if top_m_final is not None else 5,
+                index_type=index_type if index_type is not None else "flat",
+            )
 
             # pre-check embedding dim
             if not embedding_provider_id:
@@ -454,6 +568,7 @@ class KnowledgeBaseRoute(Route):
                 top_k_dense=top_k_dense,
                 top_k_sparse=top_k_sparse,
                 top_m_final=top_m_final,
+                index_type=index_type,
             )
             kb = kb_helper.kb
 
@@ -540,12 +655,48 @@ class KnowledgeBaseRoute(Route):
             rerank_provider_id = (
                 data.get("rerank_provider_id") if rerank_provider_provided else None
             )
-            chunk_size = data.get("chunk_size")
-            chunk_overlap = data.get("chunk_overlap")
-            top_k_dense = data.get("top_k_dense")
-            top_k_sparse = data.get("top_k_sparse")
-            top_m_final = data.get("top_m_final")
+            chunk_size = self._coerce_optional_int(data.get("chunk_size"), "chunk_size")
+            chunk_overlap = self._coerce_optional_int(
+                data.get("chunk_overlap"),
+                "chunk_overlap",
+            )
+            top_k_dense = self._coerce_optional_int(
+                data.get("top_k_dense"),
+                "top_k_dense",
+            )
+            top_k_sparse = self._coerce_optional_int(
+                data.get("top_k_sparse"),
+                "top_k_sparse",
+            )
+            top_m_final = self._coerce_optional_int(
+                data.get("top_m_final"),
+                "top_m_final",
+            )
             index_type = data.get("index_type")
+            kb_helper = await kb_manager.get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+            current_kb = kb_helper.kb
+            self._validate_kb_options(
+                chunk_size=chunk_size
+                if chunk_size is not None
+                else current_kb.chunk_size,
+                chunk_overlap=chunk_overlap
+                if chunk_overlap is not None
+                else current_kb.chunk_overlap,
+                top_k_dense=top_k_dense
+                if top_k_dense is not None
+                else current_kb.top_k_dense,
+                top_k_sparse=top_k_sparse
+                if top_k_sparse is not None
+                else current_kb.top_k_sparse,
+                top_m_final=top_m_final
+                if top_m_final is not None
+                else current_kb.top_m_final,
+                index_type=index_type
+                if index_type is not None
+                else current_kb.index_type,
+            )
 
             kb_helper = await kb_manager.update_kb(
                 kb_id=kb_id,
@@ -660,19 +811,32 @@ class KnowledgeBaseRoute(Route):
             if not kb_helper:
                 return Response().error("知识库不存在").__dict__
 
-            page = request.args.get("page", 1, type=int)
-            page_size = request.args.get("page_size", 100, type=int)
+            page = max(request.args.get("page", 1, type=int), 1)
+            page_size = max(request.args.get("page_size", 100, type=int), 1)
+            search = (request.args.get("search") or "").strip() or None
 
             offset = (page - 1) * page_size
             limit = page_size
 
-            doc_list = await kb_helper.list_documents(offset=offset, limit=limit)
+            doc_list = await kb_helper.list_documents(
+                offset=offset,
+                limit=limit,
+                search=search,
+            )
+            total = await kb_helper.count_documents(search=search)
 
             doc_list = [doc.model_dump() for doc in doc_list]
 
             return (
                 Response()
-                .ok({"items": doc_list, "page": page, "page_size": page_size})
+                .ok(
+                    {
+                        "items": doc_list,
+                        "page": page,
+                        "page_size": page_size,
+                        "total": total,
+                    },
+                )
                 .__dict__
             )
 
@@ -724,11 +888,38 @@ class KnowledgeBaseRoute(Route):
             files = await request.files
 
             kb_id = form_data.get("kb_id")
-            chunk_size = int(form_data.get("chunk_size", 512))
-            chunk_overlap = int(form_data.get("chunk_overlap", 50))
-            batch_size = int(form_data.get("batch_size", 32))
-            tasks_limit = int(form_data.get("tasks_limit", 3))
-            max_retries = int(form_data.get("max_retries", 3))
+            chunk_size = self._coerce_optional_int(
+                form_data.get("chunk_size"),
+                "chunk_size",
+            )
+            chunk_overlap = self._coerce_optional_int(
+                form_data.get("chunk_overlap"),
+                "chunk_overlap",
+            )
+            batch_size = self._coerce_optional_int(
+                form_data.get("batch_size"),
+                "batch_size",
+            )
+            tasks_limit = self._coerce_optional_int(
+                form_data.get("tasks_limit"),
+                "tasks_limit",
+            )
+            max_retries = self._coerce_optional_int(
+                form_data.get("max_retries"),
+                "max_retries",
+            )
+            chunk_size = chunk_size if chunk_size is not None else 512
+            chunk_overlap = chunk_overlap if chunk_overlap is not None else 50
+            batch_size = batch_size if batch_size is not None else 32
+            tasks_limit = tasks_limit if tasks_limit is not None else 3
+            max_retries = max_retries if max_retries is not None else 3
+            self._validate_upload_options(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+            )
             if not kb_id:
                 return Response().error("缺少参数 kb_id").__dict__
 
@@ -767,6 +958,7 @@ class KnowledgeBaseRoute(Route):
                     file_type = (
                         file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
                     )
+                    self._validate_upload_file(file_name, len(file_content))
 
                     files_to_upload.append(
                         {
@@ -843,9 +1035,16 @@ class KnowledgeBaseRoute(Route):
             ):
                 raise ValueError("chunks 必须是非空字符串列表")
 
-        batch_size = data.get("batch_size", 32)
-        tasks_limit = data.get("tasks_limit", 3)
-        max_retries = data.get("max_retries", 3)
+        batch_size = self._coerce_optional_int(data.get("batch_size"), "batch_size")
+        tasks_limit = self._coerce_optional_int(data.get("tasks_limit"), "tasks_limit")
+        max_retries = self._coerce_optional_int(data.get("max_retries"), "max_retries")
+        batch_size = batch_size if batch_size is not None else 32
+        tasks_limit = tasks_limit if tasks_limit is not None else 3
+        max_retries = max_retries if max_retries is not None else 3
+        self._validate_positive_int(batch_size, "batch_size")
+        self._validate_positive_int(tasks_limit, "tasks_limit")
+        if max_retries < 0:
+            raise ValueError("max_retries 不能为负数")
         return kb_id, documents, batch_size, tasks_limit, max_retries
 
     async def import_documents(self):
@@ -1175,19 +1374,27 @@ class KnowledgeBaseRoute(Route):
             data = await request.json
 
             query = data.get("query")
+            kb_ids = data.get("kb_ids")
             kb_names = data.get("kb_names")
             debug = data.get("debug", False)
 
             if not query:
                 return Response().error("缺少参数 query").__dict__
-            if not kb_names or not isinstance(kb_names, list):
-                return Response().error("缺少参数 kb_names 或格式错误").__dict__
+            if kb_ids is not None and not isinstance(kb_ids, list):
+                return Response().error("参数 kb_ids 格式错误").__dict__
+            if kb_names is not None and not isinstance(kb_names, list):
+                return Response().error("参数 kb_names 格式错误").__dict__
+            if not kb_ids and not kb_names:
+                return Response().error("缺少参数 kb_ids 或 kb_names").__dict__
 
-            top_k = data.get("top_k", 5)
+            top_k = self._coerce_optional_int(data.get("top_k", 5), "top_k")
+            top_k = top_k if top_k is not None else 5
+            self._validate_positive_int(top_k, "top_k")
 
             results = await kb_manager.retrieve(
                 query=query,
                 kb_names=kb_names,
+                kb_ids=kb_ids,
                 top_m_final=top_k,
             )
             result_list = []
@@ -1203,9 +1410,15 @@ class KnowledgeBaseRoute(Route):
             # Debug 模式：生成 t-SNE 可视化
             if debug:
                 try:
+                    visualization_kb_names = kb_names
+                    if not visualization_kb_names and kb_ids:
+                        visualization_kb_names = []
+                        for kb_id in kb_ids:
+                            if kb_helper := await kb_manager.get_kb(kb_id):
+                                visualization_kb_names.append(kb_helper.kb.kb_name)
                     img_base64 = await generate_tsne_visualization(
                         query,
-                        kb_names,
+                        visualization_kb_names or [],
                         kb_manager,
                     )
                     if img_base64:
@@ -1251,11 +1464,32 @@ class KnowledgeBaseRoute(Route):
             if not url:
                 return Response().error("缺少参数 url").__dict__
 
-            chunk_size = data.get("chunk_size", 512)
-            chunk_overlap = data.get("chunk_overlap", 50)
-            batch_size = data.get("batch_size", 32)
-            tasks_limit = data.get("tasks_limit", 3)
-            max_retries = data.get("max_retries", 3)
+            chunk_size = self._coerce_optional_int(data.get("chunk_size"), "chunk_size")
+            chunk_overlap = self._coerce_optional_int(
+                data.get("chunk_overlap"),
+                "chunk_overlap",
+            )
+            batch_size = self._coerce_optional_int(data.get("batch_size"), "batch_size")
+            tasks_limit = self._coerce_optional_int(
+                data.get("tasks_limit"),
+                "tasks_limit",
+            )
+            max_retries = self._coerce_optional_int(
+                data.get("max_retries"),
+                "max_retries",
+            )
+            chunk_size = chunk_size if chunk_size is not None else 512
+            chunk_overlap = chunk_overlap if chunk_overlap is not None else 50
+            batch_size = batch_size if batch_size is not None else 32
+            tasks_limit = tasks_limit if tasks_limit is not None else 3
+            max_retries = max_retries if max_retries is not None else 3
+            self._validate_upload_options(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+            )
             enable_cleaning = data.get("enable_cleaning", False)
             cleaning_provider_id = data.get("cleaning_provider_id")
 
