@@ -1,7 +1,7 @@
 <script setup>
 import axios from "axios";
 import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -9,7 +9,6 @@ import { useCustomizerStore } from "@/stores/customizer";
 const BRIDGE_CHANNEL = "astrbot-plugin-page";
 
 const route = useRoute();
-const router = useRouter();
 const { tm } = useModuleI18n("features/extension");
 const {
   locale,
@@ -46,14 +45,6 @@ const toPostMessageData = (value, fallback = null) => {
   } catch {
     return fallback;
   }
-};
-
-const goBack = () => {
-  if (window.history.length > 1) {
-    router.back();
-    return;
-  }
-  router.push("/extension#installed");
 };
 
 const cleanupSSEConnections = () => {
@@ -469,66 +460,49 @@ watch(() => customizer.uiTheme, () => {
 
 <template>
   <div class="plugin-page-page">
-    <div class="d-flex align-center flex-wrap mb-4" style="gap: 12px">
-      <v-btn
-        variant="tonal"
-        color="primary"
-        prepend-icon="mdi-arrow-left"
-        @click="goBack"
-      >
-        {{ tm("buttons.back") }}
-      </v-btn>
-
-      <div>
-        <div class="text-h2 mb-1">
-          {{ localizedPageTitle }}
-        </div>
-      </div>
+    <div v-if="loading" class="plugin-page-state">
+      <v-progress-circular indeterminate color="primary" />
+      <span>{{ tm("status.loading") }}</span>
     </div>
 
-    <v-card class="plugin-page-card" elevation="0">
-      <v-card-text class="pa-0">
-        <div v-if="loading" class="plugin-page-state">
-          <v-progress-circular indeterminate color="primary" />
-          <span>{{ tm("status.loading") }}</span>
-        </div>
+    <div v-else-if="errorMessage" class="plugin-page-state">
+      <v-alert type="error" variant="tonal" class="ma-6">
+        {{ errorMessage }}
+      </v-alert>
+    </div>
 
-        <div v-else-if="errorMessage" class="pa-6">
-          <v-alert type="error" variant="tonal">
-            {{ errorMessage }}
-          </v-alert>
-        </div>
-
-        <iframe
-          v-else
-          ref="iframeRef"
-          :src="iframeSrc"
-          class="plugin-page-frame"
-          referrerpolicy="no-referrer"
-          sandbox="allow-scripts allow-forms allow-downloads"
-          @load="handleIframeLoad"
-        ></iframe>
-      </v-card-text>
-    </v-card>
+    <iframe
+      v-else
+      ref="iframeRef"
+      :src="iframeSrc"
+      class="plugin-page-frame"
+      referrerpolicy="no-referrer"
+      sandbox="allow-scripts allow-forms allow-downloads"
+      @load="handleIframeLoad"
+    ></iframe>
   </div>
 </template>
 
 <style scoped>
-.plugin-page-card {
-  background-color: rgb(var(--v-theme-surface));
-  border-radius: 16px;
-  overflow: hidden;
+.plugin-page-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .plugin-page-frame {
   width: 100%;
-  min-height: calc(100vh - 140px);
+  flex: 1;
   border: 0;
   background: transparent;
 }
 
 .plugin-page-state {
-  min-height: calc(100vh - 140px);
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;

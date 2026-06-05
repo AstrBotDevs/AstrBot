@@ -12,7 +12,10 @@ export interface menu {
   disabled?: boolean;
   type?: string;
   subCaption?: string;
+  isRawTitle?: boolean;
 }
+
+export const MORE_GROUP_KEY = 'core.navigation.groups.more';
 
 // 注意：这个文件现在包含i18n键值而不是直接的文本
 // 在组件中使用时需要通过t()函数进行翻译

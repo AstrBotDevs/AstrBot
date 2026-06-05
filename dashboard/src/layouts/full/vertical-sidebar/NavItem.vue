@@ -24,6 +24,12 @@ const isItemActive = computed(() => {
   }
   return route.path === props.item.to;
 });
+
+const itemTitle = computed(() => {
+  if (!props.item?.title) return '';
+  return props.item.isRawTitle ? props.item.title : t(props.item.title);
+});
+
 </script>
 
 <template>
@@ -32,7 +38,7 @@ const isItemActive = computed(() => {
       <v-list-item v-bind="props" rounded class="mb-1" color="secondary" :prepend-icon="item.icon"
         :style="{ '--indent-padding': '0px' }">
         <v-list-item-title style="font-size: 14px; font-weight: 500; line-height: 1.2; word-break: break-word;">
-          {{ t(item.title) }}
+          {{ itemTitle }}
         </v-list-item-title>
       </v-list-item>
     </template>
@@ -49,7 +55,7 @@ const isItemActive = computed(() => {
     <template v-slot:prepend>
       <v-icon v-if="item.icon" :size="item.iconSize" class="hide-menu" :icon="item.icon"></v-icon>
     </template>
-    <v-list-item-title style="font-size: 14px;">{{ t(item.title) }}</v-list-item-title>
+    <v-list-item-title style="font-size: 14px;">{{ itemTitle }}</v-list-item-title>
     <v-list-item-subtitle v-if="item.subCaption" class="text-caption mt-n1 hide-menu">
       {{ item.subCaption }}
     </v-list-item-subtitle>
