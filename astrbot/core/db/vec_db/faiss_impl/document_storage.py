@@ -1,12 +1,16 @@
 import json
 import os
+from asyncio import Lock
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import Column, Text, bindparam
+from sqlalchemy.dialects import sqlite
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
+from sqlalchemy.schema import CreateTable
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
 
 from astrbot.core import logger
@@ -55,61 +59,98 @@ class DocumentStorage:
         self._fts_contentless_delete = False
         self._fts_index_ready = False
         self._stopwords: set[str] | None = None
+        self._fts_rebuild_lock = Lock()
 
     async def initialize(self) -> None:
         """Initialize the SQLite database and create the documents table if it doesn't exist."""
         await self.connect()
         async with self.engine.begin() as conn:  # type: ignore
-            # Create tables using SQLModel
-            await conn.run_sync(BaseDocModel.metadata.create_all)
-
-            try:
-                await conn.execute(
-                    text(
-                        "ALTER TABLE documents ADD COLUMN kb_doc_id TEXT "
-                        "GENERATED ALWAYS AS (json_extract(metadata, '$.kb_doc_id')) STORED",
-                    ),
-                )
-                await conn.execute(
-                    text(
-                        "ALTER TABLE documents ADD COLUMN user_id TEXT "
-                        "GENERATED ALWAYS AS (json_extract(metadata, '$.user_id')) STORED",
-                    ),
-                )
-                await conn.execute(
-                    text(
-                        "ALTER TABLE documents ADD COLUMN kb_id TEXT "
-                        "GENERATED ALWAYS AS (json_extract(metadata, '$.kb_id')) STORED",
-                    ),
-                )
-
-                # Create indexes
-                await conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_documents_kb_doc_id ON documents(kb_doc_id)",
-                    ),
-                )
-                await conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)",
-                    ),
-                )
-                await conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_documents_kb_id ON documents(kb_id)",
-                    ),
-                )
-            except BaseException:
-                pass
-
-            await conn.execute(
-                text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_doc_id_unique ON documents(doc_id)",
-                ),
-            )
+            await self._ensure_documents_table(conn)
+            await self._ensure_generated_columns(conn)
 
             await self._initialize_fts5(conn)
             await conn.commit()
+
+    async def _table_columns(self, executor, table_name: str) -> set[str]:
+        result = await executor.execute(text(f"PRAGMA table_xinfo({table_name})"))
+        return {row[1] for row in result.fetchall()}
+
+    async def _ensure_generated_columns(self, executor) -> None:
+        generated_columns = {
+            "kb_doc_id": "json_extract(metadata, '$.kb_doc_id')",
+            "user_id": "json_extract(metadata, '$.user_id')",
+            "kb_id": "json_extract(metadata, '$.kb_id')",
+        }
+        columns = await self._table_columns(executor, "documents")
+        for column_name, expression in generated_columns.items():
+            if column_name in columns:
+                continue
+            await executor.execute(
+                text(
+                    f"ALTER TABLE documents ADD COLUMN {column_name} TEXT "
+                    f"GENERATED ALWAYS AS ({expression}) VIRTUAL",
+                ),
+            )
+            columns.add(column_name)
+
+        index_statements = [
+            "CREATE INDEX IF NOT EXISTS idx_documents_kb_doc_id "
+            "ON documents(kb_doc_id)",
+            "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_documents_kb_id ON documents(kb_id)",
+        ]
+        for statement in index_statements:
+            await executor.execute(text(statement))
+
+    async def _ensure_documents_table(self, executor) -> None:
+        """Create the document table from the SQLModel definition."""
+        result = await executor.execute(
+            text(
+                """
+                SELECT 1
+                FROM sqlite_master
+                WHERE type='table' AND name=:table_name
+                LIMIT 1
+                """,
+            ),
+            {"table_name": Document.__tablename__},
+        )
+        if result.scalar_one_or_none() is not None:
+            await self._ensure_doc_id_unique_index(executor)
+            return
+
+        create_table = CreateTable(Document.__table__, if_not_exists=True)  # type: ignore[attr-defined]
+
+        await executor.execute(
+            text(str(create_table.compile(dialect=sqlite.dialect())))
+        )
+        await self._ensure_doc_id_unique_index(executor)
+
+    async def _ensure_doc_id_unique_index(self, executor) -> None:
+        duplicate_result = await executor.execute(
+            text(
+                """
+                SELECT doc_id
+                FROM documents
+                GROUP BY doc_id
+                HAVING COUNT(*) > 1
+                LIMIT 1
+                """,
+            ),
+        )
+        if duplicate_result.scalar_one_or_none() is not None:
+            logger.warning(
+                "Skipping documents.doc_id unique index migration because duplicate "
+                f"doc_id values already exist in {self.db_path}.",
+            )
+            return
+
+        await executor.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "idx_documents_doc_id_unique ON documents(doc_id)",
+            ),
+        )
 
     async def _initialize_fts5(self, executor) -> None:
         try:
@@ -214,6 +255,7 @@ class DocumentStorage:
                 self.DATABASE_URL,
                 echo=False,
                 future=True,
+                poolclass=NullPool,
             )
             self.async_session_maker = sessionmaker(
                 self.engine,  # type: ignore
@@ -266,17 +308,11 @@ class DocumentStorage:
 
         async with self.get_session() as session:
             query = select(Document)
-
-            for key, val in metadata_filters.items():
-                # kb_id 和 kb_doc_id 有生成列和索引，直接用列名过滤避免全表扫描
-                if key in ("kb_id", "kb_doc_id"):
-                    query = query.where(
-                        text(f"{key} = :filter_{key}"),
-                    ).params(**{f"filter_{key}": val})
-                else:
-                    query = query.where(
-                        text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
-                    ).params(**{f"filter_{key}": val})
+            query = await self._apply_metadata_filters(
+                session,
+                query,
+                metadata_filters,
+            )
 
             if ids is not None and len(ids) > 0:
                 valid_ids = [int(i) for i in ids if i != -1]
@@ -438,11 +474,11 @@ class DocumentStorage:
 
         async with self.get_session() as session, session.begin():
             query = select(Document)
-
-            for key, val in metadata_filters.items():
-                query = query.where(
-                    text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
-                ).params(**{f"filter_{key}": val})
+            query = await self._apply_metadata_filters(
+                session,
+                query,
+                metadata_filters,
+            )
 
             result = await session.execute(query)
             documents = result.scalars().all()
@@ -469,20 +505,33 @@ class DocumentStorage:
             query = select(func.count(col(Document.id)))
 
             if metadata_filters:
-                for key, val in metadata_filters.items():
-                    # 使用生成列避免全表扫描
-                    if key in ("kb_id", "kb_doc_id"):
-                        query = query.where(
-                            text(f"{key} = :filter_{key}"),
-                        ).params(**{f"filter_{key}": val})
-                    else:
-                        query = query.where(
-                            text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
-                        ).params(**{f"filter_{key}": val})
+                query = await self._apply_metadata_filters(
+                    session,
+                    query,
+                    metadata_filters,
+                )
 
             result = await session.execute(query)
             count = result.scalar_one_or_none()
             return count if count is not None else 0
+
+    async def _apply_metadata_filters(
+        self,
+        session: AsyncSession,
+        query,
+        metadata_filters: dict,
+    ):
+        columns = await self._table_columns(session, "documents")
+        for key, val in metadata_filters.items():
+            if key in {"kb_id", "kb_doc_id", "user_id"} and key in columns:
+                query = query.where(
+                    text(f"{key} = :filter_{key}"),
+                ).params(**{f"filter_{key}": val})
+            else:
+                query = query.where(
+                    text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
+                ).params(**{f"filter_{key}": val})
+        return query
 
     async def ensure_fts_index(self) -> bool:
         """Ensure the FTS5 sparse index exists and matches the documents table."""
@@ -493,22 +542,30 @@ class DocumentStorage:
 
         assert self.engine is not None, "Database connection is not initialized."
 
-        async with self.get_session() as session:
-            doc_count = await self._count_documents_in_session(session)
-            fts_count = await self._count_fts_rows(session)
-            if doc_count == fts_count:
-                self._fts_index_ready = True
+        async with self._fts_rebuild_lock:
+            if self._fts_index_ready:
                 return True
 
-        logger.info(
-            f"Rebuilding FTS5 sparse index for {self.db_path}: "
-            f"documents={doc_count}, fts_rows={fts_count}",
-        )
-        await self.rebuild_fts_index()
-        return self.fts5_available
+            async with self.get_session() as session:
+                doc_count = await self._count_documents_in_session(session)
+                fts_count = await self._count_fts_rows(session)
+                if doc_count == fts_count:
+                    self._fts_index_ready = True
+                    return True
+
+            logger.info(
+                f"Rebuilding FTS5 sparse index for {self.db_path}: "
+                f"documents={doc_count}, fts_rows={fts_count}",
+            )
+            await self._rebuild_fts_index_unlocked()
+            return self.fts5_available
 
     async def rebuild_fts_index(self) -> None:
         """Rebuild the contentless FTS5 sparse index from documents."""
+        async with self._fts_rebuild_lock:
+            await self._rebuild_fts_index_unlocked()
+
+    async def _rebuild_fts_index_unlocked(self) -> None:
         if not self.fts5_available:
             return
 
@@ -553,7 +610,7 @@ class DocumentStorage:
         sparse retrieval implementation.
         """
         if limit <= 0:
-            return []
+            return None
         if not await self.ensure_fts_index():
             return None
 
