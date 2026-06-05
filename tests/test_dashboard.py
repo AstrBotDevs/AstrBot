@@ -42,8 +42,10 @@ from astrbot.dashboard.password_state import (
     set_password_change_required,
     set_password_storage_upgraded,
 )
-from astrbot.dashboard.routes.auth import DASHBOARD_JWT_COOKIE_NAME
-from astrbot.dashboard.routes.auth import DASHBOARD_TEMPORARY_LOGIN_JWT_MAX_AGE
+from astrbot.dashboard.routes.auth import (
+    DASHBOARD_JWT_COOKIE_NAME,
+    DASHBOARD_TEMPORARY_LOGIN_JWT_MAX_AGE,
+)
 from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
