@@ -5,7 +5,6 @@
   box-shadow: none !important;
 }
 .listitem {
-  overflow-y: auto;
   .v-list {
     color: rgb(var(--v-theme-secondaryText));
   }
@@ -97,6 +96,12 @@
     .flex-grow-1 {
       flex: 1 1 auto;
       overflow-y: auto;
+    }
+
+    .sidebar-scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
     }
     
     .sidebar-footer {

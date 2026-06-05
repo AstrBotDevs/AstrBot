@@ -7,6 +7,7 @@ import sidebarItems from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { applySidebarCustomization } from '@/utils/sidebarCustomization';
 import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
+import OverlayScrollbar from '@/components/shared/OverlayScrollbar.vue';
 
 const { t, locale } = useI18n();
 
@@ -294,11 +295,13 @@ function openChangelogDialog() {
     :rail="customizer.mini_sidebar"
   >
     <div class="sidebar-container">
-      <v-list :class="['pa-4', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': customizer.mini_sidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
-        <template v-for="(item, i) in sidebarMenu" :key="item.title || item.to || `sidebar-item-${i}`">
-          <NavItem :item="item" class="leftPadding" />
-        </template>
-      </v-list>
+      <OverlayScrollbar class="sidebar-scroll flex-grow-1">
+        <v-list :class="['pa-4', 'listitem', { 'hidden-scrollbar': customizer.mini_sidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
+          <template v-for="(item, i) in sidebarMenu" :key="item.title || item.to || `sidebar-item-${i}`">
+            <NavItem :item="item" class="leftPadding" />
+          </template>
+        </v-list>
+      </OverlayScrollbar>
       <div class="sidebar-footer" v-if="!customizer.mini_sidebar">
         <v-btn class="sidebar-footer-btn" size="small" variant="tonal" color="primary" to="/settings" prepend-icon="mdi-cog">
           {{ t('core.navigation.settings') }}

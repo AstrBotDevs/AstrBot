@@ -2,24 +2,24 @@
     <v-dialog v-model="showDialog" max-width="1000px" >
         <v-card :title="tm('dialogs.addProvider.title')">
             <v-card-text style="overflow-y: auto;">
-                <v-tabs v-model="activeProviderTab" grow>
-                    <v-tab value="agent_runner" class="font-weight-medium px-3">
+                <v-tabs v-model="activeProviderTab">
+                    <v-tab value="agent_runner" class="font-weight-medium">
                         <v-icon start>mdi-cogs</v-icon>
                         {{ tm('dialogs.addProvider.tabs.agentRunner') }}
                     </v-tab>
-                    <v-tab value="speech_to_text" class="font-weight-medium px-3">
+                    <v-tab value="speech_to_text" class="font-weight-medium">
                         <v-icon start>mdi-microphone-message</v-icon>
                         {{ tm('dialogs.addProvider.tabs.speechToText') }}
                     </v-tab>
-                    <v-tab value="text_to_speech" class="font-weight-medium px-3">
+                    <v-tab value="text_to_speech" class="font-weight-medium">
                         <v-icon start>mdi-volume-high</v-icon>
                         {{ tm('dialogs.addProvider.tabs.textToSpeech') }}
                     </v-tab>
-                    <v-tab value="embedding" class="font-weight-medium px-3">
+                    <v-tab value="embedding" class="font-weight-medium">
                         <v-icon start>mdi-code-json</v-icon>
                         {{ tm('dialogs.addProvider.tabs.embedding') }}
                     </v-tab>
-                    <v-tab value="rerank" class="font-weight-medium px-3">
+                    <v-tab value="rerank" class="font-weight-medium">
                         <v-icon start>mdi-compare-vertical</v-icon>
                         {{ tm('dialogs.addProvider.tabs.rerank') }}
                     </v-tab>
@@ -239,5 +239,19 @@ export default {
     font-size: 24px;
     font-weight: bold;
     opacity: 0.3;
+}
+
+@media (max-width: 960px) {
+    :deep(.v-tab) {
+        min-width: 48px !important;
+        padding: 0 10px !important;
+    }
+    :deep(.v-tab) .v-btn__content {
+        font-size: 0;
+    }
+    :deep(.v-tab) .v-btn__content .v-icon {
+        font-size: 20px;
+        margin-inline-end: 0;
+    }
 }
 </style>

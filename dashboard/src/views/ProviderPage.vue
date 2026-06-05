@@ -890,6 +890,29 @@ function goToConfigPage() {
     overflow-x: auto;
   }
 
+  .provider-page :deep(.v-tab) {
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .provider-page :deep(.v-tab) .v-btn__content {
+    white-space: nowrap;
+  }
+
+  @media (max-width: 960px) {
+    .provider-page :deep(.v-tab) {
+      min-width: 48px !important;
+      padding: 0 10px !important;
+    }
+    .provider-page :deep(.v-tab) .v-btn__content {
+      font-size: 0;
+    }
+    .provider-page :deep(.v-tab) .v-btn__content .v-icon {
+      font-size: 20px;
+      margin-inline-end: 0;
+    }
+  }
+
   .provider-workbench {
     border-radius: 16px;
     overflow: visible;

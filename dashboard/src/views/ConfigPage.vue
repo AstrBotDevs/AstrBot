@@ -991,7 +991,7 @@ export default {
 
 .unsaved-changes-banner-wrap {
   position: sticky;
-  top: calc(var(--v-layout-top, 64px));
+  top: 0;
   z-index: 20;
   width: 100%;
   margin-bottom: 6px;
@@ -1073,6 +1073,7 @@ export default {
   display: flex;
   flex-direction: column;
   margin: 16px;
+  overflow: hidden;
 }
 
 .test-chat-header {
