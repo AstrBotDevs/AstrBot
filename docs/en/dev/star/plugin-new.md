@@ -61,20 +61,6 @@ You can add a `short_desc` field to `metadata.yaml` as the short description sho
 short_desc: A one-line summary of your plugin.
 ```
 
-### Plugin Sidebar Icon (Optional)
-
-If your plugin provides a WebUI page (a `pages/` directory), the sidebar automatically shows an entry for it under the "Plugin Pages" group. You can specify an icon from [Material Design Icons](https://pictogrammers.com/library/mdi/) in `metadata.yaml` via the `icon` field.
-
-```yaml
-icon: brain
-```
-
-Copy the icon name from the MDI website and add an `mdi-` prefix:
-
-```yaml
-icon: mdi-brain
-```
-
 ### Bundle Skills with a Plugin (Optional)
 
 Plugins can provide a `skills/` directory. After AstrBot loads the plugin, valid Skills inside that directory are automatically included in the Skill Manager, with their source shown as the plugin.

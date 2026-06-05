@@ -13,7 +13,6 @@ export interface menu {
   type?: string;
   subCaption?: string;
   isRawTitle?: boolean;
-  iconSvg?: string;
 }
 
 export const MORE_GROUP_KEY = 'core.navigation.groups.more';

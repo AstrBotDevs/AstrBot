@@ -53,8 +53,7 @@ const itemTitle = computed(() => {
     :active="isItemActive" rounded class="mb-1" color="secondary" :disabled="item.disabled"
     :target="item.type === 'external' ? '_blank' : ''" :style="itemStyle">
     <template v-slot:prepend>
-      <span v-if="item.iconSvg" class="plugin-icon-svg" v-html="item.iconSvg"></span>
-      <v-icon v-else-if="item.icon" :size="item.iconSize" class="hide-menu" :icon="item.icon"></v-icon>
+      <v-icon v-if="item.icon" :size="item.iconSize" class="hide-menu" :icon="item.icon"></v-icon>
     </template>
     <v-list-item-title style="font-size: 14px;">{{ itemTitle }}</v-list-item-title>
     <v-list-item-subtitle v-if="item.subCaption" class="text-caption mt-n1 hide-menu">
@@ -70,21 +69,6 @@ const itemTitle = computed(() => {
 </template>
 
 <style>
-.plugin-icon-svg {
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.plugin-icon-svg :deep(svg) {
-  width: 100%;
-  height: 100%;
-  fill: currentColor;
-}
-
 /* 在折叠(mini)状态下，分组展开时给整个分组（母项+子项）加边框以便区分 */
 .group-bordered.v-list-group--open {
   border: 2px solid rgba(var(--v-theme-borderLight), 0.35);

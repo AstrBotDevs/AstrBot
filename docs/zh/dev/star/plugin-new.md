@@ -63,18 +63,6 @@ git clone 插件仓库地址
 short_desc: 一句话介绍你的插件。
 ```
 
-### 插件侧边栏图标（可选）
-
-如果你的插件提供了 WebUI 页面（`pages/` 目录），侧边栏会在「插件页面」分组下自动显示入口。你可以通过 `metadata.yaml` 中的 `icon` 字段指定一个图标，作为该入口的侧边栏图标。
-
-图标名称来自 [Material Design Icons](https://pictogrammers.com/library/mdi/)，选择图标后复制其名称，加上 `mdi-` 前缀即可：
-
-```yaml
-icon: mdi-brain
-```
-
-如果不设置 `icon`，侧边栏会使用默认图标。
-
 ### 随插件提供 Skills（可选）
 
 插件可以在自己的目录下提供 `skills/` 文件夹。AstrBot 加载插件后会自动把其中合法的 Skill 纳入 Skill Manager，来源会显示为对应插件。
