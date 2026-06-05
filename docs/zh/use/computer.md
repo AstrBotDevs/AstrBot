@@ -100,10 +100,12 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 沙盒由 AstrBot 托管后，会有“占用”和“保留策略”两层状态。占用表示某个会话暂时控制这个沙盒；占用租约到期后，其他会话才可以重新占用或接管。保留策略决定沙盒释放后是保留下来复用，还是按空闲/过期规则清理。
 
-沙盒驱动可在 `配置 -> 普通配置 -> 使用电脑能力` 的沙盒配置中选择。当前常用选项包括：
+沙盒驱动可在 `配置 -> 普通配置 -> 使用电脑能力` 的沙盒配置中选择。当前可用选项包括：
 
-- `Shipyard Neo`：AstrBot 推荐的远程/独立部署沙盒服务，适合长期运行和多人使用。
-- `CUA`：基于 [CUA](https://github.com/trycua/cua) 的本地或云端电脑使用沙盒，可提供桌面截图、鼠标、键盘、Shell、Python 和文件操作能力。
+- [`Shipyard Neo`](https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo)：AstrBot 推荐的远程/独立部署沙盒服务，适合长期运行和多人使用。
+- [`BoxLite`](https://github.com/AstrBotDevs/astrbot_sandbox_boxlite)：轻量本地沙盒，适合只需要 Shell、Python 和文件操作的场景。
+- [`Shipyard`](https://github.com/AstrBotDevs/astrbot_sandbox_shipyard)：旧方案，仍可继续使用。
+- [`CUA`](https://github.com/AstrBotDevs/astrbot_sandbox_cua)：本地或云端电脑使用沙盒，适合需要桌面截图、鼠标和键盘操作的场景。
 
 使用 `Shipyard Neo` 时，沙盒 workspace 根目录通常是：
 

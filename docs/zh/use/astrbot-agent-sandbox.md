@@ -14,17 +14,17 @@
 ### 先看这 3 个配置
 
 1. `Computer Use Runtime` 设为 `sandbox`。
-2. 在 `沙盒驱动` 里选择 `Shipyard Neo`、`Shipyard` 或 `CUA`。
+2. 在 `沙盒驱动` 里选择 `Shipyard Neo`、`BoxLite`、`Shipyard` 或 `CUA`。
 3. 按所选驱动补齐对应配置，比如 `Shipyard Neo API Endpoint`、`Shipyard Neo Access Token`、`CUA Image`、`CUA Sandbox TTL`。
 
 这几个驱动现在都以独立插件的形式提供，所以顺序一定是：先装插件，再回到 WebUI 配置。
 
 当前可用的沙盒驱动包括：
 
-- `Shipyard Neo`（推荐）
-- `BoxLite`（轻量本地沙盒，适合只需要 Shell、Python 和文件操作的场景）
-- `Shipyard`（旧方案，仍可继续使用）
-- `CUA`（本地或云端电脑使用沙盒，适合需要桌面操作的场景）
+- [`Shipyard Neo`](https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo)（推荐，适合长期运行和多人使用）
+- [`BoxLite`](https://github.com/AstrBotDevs/astrbot_sandbox_boxlite)（轻量本地沙盒，适合只需要 Shell、Python 和文件操作的场景）
+- [`Shipyard`](https://github.com/AstrBotDevs/astrbot_sandbox_shipyard)（旧方案，仍可继续使用）
+- [`CUA`](https://github.com/AstrBotDevs/astrbot_sandbox_cua)（本地或云端电脑使用沙盒，适合需要桌面操作的场景）
 
 如果你只是想先跑通沙盒，建议这样选：
 
@@ -47,7 +47,7 @@ git clone https://github.com/AstrBotDevs/astrbot_sandbox_cua.git data/plugins/as
 然后打开 AstrBot 控制台，在“AI 配置” -> “Agent Computer Use”中选择：
 
 - `Computer Use Runtime` = `sandbox`
-- `沙盒驱动` = `Shipyard Neo`、`Shipyard` 或 `CUA`
+- `沙盒驱动` = `Shipyard Neo`、`BoxLite`、`Shipyard` 或 `CUA`
 
 其中，`Shipyard Neo` 是当前推荐的默认驱动。它由 Bay、Ship、Gull 三部分组成：
 

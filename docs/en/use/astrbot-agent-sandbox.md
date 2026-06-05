@@ -11,7 +11,7 @@ Starting from version `v4.12.0`, AstrBot introduced the Agent sandbox environmen
 
 If you are migrating existing settings, start with the config mapping. Sandbox drivers are now shipped as separate plugins, and AstrBot Core only handles routing, reuse, and cleanup. What you need to update is the `Computer Use Runtime`, the `Sandbox Driver`, and the driver-specific settings.
 
-Starting with the current version, concrete sandbox drivers such as `Shipyard Neo`, `Shipyard`, and `CUA` are shipped as **separate plugins**, not built into AstrBot Core by default.
+Starting with the current version, concrete sandbox drivers such as `Shipyard Neo`, `BoxLite`, `Shipyard`, and `CUA` are shipped as **separate plugins**, not built into AstrBot Core by default.
 
 That means enabling sandbox mode always has two steps:
 
@@ -22,10 +22,10 @@ If you only switch `Computer Use Runtime` to `sandbox` in the WebUI without inst
 
 AstrBot currently supports the following sandbox drivers:
 
-- `Shipyard Neo` (recommended)
-- `BoxLite` (a lightweight local sandbox for shell, Python, and file operations only)
-- `Shipyard` (legacy option, still supported)
-- `CUA` (local or cloud computer-use sandbox, suitable for desktop interaction tasks)
+- [`Shipyard Neo`](https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo) (recommended for long-running and multi-user usage)
+- [`BoxLite`](https://github.com/AstrBotDevs/astrbot_sandbox_boxlite) (a lightweight local sandbox for shell, Python, and file operations only)
+- [`Shipyard`](https://github.com/AstrBotDevs/astrbot_sandbox_shipyard) (legacy option, still supported)
+- [`CUA`](https://github.com/AstrBotDevs/astrbot_sandbox_cua) (local or cloud computer-use sandbox, suitable for desktop interaction tasks)
 
 If you just want to get started, choose based on the task:
 
@@ -48,7 +48,7 @@ After installation, restart AstrBot or reload plugins from the plugin management
 Then open the AstrBot console, go to **AI Settings** -> **Agent Computer Use**, and select:
 
 - `Computer Use Runtime` = `sandbox`
-- `Sandbox Driver` = `Shipyard Neo`, `Shipyard`, or `CUA`
+- `Sandbox Driver` = `Shipyard Neo`, `BoxLite`, `Shipyard`, or `CUA`
 
 `Shipyard Neo` is the recommended default driver. It consists of Bay, Ship, and Gull:
 
