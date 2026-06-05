@@ -189,6 +189,7 @@ class KBHelper:
             index_store_path=str(self.kb_dir / "index.faiss"),
             embedding_provider=ep,
             rerank_provider=rp,
+            index_type=self.kb.index_type or "flat",
         )
         await vec_db.initialize()
         self.vec_db = vec_db

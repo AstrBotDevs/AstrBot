@@ -94,6 +94,7 @@ class KnowledgeBaseManager:
         top_k_dense: int | None = None,
         top_k_sparse: int | None = None,
         top_m_final: int | None = None,
+        index_type: str | None = None,
     ) -> KBHelper:
         """创建新的知识库实例"""
         if embedding_provider_id is None:
@@ -109,6 +110,7 @@ class KnowledgeBaseManager:
             top_k_dense=top_k_dense if top_k_dense is not None else 50,
             top_k_sparse=top_k_sparse if top_k_sparse is not None else 50,
             top_m_final=top_m_final if top_m_final is not None else 5,
+            index_type=index_type if index_type is not None else "flat",
         )
         try:
             async with self.kb_db.get_db() as session:
@@ -175,6 +177,7 @@ class KnowledgeBaseManager:
         top_k_dense: int | None = None,
         top_k_sparse: int | None = None,
         top_m_final: int | None = None,
+        index_type: str | None = None,
     ) -> KBHelper | None:
         """更新知识库实例"""
         kb_helper = await self.get_kb(kb_id)
@@ -193,6 +196,7 @@ class KnowledgeBaseManager:
             "top_k_dense": kb.top_k_dense,
             "top_k_sparse": kb.top_k_sparse,
             "top_m_final": kb.top_m_final,
+            "index_type": kb.index_type,
         }
         previous_init_error = kb_helper.init_error
 
@@ -215,6 +219,8 @@ class KnowledgeBaseManager:
             kb.top_k_sparse = top_k_sparse
         if top_m_final is not None:
             kb.top_m_final = top_m_final
+        if index_type is not None:
+            kb.index_type = index_type
 
         # Build a new helper first. Keep current vec_db alive until new init succeeds.
         new_helper = KBHelper(
@@ -239,6 +245,7 @@ class KnowledgeBaseManager:
             kb.top_k_dense = previous_state["top_k_dense"]
             kb.top_k_sparse = previous_state["top_k_sparse"]
             kb.top_m_final = previous_state["top_m_final"]
+            kb.index_type = previous_state["index_type"]
             kb_helper.init_error = previous_init_error
             logger.error(
                 f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败，继续使用旧实例: {e}",

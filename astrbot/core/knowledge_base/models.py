@@ -36,6 +36,8 @@ class KnowledgeBase(BaseKBModel, table=True):
     # 分块配置参数
     chunk_size: int | None = Field(default=512, nullable=True)
     chunk_overlap: int | None = Field(default=50, nullable=True)
+    # 索引类型: "flat" (精确) 或 "hnsw" (近似最近邻，适合大规模)
+    index_type: str | None = Field(default="flat", max_length=10)
     # 检索配置参数
     top_k_dense: int | None = Field(default=50, nullable=True)
     top_k_sparse: int | None = Field(default=50, nullable=True)
