@@ -1118,6 +1118,32 @@
           "ca_certs": {
             "description": "SSL CA Certificate File Path",
             "hint": "Optional. Path to CA certificate file."
+          },
+          "auto_acme": {
+            "enable": {
+              "description": "Automatically issue Let's Encrypt IP certificate",
+              "hint": "When enabled, WebUI HTTPS startup uses acme.sh standalone HTTP-01 mode to issue a Let's Encrypt certificate for the current public IP. Port 80 must be reachable from the Internet and not occupied."
+            },
+            "ip": {
+              "description": "Public IP",
+              "hint": "Leave empty to auto-detect the public IP. Let's Encrypt IP certificate support may depend on ACME service policy."
+            },
+            "email": {
+              "description": "ACME email",
+              "hint": "Used to register the acme.sh account and receive certificate notifications. Optional."
+            },
+            "server": {
+              "description": "ACME CA",
+              "hint": "Defaults to letsencrypt."
+            },
+            "keylength": {
+              "description": "Certificate key type",
+              "hint": "Defaults to RSA 2048."
+            },
+            "force_issue": {
+              "description": "Force certificate re-issue",
+              "hint": "Usually keep disabled. When enabled, startup passes --force and may hit CA rate limits."
+            }
           }
         },
         "totp": {

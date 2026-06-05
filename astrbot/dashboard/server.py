@@ -44,6 +44,7 @@ from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
+from .ssl_auto_acme import ensure_dashboard_ip_certificate
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
@@ -655,6 +656,15 @@ class AstrBotDashboard:
         )
         resolved_ssl_config: dict[str, str] = {}
         if ssl_enable:
+            try:
+                auto_acme_changed, _ = ensure_dashboard_ip_certificate(ssl_config)
+                if auto_acme_changed:
+                    self.config.save_config()
+            except Exception as e:
+                logger.error(
+                    "Failed to prepare automatic dashboard HTTPS certificate: %s",
+                    e,
+                )
             ssl_enable, resolved_ssl_config = self._resolve_dashboard_ssl_config(
                 ssl_config,
             )
