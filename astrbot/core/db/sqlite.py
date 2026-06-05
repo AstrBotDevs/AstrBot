@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import CursorResult, Row
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
@@ -38,6 +39,8 @@ from astrbot.core.sentinels import NOT_GIVEN
 
 TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
+SQLITE_LOCK_RETRY_ATTEMPTS = 2
+SQLITE_LOCK_RETRY_BASE_DELAY = 0.1
 
 
 class SQLiteDatabase(BaseDatabase):
@@ -46,6 +49,15 @@ class SQLiteDatabase(BaseDatabase):
         self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
         self.inited = False
         super().__init__()
+
+    @staticmethod
+    def _is_sqlite_database_locked_error(exc: OperationalError) -> bool:
+        raw = getattr(exc, "orig", exc)
+        message = str(raw).lower()
+        return "database" in message and "locked" in message
+
+    async def _sleep_before_locked_retry(self, attempt: int) -> None:
+        await asyncio.sleep(SQLITE_LOCK_RETRY_BASE_DELAY * (2**attempt))
 
     async def initialize(self) -> None:
         """Initialize the database by creating tables if they do not exist."""
@@ -138,30 +150,31 @@ class SQLiteDatabase(BaseDatabase):
         timestamp=None,
     ) -> None:
         """Insert a new platform statistic record."""
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                if timestamp is None:
-                    timestamp = datetime.now().replace(
-                        minute=0,
-                        second=0,
-                        microsecond=0,
-                    )
-                current_hour = timestamp
-                await session.execute(
-                    text("""
+        if timestamp is None:
+            timestamp = datetime.now().replace(
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
+        current_hour = timestamp
+
+        async def _op(session: AsyncSession) -> None:
+            await session.execute(
+                text("""
                     INSERT INTO platform_stats (timestamp, platform_id, platform_type, count)
                     VALUES (:timestamp, :platform_id, :platform_type, :count)
                     ON CONFLICT(timestamp, platform_id, platform_type) DO UPDATE SET
                         count = platform_stats.count + EXCLUDED.count
                     """),
-                    {
-                        "timestamp": current_hour,
-                        "platform_id": platform_id,
-                        "platform_type": platform_type,
-                        "count": count,
-                    },
-                )
+                {
+                    "timestamp": current_hour,
+                    "platform_id": platform_id,
+                    "platform_type": platform_type,
+                    "count": count,
+                },
+            )
+
+        await self._run_in_tx(_op)
 
     async def count_platform_stats(self) -> int:
         """Count the number of platform statistics records."""
@@ -347,42 +360,45 @@ class SQLiteDatabase(BaseDatabase):
             kwargs["created_at"] = created_at
         if updated_at:
             kwargs["updated_at"] = updated_at
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                new_conversation = ConversationV2(
-                    user_id=user_id,
-                    content=content or [],
-                    platform_id=platform_id,
-                    title=title,
-                    persona_id=persona_id,
-                    **kwargs,
-                )
-                session.add(new_conversation)
-                return new_conversation
+        async def _op(session: AsyncSession) -> ConversationV2:
+            new_conversation = ConversationV2(
+                user_id=user_id,
+                content=content or [],
+                platform_id=platform_id,
+                title=title,
+                persona_id=persona_id,
+                **kwargs,
+            )
+            session.add(new_conversation)
+            await session.flush()
+            await session.refresh(new_conversation)
+            return new_conversation
+
+        return await self._run_in_tx(_op)
 
     async def update_conversation(
         self, cid, title=None, persona_id=None, content=None, token_usage=None
     ):
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                query = update(ConversationV2).where(
-                    col(ConversationV2.conversation_id) == cid,
-                )
-                values = {}
-                if title is not None:
-                    values["title"] = title
-                if persona_id is not None:
-                    values["persona_id"] = persona_id
-                if content is not None:
-                    values["content"] = content
-                if token_usage is not None:
-                    values["token_usage"] = token_usage
-                if not values:
-                    return None
-                query = query.values(**values)
-                await session.execute(query)
+        values = {}
+        if title is not None:
+            values["title"] = title
+        if persona_id is not None:
+            values["persona_id"] = persona_id
+        if content is not None:
+            values["content"] = content
+        if token_usage is not None:
+            values["token_usage"] = token_usage
+        if not values:
+            return None
+
+        async def _op(session: AsyncSession) -> None:
+            query = update(ConversationV2).where(
+                col(ConversationV2.conversation_id) == cid,
+            )
+            query = query.values(**values)
+            await session.execute(query)
+
+        await self._run_in_tx(_op)
         return await self.get_conversation_by_id(cid)
 
     async def delete_conversation(self, cid) -> None:
@@ -524,19 +540,21 @@ class SQLiteDatabase(BaseDatabase):
         llm_checkpoint_id=None,
     ):
         """Insert a new platform message history record."""
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                new_history = PlatformMessageHistory(
-                    platform_id=platform_id,
-                    user_id=user_id,
-                    content=content,
-                    sender_id=sender_id,
-                    sender_name=sender_name,
-                    llm_checkpoint_id=llm_checkpoint_id,
-                )
-                session.add(new_history)
-                return new_history
+        async def _op(session: AsyncSession) -> PlatformMessageHistory:
+            new_history = PlatformMessageHistory(
+                platform_id=platform_id,
+                user_id=user_id,
+                content=content,
+                sender_id=sender_id,
+                sender_name=sender_name,
+                llm_checkpoint_id=llm_checkpoint_id,
+            )
+            session.add(new_history)
+            await session.flush()
+            await session.refresh(new_history)
+            return new_history
+
+        return await self._run_in_tx(_op)
 
     async def update_platform_message_history(
         self,
@@ -553,14 +571,14 @@ class SQLiteDatabase(BaseDatabase):
         if not values:
             return
 
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                await session.execute(
-                    update(PlatformMessageHistory)
-                    .where(PlatformMessageHistory.id == message_id)
-                    .values(**values)
-                )
+        async def _op(session: AsyncSession) -> None:
+            await session.execute(
+                update(PlatformMessageHistory)
+                .where(PlatformMessageHistory.id == message_id)
+                .values(**values)
+            )
+
+        await self._run_in_tx(_op)
 
     async def delete_platform_message_history_by_id(self, message_id: int) -> None:
         """Delete a platform message history record by ID."""
@@ -1284,10 +1302,21 @@ class SQLiteDatabase(BaseDatabase):
         self,
         fn: Callable[[AsyncSession], Awaitable[TxResult]],
     ) -> TxResult:
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                return await fn(session)
+        for attempt in range(SQLITE_LOCK_RETRY_ATTEMPTS):
+            try:
+                async with self.get_db() as session:
+                    session: AsyncSession
+                    async with session.begin():
+                        return await fn(session)
+            except OperationalError as exc:
+                if (
+                    not self._is_sqlite_database_locked_error(exc)
+                    or attempt == SQLITE_LOCK_RETRY_ATTEMPTS - 1
+                ):
+                    raise
+                await self._sleep_before_locked_retry(attempt)
+
+        raise RuntimeError("unreachable sqlite transaction retry state")
 
     @staticmethod
     def _apply_updates(model, **updates) -> None:
