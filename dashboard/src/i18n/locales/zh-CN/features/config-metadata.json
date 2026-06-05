@@ -249,31 +249,31 @@
       "provider_settings": {
         "max_context_length": {
           "description": "压缩前最多保留对话轮数",
-          "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。"
+          "hint": "无论选择截断还是 LLM 压缩，都会先按该值限制历史轮数；-1 表示不按轮数限制"
         },
         "dequeue_context_length": {
           "description": "轮次超限时一次丢弃轮数",
-          "hint": "当超过\"压缩前最多保留对话轮数\"且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。"
+          "hint": "当超过\"压缩前最多保留对话轮数\"时，一次丢弃多少轮旧对话；同时也可能作为压缩不可用时的回退截断参数"
         },
         "context_limit_reached_strategy": {
-          "description": "历史超限或上下文接近上限时的处理方式",
+          "description": "模型上下文接近上限后的处理方式",
           "labels": [
             "按对话轮数截断",
             "由 LLM 压缩上下文"
           ],
-          "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
+          "hint": "该策略只会在完成轮次限制后，且上下文 token 接近模型窗口上限时触发。当按对话轮数截断时，会根据上面\"轮次超限时一次丢弃轮数\"的配置丢弃最旧的 N 轮对话。当由 LLM 压缩上下文时，会使用指定的模型进行上下文压缩。"
         },
         "llm_compress_instruction": {
           "description": "上下文压缩提示词",
           "hint": "如果为空则使用默认提示词。"
         },
-        "llm_compress_keep_recent_ratio": {
-          "description": "压缩时保留最近上下文比例",
-          "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。"
+        "llm_compress_keep_recent": {
+          "description": "压缩时保留最近对话轮数",
+          "hint": "始终保留的最近 N 轮对话。"
         },
         "llm_compress_provider_id": {
           "description": "用于上下文压缩的模型提供商 ID",
-          "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为\"按对话轮数截断\"的策略。"
+          "hint": "留空时将降级为\"按对话轮数截断\"的策略。"
         },
         "fallback_max_context_tokens": {
           "description": "上下文窗口兜底值",
@@ -1086,24 +1086,6 @@
         "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。"
       },
       "dashboard": {
-        "trust_proxy_headers": {
-          "description": "信任代理请求头获取客户端 IP",
-          "hint": "关闭时忽略 X-Forwarded-For/X-Real-IP，仅使用连接地址。"
-        },
-        "auth_rate_limit": {
-          "enable": {
-            "description": "启用登录验证速率限制",
-            "hint": "关闭后将不对登录、TOTP 等身份验证接口进行速率限制。"
-          },
-          "average_interval": {
-            "description": "验证端点速率限制平均间隔(秒)",
-            "hint": "两次身份验证请求之间的最小平均间隔时间。例如设置为 1.0 表示每秒最多处理 1 个请求。"
-          },
-          "max_burst": {
-            "description": "验证端点速率限制最大突发数",
-            "hint": "允许的瞬时最大突发请求数。例如设置为 3 表示在短时间内最多连续处理 3 个请求。"
-          }
-        },
         "ssl": {
           "enable": {
             "description": "启用 WebUI HTTPS",
@@ -1121,52 +1103,6 @@
             "description": "SSL CA 证书文件路径",
             "hint": "可选。用于指定 CA 证书文件路径。"
           }
-        },
-        "totp": {
-          "enable": {
-            "description": "启用 WebUI TOTP 双因素认证",
-            "hint": "启用后，登录 WebUI 需要额外输入验证码。"
-          },
-          "manage": "管理",
-          "configuration": "TOTP",
-          "statusPending": "需完成设置",
-          "statusEnabled": "已启用",
-          "setupRequiredHint": "TOTP 已开启但尚未完成配置，请点击“管理”完成初始化。",
-          "setupTitle": "设置 TOTP",
-          "setupSubtitle": "请使用认证器应用扫描二维码，然后输入验证码。",
-          "setupConfirm": "验证并继续",
-          "activeSubtitle": "可使用此二维码和密钥添加新的认证器设备。",
-          "rotateTitle": "更换 TOTP 密钥",
-          "rotateSubtitle": "生成新密钥并完成验证后，将替换当前密钥。",
-          "rotate": "更换密钥",
-          "rotateRecovery": "更换恢复码",
-          "rotateConfirm": "确认更换",
-          "rotateCancel": "取消",
-          "rotateCode": "验证码",
-          "rotateCodeHint": "输入认证器应用中的验证码以确认新密钥。",
-          "rotateError": "验证码无效，请重试。",
-          "recoveryTitle": "恢复码",
-          "recoverySubtitle": "恢复码仅展示一次，请在继续前妥善保存。",
-          "recoveryWarning": "若恢复码丢失将无法通过常规途径恢复账户访问权限。",
-          "recoveryAcknowledge": "我已保存恢复码",
-          "recoveryClose": "完成",
-          "disableTitle": "关闭 TOTP",
-          "disableSubtitle": "输入验证码以确认关闭双因素认证。",
-          "disableRecoverySubtitle": "输入恢复码以确认关闭双因素认证。",
-          "disableCode": "验证码",
-          "disableRecoveryCode": "恢复码",
-          "disableConfirm": "确认关闭",
-          "disableCancel": "取消",
-          "disableError": "验证失败，请重试。",
-          "disableUseRecovery": "无法使用TOTP?",
-          "disableUseCode": "使用验证码",
-          "configSaveTitle": "两步验证",
-          "configSaveSubtitle": "输入验证码以更改受保护的配置。",
-          "configSaveRotationHint": "轮换 TOTP 密钥时，轮换前和轮换后的验证码均可用（仅轮换操作中单次允许）。",
-          "configSaveCode": "验证码",
-          "configSaveConfirm": "继续",
-          "configSaveCancel": "取消",
-          "configSaveError": "验证失败，请重试。"
         }
       },
       "timezone": {
@@ -1273,8 +1209,8 @@
             "name": "Top-p"
           },
           "max_tokens": {
-            "description": "最大词元（Tokens）数",
-            "hint": "生成的最大词元（Tokens）数。",
+            "description": "最大令牌数",
+            "hint": "生成的最大令牌数。",
             "name": "Max Tokens"
           }
         }
@@ -1387,21 +1323,45 @@
       "gemini_embedding": {
         "hint": "Gemini Embedding 无需手动添加 /v1beta。"
       },
-      "volcengine_cluster": {
-        "description": "火山引擎集群",
-        "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
+      "resource_id": {
+        "description": "模型/资源选择",
+        "hint": "seed-tts-2.0(语音合成2.0) | seed-tts-1.0(语音合成1.0) | seed-icl-2.0(声音复刻2.0) | seed-icl-1.0(声音复刻1.0)"
       },
-      "volcengine_voice_type": {
-        "description": "火山引擎音色",
-        "hint": "输入声音id(Voice_type)"
+      "speaker": {
+        "description": "发音人",
+        "hint": "音色ID，如 zh_female_meilinvyou_uranus_bigtts。详见 https://www.volcengine.com/docs/6561/1257544"
       },
-      "volcengine_speed_ratio": {
-        "description": "语速设置",
-        "hint": "语速设置，范围为 0.2 到 3.0,默认值为 1.0"
+      "format": {
+        "description": "音频格式",
+        "hint": "mp3 / ogg_opus / pcm"
       },
-      "volcengine_volume_ratio": {
-        "description": "音量设置",
-        "hint": "音量设置，范围为 0.0 到 2.0,默认值为 1.0"
+      "sample_rate": {
+        "description": "采样率",
+        "hint": "8000/16000/22050/24000/32000/44100/48000"
+      },
+      "bit_rate": {
+        "description": "比特率",
+        "hint": "MP3格式建议128000，不传则默认8k音质差"
+      },
+      "speech_rate": {
+        "description": "语调(语速)",
+        "hint": "范围-50~100，默认0。100=2倍速，-50=0.5倍速"
+      },
+      "loudness_rate": {
+        "description": "音量",
+        "hint": "范围-50~100，默认0。100=2倍音量，-50=0.5倍音量"
+      },
+      "pitch": {
+        "description": "音调",
+        "hint": "范围-12~12，默认0。正值升调，负值降调"
+      },
+      "emotion": {
+        "description": "情感",
+        "hint": "如 tender/happy/sad/storytelling。仅部分音色支持"
+      },
+      "model": {
+        "description": "模型子类型",
+        "hint": "仅 seed-icl-2.0 (声音复刻2.0) 生效: seed-icl-2.0-standard(标准) / seed-icl-2.0-expressive(表现力)"
       },
       "azure_tts_voice": {
         "description": "音色设置",
