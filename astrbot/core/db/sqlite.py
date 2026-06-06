@@ -45,7 +45,7 @@ SQLITE_LOCK_RETRY_BASE_DELAY = 0.2
 
 
 def _is_sqlite_database_locked_error(exc: OperationalError) -> bool:
-    raw = getattr(exc, "orig", exc)
+    raw = getattr(exc, "orig", None) or exc
     message = str(raw).lower()
     return "database" in message and "locked" in message
 
@@ -57,14 +57,16 @@ class SQLiteDatabase(BaseDatabase):
         self.inited = False
         super().__init__()
 
-    async def _run_with_sqlite_lock_retry(
+    async def _with_session_and_sqlite_lock_retry(
         self,
-        operation: Callable[[], Awaitable[TxResult]],
+        operation: Callable[[AsyncSession], Awaitable[TxResult]],
     ) -> TxResult:
         for attempt in range(SQLITE_LOCK_RETRY_ATTEMPTS):
             last_attempt = attempt == SQLITE_LOCK_RETRY_ATTEMPTS - 1
             try:
-                return await operation()
+                async with self.get_db() as session:
+                    session: AsyncSession
+                    return await operation(session)
             except asyncio.CancelledError:
                 raise
             except OperationalError as exc:
@@ -1255,34 +1257,30 @@ class SQLiteDatabase(BaseDatabase):
     async def get_preference(self, scope, scope_id, key):
         """Get a preference by key."""
 
-        async def _get_preference() -> Preference | None:
-            async with self.get_db() as session:
-                session: AsyncSession
-                query = select(Preference).where(
-                    Preference.scope == scope,
-                    Preference.scope_id == scope_id,
-                    Preference.key == key,
-                )
-                result = await session.execute(query)
-                return result.scalar_one_or_none()
+        async def _get_preference(session: AsyncSession) -> Preference | None:
+            query = select(Preference).where(
+                Preference.scope == scope,
+                Preference.scope_id == scope_id,
+                Preference.key == key,
+            )
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
 
-        return await self._run_with_sqlite_lock_retry(_get_preference)
+        return await self._with_session_and_sqlite_lock_retry(_get_preference)
 
     async def get_preferences(self, scope, scope_id=None, key=None):
         """Get all preferences for a specific scope ID or key."""
 
-        async def _get_preferences() -> list[Preference]:
-            async with self.get_db() as session:
-                session: AsyncSession
-                query = select(Preference).where(Preference.scope == scope)
-                if scope_id is not None:
-                    query = query.where(Preference.scope_id == scope_id)
-                if key is not None:
-                    query = query.where(Preference.key == key)
-                result = await session.execute(query)
-                return result.scalars().all()
+        async def _get_preferences(session: AsyncSession) -> list[Preference]:
+            query = select(Preference).where(Preference.scope == scope)
+            if scope_id is not None:
+                query = query.where(Preference.scope_id == scope_id)
+            if key is not None:
+                query = query.where(Preference.key == key)
+            result = await session.execute(query)
+            return result.scalars().all()
 
-        return await self._run_with_sqlite_lock_retry(_get_preferences)
+        return await self._with_session_and_sqlite_lock_retry(_get_preferences)
 
     async def remove_preference(self, scope, scope_id, key) -> None:
         """Remove a preference by scope ID and key."""

@@ -23,12 +23,11 @@ if TYPE_CHECKING:
 def _configure_sqlite_connection(dbapi_connection, connection_record) -> None:
     cursor = dbapi_connection.cursor()
     try:
-        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
         cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.execute("PRAGMA cache_size=20000")
         cursor.execute("PRAGMA temp_store=MEMORY")
         cursor.execute("PRAGMA mmap_size=134217728")
-        cursor.execute("PRAGMA optimize")
     finally:
         cursor.close()
 
@@ -55,6 +54,7 @@ class KBSQLiteDatabase:
             self.DATABASE_URL,
             echo=False,
             poolclass=NullPool,
+            connect_args={"timeout": 30},
         )
         event.listen(
             self.engine.sync_engine,
