@@ -1,4 +1,4 @@
-﻿{
+{
     "title": "Инструменты и функции",
     "subtitle": "Управление MCP-серверами и доступными функциями",
     "tooltip": {
@@ -47,7 +47,8 @@
             "origin": "Источник",
             "originName": "Имя источника",
             "readonly": "Только чтение",
-            "actions": "Действия"
+            "actions": "Действия",
+            "permission": "Права доступа"
         },
         "configTags": {
             "tooltipTitle": "Этот инструмент включен в файле конфигурации {config}, потому что:",
@@ -57,6 +58,10 @@
                 "in": "{key} соответствует {expected}",
                 "fallback": "Текущее значение {key}: {actual}"
             }
+        },
+        "permission": {
+            "everyone": "Все",
+            "admin": "Только администратор"
         }
     },
     "marketplace": {
@@ -167,7 +172,9 @@
         "toggleToolSuccess": "Статус инструмента изменен!",
         "toggleToolReadonly": "Встроенные инструменты доступны только для чтения и не могут быть включены или выключены.",
         "toggleToolError": "Не удалось изменить статус: {error}",
-        "testError": "Ошибка теста связи: {error}"
+        "testError": "Ошибка теста связи: {error}",
+        "updatePermissionSuccess": "Права доступа обновлены!",
+        "updatePermissionError": "Ошибка обновления прав: {error}"
     },
     "syncProvider": {
         "title": "Синхронизация серверов MCP",
