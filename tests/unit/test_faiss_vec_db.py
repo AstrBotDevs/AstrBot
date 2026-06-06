@@ -31,35 +31,19 @@ async def test_insert_batch_skips_empty_contents() -> None:
 
 
 @pytest.mark.asyncio
-async def test_insert_batch_raises_friendly_error_for_embedding_count_mismatch() -> (
-    None
-):
+@pytest.mark.parametrize(
+    ("embeddings", "expected_fragments"),
+    [
+        ([[0.1, 0.2]], ("期望 2", "实际 1")),
+        ([[0.1, 0.2], [0.3]], ()),
+    ],
+)
+async def test_insert_batch_rejects_invalid_embeddings_before_writing_documents(
+    embeddings: list[list[float]],
+    expected_fragments: tuple[str, ...],
+) -> None:
     vec_db = _make_vecdb()
-    vec_db.embedding_provider.get_embeddings_batch.return_value = [[0.1, 0.2]]
-    vec_db.embedding_storage.dimension = 2
-
-    with pytest.raises(KnowledgeBaseUploadError) as exc_info:
-        await FaissVecDB.insert_batch(
-            vec_db,
-            contents=["chunk-1", "chunk-2"],
-            metadatas=[{}, {}],
-            ids=["doc-1", "doc-2"],
-        )
-
-    assert "向量化失败" in str(exc_info.value)
-    assert "期望 2" in str(exc_info.value)
-    assert "实际 1" in str(exc_info.value)
-    vec_db.document_storage.insert_documents_batch.assert_not_called()
-    vec_db.embedding_storage.insert_batch.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_insert_batch_validates_vectors_before_writing_documents() -> None:
-    vec_db = _make_vecdb()
-    vec_db.embedding_provider.get_embeddings_batch.return_value = [
-        [0.1, 0.2],
-        [0.3],
-    ]
+    vec_db.embedding_provider.get_embeddings_batch.return_value = embeddings
     vec_db.embedding_storage.dimension = 2
 
     with pytest.raises(KnowledgeBaseUploadError) as exc_info:
@@ -71,6 +55,9 @@ async def test_insert_batch_validates_vectors_before_writing_documents() -> None
         )
 
     assert exc_info.value.stage == "embedding"
+    assert "向量化失败" in str(exc_info.value)
+    for fragment in expected_fragments:
+        assert fragment in str(exc_info.value)
     vec_db.document_storage.insert_documents_batch.assert_not_called()
     vec_db.embedding_storage.insert_batch.assert_not_called()
 

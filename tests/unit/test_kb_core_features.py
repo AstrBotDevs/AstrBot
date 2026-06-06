@@ -44,30 +44,6 @@ def test_knowledge_base_model_defaults_match_capabilities():
 
 
 @pytest.mark.asyncio
-async def test_kb_helper_get_document_rejects_other_kb_document() -> None:
-    helper = KBHelper.__new__(KBHelper)
-    helper.kb = KnowledgeBase(
-        kb_id="kb-1",
-        kb_name="kb",
-        embedding_provider_id="emb-1",
-    )
-    helper.kb_db = MagicMock()
-    helper.kb_db.get_document_by_id = AsyncMock(
-        return_value=KBDocument(
-            doc_id="doc-1",
-            kb_id="kb-2",
-            doc_name="doc.md",
-            file_type="md",
-            file_size=1,
-            file_path="",
-            status="ready",
-        ),
-    )
-
-    assert await helper.get_document("doc-1") is None
-
-
-@pytest.mark.asyncio
 async def test_create_kb_uses_capability_defaults(monkeypatch):
     from astrbot.core.knowledge_base.kb_helper import KBHelper
     from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager

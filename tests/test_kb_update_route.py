@@ -635,6 +635,46 @@ async def test_list_documents_rejects_invalid_filters():
 
 
 @pytest.mark.asyncio
+async def test_get_document_rejects_other_kb_document():
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.models import KBDocument, KnowledgeBase
+    from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
+
+    app = Quart(__name__)
+    kb_helper = KBHelper.__new__(KBHelper)
+    kb_helper.kb = KnowledgeBase(
+        kb_id="kb-1",
+        kb_name="kb",
+        embedding_provider_id="emb-1",
+    )
+    kb_helper.kb_db = MagicMock()
+    kb_helper.kb_db.get_document_by_id = AsyncMock(
+        return_value=KBDocument(
+            doc_id="doc-1",
+            kb_id="kb-2",
+            doc_name="doc.md",
+            file_type="md",
+            file_size=1,
+            file_path="",
+            status="ready",
+        ),
+    )
+    kb_manager = MagicMock()
+    kb_manager.get_kb = AsyncMock(return_value=kb_helper)
+    route = _build_route_with_manager(kb_manager)
+
+    async with app.test_request_context(
+        "/api/kb/document/get?kb_id=kb-1&doc_id=doc-1",
+        method="GET",
+    ):
+        response = await KnowledgeBaseRoute.get_document(route)
+
+    assert response["status"] == "error"
+    assert response["message"] == "文档不存在"
+    kb_helper.kb_db.get_document_by_id.assert_awaited_once_with("doc-1")
+
+
+@pytest.mark.asyncio
 async def test_list_chunks_forwards_search_and_total():
     from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
 
@@ -1146,29 +1186,57 @@ def test_batch_task_status_and_error_helpers_report_partial_failures():
 
 
 @pytest.mark.asyncio
-async def test_get_upload_progress_returns_failed_task_result_from_memory():
+@pytest.mark.parametrize(
+    ("status", "uploaded", "total", "success_count", "progress"),
+    [
+        (
+            "failed",
+            [],
+            1,
+            0,
+            {"status": "failed", "stage": "parsing", "current": 0, "total": 100},
+        ),
+        (
+            "partial_failed",
+            [{"doc_id": "doc-1"}],
+            2,
+            1,
+            {
+                "status": "partial_failed",
+                "stage": "completed",
+                "current": 2,
+                "total": 2,
+            },
+        ),
+    ],
+)
+async def test_get_upload_progress_returns_terminal_task_result_from_memory(
+    status: str,
+    uploaded: list[dict],
+    total: int,
+    success_count: int,
+    progress: dict,
+):
     from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
 
     app = Quart(__name__)
     route = _build_route_with_manager(MagicMock())
     result = {
         "task_id": "task-1",
-        "uploaded": [],
+        "uploaded": uploaded,
         "failed": [{"file_name": "same.md", "error": "same.md: duplicate"}],
-        "total": 1,
-        "success_count": 0,
+        "total": total,
+        "success_count": success_count,
         "failed_count": 1,
     }
     route.upload_tasks = {
         "task-1": {
-            "status": "failed",
+            "status": status,
             "result": result,
             "error": "same.md: duplicate",
         },
     }
-    route.upload_progress = {
-        "task-1": {"status": "failed", "stage": "parsing", "current": 0, "total": 100},
-    }
+    route.upload_progress = {"task-1": progress}
     route._cleanup_task = MagicMock()
 
     async with app.test_request_context(
@@ -1180,7 +1248,7 @@ async def test_get_upload_progress_returns_failed_task_result_from_memory():
     assert response["status"] == "ok"
     assert response["data"] == {
         "task_id": "task-1",
-        "status": "failed",
+        "status": status,
         "result": result,
         "error": "same.md: duplicate",
     }
@@ -1188,54 +1256,30 @@ async def test_get_upload_progress_returns_failed_task_result_from_memory():
 
 
 @pytest.mark.asyncio
-async def test_get_upload_progress_returns_partial_failed_task_result_from_memory():
-    from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
-
-    app = Quart(__name__)
-    route = _build_route_with_manager(MagicMock())
-    result = {
-        "task_id": "task-1",
-        "uploaded": [{"doc_id": "doc-1"}],
-        "failed": [{"file_name": "same.md", "error": "same.md: duplicate"}],
-        "total": 2,
-        "success_count": 1,
-        "failed_count": 1,
-    }
-    route.upload_tasks = {
-        "task-1": {
-            "status": "partial_failed",
-            "result": result,
-            "error": "same.md: duplicate",
-        },
-    }
-    route.upload_progress = {
-        "task-1": {
-            "status": "partial_failed",
-            "stage": "completed",
-            "current": 2,
-            "total": 2,
-        },
-    }
-    route._cleanup_task = MagicMock()
-
-    async with app.test_request_context(
-        "/api/kb/document/upload/progress?task_id=task-1",
-        method="GET",
-    ):
-        response = await KnowledgeBaseRoute.get_upload_progress(route)
-
-    assert response["status"] == "ok"
-    assert response["data"] == {
-        "task_id": "task-1",
-        "status": "partial_failed",
-        "result": result,
-        "error": "same.md: duplicate",
-    }
-    route._cleanup_task.assert_called_once_with("task-1")
-
-
-@pytest.mark.asyncio
-async def test_get_upload_progress_returns_failed_persistent_task_result():
+@pytest.mark.parametrize(
+    (
+        "status",
+        "uploaded",
+        "total",
+        "success_count",
+        "progress_stage",
+        "progress_current",
+        "progress_total",
+    ),
+    [
+        ("failed", [], 1, 0, "parsing", 0, 100),
+        ("partial_failed", [{"doc_id": "doc-1"}], 2, 1, "completed", 2, 2),
+    ],
+)
+async def test_get_upload_progress_returns_terminal_persistent_task_result(
+    status: str,
+    uploaded: list[dict],
+    total: int,
+    success_count: int,
+    progress_stage: str,
+    progress_current: int,
+    progress_total: int,
+):
     from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
 
     app = Quart(__name__)
@@ -1244,20 +1288,24 @@ async def test_get_upload_progress_returns_failed_persistent_task_result():
     route.upload_progress = {}
     result = {
         "task_id": "task-1",
-        "uploaded": [],
+        "uploaded": uploaded,
         "failed": [{"file_name": "same.md", "error": "same.md: duplicate"}],
-        "total": 1,
-        "success_count": 0,
+        "total": total,
+        "success_count": success_count,
         "failed_count": 1,
     }
     route._get_persistent_task = AsyncMock(
         return_value={
             "task_id": "task-1",
-            "status": "failed",
-            "progress_stage": "parsing",
-            "progress_current": 0,
-            "progress_total": 100,
-            "progress": {"stage": "parsing", "current": 0, "total": 100},
+            "status": status,
+            "progress_stage": progress_stage,
+            "progress_current": progress_current,
+            "progress_total": progress_total,
+            "progress": {
+                "stage": progress_stage,
+                "current": progress_current,
+                "total": progress_total,
+            },
             "result": result,
             "error": "same.md: duplicate",
         },
@@ -1272,60 +1320,15 @@ async def test_get_upload_progress_returns_failed_persistent_task_result():
     assert response["status"] == "ok"
     assert response["data"] == {
         "task_id": "task-1",
-        "status": "failed",
-        "progress_stage": "parsing",
-        "progress_current": 0,
-        "progress_total": 100,
-        "progress": {"stage": "parsing", "current": 0, "total": 100},
-        "result": result,
-        "error": "same.md: duplicate",
-    }
-    route._get_persistent_task.assert_awaited_once_with("task-1")
-
-
-@pytest.mark.asyncio
-async def test_get_upload_progress_returns_partial_failed_persistent_task_result():
-    from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
-
-    app = Quart(__name__)
-    route = _build_route_with_manager(MagicMock())
-    route.upload_tasks = {}
-    route.upload_progress = {}
-    result = {
-        "task_id": "task-1",
-        "uploaded": [{"doc_id": "doc-1"}],
-        "failed": [{"file_name": "same.md", "error": "same.md: duplicate"}],
-        "total": 2,
-        "success_count": 1,
-        "failed_count": 1,
-    }
-    route._get_persistent_task = AsyncMock(
-        return_value={
-            "task_id": "task-1",
-            "status": "partial_failed",
-            "progress_stage": "completed",
-            "progress_current": 2,
-            "progress_total": 2,
-            "progress": {"stage": "completed", "current": 2, "total": 2},
-            "result": result,
-            "error": "same.md: duplicate",
+        "status": status,
+        "progress_stage": progress_stage,
+        "progress_current": progress_current,
+        "progress_total": progress_total,
+        "progress": {
+            "stage": progress_stage,
+            "current": progress_current,
+            "total": progress_total,
         },
-    )
-
-    async with app.test_request_context(
-        "/api/kb/document/upload/progress?task_id=task-1",
-        method="GET",
-    ):
-        response = await KnowledgeBaseRoute.get_upload_progress(route)
-
-    assert response["status"] == "ok"
-    assert response["data"] == {
-        "task_id": "task-1",
-        "status": "partial_failed",
-        "progress_stage": "completed",
-        "progress_current": 2,
-        "progress_total": 2,
-        "progress": {"stage": "completed", "current": 2, "total": 2},
         "result": result,
         "error": "same.md: duplicate",
     }
