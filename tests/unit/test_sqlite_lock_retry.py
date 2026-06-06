@@ -3,11 +3,11 @@ from collections.abc import Sequence
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from astrbot.core.db import _configure_sqlite_connection as configure_main_sqlite
 from astrbot.core.db import sqlite
 from astrbot.core.db.po import Preference
-from astrbot.core.knowledge_base.kb_db_sqlite import (
-    _configure_sqlite_connection as configure_kb_sqlite,
+from astrbot.core.db.sqlite_pragmas import (
+    SQLITE_CONNECT_PRAGMAS,
+    configure_sqlite_connection,
 )
 
 
@@ -98,18 +98,25 @@ async def test_get_preference_retries_sqlite_database_lock(
     )
     session = _LockedOnceSession(preference)
     sleep_delays = []
+    debug_logs = []
 
     async def record_sleep(delay: float) -> None:
         sleep_delays.append(delay)
 
     monkeypatch.setattr(temp_db, "get_db", lambda: _SessionContext(session))
     monkeypatch.setattr(sqlite.asyncio, "sleep", record_sleep)
+    monkeypatch.setattr(
+        sqlite.logger,
+        "debug",
+        lambda *args, **kwargs: debug_logs.append((args, kwargs)),
+    )
 
     result = await temp_db.get_preference("global", "global", "migration_done")
 
     assert result == preference
     assert session.attempts == 2
     assert sleep_delays == [sqlite.SQLITE_LOCK_RETRY_BASE_DELAY]
+    assert len(debug_logs) == 1
 
 
 @pytest.mark.asyncio
@@ -167,12 +174,18 @@ async def test_get_preference_propagates_operational_error_after_retry_exhaustio
 ):
     session = _AlwaysLockedSession()
     sleep_delays = []
+    warning_logs = []
 
     async def record_sleep(delay: float) -> None:
         sleep_delays.append(delay)
 
     monkeypatch.setattr(temp_db, "get_db", lambda: _SessionContext(session))
     monkeypatch.setattr(sqlite.asyncio, "sleep", record_sleep)
+    monkeypatch.setattr(
+        sqlite.logger,
+        "warning",
+        lambda *args, **kwargs: warning_logs.append((args, kwargs)),
+    )
 
     with pytest.raises(OperationalError) as exc_info:
         await temp_db.get_preference("global", "global", "migration_done")
@@ -184,6 +197,30 @@ async def test_get_preference_propagates_operational_error_after_retry_exhaustio
     assert session.attempts == sqlite.SQLITE_LOCK_RETRY_ATTEMPTS
     assert sleep_delays == expected_sleep_delays
     assert exc_info.value is session.last_error
+    assert len(warning_logs) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_preference_uses_configured_sqlite_lock_retry_settings(
+    temp_db,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    temp_db.sqlite_lock_retry_attempts = 2
+    temp_db.sqlite_lock_retry_base_delay = 0.05
+    session = _AlwaysLockedSession()
+    sleep_delays = []
+
+    async def record_sleep(delay: float) -> None:
+        sleep_delays.append(delay)
+
+    monkeypatch.setattr(temp_db, "get_db", lambda: _SessionContext(session))
+    monkeypatch.setattr(sqlite.asyncio, "sleep", record_sleep)
+
+    with pytest.raises(OperationalError):
+        await temp_db.get_preference("global", "global", "migration_done")
+
+    assert session.attempts == 2
+    assert sleep_delays == [0.05]
 
 
 def test_sqlite_lock_detection_falls_back_when_orig_is_none():
@@ -192,22 +229,10 @@ def test_sqlite_lock_detection_falls_back_when_orig_is_none():
     assert sqlite._is_sqlite_database_locked_error(error)
 
 
-@pytest.mark.parametrize(
-    "configure_sqlite",
-    [configure_main_sqlite, configure_kb_sqlite],
-)
-def test_sqlite_connect_hook_uses_only_lightweight_connection_pragmas(
-    configure_sqlite,
-):
+def test_sqlite_connect_hook_uses_only_lightweight_connection_pragmas():
     connection = _RecordingConnection()
 
-    configure_sqlite(connection, None)
+    configure_sqlite_connection(connection, None)
 
     assert connection.cursor_instance.closed
-    assert connection.cursor_instance.statements == [
-        "PRAGMA busy_timeout=30000",
-        "PRAGMA synchronous=NORMAL",
-        "PRAGMA cache_size=20000",
-        "PRAGMA temp_store=MEMORY",
-        "PRAGMA mmap_size=134217728",
-    ]
+    assert connection.cursor_instance.statements == list(SQLITE_CONNECT_PRAGMAS)

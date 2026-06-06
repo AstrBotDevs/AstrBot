@@ -30,18 +30,7 @@ from astrbot.core.db.po import (
     UmoAlias,
     WebChatThread,
 )
-
-
-def _configure_sqlite_connection(dbapi_connection, connection_record) -> None:
-    cursor = dbapi_connection.cursor()
-    try:
-        cursor.execute("PRAGMA busy_timeout=30000")
-        cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA cache_size=20000")
-        cursor.execute("PRAGMA temp_store=MEMORY")
-        cursor.execute("PRAGMA mmap_size=134217728")
-    finally:
-        cursor.close()
+from astrbot.core.db.sqlite_pragmas import configure_sqlite_connection
 
 
 @dataclass
@@ -77,7 +66,7 @@ class BaseDatabase(abc.ABC):
             event.listen(
                 self.engine.sync_engine,
                 "connect",
-                _configure_sqlite_connection,
+                configure_sqlite_connection,
             )
         self.AsyncSessionLocal = async_sessionmaker(
             self.engine,

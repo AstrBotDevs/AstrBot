@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import threading
 import typing as T
 from collections.abc import Awaitable, Callable
@@ -42,6 +43,7 @@ TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
 SQLITE_LOCK_RETRY_ATTEMPTS = 3
 SQLITE_LOCK_RETRY_BASE_DELAY = 0.2
+logger = logging.getLogger(__name__)
 
 
 def _is_sqlite_database_locked_error(exc: OperationalError) -> bool:
@@ -51,18 +53,30 @@ def _is_sqlite_database_locked_error(exc: OperationalError) -> bool:
 
 
 class SQLiteDatabase(BaseDatabase):
-    def __init__(self, db_path: str) -> None:
+    def __init__(
+        self,
+        db_path: str,
+        sqlite_lock_retry_attempts: int = SQLITE_LOCK_RETRY_ATTEMPTS,
+        sqlite_lock_retry_base_delay: float = SQLITE_LOCK_RETRY_BASE_DELAY,
+    ) -> None:
+        if sqlite_lock_retry_attempts < 1:
+            raise ValueError("sqlite_lock_retry_attempts must be at least 1")
+        if sqlite_lock_retry_base_delay < 0:
+            raise ValueError("sqlite_lock_retry_base_delay must be non-negative")
+
         self.db_path = db_path
         self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
         self.inited = False
+        self.sqlite_lock_retry_attempts = sqlite_lock_retry_attempts
+        self.sqlite_lock_retry_base_delay = sqlite_lock_retry_base_delay
         super().__init__()
 
     async def _with_session_and_sqlite_lock_retry(
         self,
         operation: Callable[[AsyncSession], Awaitable[TxResult]],
     ) -> TxResult:
-        for attempt in range(SQLITE_LOCK_RETRY_ATTEMPTS):
-            last_attempt = attempt == SQLITE_LOCK_RETRY_ATTEMPTS - 1
+        for attempt in range(self.sqlite_lock_retry_attempts):
+            last_attempt = attempt == self.sqlite_lock_retry_attempts - 1
             try:
                 async with self.get_db() as session:
                     session: AsyncSession
@@ -70,9 +84,22 @@ class SQLiteDatabase(BaseDatabase):
             except asyncio.CancelledError:
                 raise
             except OperationalError as exc:
-                if not _is_sqlite_database_locked_error(exc) or last_attempt:
+                if not _is_sqlite_database_locked_error(exc):
                     raise
-                await asyncio.sleep(SQLITE_LOCK_RETRY_BASE_DELAY * (2**attempt))
+                if last_attempt:
+                    logger.warning(
+                        "SQLite database lock retry exhausted after %s attempts",
+                        self.sqlite_lock_retry_attempts,
+                    )
+                    raise
+                delay = self.sqlite_lock_retry_base_delay * (2**attempt)
+                logger.debug(
+                    "SQLite database locked; retrying in %.3f seconds (attempt %s/%s)",
+                    delay,
+                    attempt + 1,
+                    self.sqlite_lock_retry_attempts,
+                )
+                await asyncio.sleep(delay)
 
         raise RuntimeError("unreachable sqlite lock retry state")
 

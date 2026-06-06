@@ -8,6 +8,7 @@ from sqlalchemy.pool import NullPool
 from sqlmodel import col, desc
 
 from astrbot.core import logger
+from astrbot.core.db.sqlite_pragmas import configure_sqlite_connection
 from astrbot.core.knowledge_base.models import (
     BaseKBModel,
     KBDocument,
@@ -18,18 +19,6 @@ from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
 
 if TYPE_CHECKING:
     from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
-
-
-def _configure_sqlite_connection(dbapi_connection, connection_record) -> None:
-    cursor = dbapi_connection.cursor()
-    try:
-        cursor.execute("PRAGMA busy_timeout=30000")
-        cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA cache_size=20000")
-        cursor.execute("PRAGMA temp_store=MEMORY")
-        cursor.execute("PRAGMA mmap_size=134217728")
-    finally:
-        cursor.close()
 
 
 class KBSQLiteDatabase:
@@ -59,7 +48,7 @@ class KBSQLiteDatabase:
         event.listen(
             self.engine.sync_engine,
             "connect",
-            _configure_sqlite_connection,
+            configure_sqlite_connection,
         )
 
         # 创建会话工厂
