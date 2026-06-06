@@ -1,7 +1,5 @@
 import asyncio
 import datetime
-import hashlib
-import json
 import random
 import uuid
 from collections import defaultdict, deque
@@ -108,22 +106,31 @@ class GroupChatContext:
             configured_provider_id=image_caption_provider_id,
         )
 
-        async def _caption_factory() -> str:
-            response = await provider.text_chat(
-                prompt=image_caption_prompt,
-                session_id=uuid.uuid4().hex,
-                image_urls=[image_url],
-                persist=False,
-            )
-            return response.completion_text
-
         return await image_caption_cache.get_or_create(
             provider_id=provider_id,
             prompt=image_caption_prompt,
             image_urls=[image_url],
             ttl_seconds=cache_ttl,
-            caption_factory=_caption_factory,
+            caption_factory=lambda: self._fetch_image_caption(
+                provider,
+                image_caption_prompt,
+                image_url,
+            ),
         )
+
+    async def _fetch_image_caption(
+        self,
+        provider: Provider,
+        prompt: str,
+        image_url: str,
+    ) -> str:
+        response = await provider.text_chat(
+            prompt=prompt,
+            session_id=uuid.uuid4().hex,
+            image_urls=[image_url],
+            persist=False,
+        )
+        return response.completion_text
 
     async def need_active_reply(self, event: AstrMessageEvent) -> bool:
         cfg = self.cfg(event)
@@ -278,23 +285,18 @@ def _resolve_provider_cache_identity(
     if configured_provider_id:
         return configured_provider_id
 
-    provider_id = provider.provider_config.get("id", "")
+    provider_config = provider.provider_config or {}
+    provider_id = provider_config.get("id", "")
     if isinstance(provider_id, str) and provider_id:
         return provider_id
 
-    payload = {
-        "provider_class": (
-            f"{provider.__class__.__module__}.{provider.__class__.__qualname__}"
-        ),
-        "provider_type": provider.provider_config.get("type", ""),
-        "model": provider.get_model(),
-        "provider_config": provider.provider_config,
-    }
-    raw_payload = json.dumps(
-        payload,
-        sort_keys=True,
-        ensure_ascii=True,
-        default=str,
+    provider_type = provider_config.get("type", "")
+    model = provider.get_model()
+    return ":".join(
+        [
+            provider.__class__.__module__,
+            provider.__class__.__qualname__,
+            "" if provider_type is None else str(provider_type),
+            "" if model is None else str(model),
+        ]
     )
-    digest = hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()[:16]
-    return f"default:{provider.__class__.__qualname__}:{digest}"

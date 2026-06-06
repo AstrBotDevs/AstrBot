@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import inspect
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -54,10 +56,10 @@ class ImageCaptionCache:
         prompt: str,
         image_urls: list[str],
         ttl_seconds: int,
-        caption_factory,
+        caption_factory: Callable[[], Awaitable[str]],
     ) -> str:
         if ttl_seconds <= 0:
-            return await caption_factory()
+            return await self._invoke_caption_factory(caption_factory)
 
         cache_key = await self._build_cache_key(
             provider_id=provider_id,
@@ -83,7 +85,7 @@ class ImageCaptionCache:
                     )
                     return cached_caption
 
-                caption = await caption_factory()
+                caption = await self._invoke_caption_factory(caption_factory)
                 self._entries[cache_key] = _ImageCaptionCacheEntry(
                     caption=caption,
                     expires_at=time.monotonic() + ttl_seconds,
@@ -92,6 +94,17 @@ class ImageCaptionCache:
                 return caption
         finally:
             self._release_lock_entry(cache_key, lock_entry)
+
+    async def _invoke_caption_factory(
+        self,
+        caption_factory: Callable[[], Awaitable[str]],
+    ) -> str:
+        result = caption_factory()
+        if not inspect.isawaitable(result):
+            raise TypeError(
+                "caption_factory must be callable and return an awaitable resolving to str"
+            )
+        return await result
 
     def _get(self, cache_key: str) -> str | None:
         entry = self._entries.get(cache_key)
@@ -109,13 +122,18 @@ class ImageCaptionCache:
         ]
         for key in expired_keys:
             self._entries.pop(key, None)
+            self._locks.pop(key, None)
 
     def _acquire_lock_entry(self, cache_key: str) -> _ImageCaptionCacheLockEntry:
+        lock_entry = self._get_lock_entry(cache_key)
+        lock_entry.users += 1
+        return lock_entry
+
+    def _get_lock_entry(self, cache_key: str) -> _ImageCaptionCacheLockEntry:
         lock_entry = self._locks.get(cache_key)
         if lock_entry is None:
             lock_entry = _ImageCaptionCacheLockEntry(lock=asyncio.Lock())
             self._locks[cache_key] = lock_entry
-        lock_entry.users += 1
         return lock_entry
 
     def _release_lock_entry(
@@ -146,30 +164,42 @@ class ImageCaptionCache:
 
     async def _fingerprint_image(self, image_url: str) -> str:
         if image_url.startswith("base64://"):
-            raw_base64 = image_url.removeprefix("base64://")
-            try:
-                image_bytes = base64.b64decode(raw_base64)
-            except Exception:
-                return f"ref:{image_url}"
-            return self._hash_bytes(image_bytes)
+            return self._fingerprint_base64_image(image_url)
 
         if image_url.startswith("data:image"):
-            try:
-                _, encoded = image_url.split(",", 1)
-                image_bytes = base64.b64decode(encoded)
-            except Exception:
-                return f"ref:{image_url}"
-            return self._hash_bytes(image_bytes)
+            return self._fingerprint_data_uri_image(image_url)
 
         if image_url.startswith(("http://", "https://")):
-            return f"url:{image_url}"
+            return self._fingerprint_remote_image(image_url)
 
+        return await self._fingerprint_local_image(image_url)
+
+    def _fingerprint_base64_image(self, image_url: str) -> str:
+        raw_base64 = image_url.removeprefix("base64://")
+        try:
+            image_bytes = base64.b64decode(raw_base64)
+        except Exception:
+            return self._reference_fingerprint(image_url)
+        return self._hash_bytes(image_bytes)
+
+    def _fingerprint_data_uri_image(self, image_url: str) -> str:
+        try:
+            _, encoded = image_url.split(",", 1)
+            image_bytes = base64.b64decode(encoded)
+        except Exception:
+            return self._reference_fingerprint(image_url)
+        return self._hash_bytes(image_bytes)
+
+    def _fingerprint_remote_image(self, image_url: str) -> str:
+        return f"url:{image_url}"
+
+    async def _fingerprint_local_image(self, image_url: str) -> str:
         local_path = self._to_local_path(image_url)
         if local_path and local_path.is_file():
             image_bytes = await asyncio.to_thread(local_path.read_bytes)
             return self._hash_bytes(image_bytes)
 
-        return f"ref:{image_url}"
+        return self._reference_fingerprint(image_url)
 
     def _to_local_path(self, image_url: str) -> Path | None:
         if image_url.startswith("file://"):
@@ -190,6 +220,9 @@ class ImageCaptionCache:
 
     def _hash_bytes(self, payload: bytes) -> str:
         return hashlib.sha256(payload).hexdigest()
+
+    def _reference_fingerprint(self, image_url: str) -> str:
+        return f"ref:{image_url}"
 
 
 image_caption_cache = ImageCaptionCache()
