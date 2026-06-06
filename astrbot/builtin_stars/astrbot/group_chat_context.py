@@ -7,7 +7,7 @@ from collections import defaultdict, deque
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.message_components import At, Image, Plain
+from astrbot.api.message_components import At, Image, Plain, Reply
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.agent.message import TextPart
@@ -214,8 +214,43 @@ class GroupChatContext:
                 if is_at_self:
                     parts.insert(1, "⚠️[DIRECTED AT YOU] ")
                 parts.append(f" [At: {comp.name}]")
+            elif isinstance(comp, Reply):
+                if comp.message_str:
+                    parts.append(
+                        f" [引用消息({comp.sender_nickname}: {comp.message_str})]"
+                    )
+                elif comp.chain:
+                    chain_desc = _describe_chain(comp.chain)
+                    parts.append(
+                        f" [引用消息({comp.sender_nickname}: {chain_desc})]"
+                    )
+                else:
+                    parts.append(" [引用消息]")
 
         return "".join(parts)
+
+
+def _describe_chain(chain: list) -> str:
+    """简要描述消息链内容，用于引用消息的展示"""
+    desc = []
+    for c in chain:
+        cls_name = c.__class__.__name__
+        if cls_name == "Plain" and getattr(c, "text", None):
+            desc.append(c.text)
+        elif cls_name == "Image":
+            desc.append("[图片]")
+        elif cls_name == "At":
+            name = getattr(c, "name", "") or getattr(c, "qq", "")
+            desc.append(f"[At: {name}]")
+        elif cls_name == "Record":
+            desc.append("[语音]")
+        elif cls_name == "Video":
+            desc.append("[视频]")
+        elif cls_name == "File":
+            desc.append(f"[文件: {getattr(c, 'name', '') or ''}]")
+        else:
+            desc.append(f"[{cls_name}]")
+    return "".join(desc) or "[未知内容]"
 
 
 def _positive_int(value, fallback: int) -> int:
