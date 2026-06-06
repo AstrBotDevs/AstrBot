@@ -1044,7 +1044,7 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
             _wrap_system_block(
                 "safety_instructions",
                 LLM_SAFETY_MODE_SYSTEM_PROMPT,
-            )
+            ).lstrip()
             + f"\n{req.system_prompt or ''}"
         )
     else:
