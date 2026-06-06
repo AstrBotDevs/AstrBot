@@ -8,6 +8,7 @@ import pytest_asyncio
 from quart import Quart, g, request
 from werkzeug.datastructures import FileStorage
 
+import astrbot.dashboard.routes.chat as chat_module
 import astrbot.dashboard.routes.open_api as open_api_module
 from astrbot.core import LogBroker
 from astrbot.core.config.default import DEFAULT_CONFIG
@@ -248,7 +249,8 @@ async def test_open_chat_send_auto_session_id_and_username(
             json={
                 "message": "hello",
                 "username": "astrbot",
-                "_sender_id": "astrbot",
+                "_sender_id": "evil-admin",
+                "_sender_name": "evil-admin",
                 "enable_streaming": False,
             },
             headers={"X-API-Key": raw_key},
@@ -435,6 +437,64 @@ async def test_open_chat_ws_send_uses_openapi_sender_id(
     assert queued_payload["sender_id"] not in DEFAULT_CONFIG["admins_id"]
     assert queued_payload["sender_name"] == "astrbot"
     assert any(message["type"] == "session_id" for message in websocket_messages)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_chat_send_ignores_internal_sender_fields(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    test_client = app.test_client()
+    session_id = f"dashboard_sender_{uuid.uuid4().hex[:8]}"
+    chat_queue_items = []
+
+    class CaptureQueue:
+        async def put(self, item):
+            chat_queue_items.append(item)
+
+    def fake_back_queue(*_args, **_kwargs):
+        queue = asyncio.Queue()
+        queue.put_nowait({"type": "end", "data": ""})
+        return queue
+
+    monkeypatch.setattr(
+        chat_module.webchat_queue_mgr,
+        "get_or_create_back_queue",
+        fake_back_queue,
+    )
+    monkeypatch.setattr(
+        chat_module.webchat_queue_mgr,
+        "get_or_create_queue",
+        lambda *_args, **_kwargs: CaptureQueue(),
+    )
+    monkeypatch.setattr(
+        chat_module.webchat_queue_mgr,
+        "remove_back_queue",
+        lambda *_args, **_kwargs: None,
+    )
+
+    send_res = await test_client.post(
+        "/api/chat/send",
+        json={
+            "message": "hello",
+            "session_id": session_id,
+            "_sender_id": "astrbot",
+            "_sender_name": "astrbot",
+        },
+        headers=authenticated_header,
+    )
+
+    assert send_res.status_code == 200
+    body = await send_res.get_data(as_text=True)
+    assert '"type": "session_id"' in body
+    assert len(chat_queue_items) == 1
+    queued_username, queued_session_id, queued_payload = chat_queue_items[0]
+    assert queued_username == core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    assert queued_session_id == session_id
+    assert queued_payload["sender_id"] == queued_username
+    assert queued_payload["sender_name"] == queued_username
 
 
 @pytest.mark.asyncio

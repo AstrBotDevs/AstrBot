@@ -752,8 +752,19 @@ class ChatRoute(Route):
         enable_streaming = post_data.get("enable_streaming", True)
         platform_history_id = post_data.get("_platform_history_id") or "webchat"
         thread_selected_text = post_data.get("_thread_selected_text")
-        sender_id = str(post_data.get("_sender_id") or username)
-        sender_name = str(post_data.get("_sender_name") or username)
+        use_internal_sender = request.path.startswith("/api/v1/") and bool(
+            g.get("api_key_id", None)
+        )
+        sender_id = (
+            str(post_data.get("_sender_id") or username)
+            if use_internal_sender
+            else username
+        )
+        sender_name = (
+            str(post_data.get("_sender_name") or username)
+            if use_internal_sender
+            else username
+        )
 
         if not session_id:
             return Response().error("session_id is empty").__dict__
