@@ -113,6 +113,17 @@ class TestUploadTaskCleanup:
             == "doc: parse error"
         )
 
+    def test_build_batch_failure_error_uses_single_document_reason(self):
+        from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
+
+        assert (
+            KnowledgeBaseRoute._build_batch_failure_error(
+                [{"file_name": "doc.md", "error": "doc.md: duplicate"}],
+            )
+            == "doc.md: duplicate"
+        )
+        assert KnowledgeBaseRoute._build_batch_failure_error([]) is None
+
     @pytest.mark.asyncio
     async def test_cleanup_on_completed_poll(self):
         """Completed task cleaned up when client polls for result."""
@@ -340,6 +351,58 @@ class TestUploadTaskCleanup:
 
         await asyncio.sleep(0.05)
         route._cleanup_task.assert_called_with("task-1")
+
+    @pytest.mark.asyncio
+    async def test_background_upload_marks_task_failed_when_all_files_fail(self):
+        from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
+
+        route = KnowledgeBaseRoute.__new__(KnowledgeBaseRoute)
+        route.upload_tasks = {}
+        route.upload_progress = {}
+        route._update_persistent_task = AsyncMock()
+        route._cleanup_task = MagicMock()
+
+        async def fake_schedule(*args, **kwargs):
+            route._cleanup_task(*args)
+            await asyncio.sleep(0)
+
+        route._schedule_delayed_cleanup = fake_schedule
+
+        kb_helper = AsyncMock()
+        kb_helper.upload_document = AsyncMock(
+            side_effect=RuntimeError("重复文档：same.md 已存在"),
+        )
+
+        files = [{"file_name": "same.md", "file_content": b"same", "file_type": "md"}]
+
+        await route._background_upload_task(
+            task_id="task-dup",
+            kb_helper=kb_helper,
+            files_to_upload=files,
+            chunk_size=512,
+            chunk_overlap=50,
+            batch_size=32,
+            tasks_limit=3,
+            max_retries=3,
+        )
+
+        await asyncio.sleep(0.05)
+
+        result = route.upload_tasks["task-dup"]["result"]
+        error = route.upload_tasks["task-dup"]["error"]
+        assert route.upload_tasks["task-dup"]["status"] == "failed"
+        assert result["success_count"] == 0
+        assert result["failed_count"] == 1
+        assert result["failed"][0]["error"] == ("same.md: 重复文档：same.md 已存在")
+        assert error == "same.md: 重复文档：same.md 已存在"
+        route._update_persistent_task.assert_any_await(
+            "task-dup",
+            status="failed",
+            result=result,
+            error=error,
+            **_persistent_progress_kwargs(route.upload_progress["task-dup"]),
+        )
+        route._cleanup_task.assert_called_with("task-dup")
 
     @pytest.mark.asyncio
     async def test_background_import_schedules_cleanup(self):

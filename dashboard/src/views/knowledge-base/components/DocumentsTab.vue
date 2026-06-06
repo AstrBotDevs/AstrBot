@@ -1406,9 +1406,11 @@ const uploadFiles = async () => {
         "error",
       );
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to upload document:", error);
-    showSnackbar(t("documents.uploadFailed"), "error");
+    const message =
+      error.response?.data?.message || t("documents.uploadFailed");
+    showSnackbar(message, "error");
   } finally {
     uploading.value = false;
   }
@@ -1539,6 +1541,8 @@ const startProgressPolling = (
           const failedDetails = (result?.failed || [])
             .map((item: any) => item.error || item.file_name)
             .filter(Boolean);
+          const failedReason =
+            data.error || failedDetails[0] || t("upload.unknownError");
 
           documents.value = clearDocumentTaskState(documents.value, taskId);
 
@@ -1560,6 +1564,12 @@ const startProgressPolling = (
             }
           } else if (failedCount === 0) {
             showSnackbar(t("upload.successCount", { count: successCount }));
+          } else if (successCount === 0) {
+            showSnackbar(
+              t("upload.failedWithReason", { reason: failedReason }),
+              "error",
+              failedDetails,
+            );
           } else {
             showSnackbar(
               t("upload.partialSuccess", {
@@ -1577,12 +1587,17 @@ const startProgressPolling = (
           await loadDocuments();
           emit("refresh");
 
-          const reason = data.error || t("upload.unknownError");
+          const failedDetails = (data.result?.failed || [])
+            .map((item: any) => item.error || item.file_name)
+            .filter(Boolean);
+          const reason =
+            data.error || failedDetails[0] || t("upload.unknownError");
           showSnackbar(
             mode === "rebuild"
               ? t("documents.rebuildFailedWithReason", { reason })
               : t("upload.failedWithReason", { reason }),
             "error",
+            failedDetails,
           );
         }
       } else {

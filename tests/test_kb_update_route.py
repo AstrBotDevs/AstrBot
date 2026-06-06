@@ -1117,6 +1117,97 @@ def test_get_persistent_progress_updates_includes_flattened_fields():
 
 
 @pytest.mark.asyncio
+async def test_get_upload_progress_returns_failed_task_result_from_memory():
+    from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
+
+    app = Quart(__name__)
+    route = _build_route_with_manager(MagicMock())
+    result = {
+        "task_id": "task-1",
+        "uploaded": [],
+        "failed": [{"file_name": "same.md", "error": "same.md: duplicate"}],
+        "total": 1,
+        "success_count": 0,
+        "failed_count": 1,
+    }
+    route.upload_tasks = {
+        "task-1": {
+            "status": "failed",
+            "result": result,
+            "error": "same.md: duplicate",
+        },
+    }
+    route.upload_progress = {
+        "task-1": {"status": "failed", "stage": "parsing", "current": 0, "total": 100},
+    }
+    route._cleanup_task = MagicMock()
+
+    async with app.test_request_context(
+        "/api/kb/document/upload/progress?task_id=task-1",
+        method="GET",
+    ):
+        response = await KnowledgeBaseRoute.get_upload_progress(route)
+
+    assert response["status"] == "ok"
+    assert response["data"] == {
+        "task_id": "task-1",
+        "status": "failed",
+        "result": result,
+        "error": "same.md: duplicate",
+    }
+    route._cleanup_task.assert_called_once_with("task-1")
+
+
+@pytest.mark.asyncio
+async def test_get_upload_progress_returns_failed_persistent_task_result():
+    from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
+
+    app = Quart(__name__)
+    route = _build_route_with_manager(MagicMock())
+    route.upload_tasks = {}
+    route.upload_progress = {}
+    result = {
+        "task_id": "task-1",
+        "uploaded": [],
+        "failed": [{"file_name": "same.md", "error": "same.md: duplicate"}],
+        "total": 1,
+        "success_count": 0,
+        "failed_count": 1,
+    }
+    route._get_persistent_task = AsyncMock(
+        return_value={
+            "task_id": "task-1",
+            "status": "failed",
+            "progress_stage": "parsing",
+            "progress_current": 0,
+            "progress_total": 100,
+            "progress": {"stage": "parsing", "current": 0, "total": 100},
+            "result": result,
+            "error": "same.md: duplicate",
+        },
+    )
+
+    async with app.test_request_context(
+        "/api/kb/document/upload/progress?task_id=task-1",
+        method="GET",
+    ):
+        response = await KnowledgeBaseRoute.get_upload_progress(route)
+
+    assert response["status"] == "ok"
+    assert response["data"] == {
+        "task_id": "task-1",
+        "status": "failed",
+        "progress_stage": "parsing",
+        "progress_current": 0,
+        "progress_total": 100,
+        "progress": {"stage": "parsing", "current": 0, "total": 100},
+        "result": result,
+        "error": "same.md: duplicate",
+    }
+    route._get_persistent_task.assert_awaited_once_with("task-1")
+
+
+@pytest.mark.asyncio
 async def test_get_task_returns_persistent_task():
     from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
 
