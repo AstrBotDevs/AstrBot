@@ -369,16 +369,37 @@ class ProviderOpenAIOfficial(Provider):
             return self._file_uri_to_path(audio_ref), cleanup_paths
         if audio_ref.startswith("data:"):
             # data URI 格式: data:audio/wav;base64,<base64_data>
-            # 或 data:audio/mp3;base64,<base64_data>
+            # 或 data:audio/mpeg;base64,<base64_data>
             try:
+                # 防止过大的 base64 payload 导致内存耗尽
+                if len(audio_ref) > 10 * 1024 * 1024:  # 10 MB
+                    logger.warning(
+                        "data URI 音频过大 (%.1f MB)，将忽略",
+                        len(audio_ref) / (1024 * 1024),
+                    )
+                    return audio_ref, cleanup_paths
+
                 header, base64_data = audio_ref.split(",", 1)
-                # 从 data URI header 中提取 MIME 类型和格式
-                # 例如 "data:audio/wav;base64" -> "wav"
+
+                # 从 data URI header 中提取 MIME 类型
                 mime_parts = header.removeprefix("data:").split(";")
                 mime_type = mime_parts[0] if mime_parts else "audio/wav"
-                suffix = "." + mime_type.split("/")[-1] if "/" in mime_type else ".wav"
-                if suffix not in (".wav", ".mp3", ".ogg", ".m4a", ".aac", ".flac"):
-                    suffix = ".wav"
+
+                # 使用显式映射避免 audio/mpeg 被错误转换为 .mpeg 而非 .mp3
+                mime_to_suffix = {
+                    "audio/wav": ".wav",
+                    "audio/x-wav": ".wav",
+                    "audio/mpeg": ".mp3",
+                    "audio/mp3": ".mp3",
+                    "audio/ogg": ".ogg",
+                    "audio/m4a": ".m4a",
+                    "audio/x-m4a": ".m4a",
+                    "audio/aac": ".aac",
+                    "audio/flac": ".flac",
+                    "audio/x-flac": ".flac",
+                }
+                suffix = mime_to_suffix.get(mime_type, ".wav")
+
                 audio_bytes = base64.b64decode(base64_data)
                 temp_dir = Path(get_astrbot_temp_path())
                 temp_dir.mkdir(parents=True, exist_ok=True)
@@ -386,8 +407,10 @@ class ProviderOpenAIOfficial(Provider):
                 target_path.write_bytes(audio_bytes)
                 cleanup_paths.append(target_path)
                 return str(target_path), cleanup_paths
-            except Exception as exc:
-                logger.warning("解析 data URI 音频失败: %s，错误: %s", audio_ref[:100], exc)
+            except (ValueError, binascii.Error, OSError) as exc:
+                logger.warning(
+                    "解析 data URI 音频失败: %s，错误: %s", audio_ref[:100], exc
+                )
                 return audio_ref, cleanup_paths
         return audio_ref, cleanup_paths
 
