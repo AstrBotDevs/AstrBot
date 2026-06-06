@@ -300,6 +300,8 @@ class QQOfficialPlatformAdapter(Platform):
             else:
                 if image_path:
                     payload["file_image"] = image_path
+                # Guild channel send API does not accept the QQ v2 msg_type field.
+                payload.pop("msg_type", None)
                 ret = await self.client.api.post_message(
                     channel_id=session.session_id,
                     **payload,
