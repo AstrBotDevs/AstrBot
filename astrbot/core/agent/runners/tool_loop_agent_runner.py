@@ -1043,6 +1043,33 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     continue
 
+                # 统一权限拦截（过滤点 B：双保险）
+                # 即使 LLM 意外获知了受限工具，执行前也会在此被阻断。
+                if getattr(func_tool, "require_admin", False):
+                    _caller_event = self.run_context.context.event
+                    if getattr(_caller_event, "role", "member") != "admin":
+                        sender_id = (
+                            _caller_event.get_sender_id()
+                            if _caller_event
+                            else "unknown"
+                        )
+                        logger.warning(
+                            "Tool '%s' requires admin, "
+                            "caller role='%s', sender_id='%s'. Blocked.",
+                            func_tool_name,
+                            getattr(_caller_event, "role", "?"),
+                            sender_id,
+                        )
+                        _append_tool_call_result(
+                            func_tool_id,
+                            f"error: Permission denied. "
+                            f"Tool '{func_tool_name}' requires admin privileges. "
+                            f"Your user ID is {sender_id}. "
+                            "Ask the AstrBot admin to grant access via "
+                            "WebUI → 管理行为 → 函数工具 → 权限列.",
+                        )
+                        continue
+
                 valid_params = {}  # 参数过滤：只传递函数实际需要的参数
 
                 # 获取实际的 handler 函数
