@@ -53,7 +53,7 @@ async def test_group_chat_context_reuses_cached_image_caption(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_image_caption_cache_releases_per_key_lock_after_waiters_complete():
+async def test_image_caption_cache_reuses_per_key_lock_after_waiters_complete():
     cache = ImageCaptionCache()
     started = asyncio.Event()
     release = asyncio.Event()
@@ -94,7 +94,7 @@ async def test_image_caption_cache_releases_per_key_lock_after_waiters_complete(
     assert await task1 == "cached caption"
     assert await task2 == "cached caption"
     assert calls == 1
-    assert cache._locks == {}
+    assert len(cache._locks) == 1
 
 
 @pytest.mark.asyncio

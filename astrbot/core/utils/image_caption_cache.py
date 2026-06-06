@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
-import inspect
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -34,16 +33,10 @@ class _ImageCaptionCacheEntry:
     expires_at: float
 
 
-@dataclass(slots=True)
-class _ImageCaptionCacheLockEntry:
-    lock: asyncio.Lock
-    users: int = 0
-
-
 class ImageCaptionCache:
     def __init__(self) -> None:
         self._entries: dict[str, _ImageCaptionCacheEntry] = {}
-        self._locks: dict[str, _ImageCaptionCacheLockEntry] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
 
     def clear(self) -> None:
         self._entries.clear()
@@ -59,7 +52,7 @@ class ImageCaptionCache:
         caption_factory: Callable[[], Awaitable[str]],
     ) -> str:
         if ttl_seconds <= 0:
-            return await self._invoke_caption_factory(caption_factory)
+            return await caption_factory()
 
         cache_key = await self._build_cache_key(
             provider_id=provider_id,
@@ -74,37 +67,23 @@ class ImageCaptionCache:
             )
             return cached_caption
 
-        lock_entry = self._acquire_lock_entry(cache_key)
-        try:
-            async with lock_entry.lock:
-                cached_caption = self._get(cache_key)
-                if cached_caption is not None:
-                    logger.debug(
-                        "Using cached image caption after lock wait. provider=%s",
-                        provider_id or "<default>",
-                    )
-                    return cached_caption
-
-                caption = await self._invoke_caption_factory(caption_factory)
-                self._entries[cache_key] = _ImageCaptionCacheEntry(
-                    caption=caption,
-                    expires_at=time.monotonic() + ttl_seconds,
+        lock = self._get_lock(cache_key)
+        async with lock:
+            cached_caption = self._get(cache_key)
+            if cached_caption is not None:
+                logger.debug(
+                    "Using cached image caption after lock wait. provider=%s",
+                    provider_id or "<default>",
                 )
-                self._cleanup_expired_entries()
-                return caption
-        finally:
-            self._release_lock_entry(cache_key, lock_entry)
+                return cached_caption
 
-    async def _invoke_caption_factory(
-        self,
-        caption_factory: Callable[[], Awaitable[str]],
-    ) -> str:
-        result = caption_factory()
-        if not inspect.isawaitable(result):
-            raise TypeError(
-                "caption_factory must be callable and return an awaitable resolving to str"
+            caption = await caption_factory()
+            self._entries[cache_key] = _ImageCaptionCacheEntry(
+                caption=caption,
+                expires_at=time.monotonic() + ttl_seconds,
             )
-        return await result
+            self._cleanup_expired_entries()
+            return caption
 
     def _get(self, cache_key: str) -> str | None:
         entry = self._entries.get(cache_key)
@@ -122,31 +101,13 @@ class ImageCaptionCache:
         ]
         for key in expired_keys:
             self._entries.pop(key, None)
-            self._locks.pop(key, None)
 
-    def _acquire_lock_entry(self, cache_key: str) -> _ImageCaptionCacheLockEntry:
-        lock_entry = self._get_lock_entry(cache_key)
-        lock_entry.users += 1
-        return lock_entry
-
-    def _get_lock_entry(self, cache_key: str) -> _ImageCaptionCacheLockEntry:
-        lock_entry = self._locks.get(cache_key)
-        if lock_entry is None:
-            lock_entry = _ImageCaptionCacheLockEntry(lock=asyncio.Lock())
-            self._locks[cache_key] = lock_entry
-        return lock_entry
-
-    def _release_lock_entry(
-        self,
-        cache_key: str,
-        lock_entry: _ImageCaptionCacheLockEntry,
-    ) -> None:
-        current_lock_entry = self._locks.get(cache_key)
-        if current_lock_entry is not lock_entry:
-            return
-        current_lock_entry.users -= 1
-        if current_lock_entry.users <= 0:
-            self._locks.pop(cache_key, None)
+    def _get_lock(self, cache_key: str) -> asyncio.Lock:
+        lock = self._locks.get(cache_key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[cache_key] = lock
+        return lock
 
     async def _build_cache_key(
         self,
