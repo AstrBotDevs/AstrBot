@@ -55,6 +55,7 @@ class ToolsRoute(Route):
             "/tools/mcp/test": ("POST", self.test_mcp_connection),
             "/tools/list": ("GET", self.get_tool_list),
             "/tools/toggle-tool": ("POST", self.toggle_tool),
+            "/tools/set-permission": ("POST", self.set_tool_permission),
             "/tools/mcp/sync-provider": ("POST", self.sync_provider),
         }
         self.register_routes()
@@ -498,6 +499,7 @@ class ToolsRoute(Route):
                     "description": tool.description,
                     "parameters": tool.parameters,
                     "active": tool.active,
+                    "require_admin": getattr(tool, "require_admin", False),
                     "origin": origin,
                     "origin_name": origin_name,
                     "readonly": readonly,
@@ -550,6 +552,42 @@ class ToolsRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"Failed to operate tool: {e!s}").__dict__
+
+    async def set_tool_permission(self):
+        """Set require_admin flag for a specified tool."""
+        try:
+            data = await request.json
+            tool_name = data.get("name")
+            require_admin = data.get("require_admin")
+
+            if not tool_name or require_admin is None:
+                return (
+                    Response()
+                    .error("Missing required parameters: name or require_admin")
+                    .__dict__
+                )
+
+            if self.tool_mgr.is_builtin_tool(tool_name):
+                return (
+                    Response()
+                    .error(
+                        f"Tool {tool_name} is a builtin tool and its permission cannot be changed."
+                    )
+                    .__dict__
+                )
+
+            ok = self.tool_mgr.set_tool_require_admin(tool_name, bool(require_admin))
+            if ok:
+                return Response().ok(None, "Permission updated.").__dict__
+            return (
+                Response()
+                .error(f"Tool {tool_name} does not exist or the operation failed.")
+                .__dict__
+            )
+
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"Failed to set tool permission: {e!s}").__dict__
 
     async def sync_provider(self):
         """Sync MCP provider configuration."""
