@@ -680,6 +680,7 @@ class FunctionToolManager:
             self.func_list.append(func_tool)
 
         logger.info(f"Connected to MCP server {name}, Tools: {tool_names}")
+        self._restore_tool_permissions()
         return mcp_client
 
     async def _terminate_mcp_client(self, name: str) -> None:
