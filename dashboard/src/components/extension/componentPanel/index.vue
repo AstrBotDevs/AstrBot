@@ -125,6 +125,26 @@ const handleToggleTool = async (tool: ToolItem) => {
   }
 };
 
+const handleUpdateToolPermission = async (tool: ToolItem, permission: 'admin' | 'everyone') => {
+  const previous = tool.require_admin;
+  tool.require_admin = permission === 'admin';
+  try {
+    const res = await axios.post('/api/tools/set-permission', {
+      name: tool.name,
+      require_admin: tool.require_admin
+    });
+    if (res.data.status === 'ok') {
+      toast(tmTool('messages.updatePermissionSuccess'));
+    } else {
+      tool.require_admin = previous;
+      toast(res.data.message || tmTool('messages.updatePermissionError', { error: '' }), 'error');
+    }
+  } catch (error: any) {
+    tool.require_admin = previous;
+    toast(error?.response?.data?.message || error?.message || tmTool('messages.updatePermissionError', { error: '' }), 'error');
+  }
+};
+
 // 处理确认重命名
 const handleConfirmRename = async () => {
   await confirmRename(tm('messages.renameSuccess'), tm('messages.renameFailed'));
@@ -274,6 +294,7 @@ watch(viewMode, async (mode) => {
               :items="filteredTools"
               :loading="toolsLoading"
               @toggle-tool="handleToggleTool"
+              @update-permission="handleUpdateToolPermission"
             />
           </div>
         </v-card-text>
