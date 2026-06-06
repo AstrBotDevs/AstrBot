@@ -58,6 +58,11 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     Whether the tool is active. This field is a special field for AstrBot.
     You can ignore it when integrating with other frameworks.
     """
+    require_admin: bool = False
+    """
+    If True, this tool can only be called by admin users (event.role == 'admin').
+    Default False keeps backward compatibility with existing tools.
+    """
     is_background_task: bool = False
     """
     Declare this tool as a background task. Background tasks return immediately
