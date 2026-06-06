@@ -114,6 +114,124 @@ async def test_markdown_split_chunks_keep_current_title_path() -> None:
 
 
 @pytest.mark.asyncio
+async def test_markdown_chunker_skips_front_matter() -> None:
+    chunker = MarkdownChunker(chunk_size=200, chunk_overlap=0)
+    text = "---\noutline: deep\n---\n\n# Guide\nVisible content"
+
+    chunks = await chunker.chunk_with_metadata(text)
+
+    assert len(chunks) == 1
+    assert "outline: deep" not in chunks[0].text
+    assert chunks[0].text.startswith("# Guide")
+
+
+@pytest.mark.asyncio
+async def test_markdown_chunker_splits_long_tables_with_header() -> None:
+    chunker = MarkdownChunker(chunk_size=90, chunk_overlap=0)
+    table_rows = "\n".join(f"| row-{idx} | value-{idx} |" for idx in range(8))
+    text = "# Data\n| Name | Value |\n| --- | --- |\n" + table_rows
+
+    chunks = await chunker.chunk_with_metadata(text)
+    table_chunks = [chunk.text for chunk in chunks if "| Name | Value |" in chunk.text]
+
+    assert len(table_chunks) > 1
+    assert all("| --- | --- |" in chunk for chunk in table_chunks)
+    assert all("| Name | Value |" in chunk for chunk in table_chunks)
+
+
+@pytest.mark.asyncio
+async def test_markdown_chunker_keeps_code_fences_when_splitting() -> None:
+    chunker = MarkdownChunker(chunk_size=90, chunk_overlap=0)
+    code = "\n".join(f"print('line {idx}')" for idx in range(12))
+    text = f"# Code\n```python\n{code}\n```"
+
+    chunks = await chunker.chunk_with_metadata(text)
+    code_chunks = [chunk.text for chunk in chunks if "```python" in chunk.text]
+
+    assert len(code_chunks) > 1
+    assert all(chunk.count("```") == 2 for chunk in code_chunks)
+    assert all(chunk.rstrip().endswith("```") for chunk in code_chunks)
+
+
+@pytest.mark.asyncio
+async def test_markdown_chunker_preserves_links_inside_long_paragraphs() -> None:
+    chunker = MarkdownChunker(chunk_size=90, chunk_overlap=0)
+    url = "https://example.com/docs/plugin-development-reference"
+    text = (
+        "# Links\nRead the official guide at "
+        f"[plugin docs]({url}) "
+        + "before changing provider settings. " * 5
+    )
+
+    chunks = await chunker.chunk_with_metadata(text)
+    link_chunks = [chunk.text for chunk in chunks if "plugin docs" in chunk.text]
+
+    assert len(link_chunks) == 1
+    assert f"[plugin docs]({url})" in link_chunks[0]
+    assert sum(chunk.text.count("[plugin docs](") for chunk in chunks) == 1
+
+
+@pytest.mark.asyncio
+async def test_markdown_chunker_keeps_callout_blocks_together() -> None:
+    chunker = MarkdownChunker(chunk_size=200, chunk_overlap=0)
+    text = (
+        "# Notice\n"
+        "> [!WARNING]\n"
+        "> Keep the provider settings unchanged during migration.\n"
+        "> Rebuild only new documents.\n\n"
+        "Normal paragraph after the callout."
+    )
+
+    chunks = await chunker.chunk_with_metadata(text)
+    callout_chunks = [chunk.text for chunk in chunks if "[!WARNING]" in chunk.text]
+
+    assert len(callout_chunks) == 1
+    assert "Rebuild only new documents." in callout_chunks[0]
+
+
+@pytest.mark.asyncio
+async def test_markdown_chunker_keeps_math_block_wrapped_when_splitting() -> None:
+    chunker = MarkdownChunker(chunk_size=90, chunk_overlap=0)
+    formula_lines = "\n".join(
+        rf"a_{{{idx}}} = b_{{{idx}}} + c_{{{idx}}}" for idx in range(10)
+    )
+    text = f"# Math\n$$\n{formula_lines}\n$$"
+
+    chunks = await chunker.chunk_with_metadata(text)
+    math_chunks = [chunk.text for chunk in chunks if "$$" in chunk.text]
+
+    assert len(math_chunks) > 1
+    assert all(chunk.startswith("$$") or "\n$$" in chunk for chunk in math_chunks)
+    assert all(chunk.rstrip().endswith("$$") for chunk in math_chunks)
+
+
+@pytest.mark.asyncio
+async def test_markdown_chunker_preserves_inline_math_spans() -> None:
+    chunker = MarkdownChunker(chunk_size=80, chunk_overlap=0)
+    formula = r"$E = mc^2 + \alpha + \beta + \gamma$"
+    bracket_formula = r"\(a^2 + b^2 = c^2\)"
+    text = (
+        "# Math\n"
+        "Use "
+        f"{formula} and {bracket_formula} "
+        + "inside a paragraph with enough surrounding words to split. " * 4
+    )
+
+    chunks = await chunker.chunk_with_metadata(text)
+    inline_math_chunks = [
+        chunk.text for chunk in chunks if "E = mc^2" in chunk.text
+    ]
+    bracket_math_chunks = [
+        chunk.text for chunk in chunks if "a^2 + b^2" in chunk.text
+    ]
+
+    assert len(inline_math_chunks) == 1
+    assert formula in inline_math_chunks[0]
+    assert len(bracket_math_chunks) == 1
+    assert bracket_formula in bracket_math_chunks[0]
+
+
+@pytest.mark.asyncio
 async def test_pdf_parser_preserves_page_number_segments(monkeypatch) -> None:
     page_one = MagicMock()
     page_one.extract_text.return_value = "Page one"

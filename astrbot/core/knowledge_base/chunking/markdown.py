@@ -39,6 +39,12 @@ class _ChunkDraft:
     section_index: int | None
 
 
+@dataclass
+class _MarkdownBlock:
+    kind: str
+    text: str
+
+
 class MarkdownChunker(BaseChunker):
     """Markdown 感知分块器
 
@@ -96,6 +102,7 @@ class MarkdownChunker(BaseChunker):
 
     async def chunk_with_metadata(self, text: str, **kwargs) -> list[MarkdownChunk]:
         """Split Markdown text and keep per-chunk structure metadata."""
+        text = self._strip_front_matter(text)
         if not text or not text.strip():
             return []
 
@@ -105,7 +112,7 @@ class MarkdownChunker(BaseChunker):
         sections = self._parse_sections(text)
 
         if not sections:
-            chunks = await self._fallback_chunker.chunk(
+            chunks = await self._split_section_preserving_blocks(
                 text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
             )
             return [MarkdownChunk(text=chunk) for chunk in chunks]
@@ -150,23 +157,16 @@ class MarkdownChunker(BaseChunker):
                     )
                 )
             else:
-                # 章节过长，内部递归分割
-                # 扣除前缀长度，确保添加前缀后不超过 chunk_size
-                prefix_len = self._estimate_prefix_length(heading_path)
-                effective_chunk_size = max(chunk_size // 4, chunk_size - prefix_len)
-
-                sub_chunks = await self._fallback_chunker.chunk(
+                sub_chunks = await self._split_section_preserving_blocks(
                     section_text,
-                    chunk_size=effective_chunk_size,
+                    heading_path=heading_path,
+                    chunk_size=chunk_size,
                     chunk_overlap=chunk_overlap,
                 )
                 for i, sub_chunk in enumerate(sub_chunks):
-                    chunk_text = self._apply_heading_context(
-                        heading_path, sub_chunk, is_continuation=(i > 0)
-                    )
                     raw_chunks.append(
                         _ChunkDraft(
-                            text=chunk_text,
+                            text=sub_chunk,
                             has_body=True,
                             title_path=title_path,
                             section_index=section_index,
@@ -192,6 +192,640 @@ class MarkdownChunker(BaseChunker):
         if is_continuation:
             return f"{self.continuation_prefix} {title}\n\n{content}".strip()
         return f"{title}\n\n{content}".strip()
+
+    async def _split_section_preserving_blocks(
+        self,
+        text: str,
+        *,
+        chunk_size: int,
+        chunk_overlap: int,
+        heading_path: list[str] | None = None,
+    ) -> list[str]:
+        heading_path = heading_path or []
+        prefix_len = self._estimate_prefix_length(heading_path)
+        effective_chunk_size = max(chunk_size // 4, chunk_size - prefix_len)
+        blocks = self._parse_markdown_blocks(text)
+        if not blocks:
+            chunks = await self._fallback_chunker.chunk(
+                text,
+                chunk_size=effective_chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+            return [
+                self._apply_heading_context(heading_path, chunk, i > 0)
+                for i, chunk in enumerate(chunks)
+                if chunk.strip()
+            ]
+
+        chunks: list[str] = []
+        current = ""
+        piece_index = 0
+
+        for block in blocks:
+            pieces = await self._split_block(block, effective_chunk_size, chunk_overlap)
+            for piece in pieces:
+                piece = piece.strip()
+                if not piece:
+                    continue
+                if not current:
+                    current = piece
+                    continue
+                combined = current + "\n\n" + piece
+                if len(combined) <= effective_chunk_size:
+                    current = combined
+                    continue
+
+                chunks.append(
+                    self._apply_heading_context(
+                        heading_path,
+                        current,
+                        piece_index > 0,
+                    )
+                )
+                piece_index += 1
+                current = piece
+
+        if current:
+            chunks.append(
+                self._apply_heading_context(
+                    heading_path,
+                    current,
+                    piece_index > 0,
+                )
+            )
+
+        return chunks
+
+    async def _split_block(
+        self, block: _MarkdownBlock, chunk_size: int, chunk_overlap: int
+    ) -> list[str]:
+        text = block.text.strip()
+        if not text:
+            return []
+        if len(text) <= chunk_size:
+            return [text]
+
+        if block.kind == "table":
+            return self._split_table_block(text, chunk_size)
+        if block.kind == "code":
+            return self._split_fenced_code_block(text, chunk_size)
+        if block.kind == "math":
+            return self._split_wrapped_line_block(text, chunk_size)
+        if block.kind in {"blockquote", "list", "html"}:
+            return self._split_line_block(text, chunk_size)
+        if block.kind in {"paragraph", "text"}:
+            return self._split_text_preserving_inline_spans(text, chunk_size)
+
+        return await self._fallback_chunker.chunk(
+            text,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+
+    def _parse_markdown_blocks(self, text: str) -> list[_MarkdownBlock]:
+        lines = text.splitlines(keepends=True)
+        blocks: list[_MarkdownBlock] = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if not line.strip():
+                i += 1
+                continue
+
+            if self._is_fence_start(line):
+                block_lines, i = self._collect_fenced_code_block(lines, i)
+                blocks.append(_MarkdownBlock("code", "".join(block_lines).strip()))
+                continue
+
+            if self._is_math_block_start(line):
+                block_lines, i = self._collect_math_block(lines, i)
+                blocks.append(_MarkdownBlock("math", "".join(block_lines).strip()))
+                continue
+
+            if self._is_markdown_table_start(lines, i):
+                block_lines, i = self._collect_markdown_table(lines, i)
+                blocks.append(_MarkdownBlock("table", "".join(block_lines).strip()))
+                continue
+
+            if self._is_html_block_start(line):
+                block_lines, i = self._collect_html_block(lines, i)
+                blocks.append(_MarkdownBlock("html", "".join(block_lines).strip()))
+                continue
+
+            if line.lstrip().startswith(">"):
+                block_lines, i = self._collect_prefixed_block(
+                    lines,
+                    i,
+                    lambda candidate: candidate.lstrip().startswith(">"),
+                )
+                blocks.append(
+                    _MarkdownBlock("blockquote", "".join(block_lines).strip())
+                )
+                continue
+
+            if self._is_list_item(line):
+                block_lines, i = self._collect_list_block(lines, i)
+                blocks.append(_MarkdownBlock("list", "".join(block_lines).strip()))
+                continue
+
+            if self._is_link_reference(line):
+                block_lines, i = self._collect_prefixed_block(
+                    lines,
+                    i,
+                    self._is_link_reference,
+                )
+                blocks.append(
+                    _MarkdownBlock("link_reference", "".join(block_lines).strip())
+                )
+                continue
+
+            block_lines, i = self._collect_paragraph(lines, i)
+            blocks.append(_MarkdownBlock("paragraph", "".join(block_lines).strip()))
+
+        return [block for block in blocks if block.text.strip()]
+
+    @staticmethod
+    def _strip_front_matter(text: str) -> str:
+        if not text.startswith(("---\n", "+++\n")):
+            return text
+
+        marker = text[:3]
+        lines = text.splitlines(keepends=True)
+        for idx in range(1, min(len(lines), 200)):
+            if lines[idx].strip() == marker:
+                return "".join(lines[idx + 1 :]).lstrip("\n")
+        return text
+
+    @staticmethod
+    def _is_fence_start(line: str) -> bool:
+        stripped = line.lstrip()
+        indent = len(line) - len(stripped)
+        return indent <= 3 and (
+            stripped.startswith("```") or stripped.startswith("~~~")
+        )
+
+    @staticmethod
+    def _fence_marker(line: str) -> tuple[str, int] | None:
+        stripped = line.lstrip()
+        if stripped.startswith("```"):
+            return "`", len(stripped) - len(stripped.lstrip("`"))
+        if stripped.startswith("~~~"):
+            return "~", len(stripped) - len(stripped.lstrip("~"))
+        return None
+
+    def _collect_fenced_code_block(
+        self, lines: list[str], start: int
+    ) -> tuple[list[str], int]:
+        marker = self._fence_marker(lines[start])
+        if marker is None:
+            return [lines[start]], start + 1
+        fence_char, fence_len = marker
+        block_lines = [lines[start]]
+        i = start + 1
+        while i < len(lines):
+            block_lines.append(lines[i])
+            candidate = lines[i].lstrip()
+            indent = len(lines[i]) - len(candidate)
+            if (
+                indent <= 3
+                and candidate.startswith(fence_char * fence_len)
+                and set(candidate.strip()) <= {fence_char}
+            ):
+                i += 1
+                break
+            i += 1
+        return block_lines, i
+
+    @staticmethod
+    def _is_table_separator(line: str) -> bool:
+        stripped = line.strip()
+        if "|" not in stripped:
+            return False
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if not cells:
+            return False
+        return all(re.fullmatch(r":?-{3,}:?", cell or "") for cell in cells)
+
+    @staticmethod
+    def _is_table_row(line: str) -> bool:
+        stripped = line.strip()
+        return bool(stripped) and "|" in stripped
+
+    def _is_markdown_table_start(self, lines: list[str], index: int) -> bool:
+        return (
+            index + 1 < len(lines)
+            and self._is_table_row(lines[index])
+            and self._is_table_separator(lines[index + 1])
+        )
+
+    def _collect_markdown_table(
+        self, lines: list[str], start: int
+    ) -> tuple[list[str], int]:
+        block_lines = [lines[start], lines[start + 1]]
+        i = start + 2
+        while i < len(lines) and self._is_table_row(lines[i]):
+            block_lines.append(lines[i])
+            i += 1
+        return block_lines, i
+
+    @staticmethod
+    def _is_html_block_start(line: str) -> bool:
+        stripped = line.lstrip().lower()
+        return stripped.startswith(
+            (
+                "<table",
+                "<pre",
+                "<code",
+                "<blockquote",
+                "<details",
+                "<div",
+            )
+        )
+
+    @staticmethod
+    def _html_closing_tag(line: str) -> str | None:
+        stripped = line.lstrip().lower()
+        for tag in ("table", "pre", "code", "blockquote", "details", "div"):
+            if stripped.startswith(f"<{tag}"):
+                return f"</{tag}>"
+        return None
+
+    def _collect_html_block(
+        self, lines: list[str], start: int
+    ) -> tuple[list[str], int]:
+        closing_tag = self._html_closing_tag(lines[start])
+        block_lines = [lines[start]]
+        i = start + 1
+        if closing_tag is None or closing_tag in lines[start].lower():
+            return block_lines, i
+
+        while i < len(lines):
+            block_lines.append(lines[i])
+            if closing_tag in lines[i].lower():
+                i += 1
+                break
+            i += 1
+        return block_lines, i
+
+    @staticmethod
+    def _is_list_item(line: str) -> bool:
+        return bool(re.match(r"^\s{0,3}(?:[-*+]|\d+[.)])\s+", line))
+
+    @staticmethod
+    def _is_link_reference(line: str) -> bool:
+        return bool(re.match(r"^\s{0,3}\[[^\]]+\]:\s+\S+", line))
+
+    def _collect_prefixed_block(
+        self,
+        lines: list[str],
+        start: int,
+        predicate,
+    ) -> tuple[list[str], int]:
+        block_lines = []
+        i = start
+        while i < len(lines) and (predicate(lines[i]) or not lines[i].strip()):
+            if (
+                not lines[i].strip()
+                and i + 1 < len(lines)
+                and not predicate(lines[i + 1])
+            ):
+                break
+            block_lines.append(lines[i])
+            i += 1
+        return block_lines, i
+
+    def _collect_list_block(
+        self, lines: list[str], start: int
+    ) -> tuple[list[str], int]:
+        block_lines = [lines[start]]
+        i = start + 1
+        while i < len(lines):
+            line = lines[i]
+            if self._is_fence_start(line) or self._is_markdown_table_start(lines, i):
+                break
+            if self._is_list_item(line) or line.startswith((" ", "\t")):
+                block_lines.append(line)
+                i += 1
+                continue
+            if not line.strip() and i + 1 < len(lines):
+                next_line = lines[i + 1]
+                if self._is_list_item(next_line) or next_line.startswith((" ", "\t")):
+                    block_lines.append(line)
+                    i += 1
+                    continue
+            break
+        return block_lines, i
+
+    def _collect_paragraph(self, lines: list[str], start: int) -> tuple[list[str], int]:
+        block_lines = []
+        i = start
+        while i < len(lines):
+            line = lines[i]
+            if not line.strip():
+                break
+            if i != start and (
+                self._is_fence_start(line)
+                or self._is_math_block_start(line)
+                or self._is_markdown_table_start(lines, i)
+                or self._is_html_block_start(line)
+                or self._is_list_item(line)
+                or line.lstrip().startswith(">")
+                or self._is_link_reference(line)
+            ):
+                break
+            block_lines.append(line)
+            i += 1
+        return block_lines, i
+
+    def _split_table_block(self, text: str, chunk_size: int) -> list[str]:
+        lines = text.splitlines()
+        if len(lines) <= 2:
+            return [text]
+
+        header = lines[:2]
+        rows = lines[2:]
+        chunks = []
+        current_rows: list[str] = []
+
+        for row in rows:
+            candidate_lines = header + current_rows + [row]
+            candidate = "\n".join(candidate_lines)
+            if current_rows and len(candidate) > chunk_size:
+                chunks.append("\n".join(header + current_rows))
+                current_rows = [row]
+            else:
+                current_rows.append(row)
+
+        if current_rows:
+            chunks.append("\n".join(header + current_rows))
+
+        return chunks or [text]
+
+    @staticmethod
+    def _is_math_block_start(line: str) -> bool:
+        stripped = line.strip()
+        return (
+            stripped.startswith("$$")
+            or stripped.startswith(r"\[")
+            or bool(
+                re.match(
+                    r"^\\begin\{(?:equation|align|gather|multline|cases)\*?\}", stripped
+                )
+            )
+        )
+
+    @staticmethod
+    def _math_block_closer(line: str) -> str:
+        stripped = line.strip()
+        if stripped.startswith("$$"):
+            return "$$"
+        if stripped.startswith(r"\["):
+            return r"\]"
+
+        env_match = re.match(r"^\\begin\{([^}]+)\}", stripped)
+        if env_match:
+            return rf"\end{{{env_match.group(1)}}}"
+        return ""
+
+    def _collect_math_block(
+        self, lines: list[str], start: int
+    ) -> tuple[list[str], int]:
+        opener_line = lines[start]
+        closer = self._math_block_closer(opener_line)
+        block_lines = [opener_line]
+        if not closer:
+            return block_lines, start + 1
+
+        opener_stripped = opener_line.strip()
+        if (
+            closer in opener_stripped[len(closer) :]
+            if closer in {"$$", r"\]"}
+            else closer in opener_stripped
+        ):
+            return block_lines, start + 1
+
+        i = start + 1
+        while i < len(lines):
+            block_lines.append(lines[i])
+            if closer in lines[i].strip():
+                i += 1
+                break
+            i += 1
+        return block_lines, i
+
+    @staticmethod
+    def _split_wrapped_line_block(text: str, chunk_size: int) -> list[str]:
+        lines = text.splitlines()
+        if len(lines) <= 2:
+            return [text]
+
+        opener = lines[0]
+        closer = lines[-1]
+        body = lines[1:-1]
+        chunks = []
+        current: list[str] = []
+
+        for line in body:
+            candidate = "\n".join([opener, *current, line, closer])
+            if current and len(candidate) > chunk_size:
+                chunks.append("\n".join([opener, *current, closer]))
+                current = [line]
+            else:
+                current.append(line)
+
+        if current:
+            chunks.append("\n".join([opener, *current, closer]))
+
+        return chunks or [text]
+
+    @staticmethod
+    def _split_fenced_code_block(text: str, chunk_size: int) -> list[str]:
+        lines = text.splitlines()
+        if len(lines) <= 2:
+            return [text]
+
+        opener = lines[0]
+        closer = lines[-1] if lines[-1].lstrip().startswith(("```", "~~~")) else ""
+        body = lines[1:-1] if closer else lines[1:]
+        chunks = []
+        current: list[str] = []
+
+        for line in body:
+            candidate_lines = [opener, *current, line]
+            if closer:
+                candidate_lines.append(closer)
+            candidate = "\n".join(candidate_lines)
+            if current and len(candidate) > chunk_size:
+                chunk_lines = [opener, *current]
+                if closer:
+                    chunk_lines.append(closer)
+                chunks.append("\n".join(chunk_lines))
+                current = [line]
+            else:
+                current.append(line)
+
+        if current:
+            chunk_lines = [opener, *current]
+            if closer:
+                chunk_lines.append(closer)
+            chunks.append("\n".join(chunk_lines))
+
+        return chunks or [text]
+
+    @staticmethod
+    def _split_line_block(text: str, chunk_size: int) -> list[str]:
+        lines = text.splitlines()
+        chunks = []
+        current: list[str] = []
+        for line in lines:
+            candidate = "\n".join([*current, line])
+            if current and len(candidate) > chunk_size:
+                chunks.append("\n".join(current))
+                current = [line]
+            else:
+                current.append(line)
+        if current:
+            chunks.append("\n".join(current))
+        return chunks or [text]
+
+    def _split_text_preserving_inline_spans(
+        self, text: str, chunk_size: int
+    ) -> list[str]:
+        tokens = self._tokenize_protected_inline_spans(text)
+        chunks = []
+        current = ""
+        for token in tokens:
+            if not token:
+                continue
+            candidate = current + token if current else token.lstrip()
+            if current and len(candidate) > chunk_size:
+                chunks.append(current.strip())
+                current = token.lstrip()
+            else:
+                current = candidate
+
+            if len(current) > chunk_size and not self._is_inline_protected_token(
+                current
+            ):
+                split_chunks = self._split_long_plain_token(current, chunk_size)
+                chunks.extend(split_chunks[:-1])
+                current = split_chunks[-1] if split_chunks else ""
+
+        if current.strip():
+            chunks.append(current.strip())
+        return [chunk for chunk in chunks if chunk]
+
+    def _tokenize_protected_inline_spans(self, text: str) -> list[str]:
+        spans = self._find_protected_inline_spans(text)
+        tokens: list[str] = []
+        cursor = 0
+        for start, end in spans:
+            if start > cursor:
+                tokens.extend(re.findall(r"\S+\s*|\s+", text[cursor:start]))
+            tokens.append(text[start:end])
+            cursor = end
+        if cursor < len(text):
+            tokens.extend(re.findall(r"\S+\s*|\s+", text[cursor:]))
+        return tokens
+
+    def _find_protected_inline_spans(self, text: str) -> list[tuple[int, int]]:
+        spans: list[tuple[int, int]] = []
+        i = 0
+        while i < len(text):
+            end = self._match_markdown_link(text, i)
+            if end is None:
+                end = self._match_autolink(text, i)
+            if end is None:
+                end = self._match_inline_math(text, i)
+            if end is not None:
+                if not spans or i >= spans[-1][1]:
+                    spans.append((i, end))
+                i = end
+                continue
+            i += 1
+        return spans
+
+    @staticmethod
+    def _match_markdown_link(text: str, start: int) -> int | None:
+        marker_start = start
+        if text.startswith("![", start):
+            start += 1
+        elif text[start] != "[":
+            return None
+
+        label_end = text.find("]", start + 1)
+        if label_end == -1 or label_end + 1 >= len(text):
+            return None
+
+        next_char = text[label_end + 1]
+        if next_char == "(":
+            link_end = text.find(")", label_end + 2)
+            return link_end + 1 if link_end != -1 else None
+        if next_char == "[":
+            ref_end = text.find("]", label_end + 2)
+            return ref_end + 1 if ref_end != -1 else None
+
+        return None if marker_start == start else None
+
+    @staticmethod
+    def _match_autolink(text: str, start: int) -> int | None:
+        if text.startswith(("<http://", "<https://"), start):
+            end = text.find(">", start + 1)
+            return end + 1 if end != -1 else None
+
+        if not (
+            text.startswith("http://", start) or text.startswith("https://", start)
+        ):
+            return None
+
+        end = start
+        while end < len(text) and not text[end].isspace():
+            end += 1
+        while end > start and text[end - 1] in ".,;:!?)>]":
+            end -= 1
+        return end
+
+    @staticmethod
+    def _match_inline_math(text: str, start: int) -> int | None:
+        if text.startswith(r"\(", start):
+            end = text.find(r"\)", start + 2)
+            return end + 2 if end != -1 else None
+
+        if text[start] != "$":
+            return None
+        if text.startswith("$$", start):
+            return None
+        if start > 0 and text[start - 1] == "\\":
+            return None
+        if start + 1 >= len(text) or text[start + 1].isspace():
+            return None
+
+        i = start + 1
+        while i < len(text):
+            if text[i] == "$" and text[i - 1] != "\\":
+                if i > start + 1 and not text[i - 1].isspace():
+                    return i + 1
+                return None
+            i += 1
+        return None
+
+    @staticmethod
+    def _is_inline_protected_token(token: str) -> bool:
+        stripped = token.strip()
+        return (
+            stripped.startswith("[")
+            or stripped.startswith("![")
+            or stripped.startswith("<http")
+            or stripped.startswith("http")
+            or stripped.startswith("$")
+            or stripped.startswith(r"\(")
+        )
+
+    @staticmethod
+    def _split_long_plain_token(text: str, chunk_size: int) -> list[str]:
+        if chunk_size <= 0:
+            return [text]
+        return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
 
     def _merge_heading_only_chunks(
         self, raw_chunks: list[_ChunkDraft], chunk_size: int

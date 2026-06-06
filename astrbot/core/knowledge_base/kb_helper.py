@@ -59,6 +59,20 @@ CONSISTENCY_REPAIR_TYPES = frozenset(
     },
 )
 NON_PERSISTED_FAILURE_STAGES = frozenset({"deduplication"})
+MARKDOWN_AWARE_EXTENSIONS = frozenset(
+    {
+        ".adoc",
+        ".docx",
+        ".epub",
+        ".md",
+        ".markdown",
+        ".mdx",
+        ".mkd",
+        ".rst",
+        ".xls",
+        ".xlsx",
+    },
+)
 
 
 class RateLimiter:
@@ -636,16 +650,16 @@ class KBHelper:
                     await progress_callback("chunking", 0, 100)
 
                 try:
-                    # 根据文件类型选择分块器：Markdown 文件使用结构感知分块
+                    # Use structure-aware chunking for Markdown and MarkItDown output.
                     effective_chunker = self.chunker
                     file_ext = Path(file_name).suffix.lower() if file_name else ""
-                    if file_ext in (".md", ".markdown", ".mkd", ".mdx"):
+                    if file_ext in MARKDOWN_AWARE_EXTENSIONS:
                         effective_chunker = MarkdownChunker(
                             chunk_size=chunk_size,
                             chunk_overlap=chunk_overlap,
                         )
                         logger.info(
-                            f"检测到 Markdown 文件 '{file_name}'，使用 MarkdownChunker 进行结构化分块"
+                            f"检测到 Markdown 兼容文档 '{file_name}'，使用 MarkdownChunker 进行结构化分块"
                         )
 
                     chunker_name = get_chunker_name(effective_chunker)

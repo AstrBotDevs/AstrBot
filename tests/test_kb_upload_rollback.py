@@ -557,6 +557,49 @@ class TestUploadDocumentRollback:
         assert all(metadata.get("section_index") == 0 for metadata in metadatas)
 
     @pytest.mark.asyncio
+    async def test_upload_xlsx_uses_markdown_chunker_for_table_protection(
+        self,
+        tmp_path,
+    ):
+        table_text = (
+            "# Sheet1\n"
+            "| Name | Value |\n"
+            "| --- | --- |\n"
+            + "\n".join(f"| row-{idx} | value-{idx} |" for idx in range(8))
+        )
+
+        with patch(
+            "astrbot.core.knowledge_base.kb_helper.select_parser",
+            new_callable=AsyncMock,
+        ) as mock_select:
+            _mock_parser(mock_select, text=table_text)
+            helper = _build_helper_with_real_dirs(tmp_path)
+
+            session = _make_session_context()
+            helper.kb_db.get_db = MagicMock(return_value=session)
+            helper.kb_db.update_kb_stats = AsyncMock()
+            helper.vec_db.insert_batch = AsyncMock(return_value=[1, 2, 3])
+            helper.vec_db.delete_documents = AsyncMock()
+            helper.vec_db.count_documents = AsyncMock(return_value=3)
+            helper.refresh_kb = AsyncMock()
+            helper.refresh_document = AsyncMock()
+
+            doc = await helper.upload_document(
+                file_name="sheet.xlsx",
+                file_content=b"xlsx-bytes",
+                file_type="xlsx",
+                chunk_size=90,
+                chunk_overlap=0,
+            )
+
+        contents = helper.vec_db.insert_batch.await_args.kwargs["contents"]
+        table_chunks = [content for content in contents if "| Name | Value |" in content]
+
+        assert doc.chunker_name == "MarkdownChunker"
+        assert len(table_chunks) > 1
+        assert all("| --- | --- |" in content for content in table_chunks)
+
+    @pytest.mark.asyncio
     async def test_upload_document_stores_page_number_from_text_segments(
         self,
         tmp_path,
