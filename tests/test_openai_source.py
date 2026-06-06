@@ -1,6 +1,7 @@
 import base64
 import builtins
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -1859,7 +1860,9 @@ async def test_audio_ref_data_uri_wav(monkeypatch, tmp_path):
         assert cleanup, "应该返回需要清理的临时文件路径"
         assert audio_path.endswith(".wav"), f"后缀应为 .wav，实际为 {audio_path}"
         assert Path(audio_path).parent == tmp_path
-        assert Path(audio_path).read_bytes() == wav_data, "解码后的内容应与原始 WAV 数据一致"
+        assert Path(audio_path).read_bytes() == wav_data, (
+            "解码后的内容应与原始 WAV 数据一致"
+        )
         # 清理
         for p in cleanup:
             p.unlink(missing_ok=True)
