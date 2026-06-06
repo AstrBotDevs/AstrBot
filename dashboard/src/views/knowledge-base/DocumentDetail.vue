@@ -284,113 +284,128 @@
 
       <!-- 分块列表 -->
       <v-card variant="outlined">
-        <v-card-title class="d-flex align-center pa-4">
-          <span>{{ t("chunks.title") }}</span>
-          <v-chip class="ml-2" size="small" variant="tonal">
-            {{
-              hasChunkSearch
-                ? t("chunks.filteredTotal", {
-                    filtered: totalChunks,
-                    total: displayDocumentChunkCount,
-                  })
-                : t("chunks.total", { count: displayDocumentChunkCount })
-            }}
-          </v-chip>
-          <v-spacer />
+        <v-card-title class="chunk-card-title pa-4">
+          <div class="chunk-card-title-main">
+            <span>{{ t("chunks.title") }}</span>
+            <v-chip size="small" variant="tonal">
+              {{
+                hasChunkSearch
+                  ? t("chunks.filteredTotal", {
+                      filtered: totalChunks,
+                      total: displayDocumentChunkCount,
+                    })
+                  : t("chunks.total", { count: displayDocumentChunkCount })
+              }}
+            </v-chip>
+          </div>
           <v-text-field
             v-model="searchQuery"
+            class="chunk-search"
             prepend-inner-icon="mdi-magnify"
             :placeholder="t('chunks.searchPlaceholder')"
             variant="outlined"
             density="compact"
             hide-details
             clearable
-            style="max-width: 300px"
           />
         </v-card-title>
 
         <v-card-text class="pa-0">
-          <v-data-table
-            :headers="headers"
-            :items="chunks"
-            :loading="loadingChunks"
-            :items-per-page="pageSize"
-            hide-default-footer
-          >
-            <template #item.chunk_index="{ item }">
-              <v-chip size="small" variant="tonal" color="primary">
-                #{{ item.chunk_index + 1 }}
-              </v-chip>
-            </template>
-
-            <template #item.content="{ item }">
-              <div class="chunk-content-preview">
-                {{ item.content }}
-              </div>
-            </template>
-
-            <template #item.title_path="{ item }">
-              <span class="text-caption metadata-text">
-                {{ formatTitlePath(item.title_path) }}
-              </span>
-            </template>
-
-            <template #item.char_count="{ item }">
-              <v-chip size="small" variant="outlined">
-                {{ t("chunks.charCountValue", { count: item.char_count }) }}
-              </v-chip>
-            </template>
-
-            <template #item.token_count_estimate="{ item }">
-              <v-chip size="small" variant="outlined">
-                {{ formatTokenEstimate(item.token_count_estimate) }}
-              </v-chip>
-            </template>
-
-            <template #item.offset="{ item }">
-              <span class="text-caption">
-                {{ formatChunkOffset(item) }}
-              </span>
-            </template>
-
-            <template #item.content_hash="{ item }">
-              <span class="text-caption metadata-text">
-                {{ formatShortHash(item.content_hash) }}
-              </span>
-            </template>
-
-            <template #item.actions="{ item }">
-              <v-btn
-                icon="mdi-eye"
-                variant="text"
-                size="small"
-                color="info"
-                @click="viewChunk(item)"
-              />
-              <!-- 删除 -->
-              <v-btn
-                icon="mdi-delete"
-                variant="text"
-                size="small"
-                color="error"
-                @click="deleteChunk(item)"
-              />
-            </template>
-
-            <template #no-data>
-              <div class="text-center py-8">
-                <v-icon size="64" color="grey-lighten-2"
-                  >mdi-text-box-outline</v-icon
+          <div class="chunks-table-scroller">
+            <v-data-table
+              class="chunks-table"
+              :headers="headers"
+              :items="chunks"
+              :loading="loadingChunks"
+              :items-per-page="pageSize"
+              hide-default-footer
+            >
+              <template #item.chunk_index="{ item }">
+                <v-chip
+                  class="chunk-index-chip"
+                  size="small"
+                  variant="tonal"
+                  color="primary"
                 >
-                <p class="mt-4 text-medium-emphasis">{{ t("chunks.empty") }}</p>
-              </div>
-            </template>
-          </v-data-table>
+                  #{{ item.chunk_index + 1 }}
+                </v-chip>
+              </template>
+
+              <template #item.content="{ item }">
+                <div class="chunk-content-preview" :title="item.content">
+                  {{ item.content }}
+                </div>
+              </template>
+
+              <template #item.title_path="{ item }">
+                <span class="chunk-title-path text-caption">
+                  {{ formatTitlePath(item.title_path) }}
+                </span>
+              </template>
+
+              <template #item.char_count="{ item }">
+                <v-chip class="chunk-count-chip" size="small" variant="outlined">
+                  {{ t("chunks.charCountValue", { count: item.char_count }) }}
+                </v-chip>
+              </template>
+
+              <template #item.token_count_estimate="{ item }">
+                <v-chip class="chunk-count-chip" size="small" variant="outlined">
+                  {{ formatTokenEstimate(item.token_count_estimate) }}
+                </v-chip>
+              </template>
+
+              <template #item.offset="{ item }">
+                <span class="chunk-offset text-caption">
+                  {{ formatChunkOffset(item) }}
+                </span>
+              </template>
+
+              <template #item.content_hash="{ item }">
+                <span
+                  class="chunk-hash text-caption"
+                  :title="item.content_hash || '-'"
+                >
+                  {{ formatShortHash(item.content_hash) }}
+                </span>
+              </template>
+
+              <template #item.actions="{ item }">
+                <div class="chunk-actions">
+                  <v-btn
+                    icon="mdi-eye"
+                    variant="text"
+                    size="small"
+                    color="info"
+                    @click="viewChunk(item)"
+                  />
+                  <v-btn
+                    icon="mdi-delete"
+                    variant="text"
+                    size="small"
+                    color="error"
+                    @click="deleteChunk(item)"
+                  />
+                </div>
+              </template>
+
+              <template #no-data>
+                <div class="text-center py-8">
+                  <v-icon size="64" color="grey-lighten-2"
+                    >mdi-text-box-outline</v-icon
+                  >
+                  <p class="mt-4 text-medium-emphasis">
+                    {{ t("chunks.empty") }}
+                  </p>
+                </div>
+              </template>
+            </v-data-table>
+          </div>
 
           <!-- 自定义分页器 -->
           <div
             v-if="totalChunks > 0"
-            class="pa-4 d-flex align-center justify-space-between"
+            class="chunk-pagination-bar pa-4"
           >
             <div class="text-caption text-medium-emphasis">
               {{
@@ -401,7 +416,7 @@
                 })
               }}
             </div>
-            <div class="d-flex align-center gap-2">
+            <div class="chunk-pagination-controls">
               <v-select
                 v-model="pageSize"
                 :items="chunkPageSizeOptions"
@@ -424,9 +439,14 @@
     </div>
 
     <!-- 查看分块对话框 -->
-    <v-dialog v-model="showViewDialog" max-width="800px" scrollable>
-      <v-card>
-        <v-card-title class="pa-4">
+    <v-dialog
+      v-model="showViewDialog"
+      max-width="960px"
+      width="calc(100vw - 32px)"
+      scrollable
+    >
+      <v-card class="chunk-dialog-card">
+        <v-card-title class="pa-4 d-flex align-center">
           <span>{{ t("view.title") }}</span>
           <v-spacer />
           <v-btn
@@ -435,136 +455,28 @@
             @click="showViewDialog = false"
           />
         </v-card-title>
-        <v-card-text class="pa-6">
-          <v-list density="comfortable">
-            <v-list-item>
-              <template #prepend>
-                <v-icon>mdi-pound</v-icon>
-              </template>
-              <v-list-item-title>{{ t("view.index") }}</v-list-item-title>
-              <v-list-item-subtitle
-                >#{{
-                  (selectedChunk?.chunk_index || 0) + 1
-                }}</v-list-item-subtitle
-              >
-            </v-list-item>
-
-            <v-list-item>
-              <template #prepend>
-                <v-icon>mdi-text</v-icon>
-              </template>
-              <v-list-item-title>{{ t("view.charCount") }}</v-list-item-title>
-              <v-list-item-subtitle>{{
-                t("chunks.charCountValue", {
-                  count: selectedChunk?.char_count || 0,
-                })
-              }}</v-list-item-subtitle>
-            </v-list-item>
-
-            <v-list-item>
-              <template #prepend>
-                <v-icon>mdi-counter</v-icon>
-              </template>
-              <v-list-item-title>{{
-                t("view.tokenEstimate")
-              }}</v-list-item-title>
-              <v-list-item-subtitle>{{
-                formatTokenEstimate(selectedChunk?.token_count_estimate)
-              }}</v-list-item-subtitle>
-            </v-list-item>
-
-            <v-list-item>
-              <template #prepend>
-                <v-icon>mdi-format-title</v-icon>
-              </template>
-              <v-list-item-title>{{ t("view.titlePath") }}</v-list-item-title>
-              <v-list-item-subtitle class="metadata-text">{{
-                formatTitlePath(selectedChunk?.title_path)
-              }}</v-list-item-subtitle>
-            </v-list-item>
-
-            <v-list-item>
-              <template #prepend>
-                <v-icon>mdi-file-tree-outline</v-icon>
-              </template>
-              <v-list-item-title>{{ t("view.section") }}</v-list-item-title>
-              <v-list-item-subtitle>{{
-                formatOneBasedIndex(selectedChunk?.section_index)
-              }}</v-list-item-subtitle>
-            </v-list-item>
-
-            <v-list-item>
-              <template #prepend>
-                <v-icon>mdi-file-document-outline</v-icon>
-              </template>
-              <v-list-item-title>{{ t("view.pageNumber") }}</v-list-item-title>
-              <v-list-item-subtitle>{{
-                formatNullableValue(selectedChunk?.page_number)
-              }}</v-list-item-subtitle>
-            </v-list-item>
-
-            <v-list-item>
-              <template #prepend>
-                <v-icon>mdi-map-marker-distance</v-icon>
-              </template>
-              <v-list-item-title>{{ t("view.offset") }}</v-list-item-title>
-              <v-list-item-subtitle>{{
-                formatChunkOffset(selectedChunk)
-              }}</v-list-item-subtitle>
-            </v-list-item>
-
-            <v-list-item>
-              <template #prepend>
-                <v-icon>mdi-fingerprint</v-icon>
-              </template>
-              <v-list-item-title>{{ t("view.contentHash") }}</v-list-item-title>
-              <v-list-item-subtitle class="metadata-text">{{
-                selectedChunk?.content_hash || "-"
-              }}</v-list-item-subtitle>
-            </v-list-item>
-
-            <v-list-item>
-              <template #prepend>
-                <v-icon>mdi-arrow-left-right</v-icon>
-              </template>
-              <v-list-item-title>{{
-                t("view.adjacentChunks")
-              }}</v-list-item-title>
-              <v-list-item-subtitle class="metadata-text">
-                {{
-                  t("view.previousChunk", {
-                    id: selectedChunk?.previous_chunk_id || "-",
-                  })
-                }}
-                <br />
-                {{
-                  t("view.nextChunk", {
-                    id: selectedChunk?.next_chunk_id || "-",
-                  })
-                }}
-              </v-list-item-subtitle>
-            </v-list-item>
-
-            <v-list-item>
-              <template #prepend>
-                <v-icon>mdi-file-link-outline</v-icon>
-              </template>
-              <v-list-item-title>{{ t("view.parentChunk") }}</v-list-item-title>
-              <v-list-item-subtitle class="metadata-text">{{
-                selectedChunk?.parent_chunk_id || "-"
-              }}</v-list-item-subtitle>
-            </v-list-item>
-
-            <v-list-item>
-              <template #prepend>
-                <v-icon>mdi-key</v-icon>
-              </template>
-              <v-list-item-title>{{ t("view.vecDocId") }}</v-list-item-title>
-              <v-list-item-subtitle>{{
-                selectedChunk?.chunk_id || "-"
-              }}</v-list-item-subtitle>
-            </v-list-item>
-          </v-list>
+        <v-card-text class="pa-5 pa-md-6">
+          <div class="chunk-meta-grid">
+            <div
+              v-for="field in selectedChunkMetadata"
+              :key="field.key"
+              class="chunk-meta-item"
+              :class="{ 'chunk-meta-item--wide': field.wide }"
+            >
+              <v-icon class="chunk-meta-icon" size="20">
+                {{ field.icon }}
+              </v-icon>
+              <div class="chunk-meta-body">
+                <div class="chunk-meta-label">{{ field.label }}</div>
+                <div
+                  class="chunk-meta-value"
+                  :class="{ 'is-monospace': field.monospace }"
+                >
+                  {{ field.value }}
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div class="text-caption text-medium-emphasis mb-2">
             {{ t("view.content") }}
@@ -705,23 +617,46 @@ const showSnackbar = (text: string, color: string = "success") => {
 
 // 表格列
 const headers = computed(() => [
-  { title: t("chunks.index"), key: "chunk_index", width: 100 },
-  { title: t("chunks.content"), key: "content", sortable: false },
+  {
+    title: t("chunks.index"),
+    key: "chunk_index",
+    width: 88,
+    minWidth: "88px",
+  },
+  {
+    title: t("chunks.content"),
+    key: "content",
+    sortable: false,
+    width: 390,
+    minWidth: "320px",
+  },
   {
     title: t("chunks.titlePath"),
     key: "title_path",
     sortable: false,
-    width: 180,
+    width: 220,
+    minWidth: "180px",
   },
-  { title: t("chunks.charCount"), key: "char_count", width: 150 },
+  { title: t("chunks.charCount"), key: "char_count", width: 120 },
   {
     title: t("chunks.tokenEstimate"),
     key: "token_count_estimate",
-    width: 150,
+    width: 130,
   },
-  { title: t("chunks.offset"), key: "offset", sortable: false, width: 150 },
-  { title: t("chunks.contentHash"), key: "content_hash", sortable: false },
-  { title: t("chunks.actions"), key: "actions", sortable: false, width: 150 },
+  { title: t("chunks.offset"), key: "offset", sortable: false, width: 112 },
+  {
+    title: t("chunks.contentHash"),
+    key: "content_hash",
+    sortable: false,
+    width: 140,
+  },
+  {
+    title: t("chunks.actions"),
+    key: "actions",
+    sortable: false,
+    align: "end" as const,
+    width: 96,
+  },
 ]);
 
 const contextSlots = computed(() => [
@@ -746,6 +681,93 @@ const displayDocumentChunkCount = computed(
   () =>
     documentChunkCount.value ?? document.value.chunk_count ?? totalChunks.value,
 );
+const selectedChunkMetadata = computed(() => [
+  {
+    key: "index",
+    icon: "mdi-pound",
+    label: t("view.index"),
+    value: `#${Number(selectedChunk.value?.chunk_index ?? 0) + 1}`,
+  },
+  {
+    key: "char_count",
+    icon: "mdi-text",
+    label: t("view.charCount"),
+    value: t("chunks.charCountValue", {
+      count: selectedChunk.value?.char_count ?? 0,
+    }),
+  },
+  {
+    key: "token_count_estimate",
+    icon: "mdi-counter",
+    label: t("view.tokenEstimate"),
+    value: formatTokenEstimate(selectedChunk.value?.token_count_estimate),
+  },
+  {
+    key: "title_path",
+    icon: "mdi-format-title",
+    label: t("view.titlePath"),
+    value: formatTitlePath(selectedChunk.value?.title_path),
+    wide: true,
+  },
+  {
+    key: "section_index",
+    icon: "mdi-file-tree-outline",
+    label: t("view.section"),
+    value: formatOneBasedIndex(selectedChunk.value?.section_index),
+  },
+  {
+    key: "page_number",
+    icon: "mdi-file-document-outline",
+    label: t("view.pageNumber"),
+    value: formatNullableValue(selectedChunk.value?.page_number),
+  },
+  {
+    key: "offset",
+    icon: "mdi-map-marker-distance",
+    label: t("view.offset"),
+    value: formatChunkOffset(selectedChunk.value),
+    monospace: true,
+  },
+  {
+    key: "content_hash",
+    icon: "mdi-fingerprint",
+    label: t("view.contentHash"),
+    value: selectedChunk.value?.content_hash || "-",
+    monospace: true,
+    wide: true,
+  },
+  {
+    key: "adjacent_chunks",
+    icon: "mdi-arrow-left-right",
+    label: t("view.adjacentChunks"),
+    value: [
+      t("view.previousChunk", {
+        id: selectedChunk.value?.previous_chunk_id || "-",
+      }),
+      t("view.nextChunk", {
+        id: selectedChunk.value?.next_chunk_id || "-",
+      }),
+    ].join("\n"),
+    monospace: true,
+    wide: true,
+  },
+  {
+    key: "parent_chunk_id",
+    icon: "mdi-file-link-outline",
+    label: t("view.parentChunk"),
+    value: selectedChunk.value?.parent_chunk_id || "-",
+    monospace: true,
+    wide: true,
+  },
+  {
+    key: "chunk_id",
+    icon: "mdi-key",
+    label: t("view.vecDocId"),
+    value: selectedChunk.value?.chunk_id || "-",
+    monospace: true,
+    wide: true,
+  },
+]);
 
 // 加载文档详情
 const loadDocument = async () => {
@@ -1245,9 +1267,8 @@ const loadAll = async () => {
 
 <style scoped>
 .document-detail-page {
-  padding: 24px;
-  max-width: 1040px;
-  margin: 0 auto;
+  padding: 0;
+  width: 100%;
   animation: fadeIn 0.3s ease;
 }
 
@@ -1270,7 +1291,7 @@ const loadAll = async () => {
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .header-content {
@@ -1315,19 +1336,168 @@ const loadAll = async () => {
   overflow-wrap: anywhere;
 }
 
-.chunk-content-preview {
-  max-width: 400px;
+.chunk-card-title {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.chunk-card-title-main {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chunk-search {
+  flex: 0 1 320px;
+  max-width: 320px;
+}
+
+.chunks-table-scroller {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.chunks-table {
+  min-width: 1180px;
+}
+
+.chunks-table :deep(table) {
+  min-width: 1180px;
+  table-layout: fixed;
+}
+
+.chunks-table :deep(th) {
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.chunks-table :deep(td) {
+  vertical-align: middle;
+}
+
+.chunk-index-chip,
+.chunk-count-chip {
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.chunk-content-preview {
+  display: -webkit-box;
   font-size: 0.875rem;
   line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.chunk-title-path {
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  display: -webkit-box;
+  line-height: 1.4;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.chunk-offset,
+.chunk-hash {
+  display: block;
+  font-family: "Consolas", "Monaco", monospace;
+  white-space: nowrap;
+}
+
+.chunk-hash {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chunk-actions {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+}
+
+.chunk-pagination-bar {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.chunk-pagination-controls {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.chunk-dialog-card {
+  max-height: calc(100vh - 64px);
+}
+
+.chunk-meta-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 24px;
+}
+
+.chunk-meta-item {
+  align-items: flex-start;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.chunk-meta-item--wide {
+  grid-column: 1 / -1;
+}
+
+.chunk-meta-icon {
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.chunk-meta-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.chunk-meta-label {
+  color: rgba(var(--v-theme-on-surface), 0.68);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.chunk-meta-value {
+  font-size: 0.875rem;
+  line-height: 1.45;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.chunk-meta-value.is-monospace {
+  font-family: "Consolas", "Monaco", monospace;
 }
 
 .chunk-content-view {
   padding: 16px;
   background: rgba(var(--v-theme-surface-variant), 0.3);
   border-radius: 8px;
+  max-height: 300px;
+  overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
@@ -1373,8 +1543,21 @@ const loadAll = async () => {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .document-detail-page {
-    padding: 16px;
+  .chunk-card-title,
+  .chunk-pagination-bar,
+  .chunk-pagination-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .chunk-search {
+    flex-basis: auto;
+    max-width: none;
+    width: 100%;
+  }
+
+  .chunk-meta-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
