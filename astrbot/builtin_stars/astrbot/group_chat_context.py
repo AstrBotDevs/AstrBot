@@ -7,7 +7,7 @@ from collections import defaultdict, deque
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
+from astrbot.api.message_components import At, AtAll, Face, File, Forward, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.agent.message import TextPart
@@ -250,6 +250,12 @@ def _describe_chain(chain: list) -> str:
             desc.append("[Video]")
         elif isinstance(c, File):
             desc.append(f"[File: {getattr(c, 'name', '') or ''}]")
+        elif isinstance(c, Forward):
+            desc.append("[Forward]")
+        elif isinstance(c, AtAll):
+            desc.append("[At: All]")
+        elif isinstance(c, Face):
+            desc.append(f"[Sticker: {getattr(c, 'id', '')}]")
         elif isinstance(c, Reply):
             desc.append("[Quote]")
         else:
