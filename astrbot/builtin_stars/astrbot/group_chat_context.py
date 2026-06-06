@@ -7,7 +7,7 @@ from collections import defaultdict, deque
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.message_components import At, Image, Plain, Reply
+from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.agent.message import TextPart
@@ -217,40 +217,51 @@ class GroupChatContext:
             elif isinstance(comp, Reply):
                 if comp.message_str:
                     parts.append(
-                        f" [引用消息({comp.sender_nickname}: {comp.message_str})]"
+                        f" [Quote({comp.sender_nickname}: {_truncate_reply_text(comp.message_str)})]"
                     )
                 elif comp.chain:
                     chain_desc = _describe_chain(comp.chain)
                     parts.append(
-                        f" [引用消息({comp.sender_nickname}: {chain_desc})]"
+                        f" [Quote({comp.sender_nickname}: {chain_desc})]"
                     )
                 else:
-                    parts.append(" [引用消息]")
+                    parts.append(" [Quote]")
 
         return "".join(parts)
+
+
+_MAX_REPLY_TEXT_LENGTH = 200
 
 
 def _describe_chain(chain: list) -> str:
     """简要描述消息链内容，用于引用消息的展示"""
     desc = []
     for c in chain:
-        cls_name = c.__class__.__name__
-        if cls_name == "Plain" and getattr(c, "text", None):
+        if isinstance(c, Plain) and getattr(c, "text", None):
             desc.append(c.text)
-        elif cls_name == "Image":
-            desc.append("[图片]")
-        elif cls_name == "At":
+        elif isinstance(c, Image):
+            desc.append("[Image]")
+        elif isinstance(c, At):
             name = getattr(c, "name", "") or getattr(c, "qq", "")
             desc.append(f"[At: {name}]")
-        elif cls_name == "Record":
-            desc.append("[语音]")
-        elif cls_name == "Video":
-            desc.append("[视频]")
-        elif cls_name == "File":
-            desc.append(f"[文件: {getattr(c, 'name', '') or ''}]")
+        elif isinstance(c, Record):
+            desc.append("[Voice]")
+        elif isinstance(c, Video):
+            desc.append("[Video]")
+        elif isinstance(c, File):
+            desc.append(f"[File: {getattr(c, 'name', '') or ''}]")
+        elif isinstance(c, Reply):
+            desc.append("[Quote]")
         else:
-            desc.append(f"[{cls_name}]")
-    return "".join(desc) or "[未知内容]"
+            desc.append(f"[{c.__class__.__name__}]")
+    return "".join(desc) or "[Unknown]"
+
+
+def _truncate_reply_text(text: str) -> str:
+    """截断过长的引用文本"""
+    if len(text) <= _MAX_REPLY_TEXT_LENGTH:
+        return text
+    return text[:_MAX_REPLY_TEXT_LENGTH] + "..."
 
 
 def _positive_int(value, fallback: int) -> int:
