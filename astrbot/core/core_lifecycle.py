@@ -391,8 +391,6 @@ class AstrBotCoreLifecycle:
             except Exception as e:
                 logger.error(f"任务 {task.get_name()} 发生错误: {e}")
 
-        await LogManager.shutdown()
-
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
         await self.provider_manager.terminate()

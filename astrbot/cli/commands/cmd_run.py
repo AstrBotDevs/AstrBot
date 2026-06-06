@@ -26,26 +26,43 @@ def _install_shutdown_signal_handlers(
     installed: list[signal.Signals] = []
 
     for signum in handled_signals:
-        previous_handlers[signum] = signal.getsignal(signum)
+        try:
+            previous_handlers[signum] = signal.getsignal(signum)
+        except ValueError:
+            previous_handlers[signum] = None
         try:
             loop.add_signal_handler(signum, callback, signum)
             installed.append(signum)
-        except (NotImplementedError, RuntimeError):
+        except (NotImplementedError, RuntimeError, ValueError):
 
             def fallback_handler(received_signum, frame):
                 _ = frame
-                loop.call_soon_threadsafe(callback, signal.Signals(received_signum))
+                if not loop.is_closed():
+                    try:
+                        loop.call_soon_threadsafe(
+                            callback, signal.Signals(received_signum)
+                        )
+                    except RuntimeError:
+                        pass
 
-            signal.signal(signum, fallback_handler)
-            installed.append(signum)
+            try:
+                signal.signal(signum, fallback_handler)
+                installed.append(signum)
+            except ValueError:
+                pass
 
     def cleanup() -> None:
         for signum in installed:
             try:
                 loop.remove_signal_handler(signum)
-            except (NotImplementedError, RuntimeError):
+            except (NotImplementedError, RuntimeError, ValueError):
                 pass
-            signal.signal(signum, previous_handlers[signum])
+            previous_handler = previous_handlers.get(signum)
+            if previous_handler is not None:
+                try:
+                    signal.signal(signum, previous_handler)
+                except (TypeError, ValueError):
+                    pass
 
     return cleanup
 
@@ -103,7 +120,6 @@ async def run_astrbot(astrbot_root: Path) -> None:
             shutdown_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await shutdown_task
-        await LogManager.shutdown()
 
 
 @click.option("--reload", "-r", is_flag=True, help="Auto-reload plugins")

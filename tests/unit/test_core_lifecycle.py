@@ -102,14 +102,6 @@ class TestAstrBotCoreLifecycleInit:
 class TestAstrBotCoreLifecycleStop:
     """Tests for AstrBotCoreLifecycle.stop method."""
 
-    @pytest.fixture(autouse=True)
-    def _mock_log_manager_shutdown(self, monkeypatch: pytest.MonkeyPatch):
-        self.mock_log_shutdown = AsyncMock()
-        monkeypatch.setattr(
-            "astrbot.core.core_lifecycle.LogManager.shutdown",
-            self.mock_log_shutdown,
-        )
-
     @pytest.mark.asyncio
     async def test_stop_without_initialize(self, mock_log_broker, mock_db):
         """Test stop without initialize should not raise errors."""
@@ -755,14 +747,6 @@ class TestAstrBotCoreLifecycleStart:
 class TestAstrBotCoreLifecycleStopAdditional:
     """Additional tests for AstrBotCoreLifecycle.stop method."""
 
-    @pytest.fixture(autouse=True)
-    def _mock_log_manager_shutdown(self, monkeypatch: pytest.MonkeyPatch):
-        self.mock_log_shutdown = AsyncMock()
-        monkeypatch.setattr(
-            "astrbot.core.core_lifecycle.LogManager.shutdown",
-            self.mock_log_shutdown,
-        )
-
     @pytest.mark.asyncio
     async def test_stop_cancels_all_tasks(self, mock_log_broker, mock_db):
         """Test that stop cancels all current tasks."""
@@ -834,7 +818,6 @@ class TestAstrBotCoreLifecycleStopAdditional:
         lifecycle.provider_manager.terminate.assert_awaited_once()
         lifecycle.platform_manager.terminate.assert_awaited_once()
         lifecycle.kb_manager.terminate.assert_awaited_once()
-        self.mock_log_shutdown.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_stop_handles_plugin_termination_error(

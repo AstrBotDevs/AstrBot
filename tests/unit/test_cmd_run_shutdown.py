@@ -16,7 +16,6 @@ import astrbot.core.initial_loader as initial_loader_module
 
 @pytest.mark.asyncio
 async def test_run_astrbot_stops_gracefully_on_sigterm(monkeypatch):
-    shutdown_mock = AsyncMock(return_value=None)
     set_queue_handler_mock = MagicMock()
     check_dashboard_mock = AsyncMock(return_value=None)
     signal_restore_mock = MagicMock()
@@ -63,7 +62,6 @@ async def test_run_astrbot_stops_gracefully_on_sigterm(monkeypatch):
     monkeypatch.setattr(
         core_module.LogManager, "set_queue_handler", set_queue_handler_mock
     )
-    monkeypatch.setattr(core_module.LogManager, "shutdown", shutdown_mock)
 
     awaitable = asyncio.create_task(cmd_run.run_astrbot(Path("/tmp/astrbot-root")))
     await started.wait()
@@ -76,14 +74,12 @@ async def test_run_astrbot_stops_gracefully_on_sigterm(monkeypatch):
     assert cancelled.is_set()
     assert set(removed_signals) == {signal.SIGINT, signal.SIGTERM}
     assert signal_restore_mock.call_count == 2
-    shutdown_mock.assert_awaited_once()
     check_dashboard_mock.assert_awaited_once()
     set_queue_handler_mock.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_run_astrbot_suppresses_signal_cancelled_runner(monkeypatch):
-    shutdown_mock = AsyncMock(return_value=None)
     check_dashboard_mock = AsyncMock(return_value=None)
     signal_restore_mock = MagicMock()
     pending_signals: dict[signal.Signals, Callable[[], None]] = {}
@@ -119,7 +115,6 @@ async def test_run_astrbot_suppresses_signal_cancelled_runner(monkeypatch):
     )
     monkeypatch.setattr(cmd_run.signal, "signal", signal_restore_mock)
     monkeypatch.setattr(core_module.LogManager, "set_queue_handler", MagicMock())
-    monkeypatch.setattr(core_module.LogManager, "shutdown", shutdown_mock)
 
     awaitable = asyncio.create_task(cmd_run.run_astrbot(Path("/tmp/astrbot-root")))
     await started.wait()
@@ -128,13 +123,11 @@ async def test_run_astrbot_suppresses_signal_cancelled_runner(monkeypatch):
 
     await awaitable
 
-    shutdown_mock.assert_awaited_once()
     check_dashboard_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_run_astrbot_cancels_runner_when_parent_is_cancelled(monkeypatch):
-    shutdown_mock = AsyncMock(return_value=None)
     check_dashboard_mock = AsyncMock(return_value=None)
     signal_restore_mock = MagicMock()
     previous_handlers = {
@@ -152,6 +145,7 @@ async def test_run_astrbot_cancels_runner_when_parent_is_cancelled(monkeypatch):
 
     started = asyncio.Event()
     cancelled = asyncio.Event()
+    shutdown_complete = asyncio.Event()
 
     class FakeLoader:
         def __init__(self, db, log_broker):
@@ -165,6 +159,9 @@ async def test_run_astrbot_cancels_runner_when_parent_is_cancelled(monkeypatch):
             except asyncio.CancelledError:
                 cancelled.set()
                 raise
+            finally:
+                await asyncio.sleep(0)
+                shutdown_complete.set()
 
     monkeypatch.setattr(initial_loader_module, "InitialLoader", FakeLoader)
     monkeypatch.setattr(cmd_run, "check_dashboard", check_dashboard_mock)
@@ -174,7 +171,6 @@ async def test_run_astrbot_cancels_runner_when_parent_is_cancelled(monkeypatch):
     )
     monkeypatch.setattr(cmd_run.signal, "signal", signal_restore_mock)
     monkeypatch.setattr(core_module.LogManager, "set_queue_handler", MagicMock())
-    monkeypatch.setattr(core_module.LogManager, "shutdown", shutdown_mock)
 
     awaitable = asyncio.create_task(cmd_run.run_astrbot(Path("/tmp/astrbot-root")))
     await started.wait()
@@ -185,7 +181,7 @@ async def test_run_astrbot_cancels_runner_when_parent_is_cancelled(monkeypatch):
         await awaitable
 
     assert cancelled.is_set()
-    shutdown_mock.assert_awaited_once()
+    assert shutdown_complete.is_set()
     check_dashboard_mock.assert_awaited_once()
     assert signal_restore_mock.call_count == 2
 
@@ -208,6 +204,9 @@ def test_install_shutdown_signal_handlers_falls_back_and_restores(monkeypatch):
         def remove_signal_handler(self, _signum):
             _ = _signum
             raise NotImplementedError
+
+        def is_closed(self):
+            return False
 
         def call_soon_threadsafe(self, callback, *args):
             scheduled_callbacks.append((callback, args))
@@ -240,6 +239,141 @@ def test_install_shutdown_signal_handlers_falls_back_and_restores(monkeypatch):
         (signal.SIGINT, previous_handlers[signal.SIGINT]),
         (signal.SIGTERM, previous_handlers[signal.SIGTERM]),
     ]
+
+
+def test_fallback_signal_handler_ignores_closed_loop(monkeypatch):
+    installed_handlers: dict[signal.Signals, Callable[[int, object], object]] = {}
+    previous_handlers = {
+        signal.SIGINT: object(),
+        signal.SIGTERM: object(),
+    }
+    callback = MagicMock()
+
+    class FakeLoop:
+        def add_signal_handler(self, _signum, _callback, *_args):
+            _ = (_signum, _callback, _args)
+            raise NotImplementedError
+
+        def remove_signal_handler(self, _signum):
+            _ = _signum
+            raise NotImplementedError
+
+        def is_closed(self):
+            return True
+
+        def call_soon_threadsafe(self, _callback, *_args):
+            raise AssertionError("closed loop should not schedule callbacks")
+
+    def fake_signal(signum: signal.Signals, handler: Any) -> object:
+        if callable(handler):
+            installed_handlers[signum] = cast(Callable[[int, object], object], handler)
+        return previous_handlers[signum]
+
+    monkeypatch.setattr(
+        cmd_run.signal, "getsignal", lambda signum: previous_handlers[signum]
+    )
+    monkeypatch.setattr(cmd_run.signal, "signal", fake_signal)
+
+    cleanup = cmd_run._install_shutdown_signal_handlers(cast(Any, FakeLoop()), callback)
+
+    installed_handlers[signal.SIGTERM](signal.SIGTERM, None)
+
+    callback.assert_not_called()
+    cleanup()
+
+
+def test_fallback_signal_handler_ignores_call_soon_runtime_error(monkeypatch):
+    installed_handlers: dict[signal.Signals, Callable[[int, object], object]] = {}
+    previous_handlers = {
+        signal.SIGINT: object(),
+        signal.SIGTERM: object(),
+    }
+    callback = MagicMock()
+
+    class FakeLoop:
+        def add_signal_handler(self, _signum, _callback, *_args):
+            _ = (_signum, _callback, _args)
+            raise NotImplementedError
+
+        def remove_signal_handler(self, _signum):
+            _ = _signum
+            raise NotImplementedError
+
+        def is_closed(self):
+            return False
+
+        def call_soon_threadsafe(self, _callback, *_args):
+            raise RuntimeError("event loop is closing")
+
+    def fake_signal(signum: signal.Signals, handler: Any) -> object:
+        if callable(handler):
+            installed_handlers[signum] = cast(Callable[[int, object], object], handler)
+        return previous_handlers[signum]
+
+    monkeypatch.setattr(
+        cmd_run.signal, "getsignal", lambda signum: previous_handlers[signum]
+    )
+    monkeypatch.setattr(cmd_run.signal, "signal", fake_signal)
+
+    cleanup = cmd_run._install_shutdown_signal_handlers(cast(Any, FakeLoop()), callback)
+
+    installed_handlers[signal.SIGTERM](signal.SIGTERM, None)
+
+    callback.assert_not_called()
+    cleanup()
+
+
+def test_install_shutdown_signal_handlers_skips_unavailable_signal_api(monkeypatch):
+    callback = MagicMock()
+
+    class FakeLoop:
+        def add_signal_handler(self, _signum, _callback, *_args):
+            _ = (_signum, _callback, _args)
+            raise ValueError("signal only works in main thread")
+
+        def remove_signal_handler(self, _signum):
+            raise AssertionError("no handlers should be installed")
+
+    monkeypatch.setattr(
+        cmd_run.signal,
+        "getsignal",
+        MagicMock(side_effect=ValueError("signal only works in main thread")),
+    )
+    monkeypatch.setattr(
+        cmd_run.signal,
+        "signal",
+        MagicMock(side_effect=ValueError("signal only works in main thread")),
+    )
+
+    cleanup = cmd_run._install_shutdown_signal_handlers(cast(Any, FakeLoop()), callback)
+
+    cleanup()
+    callback.assert_not_called()
+
+
+def test_cleanup_signal_handlers_skips_none_previous_handler(monkeypatch):
+    restored_handlers: list[tuple[signal.Signals, Any]] = []
+    callback = MagicMock()
+
+    class FakeLoop:
+        def add_signal_handler(self, _signum, _callback, *_args):
+            _ = (_signum, _callback, _args)
+
+        def remove_signal_handler(self, _signum):
+            _ = _signum
+            return True
+
+    def fake_signal(signum: signal.Signals, handler: Any) -> object:
+        restored_handlers.append((signum, handler))
+        return object()
+
+    monkeypatch.setattr(cmd_run.signal, "getsignal", lambda _signum: None)
+    monkeypatch.setattr(cmd_run.signal, "signal", fake_signal)
+
+    cleanup = cmd_run._install_shutdown_signal_handlers(cast(Any, FakeLoop()), callback)
+
+    cleanup()
+    assert restored_handlers == []
 
 
 @pytest.mark.asyncio
