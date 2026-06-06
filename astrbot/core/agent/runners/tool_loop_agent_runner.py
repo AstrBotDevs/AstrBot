@@ -1043,7 +1043,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     continue
 
-                # 统一权限拦截
+                # 权限拦截
                 # 即使 LLM 意外获知了受限工具，执行前也会在此被阻断。
                 if getattr(func_tool, "require_admin", False):
                     _caller_event = self.run_context.context.event
@@ -1065,8 +1065,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             f"error: Permission denied. "
                             f"Tool '{func_tool_name}' requires admin privileges. "
                             f"Your user ID is {sender_id}. "
-                            "Ask the AstrBot admin to grant access via "
-                            "WebUI → 管理行为 → 函数工具 → 权限列.",
+                            "Please ask your AstrBot administrator to grant "
+                            "you access to this tool.",
                         )
                         continue
 
