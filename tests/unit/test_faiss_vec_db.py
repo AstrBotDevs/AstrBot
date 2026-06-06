@@ -54,6 +54,56 @@ async def test_insert_batch_raises_friendly_error_for_embedding_count_mismatch()
 
 
 @pytest.mark.asyncio
+async def test_insert_batch_validates_vectors_before_writing_documents() -> None:
+    vec_db = _make_vecdb()
+    vec_db.embedding_provider.get_embeddings_batch.return_value = [
+        [0.1, 0.2],
+        [0.3],
+    ]
+    vec_db.embedding_storage.dimension = 2
+
+    with pytest.raises(KnowledgeBaseUploadError) as exc_info:
+        await FaissVecDB.insert_batch(
+            vec_db,
+            contents=["chunk-1", "chunk-2"],
+            metadatas=[{}, {}],
+            ids=["doc-1", "doc-2"],
+        )
+
+    assert exc_info.value.stage == "embedding"
+    vec_db.document_storage.insert_documents_batch.assert_not_called()
+    vec_db.embedding_storage.insert_batch.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_insert_batch_cleans_document_rows_when_faiss_insert_fails() -> None:
+    vec_db = _make_vecdb()
+    vec_db.embedding_provider.get_embeddings_batch.return_value = [
+        [0.1] * 128,
+        [0.2] * 128,
+    ]
+    vec_db.document_storage.insert_documents_batch = AsyncMock(return_value=[10, 11])
+    vec_db.document_storage.delete_document_by_doc_id = AsyncMock()
+    vec_db.embedding_storage.insert_batch = AsyncMock(
+        side_effect=RuntimeError("faiss fail"),
+    )
+    vec_db.embedding_storage.delete = AsyncMock()
+
+    with pytest.raises(RuntimeError, match="faiss fail"):
+        await FaissVecDB.insert_batch(
+            vec_db,
+            contents=["chunk-1", "chunk-2"],
+            metadatas=[{}, {}],
+            ids=["doc-1", "doc-2"],
+        )
+
+    vec_db.embedding_storage.delete.assert_awaited_once_with([10, 11])
+    vec_db.document_storage.delete_document_by_doc_id.assert_any_await("doc-1")
+    vec_db.document_storage.delete_document_by_doc_id.assert_any_await("doc-2")
+    assert vec_db.document_storage.delete_document_by_doc_id.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_delete_returns_false_when_chunk_is_missing() -> None:
     vec_db = _make_vecdb()
     vec_db.document_storage.get_document_by_doc_id.return_value = None

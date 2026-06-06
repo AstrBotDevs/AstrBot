@@ -218,26 +218,6 @@ class FaissVecDB(BaseVecDB):
             f"in {end - start:.2f}s (cached: {cache_hits}, fresh: {cache_misses}).",
         )
 
-        # 使用 DocumentStorage 的批量插入方法
-        int_ids = await self.document_storage.insert_documents_batch(
-            ids,
-            contents,
-            metadatas,
-        )
-        if len(int_ids) != content_count:
-            raise KnowledgeBaseUploadError(
-                stage="storage",
-                user_message=(
-                    f"存储失败：写入文档索引后返回的内部 ID 数量与文本分块数量不一致"
-                    f"（期望 {content_count}，实际 {len(int_ids)}）。"
-                ),
-                details={
-                    "expected_contents": content_count,
-                    "actual_int_ids": len(int_ids),
-                },
-            )
-
-        # 批量插入向量到 FAISS
         try:
             vectors_array = np.asarray(vectors, dtype=np.float32)
         except (TypeError, ValueError) as exc:
@@ -270,8 +250,62 @@ class FaissVecDB(BaseVecDB):
                     "actual_dimension": int(vectors_array.shape[1]),
                 },
             )
-        await self.embedding_storage.insert_batch(vectors_array, int_ids)
+
+        int_ids = await self.document_storage.insert_documents_batch(
+            ids,
+            contents,
+            metadatas,
+        )
+        if len(int_ids) != content_count:
+            await self._cleanup_batch_insert(int_ids=[], doc_ids=ids)
+            raise KnowledgeBaseUploadError(
+                stage="storage",
+                user_message=(
+                    f"存储失败：写入文档索引后返回的内部 ID 数量与文本分块数量不一致"
+                    f"（期望 {content_count}，实际 {len(int_ids)}）。"
+                ),
+                details={
+                    "expected_contents": content_count,
+                    "actual_int_ids": len(int_ids),
+                },
+            )
+
+        try:
+            await self.embedding_storage.insert_batch(vectors_array, int_ids)
+        except Exception:
+            logger.warning(
+                "Failed to insert FAISS vectors; cleaning up inserted document rows.",
+                exc_info=True,
+            )
+            await self._cleanup_batch_insert(int_ids=int_ids, doc_ids=ids)
+            raise
         return int_ids
+
+    async def _cleanup_batch_insert(
+        self,
+        *,
+        int_ids: list[int],
+        doc_ids: list[str],
+    ) -> None:
+        """Best-effort cleanup for a failed batch insert."""
+        if int_ids:
+            try:
+                await self.embedding_storage.delete(int_ids)
+            except Exception:
+                logger.warning(
+                    "Failed to clean up FAISS vectors after batch insert failure.",
+                    exc_info=True,
+                )
+
+        for doc_id in doc_ids:
+            try:
+                await self.document_storage.delete_document_by_doc_id(doc_id)
+            except Exception:
+                logger.warning(
+                    f"Failed to clean up document row {doc_id} "
+                    "after batch insert failure.",
+                    exc_info=True,
+                )
 
     async def retrieve(
         self,
