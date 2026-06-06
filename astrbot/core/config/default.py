@@ -88,6 +88,10 @@ DEFAULT_CONFIG = {
             ],  # 当 split_mode 为 words 时使用
             "content_cleanup_rule": "",
         },
+        "message_debounce": {
+            "enable": False,
+            "interval": 2,
+        },
         "no_permission_reply": True,
         "empty_mention_waiting": True,
         "empty_mention_waiting_need_reply": True,
@@ -1064,6 +1068,19 @@ CONFIG_METADATA_2 = {
                             },
                             "content_cleanup_rule": {
                                 "type": "string",
+                            },
+                        },
+                    },
+                    "message_debounce": {
+                        "type": "object",
+                        "items": {
+                            "enable": {
+                                "type": "bool",
+                                "hint": "启用后，短时间内来自同一会话的多条消息会合并后再交给LLM处理，避免图片和文字分开到达时上下文割裂。",
+                            },
+                            "interval": {
+                                "type": "int",
+                                "hint": "防抖等待时间（秒）。在此时间内若收到同一会话的新消息，则等待时间重置。超时后所有消息合并为一条再处理。推荐2-3秒。",
                             },
                         },
                     },
@@ -4132,6 +4149,20 @@ CONFIG_METADATA_3 = {
                         "description": "内容过滤正则表达式",
                         "type": "string",
                         "hint": "移除分段后内容中的指定内容。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。",
+                    },
+                },
+            },
+            "message_debounce": {
+                "description": "消息防抖",
+                "type": "object",
+                "items": {
+                    "platform_settings.message_debounce.enable": {
+                        "description": "启用消息防抖",
+                        "type": "bool",
+                    },
+                    "platform_settings.message_debounce.interval": {
+                        "description": "防抖间隔（秒）",
+                        "type": "int",
                     },
                 },
             },

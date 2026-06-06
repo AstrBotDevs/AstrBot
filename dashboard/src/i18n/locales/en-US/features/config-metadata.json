@@ -979,6 +979,21 @@
         }
       }
     },
+    "message_debounce": {
+      "description": "Message Debounce",
+      "platform_settings": {
+        "message_debounce": {
+          "enable": {
+            "description": "Enable Message Debounce",
+            "hint": "When enabled, consecutive messages from the same session within a short time window are merged before being sent to the LLM. Avoids context fragmentation when images and text arrive separately."
+          },
+          "interval": {
+            "description": "Debounce Interval (seconds)",
+            "hint": "If a new message arrives from the same session within this window, the timer resets. When the timer expires, all buffered messages are merged and processed as one. Recommended: 2-3 seconds."
+          }
+        }
+      }
+    },
     "ltm": {
       "description": "Group Chat Context Awareness (formerly Chat Memory Enhancement)",
       "provider_ltm_settings": {
