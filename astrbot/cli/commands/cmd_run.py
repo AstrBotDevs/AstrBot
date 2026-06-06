@@ -31,9 +31,10 @@ def _install_shutdown_signal_handlers(
             loop.add_signal_handler(signum, callback, signum)
             installed.append(signum)
         except (NotImplementedError, RuntimeError):
+
             def fallback_handler(received_signum, frame):
                 _ = frame
-                callback(signal.Signals(received_signum))
+                loop.call_soon_threadsafe(callback, signal.Signals(received_signum))
 
             signal.signal(signum, fallback_handler)
             installed.append(signum)

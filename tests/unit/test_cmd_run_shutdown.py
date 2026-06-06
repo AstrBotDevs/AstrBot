@@ -140,6 +140,7 @@ def test_install_shutdown_signal_handlers_falls_back_and_restores(monkeypatch):
         signal.SIGTERM: object(),
     }
     callback = MagicMock()
+    scheduled_callbacks: list[tuple[Callable[..., object], tuple[object, ...]]] = []
 
     class FakeLoop:
         def add_signal_handler(self, _signum, _callback, *_args):
@@ -149,6 +150,9 @@ def test_install_shutdown_signal_handlers_falls_back_and_restores(monkeypatch):
         def remove_signal_handler(self, _signum):
             _ = _signum
             raise NotImplementedError
+
+        def call_soon_threadsafe(self, callback, *args):
+            scheduled_callbacks.append((callback, args))
 
     def fake_signal(signum: signal.Signals, handler: Any) -> object:
         if callable(handler):
@@ -165,6 +169,11 @@ def test_install_shutdown_signal_handlers_falls_back_and_restores(monkeypatch):
     cleanup = cmd_run._install_shutdown_signal_handlers(cast(Any, FakeLoop()), callback)
 
     installed_handlers[signal.SIGTERM](signal.SIGTERM, None)
+    callback.assert_not_called()
+    assert scheduled_callbacks == [(callback, (signal.SIGTERM,))]
+
+    scheduled_callback, scheduled_args = scheduled_callbacks.pop()
+    scheduled_callback(*scheduled_args)
     callback.assert_called_once_with(signal.SIGTERM)
 
     cleanup()

@@ -426,6 +426,4 @@ class LogManager:
             cls._trace_sink_id = None
             cls._remove_sink(cls._file_sink_id)
             cls._file_sink_id = None
-            cls._remove_sink(cls._console_sink_id)
-            cls._console_sink_id = None
             cls._configured = False
