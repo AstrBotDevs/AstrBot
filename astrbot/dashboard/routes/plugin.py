@@ -229,6 +229,55 @@ class PluginRoute(Route):
             return default
         return locale
 
+    @staticmethod
+    def _get_request_theme() -> str | None:
+        theme = request.args.get("theme", "").strip()
+        return theme if theme in ("dark", "light") else None
+
+    @staticmethod
+    def _apply_theme_to_html(html: str, theme: str) -> str:
+        def _replace_html_tag(m: re.Match) -> str:
+            attrs = m.group(1) or ""
+            attrs = re.sub(
+                r'\s+data-theme\s*=\s*["\'][^"\']*["\']',
+                "",
+                attrs,
+                flags=re.IGNORECASE,
+            )
+            return f'<html{attrs} data-theme="{theme}">'
+
+        html = re.sub(
+            r"<html(\b[^>]*)>",
+            _replace_html_tag,
+            html,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+
+        meta_tag = f'<meta name="color-scheme" content="{theme}">'
+
+        html = re.sub(
+            r'<meta\s[^>]*name\s*=\s*["\']color-scheme["\'][^>]*>',
+            "",
+            html,
+            flags=re.IGNORECASE,
+        )
+
+        head_match = re.search(r"<head\b[^>]*>", html, re.IGNORECASE)
+        if head_match:
+            html = html.replace(
+                head_match.group(0), f"{head_match.group(0)}{meta_tag}", 1
+            )
+        else:
+            html = re.sub(
+                r"(<html\b[^>]*>)",
+                rf"\1<head>{meta_tag}</head>",
+                html,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        return html
+
     def _get_plugin_page_initial_context(self) -> dict | None:
         asset_token = request.args.get("asset_token", "").strip()
         if not asset_token:
@@ -277,6 +326,8 @@ class PluginRoute(Route):
             self._get_by_path(locale_data, f"pages.{page_name}.title") or page_name
         )
 
+        theme = self._get_request_theme()
+
         return {
             "pluginName": plugin.name,
             "displayName": display_name,
@@ -284,6 +335,7 @@ class PluginRoute(Route):
             "pageTitle": page_title,
             "locale": locale,
             "i18n": plugin_i18n,
+            "isDark": theme == "dark",
         }
 
     @staticmethod
@@ -590,6 +642,9 @@ class PluginRoute(Route):
                 return match.group(0)
 
         rewritten_html = _HTML_ASSET_ATTR_RE.sub(replace_attr, html_text)
+        theme = self._get_request_theme()
+        if theme:
+            rewritten_html = self._apply_theme_to_html(rewritten_html, theme)
         if "/api/plugin/page/bridge-sdk.js" not in rewritten_html:
             bridge_tag = f'<script src="{self._get_plugin_page_bridge_sdk_url(extra_query_params)}"></script>'
             if "</body>" in rewritten_html:
@@ -774,7 +829,17 @@ class PluginRoute(Route):
             asset_token = (
                 self._issue_plugin_page_asset_token(plugin_name, page_name) or ""
             )
-        return {"asset_token": asset_token} if asset_token else None
+        theme = self._get_request_theme()
+
+        if not asset_token and not theme:
+            return None
+
+        params: dict[str, str] = {}
+        if asset_token:
+            params["asset_token"] = asset_token
+        if theme:
+            params["theme"] = theme
+        return params
 
     @staticmethod
     async def _plugin_page_error_response(status_code: int, message: str):
@@ -789,14 +854,21 @@ class PluginRoute(Route):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
         # Sandboxed iframes without allow-same-origin load ES modules with Origin: null.
         # CORS read access is allowed here; JWT/asset_token still protects the assets.
         response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Content-Security-Policy"] = (
-            "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
-        )
+
+        # When running under the AstrBot Launcher the dashboard is embedded in a
+        # cross-origin iframe (the Tauri webview).  Since frame-ancestors and
+        # X-Frame-Options inspect the *entire* ancestor chain, enforcing them here
+        # would block plugin pages from loading inside the nested iframe.
+        csp = "object-src 'none'; base-uri 'self'"
+        if os.environ.get("ASTRBOT_LAUNCHER") not in ("1", "true"):
+            response.headers["X-Frame-Options"] = "SAMEORIGIN"
+            csp = f"frame-ancestors 'self'; {csp}"
+        response.headers["Content-Security-Policy"] = csp
+
         return response
 
     async def _serve_plugin_page_html_asset(

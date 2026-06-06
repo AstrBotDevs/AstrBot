@@ -7,6 +7,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, Preference
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
 
 from .route import Response, Route, RouteContext
 
@@ -48,6 +49,63 @@ class SessionManagementRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.register_routes()
 
+    @staticmethod
+    def _is_group_umo(umo: str) -> bool:
+        umo_lower = umo.lower()
+        return ":group:" in umo_lower or ":groupmessage:" in umo_lower
+
+    @staticmethod
+    def _is_private_umo(umo: str) -> bool:
+        umo_lower = umo.lower()
+        return (
+            ":private:" in umo_lower
+            or ":friend:" in umo_lower
+            or ":friendmessage:" in umo_lower
+        )
+
+    async def _list_known_umos(self) -> list[str]:
+        async with self.db_helper.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(select(ConversationV2.user_id).distinct())
+            umos = {str(row[0]) for row in result.fetchall() if row[0]}
+
+        aliases = await self.db_helper.get_umo_aliases()
+        umos.update(str(alias.umo) for alias in aliases if alias.umo)
+        return sorted(umos)
+
+    async def _get_umo_alias_map(self, umos: list[str]) -> dict:
+        return build_umo_alias_map(await self.db_helper.get_umo_aliases(umos))
+
+    def _build_umo_info(self, umo: str | None, alias_map: dict) -> dict:
+        umo_str = umo or ""
+        return {
+            "umo": umo_str,
+            **parse_umo(umo_str),
+            **serialize_umo_alias(alias_map.get(umo_str), umo_str),
+        }
+
+    async def _get_umos_by_scope(
+        self,
+        scope: str,
+        group_id: str = "",
+    ) -> list[str]:
+        if scope == "custom_group":
+            if not group_id:
+                raise ValueError("请指定分组 ID")
+            groups = self._get_groups()
+            if group_id not in groups:
+                raise ValueError(f"分组 '{group_id}' 不存在")
+            return groups[group_id].get("umos", [])
+
+        all_umos = await self._list_known_umos()
+        if scope == "group":
+            return [umo for umo in all_umos if self._is_group_umo(umo)]
+        if scope == "private":
+            return [umo for umo in all_umos if self._is_private_umo(umo)]
+        if scope == "all":
+            return all_umos
+        return []
+
     async def _get_umo_rules(
         self, page: int = 1, page_size: int = 10, search: str = ""
     ) -> tuple[dict, int]:
@@ -87,6 +145,8 @@ class SessionManagementRoute(Route):
                 else:
                     umo_rules[umo_id][pref.key] = pref.value["val"]
 
+        alias_map = await self._get_umo_alias_map(list(umo_rules.keys()))
+
         # 搜索过滤
         if search:
             search_lower = search.lower()
@@ -100,6 +160,15 @@ class SessionManagementRoute(Route):
                 svc_config = rules.get("session_service_config", {})
                 custom_name = svc_config.get("custom_name", "") if svc_config else ""
                 if custom_name and search_lower in custom_name.lower():
+                    filtered_rules[umo_id] = rules
+                    continue
+
+                alias_info = serialize_umo_alias(alias_map.get(umo_id), umo_id)
+                if any(
+                    search_lower in alias_info[key].lower()
+                    for key in ("auto_name", "user_alias", "display_name")
+                    if alias_info.get(key)
+                ):
                     filtered_rules[umo_id] = rules
             umo_rules = filtered_rules
 
@@ -147,17 +216,12 @@ class SessionManagementRoute(Route):
 
             # 构建规则列表
             rules_list = []
+            alias_map = await self._get_umo_alias_map(list(umo_rules.keys()))
             for umo, rules in umo_rules.items():
                 rule_info = {
-                    "umo": umo,
                     "rules": rules,
+                    **self._build_umo_info(umo, alias_map),
                 }
-                # 解析 umo 格式: 平台:消息类型:会话ID
-                parts = umo.split(":")
-                if len(parts) >= 3:
-                    rule_info["platform"] = parts[0]
-                    rule_info["message_type"] = parts[1]
-                    rule_info["session_id"] = parts[2]
                 rules_list.append(rule_info)
 
             # 获取可用的 providers 和 personas
@@ -344,36 +408,10 @@ class SessionManagementRoute(Route):
 
             # 如果指定了 scope，获取符合条件的所有 umo
             if scope and not umos:
-                # 如果是自定义分组
-                if scope == "custom_group":
-                    if not group_id:
-                        return Response().error("请指定分组 ID").__dict__
-                    groups = self._get_groups()
-                    if group_id not in groups:
-                        return Response().error(f"分组 '{group_id}' 不存在").__dict__
-                    umos = groups[group_id].get("umos", [])
-                else:
-                    async with self.db_helper.get_db() as session:
-                        session: AsyncSession
-                        result = await session.execute(
-                            select(ConversationV2.user_id).distinct()
-                        )
-                        all_umos = [row[0] for row in result.fetchall()]
-
-                    if scope == "group":
-                        umos = [
-                            u
-                            for u in all_umos
-                            if ":group:" in u.lower() or ":groupmessage:" in u.lower()
-                        ]
-                    elif scope == "private":
-                        umos = [
-                            u
-                            for u in all_umos
-                            if ":private:" in u.lower() or ":friend" in u.lower()
-                        ]
-                    elif scope == "all":
-                        umos = all_umos
+                try:
+                    umos = await self._get_umos_by_scope(scope, group_id)
+                except ValueError as e:
+                    return Response().error(str(e)).__dict__
 
             if not umos:
                 return Response().error("缺少必要参数: umos 或有效的 scope").__dict__
@@ -430,22 +468,16 @@ class SessionManagementRoute(Route):
             return Response().error(f"批量删除会话规则失败: {e!s}").__dict__
 
     async def list_umos(self):
-        """列出所有有对话记录的 umo，从 Conversations 表中找
+        """List known UMOs from conversations and alias records.
 
-        仅返回 umo 字符串列表，用于用户在创建规则时选择 umo
+        Returns both the legacy string list and structured display metadata.
         """
         try:
-            # 从 Conversation 表获取所有 distinct user_id (即 umo)
-            async with self.db_helper.get_db() as session:
-                session: AsyncSession
-                result = await session.execute(
-                    select(ConversationV2.user_id)
-                    .distinct()
-                    .order_by(ConversationV2.user_id)
-                )
-                umos = [row[0] for row in result.fetchall()]
+            umos = await self._list_known_umos()
+            alias_map = await self._get_umo_alias_map(umos)
+            umo_infos = [self._build_umo_info(umo, alias_map) for umo in umos]
 
-            return Response().ok({"umos": umos}).__dict__
+            return Response().ok({"umos": umos, "umo_infos": umo_infos}).__dict__
         except Exception as e:
             logger.error(f"获取 UMO 列表失败: {e!s}")
             return Response().error(f"获取 UMO 列表失败: {e!s}").__dict__
@@ -474,15 +506,8 @@ class SessionManagementRoute(Route):
             if page_size > 100:
                 page_size = 100
 
-            # 从 Conversation 表获取所有 distinct user_id (即 umo)
-            async with self.db_helper.get_db() as session:
-                session: AsyncSession
-                result = await session.execute(
-                    select(ConversationV2.user_id)
-                    .distinct()
-                    .order_by(ConversationV2.user_id)
-                )
-                all_umos = [row[0] for row in result.fetchall()]
+            all_umos = await self._list_known_umos()
+            alias_map = await self._get_umo_alias_map(all_umos)
 
             # 获取所有 umo 的规则配置
             umo_rules, _ = await self._get_umo_rules(page=1, page_size=99999, search="")
@@ -490,10 +515,9 @@ class SessionManagementRoute(Route):
             # 构建带状态的 umo 列表
             umos_with_status = []
             for umo in all_umos:
-                parts = umo.split(":")
-                umo_platform = parts[0] if len(parts) >= 1 else "unknown"
-                umo_message_type = parts[1] if len(parts) >= 2 else "unknown"
-                umo_session_id = parts[2] if len(parts) >= 3 else umo
+                umo_info = self._build_umo_info(umo, alias_map)
+                umo_platform = umo_info["platform"]
+                umo_message_type = umo_info["message_type"]
 
                 # 筛选消息类型
                 if message_type != "all":
@@ -531,9 +555,17 @@ class SessionManagementRoute(Route):
                 # 搜索过滤
                 if search:
                     search_lower = search.lower()
-                    if (
-                        search_lower not in umo.lower()
-                        and search_lower not in custom_name.lower()
+                    search_targets = [
+                        umo,
+                        custom_name,
+                        umo_info["auto_name"],
+                        umo_info["user_alias"],
+                        umo_info["display_name"],
+                    ]
+                    if not any(
+                        search_lower in target.lower()
+                        for target in search_targets
+                        if target
                     ):
                         continue
 
@@ -546,10 +578,7 @@ class SessionManagementRoute(Route):
 
                 umos_with_status.append(
                     {
-                        "umo": umo,
-                        "platform": umo_platform,
-                        "message_type": umo_message_type,
-                        "session_id": umo_session_id,
+                        **umo_info,
                         "custom_name": custom_name,
                         "session_enabled": session_enabled,
                         "llm_enabled": llm_enabled,
@@ -633,36 +662,10 @@ class SessionManagementRoute(Route):
 
             # 如果指定了 scope，获取符合条件的所有 umo
             if scope and not umos:
-                # 如果是自定义分组
-                if scope == "custom_group":
-                    if not group_id:
-                        return Response().error("请指定分组 ID").__dict__
-                    groups = self._get_groups()
-                    if group_id not in groups:
-                        return Response().error(f"分组 '{group_id}' 不存在").__dict__
-                    umos = groups[group_id].get("umos", [])
-                else:
-                    async with self.db_helper.get_db() as session:
-                        session: AsyncSession
-                        result = await session.execute(
-                            select(ConversationV2.user_id).distinct()
-                        )
-                        all_umos = [row[0] for row in result.fetchall()]
-
-                    if scope == "group":
-                        umos = [
-                            u
-                            for u in all_umos
-                            if ":group:" in u.lower() or ":groupmessage:" in u.lower()
-                        ]
-                    elif scope == "private":
-                        umos = [
-                            u
-                            for u in all_umos
-                            if ":private:" in u.lower() or ":friend" in u.lower()
-                        ]
-                    elif scope == "all":
-                        umos = all_umos
+                try:
+                    umos = await self._get_umos_by_scope(scope, group_id)
+                except ValueError as e:
+                    return Response().error(str(e)).__dict__
 
             if not umos:
                 return Response().error("没有找到符合条件的会话").__dict__
@@ -766,36 +769,10 @@ class SessionManagementRoute(Route):
             # 如果指定了 scope，获取符合条件的所有 umo
             group_id = data.get("group_id", "")
             if scope and not umos:
-                # 如果是自定义分组
-                if scope == "custom_group":
-                    if not group_id:
-                        return Response().error("请指定分组 ID").__dict__
-                    groups = self._get_groups()
-                    if group_id not in groups:
-                        return Response().error(f"分组 '{group_id}' 不存在").__dict__
-                    umos = groups[group_id].get("umos", [])
-                else:
-                    async with self.db_helper.get_db() as session:
-                        session: AsyncSession
-                        result = await session.execute(
-                            select(ConversationV2.user_id).distinct()
-                        )
-                        all_umos = [row[0] for row in result.fetchall()]
-
-                    if scope == "group":
-                        umos = [
-                            u
-                            for u in all_umos
-                            if ":group:" in u.lower() or ":groupmessage:" in u.lower()
-                        ]
-                    elif scope == "private":
-                        umos = [
-                            u
-                            for u in all_umos
-                            if ":private:" in u.lower() or ":friend" in u.lower()
-                        ]
-                    elif scope == "all":
-                        umos = all_umos
+                try:
+                    umos = await self._get_umos_by_scope(scope, group_id)
+                except ValueError as e:
+                    return Response().error(str(e)).__dict__
 
             if not umos:
                 return Response().error("没有找到符合条件的会话").__dict__

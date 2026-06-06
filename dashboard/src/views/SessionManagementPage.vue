@@ -7,19 +7,25 @@
           <v-btn icon="mdi-information-outline" size="small" variant="text" href="https://docs.astrbot.app/use/custom-rules.html" target="_blank"></v-btn>
           <v-chip size="small" class="ml-1">{{ totalItems }} {{ tm('customRules.rulesCount') }}</v-chip>
           <v-row class="me-4 ms-4" dense>
-            <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :label="tm('search.placeholder')"
-              hide-details clearable variant="solo-filled" flat class="me-4" density="compact"></v-text-field>
+            <v-text-field
+              v-model="searchQuery"
+              prepend-inner-icon="mdi-magnify"
+              :label="tm('search.placeholder')"
+              hide-details
+              clearable
+              variant="solo-filled"
+              flat
+              class="me-4"
+              density="compact"
+            ></v-text-field>
           </v-row>
-          <v-btn v-if="selectedItems.length > 0" color="error" prepend-icon="mdi-delete" variant="tonal"
-            @click="confirmBatchDelete" class="mr-2" size="small">
+          <v-btn v-if="selectedItems.length > 0" color="error" prepend-icon="mdi-delete" variant="tonal" @click="confirmBatchDelete" class="mr-2" size="small">
             {{ tm('buttons.batchDelete') }} ({{ selectedItems.length }})
           </v-btn>
-          <v-btn color="success" prepend-icon="mdi-plus" variant="tonal" @click="openAddRuleDialog" class="mr-2"
-            size="small">
+          <v-btn color="success" prepend-icon="mdi-plus" variant="tonal" @click="openAddRuleDialog" class="mr-2" size="small">
             {{ tm('buttons.addRule') }}
           </v-btn>
-          <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="refreshData" :loading="loading"
-            size="small">
+          <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="refreshData" :loading="loading" size="small">
             {{ tm('buttons.refresh') }}
           </v-btn>
         </v-card-title>
@@ -27,43 +33,35 @@
         <v-divider></v-divider>
 
         <v-card-text class="pa-0">
-          <v-data-table-server :headers="headers" :items="filteredRulesList" :loading="loading"
-            :items-length="totalItems" v-model:items-per-page="itemsPerPage" v-model:page="currentPage"
-            @update:options="onTableOptionsUpdate" class="elevation-0" style="font-size: 12px;" v-model="selectedItems"
-            show-select item-value="umo" return-object>
-
+          <v-data-table-server
+            :headers="headers"
+            :items="filteredRulesList"
+            :loading="loading"
+            :items-length="totalItems"
+            v-model:items-per-page="itemsPerPage"
+            v-model:page="currentPage"
+            @update:options="onTableOptionsUpdate"
+            class="elevation-0"
+            style="font-size: 12px"
+            v-model="selectedItems"
+            show-select
+            item-value="umo"
+            return-object
+          >
             <!-- UMO 信息 -->
             <template v-slot:item.umo_info="{ item }">
-              <div>
-                <div class="d-flex align-center">
-                  <v-chip size="x-small" :color="getPlatformColor(item.platform)" class="mr-2">
-                    {{ item.platform || 'unknown' }}
-                  </v-chip>
-                  <span class="text-truncate" style="max-width: 300px;">{{ item.umo }}</span>
-                  <div class="d-flex align-center" v-if="item.rules?.session_service_config?.custom_name || true">
-                    <span class="ml-2" style="color: gray; font-size: 10px;"
-                      v-if="item.rules?.session_service_config?.custom_name">
-                      ({{ item.rules?.session_service_config?.custom_name }})
-                    </span>
-                    <v-btn icon size="x-small" variant="text" class="ml-1" @click.stop="openQuickEditName(item)">
-                      <v-icon size="small" color="grey">mdi-pencil-outline</v-icon>
-                      <v-tooltip activator="parent" location="top">{{ tm('buttons.editCustomName') }}</v-tooltip>
-                    </v-btn>
-                  </div>
-                  <v-tooltip location="top">
-                    <template v-slot:activator="{ props }">
-                      <v-icon v-bind="props" size="small" class="ml-1">mdi-information-outline</v-icon>
-                    </template>
-                    <div>
-                      <p>UMO: {{ item.umo }}</p>
-                      <p v-if="item.platform">平台: {{ item.platform }}</p>
-                      <p v-if="item.message_type">消息类型: {{ item.message_type }}</p>
-                      <p v-if="item.session_id">会话 ID: {{ item.session_id }}</p>
-                    </div>
-                  </v-tooltip>
-                </div>
-
-              </div>
+              <UmoDisplay
+                :umo="item.umo"
+                :platform="item.platform"
+                :message-type="item.message_type"
+                :session-id="item.session_id"
+                :auto-name="item.auto_name"
+                :user-alias="item.user_alias"
+                :custom-name="item.rules?.session_service_config?.custom_name"
+                editable
+                :edit-tooltip="tm('buttons.editCustomName')"
+                @edit="openQuickEditName(item)"
+              />
             </template>
 
             <!-- 规则概览 -->
@@ -100,8 +98,12 @@
             <template v-slot:no-data>
               <div class="text-center py-8">
                 <v-icon size="64" color="grey-400">mdi-file-document-edit-outline</v-icon>
-                <div class="text-h6 mt-4 text-grey-600">{{ tm('customRules.noRules') }}</div>
-                <div class="text-body-2 text-grey-500">{{ tm('customRules.noRulesDesc') }}</div>
+                <div class="text-h6 mt-4 text-grey-600">
+                  {{ tm('customRules.noRules') }}
+                </div>
+                <div class="text-body-2 text-grey-500">
+                  {{ tm('customRules.noRulesDesc') }}
+                </div>
                 <v-btn color="primary" variant="tonal" class="mt-4" @click="openAddRuleDialog">
                   <v-icon start>mdi-plus</v-icon>
                   {{ tm('buttons.addRule') }}
@@ -122,30 +124,68 @@
         <v-card-text>
           <v-row dense>
             <v-col cols="12" md="6" lg="3">
-              <v-select v-model="batchScope" :items="batchScopeOptions" item-title="label" item-value="value"
-                :label="tm('batchOperations.scope')" hide-details variant="solo-filled" flat density="comfortable">
+              <v-select
+                v-model="batchScope"
+                :items="batchScopeOptions"
+                item-title="label"
+                item-value="value"
+                :label="tm('batchOperations.scope')"
+                hide-details
+                variant="solo-filled"
+                flat
+                density="comfortable"
+              >
               </v-select>
             </v-col>
             <v-col cols="12" md="6" lg="3">
-              <v-select v-model="batchLlmStatus" :items="statusOptions" item-title="label" item-value="value"
-                :label="tm('batchOperations.llmStatus')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              <v-select
+                v-model="batchLlmStatus"
+                :items="statusOptions"
+                item-title="label"
+                item-value="value"
+                :label="tm('batchOperations.llmStatus')"
+                hide-details
+                clearable
+                variant="solo-filled"
+                flat
+                density="comfortable"
+              >
               </v-select>
             </v-col>
             <v-col cols="12" md="6" lg="3">
-              <v-select v-model="batchTtsStatus" :items="statusOptions" item-title="label" item-value="value"
-                :label="tm('batchOperations.ttsStatus')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              <v-select
+                v-model="batchTtsStatus"
+                :items="statusOptions"
+                item-title="label"
+                item-value="value"
+                :label="tm('batchOperations.ttsStatus')"
+                hide-details
+                clearable
+                variant="solo-filled"
+                flat
+                density="comfortable"
+              >
               </v-select>
             </v-col>
             <v-col cols="12" md="6" lg="3">
-              <v-select v-model="batchChatProvider" :items="batchChatProviderOptions" item-title="label" item-value="value"
-                :label="tm('batchOperations.chatProvider')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              <v-select
+                v-model="batchChatProvider"
+                :items="batchChatProviderOptions"
+                item-title="label"
+                item-value="value"
+                :label="tm('batchOperations.chatProvider')"
+                hide-details
+                clearable
+                variant="solo-filled"
+                flat
+                density="comfortable"
+              >
               </v-select>
             </v-col>
           </v-row>
           <v-row dense class="mt-3">
             <v-col cols="12" class="d-flex justify-end">
-              <v-btn color="primary" variant="tonal" size="large" @click="applyBatchChanges"
-                :disabled="!canApplyBatch" :loading="batchUpdating" prepend-icon="mdi-check-all">
+              <v-btn color="primary" variant="tonal" size="large" @click="applyBatchChanges" :disabled="!canApplyBatch" :loading="batchUpdating" prepend-icon="mdi-check-all">
                 {{ tm('batchOperations.apply') }}
               </v-btn>
             </v-col>
@@ -167,7 +207,12 @@
             <v-menu activator="parent">
               <v-list density="compact">
                 <v-list-item v-for="g in groups" :key="g.id" @click="addSelectedToGroup(g.id)">
-                  <v-list-item-title>{{ tm('groups.customGroupOption', { name: g.name, count: g.umo_count }) }}</v-list-item-title>
+                  <v-list-item-title>{{
+                    tm('groups.customGroupOption', {
+                      name: g.name,
+                      count: g.umo_count,
+                    })
+                  }}</v-list-item-title>
                 </v-list-item>
               </v-list>
             </v-menu>
@@ -183,7 +228,9 @@
                 <div class="d-flex align-center justify-space-between">
                   <div>
                     <div class="font-weight-bold">{{ group.name }}</div>
-                    <div class="text-caption text-grey">{{ tm('groups.sessionsCount', { count: group.umo_count }) }}</div>
+                    <div class="text-caption text-grey">
+                      {{ tm('groups.sessionsCount', { count: group.umo_count }) }}
+                    </div>
                   </div>
                   <div>
                     <v-btn icon size="small" variant="text" @click="openEditGroupDialog(group)">
@@ -214,14 +261,36 @@
             <v-row dense>
               <!-- 左侧：可选会话 -->
               <v-col cols="5">
-                <div class="text-subtitle-2 mb-2">{{ tm('groups.availableSessions', { count: unselectedUmos.length }) }}</div>
-                <v-text-field v-model="groupMemberSearch" :placeholder="tm('groups.searchPlaceholder')" variant="outlined" density="compact" hide-details class="mb-2" clearable prepend-inner-icon="mdi-magnify"></v-text-field>
-                <v-list density="compact" class="transfer-list" lines="one">
+                <div class="text-subtitle-2 mb-2">
+                  {{
+                    tm('groups.availableSessions', {
+                      count: unselectedUmos.length,
+                    })
+                  }}
+                </div>
+                <v-text-field
+                  v-model="groupMemberSearch"
+                  :placeholder="tm('groups.searchPlaceholder')"
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                  class="mb-2"
+                  clearable
+                  prepend-inner-icon="mdi-magnify"
+                ></v-text-field>
+                <v-list density="compact" class="transfer-list">
                   <v-list-item v-for="umo in filteredUnselectedUmos" :key="umo" @click="addToGroup(umo)" class="transfer-item">
                     <template v-slot:prepend>
                       <v-icon size="small" color="grey">mdi-plus</v-icon>
                     </template>
-                    <v-list-item-title class="text-caption">{{ formatUmoShort(umo) }}</v-list-item-title>
+                    <v-list-item-title>
+                      <UmoDisplay v-bind="getAvailableUmoDisplayProps(umo)" compact :show-info="false" :show-platform="false" />
+                    </v-list-item-title>
+                    <template v-slot:append>
+                      <v-chip v-if="getAvailableUmoInfo(umo).platform" size="x-small" :color="getPlatformColor(getAvailableUmoInfo(umo).platform)" class="umo-list-platform">
+                        {{ getAvailableUmoInfo(umo).platform }}
+                      </v-chip>
+                    </template>
                   </v-list-item>
                   <v-list-item v-if="filteredUnselectedUmos.length === 0 && !loadingUmos">
                     <v-list-item-title class="text-caption text-grey text-center">{{ tm('groups.noMatch') }}</v-list-item-title>
@@ -242,14 +311,36 @@
               </v-col>
               <!-- 右侧：已选会话 -->
               <v-col cols="5">
-                <div class="text-subtitle-2 mb-2">{{ tm('groups.selectedSessions', { count: editingGroup.umos.length }) }}</div>
-                <v-text-field v-model="groupSelectedSearch" :placeholder="tm('groups.searchPlaceholder')" variant="outlined" density="compact" hide-details class="mb-2" clearable prepend-inner-icon="mdi-magnify"></v-text-field>
-                <v-list density="compact" class="transfer-list" lines="one">
+                <div class="text-subtitle-2 mb-2">
+                  {{
+                    tm('groups.selectedSessions', {
+                      count: editingGroup.umos.length,
+                    })
+                  }}
+                </div>
+                <v-text-field
+                  v-model="groupSelectedSearch"
+                  :placeholder="tm('groups.searchPlaceholder')"
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                  class="mb-2"
+                  clearable
+                  prepend-inner-icon="mdi-magnify"
+                ></v-text-field>
+                <v-list density="compact" class="transfer-list">
                   <v-list-item v-for="umo in filteredSelectedUmos" :key="umo" @click="removeFromGroup(umo)" class="transfer-item">
                     <template v-slot:prepend>
                       <v-icon size="small" color="error">mdi-minus</v-icon>
                     </template>
-                    <v-list-item-title class="text-caption">{{ formatUmoShort(umo) }}</v-list-item-title>
+                    <v-list-item-title>
+                      <UmoDisplay v-bind="getAvailableUmoDisplayProps(umo)" compact :show-info="false" :show-platform="false" />
+                    </v-list-item-title>
+                    <template v-slot:append>
+                      <v-chip v-if="getAvailableUmoInfo(umo).platform" size="x-small" :color="getPlatformColor(getAvailableUmoInfo(umo).platform)" class="umo-list-platform">
+                        {{ getAvailableUmoInfo(umo).platform }}
+                      </v-chip>
+                    </template>
                   </v-list-item>
                   <v-list-item v-if="editingGroup.umos.length === 0">
                     <v-list-item-title class="text-caption text-grey text-center">{{ tm('groups.noMembers') }}</v-list-item-title>
@@ -269,7 +360,7 @@
       <!-- 添加规则对话框 - 选择 UMO -->
       <v-dialog v-model="addRuleDialog" max-width="600">
         <v-card>
-          <v-card-title class="py-3 px-4" style="display: flex; align-items: center;">
+          <v-card-title class="py-3 px-4" style="display: flex; align-items: center">
             <span>{{ tm('addRule.title') }}</span>
             <v-spacer></v-spacer>
             <v-btn icon variant="text" @click="addRuleDialog = false">
@@ -282,8 +373,25 @@
               {{ tm('addRule.description') }}
             </v-alert>
 
-            <v-autocomplete v-model="selectedNewUmo" :items="availableUmos" :loading="loadingUmos"
-              :label="tm('addRule.selectUmo')" variant="outlined" clearable :no-data-text="tm('addRule.noUmos')" />
+            <v-autocomplete v-model="selectedNewUmo" :items="availableUmos" :loading="loadingUmos" :label="tm('addRule.selectUmo')" variant="outlined" clearable :no-data-text="tm('addRule.noUmos')">
+              <template v-slot:item="{ props, item }">
+                <v-list-item v-bind="props">
+                  <template v-slot:title>
+                    <UmoDisplay v-bind="getAvailableUmoDisplayProps(item.raw)" compact :show-info="false" :show-platform="false" />
+                  </template>
+                  <template v-slot:append>
+                    <v-chip v-if="getAvailableUmoInfo(item.raw).platform" size="x-small" :color="getPlatformColor(getAvailableUmoInfo(item.raw).platform)" class="umo-list-platform">
+                      {{ getAvailableUmoInfo(item.raw).platform }}
+                    </v-chip>
+                  </template>
+                </v-list-item>
+              </template>
+              <template v-slot:selection="{ item }">
+                <v-chip v-if="item && getUmoSelectionText(item.raw)" size="small" variant="tonal" color="primary" class="umo-selection-chip">
+                  {{ getUmoSelectionText(item.raw) }}
+                </v-chip>
+              </template>
+            </v-autocomplete>
           </v-card-text>
 
           <v-card-actions class="px-4 pb-4">
@@ -312,75 +420,104 @@
             <div class="px-6 py-4">
               <!-- Service Config Section -->
               <div class="d-flex align-center mb-4">
-                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.serviceConfig.title') }}</h3>
+                <h3 class="font-weight-bold mb-0">
+                  {{ tm('ruleEditor.serviceConfig.title') }}
+                </h3>
               </div>
 
               <v-row dense>
                 <v-col cols="12">
-                  <v-checkbox v-model="serviceConfig.session_enabled"
-                    :label="tm('ruleEditor.serviceConfig.sessionEnabled')" color="success" hide-details class="mb-2" />
+                  <v-checkbox v-model="serviceConfig.session_enabled" :label="tm('ruleEditor.serviceConfig.sessionEnabled')" color="success" hide-details class="mb-2" />
                 </v-col>
                 <v-col cols="12" md="6">
-                  <v-checkbox v-model="serviceConfig.llm_enabled" :label="tm('ruleEditor.serviceConfig.llmEnabled')"
-                    color="primary" hide-details />
+                  <v-checkbox v-model="serviceConfig.llm_enabled" :label="tm('ruleEditor.serviceConfig.llmEnabled')" color="primary" hide-details />
                 </v-col>
                 <v-col cols="12" md="6">
-                  <v-checkbox v-model="serviceConfig.tts_enabled" :label="tm('ruleEditor.serviceConfig.ttsEnabled')"
-                    color="secondary" hide-details />
+                  <v-checkbox v-model="serviceConfig.tts_enabled" :label="tm('ruleEditor.serviceConfig.ttsEnabled')" color="secondary" hide-details />
                 </v-col>
                 <v-col cols="12" class="mt-2">
-                  <v-text-field v-model="serviceConfig.custom_name" :label="tm('ruleEditor.serviceConfig.customName')"
-                    variant="outlined" hide-details clearable />
+                  <v-text-field v-model="serviceConfig.custom_name" :label="tm('ruleEditor.serviceConfig.customName')" variant="outlined" hide-details clearable />
                 </v-col>
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving"
-                  prepend-icon="mdi-content-save">
+                <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving" prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
 
               <!-- Provider Config Section -->
               <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.providerConfig.title') }}</h3>
+                <h3 class="font-weight-bold mb-0">
+                  {{ tm('ruleEditor.providerConfig.title') }}
+                </h3>
               </div>
 
               <v-row dense>
                 <v-col cols="12">
-                  <v-select v-model="providerConfig.chat_completion" :items="chatProviderOptions" item-title="label"
-                    item-value="value" :label="tm('ruleEditor.providerConfig.chatProvider')" variant="outlined"
-                    hide-details class="mb-2" />
+                  <v-select
+                    v-model="providerConfig.chat_completion"
+                    :items="chatProviderOptions"
+                    item-title="label"
+                    item-value="value"
+                    :label="tm('ruleEditor.providerConfig.chatProvider')"
+                    variant="outlined"
+                    hide-details
+                    class="mb-2"
+                  />
                 </v-col>
                 <v-col cols="12">
-                  <v-select v-model="providerConfig.speech_to_text" :items="sttProviderOptions" item-title="label"
-                    item-value="value" :label="tm('ruleEditor.providerConfig.sttProvider')" variant="outlined"
-                    hide-details :disabled="availableSttProviders.length === 0" class="mb-2" />
+                  <v-select
+                    v-model="providerConfig.speech_to_text"
+                    :items="sttProviderOptions"
+                    item-title="label"
+                    item-value="value"
+                    :label="tm('ruleEditor.providerConfig.sttProvider')"
+                    variant="outlined"
+                    hide-details
+                    :disabled="availableSttProviders.length === 0"
+                    class="mb-2"
+                  />
                 </v-col>
                 <v-col cols="12">
-                  <v-select v-model="providerConfig.text_to_speech" :items="ttsProviderOptions" item-title="label"
-                    item-value="value" :label="tm('ruleEditor.providerConfig.ttsProvider')" variant="outlined"
-                    hide-details :disabled="availableTtsProviders.length === 0" />
+                  <v-select
+                    v-model="providerConfig.text_to_speech"
+                    :items="ttsProviderOptions"
+                    item-title="label"
+                    item-value="value"
+                    :label="tm('ruleEditor.providerConfig.ttsProvider')"
+                    variant="outlined"
+                    hide-details
+                    :disabled="availableTtsProviders.length === 0"
+                  />
                 </v-col>
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="saveProviderConfig" :loading="saving"
-                  prepend-icon="mdi-content-save">
+                <v-btn color="primary" variant="tonal" size="small" @click="saveProviderConfig" :loading="saving" prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
 
               <!-- Persona Config Section -->
               <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.personaConfig.title') }}</h3>
+                <h3 class="font-weight-bold mb-0">
+                  {{ tm('ruleEditor.personaConfig.title') }}
+                </h3>
               </div>
 
               <v-row dense>
                 <v-col cols="12">
-                  <v-select v-model="serviceConfig.persona_id" :items="personaOptions" item-title="label"
-                    item-value="value" :label="tm('ruleEditor.personaConfig.selectPersona')" variant="outlined"
-                    hide-details clearable />
+                  <v-select
+                    v-model="serviceConfig.persona_id"
+                    :items="personaOptions"
+                    item-title="label"
+                    item-value="value"
+                    :label="tm('ruleEditor.personaConfig.selectPersona')"
+                    variant="outlined"
+                    hide-details
+                    clearable
+                  />
                 </v-col>
                 <v-col cols="12">
                   <v-alert type="info" variant="tonal" class="mt-2" icon="mdi-information-outline">
@@ -390,22 +527,33 @@
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving"
-                  prepend-icon="mdi-content-save">
+                <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving" prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
 
               <!-- Plugin Config Section -->
               <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.pluginConfig.title') }}</h3>
+                <h3 class="font-weight-bold mb-0">
+                  {{ tm('ruleEditor.pluginConfig.title') }}
+                </h3>
               </div>
 
               <v-row dense>
                 <v-col cols="12">
-                  <v-select v-model="pluginConfig.disabled_plugins" :items="pluginOptions" item-title="label"
-                    item-value="value" :label="tm('ruleEditor.pluginConfig.disabledPlugins')" variant="outlined"
-                    hide-details multiple chips closable-chips clearable />
+                  <v-select
+                    v-model="pluginConfig.disabled_plugins"
+                    :items="pluginOptions"
+                    item-title="label"
+                    item-value="value"
+                    :label="tm('ruleEditor.pluginConfig.disabledPlugins')"
+                    variant="outlined"
+                    hide-details
+                    multiple
+                    chips
+                    closable-chips
+                    clearable
+                  />
                 </v-col>
                 <v-col cols="12">
                   <v-alert type="info" variant="tonal" class="mt-2" icon="mdi-information-outline">
@@ -415,36 +563,45 @@
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="savePluginConfig" :loading="saving"
-                  prepend-icon="mdi-content-save">
+                <v-btn color="primary" variant="tonal" size="small" @click="savePluginConfig" :loading="saving" prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
 
               <!-- KB Config Section -->
               <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.kbConfig.title') }}</h3>
+                <h3 class="font-weight-bold mb-0">
+                  {{ tm('ruleEditor.kbConfig.title') }}
+                </h3>
               </div>
 
               <v-row dense>
                 <v-col cols="12">
-                  <v-select v-model="kbConfig.kb_ids" :items="kbOptions" item-title="label" item-value="value" :disabled="availableKbs.length === 0"
-                    :label="tm('ruleEditor.kbConfig.selectKbs')" variant="outlined" hide-details multiple chips
-                    closable-chips clearable />
+                  <v-select
+                    v-model="kbConfig.kb_ids"
+                    :items="kbOptions"
+                    item-title="label"
+                    item-value="value"
+                    :disabled="availableKbs.length === 0"
+                    :label="tm('ruleEditor.kbConfig.selectKbs')"
+                    variant="outlined"
+                    hide-details
+                    multiple
+                    chips
+                    closable-chips
+                    clearable
+                  />
                 </v-col>
                 <v-col cols="12" md="6">
-                  <v-text-field v-model.number="kbConfig.top_k" :label="tm('ruleEditor.kbConfig.topK')"
-                    variant="outlined" hide-details type="number" min="1" max="20" class="mt-3"/>
+                  <v-text-field v-model.number="kbConfig.top_k" :label="tm('ruleEditor.kbConfig.topK')" variant="outlined" hide-details type="number" min="1" max="20" class="mt-3" />
                 </v-col>
                 <v-col cols="12" md="6">
-                  <v-checkbox v-model="kbConfig.enable_rerank" :label="tm('ruleEditor.kbConfig.enableRerank')"
-                    color="primary" hide-details class="mt-3"/>
+                  <v-checkbox v-model="kbConfig.enable_rerank" :label="tm('ruleEditor.kbConfig.enableRerank')" color="primary" hide-details class="mt-3" />
                 </v-col>
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="saveKbConfig" :loading="saving"
-                  prepend-icon="mdi-content-save">
+                <v-btn color="primary" variant="tonal" size="small" @click="saveKbConfig" :loading="saving" prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
@@ -459,14 +616,13 @@
           <v-card-title class="text-h6">{{ tm('deleteConfirm.title') }}</v-card-title>
           <v-card-text>
             {{ tm('deleteConfirm.message') }}
-            <br><br>
+            <br /><br />
             <code>{{ deleteTarget?.umo }}</code>
           </v-card-text>
           <v-card-actions>
             <v-spacer></v-spacer>
             <v-btn variant="text" @click="deleteDialog = false">{{ tm('buttons.cancel') }}</v-btn>
-            <v-btn color="error" variant="tonal" @click="deleteAllRules" :loading="deleting">{{ tm('buttons.delete')
-            }}</v-btn>
+            <v-btn color="error" variant="tonal" @click="deleteAllRules" :loading="deleting">{{ tm('buttons.delete') }}</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -477,9 +633,9 @@
           <v-card-title class="text-h6">{{ tm('batchDeleteConfirm.title') }}</v-card-title>
           <v-card-text>
             {{ tm('batchDeleteConfirm.message', { count: selectedItems.length }) }}
-            <div class="mt-3" style="max-height: 200px; overflow-y: auto;">
+            <div class="mt-3" style="max-height: 200px; overflow-y: auto">
               <v-chip v-for="item in selectedItems" :key="item.umo" size="small" class="ma-1" variant="outlined">
-                {{ item.rules?.session_service_config?.custom_name || item.umo }}
+                {{ getUmoDisplayText(item) }}
               </v-chip>
             </div>
           </v-card-text>
@@ -503,8 +659,7 @@
         <v-card>
           <v-card-title class="py-3 px-4">{{ tm('quickEditName.title') }}</v-card-title>
           <v-card-text class="pa-4">
-            <v-text-field v-model="quickEditNameValue" :label="tm('ruleEditor.serviceConfig.customName')"
-              variant="outlined" hide-details clearable autofocus @keyup.enter="saveQuickEditName" />
+            <v-text-field v-model="quickEditNameValue" :label="tm('ruleEditor.serviceConfig.customName')" variant="outlined" hide-details clearable autofocus @keyup.enter="saveQuickEditName" />
           </v-card-text>
           <v-card-actions class="px-4 pb-4">
             <v-spacer></v-spacer>
@@ -521,16 +676,17 @@
 
 <script>
 import axios from 'axios'
+import UmoDisplay from '@/components/shared/UmoDisplay.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog
-} from '@/utils/confirmDialog'
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 
 const FOLLOW_CONFIG_VALUE = '__astrbot_follow_config__'
 
 export default {
   name: 'SessionManagementPage',
+  components: {
+    UmoDisplay,
+  },
   setup() {
     const { t } = useI18n()
     const { tm } = useModuleI18n('features/session-management')
@@ -539,7 +695,7 @@ export default {
     return {
       t,
       tm,
-      confirmDialog
+      confirmDialog,
     }
   },
   data() {
@@ -568,6 +724,7 @@ export default {
       // 添加规则
       addRuleDialog: false,
       availableUmos: [],
+      availableUmoInfoMap: {},
       selectedNewUmo: null,
 
       // 规则编辑
@@ -650,9 +807,24 @@ export default {
   computed: {
     headers() {
       return [
-        { title: this.tm('table.headers.umoInfo'), key: 'umo_info', sortable: false, minWidth: '300px' },
-        { title: this.tm('table.headers.rulesOverview'), key: 'rules_overview', sortable: false, minWidth: '250px' },
-        { title: this.tm('table.headers.actions'), key: 'actions', sortable: false, minWidth: '150px' },
+        {
+          title: this.tm('table.headers.umoInfo'),
+          key: 'umo_info',
+          sortable: false,
+          minWidth: '300px',
+        },
+        {
+          title: this.tm('table.headers.rulesOverview'),
+          key: 'rules_overview',
+          sortable: false,
+          minWidth: '250px',
+        },
+        {
+          title: this.tm('table.headers.actions'),
+          key: 'actions',
+          sortable: false,
+          minWidth: '150px',
+        },
       ]
     },
 
@@ -664,74 +836,74 @@ export default {
     personaOptions() {
       return [
         { label: this.tm('persona.none'), value: null },
-        ...this.availablePersonas.map(p => ({
+        ...this.availablePersonas.map((p) => ({
           label: p.name,
-          value: p.name
-        }))
+          value: p.name,
+        })),
       ]
     },
 
     chatProviderOptions() {
       return [
         { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableChatProviders.map(p => ({
+        ...this.availableChatProviders.map((p) => ({
           label: `${p.name} (${p.model})`,
-          value: p.id
-        }))
+          value: p.id,
+        })),
       ]
     },
 
     sttProviderOptions() {
       return [
         { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableSttProviders.map(p => ({
+        ...this.availableSttProviders.map((p) => ({
           label: `${p.name} (${p.model})`,
-          value: p.id
-        }))
+          value: p.id,
+        })),
       ]
     },
 
     ttsProviderOptions() {
       return [
         { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableTtsProviders.map(p => ({
+        ...this.availableTtsProviders.map((p) => ({
           label: `${p.name} (${p.model})`,
-          value: p.id
-        }))
+          value: p.id,
+        })),
       ]
     },
 
     batchChatProviderOptions() {
       return [
         { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableChatProviders.map(p => ({
+        ...this.availableChatProviders.map((p) => ({
           label: `${p.name} (${p.model})`,
-          value: p.id
-        }))
+          value: p.id,
+        })),
       ]
     },
 
     batchTtsProviderOptions() {
       return [
         { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableTtsProviders.map(p => ({
+        ...this.availableTtsProviders.map((p) => ({
           label: `${p.name} (${p.model})`,
-          value: p.id
-        }))
+          value: p.id,
+        })),
       ]
     },
 
     pluginOptions() {
-      return this.availablePlugins.map(p => ({
+      return this.availablePlugins.map((p) => ({
         label: p.display_name || p.name,
-        value: p.name
+        value: p.name,
       }))
     },
 
     kbOptions() {
-      return this.availableKbs.map(kb => ({
+      return this.availableKbs.map((kb) => ({
         label: `${kb.emoji || '📚'} ${kb.kb_name}`,
-        value: kb.kb_id
+        value: kb.kb_id,
       }))
     },
     batchScopeOptions() {
@@ -743,11 +915,18 @@ export default {
       ]
       // 添加自定义分组选项
       if (this.groups.length > 0) {
-        options.push({ label: this.tm('groups.customGroupDivider'), value: '_divider', disabled: true })
-        this.groups.forEach(g => {
+        options.push({
+          label: this.tm('groups.customGroupDivider'),
+          value: '_divider',
+          disabled: true,
+        })
+        this.groups.forEach((g) => {
           options.push({
-            label: this.tm('groups.customGroupOption', { name: g.name, count: g.umo_count }),
-            value: `custom_group:${g.id}`
+            label: this.tm('groups.customGroupOption', {
+              name: g.name,
+              count: g.umo_count,
+            }),
+            value: `custom_group:${g.id}`,
           })
         })
       }
@@ -755,9 +934,12 @@ export default {
     },
 
     groupOptions() {
-      return this.groups.map(g => ({
-        label: this.tm('groups.groupOption', { name: g.name, count: g.umo_count }),
-        value: g.id
+      return this.groups.map((g) => ({
+        label: this.tm('groups.groupOption', {
+          name: g.name,
+          count: g.umo_count,
+        }),
+        value: g.id,
       }))
     },
 
@@ -769,8 +951,7 @@ export default {
     },
 
     canApplyBatch() {
-      const hasChanges = this.batchLlmStatus !== null || this.batchTtsStatus !== null || 
-                         this.batchChatProvider !== null || this.batchTtsProvider !== null
+      const hasChanges = this.batchLlmStatus !== null || this.batchTtsStatus !== null || this.batchChatProvider !== null || this.batchTtsProvider !== null
       if (this.batchScope === 'selected') {
         return hasChanges && this.selectedItems.length > 0
       }
@@ -780,21 +961,21 @@ export default {
     // 穿梭框：未选中的UMO列表
     unselectedUmos() {
       const selected = new Set(this.editingGroup.umos || [])
-      return this.availableUmos.filter(u => !selected.has(u))
+      return this.availableUmos.filter((u) => !selected.has(u))
     },
 
     // 穿梭框：过滤后的未选中列表
     filteredUnselectedUmos() {
       if (!this.groupMemberSearch) return this.unselectedUmos
       const search = this.groupMemberSearch.toLowerCase()
-      return this.unselectedUmos.filter(u => u.toLowerCase().includes(search))
+      return this.unselectedUmos.filter((u) => u.toLowerCase().includes(search))
     },
 
     // 穿梭框：过滤后的已选中列表
     filteredSelectedUmos() {
       if (!this.groupSelectedSearch) return this.editingGroup.umos || []
       const search = this.groupSelectedSearch.toLowerCase()
-      return (this.editingGroup.umos || []).filter(u => u.toLowerCase().includes(search))
+      return (this.editingGroup.umos || []).filter((u) => u.toLowerCase().includes(search))
     },
   },
 
@@ -808,8 +989,8 @@ export default {
         this.searchTimeout = setTimeout(() => {
           this.onSearchChange()
         }, 300)
-      }
-    }
+      },
+    },
   },
 
   mounted() {
@@ -831,12 +1012,13 @@ export default {
           params: {
             page: this.currentPage,
             page_size: this.itemsPerPage,
-            search: this.searchQuery || ''
-          }
+            search: this.searchQuery || '',
+          },
         })
         if (response.data.status === 'ok') {
           const data = response.data.data
           this.rulesList = data.rules
+          this.mergeUmoInfos(data.rules)
           this.totalItems = data.total
           this.availablePersonas = data.available_personas
           this.availableChatProviders = data.available_chat_providers
@@ -871,9 +1053,10 @@ export default {
       try {
         const response = await axios.get('/api/session/active-umos')
         if (response.data.status === 'ok') {
+          this.mergeUmoInfos(response.data.data.umo_infos || [])
           // 过滤掉已有规则的 umo
-          const existingUmos = new Set(this.rulesList.map(r => r.umo))
-          this.availableUmos = response.data.data.umos.filter(umo => !existingUmos.has(umo))
+          const existingUmos = new Set(this.rulesList.map((r) => r.umo))
+          this.availableUmos = response.data.data.umos.filter((umo) => !existingUmos.has(umo))
         }
       } catch (error) {
         this.showError(error.response?.data?.message || this.tm('messages.loadError'))
@@ -887,11 +1070,95 @@ export default {
     },
 
     hasProviderConfig(rules) {
-      return rules && (
-        rules['provider_perf_chat_completion'] ||
-        rules['provider_perf_speech_to_text'] ||
-        rules['provider_perf_text_to_speech']
-      )
+      return rules && (rules['provider_perf_chat_completion'] || rules['provider_perf_speech_to_text'] || rules['provider_perf_text_to_speech'])
+    },
+
+    parseUmoInfo(umo) {
+      const parts = umo.split(':')
+      return {
+        umo,
+        platform: parts[0] || '',
+        message_type: parts[1] || '',
+        session_id: parts.slice(2).join(':') || umo,
+        auto_name: '',
+        user_alias: '',
+        display_name: umo,
+      }
+    },
+
+    mergeUmoInfos(infos = []) {
+      const next = { ...this.availableUmoInfoMap }
+      for (const info of infos) {
+        if (info?.umo) {
+          next[info.umo] = { ...(next[info.umo] || {}), ...info }
+        }
+      }
+      this.availableUmoInfoMap = next
+    },
+
+    getAvailableUmoInfo(umo) {
+      return this.availableUmoInfoMap[umo] || this.parseUmoInfo(umo)
+    },
+
+    getAvailableUmoDisplayProps(umo) {
+      const info = this.getAvailableUmoInfo(umo)
+      return {
+        umo,
+        platform: info.platform,
+        messageType: info.message_type,
+        sessionId: info.session_id,
+        autoName: info.auto_name,
+        userAlias: info.user_alias,
+      }
+    },
+
+    getPlatformColor(platform) {
+      const colors = {
+        aiocqhttp: 'blue',
+        qq_official: 'purple',
+        telegram: 'light-blue',
+        discord: 'indigo',
+        webchat: 'orange',
+      }
+      return colors[platform] || 'grey'
+    },
+
+    getUmoDisplayText(value) {
+      const item = typeof value === 'string' ? this.getAvailableUmoInfo(value) : value
+      if (!item) return ''
+      const umo = item.umo || (typeof value === 'string' ? value : '')
+      const aliasName = item.user_alias || item.rules?.session_service_config?.custom_name || ''
+      const autoName = item.auto_name || ''
+      let displayName = ''
+      if (aliasName && autoName && aliasName !== autoName) {
+        displayName = `${aliasName}（${autoName}）`
+      } else {
+        displayName = aliasName || autoName
+      }
+      if (displayName && umo) {
+        return `${displayName} (UMO: ${umo})`
+      }
+      return displayName || (umo ? `UMO: ${umo}` : item.display_name || '')
+    },
+
+    getUmoSelectionText(value) {
+      const item = typeof value === 'string' ? this.getAvailableUmoInfo(value) : value
+      if (!item) return ''
+      const umo = item.umo || (typeof value === 'string' ? value : '')
+      const aliasName = item.user_alias || item.rules?.session_service_config?.custom_name || ''
+      const autoName = item.auto_name || ''
+      if (aliasName && autoName && aliasName !== autoName) {
+        return `${aliasName}（${autoName}）`
+      }
+      return aliasName || autoName || umo || item.display_name || ''
+    },
+
+    buildUmoItem(umo, rules = {}) {
+      return {
+        ...this.getAvailableUmoInfo(umo),
+        umo,
+        rules,
+      }
     },
 
     async openAddRuleDialog() {
@@ -904,17 +1171,7 @@ export default {
       if (!this.selectedNewUmo) return
 
       // 创建一个新的规则项并打开编辑器
-      const newItem = {
-        umo: this.selectedNewUmo,
-        rules: {},
-      }
-      // 解析 umo 格式
-      const parts = this.selectedNewUmo.split(':')
-      if (parts.length >= 3) {
-        newItem.platform = parts[0]
-        newItem.message_type = parts[1]
-        newItem.session_id = parts[2]
-      }
+      const newItem = this.buildUmoItem(this.selectedNewUmo)
 
       this.addRuleDialog = false
       this.openRuleEditor(newItem)
@@ -978,7 +1235,7 @@ export default {
         const response = await axios.post('/api/session/update-rule', {
           umo: this.selectedUmo.umo,
           rule_key: 'session_service_config',
-          rule_value: config
+          rule_value: config,
         })
 
         if (response.data.status === 'ok') {
@@ -986,18 +1243,16 @@ export default {
           this.editingRules.session_service_config = config
 
           // 更新或添加到列表
-          let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+          let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo)
           if (item) {
             item.rules = { ...item.rules, session_service_config: config }
           } else {
             // 新规则，添加到列表
-            this.rulesList.push({
-              umo: this.selectedUmo.umo,
-              platform: this.selectedUmo.platform,
-              message_type: this.selectedUmo.message_type,
-              session_id: this.selectedUmo.session_id,
-              rules: { session_service_config: config }
-            })
+            this.rulesList.push(
+              this.buildUmoItem(this.selectedUmo.umo, {
+                session_service_config: config,
+              }),
+            )
           }
         } else {
           this.showError(response.data.message || this.tm('messages.saveError'))
@@ -1025,16 +1280,16 @@ export default {
               axios.post('/api/session/update-rule', {
                 umo: this.selectedUmo.umo,
                 rule_key: `provider_perf_${type}`,
-                rule_value: value
-              })
+                rule_value: value,
+              }),
             )
           } else if (this.editingRules[`provider_perf_${type}`]) {
             // 选择了"跟随配置文件" (__astrbot_follow_config__) 且之前有配置，则删除
             deleteTasks.push(
               axios.post('/api/session/delete-rule', {
                 umo: this.selectedUmo.umo,
-                rule_key: `provider_perf_${type}`
-              })
+                rule_key: `provider_perf_${type}`,
+              }),
             )
           }
         }
@@ -1045,15 +1300,9 @@ export default {
           this.showSuccess(this.tm('messages.saveSuccess'))
 
           // 更新或添加到列表
-          let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+          let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo)
           if (!item) {
-            item = {
-              umo: this.selectedUmo.umo,
-              platform: this.selectedUmo.platform,
-              message_type: this.selectedUmo.message_type,
-              session_id: this.selectedUmo.session_id,
-              rules: {}
-            }
+            item = this.buildUmoItem(this.selectedUmo.umo)
             this.rulesList.push(item)
           }
           for (const type of providerTypes) {
@@ -1091,10 +1340,10 @@ export default {
           if (this.editingRules.session_plugin_config) {
             await axios.post('/api/session/delete-rule', {
               umo: this.selectedUmo.umo,
-              rule_key: 'session_plugin_config'
+              rule_key: 'session_plugin_config',
             })
             delete this.editingRules.session_plugin_config
-            let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+            let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo)
             if (item) delete item.rules.session_plugin_config
           }
           this.showSuccess(this.tm('messages.saveSuccess'))
@@ -1102,24 +1351,22 @@ export default {
           const response = await axios.post('/api/session/update-rule', {
             umo: this.selectedUmo.umo,
             rule_key: 'session_plugin_config',
-            rule_value: config
+            rule_value: config,
           })
 
           if (response.data.status === 'ok') {
             this.showSuccess(this.tm('messages.saveSuccess'))
             this.editingRules.session_plugin_config = config
 
-            let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+            let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo)
             if (item) {
               item.rules.session_plugin_config = config
             } else {
-              this.rulesList.push({
-                umo: this.selectedUmo.umo,
-                platform: this.selectedUmo.platform,
-                message_type: this.selectedUmo.message_type,
-                session_id: this.selectedUmo.session_id,
-                rules: { session_plugin_config: config }
-              })
+              this.rulesList.push(
+                this.buildUmoItem(this.selectedUmo.umo, {
+                  session_plugin_config: config,
+                }),
+              )
             }
           } else {
             this.showError(response.data.message || this.tm('messages.saveError'))
@@ -1147,10 +1394,10 @@ export default {
           if (this.editingRules.kb_config) {
             await axios.post('/api/session/delete-rule', {
               umo: this.selectedUmo.umo,
-              rule_key: 'kb_config'
+              rule_key: 'kb_config',
             })
             delete this.editingRules.kb_config
-            let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+            let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo)
             if (item) delete item.rules.kb_config
           }
           this.showSuccess(this.tm('messages.saveSuccess'))
@@ -1158,24 +1405,22 @@ export default {
           const response = await axios.post('/api/session/update-rule', {
             umo: this.selectedUmo.umo,
             rule_key: 'kb_config',
-            rule_value: config
+            rule_value: config,
           })
 
           if (response.data.status === 'ok') {
             this.showSuccess(this.tm('messages.saveSuccess'))
             this.editingRules.kb_config = config
 
-            let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+            let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo)
             if (item) {
               item.rules.kb_config = config
             } else {
-              this.rulesList.push({
-                umo: this.selectedUmo.umo,
-                platform: this.selectedUmo.platform,
-                message_type: this.selectedUmo.message_type,
-                session_id: this.selectedUmo.session_id,
-                rules: { kb_config: config }
-              })
+              this.rulesList.push(
+                this.buildUmoItem(this.selectedUmo.umo, {
+                  kb_config: config,
+                }),
+              )
             }
           } else {
             this.showError(response.data.message || this.tm('messages.saveError'))
@@ -1198,13 +1443,13 @@ export default {
       this.deleting = true
       try {
         const response = await axios.post('/api/session/delete-rule', {
-          umo: this.deleteTarget.umo
+          umo: this.deleteTarget.umo,
         })
 
         if (response.data.status === 'ok') {
           this.showSuccess(this.tm('messages.deleteSuccess'))
           // 从列表中移除
-          const index = this.rulesList.findIndex(u => u.umo === this.deleteTarget.umo)
+          const index = this.rulesList.findIndex((u) => u.umo === this.deleteTarget.umo)
           if (index > -1) {
             this.rulesList.splice(index, 1)
           }
@@ -1231,9 +1476,9 @@ export default {
 
       this.deleting = true
       try {
-        const umos = this.selectedItems.map(item => item.umo)
+        const umos = this.selectedItems.map((item) => item.umo)
         const response = await axios.post('/api/session/batch-delete-rule', {
-          umos: umos
+          umos: umos,
         })
 
         if (response.data.status === 'ok') {
@@ -1250,18 +1495,6 @@ export default {
         this.showError(error.response?.data?.message || this.tm('messages.batchDeleteError'))
       }
       this.deleting = false
-    },
-
-    getPlatformColor(platform) {
-      const colors = {
-        'aiocqhttp': 'blue',
-        'qq_official': 'purple',
-        'telegram': 'light-blue',
-        'discord': 'indigo',
-        'webchat': 'orange',
-        'default': 'grey'
-      }
-      return colors[platform] || colors.default
     },
 
     showSuccess(message) {
@@ -1306,27 +1539,24 @@ export default {
         const response = await axios.post('/api/session/update-rule', {
           umo: this.quickEditNameTarget.umo,
           rule_key: 'session_service_config',
-          rule_value: config
+          rule_value: config,
         })
 
         if (response.data.status === 'ok') {
           this.showSuccess(this.tm('messages.saveSuccess'))
 
           // 更新或添加到列表
-          let item = this.rulesList.find(u => u.umo === this.quickEditNameTarget.umo)
+          let item = this.rulesList.find((u) => u.umo === this.quickEditNameTarget.umo)
           if (item) {
             if (!item.rules) item.rules = {}
             item.rules.session_service_config = config
           } else {
             // 新规则，添加到列表
-            const parts = this.quickEditNameTarget.umo.split(':')
-            this.rulesList.push({
-              umo: this.quickEditNameTarget.umo,
-              platform: parts[0] || '',
-              message_type: parts[1] || '',
-              session_id: parts[2] || '',
-              rules: { session_service_config: config }
-            })
+            this.rulesList.push(
+              this.buildUmoItem(this.quickEditNameTarget.umo, {
+                session_service_config: config,
+              }),
+            )
           }
 
           this.quickEditNameDialog = false
@@ -1355,7 +1585,7 @@ export default {
         }
 
         if (scope === 'selected') {
-          umos = this.selectedItems.map(item => item.umo)
+          umos = this.selectedItems.map((item) => item.umo)
           if (umos.length === 0) {
             this.showError(this.tm('messages.selectSessionsFirst'))
             this.batchUpdating = false
@@ -1378,39 +1608,47 @@ export default {
 
         if (this.batchChatProvider !== null) {
           if (this.batchChatProvider === FOLLOW_CONFIG_VALUE) {
-            tasks.push(axios.post('/api/session/batch-delete-rule', {
-              scope,
-              umos,
-              group_id: groupId,
-              rule_key: 'provider_perf_chat_completion'
-            }))
+            tasks.push(
+              axios.post('/api/session/batch-delete-rule', {
+                scope,
+                umos,
+                group_id: groupId,
+                rule_key: 'provider_perf_chat_completion',
+              }),
+            )
           } else {
-            tasks.push(axios.post('/api/session/batch-update-provider', {
-              scope,
-              umos,
-              group_id: groupId,
-              provider_type: 'chat_completion',
-              provider_id: this.batchChatProvider
-            }))
+            tasks.push(
+              axios.post('/api/session/batch-update-provider', {
+                scope,
+                umos,
+                group_id: groupId,
+                provider_type: 'chat_completion',
+                provider_id: this.batchChatProvider,
+              }),
+            )
           }
         }
 
         if (this.batchTtsProvider !== null) {
           if (this.batchTtsProvider === FOLLOW_CONFIG_VALUE) {
-            tasks.push(axios.post('/api/session/batch-delete-rule', {
-              scope,
-              umos,
-              group_id: groupId,
-              rule_key: 'provider_perf_text_to_speech'
-            }))
+            tasks.push(
+              axios.post('/api/session/batch-delete-rule', {
+                scope,
+                umos,
+                group_id: groupId,
+                rule_key: 'provider_perf_text_to_speech',
+              }),
+            )
           } else {
-            tasks.push(axios.post('/api/session/batch-update-provider', {
-              scope,
-              umos,
-              group_id: groupId,
-              provider_type: 'text_to_speech',
-              provider_id: this.batchTtsProvider
-            }))
+            tasks.push(
+              axios.post('/api/session/batch-update-provider', {
+                scope,
+                umos,
+                group_id: groupId,
+                provider_type: 'text_to_speech',
+                provider_id: this.batchTtsProvider,
+              }),
+            )
           }
         }
 
@@ -1421,7 +1659,7 @@ export default {
         }
 
         const results = await Promise.all(tasks)
-        const allOk = results.every(r => r.data.status === 'ok')
+        const allOk = results.every((r) => r.data.status === 'ok')
 
         if (allOk) {
           this.showSuccess(this.tm('messages.batchUpdateSuccess'))
@@ -1460,6 +1698,7 @@ export default {
       try {
         const response = await axios.get('/api/session/active-umos')
         if (response.data.status === 'ok') {
+          this.mergeUmoInfos(response.data.data.umo_infos || [])
           this.availableUmos = response.data.data.umos || []
         }
       } catch (error) {
@@ -1499,7 +1738,7 @@ export default {
     },
 
     addAllToGroup() {
-      this.unselectedUmos.forEach(umo => {
+      this.unselectedUmos.forEach((umo) => {
         if (!this.editingGroup.umos.includes(umo)) {
           this.editingGroup.umos.push(umo)
         }
@@ -1508,15 +1747,6 @@ export default {
 
     removeAllFromGroup() {
       this.editingGroup.umos = []
-    },
-
-    formatUmoShort(umo) {
-      // 简化显示：平台:类型:ID -> 只显示ID部分
-      const parts = umo.split(':')
-      if (parts.length >= 3) {
-        return `${parts[0]}:${parts[2]}`
-      }
-      return umo
     },
 
     async saveGroup() {
@@ -1530,13 +1760,13 @@ export default {
         if (this.groupDialogMode === 'create') {
           response = await axios.post('/api/session/group/create', {
             name: this.editingGroup.name,
-            umos: this.editingGroup.umos
+            umos: this.editingGroup.umos,
           })
         } else {
           response = await axios.post('/api/session/group/update', {
             id: this.editingGroup.id,
             name: this.editingGroup.name,
-            umos: this.editingGroup.umos
+            umos: this.editingGroup.umos,
           })
         }
 
@@ -1557,7 +1787,9 @@ export default {
       if (!(await askForConfirmationDialog(message, this.confirmDialog))) return
 
       try {
-        const response = await axios.post('/api/session/group/delete', { id: group.id })
+        const response = await axios.post('/api/session/group/delete', {
+          id: group.id,
+        })
         if (response.data.status === 'ok') {
           this.showSuccess(response.data.data.message)
           await this.loadGroups()
@@ -1583,10 +1815,14 @@ export default {
       try {
         const response = await axios.post('/api/session/group/update', {
           id: groupId,
-          add_umos: this.selectedItems.map(item => item.umo)
+          add_umos: this.selectedItems.map((item) => item.umo),
         })
         if (response.data.status === 'ok') {
-          this.showSuccess(this.tm('messages.addToGroupSuccess', { count: this.selectedItems.length }))
+          this.showSuccess(
+            this.tm('messages.addToGroupSuccess', {
+              count: this.selectedItems.length,
+            }),
+          )
           await this.loadGroups()
         } else {
           this.showError(response.data.message)
@@ -1622,9 +1858,47 @@ code {
 .transfer-item {
   cursor: pointer;
   transition: background-color 0.15s;
+  min-height: 44px !important;
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
 }
 
 .transfer-item:hover {
   background-color: rgba(0, 0, 0, 0.04);
+}
+
+.transfer-item :deep(.v-list-item__append) {
+  align-self: center;
+  margin-inline-start: auto;
+  padding-inline-start: 12px;
+}
+
+.transfer-item :deep(.v-list-item__prepend) {
+  align-self: center;
+}
+
+.transfer-item :deep(.v-list-item__content) {
+  min-width: 0;
+  padding-inline-end: 12px;
+}
+
+.transfer-item :deep(.v-list-item-title) {
+  line-height: 1.2;
+}
+
+.umo-list-platform {
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.umo-selection-chip {
+  max-width: 100%;
+}
+
+.umo-selection-chip :deep(.v-chip__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
