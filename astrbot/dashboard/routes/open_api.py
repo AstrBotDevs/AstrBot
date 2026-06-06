@@ -65,6 +65,11 @@ class OpenApiRoute(Route):
             return None, "username is empty"
         return username, None
 
+    @staticmethod
+    def _build_openapi_sender_id(api_key_id: str | None, username: str) -> str:
+        key_id = str(api_key_id or "unknown").strip() or "unknown"
+        return f"openapi:{key_id}:{username}"
+
     def _get_chat_config_list(self) -> list[dict]:
         conf_list = self.core_lifecycle.astrbot_config_mgr.get_conf_list()
 
@@ -170,6 +175,11 @@ class OpenApiRoute(Route):
 
         original_username = g.get("username", "guest")
         g.username = effective_username
+        post_data["_sender_id"] = self._build_openapi_sender_id(
+            g.get("api_key_id", None),
+            effective_username,
+        )
+        post_data["_sender_name"] = effective_username
         if config_id:
             umo = f"webchat:FriendMessage:webchat!{effective_username}!{session_id}"
             try:
@@ -213,10 +223,12 @@ class OpenApiRoute(Route):
             return auth_header.removeprefix("ApiKey ").strip()
         return None
 
-    async def _authenticate_chat_ws_api_key(self) -> tuple[bool, str | None]:
+    async def _authenticate_chat_ws_api_key(
+        self,
+    ) -> tuple[bool, str | None, str | None]:
         raw_key = self._extract_ws_api_key()
         if not raw_key:
-            return False, "Missing API key"
+            return False, "Missing API key", None
 
         key_hash = hashlib.pbkdf2_hmac(
             "sha256",
@@ -226,7 +238,7 @@ class OpenApiRoute(Route):
         ).hex()
         api_key = await self.db.get_active_api_key_by_hash(key_hash)
         if not api_key:
-            return False, "Invalid API key"
+            return False, "Invalid API key", None
 
         if isinstance(api_key.scopes, list):
             scopes = api_key.scopes
@@ -234,10 +246,10 @@ class OpenApiRoute(Route):
             scopes = list(ALL_OPEN_API_SCOPES)
 
         if "*" not in scopes and "chat" not in scopes:
-            return False, "Insufficient API key scope"
+            return False, "Insufficient API key scope", None
 
         await self.db.touch_api_key(api_key.key_id)
-        return True, None
+        return True, None, api_key.key_id
 
     async def _send_chat_ws_error(self, message: str, code: str) -> None:
         await websocket.send_json(
@@ -277,7 +289,11 @@ class OpenApiRoute(Route):
             return f"Failed to update chat config route: {e}"
         return None
 
-    async def _handle_chat_ws_send(self, post_data: dict) -> None:
+    async def _handle_chat_ws_send(
+        self,
+        post_data: dict,
+        api_key_id: str | None,
+    ) -> None:
         effective_username, username_err = self._resolve_open_username(
             post_data.get("username")
         )
@@ -331,6 +347,7 @@ class OpenApiRoute(Route):
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)
+        sender_id = self._build_openapi_sender_id(api_key_id, effective_username)
 
         back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
         try:
@@ -345,6 +362,8 @@ class OpenApiRoute(Route):
                         "selected_model": selected_model,
                         "enable_streaming": enable_streaming,
                         "message_id": message_id,
+                        "sender_id": sender_id,
+                        "sender_name": effective_username,
                     },
                 )
             )
@@ -493,7 +512,7 @@ class OpenApiRoute(Route):
             webchat_queue_mgr.remove_back_queue(message_id)
 
     async def chat_ws(self) -> None:
-        authed, auth_err = await self._authenticate_chat_ws_api_key()
+        authed, auth_err, api_key_id = await self._authenticate_chat_ws_api_key()
         if not authed:
             await self._send_chat_ws_error(auth_err or "Unauthorized", "UNAUTHORIZED")
             await websocket.close(1008, auth_err or "Unauthorized")
@@ -520,7 +539,7 @@ class OpenApiRoute(Route):
                     )
                     continue
 
-                await self._handle_chat_ws_send(message)
+                await self._handle_chat_ws_send(message, api_key_id)
         except Exception as e:
             logger.debug("Open API WS connection closed: %s", e)
 

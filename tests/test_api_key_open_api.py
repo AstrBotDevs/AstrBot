@@ -8,9 +8,17 @@ import pytest_asyncio
 from quart import Quart, g, request
 from werkzeug.datastructures import FileStorage
 
+import astrbot.dashboard.routes.open_api as open_api_module
 from astrbot.core import LogBroker
+from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
+from astrbot.core.platform import AstrBotMessage, MessageMember, MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.platform.sources.webchat.webchat_adapter import WebChatAdapter
+from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
     hash_legacy_dashboard_password,
@@ -208,7 +216,7 @@ async def test_open_chat_send_auto_session_id_and_username(
 ):
     test_client = app.test_client()
 
-    raw_key, _ = await _create_api_key(
+    raw_key, key_id = await _create_api_key(
         app,
         authenticated_header,
         scopes=["chat"],
@@ -226,6 +234,8 @@ async def test_open_chat_send_auto_session_id_and_username(
                 data={
                     "session_id": payload.get("session_id"),
                     "creator": g.get("username"),
+                    "sender_id": payload.get("_sender_id"),
+                    "sender_name": payload.get("_sender_name"),
                 }
             )
             .__dict__
@@ -237,7 +247,8 @@ async def test_open_chat_send_auto_session_id_and_username(
             "/api/v1/chat",
             json={
                 "message": "hello",
-                "username": "alice_auto_session",
+                "username": "astrbot",
+                "_sender_id": "astrbot",
                 "enable_streaming": False,
             },
             headers={"X-API-Key": raw_key},
@@ -251,12 +262,15 @@ async def test_open_chat_send_auto_session_id_and_username(
     created_session_id = send_data["data"]["session_id"]
     assert isinstance(created_session_id, str)
     uuid.UUID(created_session_id)
-    assert send_data["data"]["creator"] == "alice_auto_session"
+    assert send_data["data"]["creator"] == "astrbot"
+    assert send_data["data"]["sender_id"] == f"openapi:{key_id}:astrbot"
+    assert send_data["data"]["sender_id"] not in DEFAULT_CONFIG["admins_id"]
+    assert send_data["data"]["sender_name"] == "astrbot"
     created_session = await core_lifecycle_td.db.get_platform_session_by_id(
         created_session_id
     )
     assert created_session is not None
-    assert created_session.creator == "alice_auto_session"
+    assert created_session.creator == "astrbot"
     assert created_session.platform_id == "webchat"
 
     await core_lifecycle_td.db.create_platform_session(
@@ -289,6 +303,138 @@ async def test_open_chat_send_auto_session_id_and_username(
     missing_username_data = await missing_username_res.get_json()
     assert missing_username_data["status"] == "error"
     assert missing_username_data["message"] == "Missing key: username"
+
+
+@pytest.mark.asyncio
+async def test_openapi_sender_id_is_used_for_webchat_event_identity():
+    adapter = WebChatAdapter({}, {}, asyncio.Queue())
+    message = await adapter.convert_message(
+        (
+            "astrbot",
+            "openapi-repro-session",
+            {
+                "message": [{"type": "plain", "text": "/provider"}],
+                "message_id": "openapi-repro-message",
+                "sender_id": "openapi:key-123:astrbot",
+                "sender_name": "astrbot",
+            },
+        )
+    )
+
+    assert message.sender.user_id == "openapi:key-123:astrbot"
+    assert message.sender.user_id not in DEFAULT_CONFIG["admins_id"]
+    assert message.sender.nickname == "astrbot"
+    assert message.session_id == "webchat!astrbot!openapi-repro-session"
+
+
+@pytest.mark.asyncio
+async def test_openapi_sender_id_does_not_match_default_admin_in_waking_stage():
+    stage = WakingCheckStage()
+    await stage.initialize(
+        PipelineContext(
+            astrbot_config={
+                "admins_id": DEFAULT_CONFIG["admins_id"],
+                "wake_prefix": ["/"],
+                "platform_settings": {"friend_message_needs_wake_prefix": True},
+                "disable_builtin_commands": False,
+            },
+            plugin_manager=None,
+            astrbot_config_id="test",
+        )
+    )
+    platform_meta = PlatformMetadata(
+        name="webchat",
+        description="webchat",
+        id="webchat",
+    )
+
+    async def role_for(sender_id: str) -> str:
+        message_obj = AstrBotMessage()
+        message_obj.type = MessageType.FRIEND_MESSAGE
+        message_obj.self_id = "webchat"
+        message_obj.sender = MessageMember(sender_id, "astrbot")
+        message_obj.message = []
+        message_obj.message_str = "hello"
+        message_obj.session_id = "webchat!astrbot!waking-repro"
+        event = WebChatMessageEvent(
+            message_str="hello",
+            message_obj=message_obj,
+            platform_meta=platform_meta,
+            session_id=message_obj.session_id,
+        )
+        await stage.process(event)
+        return event.role
+
+    assert await role_for("astrbot") == "admin"
+    assert await role_for("openapi:key-123:astrbot") == "member"
+
+
+@pytest.mark.asyncio
+async def test_open_chat_ws_send_uses_openapi_sender_id(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    open_api_route = _get_open_api_route(app)
+    session_id = f"openapi_ws_sender_{uuid.uuid4().hex[:8]}"
+    message_id = f"openapi-ws-message-{uuid.uuid4().hex[:8]}"
+    chat_queue_items = []
+    websocket_messages = []
+
+    class CaptureQueue:
+        async def put(self, item):
+            chat_queue_items.append(item)
+
+    back_queue = asyncio.Queue()
+    await back_queue.put(
+        {
+            "type": "end",
+            "data": "",
+            "message_id": message_id,
+        }
+    )
+
+    class FakeWebsocket:
+        async def send_json(self, payload):
+            websocket_messages.append(payload)
+
+    monkeypatch.setattr(
+        open_api_module.webchat_queue_mgr,
+        "get_or_create_back_queue",
+        lambda *_args, **_kwargs: back_queue,
+    )
+    monkeypatch.setattr(
+        open_api_module.webchat_queue_mgr,
+        "get_or_create_queue",
+        lambda *_args, **_kwargs: CaptureQueue(),
+    )
+    monkeypatch.setattr(
+        open_api_module.webchat_queue_mgr,
+        "remove_back_queue",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(open_api_module, "websocket", FakeWebsocket())
+
+    await open_api_route._handle_chat_ws_send(
+        {
+            "message": "hello",
+            "username": "astrbot",
+            "session_id": session_id,
+            "message_id": message_id,
+            "enable_streaming": False,
+            "sender_id": "astrbot",
+        },
+        "ws-key-123",
+    )
+
+    assert len(chat_queue_items) == 1
+    queued_username, queued_session_id, queued_payload = chat_queue_items[0]
+    assert queued_username == "astrbot"
+    assert queued_session_id == session_id
+    assert queued_payload["sender_id"] == "openapi:ws-key-123:astrbot"
+    assert queued_payload["sender_id"] not in DEFAULT_CONFIG["admins_id"]
+    assert queued_payload["sender_name"] == "astrbot"
+    assert any(message["type"] == "session_id" for message in websocket_messages)
 
 
 @pytest.mark.asyncio
