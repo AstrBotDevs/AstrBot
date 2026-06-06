@@ -374,8 +374,7 @@ def _apply_workspace_extra_prompt(
     if not extra_prompt:
         return
 
-    req.system_prompt = f"{req.system_prompt or ''}"
-    req.system_prompt += _wrap_system_block(
+    req.system_prompt = (req.system_prompt or "") + _wrap_system_block(
         "workspace_extra_prompt",
         (
             "The following instructions are loaded from the current workspace "
@@ -1559,7 +1558,7 @@ async def build_main_agent(
         )
 
         if config.computer_use_runtime == "local":
-            req.system_prompt += _wrap_system_block(
+            req.system_prompt = (req.system_prompt or "") + _wrap_system_block(
                 "workspace_runtime_rule",
                 (
                     f"Current workspace you can use: "
@@ -1569,14 +1568,14 @@ async def build_main_agent(
                 ),
             )
 
-        req.system_prompt += _wrap_system_block(
+        req.system_prompt = (req.system_prompt or "") + _wrap_system_block(
             "tool_use_instructions",
             tool_prompt,
         )
 
     action_type = event.get_extra("action_type")
     if action_type == "live":
-        req.system_prompt += _wrap_system_block(
+        req.system_prompt = (req.system_prompt or "") + _wrap_system_block(
             "live_mode_instructions",
             LIVE_MODE_SYSTEM_PROMPT,
         )
