@@ -863,14 +863,18 @@ async def _process_quote_message(
 class _QuotedImageCaptionContext:
     def __init__(self, provider: Provider) -> None:
         self._provider = provider
+
     def get_provider_by_id(self, provider_id: str) -> Provider:
         wrapped_id = getattr(self._provider, "id", None)
-        if wrapped_id is not None and provider_id != wrapped_id:
-            raise ValueError(
-                f"Requested provider_id '{provider_id}' does not match "
-                f"wrapped provider id '{wrapped_id}'."
+        if provider_id and wrapped_id and provider_id != wrapped_id:
+            logger.warning(
+                "Quoted image caption provider id mismatch. "
+                "requested=%s wrapped=%s. Using wrapped provider instance.",
+                provider_id,
+                wrapped_id,
             )
         return self._provider
+
 
 def _append_system_reminders(
     event: AstrMessageEvent,

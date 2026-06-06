@@ -101,6 +101,7 @@ class ImageCaptionCache:
         ]
         for key in expired_keys:
             self._entries.pop(key, None)
+            self._locks.pop(key, None)
 
     def _get_lock(self, cache_key: str) -> asyncio.Lock:
         lock = self._locks.get(cache_key)

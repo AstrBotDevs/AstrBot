@@ -1215,6 +1215,41 @@ class TestBuildMainAgent:
         image_caption_cache.clear()
 
     @pytest.mark.asyncio
+    async def test_request_img_caption_quoted_context_tolerates_provider_id_mismatch(
+        self,
+        tmp_path,
+    ):
+        """Test quoted image captions reuse the wrapped provider despite ID mismatches."""
+        module = ama
+        image_caption_cache.clear()
+
+        image_path = tmp_path / "quoted-image.png"
+        image_path.write_bytes(b"quoted-image")
+
+        caption_provider = MagicMock(spec=Provider)
+        caption_provider.provider_config = {"id": "provider-config-id"}
+        caption_provider.id = "wrapped-provider-id"
+        caption_provider.text_chat = AsyncMock(
+            return_value=MagicMock(completion_text="quoted caption")
+        )
+
+        cfg = {
+            "image_caption_prompt": "Please describe the image content.",
+            "image_caption_cache_ttl": 600,
+        }
+
+        caption = await module._request_img_caption(
+            "provider-config-id",
+            cfg,
+            [str(image_path)],
+            module._QuotedImageCaptionContext(caption_provider),
+        )
+
+        assert caption == "quoted caption"
+        caption_provider.text_chat.assert_awaited_once()
+        image_caption_cache.clear()
+
+    @pytest.mark.asyncio
     async def test_build_main_agent_uses_image_fallback_provider(
         self, mock_event, mock_context
     ):
