@@ -901,21 +901,16 @@ class FunctionToolManager:
 
         func_tool.require_admin = require
 
-        require_admin_tools: list = sp.get(
-            "tool_require_admin_list",
-            [],
+        require_admin_map: dict = sp.get(
+            "tool_require_admin_map",
+            {},
             scope="global",
             scope_id="global",
         )
-        if require:
-            if name not in require_admin_tools:
-                require_admin_tools.append(name)
-        else:
-            if name in require_admin_tools:
-                require_admin_tools.remove(name)
+        require_admin_map[name] = require
         sp.put(
-            "tool_require_admin_list",
-            require_admin_tools,
+            "tool_require_admin_map",
+            require_admin_map,
             scope="global",
             scope_id="global",
         )
@@ -926,14 +921,15 @@ class FunctionToolManager:
 
         应在 MCP 客户端初始化完成后、插件工具注册完成后调用。
         """
-        require_admin_tools: list = sp.get(
-            "tool_require_admin_list",
-            [],
+        require_admin_map: dict = sp.get(
+            "tool_require_admin_map",
+            {},
             scope="global",
             scope_id="global",
         )
         for tool in self.func_list:
-            tool.require_admin = tool.name in require_admin_tools
+            if tool.name in require_admin_map:
+                tool.require_admin = require_admin_map[tool.name]
 
     @property
     def mcp_config_path(self):
