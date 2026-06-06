@@ -1043,7 +1043,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     continue
 
-                # 统一权限拦截（过滤点 B：双保险）
+                # 统一权限拦截
                 # 即使 LLM 意外获知了受限工具，执行前也会在此被阻断。
                 if getattr(func_tool, "require_admin", False):
                     _caller_event = self.run_context.context.event
