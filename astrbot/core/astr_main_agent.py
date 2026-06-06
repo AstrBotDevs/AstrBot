@@ -958,6 +958,29 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
         req.func_tool = new_tool_set
 
 
+def _filter_tools_by_role(event: AstrMessageEvent, req: ProviderRequest) -> None:
+    """从 req.func_tool 中移除当前用户无权调用的工具。
+
+    require_admin=True 的工具对非管理员用户不可见，
+    LLM 不会感知到这些工具的存在。
+    """
+    if not req.func_tool:
+        return
+    if getattr(event, "role", "member") == "admin":
+        return
+    new_tool_set = ToolSet()
+    for tool in req.func_tool.tools:
+        if getattr(tool, "require_admin", False):
+            logger.debug(
+                "Hiding tool '%s' from non-admin user (sender_id=%s).",
+                tool.name,
+                event.get_sender_id(),
+            )
+            continue
+        new_tool_set.add_tool(tool)
+    req.func_tool = new_tool_set
+
+
 async def _handle_webchat(
     event: AstrMessageEvent, req: ProviderRequest, prov: Provider
 ) -> None:
@@ -1446,6 +1469,7 @@ async def build_main_agent(
         req.session_id = event.unified_msg_origin
 
     _plugin_tool_fix(event, req)
+    _filter_tools_by_role(event, req)
     await _apply_web_search_tools(event, req, plugin_context)
 
     if config.llm_safety_mode:
