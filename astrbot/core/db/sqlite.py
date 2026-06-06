@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import CursorResult, Row
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
@@ -39,6 +40,14 @@ from astrbot.core.sentinels import NOT_GIVEN
 
 TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
+SQLITE_LOCK_RETRY_ATTEMPTS = 3
+SQLITE_LOCK_RETRY_BASE_DELAY = 0.2
+
+
+def _is_sqlite_database_locked_error(exc: OperationalError) -> bool:
+    raw = getattr(exc, "orig", exc)
+    message = str(raw).lower()
+    return "database" in message and "locked" in message
 
 
 class SQLiteDatabase(BaseDatabase):
@@ -47,6 +56,23 @@ class SQLiteDatabase(BaseDatabase):
         self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
         self.inited = False
         super().__init__()
+
+    async def _run_with_sqlite_lock_retry(
+        self,
+        operation: Callable[[], Awaitable[TxResult]],
+    ) -> TxResult:
+        for attempt in range(SQLITE_LOCK_RETRY_ATTEMPTS):
+            last_attempt = attempt == SQLITE_LOCK_RETRY_ATTEMPTS - 1
+            try:
+                return await operation()
+            except asyncio.CancelledError:
+                raise
+            except OperationalError as exc:
+                if not _is_sqlite_database_locked_error(exc) or last_attempt:
+                    raise
+                await asyncio.sleep(SQLITE_LOCK_RETRY_BASE_DELAY * (2**attempt))
+
+        raise RuntimeError("unreachable sqlite lock retry state")
 
     async def initialize(self) -> None:
         """Initialize the database by creating tables if they do not exist."""
@@ -1228,27 +1254,35 @@ class SQLiteDatabase(BaseDatabase):
 
     async def get_preference(self, scope, scope_id, key):
         """Get a preference by key."""
-        async with self.get_db() as session:
-            session: AsyncSession
-            query = select(Preference).where(
-                Preference.scope == scope,
-                Preference.scope_id == scope_id,
-                Preference.key == key,
-            )
-            result = await session.execute(query)
-            return result.scalar_one_or_none()
+
+        async def _get_preference() -> Preference | None:
+            async with self.get_db() as session:
+                session: AsyncSession
+                query = select(Preference).where(
+                    Preference.scope == scope,
+                    Preference.scope_id == scope_id,
+                    Preference.key == key,
+                )
+                result = await session.execute(query)
+                return result.scalar_one_or_none()
+
+        return await self._run_with_sqlite_lock_retry(_get_preference)
 
     async def get_preferences(self, scope, scope_id=None, key=None):
         """Get all preferences for a specific scope ID or key."""
-        async with self.get_db() as session:
-            session: AsyncSession
-            query = select(Preference).where(Preference.scope == scope)
-            if scope_id is not None:
-                query = query.where(Preference.scope_id == scope_id)
-            if key is not None:
-                query = query.where(Preference.key == key)
-            result = await session.execute(query)
-            return result.scalars().all()
+
+        async def _get_preferences() -> list[Preference]:
+            async with self.get_db() as session:
+                session: AsyncSession
+                query = select(Preference).where(Preference.scope == scope)
+                if scope_id is not None:
+                    query = query.where(Preference.scope_id == scope_id)
+                if key is not None:
+                    query = query.where(Preference.key == key)
+                result = await session.execute(query)
+                return result.scalars().all()
+
+        return await self._run_with_sqlite_lock_retry(_get_preferences)
 
     async def remove_preference(self, scope, scope_id, key) -> None:
         """Remove a preference by scope ID and key."""
