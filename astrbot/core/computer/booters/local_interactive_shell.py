@@ -103,7 +103,9 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
             try:
                 # Wait up to 60 s for an EOF signal; if none arrives,
                 # fall through to the periodic sweep.
-                session_id = await asyncio.wait_for(self._eof_queue.get(), timeout=60)
+                session_id = await asyncio.wait_for(
+                    self._eof_queue.get(), timeout=60
+                )
                 self._cleanup_session_by_id(session_id)
             except asyncio.TimeoutError:
                 pass
@@ -142,11 +144,7 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                 t.join(timeout=1.0)
 
         # Close pipes to release file descriptors promptly.
-        for pipe in [
-            session.process.stdin,
-            session.process.stdout,
-            session.process.stderr,
-        ]:
+        for pipe in [session.process.stdin, session.process.stdout, session.process.stderr]:
             if pipe:
                 try:
                     pipe.close()
@@ -312,9 +310,7 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
 
             actual_command = command
             if sys.platform == "win32":
-                popen_kwargs["creationflags"] = (
-                    subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
-                )
+                popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
                 # For cmd.exe on Windows, prefix with chcp to set UTF-8 code page
                 if shell and actual_command.strip().lower().startswith("cmd"):
                     actual_command = f"chcp 65001 >nul && {actual_command}"
