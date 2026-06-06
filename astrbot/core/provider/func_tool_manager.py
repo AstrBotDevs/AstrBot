@@ -516,6 +516,8 @@ class FunctionToolManager:
             if raise_on_all_failed:
                 raise MCPAllServicesFailedError(msg)
             logger.error(msg)
+
+        self._restore_tool_permissions()
         return summary
 
     async def _start_mcp_server(
@@ -886,6 +888,52 @@ class FunctionToolManager:
 
             return True
         return False
+
+    def set_tool_require_admin(self, name: str, require: bool) -> bool:
+        """设置某工具是否仅管理员可调用，并持久化。
+
+        Returns:
+            如果没找到工具，会返回 False
+        """
+        func_tool = self.get_func(name)
+        if func_tool is None:
+            return False
+
+        func_tool.require_admin = require
+
+        require_admin_tools: list = sp.get(
+            "tool_require_admin_list",
+            [],
+            scope="global",
+            scope_id="global",
+        )
+        if require:
+            if name not in require_admin_tools:
+                require_admin_tools.append(name)
+        else:
+            if name in require_admin_tools:
+                require_admin_tools.remove(name)
+        sp.put(
+            "tool_require_admin_list",
+            require_admin_tools,
+            scope="global",
+            scope_id="global",
+        )
+        return True
+
+    def _restore_tool_permissions(self) -> None:
+        """从持久化存储恢复 require_admin 状态到已注册的工具。
+
+        应在 MCP 客户端初始化完成后、插件工具注册完成后调用。
+        """
+        require_admin_tools: list = sp.get(
+            "tool_require_admin_list",
+            [],
+            scope="global",
+            scope_id="global",
+        )
+        for tool in self.func_list:
+            tool.require_admin = tool.name in require_admin_tools
 
     @property
     def mcp_config_path(self):
