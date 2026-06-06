@@ -43,9 +43,12 @@
       <v-window v-model="activeTab" style="padding: 8px">
         <!-- 概览 -->
         <v-window-item value="overview">
-          <v-row>
-            <v-col cols="12" md="6">
-              <v-card variant="outlined">
+          <v-row class="overview-layout">
+            <v-col cols="12" lg="4">
+              <v-card
+                variant="outlined"
+                class="overview-card overview-card--fill"
+              >
                 <v-card-title>{{ t("overview.title") }}</v-card-title>
                 <v-card-text>
                   <v-list density="comfortable">
@@ -108,19 +111,46 @@
                         formatDate(kb.updated_at)
                       }}</v-list-item-subtitle>
                     </v-list-item>
+
+                    <v-list-item>
+                      <template #prepend>
+                        <v-icon>mdi-vector-point</v-icon>
+                      </template>
+                      <v-list-item-title>{{
+                        t("overview.embeddingModel")
+                      }}</v-list-item-title>
+                      <v-list-item-subtitle>{{
+                        kb.embedding_provider_id || t("overview.notSet")
+                      }}</v-list-item-subtitle>
+                    </v-list-item>
+
+                    <v-list-item>
+                      <template #prepend>
+                        <v-icon>mdi-sort-ascending</v-icon>
+                      </template>
+                      <v-list-item-title>{{
+                        t("overview.rerankModel")
+                      }}</v-list-item-title>
+                      <v-list-item-subtitle>{{
+                        kb.rerank_provider_id || t("overview.notSet")
+                      }}</v-list-item-subtitle>
+                    </v-list-item>
                   </v-list>
                 </v-card-text>
               </v-card>
             </v-col>
 
-            <v-col cols="12" md="6">
-              <v-card variant="outlined" class="mb-4">
+            <v-col cols="12" lg="8">
+              <v-card
+                variant="outlined"
+                class="overview-card overview-card--fill"
+              >
                 <v-card-title>{{ t("overview.stats") }}</v-card-title>
                 <v-card-text>
-                  <v-row>
-                    <v-col cols="6">
+                  <v-row dense class="stats-grid">
+                    <v-col cols="12" sm="6" md="4">
                       <div class="stat-box">
-                        <v-icon size="48" color="primary"
+                        <v-icon size="36" color="primary"
                           >mdi-file-document</v-icon
                         >
                         <div class="stat-value">{{ documentCount }}</div>
@@ -129,9 +159,9 @@
                         </div>
                       </div>
                     </v-col>
-                    <v-col cols="6">
+                    <v-col cols="12" sm="6" md="4">
                       <div class="stat-box">
-                        <v-icon size="48" color="secondary"
+                        <v-icon size="36" color="secondary"
                           >mdi-text-box</v-icon
                         >
                         <div class="stat-value">{{ indexedChunkCount }}</div>
@@ -140,9 +170,9 @@
                         </div>
                       </div>
                     </v-col>
-                    <v-col cols="6">
+                    <v-col cols="12" sm="6" md="4">
                       <div class="stat-box">
-                        <v-icon size="48" color="success"
+                        <v-icon size="36" color="success"
                           >mdi-check-circle-outline</v-icon
                         >
                         <div class="stat-value">{{ readyDocumentCount }}</div>
@@ -151,9 +181,9 @@
                         </div>
                       </div>
                     </v-col>
-                    <v-col cols="6">
+                    <v-col cols="12" sm="6" md="4">
                       <div class="stat-box">
-                        <v-icon size="48" color="error"
+                        <v-icon size="36" color="error"
                           >mdi-alert-circle-outline</v-icon
                         >
                         <div class="stat-value">{{ failedDocumentCount }}</div>
@@ -162,20 +192,18 @@
                         </div>
                       </div>
                     </v-col>
-                    <v-col cols="6">
+                    <v-col cols="12" sm="6" md="4">
                       <div class="stat-box">
-                        <v-icon size="48" color="info">mdi-file-cabinet</v-icon>
+                        <v-icon size="36" color="info">mdi-folder</v-icon>
                         <div class="stat-value">{{ sourceFileCount }}</div>
                         <div class="stat-label">
                           {{ t("overview.sourceFiles") }}
                         </div>
                       </div>
                     </v-col>
-                    <v-col cols="6">
+                    <v-col cols="12" sm="6" md="4">
                       <div class="stat-box">
-                        <v-icon size="48" color="warning"
-                          >mdi-database-outline</v-icon
-                        >
+                        <v-icon size="36" color="warning">mdi-database</v-icon>
                         <div class="stat-value">
                           {{ formatFileSize(storageBytes) }}
                         </div>
@@ -187,8 +215,10 @@
                   </v-row>
                 </v-card-text>
               </v-card>
+            </v-col>
 
-              <v-card variant="outlined" class="mb-4">
+            <v-col cols="12" lg="7">
+              <v-card variant="outlined" class="overview-card">
                 <v-card-title
                   class="d-flex align-center justify-space-between flex-wrap ga-2"
                 >
@@ -298,12 +328,17 @@
 
                   <v-alert
                     v-else
-                    type="info"
+                    :type="consistencyPrecheckType"
                     variant="tonal"
                     density="compact"
-                    class="mb-4"
+                    class="mb-0"
                   >
-                    {{ t("consistency.notRun") }}
+                    <div class="d-flex flex-column ga-1">
+                      <span>{{ consistencyPrecheckMessage }}</span>
+                      <span class="text-caption text-medium-emphasis">
+                        {{ t("consistency.notRunHint") }}
+                      </span>
+                    </div>
                   </v-alert>
 
                   <v-row v-if="consistencyReport" dense class="mb-2">
@@ -400,142 +435,97 @@
                   </v-expansion-panels>
                 </v-card-text>
               </v-card>
+            </v-col>
 
-              <v-card variant="outlined" class="mb-4">
-                <v-card-title
-                  class="d-flex align-center justify-space-between flex-wrap ga-2"
-                >
-                  <span>{{ t("tasks.title") }}</span>
-                  <v-btn
-                    icon="mdi-refresh"
-                    variant="text"
-                    size="small"
-                    :loading="recentTasksLoading"
-                    :title="t('tasks.refresh')"
-                    @click="loadRecentTasks"
-                  />
-                </v-card-title>
-                <v-card-text>
-                  <v-skeleton-loader
-                    v-if="recentTasksLoading && recentTasks.length === 0"
-                    type="list-item-two-line@3"
-                  />
-                  <v-alert
-                    v-else-if="recentTasksLoadError"
-                    type="error"
-                    variant="tonal"
-                    density="compact"
+            <v-col cols="12" lg="5">
+              <div class="overview-side-stack">
+                <v-card variant="outlined" class="overview-card">
+                  <v-card-title
+                    class="d-flex align-center justify-space-between flex-wrap ga-2"
                   >
-                    {{ recentTasksLoadError }}
-                  </v-alert>
-                  <v-alert
-                    v-else-if="recentTasks.length === 0"
-                    type="info"
-                    variant="tonal"
-                    density="compact"
-                  >
-                    {{ t("tasks.empty") }}
-                  </v-alert>
-                  <v-list v-else density="compact" class="task-list">
-                    <v-list-item
-                      v-for="task in recentTasks"
-                      :key="task.task_id"
-                      class="px-0"
+                    <span>{{ t("tasks.title") }}</span>
+                    <v-btn
+                      icon="mdi-refresh"
+                      variant="text"
+                      size="small"
+                      :loading="recentTasksLoading"
+                      :title="t('tasks.refresh')"
+                      @click="loadRecentTasks"
+                    />
+                  </v-card-title>
+                  <v-card-text>
+                    <v-skeleton-loader
+                      v-if="recentTasksLoading && recentTasks.length === 0"
+                      type="list-item-two-line@3"
+                    />
+                    <v-alert
+                      v-else-if="recentTasksLoadError"
+                      type="error"
+                      variant="tonal"
+                      density="compact"
                     >
-                      <template #prepend>
-                        <v-icon
-                          :color="getTaskStatusColor(task.status)"
-                          size="small"
-                        >
-                          {{ getTaskTypeIcon(task.task_type) }}
-                        </v-icon>
-                      </template>
-                      <v-list-item-title class="d-flex align-center ga-2">
-                        <span>{{ getTaskTypeText(task.task_type) }}</span>
-                        <v-chip
-                          size="x-small"
-                          variant="tonal"
-                          :color="getTaskStatusColor(task.status)"
-                        >
-                          {{ getTaskStatusText(task.status) }}
-                        </v-chip>
-                      </v-list-item-title>
-                      <v-list-item-subtitle>
-                        {{
-                          formatDate(task.updated_at || task.created_at || "")
-                        }}
-                      </v-list-item-subtitle>
-                      <template #append>
-                        <span
-                          v-if="
-                            task.status === 'pending' ||
-                            task.status === 'processing'
-                          "
-                          class="text-caption text-medium-emphasis"
-                        >
-                          {{ formatTaskProgress(task) }}
-                        </span>
-                      </template>
-                    </v-list-item>
-                  </v-list>
-
-                  <div v-if="recentFailedTasks.length" class="mt-4">
-                    <div class="text-subtitle-2 mb-2">
-                      {{ t("tasks.recentFailures") }}
-                    </div>
-                    <v-list density="compact" class="task-list">
+                      {{ recentTasksLoadError }}
+                    </v-alert>
+                    <v-alert
+                      v-else-if="recentTasks.length === 0"
+                      type="info"
+                      variant="tonal"
+                      density="compact"
+                    >
+                      {{ t("tasks.empty") }}
+                    </v-alert>
+                    <template v-else>
+                      <v-list density="compact" class="task-list task-list--timeline">
                       <v-list-item
-                        v-for="task in recentFailedTasks"
-                        :key="`failed-${task.task_id}`"
+                        v-for="task in recentTasks"
+                        :key="task.task_id"
                         class="px-0"
                       >
                         <template #prepend>
-                          <v-icon color="error" size="small">
-                            mdi-alert-circle-outline
+                          <v-icon
+                            :color="getTaskStatusColor(task.status)"
+                            size="small"
+                          >
+                            {{ getTaskTypeIcon(task.task_type) }}
                           </v-icon>
                         </template>
-                        <v-list-item-title>
-                          {{ getTaskTypeText(task.task_type) }}
+                        <v-list-item-title class="d-flex align-center ga-2">
+                          <span>{{ getTaskTypeText(task.task_type) }}</span>
+                          <v-chip
+                            size="x-small"
+                            variant="tonal"
+                            :color="getTaskStatusColor(task.status)"
+                          >
+                            {{ getTaskStatusText(task.status) }}
+                          </v-chip>
                         </v-list-item-title>
                         <v-list-item-subtitle>
-                          {{ formatTaskError(task) }}
+                          {{ formatTaskSubtitle(task) }}
+                          <span
+                            v-if="formatTaskDetail(task)"
+                            class="task-detail-line"
+                          >
+                            {{ formatTaskDetail(task) }}
+                          </span>
                         </v-list-item-subtitle>
+                        <template #append>
+                          <span
+                            v-if="
+                              task.status === 'pending' ||
+                              task.status === 'processing'
+                            "
+                            class="text-caption text-medium-emphasis"
+                          >
+                            {{ formatTaskProgress(task) }}
+                          </span>
+                        </template>
                       </v-list-item>
-                    </v-list>
-                  </div>
-                </v-card-text>
-              </v-card>
+                      </v-list>
+                    </template>
 
-              <v-card variant="outlined">
-                <v-card-title>{{ t("overview.embeddingModel") }}</v-card-title>
-                <v-card-text>
-                  <v-list density="comfortable">
-                    <v-list-item>
-                      <template #prepend>
-                        <v-icon>mdi-vector-point</v-icon>
-                      </template>
-                      <v-list-item-title>{{
-                        t("overview.embeddingModel")
-                      }}</v-list-item-title>
-                      <v-list-item-subtitle>{{
-                        kb.embedding_provider_id || t("overview.notSet")
-                      }}</v-list-item-subtitle>
-                    </v-list-item>
-
-                    <v-list-item>
-                      <template #prepend>
-                        <v-icon>mdi-sort-ascending</v-icon>
-                      </template>
-                      <v-list-item-title>{{
-                        t("overview.rerankModel")
-                      }}</v-list-item-title>
-                      <v-list-item-subtitle>{{
-                        kb.rerank_provider_id || t("overview.notSet")
-                      }}</v-list-item-subtitle>
-                    </v-list-item>
-                  </v-list>
-                </v-card-text>
-              </v-card>
+                  </v-card-text>
+                </v-card>
+              </div>
             </v-col>
           </v-row>
         </v-window-item>
@@ -694,6 +684,9 @@ const failedDocumentCount = computed(
 const indexedChunkCount = computed(
   () => kb.value.indexed_chunk_count ?? kb.value.chunk_count ?? 0,
 );
+const documentChunkCount = computed(
+  () => kb.value.document_chunk_count ?? indexedChunkCount.value,
+);
 const sourceFileCount = computed(() => kb.value.source_file_count ?? 0);
 const storageBytes = computed(() => kb.value.storage_bytes ?? 0);
 const supportsConsistencyCheck = computed(() =>
@@ -711,7 +704,6 @@ const consistencyReport = ref<ConsistencyReport | null>(null);
 const kbRebuilding = ref(false);
 const kbRebuildTaskId = ref("");
 const recentTasks = ref<KnowledgeBaseTask[]>([]);
-const recentFailedTasks = ref<KnowledgeBaseTask[]>([]);
 const recentTasksLoading = ref(false);
 const recentTasksLoadError = ref("");
 const kbRebuildProgress = ref({
@@ -757,6 +749,26 @@ const visibleConsistencyIssueTypes = computed(() => {
     (issueType) => (consistencyReport.value?.summary[issueType.key] ?? 0) > 0,
   );
 });
+const hasChunkCountDrift = computed(
+  () => documentChunkCount.value !== indexedChunkCount.value,
+);
+const consistencyPrecheckType = computed(() =>
+  failedDocumentCount.value > 0 || hasChunkCountDrift.value ? "warning" : "info",
+);
+const consistencyPrecheckMessage = computed(() => {
+  if (hasChunkCountDrift.value) {
+    return t("consistency.notRunChunkMismatch", {
+      metadata: documentChunkCount.value,
+      indexed: indexedChunkCount.value,
+    });
+  }
+  if (failedDocumentCount.value > 0) {
+    return t("consistency.notRunFailedDocs", {
+      count: failedDocumentCount.value,
+    });
+  }
+  return t("consistency.notRun");
+});
 const repairableConsistencyTypes = computed(() =>
   getRepairableConsistencyTypes(consistencyReport.value),
 );
@@ -765,7 +777,6 @@ const canRepairConsistency = computed(
     supportsConsistencyRepair.value &&
     hasRepairableConsistencyIssues(consistencyReport.value),
 );
-
 const snackbar = ref({
   show: false,
   text: "",
@@ -818,35 +829,19 @@ const loadRecentTasks = async () => {
   recentTasksLoading.value = true;
   recentTasksLoadError.value = "";
   try {
-    const [tasksResponse, failedTasksResponse] = await Promise.all([
-      axios.get("/api/kb/task/list", {
-        params: {
-          kb_id: kbId.value,
-          page: 1,
-          page_size: 5,
-        },
-      }),
-      axios.get("/api/kb/task/list", {
-        params: {
-          kb_id: kbId.value,
-          status: "failed",
-          page: 1,
-          page_size: 3,
-        },
-      }),
-    ]);
+    const tasksResponse = await axios.get("/api/kb/task/list", {
+      params: {
+        kb_id: kbId.value,
+        page: 1,
+        page_size: 5,
+      },
+    });
     if (tasksResponse.data.status !== "ok") {
       recentTasksLoadError.value =
         tasksResponse.data.message || t("tasks.loadFailed");
       return;
     }
-    if (failedTasksResponse.data.status !== "ok") {
-      recentTasksLoadError.value =
-        failedTasksResponse.data.message || t("tasks.loadFailed");
-      return;
-    }
     recentTasks.value = tasksResponse.data.data.items || [];
-    recentFailedTasks.value = failedTasksResponse.data.data.items || [];
   } catch (error) {
     console.error("Failed to load recent knowledge base tasks:", error);
     recentTasksLoadError.value = t("tasks.loadFailed");
@@ -1093,6 +1088,19 @@ const getTaskTypeText = (taskType: string) =>
 const getTaskStatusText = (status: string) =>
   t(`tasks.statuses.${status}`) || status;
 
+const toTaskCount = (value: unknown) => {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+};
+
+const getTaskResultCounts = (task: KnowledgeBaseTask) => {
+  const result = task.result || {};
+  const success = toTaskCount(result.success_count);
+  const failed = toTaskCount(result.failed_count);
+  const total = toTaskCount(result.total) || success + failed;
+  return { success, failed, total };
+};
+
 const formatTaskProgress = (task: KnowledgeBaseTask) => {
   const progress = getKnowledgeBaseTaskProgress(task);
   return `${progress.current} / ${progress.total}`;
@@ -1100,6 +1108,30 @@ const formatTaskProgress = (task: KnowledgeBaseTask) => {
 
 const formatTaskError = (task: KnowledgeBaseTask) =>
   getKnowledgeBaseTaskErrorText(task.error, t("tasks.noErrorMessage"));
+
+const formatTaskSubtitle = (task: KnowledgeBaseTask) =>
+  formatDate(task.updated_at || task.created_at || "");
+
+const formatTaskDetail = (task: KnowledgeBaseTask) => {
+  if (task.status === "pending" || task.status === "processing") {
+    return t("tasks.progressDetail", {
+      progress: formatTaskProgress(task),
+    });
+  }
+  if (task.status === "failed") {
+    return formatTaskError(task);
+  }
+
+  const { success, failed, total } = getTaskResultCounts(task);
+  if (total > 0) {
+    return t("tasks.resultSummary", {
+      success,
+      failed,
+      total,
+    });
+  }
+  return "";
+};
 
 const formatConsistencyIssueTitle = (issue: ConsistencyIssue) => {
   return (
@@ -1189,13 +1221,42 @@ watch(
   min-height: 400px;
 }
 
+.overview-layout {
+  align-items: stretch;
+}
+
+.overview-layout > .v-col {
+  display: flex;
+}
+
+.overview-card {
+  width: 100%;
+}
+
+.overview-card--fill {
+  height: 100%;
+}
+
+.overview-side-stack {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.stats-grid > .v-col {
+  display: flex;
+}
+
 .stat-box {
+  min-height: 118px;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px;
+  justify-content: center;
+  padding: 18px 14px;
   text-align: center;
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgba(var(--v-theme-surface-variant), 0.1);
   transition: all 0.3s ease;
 }
@@ -1205,14 +1266,21 @@ watch(
 }
 
 .stat-value {
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 600;
+  line-height: 1.2;
   margin-top: 8px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .stat-label {
+  color: rgba(var(--v-theme-on-surface), 0.72);
   font-size: 0.875rem;
+  line-height: 1.35;
   margin-top: 4px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .consistency-metric {
@@ -1236,10 +1304,33 @@ watch(
   overflow-wrap: anywhere;
 }
 
+.task-detail-line {
+  display: block;
+  margin-top: 2px;
+  color: rgba(var(--v-theme-on-surface), 0.68);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.task-list--timeline :deep(.v-list-item) {
+  border-left: 2px solid rgba(var(--v-theme-outline), 0.16);
+  padding-left: 12px !important;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .kb-title {
     font-size: 1.25rem;
+  }
+
+  .stat-box {
+    min-height: 108px;
+    padding: 16px 10px;
+  }
+
+  .stat-value {
+    font-size: 1.45rem;
   }
 }
 </style>
