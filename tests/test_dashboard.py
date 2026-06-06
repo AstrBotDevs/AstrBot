@@ -374,7 +374,11 @@ async def test_auth_rate_limit_uses_same_bucket_across_paths(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
-    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
     cfg["trust_proxy_headers"] = True
 
     try:
@@ -406,7 +410,11 @@ async def test_auth_rate_limit_separates_different_client_ips(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
-    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
     cfg["trust_proxy_headers"] = True
 
     try:
@@ -450,7 +458,11 @@ async def test_auth_rate_limit_ignores_proxy_headers_by_default(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
-    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
     cfg["trust_proxy_headers"] = False
 
     try:

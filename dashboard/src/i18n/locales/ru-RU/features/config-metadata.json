@@ -790,7 +790,7 @@
             },
             "disable_builtin_commands": {
                 "description": "Отключить встроенные команды",
-                "hint": "Отключает help, provider, model и другие базовые команды."
+                "hint": "Отключает help, sid, new и другие базовые команды."
             }
         },
         "whitelist": {
