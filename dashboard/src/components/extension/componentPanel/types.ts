@@ -112,6 +112,7 @@ export interface ToolItem {
   description: string;
   active: boolean;
   readonly?: boolean;
+  require_admin?: boolean;
   parameters?: {
     properties?: Record<string, ToolParameter>;
   };
