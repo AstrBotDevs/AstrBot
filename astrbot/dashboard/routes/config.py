@@ -22,6 +22,10 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider import Provider
 from astrbot.core.provider.register import provider_registry
+from astrbot.core.provider.sources.vertex_ai import (
+    normalize_vertex_ai_provider_config,
+    normalize_vertex_ai_provider_source_config,
+)
 from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_data_path,
@@ -445,6 +449,9 @@ class ConfigRoute(Route):
         # 确保配置中有 id 字段
         if not new_source_config.get("id"):
             new_source_config["id"] = original_id
+        new_source_config = normalize_vertex_ai_provider_source_config(
+            new_source_config
+        )
 
         provider_sources = self.config.get("provider_sources", [])
 
@@ -924,7 +931,9 @@ class ConfigRoute(Route):
             provider_source = None
             for ps in provider_sources:
                 if ps.get("id") == provider_source_id:
-                    provider_source = ps
+                    provider_source = normalize_vertex_ai_provider_config(
+                        copy.deepcopy(ps)
+                    )
                     break
 
             if not provider_source:
@@ -971,26 +980,23 @@ class ConfigRoute(Route):
 
             # 临时实例化 provider
             inst = cls_type(provider_source, {})
+            try:
+                init_fn = getattr(inst, "initialize", None)
+                if inspect.iscoroutinefunction(init_fn):
+                    await init_fn()
 
-            # 如果有 initialize 方法，调用它
-            init_fn = getattr(inst, "initialize", None)
-            if inspect.iscoroutinefunction(init_fn):
-                await init_fn()
-
-            # 获取模型列表
-            models = await inst.get_models()
-            models = models or []
+                models = await inst.get_models()
+                models = models or []
+            finally:
+                terminate_fn = getattr(inst, "terminate", None)
+                if inspect.iscoroutinefunction(terminate_fn):
+                    await terminate_fn()
 
             metadata_map = {}
             for model_id in models:
                 meta = LLM_METADATAS.get(model_id)
                 if meta:
                     metadata_map[model_id] = meta
-
-            # 销毁实例（如果有 terminate 方法）
-            terminate_fn = getattr(inst, "terminate", None)
-            if inspect.iscoroutinefunction(terminate_fn):
-                await terminate_fn()
 
             return (
                 Response()

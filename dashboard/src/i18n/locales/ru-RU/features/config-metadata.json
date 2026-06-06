@@ -1189,6 +1189,33 @@
                 "description": "Заголовки запроса",
                 "hint": "Пары ключ/значение будут добавлены в заголовки запроса (default_headers). Значения должны быть строками."
             },
+            "google_vertex_ai": {
+                "hint": "Vertex AI через нативный Gemini API. API Base URL по умолчанию: https://aiplatform.googleapis.com/v1, location по умолчанию: global. Используйте либо Vertex AI API key, либо JSON сервисного аккаунта."
+            },
+            "vertex_ai_auth_type": {
+                "description": "Формат ключа",
+                "hint": "Используйте либо Vertex AI API key, либо JSON сервисного аккаунта. JSON поддерживает получение списка моделей; API key только для генерации."
+            },
+            "vertex_ai_api_key": {
+                "description": "API Key",
+                "hint": "Vertex AI API key. Используется, когда выбран формат API key; оставьте пустым при использовании JSON сервисного аккаунта."
+            },
+            "vertex_ai_project_id": {
+                "description": "Vertex AI project ID",
+                "hint": "ID проекта Google Cloud. Если пусто, AstrBot попробует прочитать его из JSON сервисного аккаунта."
+            },
+            "vertex_ai_location": {
+                "description": "Vertex AI location",
+                "hint": "Location модели, например global, us-central1. По умолчанию: global."
+            },
+            "vertex_ai_credentials_path": {
+                "description": "Путь к JSON сервисного аккаунта",
+                "hint": "Абсолютный путь к JSON файлу сервисного аккаунта Google Cloud. Оставьте пустым, если JSON вставлен ниже."
+            },
+            "vertex_ai_credentials_json": {
+                "description": "JSON сервисного аккаунта",
+                "hint": "JSON сервисного аккаунта Google Cloud можно создать здесь: https://console.cloud.google.com/iam-admin/serviceaccounts"
+            },
             "custom_extra_body": {
                 "description": "Параметры тела запроса",
                 "hint": "Добавление дополнительных параметров в запрос (temperature, top_p и др.).",

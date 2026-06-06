@@ -26,8 +26,26 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file, download_image_by_url
 from astrbot.core.utils.media_utils import ensure_wav
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
+from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..register import register_provider_adapter
+from .vertex_ai import (
+    GOOGLE_CLOUD_PLATFORM_SCOPE,
+    VERTEX_AI_API_KEY_AUTH,
+    VERTEX_AI_API_VERSION,
+    VERTEX_AI_DEFAULT_API_BASE,
+    VERTEX_AI_JSON_AUTH,
+    VERTEX_AI_MODEL_NAME_SEPARATOR,
+    build_vertex_ai_publisher_models_url,
+    extract_vertex_ai_credentials_json,
+    fetch_vertex_ai_publisher_models,
+    make_vertex_ai_refresh_request,
+    normalize_vertex_ai_auth_type,
+    normalize_vertex_ai_location,
+    normalize_vertex_ai_provider_config,
+    resolve_vertex_ai_project_id,
+    to_vertex_ai_genai_model_name,
+)
 
 
 class SuppressNonTextPartsWarning(logging.Filter):
@@ -64,6 +82,8 @@ class ProviderGoogleGenAI(Provider):
         provider_config,
         provider_settings,
     ) -> None:
+        if provider_config.get("provider") == "google-vertex-ai":
+            provider_config = normalize_vertex_ai_provider_config(provider_config)
         super().__init__(
             provider_config,
             provider_settings,
@@ -85,17 +105,24 @@ class ProviderGoogleGenAI(Provider):
     def _init_client(self) -> None:
         """初始化Gemini客户端"""
         proxy = self.provider_config.get("proxy", "")
-        http_options = types.HttpOptions(
-            base_url=self.api_base,
-            timeout=self.timeout * 1000,  # 毫秒
-        )
+        is_vertex_ai = self._is_vertex_ai_config()
+        base_url = self._get_vertex_ai_sdk_base_url() if is_vertex_ai else self.api_base
+
+        http_options_kwargs = {
+            "base_url": base_url,
+            "timeout": self.timeout * 1000,  # 毫秒
+        }
+        if is_vertex_ai:
+            http_options_kwargs["api_version"] = VERTEX_AI_API_VERSION
+        http_options = types.HttpOptions(**http_options_kwargs)
 
         # 强制使用 httpx 作为异步 HTTP 后端，避免 aiohttp 响应类型兼容问题 (#7564)
         # httpx.AsyncClient 的 timeout 单位为秒（与 HttpOptions 的毫秒不同）
         async_client_kwargs: dict = {
-            "base_url": self.api_base,
             "timeout": self.timeout,
         }
+        if base_url:
+            async_client_kwargs["base_url"] = base_url
         if proxy:
             async_client_kwargs["proxy"] = proxy
             async_client_kwargs["trust_env"] = False
@@ -112,10 +139,126 @@ class ProviderGoogleGenAI(Provider):
         self._http_client = httpx.AsyncClient(**async_client_kwargs)
         http_options.httpx_async_client = self._http_client
 
-        self.client = genai.Client(
-            api_key=self.chosen_api_key,
-            http_options=http_options,
-        ).aio
+        client_kwargs = self._get_genai_client_kwargs(http_options)
+        self.client = genai.Client(**client_kwargs).aio
+
+    def _is_vertex_ai_config(self) -> bool:
+        return self.provider_config.get("provider") == "google-vertex-ai"
+
+    def _get_vertex_ai_auth_type(self) -> str:
+        return normalize_vertex_ai_auth_type(
+            self.provider_config.get("vertex_ai_auth_type")
+        )
+
+    def _get_vertex_ai_sdk_base_url(self) -> str:
+        configured_base_url = str(self.api_base or "").strip().rstrip("/")
+        location = normalize_vertex_ai_location(
+            self.provider_config.get("vertex_ai_location")
+        )
+
+        if configured_base_url in {
+            "",
+            VERTEX_AI_DEFAULT_API_BASE,
+            f"{VERTEX_AI_DEFAULT_API_BASE}/{VERTEX_AI_API_VERSION}",
+        }:
+            if location == "global":
+                return VERTEX_AI_DEFAULT_API_BASE
+            return f"https://{location}-aiplatform.googleapis.com"
+
+        version_suffix = f"/{VERTEX_AI_API_VERSION}"
+        if configured_base_url.endswith(version_suffix):
+            return (
+                configured_base_url[: -len(version_suffix)]
+                or VERTEX_AI_DEFAULT_API_BASE
+            )
+        return configured_base_url
+
+    def _get_genai_client_kwargs(self, http_options: types.HttpOptions) -> dict:
+        if not self._is_vertex_ai_config():
+            return {
+                "api_key": self.chosen_api_key,
+                "http_options": http_options,
+            }
+
+        auth_type = self._get_vertex_ai_auth_type()
+        if auth_type == VERTEX_AI_API_KEY_AUTH and not self._has_vertex_ai_key_json():
+            client_kwargs = {
+                "vertexai": True,
+                "http_options": http_options,
+            }
+            if self.chosen_api_key:
+                client_kwargs["api_key"] = self.chosen_api_key
+            return client_kwargs
+
+        if auth_type in {VERTEX_AI_API_KEY_AUTH, VERTEX_AI_JSON_AUTH}:
+            return {
+                "credentials": self._load_vertex_ai_service_account_credentials(),
+                "project": self._resolve_vertex_ai_project_id_required(),
+                "location": normalize_vertex_ai_location(
+                    self.provider_config.get("vertex_ai_location")
+                ),
+                "vertexai": True,
+                "http_options": http_options,
+            }
+
+        raise ValueError(
+            "Vertex AI key format must be api_key or json for Google GenAI provider."
+        )
+
+    def _has_vertex_ai_key_json(self) -> bool:
+        return bool(extract_vertex_ai_credentials_json(self.provider_config).strip())
+
+    def _resolve_vertex_ai_project_id_required(self) -> str:
+        project_id = resolve_vertex_ai_project_id(self.provider_config)
+        if not project_id:
+            raise ValueError(
+                "Vertex AI project id is required for service account auth."
+            )
+        return project_id
+
+    def _load_vertex_ai_service_account_credentials(self):
+        try:
+            from google.oauth2 import service_account
+        except ImportError as exc:
+            raise RuntimeError(
+                "google-auth is required for Vertex AI service account auth."
+            ) from exc
+
+        scopes = [GOOGLE_CLOUD_PLATFORM_SCOPE]
+        credentials_json = extract_vertex_ai_credentials_json(self.provider_config)
+        credentials_path = str(
+            self.provider_config.get("vertex_ai_credentials_path") or ""
+        )
+
+        if credentials_json.strip():
+            return service_account.Credentials.from_service_account_info(
+                json.loads(credentials_json),
+                scopes=scopes,
+            )
+
+        if credentials_path.strip():
+            return service_account.Credentials.from_service_account_file(
+                str(Path(credentials_path).expanduser()),
+                scopes=scopes,
+            )
+
+        raise ValueError(
+            "Vertex AI service account auth requires a JSON file path or pasted JSON."
+        )
+
+    def _ensure_vertex_ai_api_key_for_generation(self) -> None:
+        if (
+            self._is_vertex_ai_config()
+            and self._get_vertex_ai_auth_type() == VERTEX_AI_API_KEY_AUTH
+            and not self._has_vertex_ai_key_json()
+            and not self.chosen_api_key
+        ):
+            raise ValueError("Vertex AI API key is required for chat generation.")
+
+    def _get_request_model_name(self, model: str) -> str:
+        if self._is_vertex_ai_config():
+            return to_vertex_ai_genai_model_name(model)
+        return model
 
     def _init_safety_settings(self) -> None:
         """初始化安全设置"""
@@ -605,12 +748,13 @@ class ProviderGoogleGenAI(Provider):
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         """非流式请求 Gemini API"""
+        self._ensure_vertex_ai_api_key_for_generation()
         system_instruction = next(
             (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
             None,
         )
 
-        model = payloads.get("model", self.get_model())
+        model = self._get_request_model_name(payloads.get("model", self.get_model()))
 
         modalities = ["TEXT"]
         if self.provider_config.get("gm_resp_image_modal", False):
@@ -635,7 +779,12 @@ class ProviderGoogleGenAI(Provider):
                     contents=cast(types.ContentListUnion, conversation),
                     config=config,
                 )
-                logger.debug(f"genai result: {result}")
+                logger.debug(
+                    "[Gemini] generate_content result: "
+                    f"candidates={len(result.candidates or [])}, "
+                    f"model_version={getattr(result, 'model_version', None)}, "
+                    f"response_id={getattr(result, 'response_id', None)}"
+                )
 
                 if not result.candidates:
                     logger.error(f"请求失败, 返回的 candidates 为空: {result}")
@@ -694,11 +843,12 @@ class ProviderGoogleGenAI(Provider):
         tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
+        self._ensure_vertex_ai_api_key_for_generation()
         system_instruction = next(
             (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
             None,
         )
-        model = payloads.get("model", self.get_model())
+        model = self._get_request_model_name(payloads.get("model", self.get_model()))
         conversation = self._prepare_conversation(payloads)
 
         result = None
@@ -939,17 +1089,63 @@ class ProviderGoogleGenAI(Provider):
                 break
 
     async def get_models(self):
+        if self._is_vertex_ai_config():
+            return await self._get_vertex_ai_models()
+
         try:
             models = await self.client.models.list()
-            return [
-                m.name.replace("models/", "")
-                for m in models
-                if m.supported_actions
-                and "generateContent" in m.supported_actions
-                and m.name
-            ]
+            model_ids = []
+            for model in models:
+                if (
+                    not model.supported_actions
+                    or "generateContent" not in model.supported_actions
+                    or not model.name
+                ):
+                    continue
+                model_ids.append(self._normalize_model_name(model.name))
+            return normalize_and_dedupe_strings(model_ids)
         except APIError as e:
             raise Exception(f"获取模型列表失败: {e.message}")
+
+    async def _get_vertex_ai_models(self) -> list[str]:
+        auth_type = self._get_vertex_ai_auth_type()
+        if auth_type == VERTEX_AI_API_KEY_AUTH and not self._has_vertex_ai_key_json():
+            raise ValueError(
+                "Vertex AI API Key 无法获取模型列表。请将密钥格式切换为 json "
+                "并填写 Google Cloud 服务账号 JSON 后获取模型列表，或手动添加模型。"
+            )
+
+        credentials = self._load_vertex_ai_service_account_credentials()
+        if not getattr(credentials, "valid", False) or not getattr(
+            credentials, "token", None
+        ):
+            credentials.refresh(make_vertex_ai_refresh_request(self.provider_config))
+
+        token = getattr(credentials, "token", None)
+        if not token:
+            raise RuntimeError("Failed to refresh Vertex AI access token.")
+
+        url = build_vertex_ai_publisher_models_url(self.provider_config)
+        project_id = self._resolve_vertex_ai_project_id_required()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept-Encoding": "gzip, deflate",
+            "x-goog-user-project": project_id,
+        }
+        assert self._http_client is not None
+        return await fetch_vertex_ai_publisher_models(self._http_client, url, headers)
+
+    def _normalize_model_name(self, name: str) -> str:
+        name = name.strip()
+        if self._is_vertex_ai_config():
+            if VERTEX_AI_MODEL_NAME_SEPARATOR in name:
+                name = name.rsplit(VERTEX_AI_MODEL_NAME_SEPARATOR, 1)[1]
+            elif name.startswith("models/"):
+                name = name.removeprefix("models/")
+            if not name.startswith("google/"):
+                name = f"google/{name}"
+            return name
+        return name.replace("models/", "")
 
     def get_current_key(self) -> str:
         return self.chosen_api_key

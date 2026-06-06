@@ -21,6 +21,7 @@ from .provider import (
     TTSProvider,
 )
 from .register import llm_tools, provider_cls_map
+from .sources.vertex_ai import normalize_vertex_ai_provider_config
 
 
 @runtime_checkable
@@ -515,7 +516,7 @@ class ProviderManager:
                 # 保持 id 为 provider 的 id，而不是 source 的 id
                 merged_config["id"] = pc["id"]
                 pc = merged_config
-        return pc
+        return normalize_vertex_ai_provider_config(pc)
 
     def get_provider_config_by_id(
         self,

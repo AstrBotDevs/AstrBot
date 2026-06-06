@@ -206,6 +206,9 @@
       v-else-if="itemMeta?.type === 'list'"
       :model-value="modelValue"
       @update:model-value="emitUpdate"
+      :button-text="itemMeta?.button_text || ''"
+      :dialog-title="itemMeta?.dialog_title || ''"
+      :prefer-single-item="itemMeta?.prefer_single_item ?? true"
       class="config-field"
     />
 
