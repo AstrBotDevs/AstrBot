@@ -244,6 +244,7 @@ const TASK_STATUS_COLORS = {
   pending: "grey",
   processing: "warning",
   completed: "success",
+  partial_failed: "warning",
   failed: "error",
 };
 

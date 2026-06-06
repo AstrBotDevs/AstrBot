@@ -1532,7 +1532,7 @@ const startProgressPolling = (
             taskId,
             data.progress,
           );
-        } else if (status === "completed") {
+        } else if (status === "completed" || status === "partial_failed") {
           stopProgressPolling(taskId);
 
           const result = data.result;

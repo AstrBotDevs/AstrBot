@@ -88,6 +88,7 @@
     "refresh": "Refresh tasks",
     "empty": "No task records yet",
     "loadFailed": "Failed to load recent tasks",
+    "recentFailures": "Recent failures",
     "noErrorMessage": "No error message",
     "resultSummary": "{total} total, {success} succeeded, {failed} failed",
     "progressDetail": "Progress {progress}",
@@ -103,6 +104,7 @@
       "pending": "Pending",
       "processing": "Processing",
       "completed": "Completed",
+      "partial_failed": "Partially failed",
       "failed": "Failed"
     }
   },

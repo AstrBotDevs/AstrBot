@@ -88,6 +88,7 @@
     "refresh": "刷新任务",
     "empty": "暂无任务记录",
     "loadFailed": "加载最近任务失败",
+    "recentFailures": "最近失败",
     "noErrorMessage": "暂无错误信息",
     "resultSummary": "共 {total} 个，成功 {success} 个，失败 {failed} 个",
     "progressDetail": "进度 {progress}",
@@ -103,6 +104,7 @@
       "pending": "等待中",
       "processing": "处理中",
       "completed": "已完成",
+      "partial_failed": "部分失败",
       "failed": "失败"
     }
   },

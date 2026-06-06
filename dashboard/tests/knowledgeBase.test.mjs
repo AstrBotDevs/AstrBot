@@ -1282,6 +1282,7 @@ test("getKnowledgeBaseTaskStatusColor maps known statuses", () => {
   assert.equal(getKnowledgeBaseTaskStatusColor("pending"), "grey");
   assert.equal(getKnowledgeBaseTaskStatusColor("processing"), "warning");
   assert.equal(getKnowledgeBaseTaskStatusColor("completed"), "success");
+  assert.equal(getKnowledgeBaseTaskStatusColor("partial_failed"), "warning");
   assert.equal(getKnowledgeBaseTaskStatusColor("failed"), "error");
   assert.equal(getKnowledgeBaseTaskStatusColor("custom"), "grey");
 });

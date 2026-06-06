@@ -266,12 +266,26 @@ class KnowledgeBaseRoute(Route):
         return f"{file_name}: {message}"
 
     @staticmethod
-    def _build_batch_failure_error(failed_docs: list[dict]) -> str | None:
+    def _resolve_batch_task_status(success_count: int, failed_count: int) -> str:
+        if failed_count == 0:
+            return "completed"
+        if success_count > 0:
+            return "partial_failed"
+        return "failed"
+
+    @staticmethod
+    def _build_batch_failure_error(
+        failed_docs: list[dict],
+        success_count: int = 0,
+        action: str = "上传",
+    ) -> str | None:
         if not failed_docs:
             return None
         if len(failed_docs) == 1:
             return failed_docs[0].get("error") or "上传失败：发生未知错误。"
-        return f"所有文档上传失败，共 {len(failed_docs)} 个失败。"
+        if success_count > 0:
+            return f"部分文档{action}失败，共 {len(failed_docs)} 个失败。"
+        return f"所有文档{action}失败，共 {len(failed_docs)} 个失败。"
 
     @staticmethod
     def _format_size_limit(size_bytes: int) -> str:
@@ -455,8 +469,15 @@ class KnowledgeBaseRoute(Route):
                 "failed_count": len(failed_docs),
             }
 
-            task_status = "completed" if uploaded_docs else "failed"
-            task_error = self._build_batch_failure_error(failed_docs)
+            task_status = self._resolve_batch_task_status(
+                len(uploaded_docs),
+                len(failed_docs),
+            )
+            task_error = self._build_batch_failure_error(
+                failed_docs,
+                success_count=len(uploaded_docs),
+                action="上传",
+            )
             self._set_task_result(
                 task_id,
                 task_status,
@@ -572,8 +593,15 @@ class KnowledgeBaseRoute(Route):
                 "failed_count": len(failed_docs),
             }
 
-            task_status = "completed" if uploaded_docs else "failed"
-            task_error = self._build_batch_failure_error(failed_docs)
+            task_status = self._resolve_batch_task_status(
+                len(uploaded_docs),
+                len(failed_docs),
+            )
+            task_error = self._build_batch_failure_error(
+                failed_docs,
+                success_count=len(uploaded_docs),
+                action="导入",
+            )
             self._set_task_result(
                 task_id,
                 task_status,
@@ -718,22 +746,36 @@ class KnowledgeBaseRoute(Route):
                 "task_id": task_id,
                 **result,
             }
+            task_status = self._resolve_batch_task_status(
+                int(result.get("success_count") or 0),
+                int(result.get("failed_count") or 0),
+            )
+            task_error = self._build_batch_failure_error(
+                result.get("failed") or [],
+                success_count=int(result.get("success_count") or 0),
+                action="重建",
+            )
             completed_total = max(int(result.get("total") or 0), 1)
             self._update_progress(
                 task_id,
-                status="completed",
+                status=task_status,
                 file_index=0,
                 file_name=kb_name,
                 stage="completed",
                 current=completed_total,
                 total=completed_total,
             )
-            self._set_task_result(task_id, "completed", result=result)
+            self._set_task_result(
+                task_id,
+                task_status,
+                result=result,
+                error=task_error,
+            )
             await self._update_persistent_task(
                 task_id,
-                status="completed",
+                status=task_status,
                 result=result,
-                error=None,
+                error=task_error,
                 **self._get_persistent_progress_updates(task_id),
             )
 
@@ -795,22 +837,36 @@ class KnowledgeBaseRoute(Route):
                 "task_id": task_id,
                 **result,
             }
+            task_status = self._resolve_batch_task_status(
+                int(result.get("success_count") or 0),
+                int(result.get("failed_count") or 0),
+            )
+            task_error = self._build_batch_failure_error(
+                result.get("failed") or [],
+                success_count=int(result.get("success_count") or 0),
+                action="重建",
+            )
             completed_total = max(int(result.get("total") or 0), 1)
             self._update_progress(
                 task_id,
-                status="completed",
+                status=task_status,
                 file_index=0,
                 file_name=task_name,
                 stage="completed",
                 current=completed_total,
                 total=completed_total,
             )
-            self._set_task_result(task_id, "completed", result=result)
+            self._set_task_result(
+                task_id,
+                task_status,
+                result=result,
+                error=task_error,
+            )
             await self._update_persistent_task(
                 task_id,
-                status="completed",
+                status=task_status,
                 result=result,
-                error=None,
+                error=task_error,
                 **self._get_persistent_progress_updates(task_id),
             )
 
@@ -1677,6 +1733,7 @@ class KnowledgeBaseRoute(Route):
         - pending: 任务待处理
         - processing: 任务处理中
         - completed: 任务完成
+        - partial_failed: 任务部分失败
         - failed: 任务失败
         """
         try:
@@ -1698,9 +1755,13 @@ class KnowledgeBaseRoute(Route):
                 }
                 if persistent_task.get("progress") is not None:
                     response_data["progress"] = persistent_task["progress"]
-                if persistent_task["status"] in ("completed", "failed"):
+                if persistent_task["status"] in (
+                    "completed",
+                    "partial_failed",
+                    "failed",
+                ):
                     response_data["result"] = persistent_task.get("result")
-                if persistent_task["status"] == "failed":
+                if persistent_task["status"] in ("partial_failed", "failed"):
                     response_data["error"] = persistent_task.get("error")
                 return Response().ok(response_data).__dict__
 
@@ -1718,15 +1779,15 @@ class KnowledgeBaseRoute(Route):
                 response_data["progress"] = self.upload_progress[task_id]
 
             # 如果任务完成，返回结果
-            if status in ("completed", "failed"):
+            if status in ("completed", "partial_failed", "failed"):
                 response_data["result"] = task_info["result"]
 
-            # 如果任务失败，返回错误信息
-            if status == "failed":
+            # 如果任务存在失败项，返回错误信息
+            if status in ("partial_failed", "failed"):
                 response_data["error"] = task_info["error"]
 
-            # 清理已完成/失败的任务，释放内存
-            if status in ("completed", "failed"):
+            # 清理已结束的任务，释放内存
+            if status in ("completed", "partial_failed", "failed"):
                 self._cleanup_task(task_id)
 
             return Response().ok(response_data).__dict__

@@ -885,7 +885,7 @@ const pollKbRebuildProgress = (taskId: string) => {
         };
       }
 
-      if (data.status === "completed") {
+      if (data.status === "completed" || data.status === "partial_failed") {
         const result = data.result || {};
         await finishKbRebuildTask();
         const failedCount = result.failed_count || 0;
