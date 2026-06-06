@@ -27,6 +27,7 @@ function onSubmit() {
   <v-text-field
     :model-value="props.username"
     :label="t('username')"
+    autocomplete="username"
     class="mb-6 input-field"
     required
     hide-details="auto"
@@ -40,6 +41,7 @@ function onSubmit() {
   <v-text-field
     :model-value="props.password"
     :label="t('password')"
+    autocomplete="current-password"
     required
     variant="outlined"
     hide-details="auto"
