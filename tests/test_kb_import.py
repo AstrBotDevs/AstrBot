@@ -212,12 +212,13 @@ async def test_import_documents_returns_friendly_failure_message(
         max_retries=3,
     )
 
-    assert route.upload_tasks["task-1"]["status"] == "completed"
+    assert route.upload_tasks["task-1"]["status"] == "failed"
     result = route.upload_tasks["task-1"]["result"]
     assert result["success_count"] == 0
     assert result["failed_count"] == 1
     assert result["failed"][0]["file_name"] == "broken.txt"
     assert result["failed"][0]["error"].startswith("broken.txt:")
+    assert route.upload_tasks["task-1"]["error"] == result["failed"][0]["error"]
     assert "向量化失败" in result["failed"][0]["error"]
     assert "期望 2，实际 1" in result["failed"][0]["error"]
     assert "not same nb of vectors as ids" not in result["failed"][0]["error"]
