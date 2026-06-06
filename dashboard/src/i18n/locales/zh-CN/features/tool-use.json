@@ -47,7 +47,8 @@
       "origin": "来源",
       "originName": "来源名称",
       "readonly": "只读",
-      "actions": "操作"
+      "actions": "操作",
+      "permission": "权限"
     },
     "configTags": {
       "tooltipTitle": "该工具在配置文件 {config} 中启用，因为：",
@@ -57,6 +58,10 @@
         "in": "{key} 命中了 {expected}",
         "fallback": "{key} 当前值为 {actual}"
       }
+    },
+    "permission": {
+      "everyone": "所有人",
+      "admin": "管理员"
     }
   },
   "marketplace": {
@@ -167,6 +172,8 @@
     "toggleToolSuccess": "工具状态切换成功!",
     "toggleToolReadonly": "内置工具为只读，无法进行启用或停用操作。",
     "toggleToolError": "工具状态切换失败: {error}",
-    "testError": "测试连接失败: {error}"
+    "testError": "测试连接失败: {error}",
+    "updatePermissionSuccess": "权限更新成功!",
+    "updatePermissionError": "权限更新失败: {error}"
   }
 }
