@@ -367,6 +367,28 @@ class ProviderOpenAIOfficial(Provider):
             return str(target_path), cleanup_paths
         if audio_ref.startswith("file://"):
             return self._file_uri_to_path(audio_ref), cleanup_paths
+        if audio_ref.startswith("data:"):
+            # data URI 格式: data:audio/wav;base64,<base64_data>
+            # 或 data:audio/mp3;base64,<base64_data>
+            try:
+                header, base64_data = audio_ref.split(",", 1)
+                # 从 data URI header 中提取 MIME 类型和格式
+                # 例如 "data:audio/wav;base64" -> "wav"
+                mime_parts = header.removeprefix("data:").split(";")
+                mime_type = mime_parts[0] if mime_parts else "audio/wav"
+                suffix = "." + mime_type.split("/")[-1] if "/" in mime_type else ".wav"
+                if suffix not in (".wav", ".mp3", ".ogg", ".m4a", ".aac", ".flac"):
+                    suffix = ".wav"
+                audio_bytes = base64.b64decode(base64_data)
+                temp_dir = Path(get_astrbot_temp_path())
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                target_path = temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
+                target_path.write_bytes(audio_bytes)
+                cleanup_paths.append(target_path)
+                return str(target_path), cleanup_paths
+            except Exception as exc:
+                logger.warning("解析 data URI 音频失败: %s，错误: %s", audio_ref[:100], exc)
+                return audio_ref, cleanup_paths
         return audio_ref, cleanup_paths
 
     async def _resolve_audio_part(self, audio_ref: str) -> dict | None:
