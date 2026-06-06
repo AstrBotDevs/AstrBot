@@ -1269,6 +1269,8 @@ class PluginManager:
             logger.error(traceback.format_exc())
 
         self._rebuild_failed_plugin_info()
+        # 插件工具注册完成后恢复权限配置
+        llm_tools._restore_tool_permissions()
         if has_load_error:
             return False, self.failed_plugin_info
         return True, None
