@@ -1000,8 +1000,11 @@ class ProviderOpenAIOfficial(Provider):
         llm_response.raw_completion = completion
         llm_response.id = completion.id
 
-        if completion.usage:
-            llm_response.usage = self._extract_usage(completion.usage)
+        llm_response.usage = (
+            self._extract_usage(completion.usage)
+            if completion.usage
+            else TokenUsage()
+        )
 
         return llm_response
 
