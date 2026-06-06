@@ -266,11 +266,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # "all tools", including runtime computer-use tools.
         if tools is None:
             toolset = ToolSet()
+            is_admin = getattr(event, "role", "member") == "admin"
             for registered_tool in llm_tools.func_list:
                 if isinstance(registered_tool, HandoffTool):
                     continue
-                if registered_tool.active:
-                    toolset.add_tool(registered_tool)
+                if not registered_tool.active:
+                    continue
+                if not is_admin and getattr(registered_tool, "require_admin", False):
+                    continue
+                toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)
             return None if toolset.empty() else toolset
@@ -279,10 +283,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return None
 
         toolset = ToolSet()
+        is_admin = getattr(event, "role", "member") == "admin"
         for tool_name_or_obj in tools:
             if isinstance(tool_name_or_obj, str):
                 registered_tool = llm_tools.get_func(tool_name_or_obj)
                 if registered_tool and registered_tool.active:
+                    if not is_admin and getattr(
+                        registered_tool, "require_admin", False
+                    ):
+                        continue
                     toolset.add_tool(registered_tool)
                     continue
                 runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
