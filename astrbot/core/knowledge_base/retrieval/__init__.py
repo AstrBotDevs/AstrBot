@@ -3,7 +3,12 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .manager import RetrievalManager, RetrievalResult
+    from .manager import (
+        RetrievalManager,
+        RetrievalResult,
+        RetrievalTrace,
+        RetrievalWithTrace,
+    )
     from .rank_fusion import FusedResult, RankFusion
     from .sparse_retriever import SparseResult, SparseRetriever
 
@@ -12,18 +17,32 @@ __all__ = [
     "RankFusion",
     "RetrievalManager",
     "RetrievalResult",
+    "RetrievalTrace",
+    "RetrievalWithTrace",
     "SparseResult",
     "SparseRetriever",
 ]
 
 
 def __getattr__(name: str):
-    if name in {"RetrievalManager", "RetrievalResult"}:
-        from .manager import RetrievalManager, RetrievalResult
+    if name in {
+        "RetrievalManager",
+        "RetrievalResult",
+        "RetrievalTrace",
+        "RetrievalWithTrace",
+    }:
+        from .manager import (
+            RetrievalManager,
+            RetrievalResult,
+            RetrievalTrace,
+            RetrievalWithTrace,
+        )
 
         return {
             "RetrievalManager": RetrievalManager,
             "RetrievalResult": RetrievalResult,
+            "RetrievalTrace": RetrievalTrace,
+            "RetrievalWithTrace": RetrievalWithTrace,
         }[name]
 
     if name in {"FusedResult", "RankFusion"}:

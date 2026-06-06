@@ -9,13 +9,48 @@
     "chunkCount": "Количество фрагментов",
     "createdAt": "Загружен"
   },
+  "processing": {
+    "title": "Информация обработки",
+    "status": "Статус",
+    "sourceType": "Тип источника",
+    "sourceUri": "Источник",
+    "contentHash": "Хэш контента",
+    "parser": "Парсер",
+    "chunker": "Разбиение",
+    "version": "Версия",
+    "parentDocId": "ID родительского документа",
+    "indexedAt": "Индексирован",
+    "unknownStage": "Неизвестный этап",
+    "noErrorMessage": "Нет сообщения об ошибке",
+    "statuses": {
+      "pending": "Ожидание",
+      "parsing": "Разбор",
+      "chunking": "Фрагментация",
+      "embedding": "Индексация",
+      "ready": "Готово",
+      "failed": "Ошибка"
+    },
+    "sourceTypes": {
+      "file": "Файл",
+      "url": "URL",
+      "import": "Импорт",
+      "api": "API"
+    }
+  },
   "chunks": {
     "title": "Фрагменты текста",
+    "total": "Фрагментов: {count}",
+    "filteredTotal": "Найдено {filtered} / {total} фрагм.",
     "empty": "Фрагменты не найдены",
     "index": "Индекс",
     "content": "Текст",
+    "titlePath": "Путь заголовков",
     "charCount": "Символов",
     "charCountValue": "{count} симв.",
+    "tokenEstimate": "Оценка токенов",
+    "tokenEstimateValue": "Около {count} ток.",
+    "offset": "Позиция",
+    "contentHash": "Хэш контента",
     "actions": "Действия",
     "view": "Детали",
     "edit": "Изменить",
@@ -24,6 +59,7 @@
     "search": "Поиск по документу",
     "searchPlaceholder": "Найти во фрагментах...",
     "showing": "Показано",
+    "showingRange": "Показано {start} - {end} / {total} фрагм.",
     "deleteConfirm": "Удалить этот фрагмент?",
     "deleteSuccess": "Фрагмент удален",
     "deleteFailed": "Ошибка удаления"
@@ -50,14 +86,39 @@
     "index": "Индекс",
     "content": "Текст",
     "charCount": "Символов",
+    "tokenEstimate": "Оценка токенов",
+    "titlePath": "Путь заголовков",
+    "section": "Раздел",
+    "pageNumber": "Страница",
+    "offset": "Позиция",
+    "contentHash": "Хэш контента",
+    "adjacentChunks": "Соседние фрагменты",
+    "previousChunk": "Предыдущий: {id}",
+    "nextChunk": "Следующий: {id}",
+    "parentChunk": "Родительский фрагмент",
     "vecDocId": "ID вектора",
+    "context": "Соседний контекст",
+    "previous": "Предыдущий",
+    "current": "Текущий",
+    "next": "Следующий",
+    "contextMissing": "Соседний фрагмент отсутствует",
     "close": "Закрыть"
   },
   "actions": {
-    "retry": "Повторить"
+    "retry": "Повторить",
+    "retryRebuild": "Повторить индексацию",
+    "retryRebuildConfirm": "Переиндексировать этот документ?"
   },
   "messages": {
     "loadDocumentFailed": "Не удалось загрузить документ",
-    "loadChunksFailed": "Не удалось загрузить фрагменты"
+    "loadChunksFailed": "Не удалось загрузить фрагменты",
+    "loadChunkContextFailed": "Не удалось загрузить соседний контекст",
+    "rebuildStarted": "Переиндексация документа запущена",
+    "rebuildCompleted": "Переиндексация документа завершена",
+    "rebuildFailed": "Не удалось переиндексировать документ",
+    "rebuildFailedWithReason": "Не удалось переиндексировать документ: {reason}",
+    "focusChunkLoaded": "Открыт найденный фрагмент",
+    "focusChunkFailed": "Не удалось открыть найденный фрагмент",
+    "focusChunkNotFound": "Найденный фрагмент не найден"
   }
 }

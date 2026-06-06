@@ -48,11 +48,15 @@
         <div class="kb-stats" v-if="!kb.init_error">
           <div class="stat-item">
             <v-icon size="small">mdi-file-document</v-icon>
-            <span>{{ kb.doc_count || 0 }} {{ t("list.documents") }}</span>
+            <span>
+              {{ getListStats(kb).documentCount }} {{ t("list.documents") }}
+            </span>
           </div>
           <div class="stat-item">
             <v-icon size="small">mdi-text-box</v-icon>
-            <span>{{ kb.chunk_count || 0 }} {{ t("list.chunks") }}</span>
+            <span>
+              {{ getListStats(kb).chunkCount }} {{ t("list.chunks") }}
+            </span>
           </div>
         </div>
 
@@ -117,7 +121,7 @@
             variant="elevated"
             class="kb-fab"
             :loading="loading"
-            @click="loadKnowledgeBases()"
+            @click="loadKnowledgeBases(true)"
           />
         </template>
       </v-tooltip>
@@ -342,9 +346,14 @@ import { useRouter } from "vue-router";
 import axios from "axios";
 import { useModuleI18n } from "@/i18n/composables";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
+import { useKnowledgeBaseCapabilities } from "./capabilities";
+import { loadKnowledgeBaseListPages } from "./knowledgeBaseUi.mjs";
+import { getKnowledgeBaseListStats } from "./knowledgeBaseUi.mjs";
+import { getKnowledgeBasePaginationConfig } from "./knowledgeBaseUi.mjs";
 
 const { tm: t } = useModuleI18n("features/knowledge-base/index");
 const router = useRouter();
+const { loadCapabilities } = useKnowledgeBaseCapabilities();
 
 // 状态
 const loading = ref(false);
@@ -382,6 +391,8 @@ const nameRules = [(v: string) => !!v?.trim() || t("create.nameRequired")];
 const embeddingRules = [
   (v: string | null) => !!v || t("create.embeddingRequired"),
 ];
+
+const getListStats = (kb: any) => getKnowledgeBaseListStats(kb);
 
 // Emoji 分类
 const emojiCategories = [
@@ -471,20 +482,24 @@ const emojiCategories = [
 const loadKnowledgeBases = async (refreshStats = false) => {
   loading.value = true;
   try {
-    const params: any = {};
-    if (refreshStats) {
-      params.refresh_stats = "true";
-    }
-
-    const response = await axios.get("/api/kb/list", { params });
-    if (response.data.status === "ok") {
-      kbList.value = response.data.data.items || [];
-    } else {
-      showSnackbar(response.data.message || t("messages.loadError"), "error");
-    }
+    const loadedCapabilities = await loadCapabilities();
+    const pageSize =
+      getKnowledgeBasePaginationConfig(loadedCapabilities).defaultKbPageSize;
+    kbList.value = await loadKnowledgeBaseListPages({
+      fetchPage: async (params: any) => {
+        const response = await axios.get("/api/kb/list", { params });
+        return response.data;
+      },
+      pageSize,
+      refreshStats,
+    });
   } catch (error) {
     console.error("Failed to load knowledge bases:", error);
-    showSnackbar(t("messages.loadError"), "error");
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : t("messages.loadError");
+    showSnackbar(message, "error");
   } finally {
     loading.value = false;
   }

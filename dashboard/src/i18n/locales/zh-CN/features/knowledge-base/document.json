@@ -9,13 +9,48 @@
     "chunkCount": "分块数量",
     "createdAt": "上传时间"
   },
+  "processing": {
+    "title": "处理信息",
+    "status": "状态",
+    "sourceType": "来源类型",
+    "sourceUri": "来源地址",
+    "contentHash": "内容哈希",
+    "parser": "解析器",
+    "chunker": "分块器",
+    "version": "版本",
+    "parentDocId": "父文档 ID",
+    "indexedAt": "索引时间",
+    "unknownStage": "未知阶段",
+    "noErrorMessage": "暂无错误信息",
+    "statuses": {
+      "pending": "等待中",
+      "parsing": "解析中",
+      "chunking": "分块中",
+      "embedding": "索引中",
+      "ready": "已索引",
+      "failed": "失败"
+    },
+    "sourceTypes": {
+      "file": "文件",
+      "url": "URL",
+      "import": "导入",
+      "api": "API"
+    }
+  },
   "chunks": {
     "title": "分块列表",
+    "total": "{count} 个分块",
+    "filteredTotal": "匹配 {filtered} / {total} 个分块",
     "empty": "暂无分块",
     "index": "序号",
     "content": "内容",
+    "titlePath": "标题路径",
     "charCount": "字符数",
     "charCountValue": "{count} 字符",
+    "tokenEstimate": "估算 Token",
+    "tokenEstimateValue": "约 {count} token",
+    "offset": "位置",
+    "contentHash": "内容哈希",
     "actions": "操作",
     "view": "查看",
     "edit": "编辑",
@@ -24,6 +59,7 @@
     "search": "搜索分块",
     "searchPlaceholder": "输入关键词搜索分块内容...",
     "showing": "显示",
+    "showingRange": "显示 {start} - {end} / {total} 个分块",
     "deleteConfirm": "确定要删除该文本块吗?",
     "deleteSuccess": "文本块删除成功",
     "deleteFailed": "文本块删除失败"
@@ -50,14 +86,39 @@
     "index": "序号",
     "content": "内容",
     "charCount": "字符数",
+    "tokenEstimate": "估算 Token",
+    "titlePath": "标题路径",
+    "section": "章节",
+    "pageNumber": "页码",
+    "offset": "位置",
+    "contentHash": "内容哈希",
+    "adjacentChunks": "相邻分块",
+    "previousChunk": "上一块: {id}",
+    "nextChunk": "下一块: {id}",
+    "parentChunk": "父分块",
     "vecDocId": "向量ID",
+    "context": "相邻上下文",
+    "previous": "上一块",
+    "current": "当前块",
+    "next": "下一块",
+    "contextMissing": "暂无相邻分块",
     "close": "关闭"
   },
   "actions": {
-    "retry": "重试"
+    "retry": "重试",
+    "retryRebuild": "重试重建",
+    "retryRebuildConfirm": "确定要重新构建该文档索引吗?"
   },
   "messages": {
     "loadDocumentFailed": "加载文档详情失败",
-    "loadChunksFailed": "加载分块列表失败"
+    "loadChunksFailed": "加载分块列表失败",
+    "loadChunkContextFailed": "加载相邻上下文失败",
+    "rebuildStarted": "文档重建任务已开始",
+    "rebuildCompleted": "文档重建完成",
+    "rebuildFailed": "文档重建失败",
+    "rebuildFailedWithReason": "文档重建失败: {reason}",
+    "focusChunkLoaded": "已打开检索命中的分块",
+    "focusChunkFailed": "打开检索命中的分块失败",
+    "focusChunkNotFound": "未找到检索命中的分块"
   }
 }

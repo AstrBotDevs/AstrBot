@@ -18,6 +18,7 @@ from astrbot.core.knowledge_base.retrieval.tokenizer import (
     build_fts5_or_query,
     load_stopwords,
     to_fts5_search_text,
+    tokenize_text,
 )
 
 FTS_TABLE_NAME = "documents_fts"
@@ -515,23 +516,133 @@ class DocumentStorage:
             count = result.scalar_one_or_none()
             return count if count is not None else 0
 
+    async def search_documents(
+        self,
+        query_text: str,
+        metadata_filters: dict | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> tuple[list[dict], int] | None:
+        """Search documents with FTS5 and optional metadata filters.
+
+        Returns None when FTS5 is unavailable so callers can choose whether to
+        fall back to an alternate search strategy.
+        """
+        if limit <= 0:
+            return [], 0
+        if not await self.ensure_fts_index():
+            return None
+
+        match_query = build_fts5_or_query(tokenize_text(query_text, self.stopwords))
+        if not match_query:
+            return [], 0
+
+        metadata_filters = metadata_filters or {}
+        async with self.get_session() as session:
+            filters_sql, filter_params = await self._metadata_filter_sql(
+                session,
+                metadata_filters,
+                table_alias="d",
+            )
+            where_clause = f"{FTS_TABLE_NAME} MATCH :query"
+            if filters_sql:
+                where_clause = f"{where_clause} AND {' AND '.join(filters_sql)}"
+            params = {
+                "query": match_query,
+                "limit": int(limit),
+                "offset": int(offset),
+                **filter_params,
+            }
+            try:
+                count_result = await session.execute(
+                    text(
+                        f"""
+                        SELECT count(*)
+                        FROM {FTS_TABLE_NAME}
+                        JOIN documents d ON d.id = {FTS_TABLE_NAME}.rowid
+                        WHERE {where_clause}
+                        """,
+                    ),
+                    params,
+                )
+                total = int(count_result.scalar_one_or_none() or 0)
+                result = await session.execute(
+                    text(
+                        f"""
+                        SELECT
+                            d.id AS id,
+                            d.doc_id AS doc_id,
+                            d.text AS text,
+                            d.metadata AS metadata,
+                            d.created_at AS created_at,
+                            d.updated_at AS updated_at,
+                            bm25({FTS_TABLE_NAME}) AS score
+                        FROM {FTS_TABLE_NAME}
+                        JOIN documents d ON d.id = {FTS_TABLE_NAME}.rowid
+                        WHERE {where_clause}
+                        ORDER BY score ASC, d.id ASC
+                        LIMIT :limit
+                        OFFSET :offset
+                        """,
+                    ),
+                    params,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"FTS5 document search failed for {self.db_path}: {e}",
+                )
+                self.fts5_available = False
+                return None
+
+            rows = result.mappings().all()
+            return [
+                {
+                    "id": row["id"],
+                    "doc_id": row["doc_id"],
+                    "text": row["text"],
+                    "metadata": row["metadata"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "score": float(row["score"]),
+                }
+                for row in rows
+            ], total
+
     async def _apply_metadata_filters(
         self,
         session: AsyncSession,
         query,
         metadata_filters: dict,
     ):
+        filters_sql, params = await self._metadata_filter_sql(
+            session,
+            metadata_filters,
+        )
+        for filter_sql in filters_sql:
+            query = query.where(text(filter_sql))
+        if params:
+            query = query.params(**params)
+        return query
+
+    async def _metadata_filter_sql(
+        self,
+        session: AsyncSession,
+        metadata_filters: dict,
+        table_alias: str | None = None,
+    ) -> tuple[list[str], dict]:
         columns = await self._table_columns(session, "documents")
+        prefix = f"{table_alias}." if table_alias else ""
+        filters_sql = []
+        params = {}
         for key, val in metadata_filters.items():
             if key in {"kb_id", "kb_doc_id", "user_id"} and key in columns:
-                query = query.where(
-                    text(f"{key} = :filter_{key}"),
-                ).params(**{f"filter_{key}": val})
+                filters_sql.append(f"{prefix}{key} = :filter_{key}")
             else:
-                query = query.where(
-                    text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
-                ).params(**{f"filter_{key}": val})
-        return query
+                filters_sql.append(
+                    f"json_extract({prefix}metadata, '$.{key}') = :filter_{key}"
+                )
+            params[f"filter_{key}"] = val
+        return filters_sql, params
 
     async def ensure_fts_index(self) -> bool:
         """Ensure the FTS5 sparse index exists and matches the documents table."""

@@ -60,6 +60,40 @@ async def test_document_storage_fts_rebuilds_existing_documents(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_document_storage_search_documents_filters_and_paginates(tmp_path):
+    storage = DocumentStorage(str(tmp_path / "doc.db"))
+    await storage.initialize()
+
+    await storage.insert_documents_batch(
+        doc_ids=["chunk-1", "chunk-2", "chunk-3"],
+        texts=[
+            "AstrBot plugin lifecycle",
+            "AstrBot provider lifecycle",
+            "unrelated content",
+        ],
+        metadatas=[
+            {"kb_doc_id": "doc-1", "kb_id": "kb-1", "chunk_index": 0},
+            {"kb_doc_id": "doc-1", "kb_id": "kb-1", "chunk_index": 1},
+            {"kb_doc_id": "doc-2", "kb_id": "kb-1", "chunk_index": 0},
+        ],
+    )
+
+    result = await storage.search_documents(
+        "lifecycle",
+        metadata_filters={"kb_doc_id": "doc-1"},
+        offset=1,
+        limit=1,
+    )
+
+    assert result is not None
+    docs, total = result
+    assert total == 2
+    assert [doc["doc_id"] for doc in docs] == ["chunk-2"]
+
+    await storage.close()
+
+
+@pytest.mark.asyncio
 async def test_document_storage_search_sparse_non_positive_limit_falls_back(tmp_path):
     storage = DocumentStorage(str(tmp_path / "doc.db"))
     await storage.initialize()

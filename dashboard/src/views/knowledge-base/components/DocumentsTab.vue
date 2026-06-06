@@ -10,6 +10,34 @@
       >
         {{ t("documents.upload") }}
       </v-btn>
+      <v-btn
+        v-if="supportsBatchDelete"
+        prepend-icon="mdi-delete-sweep"
+        color="error"
+        variant="tonal"
+        :disabled="!batchDeleteState.hasSelection || batchDeleting"
+        :loading="batchDeleting"
+        @click="confirmBatchDelete"
+      >
+        {{
+          t("documents.batchDelete", { count: batchDeleteState.selectedCount })
+        }}
+      </v-btn>
+      <v-btn
+        v-if="supportsBatchRebuild"
+        prepend-icon="mdi-refresh"
+        color="primary"
+        variant="tonal"
+        :disabled="!batchRebuildState.hasSelection || batchRebuilding"
+        :loading="batchRebuilding"
+        @click="confirmBatchRebuild"
+      >
+        {{
+          t("documents.batchRebuild", {
+            count: batchRebuildState.selectedCount,
+          })
+        }}
+      </v-btn>
       <v-text-field
         v-model="searchQuery"
         prepend-inner-icon="mdi-magnify"
@@ -20,6 +48,35 @@
         clearable
         style="max-width: 300px"
       />
+      <v-select
+        v-model="selectedStatus"
+        :items="statusFilterOptions"
+        :label="t('documents.statusFilter')"
+        class="document-filter-select"
+        variant="outlined"
+        density="compact"
+        hide-details
+      />
+      <v-select
+        v-model="selectedSourceType"
+        :items="sourceTypeFilterOptions"
+        :label="t('documents.sourceFilter')"
+        class="document-filter-select"
+        variant="outlined"
+        density="compact"
+        hide-details
+      />
+      <span
+        v-if="hasActiveDocumentFilters"
+        class="text-caption text-medium-emphasis documents-filter-count"
+      >
+        {{
+          t("documents.filteredCount", {
+            filtered: totalDocuments,
+            total: documentCount,
+          })
+        }}
+      </span>
     </div>
 
     <!-- 文档列表 -->
@@ -30,8 +87,13 @@
         :loading="loading"
         :items-length="totalDocuments"
         :items-per-page-options="pageSizeOptions"
+        v-model="selectedDocumentRows"
         v-model:items-per-page="pageSize"
         v-model:page="page"
+        item-value="doc_id"
+        item-selectable="selectable"
+        :show-select="supportsBatchDelete || supportsBatchRebuild"
+        return-object
         @update:options="loadDocuments"
       >
         <template #item.doc_name="{ item }">
@@ -46,7 +108,7 @@
                 >{{ item.doc_name }}</span
               >
               <!-- 上传进度 -->
-              <div v-if="item.uploading" class="mt-1">
+              <div v-if="item.uploading || item.rebuilding" class="mt-1">
                 <div class="text-caption text-medium-emphasis mb-1">
                   {{ getStageText(item.uploadProgress?.stage || "waiting") }}
                   <span
@@ -67,8 +129,25 @@
                   striped
                 />
               </div>
+              <div
+                v-else-if="item.status === 'failed'"
+                class="doc-error text-caption mt-1"
+                :title="getFailureSummary(item)"
+              >
+                {{ getFailureSummary(item) }}
+              </div>
             </div>
           </div>
+        </template>
+
+        <template #item.status="{ item }">
+          <v-chip
+            size="small"
+            variant="tonal"
+            :color="getDocumentStatusColor(item.status)"
+          >
+            {{ getDocumentStatusText(item.status) }}
+          </v-chip>
         </template>
 
         <template #item.file_size="{ item }">
@@ -81,11 +160,36 @@
 
         <template #item.actions="{ item }">
           <v-btn
+            v-if="item.status === 'failed'"
+            icon="mdi-content-copy"
+            variant="text"
+            size="small"
+            color="warning"
+            :disabled="
+              item.uploading ||
+              item.rebuilding ||
+              rebuildingDocIds.has(item.doc_id)
+            "
+            :title="t('documents.copyFailure')"
+            @click="copyFailureDetails(item)"
+          />
+          <v-btn
+            v-if="item.status === 'failed' && supportsDocumentRebuild"
+            icon="mdi-refresh"
+            variant="text"
+            size="small"
+            color="primary"
+            :loading="rebuildingDocIds.has(item.doc_id) || item.rebuilding"
+            :disabled="!canRebuild(item)"
+            :title="t('documents.rebuild')"
+            @click="confirmRebuild(item)"
+          />
+          <v-btn
             icon="mdi-eye"
             variant="text"
             size="small"
             color="info"
-            :disabled="item.uploading"
+            :disabled="item.uploading || item.rebuilding"
             @click="viewDocument(item)"
           />
           <v-btn
@@ -93,7 +197,7 @@
             variant="text"
             size="small"
             color="error"
-            :disabled="item.uploading"
+            :disabled="item.uploading || item.rebuilding"
             @click="confirmDelete(item)"
           />
         </template>
@@ -130,7 +234,7 @@
 
         <v-tabs v-model="uploadMode" grow class="mb-4">
           <v-tab value="file">{{ t("upload.fileUpload") }}</v-tab>
-          <v-tab value="url">
+          <v-tab v-if="supportsUrlImport" value="url">
             {{ t("upload.fromUrl") }}
             <v-badge
               color="warning"
@@ -157,13 +261,17 @@
                 <v-icon size="64" color="primary">mdi-cloud-upload</v-icon>
                 <p class="mt-4 text-h6">{{ t("upload.dropzone") }}</p>
                 <p class="text-caption text-medium-emphasis mt-2">
-                  {{ t("upload.supportedFormats") }}
+                  {{
+                    t("upload.supportedFormats", {
+                      formats: supportedFormatsText,
+                    })
+                  }}
                 </p>
                 <p class="text-caption text-medium-emphasis">
-                  {{ t("upload.maxSize") }}
+                  {{ t("upload.maxSize", { size: maxFileSizeText }) }}
                 </p>
                 <p class="text-caption text-medium-emphasis">
-                  {{ t("upload.maxFiles") }}
+                  {{ t("upload.maxFiles", { count: maxFilesPerUploadText }) }}
                 </p>
                 <input
                   ref="fileInput"
@@ -171,7 +279,7 @@
                   multiple
                   hidden
                   :disabled="uploading"
-                  accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
+                  :accept="fileAccept"
                   @change="handleFileSelect"
                 />
               </div>
@@ -266,7 +374,7 @@
           </v-window>
 
           <!-- 清洗设置 (仅在URL模式下显示) -->
-          <div v-if="uploadMode === 'url'" class="mt-6">
+          <div v-if="uploadMode === 'url' && supportsUrlImport" class="mt-6">
             <div class="d-flex align-center mb-4">
               <h3 class="text-h6">{{ t("upload.cleaningSettings") }}</h3>
             </div>
@@ -305,12 +413,16 @@
                 <v-text-field
                   v-model.number="uploadSettings.chunk_size"
                   :label="t('upload.chunkSize')"
-                  :hint="t('upload.chunkSizeHint')"
+                  :hint="
+                    t('upload.chunkSizeHint', {
+                      value: capabilities?.defaults.chunk_size ?? '-',
+                    })
+                  "
                   persistent-hint
                   type="number"
                   variant="outlined"
                   density="compact"
-                  :placeholder="props.kb?.chunk_size?.toString() || '512'"
+                  :placeholder="chunkSizePlaceholder"
                   :rules="chunkSizeRules"
                 />
               </v-col>
@@ -318,12 +430,16 @@
                 <v-text-field
                   v-model.number="uploadSettings.chunk_overlap"
                   :label="t('upload.chunkOverlap')"
-                  :hint="t('upload.chunkOverlapHint')"
+                  :hint="
+                    t('upload.chunkOverlapHint', {
+                      value: capabilities?.defaults.chunk_overlap ?? '-',
+                    })
+                  "
                   persistent-hint
                   type="number"
                   variant="outlined"
                   density="compact"
-                  :placeholder="props.kb?.chunk_overlap?.toString() || '50'"
+                  :placeholder="chunkOverlapPlaceholder"
                   :rules="chunkOverlapRules"
                 />
               </v-col>
@@ -337,7 +453,11 @@
                 <v-text-field
                   v-model.number="uploadSettings.batch_size"
                   :label="t('upload.batchSize')"
-                  :hint="t('upload.batchSizeHint')"
+                  :hint="
+                    t('upload.batchSizeHint', {
+                      value: capabilities?.defaults.batch_size ?? '-',
+                    })
+                  "
                   persistent-hint
                   type="number"
                   variant="outlined"
@@ -349,7 +469,11 @@
                 <v-text-field
                   v-model.number="uploadSettings.tasks_limit"
                   :label="t('upload.tasksLimit')"
-                  :hint="t('upload.tasksLimitHint')"
+                  :hint="
+                    t('upload.tasksLimitHint', {
+                      value: capabilities?.defaults.tasks_limit ?? '-',
+                    })
+                  "
                   persistent-hint
                   type="number"
                   variant="outlined"
@@ -361,7 +485,11 @@
                 <v-text-field
                   v-model.number="uploadSettings.max_retries"
                   :label="t('upload.maxRetries')"
-                  :hint="t('upload.maxRetriesHint')"
+                  :hint="
+                    t('upload.maxRetriesHint', {
+                      value: capabilities?.defaults.max_retries ?? '-',
+                    })
+                  "
                   persistent-hint
                   type="number"
                   variant="outlined"
@@ -433,6 +561,179 @@
       </v-card>
     </v-dialog>
 
+    <!-- 批量删除确认对话框 -->
+    <v-dialog v-model="showBatchDeleteDialog" max-width="500px">
+      <v-card>
+        <v-card-title class="pa-4 text-h6">{{
+          t("documents.batchDeleteTitle")
+        }}</v-card-title>
+        <v-card-text class="pa-6">
+          <p>
+            {{
+              t("documents.batchDeleteConfirm", {
+                count: batchDeleteState.selectedCount,
+              })
+            }}
+          </p>
+          <div v-if="selectedBatchDeletePreview.length" class="mt-4">
+            <v-chip
+              v-for="doc in selectedBatchDeletePreview"
+              :key="doc.doc_id"
+              size="small"
+              variant="tonal"
+              class="mr-1 mb-1"
+            >
+              {{ doc.doc_name || doc.doc_id }}
+            </v-chip>
+            <v-chip
+              v-if="batchDeleteRemainingCount > 0"
+              size="small"
+              variant="outlined"
+              class="mr-1 mb-1"
+            >
+              {{
+                t("documents.batchDeleteMore", {
+                  count: batchDeleteRemainingCount,
+                })
+              }}
+            </v-chip>
+          </div>
+          <v-alert type="error" variant="tonal" density="compact" class="mt-4">
+            {{ t("documents.deleteWarning") }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn
+            variant="text"
+            @click="showBatchDeleteDialog = false"
+            :disabled="batchDeleting"
+            >{{ t("documents.cancel") }}</v-btn
+          >
+          <v-btn
+            color="error"
+            variant="elevated"
+            @click="batchDeleteDocuments"
+            :loading="batchDeleting"
+            :disabled="!batchDeleteState.canDelete"
+          >
+            {{ t("documents.delete") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Batch rebuild confirmation dialog -->
+    <v-dialog v-model="showBatchRebuildDialog" max-width="500px">
+      <v-card>
+        <v-card-title class="pa-4 text-h6">{{
+          t("documents.batchRebuildTitle")
+        }}</v-card-title>
+        <v-card-text class="pa-6">
+          <p>
+            {{
+              t("documents.batchRebuildConfirm", {
+                count: batchRebuildState.selectedCount,
+              })
+            }}
+          </p>
+          <div v-if="selectedBatchRebuildPreview.length" class="mt-4">
+            <v-chip
+              v-for="doc in selectedBatchRebuildPreview"
+              :key="doc.doc_id"
+              size="small"
+              variant="tonal"
+              class="mr-1 mb-1"
+            >
+              {{ doc.doc_name || doc.doc_id }}
+            </v-chip>
+            <v-chip
+              v-if="batchRebuildRemainingCount > 0"
+              size="small"
+              variant="outlined"
+              class="mr-1 mb-1"
+            >
+              {{
+                t("documents.batchRebuildMore", {
+                  count: batchRebuildRemainingCount,
+                })
+              }}
+            </v-chip>
+          </div>
+          <v-alert
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mt-4"
+          >
+            {{ t("documents.batchRebuildWarning") }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn
+            variant="text"
+            @click="showBatchRebuildDialog = false"
+            :disabled="batchRebuilding"
+            >{{ t("documents.cancel") }}</v-btn
+          >
+          <v-btn
+            color="primary"
+            variant="elevated"
+            @click="batchRebuildDocuments"
+            :loading="batchRebuilding"
+            :disabled="!batchRebuildState.canRebuild"
+          >
+            {{ t("documents.rebuild") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Rebuild confirmation dialog -->
+    <v-dialog v-model="showRebuildDialog" max-width="450px">
+      <v-card>
+        <v-card-title class="pa-4 text-h6">{{
+          t("documents.rebuildTitle")
+        }}</v-card-title>
+        <v-card-text class="pa-6">
+          <p>
+            {{
+              t("documents.rebuildConfirm", {
+                name: rebuildTarget?.doc_name || "",
+              })
+            }}
+          </p>
+          <v-alert
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mt-4"
+          >
+            {{ t("documents.rebuildWarning") }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn
+            variant="text"
+            @click="showRebuildDialog = false"
+            :disabled="isRebuildTargetBusy"
+            >{{ t("documents.cancel") }}</v-btn
+          >
+          <v-btn
+            color="primary"
+            variant="elevated"
+            @click="rebuildDocument"
+            :loading="isRebuildTargetBusy"
+            :disabled="!canRebuildTarget"
+          >
+            {{ t("documents.rebuild") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- 消息提示 -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color">
       <div>{{ snackbar.text }}</div>
@@ -452,6 +753,26 @@ import { ref, onMounted, onUnmounted, computed, watch } from "vue";
 import { useRouter } from "vue-router";
 import axios from "axios";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { copyToClipboard } from "@/utils/clipboard";
+import { useKnowledgeBaseCapabilities } from "../capabilities";
+import {
+  applyActiveRebuildState,
+  applyDocumentTaskProgress,
+  buildDocumentDisplayTotals,
+  buildDocumentFailureText,
+  buildDocumentListParams,
+  canRebuildDocument,
+  clearDocumentTaskState,
+  countUploadingDocuments,
+  DEFAULT_DOCUMENT_PAGE_SIZE,
+  getBatchDeleteState,
+  getBatchRebuildState,
+  getDocumentFailureSummary,
+  getKnowledgeBasePaginationConfig,
+  isKnowledgeBaseFeatureEnabled,
+  markDocumentRebuildStarted,
+  markDocumentsRebuildStarted,
+} from "../knowledgeBaseUi.mjs";
 
 const { tm: t } = useModuleI18n("features/knowledge-base/detail");
 const { locale } = useI18n();
@@ -463,20 +784,32 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits(["refresh"]);
+const { capabilities, loadCapabilities } = useKnowledgeBaseCapabilities();
 
 // 状态
 const loading = ref(false);
 const uploading = ref(false);
 const deleting = ref(false);
+const batchDeleting = ref(false);
+const batchRebuilding = ref(false);
+const rebuildingDocIds = ref(new Set<string>());
 const documents = ref<any[]>([]);
-const totalDocuments = ref(0);
+const selectedDocumentRows = ref<any[]>([]);
+const backendMatchedDocuments = ref(0);
+const backendDocumentCount = ref(0);
 const page = ref(1);
-const pageSize = ref(10);
+const pageSize = ref(DEFAULT_DOCUMENT_PAGE_SIZE);
 const searchQuery = ref("");
+const selectedStatus = ref<string | null>(null);
+const selectedSourceType = ref<string | null>(null);
 const showUploadDialog = ref(false);
 const showDeleteDialog = ref(false);
+const showBatchDeleteDialog = ref(false);
+const showBatchRebuildDialog = ref(false);
+const showRebuildDialog = ref(false);
 const selectedFiles = ref<File[]>([]);
 const deleteTarget = ref<any>(null);
+const rebuildTarget = ref<any>(null);
 const isDragging = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const uploadMode = ref("file"); // 'file' or 'url'
@@ -485,26 +818,63 @@ const llmProviders = ref<any[]>([]);
 const progressPollingIntervals = new Map<string, number>();
 const tavilyConfigStatus = ref("loading"); // 'loading', 'configured', 'not_configured', 'error'
 const showTavilyDialog = ref(false);
-const MAX_FILES = 10;
-const MAX_FILE_SIZE = 128 * 1024 * 1024;
-const pageSizeOptions = [
-  { value: 10, title: "10" },
-  { value: 20, title: "20" },
-  { value: 50, title: "50" },
-  { value: 100, title: "100" },
-];
-const allowedExtensions = new Set([
-  "txt",
-  "md",
-  "markdown",
-  "rst",
-  "adoc",
-  "pdf",
-  "docx",
-  "epub",
-  "xls",
-  "xlsx",
+const paginationConfig = computed(() =>
+  getKnowledgeBasePaginationConfig(capabilities.value),
+);
+const pageSizeOptions = computed(() =>
+  paginationConfig.value.documentPageSizeOptions.map((value) => ({
+    value,
+    title: value.toString(),
+  })),
+);
+
+const uploadingDocumentCount = computed(() =>
+  countUploadingDocuments(documents.value),
+);
+const documentDisplayTotals = computed(() =>
+  buildDocumentDisplayTotals({
+    matchedTotal: backendMatchedDocuments.value,
+    documentCount: backendDocumentCount.value,
+    uploadingCount: uploadingDocumentCount.value,
+  }),
+);
+const totalDocuments = computed(
+  () => documentDisplayTotals.value.filteredTotal,
+);
+const documentCount = computed(() => documentDisplayTotals.value.documentCount);
+const documentFilterStatuses = computed(
+  () => capabilities.value?.document_filters?.statuses ?? [],
+);
+const documentFilterSourceTypes = computed(
+  () => capabilities.value?.document_filters?.source_types ?? [],
+);
+const hasKnownDocumentFilterCapabilities = computed(
+  () =>
+    documentFilterStatuses.value.length > 0 ||
+    documentFilterSourceTypes.value.length > 0,
+);
+const statusFilterOptions = computed(() => [
+  { title: t("documents.allStatuses"), value: null },
+  ...documentFilterStatuses.value.map((status) => ({
+    title: getDocumentStatusText(status),
+    value: status,
+  })),
 ]);
+const sourceTypeFilterOptions = computed(() => [
+  { title: t("documents.allSources"), value: null },
+  ...documentFilterSourceTypes.value.map((sourceType) => ({
+    title: getSourceTypeText(sourceType),
+    value: sourceType,
+  })),
+]);
+const hasActiveDocumentFilters = computed(
+  () =>
+    Boolean(
+      typeof searchQuery.value === "string" && searchQuery.value.trim(),
+    ) ||
+    Boolean(selectedStatus.value) ||
+    Boolean(selectedSourceType.value),
+);
 
 const snackbar = ref({
   show: false,
@@ -524,29 +894,152 @@ const showSnackbar = (
   snackbar.value.show = true;
 };
 
+const updateRebuildingDocIds = (docId: string, rebuilding: boolean) => {
+  const next = new Set(rebuildingDocIds.value);
+  if (rebuilding) {
+    next.add(docId);
+  } else {
+    next.delete(docId);
+  }
+  rebuildingDocIds.value = next;
+};
+
 // 上传设置
 const uploadSettings = ref({
   chunk_size: null as number | null,
   chunk_overlap: null as number | null,
-  batch_size: 32,
-  tasks_limit: 3,
-  max_retries: 3,
+  batch_size: null as number | null,
+  tasks_limit: null as number | null,
+  max_retries: null as number | null,
   enable_cleaning: false,
   cleaning_provider_id: null as string | null,
 });
 
 // 初始化上传设置
 const initUploadSettings = () => {
+  const defaults = capabilities.value?.defaults;
   uploadSettings.value = {
     chunk_size: props.kb?.chunk_size || null,
     chunk_overlap: props.kb?.chunk_overlap || null,
-    batch_size: 32,
-    tasks_limit: 3,
-    max_retries: 3,
+    batch_size: defaults?.batch_size ?? null,
+    tasks_limit: defaults?.tasks_limit ?? null,
+    max_retries: defaults?.max_retries ?? null,
     enable_cleaning: false,
     cleaning_provider_id: null,
   };
 };
+
+const allowedExtensions = computed(
+  () => new Set(capabilities.value?.upload.allowed_extensions ?? []),
+);
+const maxFilesPerUpload = computed(
+  () => capabilities.value?.upload.max_files_per_upload ?? null,
+);
+const maxFileSize = computed(
+  () => capabilities.value?.upload.max_file_size_bytes ?? null,
+);
+const supportedFormatsText = computed(() => {
+  const extensions = capabilities.value?.upload.allowed_extensions;
+  if (!extensions?.length) {
+    return "-";
+  }
+  return extensions.map((extension) => `.${extension}`).join(", ");
+});
+const maxFileSizeText = computed(() =>
+  maxFileSize.value === null ? "-" : formatFileSize(maxFileSize.value),
+);
+const maxFilesPerUploadText = computed(() => maxFilesPerUpload.value ?? "-");
+const supportsUrlImport = computed(() =>
+  isKnowledgeBaseFeatureEnabled(capabilities.value, "url_import"),
+);
+const supportsDocumentRebuild = computed(() =>
+  isKnowledgeBaseFeatureEnabled(capabilities.value, "document_rebuild"),
+);
+const supportsBatchDelete = computed(() =>
+  isKnowledgeBaseFeatureEnabled(capabilities.value, "batch_delete"),
+);
+const supportsBatchRebuild = computed(() =>
+  isKnowledgeBaseFeatureEnabled(capabilities.value, "batch_rebuild"),
+);
+const maxBatchDeleteDocuments = computed(
+  () => capabilities.value?.limits.max_batch_delete_documents ?? null,
+);
+const maxBatchRebuildDocuments = computed(
+  () => capabilities.value?.limits.max_batch_rebuild_documents ?? null,
+);
+const batchDeleteState = computed(() =>
+  getBatchDeleteState({
+    selected: selectedDocumentRows.value,
+    documents: documents.value,
+    maxDocuments: maxBatchDeleteDocuments.value,
+    enabled: supportsBatchDelete.value,
+    busy: batchDeleting.value,
+  }),
+);
+const batchRebuildState = computed(() =>
+  getBatchRebuildState({
+    selectedIds: batchDeleteState.value.selectedIds,
+    documents: documents.value,
+    maxDocuments: maxBatchRebuildDocuments.value,
+    enabled: supportsBatchRebuild.value,
+    busy: batchRebuilding.value,
+  }),
+);
+const selectedBatchDeletePreview = computed(() =>
+  documents.value
+    .filter((doc) => batchDeleteState.value.selectedIds.includes(doc.doc_id))
+    .slice(0, 5),
+);
+const batchDeleteRemainingCount = computed(() =>
+  Math.max(
+    batchDeleteState.value.selectedCount -
+      selectedBatchDeletePreview.value.length,
+    0,
+  ),
+);
+const selectedBatchRebuildPreview = computed(() =>
+  documents.value
+    .filter((doc) => batchRebuildState.value.selectedIds.includes(doc.doc_id))
+    .slice(0, 5),
+);
+const batchRebuildRemainingCount = computed(() =>
+  Math.max(
+    batchRebuildState.value.selectedCount -
+      selectedBatchRebuildPreview.value.length,
+    0,
+  ),
+);
+const canRebuild = (doc: any) =>
+  canRebuildDocument(doc, {
+    supportsDocumentRebuild: supportsDocumentRebuild.value,
+    rebuildingDocIds: rebuildingDocIds.value,
+  });
+const isRebuildTargetBusy = computed(() =>
+  Boolean(
+    rebuildTarget.value?.rebuilding ||
+      (rebuildTarget.value?.doc_id &&
+        rebuildingDocIds.value.has(rebuildTarget.value.doc_id)),
+  ),
+);
+const canRebuildTarget = computed(() => canRebuild(rebuildTarget.value));
+const fileAccept = computed(() => {
+  const extensions = capabilities.value?.upload.allowed_extensions;
+  return extensions?.length
+    ? extensions.map((extension) => `.${extension}`).join(",")
+    : undefined;
+});
+const chunkSizePlaceholder = computed(
+  () =>
+    props.kb?.chunk_size?.toString() ||
+    capabilities.value?.defaults.chunk_size.toString() ||
+    "",
+);
+const chunkOverlapPlaceholder = computed(
+  () =>
+    props.kb?.chunk_overlap?.toString() ||
+    capabilities.value?.defaults.chunk_overlap.toString() ||
+    "",
+);
 
 const isPositiveInteger = (value: number | null) =>
   Number.isInteger(value) && Number(value) > 0;
@@ -554,11 +1047,15 @@ const isNonNegativeInteger = (value: number | null) =>
   Number.isInteger(value) && Number(value) >= 0;
 const positiveIntegerRules = [
   (value: number) =>
-    isPositiveInteger(value) || t("validation.positiveInteger"),
+    value === null ||
+    isPositiveInteger(value) ||
+    t("validation.positiveInteger"),
 ];
 const nonNegativeIntegerRules = [
   (value: number) =>
-    isNonNegativeInteger(value) || t("validation.nonNegativeInteger"),
+    value === null ||
+    isNonNegativeInteger(value) ||
+    t("validation.nonNegativeInteger"),
 ];
 const chunkSizeRules = [
   (value: number | null) =>
@@ -595,9 +1092,11 @@ const isUploadSettingsValid = () => {
     return false;
   }
   return (
-    isPositiveInteger(settings.batch_size) &&
-    isPositiveInteger(settings.tasks_limit) &&
-    isNonNegativeInteger(settings.max_retries)
+    (settings.batch_size === null || isPositiveInteger(settings.batch_size)) &&
+    (settings.tasks_limit === null ||
+      isPositiveInteger(settings.tasks_limit)) &&
+    (settings.max_retries === null ||
+      isNonNegativeInteger(settings.max_retries))
   );
 };
 
@@ -612,6 +1111,9 @@ const isUploadDisabled = computed(() => {
     return selectedFiles.value.length === 0;
   }
   if (uploadMode.value === "url") {
+    if (!supportsUrlImport.value) {
+      return true;
+    }
     if (!uploadUrl.value) {
       return true;
     }
@@ -633,6 +1135,7 @@ const isUploadDisabled = computed(() => {
 const headers = computed(() => [
   { title: t("documents.name"), key: "doc_name", sortable: true },
   { title: t("documents.type"), key: "file_type", sortable: true },
+  { title: t("documents.status"), key: "status", sortable: true },
   { title: t("documents.size"), key: "file_size", sortable: true },
   { title: t("documents.chunks"), key: "chunk_count", sortable: true },
   { title: t("documents.createdAt"), key: "created_at", sortable: true },
@@ -649,19 +1152,36 @@ const loadDocuments = async () => {
   loading.value = true;
   try {
     const response = await axios.get("/api/kb/document/list", {
-      params: {
-        kb_id: props.kbId,
+      params: buildDocumentListParams({
+        kbId: props.kbId,
         page: page.value,
-        page_size: pageSize.value,
+        pageSize: pageSize.value,
         search: searchQuery.value || undefined,
-      },
+        status: selectedStatus.value,
+        sourceType: selectedSourceType.value,
+        allowedStatuses: documentFilterStatuses.value,
+        allowedSourceTypes: documentFilterSourceTypes.value,
+      }),
     });
     if (response.data.status === "ok") {
       const uploadingDocs = documents.value.filter((doc) => doc.uploading);
-      const loadedDocs = response.data.data.items || [];
-      const matchedTotal = response.data.data.total || 0;
+      const loadedDocs = applyActiveRebuildState(
+        response.data.data.items || [],
+        documents.value,
+      ).map((doc: any) => ({
+        ...doc,
+        selectable: !doc.uploading && !doc.rebuilding,
+      }));
+      const matchedTotal =
+        response.data.data.filtered_total ?? response.data.data.total ?? 0;
+      const unfilteredTotal =
+        response.data.data.document_count ?? response.data.data.total ?? 0;
       documents.value = [...uploadingDocs, ...loadedDocs];
-      totalDocuments.value = matchedTotal + uploadingDocs.length;
+      selectedDocumentRows.value = selectedDocumentRows.value.filter((doc) =>
+        loadedDocs.some((loadedDoc: any) => loadedDoc.doc_id === doc.doc_id),
+      );
+      backendMatchedDocuments.value = matchedTotal;
+      backendDocumentCount.value = unfilteredTotal;
       const lastPage = Math.max(Math.ceil(matchedTotal / pageSize.value), 1);
       if (loadedDocs.length === 0 && page.value > lastPage) {
         page.value = lastPage;
@@ -677,9 +1197,34 @@ const loadDocuments = async () => {
   }
 };
 
-watch(searchQuery, () => {
+watch([searchQuery, selectedStatus, selectedSourceType], () => {
   page.value = 1;
   loadDocuments();
+});
+
+watch(capabilities, () => {
+  if (!hasKnownDocumentFilterCapabilities.value) {
+    return;
+  }
+  let shouldReload = false;
+  if (
+    selectedStatus.value &&
+    !documentFilterStatuses.value.includes(selectedStatus.value)
+  ) {
+    selectedStatus.value = null;
+    shouldReload = true;
+  }
+  if (
+    selectedSourceType.value &&
+    !documentFilterSourceTypes.value.includes(selectedSourceType.value)
+  ) {
+    selectedSourceType.value = null;
+    shouldReload = true;
+  }
+  if (shouldReload) {
+    page.value = 1;
+    loadDocuments();
+  }
 });
 
 const openFilePicker = () => {
@@ -705,20 +1250,34 @@ const handleFileSelect = (event: Event) => {
 // 添加文件（检查数量限制）
 const addFiles = (files: File[]) => {
   const totalFiles = selectedFiles.value.length + files.length;
-  if (totalFiles > MAX_FILES) {
-    showSnackbar(t("upload.maxFilesWarning", { count: MAX_FILES }), "warning");
+  if (
+    maxFilesPerUpload.value !== null &&
+    totalFiles > maxFilesPerUpload.value
+  ) {
+    showSnackbar(
+      t("upload.maxFilesWarning", { count: maxFilesPerUpload.value }),
+      "warning",
+    );
     return;
   }
   const acceptedFiles: File[] = [];
   const rejectedFiles: string[] = [];
   files.forEach((file) => {
     const extension = getFileExtension(file.name);
-    if (!allowedExtensions.has(extension)) {
+    if (
+      allowedExtensions.value.size > 0 &&
+      !allowedExtensions.value.has(extension)
+    ) {
       rejectedFiles.push(t("upload.unsupportedFile", { name: file.name }));
       return;
     }
-    if (file.size > MAX_FILE_SIZE) {
-      rejectedFiles.push(t("upload.fileTooLarge", { name: file.name }));
+    if (maxFileSize.value !== null && file.size > maxFileSize.value) {
+      rejectedFiles.push(
+        t("upload.fileTooLarge", {
+          name: file.name,
+          size: formatFileSize(maxFileSize.value),
+        }),
+      );
       return;
     }
     acceptedFiles.push(file);
@@ -754,7 +1313,7 @@ const startUpload = async () => {
   }
   if (uploadMode.value === "file") {
     await uploadFiles();
-  } else if (uploadMode.value === "url") {
+  } else if (uploadMode.value === "url" && supportsUrlImport.value) {
     await uploadFromUrl();
   }
 };
@@ -786,9 +1345,21 @@ const uploadFiles = async () => {
         uploadSettings.value.chunk_overlap.toString(),
       );
     }
-    formData.append("batch_size", uploadSettings.value.batch_size.toString());
-    formData.append("tasks_limit", uploadSettings.value.tasks_limit.toString());
-    formData.append("max_retries", uploadSettings.value.max_retries.toString());
+    if (uploadSettings.value.batch_size !== null) {
+      formData.append("batch_size", uploadSettings.value.batch_size.toString());
+    }
+    if (uploadSettings.value.tasks_limit !== null) {
+      formData.append(
+        "tasks_limit",
+        uploadSettings.value.tasks_limit.toString(),
+      );
+    }
+    if (uploadSettings.value.max_retries !== null) {
+      formData.append(
+        "max_retries",
+        uploadSettings.value.max_retries.toString(),
+      );
+    }
 
     const response = await axios.post("/api/kb/document/upload", formData);
 
@@ -816,19 +1387,18 @@ const uploadFiles = async () => {
           current: 0,
           total: 100,
         },
+        selectable: false,
       }));
 
       // 添加到文档列表顶部
       page.value = 1;
       documents.value = [...uploadingDocs, ...documents.value];
-      totalDocuments.value += uploadingDocs.length;
 
       // 关闭对话框
       closeUploadDialog(true);
 
-      // 开始轮询进度
       if (taskId) {
-        startProgressPolling(taskId);
+        startProgressPolling(taskId, "upload");
       }
     } else {
       showSnackbar(
@@ -846,6 +1416,11 @@ const uploadFiles = async () => {
 
 // 从 URL 上传
 const uploadFromUrl = async () => {
+  if (!supportsUrlImport.value) {
+    showSnackbar(t("upload.unsupportedUrlImport"), "warning");
+    uploadMode.value = "file";
+    return;
+  }
   if (!uploadUrl.value) {
     showSnackbar(t("upload.urlRequired"), "warning");
     return;
@@ -857,10 +1432,16 @@ const uploadFromUrl = async () => {
     const payload: any = {
       kb_id: props.kbId,
       url: uploadUrl.value,
-      batch_size: uploadSettings.value.batch_size,
-      tasks_limit: uploadSettings.value.tasks_limit,
-      max_retries: uploadSettings.value.max_retries,
     };
+    if (uploadSettings.value.batch_size !== null) {
+      payload.batch_size = uploadSettings.value.batch_size;
+    }
+    if (uploadSettings.value.tasks_limit !== null) {
+      payload.tasks_limit = uploadSettings.value.tasks_limit;
+    }
+    if (uploadSettings.value.max_retries !== null) {
+      payload.max_retries = uploadSettings.value.max_retries;
+    }
     if (uploadSettings.value.chunk_size !== null) {
       payload.chunk_size = uploadSettings.value.chunk_size;
     }
@@ -898,15 +1479,15 @@ const uploadFromUrl = async () => {
           current: 0,
           total: 100,
         },
+        selectable: false,
       };
 
       page.value = 1;
       documents.value = [uploadingDoc, ...documents.value];
-      totalDocuments.value += 1;
       closeUploadDialog(true);
 
       if (taskId) {
-        startProgressPolling(taskId);
+        startProgressPolling(taskId, "upload");
       }
     } else {
       showSnackbar(
@@ -925,7 +1506,10 @@ const uploadFromUrl = async () => {
 };
 
 // 开始轮询进度
-const startProgressPolling = (taskId: string) => {
+const startProgressPolling = (
+  taskId: string,
+  mode: "upload" | "rebuild" = "upload",
+) => {
   if (progressPollingIntervals.has(taskId)) {
     return;
   }
@@ -941,29 +1525,12 @@ const startProgressPolling = (taskId: string) => {
         const status = data.status;
 
         if (status === "processing" && data.progress) {
-          // 更新进度
-          const progress = data.progress;
-          const fileIndex = progress.file_index ?? 0;
-
-          // 更新对应文件的进度
-          documents.value = documents.value.map((doc) => {
-            if (doc.taskId === taskId) {
-              const docIndex = parseInt(doc.doc_id.split("_").pop() || "0");
-              if (docIndex === fileIndex) {
-                return {
-                  ...doc,
-                  uploadProgress: {
-                    stage: progress.stage || "waiting",
-                    current: progress.current ?? 0,
-                    total: progress.total ?? 100,
-                  },
-                };
-              }
-            }
-            return doc;
-          });
+          documents.value = applyDocumentTaskProgress(
+            documents.value,
+            taskId,
+            data.progress,
+          );
         } else if (status === "completed") {
-          // 任务完成
           stopProgressPolling(taskId);
 
           const result = data.result;
@@ -973,16 +1540,25 @@ const startProgressPolling = (taskId: string) => {
             .map((item: any) => item.error || item.file_name)
             .filter(Boolean);
 
-          // 移除上传中的占位文档
-          documents.value = documents.value.filter(
-            (doc) => doc.taskId !== taskId,
-          );
+          documents.value = clearDocumentTaskState(documents.value, taskId);
 
-          // 重新加载文档列表
           await loadDocuments();
           emit("refresh");
 
-          if (failedCount === 0) {
+          if (mode === "rebuild") {
+            if (failedCount === 0) {
+              showSnackbar(t("documents.rebuildSuccess"));
+            } else {
+              showSnackbar(
+                t("documents.rebuildPartialSuccess", {
+                  success: successCount,
+                  failed: failedCount,
+                }),
+                "warning",
+                failedDetails,
+              );
+            }
+          } else if (failedCount === 0) {
             showSnackbar(t("upload.successCount", { count: successCount }));
           } else {
             showSnackbar(
@@ -995,29 +1571,23 @@ const startProgressPolling = (taskId: string) => {
             );
           }
         } else if (status === "failed") {
-          // 任务失败
           stopProgressPolling(taskId);
 
-          // 移除上传中的占位文档
-          documents.value = documents.value.filter(
-            (doc) => doc.taskId !== taskId,
-          );
-          totalDocuments.value = Math.max(totalDocuments.value - 1, 0);
+          documents.value = clearDocumentTaskState(documents.value, taskId);
+          await loadDocuments();
+          emit("refresh");
 
+          const reason = data.error || t("upload.unknownError");
           showSnackbar(
-            t("upload.failedWithReason", {
-              reason: data.error || t("upload.unknownError"),
-            }),
+            mode === "rebuild"
+              ? t("documents.rebuildFailedWithReason", { reason })
+              : t("upload.failedWithReason", { reason }),
             "error",
           );
         }
       } else {
-        // 任务不存在，停止轮询
         stopProgressPolling(taskId);
-        documents.value = documents.value.filter(
-          (doc) => doc.taskId !== taskId,
-        );
-        totalDocuments.value = Math.max(totalDocuments.value - 1, 0);
+        documents.value = clearDocumentTaskState(documents.value, taskId);
         await loadDocuments();
         emit("refresh");
       }
@@ -1060,8 +1630,126 @@ const getStageText = (stage: string) => {
     parsing: t("upload.stages.parsing"),
     chunking: t("upload.stages.chunking"),
     embedding: t("upload.stages.embedding"),
+    rebuilding: t("upload.stages.rebuilding"),
+    completed: t("upload.stages.completed"),
   };
   return stageMap[stage] || stage;
+};
+
+const getDocumentStatusText = (status?: string) => {
+  const normalizedStatus = status || "ready";
+  const statusMap: Record<string, string> = {
+    pending: t("documents.statuses.pending"),
+    parsing: t("documents.statuses.parsing"),
+    chunking: t("documents.statuses.chunking"),
+    embedding: t("documents.statuses.embedding"),
+    ready: t("documents.statuses.ready"),
+    failed: t("documents.statuses.failed"),
+  };
+  return statusMap[normalizedStatus] || normalizedStatus;
+};
+
+const getDocumentStatusColor = (status?: string) => {
+  switch (status) {
+    case "failed":
+      return "error";
+    case "pending":
+      return "grey";
+    case "parsing":
+    case "chunking":
+    case "embedding":
+      return "warning";
+    case "ready":
+    default:
+      return "success";
+  }
+};
+
+const getSourceTypeText = (sourceType?: string) => {
+  const normalizedSourceType = sourceType || "file";
+  const sourceTypeMap: Record<string, string> = {
+    file: t("documents.sourceTypes.file"),
+    url: t("documents.sourceTypes.url"),
+    import: t("documents.sourceTypes.import"),
+  };
+  return sourceTypeMap[normalizedSourceType] || normalizedSourceType;
+};
+
+const getFailureLabels = () => ({
+  document: t("documents.failureDocument"),
+  documentId: t("documents.failureDocumentId"),
+  stage: t("documents.failureStage"),
+  message: t("documents.failureMessage"),
+  unknownStage: t("documents.unknownFailureStage"),
+  noErrorMessage: t("documents.noFailureMessage"),
+});
+
+const getFailureSummary = (doc: any) =>
+  getDocumentFailureSummary(doc, getFailureLabels());
+
+const copyFailureDetails = async (doc: any) => {
+  const copied = await copyToClipboard(
+    buildDocumentFailureText(doc, getFailureLabels()),
+  );
+  showSnackbar(
+    copied
+      ? t("documents.copyFailureSuccess")
+      : t("documents.copyFailureFailed"),
+    copied ? "success" : "error",
+  );
+};
+
+const confirmRebuild = (doc: any) => {
+  if (!canRebuild(doc)) {
+    return;
+  }
+  rebuildTarget.value = doc;
+  showRebuildDialog.value = true;
+};
+
+const rebuildDocument = async () => {
+  const doc = rebuildTarget.value;
+  if (!canRebuild(doc)) {
+    return;
+  }
+  updateRebuildingDocIds(doc.doc_id, true);
+  try {
+    const response = await axios.post("/api/kb/document/rebuild", {
+      doc_id: doc.doc_id,
+      kb_id: props.kbId,
+      background: true,
+    });
+    if (response.data.status === "ok") {
+      const taskId = response.data.data?.task_id;
+      if (taskId) {
+        documents.value = markDocumentRebuildStarted(
+          documents.value,
+          doc.doc_id,
+          taskId,
+        );
+        showSnackbar(t("documents.rebuildStarted"), "info");
+        startProgressPolling(taskId, "rebuild");
+        showRebuildDialog.value = false;
+        rebuildTarget.value = null;
+      } else {
+        showSnackbar(t("documents.rebuildSuccess"));
+        showRebuildDialog.value = false;
+        rebuildTarget.value = null;
+        await loadDocuments();
+        emit("refresh");
+      }
+    } else {
+      showSnackbar(
+        response.data.message || t("documents.rebuildFailed"),
+        "error",
+      );
+    }
+  } catch (error) {
+    console.error("Failed to rebuild document:", error);
+    showSnackbar(t("documents.rebuildFailed"), "error");
+  } finally {
+    updateRebuildingDocIds(doc.doc_id, false);
+  }
 };
 
 // 关闭上传对话框
@@ -1075,6 +1763,12 @@ const closeUploadDialog = (force = false) => {
   uploadMode.value = "file";
   initUploadSettings();
 };
+
+watch(supportsUrlImport, (supported) => {
+  if (!supported && uploadMode.value === "url") {
+    uploadMode.value = "file";
+  }
+});
 
 // 查看文档
 const viewDocument = (doc: any) => {
@@ -1119,6 +1813,136 @@ const deleteDocument = async () => {
     showSnackbar(t("documents.deleteFailed"), "error");
   } finally {
     deleting.value = false;
+  }
+};
+
+const confirmBatchDelete = () => {
+  if (!batchDeleteState.value.canDelete) {
+    if (batchDeleteState.value.exceedsLimit && batchDeleteState.value.limit) {
+      showSnackbar(
+        t("documents.batchDeleteLimitExceeded", {
+          limit: batchDeleteState.value.limit,
+        }),
+        "warning",
+      );
+    }
+    return;
+  }
+  showBatchDeleteDialog.value = true;
+};
+
+const batchDeleteDocuments = async () => {
+  if (!batchDeleteState.value.canDelete) return;
+
+  const deletingCount = batchDeleteState.value.selectedCount;
+  batchDeleting.value = true;
+  try {
+    const response = await axios.post("/api/kb/document/batch-delete", {
+      kb_id: props.kbId,
+      doc_ids: batchDeleteState.value.selectedIds,
+    });
+
+    if (response.data.status === "ok") {
+      const data = response.data.data || {};
+      showBatchDeleteDialog.value = false;
+      selectedDocumentRows.value = [];
+      if (data.failed_count > 0) {
+        showSnackbar(
+          t("documents.batchDeletePartialSuccess", {
+            success: data.success_count || 0,
+            failed: data.failed_count || 0,
+          }),
+          "warning",
+        );
+      } else {
+        showSnackbar(
+          t("documents.batchDeleteSuccess", {
+            count: data.success_count ?? deletingCount,
+          }),
+        );
+      }
+      await loadDocuments();
+      emit("refresh");
+    } else {
+      showSnackbar(
+        response.data.message || t("documents.batchDeleteFailed"),
+        "error",
+      );
+    }
+  } catch (error) {
+    console.error("Failed to batch delete documents:", error);
+    showSnackbar(t("documents.batchDeleteFailed"), "error");
+  } finally {
+    batchDeleting.value = false;
+  }
+};
+
+const confirmBatchRebuild = () => {
+  if (!batchRebuildState.value.canRebuild) {
+    if (batchRebuildState.value.exceedsLimit && batchRebuildState.value.limit) {
+      showSnackbar(
+        t("documents.batchRebuildLimitExceeded", {
+          limit: batchRebuildState.value.limit,
+        }),
+        "warning",
+      );
+    }
+    return;
+  }
+  showBatchRebuildDialog.value = true;
+};
+
+const batchRebuildDocuments = async () => {
+  if (!batchRebuildState.value.canRebuild) return;
+
+  const rebuildingIds = batchRebuildState.value.selectedIds.filter(
+    (docId): docId is string => typeof docId === "string" && docId.length > 0,
+  );
+  if (!rebuildingIds.length) {
+    return;
+  }
+  batchRebuilding.value = true;
+  rebuildingIds.forEach((docId) => updateRebuildingDocIds(docId, true));
+  try {
+    const response = await axios.post("/api/kb/document/batch-rebuild", {
+      kb_id: props.kbId,
+      doc_ids: rebuildingIds,
+    });
+
+    if (response.data.status === "ok") {
+      const taskId = response.data.data?.task_id;
+      showBatchRebuildDialog.value = false;
+      selectedDocumentRows.value = [];
+      if (taskId) {
+        documents.value = markDocumentsRebuildStarted(
+          documents.value,
+          rebuildingIds,
+          taskId,
+        );
+        showSnackbar(
+          t("documents.batchRebuildStarted", {
+            count: rebuildingIds.length,
+          }),
+          "info",
+        );
+        startProgressPolling(taskId, "rebuild");
+      } else {
+        showSnackbar(t("documents.rebuildStarted"), "info");
+        await loadDocuments();
+        emit("refresh");
+      }
+    } else {
+      showSnackbar(
+        response.data.message || t("documents.batchRebuildFailed"),
+        "error",
+      );
+    }
+  } catch (error) {
+    console.error("Failed to batch rebuild documents:", error);
+    showSnackbar(t("documents.batchRebuildFailed"), "error");
+  } finally {
+    rebuildingIds.forEach((docId) => updateRebuildingDocIds(docId, false));
+    batchRebuilding.value = false;
   }
 };
 
@@ -1221,7 +2045,11 @@ const onTavilyKeySet = () => {
 };
 
 onMounted(() => {
-  loadDocuments();
+  loadCapabilities().then(() => {
+    initUploadSettings();
+    pageSize.value = paginationConfig.value.defaultDocumentPageSize;
+    loadDocuments();
+  });
   loadLlmProviders();
   checkTavilyConfig();
 });
@@ -1248,10 +2076,35 @@ onUnmounted(() => {
 
 .action-bar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.document-filter-select {
+  max-width: 180px;
+  min-width: 150px;
+}
+
+.documents-filter-count {
+  min-width: fit-content;
+}
+
+.doc-name {
+  display: block;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-error {
+  max-width: 320px;
+  color: rgb(var(--v-theme-error));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .upload-dropzone {

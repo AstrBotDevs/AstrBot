@@ -1,12 +1,7 @@
-import sys
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-_mock_pm = MagicMock()
-_mock_pm.ProviderManager = MagicMock()
-sys.modules["astrbot.core.provider.manager"] = _mock_pm
 
 
 @pytest.mark.asyncio
@@ -14,7 +9,11 @@ async def test_delete_kb_removes_related_document_and_media_metadata(tmp_path):
     from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
     from astrbot.core.knowledge_base.kb_helper import KBHelper
     from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
-    from astrbot.core.knowledge_base.models import KBDocument, KBMedia, KnowledgeBase
+    from astrbot.core.knowledge_base.models import (
+        KBDocument,
+        KBMedia,
+        KnowledgeBase,
+    )
 
     kb_db = KBSQLiteDatabase(str(tmp_path / "kb.db"))
     await kb_db.initialize()

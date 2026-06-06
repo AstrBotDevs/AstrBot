@@ -86,3 +86,105 @@ class TestUpdateKbStatsChunkCountScope:
         vec_db.count_documents.assert_awaited_once_with(
             metadata_filter={"kb_id": "kb-empty"},
         )
+
+
+@pytest.mark.asyncio
+async def test_get_kb_stats_returns_status_and_chunk_breakdown(tmp_path):
+    from astrbot.core.knowledge_base.models import KBDocument, KBMedia, KnowledgeBase
+
+    kb_db = KBSQLiteDatabase(str(tmp_path / "kb.db"))
+    await kb_db.initialize()
+    await kb_db.migrate_to_v1()
+
+    kb = KnowledgeBase(
+        kb_id="kb-stats",
+        kb_name="stats",
+        embedding_provider_id="emb-1",
+        doc_count=3,
+        chunk_count=8,
+    )
+    docs = [
+        KBDocument(
+            doc_id="doc-ready-1",
+            kb_id="kb-stats",
+            doc_name="ready-1.txt",
+            file_type="txt",
+            file_size=10,
+            file_path=str(tmp_path / "ready-1.txt"),
+            source_type="file",
+            status="ready",
+            chunk_count=3,
+        ),
+        KBDocument(
+            doc_id="doc-ready-2",
+            kb_id="kb-stats",
+            doc_name="ready-2.txt",
+            file_type="txt",
+            file_size=20,
+            file_path="",
+            source_type="file",
+            status="ready",
+            chunk_count=5,
+        ),
+        KBDocument(
+            doc_id="doc-failed",
+            kb_id="kb-stats",
+            doc_name="failed.txt",
+            file_type="txt",
+            file_size=30,
+            file_path="",
+            source_type="file",
+            status="failed",
+            chunk_count=0,
+        ),
+        KBDocument(
+            doc_id="doc-other",
+            kb_id="kb-other",
+            doc_name="other.txt",
+            file_type="txt",
+            file_size=40,
+            file_path=str(tmp_path / "other.txt"),
+            source_type="file",
+            status="ready",
+            chunk_count=99,
+        ),
+    ]
+    media = KBMedia(
+        media_id="media-1",
+        doc_id="doc-ready-1",
+        kb_id="kb-stats",
+        media_type="image",
+        file_name="image.png",
+        file_path="",
+        file_size=7,
+        mime_type="image/png",
+    )
+
+    async with kb_db.get_db() as session:
+        session.add(kb)
+        for doc in docs:
+            session.add(doc)
+        session.add(media)
+        await session.commit()
+
+    stats = await kb_db.get_kb_stats("kb-stats")
+    missing = await kb_db.get_kb_stats("missing-kb")
+
+    await kb_db.close()
+
+    assert stats is not None
+    assert stats["kb_id"] == "kb-stats"
+    assert stats["doc_count"] == 3
+    assert stats["chunk_count"] == 8
+    assert stats["document_count"] == 3
+    assert stats["ready_document_count"] == 2
+    assert stats["failed_document_count"] == 1
+    assert stats["pending_document_count"] == 0
+    assert stats["processing_document_count"] == 0
+    assert stats["indexed_chunk_count"] == 8
+    assert stats["document_chunk_count"] == 8
+    assert stats["media_count"] == 1
+    assert stats["source_file_count"] == 1
+    assert stats["storage_bytes"] == 17
+    assert stats["status_counts"] == {"failed": 1, "ready": 2}
+    assert missing is None

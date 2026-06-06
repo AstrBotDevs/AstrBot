@@ -1,22 +1,40 @@
 import asyncio
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy import delete
 from sqlmodel import col
 
 from astrbot.core import logger
-from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
 
 # from .chunking.fixed_size import FixedSizeChunker
+from .capabilities import (
+    DEFAULT_CHUNK_OVERLAP,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_INDEX_TYPE,
+    DEFAULT_TOP_K_DENSE,
+    DEFAULT_TOP_K_SPARSE,
+    DEFAULT_TOP_M_FINAL,
+    DEFAULT_UPLOAD_BATCH_SIZE,
+    DEFAULT_UPLOAD_MAX_RETRIES,
+    DEFAULT_UPLOAD_TASKS_LIMIT,
+)
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .kb_helper import KBHelper
-from .models import KBDocument, KBMedia, KnowledgeBase
+from .models import (
+    KBDocument,
+    KBMedia,
+    KnowledgeBase,
+)
 from .retrieval.manager import RetrievalManager, RetrievalResult
 from .retrieval.rank_fusion import RankFusion
 from .retrieval.sparse_retriever import SparseRetriever
+
+if TYPE_CHECKING:
+    from astrbot.core.provider.manager import ProviderManager
 
 FILES_PATH = get_astrbot_knowledge_base_path()
 DB_PATH = Path(FILES_PATH) / "kb.db"
@@ -65,7 +83,7 @@ class KnowledgeBaseManager:
 
     def __init__(
         self,
-        provider_manager: ProviderManager,
+        provider_manager: "ProviderManager",
     ) -> None:
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         self.provider_manager = provider_manager
@@ -214,12 +232,24 @@ class KnowledgeBaseManager:
         """创建新的知识库实例"""
         if embedding_provider_id is None:
             raise ValueError("创建知识库时必须提供embedding_provider_id")
-        effective_chunk_size = chunk_size if chunk_size is not None else 512
-        effective_chunk_overlap = chunk_overlap if chunk_overlap is not None else 50
-        effective_top_k_dense = top_k_dense if top_k_dense is not None else 50
-        effective_top_k_sparse = top_k_sparse if top_k_sparse is not None else 50
-        effective_top_m_final = top_m_final if top_m_final is not None else 5
-        effective_index_type = index_type if index_type is not None else "flat"
+        effective_chunk_size = (
+            chunk_size if chunk_size is not None else DEFAULT_CHUNK_SIZE
+        )
+        effective_chunk_overlap = (
+            chunk_overlap if chunk_overlap is not None else DEFAULT_CHUNK_OVERLAP
+        )
+        effective_top_k_dense = (
+            top_k_dense if top_k_dense is not None else DEFAULT_TOP_K_DENSE
+        )
+        effective_top_k_sparse = (
+            top_k_sparse if top_k_sparse is not None else DEFAULT_TOP_K_SPARSE
+        )
+        effective_top_m_final = (
+            top_m_final if top_m_final is not None else DEFAULT_TOP_M_FINAL
+        )
+        effective_index_type = (
+            index_type if index_type is not None else DEFAULT_INDEX_TYPE
+        )
         _validate_kb_options(
             chunk_size=effective_chunk_size,
             chunk_overlap=effective_chunk_overlap,
@@ -451,7 +481,9 @@ class KnowledgeBaseManager:
         kb_names: list[str] | None = None,
         kb_ids: list[str] | None = None,
         top_k_fusion: int = 20,
-        top_m_final: int = 5,
+        top_m_final: int = DEFAULT_TOP_M_FINAL,
+        include_trace: bool = False,
+        retrieval_overrides: dict | None = None,
     ) -> dict | None:
         """从指定知识库中检索相关内容"""
         resolved_kb_ids = []
@@ -488,15 +520,42 @@ class KnowledgeBaseManager:
         if not resolved_kb_ids:
             return {}
 
-        results = await self.retrieval_manager.retrieve(
-            query=query,
-            kb_ids=resolved_kb_ids,
-            kb_id_helper_map=kb_id_helper_map,
-            top_k_fusion=top_k_fusion,
-            top_m_final=top_m_final,
-        )
+        trace_payload = None
+        if include_trace:
+            retrieval_response = await self.retrieval_manager.retrieve_with_trace(
+                query=query,
+                kb_ids=resolved_kb_ids,
+                kb_id_helper_map=kb_id_helper_map,
+                top_k_fusion=top_k_fusion,
+                top_m_final=top_m_final,
+                retrieval_overrides=retrieval_overrides,
+            )
+            results = retrieval_response.results
+            trace_payload = retrieval_response.trace.to_dict()
+        else:
+            results = await self.retrieval_manager.retrieve(
+                query=query,
+                kb_ids=resolved_kb_ids,
+                kb_id_helper_map=kb_id_helper_map,
+                top_k_fusion=top_k_fusion,
+                top_m_final=top_m_final,
+                retrieval_overrides=retrieval_overrides,
+            )
         if not results:
-            return None
+            empty_response = {
+                "context_text": "",
+                "results": [],
+            }
+            if include_trace:
+                empty_response["trace"] = trace_payload or {
+                    "dense": [],
+                    "sparse": [],
+                    "fusion": [],
+                    "dedup": [],
+                    "rerank": [],
+                    "final": [],
+                }
+            return empty_response if include_trace else None
 
         context_text = self._format_context(results)
 
@@ -508,6 +567,7 @@ class KnowledgeBaseManager:
                 "kb_name": r.kb_name,
                 "doc_name": r.doc_name,
                 "chunk_index": r.metadata.get("chunk_index", 0),
+                "source": self._format_result_source(r),
                 "content": r.content,
                 "score": r.score,
                 "char_count": r.metadata.get("char_count", 0),
@@ -515,10 +575,40 @@ class KnowledgeBaseManager:
             for r in results
         ]
 
-        return {
+        response = {
             "context_text": context_text,
             "results": results_dict,
         }
+        if include_trace:
+            response["trace"] = trace_payload
+        return response
+
+    def _format_result_source(self, result: RetrievalResult) -> dict:
+        return {
+            "kb_name": result.kb_name,
+            "document_name": result.doc_name,
+            "chunk_index": result.metadata.get("chunk_index", 0),
+            "section_index": result.metadata.get("section_index"),
+            "title_path": result.metadata.get("title_path"),
+            "page_number": result.metadata.get("page_number"),
+            "parent_chunk_id": result.metadata.get("parent_chunk_id"),
+        }
+
+    def _format_source_label(self, result: RetrievalResult) -> str:
+        source = self._format_result_source(result)
+        details = []
+        title_path = source.get("title_path")
+        if isinstance(title_path, list) and title_path:
+            details.append(" > ".join(str(title) for title in title_path))
+        if source.get("page_number") is not None:
+            details.append(f"第 {source['page_number']} 页")
+        if source.get("section_index") is not None:
+            details.append(f"章节 {source['section_index']}")
+
+        base = f"{result.kb_name} / {result.doc_name}"
+        if details:
+            return f"{base} ({'; '.join(details)})"
+        return base
 
     def _format_context(self, results: list[RetrievalResult]) -> str:
         """格式化知识上下文
@@ -534,7 +624,7 @@ class KnowledgeBaseManager:
 
         for i, result in enumerate(results, 1):
             lines.append(f"【知识 {i}】")
-            lines.append(f"来源: {result.kb_name} / {result.doc_name}")
+            lines.append(f"来源: {self._format_source_label(result)}")
             lines.append(f"内容: {result.content}")
             lines.append(f"相关度: {result.score:.2f}")
             lines.append("")
@@ -562,11 +652,11 @@ class KnowledgeBaseManager:
         self,
         kb_id: str,
         url: str,
-        chunk_size: int = 512,
-        chunk_overlap: int = 50,
-        batch_size: int = 32,
-        tasks_limit: int = 3,
-        max_retries: int = 3,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+        chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+        batch_size: int = DEFAULT_UPLOAD_BATCH_SIZE,
+        tasks_limit: int = DEFAULT_UPLOAD_TASKS_LIMIT,
+        max_retries: int = DEFAULT_UPLOAD_MAX_RETRIES,
         progress_callback=None,
     ) -> KBDocument:
         """从 URL 上传文档到指定的知识库

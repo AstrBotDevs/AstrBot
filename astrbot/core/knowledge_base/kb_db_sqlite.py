@@ -1,5 +1,7 @@
 import asyncio
+import json
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -12,6 +14,7 @@ from astrbot.core import logger
 from astrbot.core.knowledge_base.models import (
     BaseKBModel,
     KBDocument,
+    KBIngestionTask,
     KBMedia,
     KnowledgeBase,
 )
@@ -19,6 +22,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
 
 if TYPE_CHECKING:
     from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+
+_UNSET = object()
 
 
 class KBSQLiteDatabase:
@@ -96,6 +101,8 @@ class KBSQLiteDatabase:
                     column_name="index_type",
                     column_sql="index_type TEXT DEFAULT 'flat'",
                 )
+                await self._ensure_document_governance_columns(session)
+                await self._ensure_ingestion_task_table(session)
 
                 # 创建知识库表索引
                 await session.execute(
@@ -148,6 +155,24 @@ class KBSQLiteDatabase:
                         "ON kb_documents(created_at)",
                     ),
                 )
+                await session.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_doc_content_hash "
+                        "ON kb_documents(content_hash)",
+                    ),
+                )
+                await session.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_doc_status "
+                        "ON kb_documents(status)",
+                    ),
+                )
+                await session.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_doc_parent_doc_id "
+                        "ON kb_documents(parent_doc_id)",
+                    ),
+                )
 
                 # 创建多媒体表索引
                 await session.execute(
@@ -173,6 +198,7 @@ class KBSQLiteDatabase:
                         "ON kb_media(media_type)",
                     ),
                 )
+                await self._ensure_ingestion_task_indexes(session)
 
                 await session.commit()
 
@@ -193,6 +219,104 @@ class KBSQLiteDatabase:
             f"知识库数据库迁移: 为表 {table_name} 添加列 {column_name}",
         )
         await session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_sql}"))
+
+    async def _ensure_document_governance_columns(
+        self,
+        session: AsyncSession,
+    ) -> None:
+        columns = {
+            "source_type": "source_type TEXT NOT NULL DEFAULT 'file'",
+            "source_uri": "source_uri TEXT",
+            "content_hash": "content_hash VARCHAR(64)",
+            "parser_name": "parser_name VARCHAR(100)",
+            "parser_version": "parser_version VARCHAR(50)",
+            "chunker_name": "chunker_name VARCHAR(100)",
+            "chunker_version": "chunker_version VARCHAR(50)",
+            "status": "status TEXT NOT NULL DEFAULT 'ready'",
+            "error_stage": "error_stage VARCHAR(50)",
+            "error_message": "error_message TEXT",
+            "version": "version INTEGER NOT NULL DEFAULT 1",
+            "parent_doc_id": "parent_doc_id VARCHAR(36)",
+            "indexed_at": "indexed_at DATETIME",
+        }
+        for column_name, column_sql in columns.items():
+            await self._ensure_column(
+                session,
+                table_name="kb_documents",
+                column_name=column_name,
+                column_sql=column_sql,
+            )
+
+    async def _ensure_ingestion_task_table(self, session: AsyncSession) -> None:
+        await session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS kb_ingestion_tasks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id VARCHAR(36) NOT NULL UNIQUE,
+                    kb_id VARCHAR(36) NOT NULL,
+                    task_type VARCHAR(30) NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                    progress_stage VARCHAR(50),
+                    progress_current INTEGER NOT NULL DEFAULT 0,
+                    progress_total INTEGER NOT NULL DEFAULT 100,
+                    progress TEXT,
+                    result TEXT,
+                    error TEXT,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+                """,
+            ),
+        )
+
+    async def _ensure_ingestion_task_indexes(self, session: AsyncSession) -> None:
+        indexes = {
+            "idx_task_task_id": "task_id",
+            "idx_task_kb_id": "kb_id",
+            "idx_task_type": "task_type",
+            "idx_task_status": "status",
+            "idx_task_created_at": "created_at",
+        }
+        for index_name, column_name in indexes.items():
+            await session.execute(
+                text(
+                    f"CREATE INDEX IF NOT EXISTS {index_name} "
+                    f"ON kb_ingestion_tasks({column_name})",
+                ),
+            )
+
+    @staticmethod
+    def _encode_json(value) -> str | None:
+        if value is None:
+            return None
+        return json.dumps(value, ensure_ascii=False, default=str)
+
+    @staticmethod
+    def _decode_json(value: str | None):
+        if value is None:
+            return None
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+
+    @classmethod
+    def _task_to_dict(cls, task: KBIngestionTask) -> dict:
+        return {
+            "task_id": task.task_id,
+            "kb_id": task.kb_id,
+            "task_type": task.task_type,
+            "status": task.status,
+            "progress_stage": task.progress_stage,
+            "progress_current": task.progress_current,
+            "progress_total": task.progress_total,
+            "progress": cls._decode_json(task.progress),
+            "result": cls._decode_json(task.result),
+            "error": cls._decode_json(task.error),
+            "created_at": task.created_at.isoformat(),
+            "updated_at": task.updated_at.isoformat(),
+        }
 
     async def close(self) -> None:
         """关闭数据库连接"""
@@ -239,6 +363,146 @@ class KBSQLiteDatabase:
             result = await session.execute(stmt)
             return result.scalar() or 0
 
+    # ===== 任务查询 =====
+
+    async def create_ingestion_task(
+        self,
+        *,
+        task_id: str,
+        kb_id: str,
+        task_type: str,
+        status: str = "pending",
+        progress_stage: str | None = None,
+        progress_current: int = 0,
+        progress_total: int = 100,
+        progress: dict | None = None,
+    ) -> dict:
+        task = KBIngestionTask(
+            task_id=task_id,
+            kb_id=kb_id,
+            task_type=task_type,
+            status=status,
+            progress_stage=progress_stage,
+            progress_current=progress_current,
+            progress_total=progress_total,
+            progress=self._encode_json(progress),
+        )
+        async with self.get_db() as session:
+            session.add(task)
+            await session.commit()
+            await session.refresh(task)
+            return self._task_to_dict(task)
+
+    async def update_ingestion_task(
+        self,
+        task_id: str,
+        *,
+        status: str | object = _UNSET,
+        progress_stage: str | None | object = _UNSET,
+        progress_current: int | object = _UNSET,
+        progress_total: int | object = _UNSET,
+        progress: dict | None | object = _UNSET,
+        result: dict | None | object = _UNSET,
+        error: str | None | object = _UNSET,
+    ) -> dict | None:
+        async with self.get_db() as session:
+            stmt = select(KBIngestionTask).where(
+                col(KBIngestionTask.task_id) == task_id,
+            )
+            query_result = await session.execute(stmt)
+            task = query_result.scalar_one_or_none()
+            if task is None:
+                return None
+
+            if status is not _UNSET:
+                task.status = status  # type: ignore[assignment]
+            if progress_stage is not _UNSET:
+                task.progress_stage = progress_stage  # type: ignore[assignment]
+            if progress_current is not _UNSET:
+                task.progress_current = progress_current  # type: ignore[assignment]
+            if progress_total is not _UNSET:
+                task.progress_total = progress_total  # type: ignore[assignment]
+            if progress is not _UNSET:
+                task.progress = self._encode_json(progress)
+            if result is not _UNSET:
+                task.result = self._encode_json(result)
+            if error is not _UNSET:
+                task.error = self._encode_json(error)
+            task.updated_at = datetime.now(timezone.utc)
+
+            session.add(task)
+            await session.commit()
+            await session.refresh(task)
+            return self._task_to_dict(task)
+
+    async def get_ingestion_task(self, task_id: str) -> dict | None:
+        async with self.get_db() as session:
+            stmt = select(KBIngestionTask).where(
+                col(KBIngestionTask.task_id) == task_id,
+            )
+            result = await session.execute(stmt)
+            task = result.scalar_one_or_none()
+            return self._task_to_dict(task) if task is not None else None
+
+    @staticmethod
+    def _build_ingestion_task_conditions(
+        *,
+        kb_id: str | None = None,
+        status: str | None = None,
+        task_type: str | None = None,
+    ) -> list:
+        conditions = []
+        if kb_id is not None:
+            conditions.append(col(KBIngestionTask.kb_id) == kb_id)
+        if status is not None:
+            conditions.append(col(KBIngestionTask.status) == status)
+        if task_type is not None:
+            conditions.append(col(KBIngestionTask.task_type) == task_type)
+        return conditions
+
+    async def list_ingestion_tasks(
+        self,
+        *,
+        kb_id: str | None = None,
+        status: str | None = None,
+        task_type: str | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[dict]:
+        conditions = self._build_ingestion_task_conditions(
+            kb_id=kb_id,
+            status=status,
+            task_type=task_type,
+        )
+
+        async with self.get_db() as session:
+            stmt = (
+                select(KBIngestionTask)
+                .where(*conditions)
+                .offset(offset)
+                .limit(limit)
+                .order_by(desc(KBIngestionTask.created_at))
+            )
+            result = await session.execute(stmt)
+            return [self._task_to_dict(task) for task in result.scalars().all()]
+
+    async def count_ingestion_tasks(
+        self,
+        *,
+        kb_id: str | None = None,
+        status: str | None = None,
+        task_type: str | None = None,
+    ) -> int:
+        conditions = self._build_ingestion_task_conditions(
+            kb_id=kb_id,
+            status=status,
+            task_type=task_type,
+        )
+        async with self.get_db() as session:
+            stmt = select(func.count(col(KBIngestionTask.id))).where(*conditions)
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+
     # ===== 文档查询 =====
 
     async def get_document_by_id(self, doc_id: str) -> KBDocument | None:
@@ -248,24 +512,67 @@ class KBSQLiteDatabase:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
+    async def get_document_by_content_hash(
+        self,
+        *,
+        kb_id: str,
+        content_hash: str,
+    ) -> KBDocument | None:
+        """Return an existing active document with the same source content hash."""
+        async with self.get_db() as session:
+            stmt = (
+                select(KBDocument)
+                .where(
+                    col(KBDocument.kb_id) == kb_id,
+                    col(KBDocument.content_hash) == content_hash,
+                    col(KBDocument.status) != "failed",
+                )
+                .order_by(desc(KBDocument.created_at))
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    @staticmethod
+    def _build_document_filters(
+        *,
+        kb_id: str,
+        search: str | None = None,
+        status: str | None = None,
+        source_type: str | None = None,
+    ) -> list:
+        conditions = [col(KBDocument.kb_id) == kb_id]
+        if search:
+            pattern = f"%{search}%"
+            conditions.append(
+                or_(
+                    col(KBDocument.doc_name).ilike(pattern),
+                    col(KBDocument.file_type).ilike(pattern),
+                ),
+            )
+        if status:
+            conditions.append(col(KBDocument.status) == status)
+        if source_type:
+            conditions.append(col(KBDocument.source_type) == source_type)
+        return conditions
+
     async def list_documents_by_kb(
         self,
         kb_id: str,
         offset: int = 0,
         limit: int = 100,
         search: str | None = None,
+        status: str | None = None,
+        source_type: str | None = None,
     ) -> list[KBDocument]:
         """列出知识库的所有文档"""
         async with self.get_db() as session:
-            conditions = [col(KBDocument.kb_id) == kb_id]
-            if search:
-                pattern = f"%{search}%"
-                conditions.append(
-                    or_(
-                        col(KBDocument.doc_name).ilike(pattern),
-                        col(KBDocument.file_type).ilike(pattern),
-                    ),
-                )
+            conditions = self._build_document_filters(
+                kb_id=kb_id,
+                search=search,
+                status=status,
+                source_type=source_type,
+            )
             stmt = (
                 select(KBDocument)
                 .where(*conditions)
@@ -280,18 +587,17 @@ class KBSQLiteDatabase:
         self,
         kb_id: str,
         search: str | None = None,
+        status: str | None = None,
+        source_type: str | None = None,
     ) -> int:
         """统计知识库的文档数量"""
         async with self.get_db() as session:
-            conditions = [col(KBDocument.kb_id) == kb_id]
-            if search:
-                pattern = f"%{search}%"
-                conditions.append(
-                    or_(
-                        col(KBDocument.doc_name).ilike(pattern),
-                        col(KBDocument.file_type).ilike(pattern),
-                    ),
-                )
+            conditions = self._build_document_filters(
+                kb_id=kb_id,
+                search=search,
+                status=status,
+                source_type=source_type,
+            )
             stmt = select(func.count(col(KBDocument.id))).where(*conditions)
             result = await session.execute(stmt)
             return result.scalar() or 0
@@ -481,3 +787,84 @@ class KBSQLiteDatabase:
 
             await session.execute(update_stmt)
             await session.commit()
+
+    async def get_kb_stats(self, kb_id: str) -> dict | None:
+        """Return persisted document statistics for a knowledge base."""
+        async with self.get_db() as session:
+            kb_result = await session.execute(
+                select(KnowledgeBase).where(col(KnowledgeBase.kb_id) == kb_id),
+            )
+            kb = kb_result.scalar_one_or_none()
+            if kb is None:
+                return None
+
+            status_result = await session.execute(
+                select(KBDocument.status, func.count(col(KBDocument.id)))
+                .where(col(KBDocument.kb_id) == kb_id)
+                .group_by(KBDocument.status),
+            )
+            status_counts = {
+                status or "unknown": count for status, count in status_result.all()
+            }
+
+            chunk_result = await session.execute(
+                select(func.coalesce(func.sum(col(KBDocument.chunk_count)), 0)).where(
+                    col(KBDocument.kb_id) == kb_id,
+                ),
+            )
+            document_chunk_count = int(chunk_result.scalar() or 0)
+
+            media_result = await session.execute(
+                select(func.count(col(KBMedia.id))).where(col(KBMedia.kb_id) == kb_id),
+            )
+            media_count = int(media_result.scalar() or 0)
+            source_file_count_result = await session.execute(
+                select(func.count(col(KBDocument.id))).where(
+                    col(KBDocument.kb_id) == kb_id,
+                    col(KBDocument.source_type) == "file",
+                    col(KBDocument.file_path) != "",
+                ),
+            )
+            source_file_count = int(source_file_count_result.scalar() or 0)
+            document_storage_result = await session.execute(
+                select(func.coalesce(func.sum(col(KBDocument.file_size)), 0)).where(
+                    col(KBDocument.kb_id) == kb_id,
+                    col(KBDocument.file_path) != "",
+                ),
+            )
+            document_storage_bytes = int(document_storage_result.scalar() or 0)
+            media_storage_result = await session.execute(
+                select(func.coalesce(func.sum(col(KBMedia.file_size)), 0)).where(
+                    col(KBMedia.kb_id) == kb_id,
+                ),
+            )
+            media_storage_bytes = int(media_storage_result.scalar() or 0)
+
+            document_count = sum(status_counts.values())
+            ready_document_count = status_counts.get("ready", 0)
+            failed_document_count = status_counts.get("failed", 0)
+            pending_document_count = status_counts.get("pending", 0)
+            processing_document_count = sum(
+                status_counts.get(status, 0)
+                for status in ("parsing", "chunking", "embedding")
+            )
+
+            return {
+                "kb_id": kb.kb_id,
+                "kb_name": kb.kb_name,
+                "doc_count": kb.doc_count,
+                "chunk_count": kb.chunk_count,
+                "document_count": document_count,
+                "ready_document_count": ready_document_count,
+                "failed_document_count": failed_document_count,
+                "pending_document_count": pending_document_count,
+                "processing_document_count": processing_document_count,
+                "indexed_chunk_count": kb.chunk_count,
+                "document_chunk_count": document_chunk_count,
+                "media_count": media_count,
+                "source_file_count": source_file_count,
+                "storage_bytes": document_storage_bytes + media_storage_bytes,
+                "status_counts": status_counts,
+                "created_at": kb.created_at.isoformat(),
+                "updated_at": kb.updated_at.isoformat(),
+            }

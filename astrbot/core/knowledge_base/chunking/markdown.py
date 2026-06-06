@@ -16,8 +16,27 @@ class _Section:
     """解析后的 Markdown 章节"""
 
     heading_path: list[str]
+    title_path: list[str]
+    section_index: int | None
     text: str
     has_body: bool
+
+
+@dataclass
+class MarkdownChunk:
+    """A Markdown chunk with source structure metadata."""
+
+    text: str
+    title_path: list[str] | None = None
+    section_index: int | None = None
+
+
+@dataclass
+class _ChunkDraft:
+    text: str
+    has_body: bool
+    title_path: list[str] | None
+    section_index: int | None
 
 
 class MarkdownChunker(BaseChunker):
@@ -72,31 +91,28 @@ class MarkdownChunker(BaseChunker):
             list[str]: 分块后的文本列表
 
         """
+        chunks = await self.chunk_with_metadata(text, **kwargs)
+        return [chunk.text for chunk in chunks]
+
+    async def chunk_with_metadata(self, text: str, **kwargs) -> list[MarkdownChunk]:
+        """Split Markdown text and keep per-chunk structure metadata."""
         if not text or not text.strip():
             return []
 
         chunk_size = kwargs.get("chunk_size", self.chunk_size)
         chunk_overlap = kwargs.get("chunk_overlap", self.chunk_overlap)
 
-        # 解析 Markdown 结构
         sections = self._parse_sections(text)
 
         if not sections:
-            # 没有识别到标题结构，回退到递归分割
-            return await self._fallback_chunker.chunk(
+            chunks = await self._fallback_chunker.chunk(
                 text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
             )
+            return [MarkdownChunk(text=chunk) for chunk in chunks]
 
-        # 将 sections 转换为 raw chunks
         raw_chunks = await self._sections_to_chunks(sections, chunk_size, chunk_overlap)
-
-        # 合并纯标题节到下一个有内容的 chunk
         merged = self._merge_heading_only_chunks(raw_chunks, chunk_size)
-
-        # 合并过短的相邻 chunk
-        merged = self._merge_short_chunks(merged, chunk_size)
-
-        return merged
+        return self._merge_short_chunks(merged, chunk_size)
 
     def _estimate_prefix_length(self, heading_path: list[str]) -> int:
         """估算标题上下文前缀的最大长度（用于扣除子块可用空间）"""
@@ -109,13 +125,15 @@ class MarkdownChunker(BaseChunker):
 
     async def _sections_to_chunks(
         self, sections: list[_Section], chunk_size: int, chunk_overlap: int
-    ) -> list[tuple[str, bool]]:
+    ) -> list[_ChunkDraft]:
         """将解析后的 sections 转换为 (chunk_text, has_body) 列表"""
-        raw_chunks: list[tuple[str, bool]] = []
+        raw_chunks: list[_ChunkDraft] = []
 
         for section in sections:
             section_text = section.text
             heading_path = section.heading_path
+            title_path = self._normalize_title_path(section.title_path)
+            section_index = section.section_index
             has_body = section.has_body
 
             # 构建带上下文的文本
@@ -123,7 +141,14 @@ class MarkdownChunker(BaseChunker):
             full_text = context_prefix + section_text
 
             if len(full_text) <= chunk_size:
-                raw_chunks.append((full_text.strip(), has_body))
+                raw_chunks.append(
+                    _ChunkDraft(
+                        text=full_text.strip(),
+                        has_body=has_body,
+                        title_path=title_path,
+                        section_index=section_index,
+                    )
+                )
             else:
                 # 章节过长，内部递归分割
                 # 扣除前缀长度，确保添加前缀后不超过 chunk_size
@@ -139,7 +164,14 @@ class MarkdownChunker(BaseChunker):
                     chunk_text = self._apply_heading_context(
                         heading_path, sub_chunk, is_continuation=(i > 0)
                     )
-                    raw_chunks.append((chunk_text, True))
+                    raw_chunks.append(
+                        _ChunkDraft(
+                            text=chunk_text,
+                            has_body=True,
+                            title_path=title_path,
+                            section_index=section_index,
+                        )
+                    )
 
         return raw_chunks
 
@@ -162,73 +194,182 @@ class MarkdownChunker(BaseChunker):
         return f"{title}\n\n{content}".strip()
 
     def _merge_heading_only_chunks(
-        self, raw_chunks: list[tuple[str, bool]], chunk_size: int
-    ) -> list[str]:
+        self, raw_chunks: list[_ChunkDraft], chunk_size: int
+    ) -> list[MarkdownChunk]:
         """合并没有实质正文的 chunk 到下一个有正文的 chunk"""
-        merged: list[str] = []
-        pending = ""
+        merged: list[MarkdownChunk] = []
+        pending_text = ""
+        pending_title_path: list[str] | None = None
+        pending_section_index: int | None = None
 
-        for chunk_text, has_body in raw_chunks:
+        for chunk in raw_chunks:
+            chunk_text = chunk.text
             if not chunk_text:
                 continue
-            if not has_body:
+            if not chunk.has_body:
                 # 纯标题节，暂存；但如果 pending 已经够长，先 flush
-                if pending and len(pending) + len(chunk_text) + 2 > chunk_size:
-                    merged.append(pending.strip())
-                    pending = ""
-                pending += chunk_text + "\n\n"
+                if (
+                    pending_text
+                    and len(pending_text) + len(chunk_text) + 2 > chunk_size
+                ):
+                    merged.append(
+                        MarkdownChunk(
+                            text=pending_text.strip(),
+                            title_path=pending_title_path,
+                            section_index=pending_section_index,
+                        )
+                    )
+                    pending_text = ""
+                    pending_title_path = None
+                    pending_section_index = None
+                pending_text += chunk_text + "\n\n"
+                pending_title_path = chunk.title_path or pending_title_path
+                pending_section_index = chunk.section_index
             else:
-                if pending:
-                    combined = pending + chunk_text
+                if pending_text:
+                    combined = pending_text + chunk_text
                     if len(combined) <= chunk_size:
-                        merged.append(combined.strip())
+                        merged.append(
+                            MarkdownChunk(
+                                text=combined.strip(),
+                                title_path=chunk.title_path or pending_title_path,
+                                section_index=chunk.section_index,
+                            )
+                        )
                     else:
-                        merged.append(pending.strip())
-                        merged.append(chunk_text.strip())
-                    pending = ""
+                        merged.append(
+                            MarkdownChunk(
+                                text=pending_text.strip(),
+                                title_path=pending_title_path,
+                                section_index=pending_section_index,
+                            )
+                        )
+                        merged.append(
+                            MarkdownChunk(
+                                text=chunk_text.strip(),
+                                title_path=chunk.title_path,
+                                section_index=chunk.section_index,
+                            )
+                        )
+                    pending_text = ""
+                    pending_title_path = None
+                    pending_section_index = None
                 else:
-                    merged.append(chunk_text.strip())
+                    merged.append(
+                        MarkdownChunk(
+                            text=chunk_text.strip(),
+                            title_path=chunk.title_path,
+                            section_index=chunk.section_index,
+                        )
+                    )
 
         # 处理尾部残留的 pending
-        if pending:
-            pending_text = pending.strip()
-            if merged and len(merged[-1] + "\n\n" + pending_text) <= chunk_size:
-                merged[-1] = merged[-1] + "\n\n" + pending_text
+        if pending_text:
+            trailing_text = pending_text.strip()
+            if merged and len(merged[-1].text + "\n\n" + trailing_text) <= chunk_size:
+                merged[-1] = MarkdownChunk(
+                    text=merged[-1].text + "\n\n" + trailing_text,
+                    title_path=self._merge_title_paths(
+                        [merged[-1].title_path, pending_title_path]
+                    ),
+                    section_index=self._merge_section_indexes(
+                        [merged[-1].section_index, pending_section_index]
+                    ),
+                )
             else:
-                merged.append(pending_text)
+                merged.append(
+                    MarkdownChunk(
+                        text=trailing_text,
+                        title_path=pending_title_path,
+                        section_index=pending_section_index,
+                    )
+                )
 
-        return [c for c in merged if c.strip()]
+        return [chunk for chunk in merged if chunk.text.strip()]
 
-    def _merge_short_chunks(self, chunks: list[str], chunk_size: int) -> list[str]:
+    def _merge_short_chunks(
+        self, chunks: list[MarkdownChunk], chunk_size: int
+    ) -> list[MarkdownChunk]:
         """合并过短的相邻 chunk（低于 min_chunk_size）"""
         if self.min_chunk_size <= 0 or len(chunks) <= 1:
             return chunks
 
-        final: list[str] = []
-        buf = ""
+        final: list[MarkdownChunk] = []
+        buf: MarkdownChunk | None = None
 
-        for c in chunks:
+        for chunk in chunks:
             if buf:
-                combined = buf + "\n\n" + c
+                combined = buf.text + "\n\n" + chunk.text
                 if len(combined) <= chunk_size:
-                    buf = combined
+                    buf = MarkdownChunk(
+                        text=combined,
+                        title_path=self._merge_title_paths(
+                            [buf.title_path, chunk.title_path]
+                        ),
+                        section_index=self._merge_section_indexes(
+                            [buf.section_index, chunk.section_index]
+                        ),
+                    )
                 else:
                     final.append(buf)
-                    buf = c if len(c) < self.min_chunk_size else ""
-                    if len(c) >= self.min_chunk_size:
-                        final.append(c)
-            elif len(c) < self.min_chunk_size:
-                buf = c
+                    if len(chunk.text) < self.min_chunk_size:
+                        buf = chunk
+                    else:
+                        buf = None
+                        final.append(chunk)
+            elif len(chunk.text) < self.min_chunk_size:
+                buf = chunk
             else:
-                final.append(c)
+                final.append(chunk)
 
         if buf:
-            if final and len(final[-1] + "\n\n" + buf) <= chunk_size:
-                final[-1] = final[-1] + "\n\n" + buf
+            if final and len(final[-1].text + "\n\n" + buf.text) <= chunk_size:
+                final[-1] = MarkdownChunk(
+                    text=final[-1].text + "\n\n" + buf.text,
+                    title_path=self._merge_title_paths(
+                        [final[-1].title_path, buf.title_path]
+                    ),
+                    section_index=self._merge_section_indexes(
+                        [final[-1].section_index, buf.section_index]
+                    ),
+                )
             else:
                 final.append(buf)
 
         return final
+
+    @staticmethod
+    def _normalize_title_path(title_path: list[str]) -> list[str] | None:
+        path = [title.strip() for title in title_path if title and title.strip()]
+        return path or None
+
+    @staticmethod
+    def _merge_title_paths(paths: list[list[str] | None]) -> list[str] | None:
+        non_empty_paths = [path for path in paths if path]
+        if not non_empty_paths:
+            return None
+
+        common = list(non_empty_paths[0])
+        for path in non_empty_paths[1:]:
+            prefix: list[str] = []
+            for left, right in zip(common, path, strict=False):
+                if left != right:
+                    break
+                prefix.append(left)
+            common = prefix
+            if not common:
+                return None
+        return common
+
+    @staticmethod
+    def _merge_section_indexes(indexes: list[int | None]) -> int | None:
+        non_empty_indexes = [index for index in indexes if index is not None]
+        if not non_empty_indexes:
+            return None
+        first_index = non_empty_indexes[0]
+        if all(index == first_index for index in non_empty_indexes):
+            return first_index
+        return None
 
     def _parse_sections(self, text: str) -> list[_Section]:
         """解析 Markdown 文本为章节列表
@@ -264,11 +405,21 @@ class MarkdownChunker(BaseChunker):
             return []
 
         sections: list[_Section] = []
+        section_index = 0
 
         # 处理第一个标题之前的内容（如果有）
         preamble = text[: headings[0]["start"]].strip()
         if preamble:
-            sections.append(_Section(heading_path=[], text=preamble, has_body=True))
+            sections.append(
+                _Section(
+                    heading_path=[],
+                    title_path=[],
+                    section_index=section_index,
+                    text=preamble,
+                    has_body=True,
+                )
+            )
+            section_index += 1
 
         # 维护标题栈来追踪层级路径
         heading_stack: list[dict] = []
@@ -297,14 +448,18 @@ class MarkdownChunker(BaseChunker):
 
             # 构建标题路径
             heading_path = [h["title"] for h in heading_stack[:-1]]
+            title_path = [h["title"] for h in heading_stack]
 
             sections.append(
                 _Section(
                     heading_path=heading_path,
+                    title_path=title_path,
+                    section_index=section_index,
                     text=section_text,
                     has_body=bool(body),
                 )
             )
+            section_index += 1
 
         return sections
 

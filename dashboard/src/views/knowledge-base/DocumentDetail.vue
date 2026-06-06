@@ -101,15 +101,203 @@
         </v-card-text>
       </v-card>
 
+      <v-card variant="outlined" class="mb-6">
+        <v-card-title>{{ t("processing.title") }}</v-card-title>
+        <v-card-text>
+          <v-row>
+            <v-col cols="12" md="3">
+              <div class="info-item">
+                <v-icon start :color="getDocumentStatusColor(document.status)">
+                  {{ getDocumentStatusIcon(document.status) }}
+                </v-icon>
+                <div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t("processing.status") }}
+                  </div>
+                  <v-chip
+                    size="small"
+                    variant="tonal"
+                    :color="getDocumentStatusColor(document.status)"
+                  >
+                    {{ getDocumentStatusText(document.status) }}
+                  </v-chip>
+                </div>
+              </div>
+            </v-col>
+            <v-col cols="12" md="3">
+              <div class="info-item">
+                <v-icon start>mdi-source-branch</v-icon>
+                <div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t("processing.sourceType") }}
+                  </div>
+                  <div class="text-body-1">
+                    {{ getSourceTypeText(document.source_type) }}
+                  </div>
+                </div>
+              </div>
+            </v-col>
+            <v-col cols="12" md="3">
+              <div class="info-item">
+                <v-icon start>mdi-counter</v-icon>
+                <div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t("processing.version") }}
+                  </div>
+                  <div class="text-body-1">
+                    {{ document.version || 1 }}
+                  </div>
+                </div>
+              </div>
+            </v-col>
+            <v-col cols="12" md="3">
+              <div class="info-item">
+                <v-icon start>mdi-calendar-check</v-icon>
+                <div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t("processing.indexedAt") }}
+                  </div>
+                  <div class="text-body-1">
+                    {{ formatDate(document.indexed_at) }}
+                  </div>
+                </div>
+              </div>
+            </v-col>
+            <v-col cols="12" md="6">
+              <div class="info-item">
+                <v-icon start>mdi-link-variant</v-icon>
+                <div class="metadata-value">
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t("processing.sourceUri") }}
+                  </div>
+                  <div class="text-body-2 metadata-text">
+                    {{ document.source_uri || "-" }}
+                  </div>
+                </div>
+              </div>
+            </v-col>
+            <v-col cols="12" md="6">
+              <div class="info-item">
+                <v-icon start>mdi-fingerprint</v-icon>
+                <div class="metadata-value">
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t("processing.contentHash") }}
+                  </div>
+                  <div class="text-body-2 metadata-text">
+                    {{ document.content_hash || "-" }}
+                  </div>
+                </div>
+              </div>
+            </v-col>
+            <v-col cols="12" md="6">
+              <div class="info-item">
+                <v-icon start>mdi-file-cog-outline</v-icon>
+                <div class="metadata-value">
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t("processing.parser") }}
+                  </div>
+                  <div class="text-body-2">
+                    {{
+                      formatProcessor(
+                        document.parser_name,
+                        document.parser_version,
+                      )
+                    }}
+                  </div>
+                </div>
+              </div>
+            </v-col>
+            <v-col cols="12" md="6">
+              <div class="info-item">
+                <v-icon start>mdi-text-box-check-outline</v-icon>
+                <div class="metadata-value">
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t("processing.chunker") }}
+                  </div>
+                  <div class="text-body-2">
+                    {{
+                      formatProcessor(
+                        document.chunker_name,
+                        document.chunker_version,
+                      )
+                    }}
+                  </div>
+                </div>
+              </div>
+            </v-col>
+            <v-col v-if="document.parent_doc_id" cols="12" md="6">
+              <div class="info-item">
+                <v-icon start>mdi-file-replace-outline</v-icon>
+                <div class="metadata-value">
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t("processing.parentDocId") }}
+                  </div>
+                  <div class="text-body-2 metadata-text">
+                    {{ document.parent_doc_id }}
+                  </div>
+                </div>
+              </div>
+            </v-col>
+          </v-row>
+          <v-alert
+            v-if="document.status === 'failed'"
+            type="error"
+            variant="tonal"
+            class="mt-4"
+          >
+            <div
+              class="d-flex align-center justify-space-between flex-wrap ga-4"
+            >
+              <div class="metadata-value">
+                <div class="text-subtitle-2">
+                  {{ document.error_stage || t("processing.unknownStage") }}
+                </div>
+                <div class="text-body-2 mt-1">
+                  {{ document.error_message || t("processing.noErrorMessage") }}
+                </div>
+                <v-progress-linear
+                  v-if="document.rebuilding"
+                  :model-value="getRebuildPercentage(document)"
+                  color="error"
+                  height="4"
+                  rounded
+                  striped
+                  class="mt-3"
+                />
+              </div>
+              <v-btn
+                v-if="supportsDocumentRebuild"
+                class="flex-shrink-0"
+                color="error"
+                variant="tonal"
+                prepend-icon="mdi-refresh"
+                :loading="isDocumentRebuildBusy"
+                :disabled="isDocumentRebuildBusy || !document.doc_id"
+                @click="retryDocumentRebuild"
+              >
+                {{ t("actions.retryRebuild") }}
+              </v-btn>
+            </div>
+          </v-alert>
+        </v-card-text>
+      </v-card>
+
       <!-- 分块列表 -->
       <v-card variant="outlined">
         <v-card-title class="d-flex align-center pa-4">
           <span>{{ t("chunks.title") }}</span>
           <v-chip class="ml-2" size="small" variant="tonal">
-            {{ totalChunks }} {{ t("chunks.title") }}
+            {{
+              hasChunkSearch
+                ? t("chunks.filteredTotal", {
+                    filtered: totalChunks,
+                    total: displayDocumentChunkCount,
+                  })
+                : t("chunks.total", { count: displayDocumentChunkCount })
+            }}
           </v-chip>
           <v-spacer />
-          <!-- <v-text-field
+          <v-text-field
             v-model="searchQuery"
             prepend-inner-icon="mdi-magnify"
             :placeholder="t('chunks.searchPlaceholder')"
@@ -118,13 +306,13 @@
             hide-details
             clearable
             style="max-width: 300px"
-          /> -->
+          />
         </v-card-title>
 
         <v-card-text class="pa-0">
           <v-data-table
             :headers="headers"
-            :items="filteredChunks"
+            :items="chunks"
             :loading="loadingChunks"
             :items-per-page="pageSize"
             hide-default-footer
@@ -141,10 +329,34 @@
               </div>
             </template>
 
+            <template #item.title_path="{ item }">
+              <span class="text-caption metadata-text">
+                {{ formatTitlePath(item.title_path) }}
+              </span>
+            </template>
+
             <template #item.char_count="{ item }">
               <v-chip size="small" variant="outlined">
                 {{ t("chunks.charCountValue", { count: item.char_count }) }}
               </v-chip>
+            </template>
+
+            <template #item.token_count_estimate="{ item }">
+              <v-chip size="small" variant="outlined">
+                {{ formatTokenEstimate(item.token_count_estimate) }}
+              </v-chip>
+            </template>
+
+            <template #item.offset="{ item }">
+              <span class="text-caption">
+                {{ formatChunkOffset(item) }}
+              </span>
+            </template>
+
+            <template #item.content_hash="{ item }">
+              <span class="text-caption metadata-text">
+                {{ formatShortHash(item.content_hash) }}
+              </span>
             </template>
 
             <template #item.actions="{ item }">
@@ -177,17 +389,22 @@
 
           <!-- 自定义分页器 -->
           <div
-            v-if="!searchQuery && totalChunks > 0"
+            v-if="totalChunks > 0"
             class="pa-4 d-flex align-center justify-space-between"
           >
             <div class="text-caption text-medium-emphasis">
-              {{ t("chunks.showing") }} {{ (page - 1) * pageSize + 1 }} -
-              {{ Math.min(page * pageSize, totalChunks) }} / {{ totalChunks }}
+              {{
+                t("chunks.showingRange", {
+                  start: (page - 1) * pageSize + 1,
+                  end: Math.min(page * pageSize, totalChunks),
+                  total: totalChunks,
+                })
+              }}
             </div>
             <div class="d-flex align-center gap-2">
               <v-select
                 v-model="pageSize"
-                :items="[10, 25, 50, 100]"
+                :items="chunkPageSizeOptions"
                 density="compact"
                 variant="outlined"
                 hide-details
@@ -246,6 +463,100 @@
 
             <v-list-item>
               <template #prepend>
+                <v-icon>mdi-counter</v-icon>
+              </template>
+              <v-list-item-title>{{
+                t("view.tokenEstimate")
+              }}</v-list-item-title>
+              <v-list-item-subtitle>{{
+                formatTokenEstimate(selectedChunk?.token_count_estimate)
+              }}</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item>
+              <template #prepend>
+                <v-icon>mdi-format-title</v-icon>
+              </template>
+              <v-list-item-title>{{ t("view.titlePath") }}</v-list-item-title>
+              <v-list-item-subtitle class="metadata-text">{{
+                formatTitlePath(selectedChunk?.title_path)
+              }}</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item>
+              <template #prepend>
+                <v-icon>mdi-file-tree-outline</v-icon>
+              </template>
+              <v-list-item-title>{{ t("view.section") }}</v-list-item-title>
+              <v-list-item-subtitle>{{
+                formatOneBasedIndex(selectedChunk?.section_index)
+              }}</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item>
+              <template #prepend>
+                <v-icon>mdi-file-document-outline</v-icon>
+              </template>
+              <v-list-item-title>{{ t("view.pageNumber") }}</v-list-item-title>
+              <v-list-item-subtitle>{{
+                formatNullableValue(selectedChunk?.page_number)
+              }}</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item>
+              <template #prepend>
+                <v-icon>mdi-map-marker-distance</v-icon>
+              </template>
+              <v-list-item-title>{{ t("view.offset") }}</v-list-item-title>
+              <v-list-item-subtitle>{{
+                formatChunkOffset(selectedChunk)
+              }}</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item>
+              <template #prepend>
+                <v-icon>mdi-fingerprint</v-icon>
+              </template>
+              <v-list-item-title>{{ t("view.contentHash") }}</v-list-item-title>
+              <v-list-item-subtitle class="metadata-text">{{
+                selectedChunk?.content_hash || "-"
+              }}</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item>
+              <template #prepend>
+                <v-icon>mdi-arrow-left-right</v-icon>
+              </template>
+              <v-list-item-title>{{
+                t("view.adjacentChunks")
+              }}</v-list-item-title>
+              <v-list-item-subtitle class="metadata-text">
+                {{
+                  t("view.previousChunk", {
+                    id: selectedChunk?.previous_chunk_id || "-",
+                  })
+                }}
+                <br />
+                {{
+                  t("view.nextChunk", {
+                    id: selectedChunk?.next_chunk_id || "-",
+                  })
+                }}
+              </v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item>
+              <template #prepend>
+                <v-icon>mdi-file-link-outline</v-icon>
+              </template>
+              <v-list-item-title>{{ t("view.parentChunk") }}</v-list-item-title>
+              <v-list-item-subtitle class="metadata-text">{{
+                selectedChunk?.parent_chunk_id || "-"
+              }}</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item>
+              <template #prepend>
                 <v-icon>mdi-key</v-icon>
               </template>
               <v-list-item-title>{{ t("view.vecDocId") }}</v-list-item-title>
@@ -260,6 +571,43 @@
           </div>
           <div class="chunk-content-view">
             {{ selectedChunk?.content }}
+          </div>
+
+          <div class="d-flex align-center mt-6 mb-2">
+            <div class="text-caption text-medium-emphasis">
+              {{ t("view.context") }}
+            </div>
+            <v-spacer />
+            <v-progress-circular
+              v-if="loadingContext"
+              indeterminate
+              size="18"
+              width="2"
+            />
+          </div>
+          <div class="chunk-context-list">
+            <div
+              v-for="slot in contextSlots"
+              :key="slot.key"
+              class="chunk-context-item"
+              :class="{ active: slot.key === 'current' }"
+            >
+              <div class="chunk-context-header">
+                <v-chip
+                  size="x-small"
+                  variant="tonal"
+                  :color="slot.key === 'current' ? 'primary' : 'default'"
+                >
+                  {{ slot.label }}
+                </v-chip>
+                <span class="text-caption text-medium-emphasis">
+                  {{ formatContextMeta(slot.chunk) }}
+                </span>
+              </div>
+              <div class="chunk-context-content">
+                {{ slot.chunk?.content || t("view.contextMissing") }}
+              </div>
+            </div>
           </div>
         </v-card-text>
         <v-card-actions class="pa-4">
@@ -279,35 +627,69 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import { useRoute } from "vue-router";
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import axios from "axios";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
+import { useKnowledgeBaseCapabilities } from "./capabilities";
+import {
+  applyActiveRebuildState,
+  applyDocumentTaskProgress,
+  canRebuildDocument,
+  clearDocumentTaskState,
+  DEFAULT_CHUNK_PAGE_SIZE,
+  getFocusedChunkId,
+  getKnowledgeBasePaginationConfig,
+  isKnowledgeBaseFeatureEnabled,
+  markDocumentRebuildStarted,
+  removeFocusedChunkQuery,
+} from "./knowledgeBaseUi.mjs";
 
 const { tm: t } = useModuleI18n("features/knowledge-base/document");
 const { locale } = useI18n();
 const route = useRoute();
+const router = useRouter();
+const { capabilities, loadCapabilities } = useKnowledgeBaseCapabilities();
 
 const confirmDialog = useConfirmDialog();
 
-const kbId = ref(route.params.kbId as string);
-const docId = ref(route.params.docId as string);
+const kbId = computed(() => String(route.params.kbId || ""));
+const docId = computed(() => String(route.params.docId || ""));
 
 // 状态
 const loading = ref(true);
 const loadingChunks = ref(false);
+const rebuilding = ref(false);
 const document = ref<any>({});
 const chunks = ref<any[]>([]);
 const searchQuery = ref("");
 const showViewDialog = ref(false);
 const selectedChunk = ref<any>(null);
+const chunkContext = ref<any>(null);
+const loadingContext = ref(false);
 const loadError = ref("");
+const focusedChunkId = computed(() => getFocusedChunkId(route.query));
 
 // 分页状态
 const page = ref(1);
-const pageSize = ref(10);
+const pageSize = ref(DEFAULT_CHUNK_PAGE_SIZE);
 const totalChunks = ref(0);
+const documentChunkCount = ref<number | null>(null);
+let searchTimer: number | undefined;
+let rebuildPollingInterval: number | undefined;
+const paginationConfig = computed(() =>
+  getKnowledgeBasePaginationConfig(capabilities.value),
+);
+const chunkPageSizeOptions = computed(
+  () => paginationConfig.value.chunkPageSizeOptions,
+);
+const supportsDocumentRebuild = computed(() =>
+  isKnowledgeBaseFeatureEnabled(capabilities.value, "document_rebuild"),
+);
+const isDocumentRebuildBusy = computed(
+  () => rebuilding.value || Boolean(document.value?.rebuilding),
+);
 
 const snackbar = ref({
   show: false,
@@ -325,18 +707,45 @@ const showSnackbar = (text: string, color: string = "success") => {
 const headers = computed(() => [
   { title: t("chunks.index"), key: "chunk_index", width: 100 },
   { title: t("chunks.content"), key: "content", sortable: false },
+  {
+    title: t("chunks.titlePath"),
+    key: "title_path",
+    sortable: false,
+    width: 180,
+  },
   { title: t("chunks.charCount"), key: "char_count", width: 150 },
+  {
+    title: t("chunks.tokenEstimate"),
+    key: "token_count_estimate",
+    width: 150,
+  },
+  { title: t("chunks.offset"), key: "offset", sortable: false, width: 150 },
+  { title: t("chunks.contentHash"), key: "content_hash", sortable: false },
   { title: t("chunks.actions"), key: "actions", sortable: false, width: 150 },
 ]);
 
-// 过滤分块
-const filteredChunks = computed(() => {
-  if (!searchQuery.value) return chunks.value;
-  const query = searchQuery.value.toLowerCase();
-  return chunks.value.filter((chunk) =>
-    chunk.content.toLowerCase().includes(query),
-  );
-});
+const contextSlots = computed(() => [
+  {
+    key: "previous",
+    label: t("view.previous"),
+    chunk: chunkContext.value?.previous,
+  },
+  {
+    key: "current",
+    label: t("view.current"),
+    chunk: chunkContext.value?.current || selectedChunk.value,
+  },
+  {
+    key: "next",
+    label: t("view.next"),
+    chunk: chunkContext.value?.next,
+  },
+]);
+const hasChunkSearch = computed(() => searchQuery.value.trim().length > 0);
+const displayDocumentChunkCount = computed(
+  () =>
+    documentChunkCount.value ?? document.value.chunk_count ?? totalChunks.value,
+);
 
 // 加载文档详情
 const loadDocument = async () => {
@@ -347,7 +756,11 @@ const loadDocument = async () => {
       params: { doc_id: docId.value, kb_id: kbId.value },
     });
     if (response.data.status === "ok") {
-      document.value = response.data.data;
+      document.value = applyActiveRebuildState(
+        [response.data.data],
+        [document.value],
+      )[0];
+      documentChunkCount.value = response.data.data.chunk_count ?? null;
     } else {
       loadError.value =
         response.data.message || t("messages.loadDocumentFailed");
@@ -372,11 +785,17 @@ const loadChunks = async () => {
         kb_id: kbId.value,
         page: page.value,
         page_size: pageSize.value,
+        search: searchQuery.value || undefined,
       },
     });
     if (response.data.status === "ok") {
       chunks.value = response.data.data.items || [];
-      totalChunks.value = response.data.data.total || 0;
+      totalChunks.value =
+        response.data.data.filtered_total ?? response.data.data.total ?? 0;
+      documentChunkCount.value =
+        response.data.data.document_chunk_count ??
+        response.data.data.total ??
+        documentChunkCount.value;
     } else {
       showSnackbar(
         response.data.message || t("messages.loadChunksFailed"),
@@ -406,7 +825,200 @@ const handlePageSizeChange = (newPageSize: number) => {
 // 查看分块
 const viewChunk = (chunk: any) => {
   selectedChunk.value = chunk;
+  chunkContext.value = null;
   showViewDialog.value = true;
+  loadChunkContext(chunk);
+};
+
+const loadChunkContext = async (chunk: any) => {
+  if (!chunk?.chunk_id) return;
+  loadingContext.value = true;
+  try {
+    const response = await axios.get("/api/kb/chunk/context", {
+      params: {
+        chunk_id: chunk.chunk_id,
+        doc_id: docId.value,
+        kb_id: kbId.value,
+      },
+    });
+    if (response.data.status === "ok") {
+      chunkContext.value = response.data.data;
+    } else {
+      showSnackbar(
+        response.data.message || t("messages.loadChunkContextFailed"),
+        "error",
+      );
+    }
+  } catch (error) {
+    console.error("Failed to load chunk context:", error);
+    showSnackbar(t("messages.loadChunkContextFailed"), "error");
+  } finally {
+    loadingContext.value = false;
+  }
+};
+
+const getRebuildPercentage = (doc: any) => {
+  const current = Number(doc?.uploadProgress?.current ?? 0);
+  const total = Number(doc?.uploadProgress?.total ?? 100);
+  if (!Number.isFinite(total) || total <= 0) {
+    return 0;
+  }
+  return (current / total) * 100;
+};
+
+const stopRebuildProgressPolling = () => {
+  if (rebuildPollingInterval !== undefined) {
+    window.clearInterval(rebuildPollingInterval);
+    rebuildPollingInterval = undefined;
+  }
+};
+
+const refreshAfterRebuildTask = async (taskId: string) => {
+  document.value =
+    clearDocumentTaskState([document.value], taskId)[0] || document.value;
+  await loadDocument();
+  await loadChunks();
+};
+
+const startRebuildProgressPolling = (taskId: string) => {
+  stopRebuildProgressPolling();
+  rebuildPollingInterval = window.setInterval(async () => {
+    try {
+      const response = await axios.get("/api/kb/document/upload/progress", {
+        params: { task_id: taskId },
+      });
+      if (response.data.status !== "ok") {
+        stopRebuildProgressPolling();
+        await refreshAfterRebuildTask(taskId);
+        return;
+      }
+
+      const task = response.data.data;
+      if (task.status === "processing" && task.progress) {
+        document.value =
+          applyDocumentTaskProgress(
+            [document.value],
+            taskId,
+            task.progress,
+          )[0] || document.value;
+        return;
+      }
+
+      if (task.status === "completed") {
+        stopRebuildProgressPolling();
+        showSnackbar(t("messages.rebuildCompleted"));
+        await refreshAfterRebuildTask(taskId);
+        return;
+      }
+
+      if (task.status === "failed") {
+        stopRebuildProgressPolling();
+        const reason = task.error || t("messages.rebuildFailed");
+        showSnackbar(
+          t("messages.rebuildFailedWithReason", { reason }),
+          "error",
+        );
+        await refreshAfterRebuildTask(taskId);
+      }
+    } catch (error) {
+      console.error("Failed to poll document rebuild progress:", error);
+    }
+  }, 1000);
+};
+
+const retryDocumentRebuild = async () => {
+  if (
+    !canRebuildDocument(document.value, {
+      supportsDocumentRebuild: supportsDocumentRebuild.value,
+    })
+  ) {
+    return;
+  }
+  if (
+    !(await askForConfirmation(t("actions.retryRebuildConfirm"), confirmDialog))
+  ) {
+    return;
+  }
+
+  rebuilding.value = true;
+  try {
+    const response = await axios.post("/api/kb/document/rebuild", {
+      doc_id: document.value.doc_id,
+      kb_id: kbId.value,
+      background: true,
+    });
+    if (response.data.status === "ok") {
+      const taskId = response.data.data?.task_id;
+      if (taskId) {
+        document.value =
+          markDocumentRebuildStarted(
+            [document.value],
+            document.value.doc_id,
+            taskId,
+          )[0] || document.value;
+        showSnackbar(t("messages.rebuildStarted"), "info");
+        startRebuildProgressPolling(taskId);
+      } else {
+        showSnackbar(t("messages.rebuildCompleted"));
+        await loadDocument();
+        await loadChunks();
+      }
+    } else {
+      showSnackbar(
+        response.data.message || t("messages.rebuildFailed"),
+        "error",
+      );
+    }
+  } catch (error) {
+    console.error("Failed to retry document rebuild:", error);
+    showSnackbar(t("messages.rebuildFailed"), "error");
+  } finally {
+    rebuilding.value = false;
+  }
+};
+
+const clearFocusedChunk = () => {
+  if (!focusedChunkId.value) return;
+  router.replace({ query: removeFocusedChunkQuery(route.query) });
+};
+
+const focusChunkFromQuery = async () => {
+  if (!focusedChunkId.value || loading.value || loadError.value) return;
+
+  loadingContext.value = true;
+  try {
+    const response = await axios.get("/api/kb/chunk/context", {
+      params: {
+        chunk_id: focusedChunkId.value,
+        doc_id: docId.value,
+        kb_id: kbId.value,
+      },
+    });
+    if (response.data.status === "ok") {
+      chunkContext.value = response.data.data;
+      selectedChunk.value = response.data.data?.current || null;
+      if (!selectedChunk.value) {
+        showSnackbar(t("messages.focusChunkNotFound"), "warning");
+        clearFocusedChunk();
+        return;
+      }
+      showViewDialog.value = true;
+      await nextTick();
+      showSnackbar(t("messages.focusChunkLoaded"));
+    } else {
+      showSnackbar(
+        response.data.message || t("messages.focusChunkFailed"),
+        "error",
+      );
+      clearFocusedChunk();
+    }
+  } catch (error) {
+    console.error("Failed to focus chunk:", error);
+    showSnackbar(t("messages.focusChunkFailed"), "error");
+    clearFocusedChunk();
+  } finally {
+    loadingContext.value = false;
+  }
 };
 
 // 删除分块
@@ -456,6 +1068,111 @@ const getFileColor = (fileType: string) => {
   return "grey";
 };
 
+const getDocumentStatusText = (status?: string) => {
+  const normalizedStatus = status || "ready";
+  const statusMap: Record<string, string> = {
+    pending: t("processing.statuses.pending"),
+    parsing: t("processing.statuses.parsing"),
+    chunking: t("processing.statuses.chunking"),
+    embedding: t("processing.statuses.embedding"),
+    ready: t("processing.statuses.ready"),
+    failed: t("processing.statuses.failed"),
+  };
+  return statusMap[normalizedStatus] || normalizedStatus;
+};
+
+const getDocumentStatusColor = (status?: string) => {
+  switch (status) {
+    case "failed":
+      return "error";
+    case "pending":
+      return "grey";
+    case "parsing":
+    case "chunking":
+    case "embedding":
+      return "warning";
+    case "ready":
+    default:
+      return "success";
+  }
+};
+
+const getDocumentStatusIcon = (status?: string) => {
+  switch (status) {
+    case "failed":
+      return "mdi-alert-circle-outline";
+    case "pending":
+      return "mdi-clock-outline";
+    case "parsing":
+    case "chunking":
+    case "embedding":
+      return "mdi-progress-clock";
+    case "ready":
+    default:
+      return "mdi-check-circle-outline";
+  }
+};
+
+const getSourceTypeText = (sourceType?: string) => {
+  const normalizedSourceType = sourceType || "file";
+  const sourceTypeMap: Record<string, string> = {
+    file: t("processing.sourceTypes.file"),
+    url: t("processing.sourceTypes.url"),
+    import: t("processing.sourceTypes.import"),
+    api: t("processing.sourceTypes.api"),
+  };
+  return sourceTypeMap[normalizedSourceType] || normalizedSourceType;
+};
+
+const formatProcessor = (name?: string, version?: string) => {
+  if (!name) return "-";
+  return version ? `${name} v${version}` : name;
+};
+
+const formatChunkOffset = (chunk?: any) => {
+  if (
+    chunk?.start_offset === undefined ||
+    chunk?.start_offset === null ||
+    chunk?.end_offset === undefined ||
+    chunk?.end_offset === null
+  ) {
+    return "-";
+  }
+  return `${chunk.start_offset} - ${chunk.end_offset}`;
+};
+
+const formatContextMeta = (chunk?: any) => {
+  if (!chunk) return "-";
+  return `#${(chunk.chunk_index || 0) + 1} | ${formatTitlePath(
+    chunk.title_path,
+  )} | ${formatChunkOffset(chunk)}`;
+};
+
+const formatTitlePath = (titlePath?: string[] | null) => {
+  if (!Array.isArray(titlePath) || titlePath.length === 0) return "-";
+  return titlePath.filter(Boolean).join(" / ") || "-";
+};
+
+const formatNullableValue = (value?: number | null) => {
+  if (value === undefined || value === null) return "-";
+  return String(value);
+};
+
+const formatOneBasedIndex = (value?: number | null) => {
+  if (value === undefined || value === null) return "-";
+  return String(value + 1);
+};
+
+const formatTokenEstimate = (value?: number | null) => {
+  if (value === undefined || value === null) return "-";
+  return t("chunks.tokenEstimateValue", { count: value });
+};
+
+const formatShortHash = (hash?: string) => {
+  if (!hash) return "-";
+  return hash.length > 12 ? `${hash.slice(0, 12)}...` : hash;
+};
+
 const formatFileSize = (bytes: number) => {
   if (!bytes) return "-";
   const units = ["B", "KB", "MB", "GB"];
@@ -480,13 +1197,48 @@ const formatDate = (dateStr: string) => {
 };
 
 onMounted(() => {
+  loadCapabilities().then((loadedCapabilities) => {
+    pageSize.value =
+      getKnowledgeBasePaginationConfig(loadedCapabilities).defaultChunkPageSize;
+    loadAll();
+  });
+});
+
+watch(focusedChunkId, () => {
+  focusChunkFromQuery();
+});
+
+watch([kbId, docId], () => {
+  stopRebuildProgressPolling();
+  showViewDialog.value = false;
+  selectedChunk.value = null;
+  chunkContext.value = null;
+  page.value = 1;
   loadAll();
+});
+
+watch(searchQuery, () => {
+  page.value = 1;
+  if (searchTimer !== undefined) {
+    window.clearTimeout(searchTimer);
+  }
+  searchTimer = window.setTimeout(() => {
+    loadChunks();
+  }, 250);
+});
+
+onUnmounted(() => {
+  if (searchTimer !== undefined) {
+    window.clearTimeout(searchTimer);
+  }
+  stopRebuildProgressPolling();
 });
 
 const loadAll = async () => {
   await loadDocument();
   if (!loadError.value) {
     await loadChunks();
+    await focusChunkFromQuery();
   }
 };
 </script>
@@ -554,6 +1306,15 @@ const loadAll = async () => {
   align-items: flex-start;
 }
 
+.metadata-value {
+  min-width: 0;
+  flex: 1;
+}
+
+.metadata-text {
+  overflow-wrap: anywhere;
+}
+
 .chunk-content-preview {
   max-width: 400px;
   white-space: nowrap;
@@ -571,6 +1332,39 @@ const loadAll = async () => {
   word-break: break-word;
   line-height: 1.6;
   font-family: "Consolas", "Monaco", monospace;
+}
+
+.chunk-context-list {
+  display: grid;
+  gap: 12px;
+}
+
+.chunk-context-item {
+  padding: 12px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface));
+}
+
+.chunk-context-item.active {
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.04);
+}
+
+.chunk-context-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.chunk-context-content {
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.875rem;
+  line-height: 1.6;
 }
 
 .gap-2 {

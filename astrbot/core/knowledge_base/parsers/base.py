@@ -21,6 +21,14 @@ class MediaItem:
 
 
 @dataclass
+class TextSegment:
+    """Parsed text segment with optional source location metadata."""
+
+    text: str
+    metadata: dict
+
+
+@dataclass
 class ParseResult:
     """解析结果
 
@@ -29,6 +37,7 @@ class ParseResult:
 
     text: str
     media: list[MediaItem]
+    text_segments: list[TextSegment] | None = None
 
 
 class BaseParser(ABC):

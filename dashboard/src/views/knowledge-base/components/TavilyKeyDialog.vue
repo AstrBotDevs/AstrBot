@@ -19,7 +19,7 @@
           :error-messages="errorMessage"
           autofocus
           clearable
-          placeholder="tvly-..."
+          :placeholder="t('tavily.apiKeyPlaceholder')"
         />
       </v-card-text>
       <v-card-actions>

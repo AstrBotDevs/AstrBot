@@ -11,6 +11,7 @@ from astrbot.core.knowledge_base.parsers.base import (
     BaseParser,
     MediaItem,
     ParseResult,
+    TextSegment,
 )
 
 
@@ -35,13 +36,20 @@ class PDFParser(BaseParser):
         reader = PdfReader(pdf_file)
 
         text_parts = []
+        text_segments = []
         media_items = []
 
         # 提取文本
-        for page in reader.pages:
+        for page_number, page in enumerate(reader.pages, start=1):
             text = page.extract_text()
             if text:
                 text_parts.append(text)
+                text_segments.append(
+                    TextSegment(
+                        text=text,
+                        metadata={"page_number": page_number},
+                    )
+                )
 
         # 提取图片
         image_counter = 0
@@ -98,4 +106,8 @@ class PDFParser(BaseParser):
                 continue
 
         full_text = "\n\n".join(text_parts)
-        return ParseResult(text=full_text, media=media_items)
+        return ParseResult(
+            text=full_text,
+            media=media_items,
+            text_segments=text_segments,
+        )

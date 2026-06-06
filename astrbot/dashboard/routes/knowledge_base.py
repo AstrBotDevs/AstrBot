@@ -11,25 +11,34 @@ from quart import request
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.knowledge_base.capabilities import (
+    ALLOWED_UPLOAD_EXTENSIONS,
+    DEFAULT_CHUNK_OVERLAP,
+    DEFAULT_CHUNK_PAGE_SIZE,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_DOCUMENT_PAGE_SIZE,
+    DEFAULT_INDEX_TYPE,
+    DEFAULT_KB_PAGE_SIZE,
+    DEFAULT_TOP_K_DENSE,
+    DEFAULT_TOP_K_SPARSE,
+    DEFAULT_TOP_M_FINAL,
+    DEFAULT_UPLOAD_BATCH_SIZE,
+    DEFAULT_UPLOAD_MAX_RETRIES,
+    DEFAULT_UPLOAD_TASKS_LIMIT,
+    DOCUMENT_FILTER_SOURCE_TYPES,
+    DOCUMENT_FILTER_STATUSES,
+    MAX_BATCH_DELETE_DOCUMENTS,
+    MAX_BATCH_REBUILD_DOCUMENTS,
+    MAX_RETRIEVE_TOP_K,
+    MAX_UPLOAD_FILE_SIZE,
+    MAX_UPLOAD_FILES,
+    get_knowledge_base_capabilities,
+)
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..utils import generate_tsne_visualization
 from .route import Response, Route, RouteContext
-
-ALLOWED_UPLOAD_EXTENSIONS = {
-    "adoc",
-    "docx",
-    "epub",
-    "md",
-    "markdown",
-    "pdf",
-    "rst",
-    "txt",
-    "xls",
-    "xlsx",
-}
-MAX_UPLOAD_FILE_SIZE = 128 * 1024 * 1024
 
 
 class KnowledgeBaseRoute(Route):
@@ -55,12 +64,16 @@ class KnowledgeBaseRoute(Route):
         # 注册路由
         self.routes = {
             # 知识库管理
+            "/kb/capabilities": ("GET", self.get_capabilities),
             "/kb/list": ("GET", self.list_kbs),
             "/kb/create": ("POST", self.create_kb),
             "/kb/get": ("GET", self.get_kb),
             "/kb/update": ("POST", self.update_kb),
             "/kb/delete": ("POST", self.delete_kb),
             "/kb/stats": ("GET", self.get_kb_stats),
+            "/kb/consistency/check": ("GET", self.check_kb_consistency),
+            "/kb/consistency/repair": ("POST", self.repair_kb_consistency),
+            "/kb/rebuild": ("POST", self.rebuild_kb),
             # 文档管理
             "/kb/document/list": ("GET", self.list_documents),
             "/kb/document/upload": ("POST", self.upload_document),
@@ -68,10 +81,15 @@ class KnowledgeBaseRoute(Route):
             "/kb/document/upload/url": ("POST", self.upload_document_from_url),
             "/kb/document/upload/progress": ("GET", self.get_upload_progress),
             "/kb/document/get": ("GET", self.get_document),
+            "/kb/document/rebuild": ("POST", self.rebuild_document),
+            "/kb/document/batch-rebuild": ("POST", self.batch_rebuild_documents),
             "/kb/document/delete": ("POST", self.delete_document),
             "/kb/document/batch-delete": ("POST", self.batch_delete_documents),
+            "/kb/task/get": ("GET", self.get_task),
+            "/kb/task/list": ("GET", self.list_tasks),
             # # 块管理
             "/kb/chunk/list": ("GET", self.list_chunks),
+            "/kb/chunk/context": ("GET", self.get_chunk_context),
             "/kb/chunk/delete": ("POST", self.delete_chunk),
             # # 多媒体管理
             # "/kb/media/list": ("GET", self.list_media),
@@ -83,6 +101,77 @@ class KnowledgeBaseRoute(Route):
 
     def _get_kb_manager(self):
         return self.core_lifecycle.kb_manager
+
+    def _get_kb_db(self):
+        if not hasattr(self, "core_lifecycle"):
+            return None
+        kb_manager = self._get_kb_manager()
+        return getattr(kb_manager, "kb_db", None)
+
+    @staticmethod
+    def _get_positive_query_int(name: str, default: int) -> int:
+        value = request.args.get(name, default, type=int)
+        return max(value if value is not None else default, 1)
+
+    async def get_capabilities(self):
+        """Return knowledge base capabilities, defaults, and limits."""
+        return Response().ok(get_knowledge_base_capabilities()).__dict__
+
+    async def _create_persistent_task(
+        self,
+        *,
+        task_id: str,
+        kb_id: str | None,
+        task_type: str,
+        status: str,
+        progress: dict | None = None,
+    ) -> None:
+        kb_db = self._get_kb_db()
+        if not kb_db or not kb_id:
+            return
+        try:
+            await kb_db.create_ingestion_task(
+                task_id=task_id,
+                kb_id=kb_id,
+                task_type=task_type,
+                status=status,
+                progress_stage=(progress or {}).get("stage"),
+                progress_current=(progress or {}).get("current", 0),
+                progress_total=(progress or {}).get("total", 100),
+                progress=progress,
+            )
+        except Exception as e:
+            logger.warning(f"创建知识库持久任务记录失败 {task_id}: {e}")
+
+    async def _update_persistent_task(self, task_id: str, **updates) -> None:
+        kb_db = self._get_kb_db()
+        if not kb_db:
+            return
+        try:
+            await kb_db.update_ingestion_task(task_id, **updates)
+        except Exception as e:
+            logger.warning(f"更新知识库持久任务记录失败 {task_id}: {e}")
+
+    async def _get_persistent_task(self, task_id: str) -> dict | None:
+        kb_db = self._get_kb_db()
+        if not kb_db:
+            return None
+        try:
+            return await kb_db.get_ingestion_task(task_id)
+        except Exception as e:
+            logger.warning(f"读取知识库持久任务记录失败 {task_id}: {e}")
+            return None
+
+    def _get_persistent_progress_updates(self, task_id: str) -> dict:
+        progress = self.upload_progress.get(task_id)
+        if not progress:
+            return {}
+        return {
+            "progress_stage": progress.get("stage"),
+            "progress_current": progress.get("current", 0),
+            "progress_total": progress.get("total", 100),
+            "progress": progress,
+        }
 
     def _init_task(self, task_id: str, status: str = "pending") -> None:
         self.upload_tasks[task_id] = {
@@ -144,6 +233,16 @@ class KnowledgeBaseRoute(Route):
         if total is not None:
             p["total"] = total
 
+    async def _persist_progress(self, task_id: str) -> None:
+        progress = self.upload_progress.get(task_id)
+        if not progress:
+            return
+        await self._update_persistent_task(
+            task_id,
+            status=progress.get("status"),
+            **self._get_persistent_progress_updates(task_id),
+        )
+
     def _make_progress_callback(self, task_id: str, file_idx: int, file_name: str):
         async def _callback(stage: str, current: int, total: int) -> None:
             self._update_progress(
@@ -155,6 +254,7 @@ class KnowledgeBaseRoute(Route):
                 current=current,
                 total=total,
             )
+            await self._persist_progress(task_id)
 
         return _callback
 
@@ -166,6 +266,13 @@ class KnowledgeBaseRoute(Route):
         return f"{file_name}: {message}"
 
     @staticmethod
+    def _format_size_limit(size_bytes: int) -> str:
+        size_mb = size_bytes / (1024 * 1024)
+        if size_mb.is_integer():
+            return f"{int(size_mb)}MB"
+        return f"{size_mb:.2f}MB"
+
+    @staticmethod
     def _coerce_optional_int(value: Any, field_name: str) -> int | None:
         if value in (None, ""):
             return None
@@ -173,6 +280,20 @@ class KnowledgeBaseRoute(Route):
             return int(value)
         except (TypeError, ValueError) as e:
             raise ValueError(f"{field_name} 必须是整数") from e
+
+    @staticmethod
+    def _coerce_optional_bool(value: Any, field_name: str) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value in (None, ""):
+            return False
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"true", "1", "yes", "on"}:
+                return True
+            if lowered in {"false", "0", "no", "off"}:
+                return False
+        raise ValueError(f"{field_name} 必须是布尔值")
 
     @staticmethod
     def _validate_chunk_options(
@@ -242,7 +363,8 @@ class KnowledgeBaseRoute(Route):
         if file_type not in ALLOWED_UPLOAD_EXTENSIONS:
             raise ValueError(f"不支持的文件类型: {file_name}")
         if file_size > MAX_UPLOAD_FILE_SIZE:
-            raise ValueError(f"文件超过 128MB 限制: {file_name}")
+            limit = KnowledgeBaseRoute._format_size_limit(MAX_UPLOAD_FILE_SIZE)
+            raise ValueError(f"文件超过 {limit} 限制: {file_name}")
 
     async def _background_upload_task(
         self,
@@ -267,6 +389,7 @@ class KnowledgeBaseRoute(Route):
                 "current": 0,
                 "total": 100,
             }
+            await self._persist_progress(task_id)
 
             uploaded_docs = []
             failed_docs = []
@@ -283,6 +406,7 @@ class KnowledgeBaseRoute(Route):
                         current=0,
                         total=100,
                     )
+                    await self._persist_progress(task_id)
 
                     # 创建进度回调函数
                     progress_callback = self._make_progress_callback(
@@ -324,11 +448,24 @@ class KnowledgeBaseRoute(Route):
             }
 
             self._set_task_result(task_id, "completed", result=result)
+            await self._update_persistent_task(
+                task_id,
+                status="completed",
+                result=result,
+                error=None,
+                **self._get_persistent_progress_updates(task_id),
+            )
 
         except Exception as e:
             logger.error(f"后台上传任务 {task_id} 失败: {e}")
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
+            await self._update_persistent_task(
+                task_id,
+                status="failed",
+                error=str(e),
+                **self._get_persistent_progress_updates(task_id),
+            )
         finally:
             # 兜底清理：防止客户端不轮询 get_upload_progress 导致内存泄漏
             asyncio.create_task(self._schedule_delayed_cleanup(task_id))
@@ -354,6 +491,7 @@ class KnowledgeBaseRoute(Route):
                 "current": 0,
                 "total": 100,
             }
+            await self._persist_progress(task_id)
 
             uploaded_docs = []
             failed_docs = []
@@ -373,6 +511,7 @@ class KnowledgeBaseRoute(Route):
                         current=0,
                         total=100,
                     )
+                    await self._persist_progress(task_id)
 
                     # 创建进度回调函数
                     progress_callback = self._make_progress_callback(
@@ -394,6 +533,8 @@ class KnowledgeBaseRoute(Route):
                         max_retries=max_retries,
                         progress_callback=progress_callback,
                         pre_chunked_text=chunks,
+                        source_type="import",
+                        source_uri=file_name,
                     )
 
                     uploaded_docs.append(doc.model_dump())
@@ -417,11 +558,250 @@ class KnowledgeBaseRoute(Route):
             }
 
             self._set_task_result(task_id, "completed", result=result)
+            await self._update_persistent_task(
+                task_id,
+                status="completed",
+                result=result,
+                error=None,
+                **self._get_persistent_progress_updates(task_id),
+            )
 
         except Exception as e:
             logger.error(f"后台导入任务 {task_id} 失败: {e}")
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
+            await self._update_persistent_task(
+                task_id,
+                status="failed",
+                error=str(e),
+                **self._get_persistent_progress_updates(task_id),
+            )
+        finally:
+            asyncio.create_task(self._schedule_delayed_cleanup(task_id))
+
+    async def _background_rebuild_document_task(
+        self,
+        task_id: str,
+        kb_helper,
+        doc_id: str,
+        chunk_size: int | None,
+        chunk_overlap: int | None,
+        batch_size: int,
+        tasks_limit: int,
+        max_retries: int,
+    ) -> None:
+        """Run a single document rebuild in the background."""
+        try:
+            self._init_task(task_id, status="processing")
+            self.upload_progress[task_id] = {
+                "status": "processing",
+                "file_index": 0,
+                "file_total": 1,
+                "file_name": doc_id,
+                "stage": "rebuilding",
+                "current": 0,
+                "total": 100,
+            }
+            await self._persist_progress(task_id)
+
+            progress_callback = self._make_progress_callback(task_id, 0, doc_id)
+            doc = await kb_helper.rebuild_document(
+                doc_id,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+            )
+
+            result = {
+                "task_id": task_id,
+                "rebuilt": [doc.model_dump()],
+                "failed": [],
+                "total": 1,
+                "success_count": 1,
+                "failed_count": 0,
+            }
+            self._update_progress(
+                task_id,
+                status="completed",
+                file_index=0,
+                file_name=doc_id,
+                stage="completed",
+                current=100,
+                total=100,
+            )
+            self._set_task_result(task_id, "completed", result=result)
+            await self._update_persistent_task(
+                task_id,
+                status="completed",
+                result=result,
+                error=None,
+                **self._get_persistent_progress_updates(task_id),
+            )
+
+        except Exception as e:
+            logger.error(f"后台重建文档任务 {task_id} 失败: {e}")
+            logger.error(traceback.format_exc())
+            self._set_task_result(task_id, "failed", error=str(e))
+            await self._update_persistent_task(
+                task_id,
+                status="failed",
+                error=str(e),
+                **self._get_persistent_progress_updates(task_id),
+            )
+        finally:
+            asyncio.create_task(self._schedule_delayed_cleanup(task_id))
+
+    async def _background_rebuild_kb_task(
+        self,
+        task_id: str,
+        kb_helper,
+        chunk_size: int | None,
+        chunk_overlap: int | None,
+        batch_size: int,
+        tasks_limit: int,
+        max_retries: int,
+    ) -> None:
+        """Run a full knowledge base rebuild in the background."""
+        kb_name = getattr(getattr(kb_helper, "kb", None), "kb_name", "knowledge base")
+        try:
+            self._init_task(task_id, status="processing")
+            self.upload_progress[task_id] = {
+                "status": "processing",
+                "file_index": 0,
+                "file_total": 1,
+                "file_name": kb_name,
+                "stage": "rebuilding",
+                "current": 0,
+                "total": 100,
+            }
+            await self._persist_progress(task_id)
+
+            progress_callback = self._make_progress_callback(
+                task_id,
+                0,
+                kb_name,
+            )
+            result = await kb_helper.rebuild_all_documents(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+            )
+            result = {
+                "task_id": task_id,
+                **result,
+            }
+            completed_total = max(int(result.get("total") or 0), 1)
+            self._update_progress(
+                task_id,
+                status="completed",
+                file_index=0,
+                file_name=kb_name,
+                stage="completed",
+                current=completed_total,
+                total=completed_total,
+            )
+            self._set_task_result(task_id, "completed", result=result)
+            await self._update_persistent_task(
+                task_id,
+                status="completed",
+                result=result,
+                error=None,
+                **self._get_persistent_progress_updates(task_id),
+            )
+
+        except Exception as e:
+            logger.error(f"后台重建知识库任务 {task_id} 失败: {e}")
+            logger.error(traceback.format_exc())
+            self._set_task_result(task_id, "failed", error=str(e))
+            await self._update_persistent_task(
+                task_id,
+                status="failed",
+                error=str(e),
+                **self._get_persistent_progress_updates(task_id),
+            )
+        finally:
+            asyncio.create_task(self._schedule_delayed_cleanup(task_id))
+
+    async def _background_rebuild_documents_task(
+        self,
+        task_id: str,
+        kb_helper,
+        doc_ids: list[str],
+        chunk_size: int | None,
+        chunk_overlap: int | None,
+        batch_size: int,
+        tasks_limit: int,
+        max_retries: int,
+    ) -> None:
+        """Run selected document rebuilds in the background."""
+        total = max(len(doc_ids), 1)
+        task_name = f"{len(doc_ids)} selected documents"
+        try:
+            self._init_task(task_id, status="processing")
+            self.upload_progress[task_id] = {
+                "status": "processing",
+                "file_index": 0,
+                "file_total": total,
+                "file_name": task_name,
+                "stage": "rebuilding",
+                "current": 0,
+                "total": total,
+            }
+            await self._persist_progress(task_id)
+
+            progress_callback = self._make_progress_callback(
+                task_id,
+                0,
+                task_name,
+            )
+            result = await kb_helper.rebuild_documents(
+                doc_ids,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+            )
+            result = {
+                "task_id": task_id,
+                **result,
+            }
+            completed_total = max(int(result.get("total") or 0), 1)
+            self._update_progress(
+                task_id,
+                status="completed",
+                file_index=0,
+                file_name=task_name,
+                stage="completed",
+                current=completed_total,
+                total=completed_total,
+            )
+            self._set_task_result(task_id, "completed", result=result)
+            await self._update_persistent_task(
+                task_id,
+                status="completed",
+                result=result,
+                error=None,
+                **self._get_persistent_progress_updates(task_id),
+            )
+
+        except Exception as e:
+            logger.error(f"后台批量重建文档任务 {task_id} 失败: {e}")
+            logger.error(traceback.format_exc())
+            self._set_task_result(task_id, "failed", error=str(e))
+            await self._update_persistent_task(
+                task_id,
+                status="failed",
+                error=str(e),
+                **self._get_persistent_progress_updates(task_id),
+            )
         finally:
             asyncio.create_task(self._schedule_delayed_cleanup(task_id))
 
@@ -430,20 +810,32 @@ class KnowledgeBaseRoute(Route):
 
         Query 参数:
         - page: 页码 (默认 1)
-        - page_size: 每页数量 (默认 20)
+        - page_size: 每页数量
         - refresh_stats: 是否刷新统计信息 (默认 false，首次加载时可设为 true)
         """
         try:
             kb_manager = self._get_kb_manager()
-            page = request.args.get("page", 1, type=int)
-            page_size = request.args.get("page_size", 20, type=int)
+            page = self._get_positive_query_int("page", 1)
+            page_size = self._get_positive_query_int(
+                "page_size",
+                DEFAULT_KB_PAGE_SIZE,
+            )
+            refresh_stats = request.args.get("refresh_stats") == "true"
+            kb_db = self._get_kb_db()
 
             kbs = await kb_manager.list_kbs()
+            total = len(kbs)
+            start = (page - 1) * page_size
+            paged_kbs = kbs[start : start + page_size]
 
             # 转换为字典列表
             kb_list = []
-            for kb in kbs:
+            for kb in paged_kbs:
                 kb_dict = kb.model_dump()
+                if refresh_stats and kb_db and hasattr(kb_db, "get_kb_stats"):
+                    stats = await kb_db.get_kb_stats(kb.kb_id)
+                    if stats:
+                        kb_dict.update(stats)
                 # include init_error from KBHelper if present
                 kb_helper = await kb_manager.get_kb(kb.kb_id)
                 if kb_helper and kb_helper.init_error:
@@ -452,7 +844,14 @@ class KnowledgeBaseRoute(Route):
 
             return (
                 Response()
-                .ok({"items": kb_list, "page": page, "page_size": page_size})
+                .ok(
+                    {
+                        "items": kb_list,
+                        "page": page,
+                        "page_size": page_size,
+                        "total": total,
+                    },
+                )
                 .__dict__
             )
         except ValueError as e:
@@ -507,12 +906,20 @@ class KnowledgeBaseRoute(Route):
             )
             index_type = data.get("index_type")
             self._validate_kb_options(
-                chunk_size=chunk_size if chunk_size is not None else 512,
-                chunk_overlap=chunk_overlap if chunk_overlap is not None else 50,
-                top_k_dense=top_k_dense if top_k_dense is not None else 50,
-                top_k_sparse=top_k_sparse if top_k_sparse is not None else 50,
-                top_m_final=top_m_final if top_m_final is not None else 5,
-                index_type=index_type if index_type is not None else "flat",
+                chunk_size=chunk_size if chunk_size is not None else DEFAULT_CHUNK_SIZE,
+                chunk_overlap=chunk_overlap
+                if chunk_overlap is not None
+                else DEFAULT_CHUNK_OVERLAP,
+                top_k_dense=top_k_dense
+                if top_k_dense is not None
+                else DEFAULT_TOP_K_DENSE,
+                top_k_sparse=top_k_sparse
+                if top_k_sparse is not None
+                else DEFAULT_TOP_K_SPARSE,
+                top_m_final=top_m_final
+                if top_m_final is not None
+                else DEFAULT_TOP_M_FINAL,
+                index_type=index_type if index_type is not None else DEFAULT_INDEX_TYPE,
             )
 
             # pre-check embedding dim
@@ -773,12 +1180,28 @@ class KnowledgeBaseRoute(Route):
             if not kb_helper:
                 return Response().error("知识库不存在").__dict__
             kb = kb_helper.kb
+            kb_db = self._get_kb_db()
+            if kb_db and hasattr(kb_db, "get_kb_stats"):
+                stats = await kb_db.get_kb_stats(kb_id)
+                if stats is not None:
+                    return Response().ok(stats).__dict__
 
             stats = {
                 "kb_id": kb.kb_id,
                 "kb_name": kb.kb_name,
                 "doc_count": kb.doc_count,
                 "chunk_count": kb.chunk_count,
+                "document_count": kb.doc_count,
+                "ready_document_count": kb.doc_count,
+                "failed_document_count": 0,
+                "pending_document_count": 0,
+                "processing_document_count": 0,
+                "indexed_chunk_count": kb.chunk_count,
+                "document_chunk_count": kb.chunk_count,
+                "media_count": 0,
+                "source_file_count": 0,
+                "storage_bytes": 0,
+                "status_counts": {"ready": kb.doc_count},
                 "created_at": kb.created_at.isoformat(),
                 "updated_at": kb.updated_at.isoformat(),
             }
@@ -792,6 +1215,56 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取知识库统计失败: {e!s}").__dict__
 
+    async def check_kb_consistency(self):
+        """Check consistency across metadata, source files, and indexed chunks."""
+        try:
+            kb_manager = self._get_kb_manager()
+            kb_id = request.args.get("kb_id")
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+
+            kb_helper = await kb_manager.get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+
+            report = await kb_helper.check_consistency()
+            return Response().ok(report).__dict__
+
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"检查知识库一致性失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"检查知识库一致性失败: {e!s}").__dict__
+
+    async def repair_kb_consistency(self):
+        """Repair low-risk consistency issues for a knowledge base."""
+        try:
+            kb_manager = self._get_kb_manager()
+            data = await request.json
+
+            kb_id = data.get("kb_id")
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+
+            repair_types = data.get("repair_types")
+            if repair_types is not None and not isinstance(repair_types, list):
+                return Response().error("repair_types 格式错误").__dict__
+
+            kb_helper = await kb_manager.get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+
+            report = await kb_helper.repair_consistency(repair_types=repair_types)
+            return Response().ok(report).__dict__
+
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"修复知识库一致性失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"修复知识库一致性失败: {e!s}").__dict__
+
     # ===== 文档管理 API =====
 
     async def list_documents(self):
@@ -800,7 +1273,7 @@ class KnowledgeBaseRoute(Route):
         Query 参数:
         - kb_id: 知识库 ID (必填)
         - page: 页码 (默认 1)
-        - page_size: 每页数量 (默认 20)
+        - page_size: 每页数量
         """
         try:
             kb_manager = self._get_kb_manager()
@@ -811,9 +1284,18 @@ class KnowledgeBaseRoute(Route):
             if not kb_helper:
                 return Response().error("知识库不存在").__dict__
 
-            page = max(request.args.get("page", 1, type=int), 1)
-            page_size = max(request.args.get("page_size", 100, type=int), 1)
+            page = self._get_positive_query_int("page", 1)
+            page_size = self._get_positive_query_int(
+                "page_size",
+                DEFAULT_DOCUMENT_PAGE_SIZE,
+            )
             search = (request.args.get("search") or "").strip() or None
+            status = (request.args.get("status") or "").strip() or None
+            source_type = (request.args.get("source_type") or "").strip() or None
+            if status and status not in DOCUMENT_FILTER_STATUSES:
+                return Response().error("status 参数无效").__dict__
+            if source_type and source_type not in DOCUMENT_FILTER_SOURCE_TYPES:
+                return Response().error("source_type 参数无效").__dict__
 
             offset = (page - 1) * page_size
             limit = page_size
@@ -822,8 +1304,17 @@ class KnowledgeBaseRoute(Route):
                 offset=offset,
                 limit=limit,
                 search=search,
+                status=status,
+                source_type=source_type,
             )
-            total = await kb_helper.count_documents(search=search)
+            total = await kb_helper.count_documents(
+                search=search,
+                status=status,
+                source_type=source_type,
+            )
+            document_count = total
+            if search is not None or status is not None or source_type is not None:
+                document_count = await kb_helper.count_documents()
 
             doc_list = [doc.model_dump() for doc in doc_list]
 
@@ -835,6 +1326,8 @@ class KnowledgeBaseRoute(Route):
                         "page": page,
                         "page_size": page_size,
                         "total": total,
+                        "filtered_total": total,
+                        "document_count": document_count,
                     },
                 )
                 .__dict__
@@ -875,9 +1368,9 @@ class KnowledgeBaseRoute(Route):
             kb_id = None
             chunk_size = None
             chunk_overlap = None
-            batch_size = 32
-            tasks_limit = 3
-            max_retries = 3
+            batch_size = None
+            tasks_limit = None
+            max_retries = None
             files_to_upload = []  # 存储待上传的文件信息列表
 
             if content_type and "multipart/form-data" not in content_type:
@@ -908,11 +1401,19 @@ class KnowledgeBaseRoute(Route):
                 form_data.get("max_retries"),
                 "max_retries",
             )
-            chunk_size = chunk_size if chunk_size is not None else 512
-            chunk_overlap = chunk_overlap if chunk_overlap is not None else 50
-            batch_size = batch_size if batch_size is not None else 32
-            tasks_limit = tasks_limit if tasks_limit is not None else 3
-            max_retries = max_retries if max_retries is not None else 3
+            chunk_size = chunk_size if chunk_size is not None else DEFAULT_CHUNK_SIZE
+            chunk_overlap = (
+                chunk_overlap if chunk_overlap is not None else DEFAULT_CHUNK_OVERLAP
+            )
+            batch_size = (
+                batch_size if batch_size is not None else DEFAULT_UPLOAD_BATCH_SIZE
+            )
+            tasks_limit = (
+                tasks_limit if tasks_limit is not None else DEFAULT_UPLOAD_TASKS_LIMIT
+            )
+            max_retries = (
+                max_retries if max_retries is not None else DEFAULT_UPLOAD_MAX_RETRIES
+            )
             self._validate_upload_options(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
@@ -935,8 +1436,10 @@ class KnowledgeBaseRoute(Route):
                 return Response().error("缺少文件").__dict__
 
             # 限制文件数量
-            if len(file_list) > 10:
-                return Response().error("最多只能上传10个文件").__dict__
+            if len(file_list) > MAX_UPLOAD_FILES:
+                return (
+                    Response().error(f"最多只能上传{MAX_UPLOAD_FILES}个文件").__dict__
+                )
 
             # 处理每个文件
             for file in file_list:
@@ -982,6 +1485,20 @@ class KnowledgeBaseRoute(Route):
 
             # 初始化任务状态
             self._init_task(task_id, status="pending")
+            await self._create_persistent_task(
+                task_id=task_id,
+                kb_id=kb_id,
+                task_type="upload",
+                status="pending",
+                progress={
+                    "status": "pending",
+                    "file_index": 0,
+                    "file_total": len(files_to_upload),
+                    "stage": "waiting",
+                    "current": 0,
+                    "total": 100,
+                },
+            )
 
             # 启动后台任务
             asyncio.create_task(
@@ -1038,9 +1555,13 @@ class KnowledgeBaseRoute(Route):
         batch_size = self._coerce_optional_int(data.get("batch_size"), "batch_size")
         tasks_limit = self._coerce_optional_int(data.get("tasks_limit"), "tasks_limit")
         max_retries = self._coerce_optional_int(data.get("max_retries"), "max_retries")
-        batch_size = batch_size if batch_size is not None else 32
-        tasks_limit = tasks_limit if tasks_limit is not None else 3
-        max_retries = max_retries if max_retries is not None else 3
+        batch_size = batch_size if batch_size is not None else DEFAULT_UPLOAD_BATCH_SIZE
+        tasks_limit = (
+            tasks_limit if tasks_limit is not None else DEFAULT_UPLOAD_TASKS_LIMIT
+        )
+        max_retries = (
+            max_retries if max_retries is not None else DEFAULT_UPLOAD_MAX_RETRIES
+        )
         self._validate_positive_int(batch_size, "batch_size")
         self._validate_positive_int(tasks_limit, "tasks_limit")
         if max_retries < 0:
@@ -1078,6 +1599,20 @@ class KnowledgeBaseRoute(Route):
 
             # 初始化任务状态
             self._init_task(task_id, status="pending")
+            await self._create_persistent_task(
+                task_id=task_id,
+                kb_id=kb_id,
+                task_type="import",
+                status="pending",
+                progress={
+                    "status": "pending",
+                    "file_index": 0,
+                    "file_total": len(documents),
+                    "stage": "waiting",
+                    "current": 0,
+                    "total": 100,
+                },
+            )
 
             # 启动后台任务
             asyncio.create_task(
@@ -1129,7 +1664,23 @@ class KnowledgeBaseRoute(Route):
 
             # 检查任务是否存在
             if task_id not in self.upload_tasks:
-                return Response().error("找不到该任务").__dict__
+                persistent_task = await self._get_persistent_task(task_id)
+                if persistent_task is None:
+                    return Response().error("找不到该任务").__dict__
+                response_data = {
+                    "task_id": task_id,
+                    "status": persistent_task["status"],
+                    "progress_stage": persistent_task.get("progress_stage"),
+                    "progress_current": persistent_task.get("progress_current", 0),
+                    "progress_total": persistent_task.get("progress_total", 100),
+                }
+                if persistent_task.get("progress") is not None:
+                    response_data["progress"] = persistent_task["progress"]
+                if persistent_task["status"] == "completed":
+                    response_data["result"] = persistent_task.get("result")
+                if persistent_task["status"] == "failed":
+                    response_data["error"] = persistent_task.get("error")
+                return Response().ok(response_data).__dict__
 
             task_info = self.upload_tasks[task_id]
             status = task_info["status"]
@@ -1162,6 +1713,69 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"获取上传进度失败: {e}")
             logger.error(traceback.format_exc())
             return Response().error(f"获取上传进度失败: {e!s}").__dict__
+
+    async def get_task(self):
+        """获取知识库持久任务详情"""
+        try:
+            task_id = request.args.get("task_id")
+            if not task_id:
+                return Response().error("缺少参数 task_id").__dict__
+
+            task = await self._get_persistent_task(task_id)
+            if not task:
+                return Response().error("任务不存在").__dict__
+            return Response().ok(task).__dict__
+
+        except Exception as e:
+            logger.error(f"获取知识库任务失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取知识库任务失败: {e!s}").__dict__
+
+    async def list_tasks(self):
+        """列出知识库持久任务"""
+        try:
+            kb_db = self._get_kb_db()
+            if not kb_db:
+                return Response().error("知识库数据库未初始化").__dict__
+
+            page = self._get_positive_query_int("page", 1)
+            page_size = self._get_positive_query_int(
+                "page_size",
+                DEFAULT_DOCUMENT_PAGE_SIZE,
+            )
+            kb_id = (request.args.get("kb_id") or "").strip() or None
+            status = (request.args.get("status") or "").strip() or None
+            task_type = (request.args.get("task_type") or "").strip() or None
+
+            tasks = await kb_db.list_ingestion_tasks(
+                kb_id=kb_id,
+                status=status,
+                task_type=task_type,
+                offset=(page - 1) * page_size,
+                limit=page_size,
+            )
+            total = await kb_db.count_ingestion_tasks(
+                kb_id=kb_id,
+                status=status,
+                task_type=task_type,
+            )
+            return (
+                Response()
+                .ok(
+                    {
+                        "items": tasks,
+                        "total": total,
+                        "page": page,
+                        "page_size": page_size,
+                    },
+                )
+                .__dict__
+            )
+
+        except Exception as e:
+            logger.error(f"获取知识库任务列表失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取知识库任务列表失败: {e!s}").__dict__
 
     async def get_document(self):
         """获取文档详情
@@ -1226,6 +1840,371 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"删除文档失败: {e!s}").__dict__
 
+    async def rebuild_document(self):
+        """重建单个文档"""
+        try:
+            kb_manager = self._get_kb_manager()
+            data = await request.json
+
+            kb_id = data.get("kb_id")
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+            doc_id = data.get("doc_id")
+            if not doc_id:
+                return Response().error("缺少参数 doc_id").__dict__
+
+            chunk_size = self._coerce_optional_int(data.get("chunk_size"), "chunk_size")
+            chunk_overlap = self._coerce_optional_int(
+                data.get("chunk_overlap"),
+                "chunk_overlap",
+            )
+            batch_size = self._coerce_optional_int(data.get("batch_size"), "batch_size")
+            tasks_limit = self._coerce_optional_int(
+                data.get("tasks_limit"),
+                "tasks_limit",
+            )
+            max_retries = self._coerce_optional_int(
+                data.get("max_retries"),
+                "max_retries",
+            )
+            effective_chunk_size = (
+                chunk_size if chunk_size is not None else DEFAULT_CHUNK_SIZE
+            )
+            effective_chunk_overlap = (
+                chunk_overlap if chunk_overlap is not None else DEFAULT_CHUNK_OVERLAP
+            )
+            effective_batch_size = (
+                batch_size if batch_size is not None else DEFAULT_UPLOAD_BATCH_SIZE
+            )
+            effective_tasks_limit = (
+                tasks_limit if tasks_limit is not None else DEFAULT_UPLOAD_TASKS_LIMIT
+            )
+            effective_max_retries = (
+                max_retries if max_retries is not None else DEFAULT_UPLOAD_MAX_RETRIES
+            )
+            self._validate_upload_options(
+                chunk_size=effective_chunk_size,
+                chunk_overlap=effective_chunk_overlap,
+                batch_size=effective_batch_size,
+                tasks_limit=effective_tasks_limit,
+                max_retries=effective_max_retries,
+            )
+            background = self._coerce_optional_bool(
+                data.get("background"),
+                "background",
+            )
+
+            kb_helper = await kb_manager.get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+
+            if background:
+                task_id = str(uuid.uuid4())
+                self._init_task(task_id, status="pending")
+                await self._create_persistent_task(
+                    task_id=task_id,
+                    kb_id=kb_id,
+                    task_type="document_rebuild",
+                    status="pending",
+                    progress={
+                        "status": "pending",
+                        "file_index": 0,
+                        "file_total": 1,
+                        "file_name": doc_id,
+                        "stage": "waiting",
+                        "current": 0,
+                        "total": 100,
+                    },
+                )
+                asyncio.create_task(
+                    self._background_rebuild_document_task(
+                        task_id=task_id,
+                        kb_helper=kb_helper,
+                        doc_id=doc_id,
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                        batch_size=effective_batch_size,
+                        tasks_limit=effective_tasks_limit,
+                        max_retries=effective_max_retries,
+                    ),
+                )
+                return (
+                    Response()
+                    .ok(
+                        {
+                            "task_id": task_id,
+                            "doc_id": doc_id,
+                            "message": (
+                                "document rebuild task created, "
+                                "processing in background"
+                            ),
+                        },
+                    )
+                    .__dict__
+                )
+
+            doc = await kb_helper.rebuild_document(
+                doc_id,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                batch_size=effective_batch_size,
+                tasks_limit=effective_tasks_limit,
+                max_retries=effective_max_retries,
+            )
+            return Response().ok(doc.model_dump(), "重建文档成功").__dict__
+
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"重建文档失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"重建文档失败: {e!s}").__dict__
+
+    async def rebuild_kb(self):
+        """重建整个知识库"""
+        try:
+            kb_manager = self._get_kb_manager()
+            data = await request.json
+
+            kb_id = data.get("kb_id")
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+
+            chunk_size = self._coerce_optional_int(data.get("chunk_size"), "chunk_size")
+            chunk_overlap = self._coerce_optional_int(
+                data.get("chunk_overlap"),
+                "chunk_overlap",
+            )
+            batch_size = self._coerce_optional_int(data.get("batch_size"), "batch_size")
+            tasks_limit = self._coerce_optional_int(
+                data.get("tasks_limit"),
+                "tasks_limit",
+            )
+            max_retries = self._coerce_optional_int(
+                data.get("max_retries"),
+                "max_retries",
+            )
+            effective_chunk_size = (
+                chunk_size if chunk_size is not None else DEFAULT_CHUNK_SIZE
+            )
+            effective_chunk_overlap = (
+                chunk_overlap if chunk_overlap is not None else DEFAULT_CHUNK_OVERLAP
+            )
+            effective_batch_size = (
+                batch_size if batch_size is not None else DEFAULT_UPLOAD_BATCH_SIZE
+            )
+            effective_tasks_limit = (
+                tasks_limit if tasks_limit is not None else DEFAULT_UPLOAD_TASKS_LIMIT
+            )
+            effective_max_retries = (
+                max_retries if max_retries is not None else DEFAULT_UPLOAD_MAX_RETRIES
+            )
+            self._validate_upload_options(
+                chunk_size=effective_chunk_size,
+                chunk_overlap=effective_chunk_overlap,
+                batch_size=effective_batch_size,
+                tasks_limit=effective_tasks_limit,
+                max_retries=effective_max_retries,
+            )
+            background = self._coerce_optional_bool(
+                data.get("background"),
+                "background",
+            )
+
+            kb_helper = await kb_manager.get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+
+            if background:
+                kb_name = getattr(
+                    getattr(kb_helper, "kb", None),
+                    "kb_name",
+                    "knowledge base",
+                )
+                task_id = str(uuid.uuid4())
+                self._init_task(task_id, status="pending")
+                await self._create_persistent_task(
+                    task_id=task_id,
+                    kb_id=kb_id,
+                    task_type="kb_rebuild",
+                    status="pending",
+                    progress={
+                        "status": "pending",
+                        "file_index": 0,
+                        "file_total": 1,
+                        "file_name": kb_name,
+                        "stage": "waiting",
+                        "current": 0,
+                        "total": 100,
+                    },
+                )
+                asyncio.create_task(
+                    self._background_rebuild_kb_task(
+                        task_id=task_id,
+                        kb_helper=kb_helper,
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                        batch_size=effective_batch_size,
+                        tasks_limit=effective_tasks_limit,
+                        max_retries=effective_max_retries,
+                    ),
+                )
+                return (
+                    Response()
+                    .ok(
+                        {
+                            "task_id": task_id,
+                            "kb_id": kb_id,
+                            "message": (
+                                "knowledge base rebuild task created, "
+                                "processing in background"
+                            ),
+                        },
+                    )
+                    .__dict__
+                )
+
+            result = await kb_helper.rebuild_all_documents(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                batch_size=effective_batch_size,
+                tasks_limit=effective_tasks_limit,
+                max_retries=effective_max_retries,
+            )
+            return Response().ok(result, "重建知识库完成").__dict__
+
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"重建知识库失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"重建知识库失败: {e!s}").__dict__
+
+    async def batch_rebuild_documents(self):
+        """Start a background task to rebuild selected documents.
+
+        Body:
+        - kb_id: knowledge base ID (required)
+        - doc_ids: document ID list (required)
+        """
+        try:
+            kb_manager = self._get_kb_manager()
+            data = await request.json
+
+            kb_id = data.get("kb_id")
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+            doc_ids = data.get("doc_ids")
+            if not doc_ids or not isinstance(doc_ids, list):
+                return Response().error("缺少参数 doc_ids 或格式错误").__dict__
+            normalized_doc_ids = list(
+                dict.fromkeys(
+                    doc_id.strip()
+                    for doc_id in doc_ids
+                    if isinstance(doc_id, str) and doc_id.strip()
+                )
+            )
+            if not normalized_doc_ids:
+                return Response().error("缺少参数 doc_ids 或格式错误").__dict__
+            if len(normalized_doc_ids) > MAX_BATCH_REBUILD_DOCUMENTS:
+                return (
+                    Response()
+                    .error(f"最多只能批量重建 {MAX_BATCH_REBUILD_DOCUMENTS} 个文档")
+                    .__dict__
+                )
+
+            chunk_size = self._coerce_optional_int(data.get("chunk_size"), "chunk_size")
+            chunk_overlap = self._coerce_optional_int(
+                data.get("chunk_overlap"),
+                "chunk_overlap",
+            )
+            batch_size = self._coerce_optional_int(data.get("batch_size"), "batch_size")
+            tasks_limit = self._coerce_optional_int(
+                data.get("tasks_limit"),
+                "tasks_limit",
+            )
+            max_retries = self._coerce_optional_int(
+                data.get("max_retries"),
+                "max_retries",
+            )
+            effective_chunk_size = (
+                chunk_size if chunk_size is not None else DEFAULT_CHUNK_SIZE
+            )
+            effective_chunk_overlap = (
+                chunk_overlap if chunk_overlap is not None else DEFAULT_CHUNK_OVERLAP
+            )
+            effective_batch_size = (
+                batch_size if batch_size is not None else DEFAULT_UPLOAD_BATCH_SIZE
+            )
+            effective_tasks_limit = (
+                tasks_limit if tasks_limit is not None else DEFAULT_UPLOAD_TASKS_LIMIT
+            )
+            effective_max_retries = (
+                max_retries if max_retries is not None else DEFAULT_UPLOAD_MAX_RETRIES
+            )
+            self._validate_upload_options(
+                chunk_size=effective_chunk_size,
+                chunk_overlap=effective_chunk_overlap,
+                batch_size=effective_batch_size,
+                tasks_limit=effective_tasks_limit,
+                max_retries=effective_max_retries,
+            )
+
+            kb_helper = await kb_manager.get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+
+            task_id = str(uuid.uuid4())
+            self._init_task(task_id, status="pending")
+            await self._create_persistent_task(
+                task_id=task_id,
+                kb_id=kb_id,
+                task_type="document_batch_rebuild",
+                status="pending",
+                progress={
+                    "status": "pending",
+                    "file_index": 0,
+                    "file_total": len(normalized_doc_ids),
+                    "file_name": f"{len(normalized_doc_ids)} selected documents",
+                    "stage": "waiting",
+                    "current": 0,
+                    "total": len(normalized_doc_ids),
+                },
+            )
+            asyncio.create_task(
+                self._background_rebuild_documents_task(
+                    task_id=task_id,
+                    kb_helper=kb_helper,
+                    doc_ids=normalized_doc_ids,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                    batch_size=effective_batch_size,
+                    tasks_limit=effective_tasks_limit,
+                    max_retries=effective_max_retries,
+                ),
+            )
+            return (
+                Response()
+                .ok(
+                    {
+                        "task_id": task_id,
+                        "doc_ids": normalized_doc_ids,
+                        "message": (
+                            "document batch rebuild task created, "
+                            "processing in background"
+                        ),
+                    },
+                )
+                .__dict__
+            )
+
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"批量重建文档失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"批量重建文档失败: {e!s}").__dict__
+
     async def batch_delete_documents(self):
         """批量删除文档
 
@@ -1243,8 +2222,12 @@ class KnowledgeBaseRoute(Route):
             doc_ids = data.get("doc_ids")
             if not doc_ids or not isinstance(doc_ids, list):
                 return Response().error("缺少参数 doc_ids 或格式错误").__dict__
-            if len(doc_ids) > 100:
-                return Response().error("最多只能批量删除 100 个文档").__dict__
+            if len(doc_ids) > MAX_BATCH_DELETE_DOCUMENTS:
+                return (
+                    Response()
+                    .error(f"最多只能批量删除 {MAX_BATCH_DELETE_DOCUMENTS} 个文档")
+                    .__dict__
+                )
 
             kb_helper = await kb_manager.get_kb(kb_id)
             if not kb_helper:
@@ -1317,14 +2300,18 @@ class KnowledgeBaseRoute(Route):
         Query 参数:
         - kb_id: 知识库 ID (必填)
         - page: 页码 (默认 1)
-        - page_size: 每页数量 (默认 20)
+        - page_size: 每页数量
         """
         try:
             kb_manager = self._get_kb_manager()
             kb_id = request.args.get("kb_id")
             doc_id = request.args.get("doc_id")
-            page = request.args.get("page", 1, type=int)
-            page_size = request.args.get("page_size", 100, type=int)
+            page = self._get_positive_query_int("page", 1)
+            page_size = self._get_positive_query_int(
+                "page_size",
+                DEFAULT_CHUNK_PAGE_SIZE,
+            )
+            search = (request.args.get("search") or "").strip() or None
             if not kb_id:
                 return Response().error("缺少参数 kb_id").__dict__
             if not doc_id:
@@ -1334,11 +2321,15 @@ class KnowledgeBaseRoute(Route):
             limit = page_size
             if not kb_helper:
                 return Response().error("知识库不存在").__dict__
-            chunk_list = await kb_helper.get_chunks_by_doc_id(
+            chunk_list, total = await kb_helper.search_chunks_by_doc_id(
                 doc_id=doc_id,
+                search=search,
                 offset=offset,
                 limit=limit,
             )
+            document_chunk_count = total
+            if search is not None:
+                document_chunk_count = await kb_helper.get_chunk_count_by_doc_id(doc_id)
             return (
                 Response()
                 .ok(
@@ -1346,7 +2337,9 @@ class KnowledgeBaseRoute(Route):
                         "items": chunk_list,
                         "page": page,
                         "page_size": page_size,
-                        "total": await kb_helper.get_chunk_count_by_doc_id(doc_id),
+                        "total": total,
+                        "filtered_total": total,
+                        "document_chunk_count": document_chunk_count,
                     },
                 )
                 .__dict__
@@ -1357,6 +2350,41 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"获取块列表失败: {e}")
             logger.error(traceback.format_exc())
             return Response().error(f"获取块列表失败: {e!s}").__dict__
+
+    async def get_chunk_context(self):
+        """获取文本块和相邻上下文块
+
+        Query 参数:
+        - kb_id: 知识库 ID (必填)
+        - doc_id: 文档 ID (必填)
+        - chunk_id: 文本块 ID (必填)
+        """
+        try:
+            kb_manager = self._get_kb_manager()
+            kb_id = request.args.get("kb_id")
+            doc_id = request.args.get("doc_id")
+            chunk_id = request.args.get("chunk_id")
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+            if not doc_id:
+                return Response().error("缺少参数 doc_id").__dict__
+            if not chunk_id:
+                return Response().error("缺少参数 chunk_id").__dict__
+
+            kb_helper = await kb_manager.get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+            context = await kb_helper.get_chunk_context(
+                chunk_id=chunk_id,
+                doc_id=doc_id,
+            )
+            return Response().ok(data=context).__dict__
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"获取文本块上下文失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取文本块上下文失败: {e!s}").__dict__
 
     # ===== 检索 API =====
 
@@ -1376,7 +2404,8 @@ class KnowledgeBaseRoute(Route):
             query = data.get("query")
             kb_ids = data.get("kb_ids")
             kb_names = data.get("kb_names")
-            debug = data.get("debug", False)
+            debug = self._coerce_optional_bool(data.get("debug", False), "debug")
+            trace = self._coerce_optional_bool(data.get("trace", False), "trace")
 
             if not query:
                 return Response().error("缺少参数 query").__dict__
@@ -1387,15 +2416,21 @@ class KnowledgeBaseRoute(Route):
             if not kb_ids and not kb_names:
                 return Response().error("缺少参数 kb_ids 或 kb_names").__dict__
 
-            top_k = self._coerce_optional_int(data.get("top_k", 5), "top_k")
-            top_k = top_k if top_k is not None else 5
+            top_k = self._coerce_optional_int(
+                data.get("top_k", DEFAULT_TOP_M_FINAL),
+                "top_k",
+            )
+            top_k = top_k if top_k is not None else DEFAULT_TOP_M_FINAL
             self._validate_positive_int(top_k, "top_k")
+            if top_k > MAX_RETRIEVE_TOP_K:
+                return Response().error(f"top_k 不能大于 {MAX_RETRIEVE_TOP_K}").__dict__
 
             results = await kb_manager.retrieve(
                 query=query,
                 kb_names=kb_names,
                 kb_ids=kb_ids,
                 top_m_final=top_k,
+                include_trace=trace or debug,
             )
             result_list = []
             if results:
@@ -1406,6 +2441,8 @@ class KnowledgeBaseRoute(Route):
                 "total": len(result_list),
                 "query": query,
             }
+            if results and "trace" in results:
+                response_data["trace"] = results["trace"]
 
             # Debug 模式：生成 t-SNE 可视化
             if debug:
@@ -1478,11 +2515,19 @@ class KnowledgeBaseRoute(Route):
                 data.get("max_retries"),
                 "max_retries",
             )
-            chunk_size = chunk_size if chunk_size is not None else 512
-            chunk_overlap = chunk_overlap if chunk_overlap is not None else 50
-            batch_size = batch_size if batch_size is not None else 32
-            tasks_limit = tasks_limit if tasks_limit is not None else 3
-            max_retries = max_retries if max_retries is not None else 3
+            chunk_size = chunk_size if chunk_size is not None else DEFAULT_CHUNK_SIZE
+            chunk_overlap = (
+                chunk_overlap if chunk_overlap is not None else DEFAULT_CHUNK_OVERLAP
+            )
+            batch_size = (
+                batch_size if batch_size is not None else DEFAULT_UPLOAD_BATCH_SIZE
+            )
+            tasks_limit = (
+                tasks_limit if tasks_limit is not None else DEFAULT_UPLOAD_TASKS_LIMIT
+            )
+            max_retries = (
+                max_retries if max_retries is not None else DEFAULT_UPLOAD_MAX_RETRIES
+            )
             self._validate_upload_options(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
@@ -1503,6 +2548,21 @@ class KnowledgeBaseRoute(Route):
 
             # 初始化任务状态
             self._init_task(task_id, status="pending")
+            await self._create_persistent_task(
+                task_id=task_id,
+                kb_id=kb_id,
+                task_type="url",
+                status="pending",
+                progress={
+                    "status": "pending",
+                    "file_index": 0,
+                    "file_total": 1,
+                    "file_name": f"URL: {url}",
+                    "stage": "waiting",
+                    "current": 0,
+                    "total": 100,
+                },
+            )
 
             # 启动后台任务
             asyncio.create_task(
@@ -1565,6 +2625,7 @@ class KnowledgeBaseRoute(Route):
                 "current": 0,
                 "total": 100,
             }
+            await self._persist_progress(task_id)
 
             # 创建进度回调函数
             progress_callback = self._make_progress_callback(task_id, 0, f"URL: {url}")
@@ -1593,10 +2654,23 @@ class KnowledgeBaseRoute(Route):
             }
 
             self._set_task_result(task_id, "completed", result=result)
+            await self._update_persistent_task(
+                task_id,
+                status="completed",
+                result=result,
+                error=None,
+                **self._get_persistent_progress_updates(task_id),
+            )
 
         except Exception as e:
             logger.error(f"后台上传URL任务 {task_id} 失败: {e}")
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
+            await self._update_persistent_task(
+                task_id,
+                status="failed",
+                error=str(e),
+                **self._get_persistent_progress_updates(task_id),
+            )
         finally:
             asyncio.create_task(self._schedule_delayed_cleanup(task_id))

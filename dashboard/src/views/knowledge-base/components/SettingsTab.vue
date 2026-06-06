@@ -146,6 +146,7 @@
 import { computed, ref, watch, onMounted } from "vue";
 import axios from "axios";
 import { useModuleI18n } from "@/i18n/composables";
+import { useKnowledgeBaseCapabilities } from "../capabilities";
 
 const { tm: t } = useModuleI18n("features/knowledge-base/detail");
 
@@ -154,6 +155,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits(["updated"]);
+const { capabilities, loadCapabilities } = useKnowledgeBaseCapabilities();
 
 // 状态
 const saving = ref(false);
@@ -175,12 +177,12 @@ const showSnackbar = (text: string, color: string = "success") => {
 
 // 表单数据
 const formData = ref({
-  chunk_size: 512,
-  chunk_overlap: 50,
-  top_k_dense: 50,
-  top_k_sparse: 50,
-  top_m_final: 5,
-  index_type: "flat",
+  chunk_size: null as number | null,
+  chunk_overlap: null as number | null,
+  top_k_dense: null as number | null,
+  top_k_sparse: null as number | null,
+  top_m_final: null as number | null,
+  index_type: "",
   embedding_provider_id: "",
   rerank_provider_id: null as string | null,
 });
@@ -190,39 +192,61 @@ const indexTypeOptions = computed(() => [
   { title: t("settings.indexTypes.hnsw"), value: "hnsw" },
 ]);
 
-const isPositiveInteger = (value: number) =>
-  Number.isInteger(value) && value > 0;
+const isPositiveInteger = (value: number | null) =>
+  value !== null && Number.isInteger(value) && value > 0;
 const positiveIntegerRules = [
-  (value: number) =>
+  (value: number | null) =>
     isPositiveInteger(value) || t("validation.positiveInteger"),
 ];
 const chunkSizeRules = [
-  (value: number) =>
+  (value: number | null) =>
     isPositiveInteger(value) || t("validation.positiveInteger"),
 ];
 const chunkOverlapRules = [
-  (value: number) => Number.isInteger(value) || t("validation.integer"),
-  (value: number) => value >= 0 || t("validation.nonNegativeInteger"),
-  (value: number) =>
-    value < formData.value.chunk_size || t("validation.overlapLessThanSize"),
+  (value: number | null) => Number.isInteger(value) || t("validation.integer"),
+  (value: number | null) =>
+    (value !== null && value >= 0) || t("validation.nonNegativeInteger"),
+  (value: number | null) =>
+    value === null ||
+    formData.value.chunk_size === null ||
+    value < formData.value.chunk_size ||
+    t("validation.overlapLessThanSize"),
 ];
+
+const getDefaultSettings = () => {
+  const defaults = capabilities.value?.defaults;
+  return {
+    chunk_size: defaults?.chunk_size ?? null,
+    chunk_overlap: defaults?.chunk_overlap ?? null,
+    top_k_dense: defaults?.top_k_dense ?? null,
+    top_k_sparse: defaults?.top_k_sparse ?? null,
+    top_m_final: defaults?.top_m_final ?? null,
+    index_type: defaults?.index_type ?? "",
+  };
+};
+
+const syncFormData = (kb: any) => {
+  if (!kb) {
+    return;
+  }
+  const defaults = getDefaultSettings();
+  formData.value = {
+    chunk_size: kb.chunk_size ?? defaults.chunk_size,
+    chunk_overlap: kb.chunk_overlap ?? defaults.chunk_overlap,
+    top_k_dense: kb.top_k_dense ?? defaults.top_k_dense,
+    top_k_sparse: kb.top_k_sparse ?? defaults.top_k_sparse,
+    top_m_final: kb.top_m_final ?? defaults.top_m_final,
+    index_type: kb.index_type ?? defaults.index_type,
+    embedding_provider_id: kb.embedding_provider_id || "",
+    rerank_provider_id: kb.rerank_provider_id || null,
+  };
+};
 
 // 监听 kb 变化,更新表单
 watch(
   () => props.kb,
   (kb) => {
-    if (kb) {
-      formData.value = {
-        chunk_size: kb.chunk_size || 512,
-        chunk_overlap: kb.chunk_overlap || 50,
-        top_k_dense: kb.top_k_dense || 50,
-        top_k_sparse: kb.top_k_sparse || 50,
-        top_m_final: kb.top_m_final || 5,
-        index_type: kb.index_type || "flat",
-        embedding_provider_id: kb.embedding_provider_id || "",
-        rerank_provider_id: kb.rerank_provider_id || null,
-      };
-    }
+    syncFormData(kb);
   },
   { immediate: true },
 );
@@ -280,6 +304,9 @@ const saveSettings = async () => {
 };
 
 onMounted(() => {
+  loadCapabilities().then(() => {
+    syncFormData(props.kb);
+  });
   loadProviders();
 });
 </script>

@@ -22,6 +22,12 @@ class FusedResult:
     kb_id: str
     content: str
     score: float
+    metadata: dict | None = None
+    dense_rank: int | None = None
+    sparse_rank: int | None = None
+    dense_score: float | None = None
+    sparse_score: float | None = None
+    rrf_score: float | None = None
 
 
 class RankFusion:
@@ -131,6 +137,16 @@ class RankFusion:
                         kb_id=sr.kb_id,
                         content=sr.content,
                         score=rrf_scores[identifier],
+                        metadata=sr.metadata,
+                        dense_rank=dense_ranks.get(identifier),
+                        sparse_rank=sparse_ranks.get(identifier),
+                        dense_score=(
+                            chunk_id_to_dense[identifier].similarity
+                            if identifier in chunk_id_to_dense
+                            else None
+                        ),
+                        sparse_score=sr.score,
+                        rrf_score=rrf_scores[identifier],
                     ),
                 )
             elif identifier in chunk_id_to_dense:
@@ -145,6 +161,12 @@ class RankFusion:
                         kb_id=chunk_md["kb_id"],
                         content=vec_result.data["text"],
                         score=rrf_scores[identifier],
+                        metadata=chunk_md,
+                        dense_rank=dense_ranks.get(identifier),
+                        sparse_rank=sparse_ranks.get(identifier),
+                        dense_score=vec_result.similarity,
+                        sparse_score=None,
+                        rrf_score=rrf_scores[identifier],
                     ),
                 )
 
