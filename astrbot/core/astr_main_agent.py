@@ -238,8 +238,6 @@ async def _get_session_conv(
     return conversation
 
 
-
-
 def _wrap_system_block(name: str, content: str | None) -> str:
     """Wrap a system prompt fragment with clear XML-like boundaries.
 
@@ -252,6 +250,7 @@ def _wrap_system_block(name: str, content: str | None) -> str:
     if not content:
         return ""
     return f"\n<{name}>\n{content}\n</{name}>\n"
+
 
 async def _apply_kb(
     event: AstrMessageEvent,
