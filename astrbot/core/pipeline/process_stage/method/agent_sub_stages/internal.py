@@ -149,7 +149,7 @@ class InternalAgentSubStage(Stage):
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,
             # enable_default_workspace_path=settings.get(
-             #   "enable_default_workspace_path", True
+            #   "enable_default_workspace_path", True
             # ),
             sandbox_cfg=self.sandbox_cfg,
             add_cron_tools=self.add_cron_tools,
