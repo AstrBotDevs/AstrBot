@@ -6,6 +6,9 @@ except ModuleNotFoundError:
     )
 import asyncio
 import os
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 
@@ -129,9 +132,38 @@ class EmbeddingStorage:
         new_index = faiss.IndexIDMap(faiss.IndexFlatIP(self.dimension))
         new_index.add_with_ids(vectors, ids)
 
+        self._backup_existing_index_before_migration()
         self.index = new_index
         # 立即保存迁移后的索引
         faiss.write_index(self.index, self.path)
+
+    def _backup_existing_index_before_migration(self) -> Path:
+        if self.path is None:
+            raise RuntimeError("无法备份旧索引：索引文件路径为空，已保留旧索引未覆盖。")
+
+        index_path = Path(self.path)
+        if not index_path.exists():
+            raise RuntimeError(
+                f"无法备份旧索引：索引文件不存在 {index_path}，已保留旧索引未覆盖。"
+            )
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup_path = index_path.with_name(f"{index_path.name}.bak.{timestamp}")
+        counter = 1
+        while backup_path.exists():
+            backup_path = index_path.with_name(
+                f"{index_path.name}.bak.{timestamp}.{counter}"
+            )
+            counter += 1
+
+        try:
+            shutil.copy2(index_path, backup_path)
+        except OSError as exc:
+            raise RuntimeError(
+                f"无法备份旧索引到 {backup_path}，已保留旧索引未覆盖。"
+            ) from exc
+
+        return backup_path
 
     def _get_index_ids(self) -> np.ndarray:
         assert self.index is not None
