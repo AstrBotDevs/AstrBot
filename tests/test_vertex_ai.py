@@ -589,6 +589,81 @@ async def test_vertex_ai_key_json_provider_fetches_model_list(monkeypatch):
         await provider.terminate()
 
 
+@pytest.mark.asyncio
+async def test_vertex_ai_get_models_refreshes_expired_credentials(monkeypatch):
+    class RefreshNeededCredentials(google_auth_credentials.Credentials):
+        def __init__(self):
+            super().__init__()
+            self.token = None
+            self.refresh_count = 0
+
+        def refresh(self, request):
+            self.refresh_count += 1
+            self.token = "ya29.refreshed-token"
+
+    credentials = RefreshNeededCredentials()
+    calls = []
+
+    def fake_client(**kwargs):
+        return type(
+            "FakeGenAIClient",
+            (),
+            {
+                "aio": type(
+                    "FakeAsyncClient",
+                    (),
+                    {
+                        "models": type(
+                            "FakeModels",
+                            (),
+                            {"list": lambda self: pytest.fail("models.list called")},
+                        )(),
+                        "aclose": lambda self: None,
+                    },
+                )()
+            },
+        )()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "publisherModels": [
+                    {"name": "publishers/google/models/gemini-3-flash-preview"},
+                ]
+            },
+        )
+
+    monkeypatch.setattr(
+        ProviderGoogleGenAI,
+        "_load_vertex_ai_service_account_credentials",
+        lambda self: credentials,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.gemini_source.genai.Client",
+        fake_client,
+    )
+
+    provider = ProviderGoogleGenAI(
+        _vertex_config(type="googlegenai_chat_completion"),
+        provider_settings={},
+    )
+    await provider._http_client.aclose()
+    provider._http_client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url=provider._get_vertex_ai_sdk_base_url(),
+        timeout=provider.timeout,
+    )
+
+    try:
+        assert await provider.get_models() == ["google/gemini-3-flash-preview"]
+        assert credentials.refresh_count == 1
+        assert calls[0].headers["authorization"] == "Bearer ya29.refreshed-token"
+    finally:
+        await provider.terminate()
+
+
 def test_vertex_ai_config_template_defaults_to_json_and_global():
     provider_metadata = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"]
     template = provider_metadata["config_template"]["Google Vertex AI"]

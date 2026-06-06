@@ -181,6 +181,9 @@ class ProviderGoogleGenAI(Provider):
             }
 
         auth_type = self._get_vertex_ai_auth_type()
+        # API-key auth is used only when no service-account JSON is provided. A
+        # pasted service-account JSON always takes precedence (it enables OAuth
+        # and Model Garden discovery), even if the auth type is set to api_key.
         if auth_type == VERTEX_AI_API_KEY_AUTH and not self._has_vertex_ai_key_json():
             client_kwargs = {
                 "vertexai": True,
@@ -1119,7 +1122,12 @@ class ProviderGoogleGenAI(Provider):
         if not getattr(credentials, "valid", False) or not getattr(
             credentials, "token", None
         ):
-            credentials.refresh(make_vertex_ai_refresh_request(self.provider_config))
+            # credentials.refresh performs blocking network I/O; run it off the
+            # event loop so model discovery does not stall the async runtime.
+            await asyncio.to_thread(
+                credentials.refresh,
+                make_vertex_ai_refresh_request(self.provider_config),
+            )
 
         token = getattr(credentials, "token", None)
         if not token:

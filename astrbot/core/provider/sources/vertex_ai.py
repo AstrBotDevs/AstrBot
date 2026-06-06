@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
+from astrbot.core import logger
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 GOOGLE_CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
@@ -148,6 +149,10 @@ def make_vertex_ai_refresh_request(provider_config: dict[str, Any]) -> Any:
     try:
         import requests
     except ImportError:
+        logger.warning(
+            "Vertex AI proxy is configured but the 'requests' package is "
+            "unavailable; the proxy will be ignored for OAuth token refresh."
+        )
         return Request()
 
     session = requests.Session()
