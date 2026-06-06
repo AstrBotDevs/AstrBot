@@ -924,6 +924,8 @@ class KBHelper:
     async def get_document(self, doc_id: str) -> KBDocument | None:
         """获取单个文档"""
         doc = await self.kb_db.get_document_by_id(doc_id)
+        if doc and doc.kb_id != self.kb.kb_id:
+            return None
         return doc
 
     async def delete_document(self, doc_id: str) -> None:
