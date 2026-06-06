@@ -1046,7 +1046,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 # 权限拦截
                 # 即使 LLM 意外获知了受限工具，执行前也会在此被阻断。
                 if getattr(func_tool, "require_admin", False):
-                    _caller_event = self.run_context.context.event
+                    _caller_event = getattr(self.run_context.context, "event", None)
                     if getattr(_caller_event, "role", "member") != "admin":
                         sender_id = (
                             _caller_event.get_sender_id()
