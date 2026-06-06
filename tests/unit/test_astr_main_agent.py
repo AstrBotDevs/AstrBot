@@ -1215,37 +1215,67 @@ class TestBuildMainAgent:
         image_caption_cache.clear()
 
     @pytest.mark.asyncio
-    async def test_request_img_caption_quoted_context_tolerates_provider_id_mismatch(
+    async def test_process_quote_message_uses_provider_instance_for_image_caption(
         self,
         tmp_path,
+        mock_event,
+        mock_context,
     ):
-        """Test quoted image captions reuse the wrapped provider despite ID mismatches."""
+        """Test quoted image captions use the resolved provider instance directly."""
         module = ama
         image_caption_cache.clear()
 
         image_path = tmp_path / "quoted-image.png"
         image_path.write_bytes(b"quoted-image")
 
+        quoted_image = Image(file=f"file:///{image_path.as_posix()}")
+        quoted_reply = Reply(
+            id="reply-1",
+            chain=[Plain(text="quoted text"), quoted_image],
+            sender_nickname="",
+            message_str="quoted text",
+        )
+        mock_event.message_obj.message = [quoted_reply]
+
         caption_provider = MagicMock(spec=Provider)
         caption_provider.provider_config = {"id": "provider-config-id"}
-        caption_provider.id = "wrapped-provider-id"
         caption_provider.text_chat = AsyncMock(
             return_value=MagicMock(completion_text="quoted caption")
         )
+        mock_context.get_provider_by_id.return_value = caption_provider
 
-        cfg = {
-            "image_caption_prompt": "Please describe the image content.",
-            "image_caption_cache_ttl": 600,
-        }
+        req = ProviderRequest(prompt="Hello")
 
-        caption = await module._request_img_caption(
-            "provider-config-id",
-            cfg,
-            [str(image_path)],
-            module._QuotedImageCaptionContext(caption_provider),
+        with (
+            patch(
+                "astrbot.core.astr_main_agent.extract_quoted_message_text",
+                AsyncMock(return_value="quoted text"),
+            ),
+            patch.object(
+                Image,
+                "convert_to_file_path",
+                AsyncMock(return_value=str(image_path)),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent._compress_image_for_provider",
+                AsyncMock(return_value=str(image_path)),
+            ),
+        ):
+            await module._process_quote_message(
+                mock_event,
+                req,
+                "caption-provider",
+                mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    provider_settings={"image_caption_cache_ttl": 600},
+                ),
+            )
+
+        assert any(
+            "[Image Caption in quoted message]: quoted caption" in part.text
+            for part in req.extra_user_content_parts
         )
-
-        assert caption == "quoted caption"
         caption_provider.text_chat.assert_awaited_once()
         image_caption_cache.clear()
 

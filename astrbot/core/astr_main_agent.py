@@ -582,6 +582,35 @@ async def _ensure_persona_and_skills(
         pass
 
 
+async def _request_img_caption_with_provider(
+    prov: Provider,
+    provider_id: str,
+    image_urls: list[str],
+    prompt: str,
+    cache_ttl: int | None = None,
+) -> str:
+    if cache_ttl is None:
+        cache_ttl = resolve_image_caption_cache_ttl(
+            prov.provider_config if isinstance(prov.provider_config, dict) else None
+        )
+    logger.debug("Processing image caption with provider: %s", provider_id)
+
+    async def _caption_factory() -> str:
+        llm_resp = await prov.text_chat(
+            prompt=prompt,
+            image_urls=image_urls,
+        )
+        return llm_resp.completion_text
+
+    return await image_caption_cache.get_or_create(
+        provider_id=provider_id,
+        prompt=prompt,
+        image_urls=image_urls,
+        ttl_seconds=cache_ttl,
+        caption_factory=_caption_factory,
+    )
+
+
 async def _request_img_caption(
     provider_id: str,
     cfg: dict,
@@ -604,21 +633,12 @@ async def _request_img_caption(
         "Please describe the image.",
     )
     cache_ttl = resolve_image_caption_cache_ttl(cfg)
-    logger.debug("Processing image caption with provider: %s", provider_id)
-
-    async def _caption_factory() -> str:
-        llm_resp = await prov.text_chat(
-            prompt=img_cap_prompt,
-            image_urls=image_urls,
-        )
-        return llm_resp.completion_text
-
-    return await image_caption_cache.get_or_create(
+    return await _request_img_caption_with_provider(
+        prov=prov,
         provider_id=provider_id,
-        prompt=img_cap_prompt,
         image_urls=image_urls,
-        ttl_seconds=cache_ttl,
-        caption_factory=_caption_factory,
+        prompt=img_cap_prompt,
+        cache_ttl=cache_ttl,
     )
 
 
@@ -824,17 +844,19 @@ async def _process_quote_message(
                 )
                 if path and _is_generated_compressed_image_path(path, compress_path):
                     event.track_temporary_local_file(compress_path)
-                caption = await _request_img_caption(
-                    prov.provider_config.get("id", img_cap_prov_id or ""),
-                    {
-                        "image_caption_prompt": "Please describe the image content.",
-                        "image_caption_cache_ttl": resolve_image_caption_cache_ttl(
-                            config.provider_settings if config else None
-                        ),
-                    },
-                    [compress_path],
-                    _QuotedImageCaptionContext(prov),
+                provider_config = (
+                    prov.provider_config
+                    if isinstance(prov.provider_config, dict)
+                    else {}
+                )
+                caption = await _request_img_caption_with_provider(
+                    prov=prov,
+                    provider_id=provider_config.get("id", img_cap_prov_id or ""),
+                    image_urls=[compress_path],
                     prompt="Please describe the image content.",
+                    cache_ttl=resolve_image_caption_cache_ttl(
+                        config.provider_settings if config else None
+                    ),
                 )
                 if caption:
                     content_parts.append(
@@ -858,22 +880,6 @@ async def _process_quote_message(
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
     req.extra_user_content_parts.append(TextPart(text=quoted_text))
-
-
-class _QuotedImageCaptionContext:
-    def __init__(self, provider: Provider) -> None:
-        self._provider = provider
-
-    def get_provider_by_id(self, provider_id: str) -> Provider:
-        wrapped_id = getattr(self._provider, "id", None)
-        if provider_id and wrapped_id and provider_id != wrapped_id:
-            logger.warning(
-                "Quoted image caption provider id mismatch. "
-                "requested=%s wrapped=%s. Using wrapped provider instance.",
-                provider_id,
-                wrapped_id,
-            )
-        return self._provider
 
 
 def _append_system_reminders(
