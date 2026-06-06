@@ -47,7 +47,8 @@
       "origin": "Origin",
       "originName": "Origin Name",
       "readonly": "Read-only",
-      "actions": "Actions"
+      "actions": "Actions",
+      "permission": "Permission"
     },
     "configTags": {
       "tooltipTitle": "This tool is enabled in config file {config} because:",
@@ -57,6 +58,10 @@
         "in": "{key} matched {expected}",
         "fallback": "{key} is currently {actual}"
       }
+    },
+    "permission": {
+      "everyone": "Everyone",
+      "admin": "Admin only"
     }
   },
   "marketplace": {
@@ -167,6 +172,8 @@
     "toggleToolSuccess": "Tool status toggled successfully!",
     "toggleToolReadonly": "Builtin tools are read-only and cannot be enabled or disabled.",
     "toggleToolError": "Failed to toggle tool status: {error}",
-    "testError": "Test connection failed: {error}"
+    "testError": "Test connection failed: {error}",
+    "updatePermissionSuccess": "Permission updated successfully!",
+    "updatePermissionError": "Failed to update permission: {error}"
   }
 }
