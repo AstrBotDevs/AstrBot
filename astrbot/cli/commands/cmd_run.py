@@ -95,6 +95,10 @@ async def run_astrbot(astrbot_root: Path) -> None:
                 raise
     finally:
         cleanup_signal_handlers()
+        if not runner_task.done():
+            runner_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await runner_task
         if not shutdown_task.done():
             shutdown_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

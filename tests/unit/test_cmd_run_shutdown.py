@@ -132,6 +132,64 @@ async def test_run_astrbot_suppresses_signal_cancelled_runner(monkeypatch):
     check_dashboard_mock.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_run_astrbot_cancels_runner_when_parent_is_cancelled(monkeypatch):
+    shutdown_mock = AsyncMock(return_value=None)
+    check_dashboard_mock = AsyncMock(return_value=None)
+    signal_restore_mock = MagicMock()
+    previous_handlers = {
+        signal.SIGINT: object(),
+        signal.SIGTERM: object(),
+    }
+
+    class FakeLoop:
+        def add_signal_handler(self, _signum, _callback, *_args):
+            _ = (_signum, _callback, _args)
+
+        def remove_signal_handler(self, _signum):
+            _ = _signum
+            return True
+
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    class FakeLoader:
+        def __init__(self, db, log_broker):
+            self.db = db
+            self.log_broker = log_broker
+
+        async def start(self):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+    monkeypatch.setattr(initial_loader_module, "InitialLoader", FakeLoader)
+    monkeypatch.setattr(cmd_run, "check_dashboard", check_dashboard_mock)
+    monkeypatch.setattr(cmd_run.asyncio, "get_running_loop", lambda: FakeLoop())
+    monkeypatch.setattr(
+        cmd_run.signal, "getsignal", lambda signum: previous_handlers[signum]
+    )
+    monkeypatch.setattr(cmd_run.signal, "signal", signal_restore_mock)
+    monkeypatch.setattr(core_module.LogManager, "set_queue_handler", MagicMock())
+    monkeypatch.setattr(core_module.LogManager, "shutdown", shutdown_mock)
+
+    awaitable = asyncio.create_task(cmd_run.run_astrbot(Path("/tmp/astrbot-root")))
+    await started.wait()
+
+    awaitable.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await awaitable
+
+    assert cancelled.is_set()
+    shutdown_mock.assert_awaited_once()
+    check_dashboard_mock.assert_awaited_once()
+    assert signal_restore_mock.call_count == 2
+
+
 def test_install_shutdown_signal_handlers_falls_back_and_restores(monkeypatch):
     restored_handlers: list[tuple[signal.Signals, Any]] = []
     installed_handlers: dict[signal.Signals, Callable[[int, object], object]] = {}
