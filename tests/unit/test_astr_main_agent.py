@@ -476,6 +476,46 @@ class TestBuiltinToolInjection:
         assert req.func_tool.get_tool("web_search_firecrawl") is search_tool
         assert req.func_tool.get_tool("firecrawl_extract_web_page") is extract_tool
 
+    def test_apply_web_search_citation_prompt_for_webchat(self, mock_event):
+        module = ama
+        req = ProviderRequest(system_prompt="base")
+        search_tool = MagicMock(spec=FunctionTool)
+        search_tool.name = "web_search_tavily"
+        req.func_tool = ToolSet()
+        req.func_tool.add_tool(search_tool)
+        mock_event.get_platform_name.return_value = "webchat"
+
+        module._apply_web_search_citation_prompt(mock_event, req)
+
+        assert module.WEB_SEARCH_CITATION_PROMPT in req.system_prompt
+
+    def test_apply_web_search_citation_prompt_is_idempotent(self, mock_event):
+        module = ama
+        req = ProviderRequest(system_prompt="")
+        search_tool = MagicMock(spec=FunctionTool)
+        search_tool.name = "web_search_tavily"
+        req.func_tool = ToolSet()
+        req.func_tool.add_tool(search_tool)
+        mock_event.get_platform_name.return_value = "webchat"
+
+        module._apply_web_search_citation_prompt(mock_event, req)
+        module._apply_web_search_citation_prompt(mock_event, req)
+
+        assert req.system_prompt.count(module.WEB_SEARCH_CITATION_PROMPT) == 1
+
+    def test_apply_web_search_citation_prompt_requires_webchat(self, mock_event):
+        module = ama
+        req = ProviderRequest(system_prompt="")
+        search_tool = MagicMock(spec=FunctionTool)
+        search_tool.name = "web_search_tavily"
+        req.func_tool = ToolSet()
+        req.func_tool.add_tool(search_tool)
+        mock_event.get_platform_name.return_value = "test_platform"
+
+        module._apply_web_search_citation_prompt(mock_event, req)
+
+        assert module.WEB_SEARCH_CITATION_PROMPT not in req.system_prompt
+
     def test_proactive_cron_job_tools_uses_builtin_tool_manager(self, mock_context):
         """Test cron tool injection through the builtin tool manager."""
         module = ama

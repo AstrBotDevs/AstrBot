@@ -115,6 +115,20 @@ from astrbot.core.utils.quoted_message_parser import (
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
+WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
+    {
+        "web_search_baidu",
+        "web_search_tavily",
+        "web_search_bocha",
+        "web_search_brave",
+    }
+)
+WEB_SEARCH_CITATION_PROMPT = (
+    "Always cite web search results you rely on. "
+    "Index is a unique identifier for each search result. "
+    "Use the exact citation format <ref>index</ref> (e.g. <ref>abcd.3</ref>) "
+    "after the sentence that uses the information. Do not invent citations."
+)
 
 
 @dataclass(slots=True)
@@ -1149,6 +1163,23 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
 
 
+def _apply_web_search_citation_prompt(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+) -> None:
+    if event.get_platform_name() != "webchat" or not req.func_tool:
+        return
+
+    if not any(req.func_tool.get_tool(name) for name in WEB_SEARCH_CITATION_TOOL_NAMES):
+        return
+
+    system_prompt = req.system_prompt or ""
+    if WEB_SEARCH_CITATION_PROMPT in system_prompt:
+        return
+
+    req.system_prompt = f"{system_prompt}\n{WEB_SEARCH_CITATION_PROMPT}\n"
+
+
 def _get_compress_provider(
     config: MainAgentBuildConfig,
     plugin_context: Context,
@@ -1519,6 +1550,8 @@ async def build_main_agent(
     action_type = event.get_extra("action_type")
     if action_type == "live":
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
+
+    _apply_web_search_citation_prompt(event, req)
 
     reset_coro = agent_runner.reset(
         provider=provider,
