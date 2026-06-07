@@ -87,6 +87,8 @@ from astrbot.core.tools.web_search_tools import (
     BraveWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
+    KagiExtractWebPageTool,
+    KagiWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
     normalize_legacy_web_search_config,
@@ -1147,6 +1149,9 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlExtractWebPageTool))
     elif provider == "baidu_ai_search":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
+    elif provider == "kagi":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(KagiWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(KagiExtractWebPageTool))
 
 
 def _get_compress_provider(
