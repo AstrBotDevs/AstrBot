@@ -8,6 +8,7 @@ from astrbot.core import logger
 from astrbot.core.message.components import BaseMessageComponent, ComponentType
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.sources.qqofficial.components import QQCButton, QQCKeyboard
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.path_util import path_Mapping
 
@@ -47,6 +48,9 @@ class RespondStage(Stage):
         Comp.Dice: lambda _: True,  # 掷骰子魔法表情
         Comp.RPS: lambda _: True,  # 猜拳魔法表情
         Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
+        # QQ 官方平台按钮（Keyboard）
+        QQCButton: lambda comp: bool(comp.id),
+        QQCKeyboard: lambda comp: bool(comp.rows),
     }
 
     async def initialize(self, ctx: PipelineContext) -> None:
