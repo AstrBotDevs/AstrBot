@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateTable
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
 
@@ -98,6 +97,12 @@ class DocumentStorage:
                 )
             except BaseException:
                 pass
+
+            await conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_doc_id_unique ON documents(doc_id)",
+                ),
+            )
 
             await self._initialize_fts5(conn)
             await conn.commit()
@@ -255,7 +260,6 @@ class DocumentStorage:
                 self.DATABASE_URL,
                 echo=False,
                 future=True,
-                poolclass=NullPool,
             )
             self.async_session_maker = async_sessionmaker(
                 self.engine,

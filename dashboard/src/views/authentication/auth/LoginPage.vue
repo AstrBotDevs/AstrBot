@@ -3,7 +3,7 @@ import AuthLogin from "../authForms/AuthLogin.vue";
 import DailyQuote from "@/components/shared/DailyQuote.vue";
 import DiamondBg from "@/components/auth/DiamondBg.vue";
 import LanguageSwitcher from "@/components/shared/LanguageSwitcher.vue";
-import { onMounted, ref, computed } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useAuthStore } from "@/stores/auth";
 import { useApiStore } from "@/stores/api";
 import { useRouter } from "vue-router";
@@ -11,7 +11,10 @@ import { useCustomizerStore } from "@/stores/customizer";
 import { useTheme } from "vuetify";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useToast } from "@/utils/toast";
-import { getApiBaseUrlValidationError, normalizeConfiguredApiBaseUrl } from "@/utils/request";
+import {
+  getApiBaseUrlValidationError,
+  normalizeConfiguredApiBaseUrl,
+} from "@/utils/request";
 import axios from "@/utils/request";
 
 const vuetifyTheme = useTheme();
@@ -27,6 +30,17 @@ const customizer = useCustomizerStore();
 const { locale } = useI18n();
 const { tm: t } = useModuleI18n("features/auth");
 const toast = useToast();
+const authLoginRef = ref<InstanceType<typeof AuthLogin> | null>(null);
+
+const isTotpStage = computed(
+  () =>
+    authLoginRef.value?.stage === "totp" ||
+    authLoginRef.value?.stage === "recovery",
+);
+
+const logoTitle = computed(() =>
+  isTotpStage.value ? t("logo.totpTitle") : t("logo.title"),
+);
 
 const serverConfigDialog = ref(false);
 const apiUrl = ref(normalizeConfiguredApiBaseUrl(apiStore.apiBaseUrl));
@@ -198,9 +212,10 @@ onMounted(async () => {
           </div>
         </div>
         <div class="ml-2" style="font-size: 26px">
-          {{ t("logo.title") }}
+          {{ logoTitle }}
         </div>
         <div
+          v-if="!isTotpStage"
           class="mt-2 ml-2"
           style="font-size: 14px; color: var(--v-theme-on-surface-variant)"
         >
@@ -208,7 +223,10 @@ onMounted(async () => {
         </div>
       </v-card-title>
       <v-card-text>
-        <AuthLogin @open-server-config="serverConfigDialog = true" />
+        <AuthLogin
+          ref="authLoginRef"
+          @open-server-config="serverConfigDialog = true"
+        />
       </v-card-text>
     </v-card>
 
@@ -334,7 +352,7 @@ onMounted(async () => {
               density="compact"
               hide-details
               inset
-              @update:model-value="customizer.SET_AUTO_SYNC($event)"
+              @update:model-value="customizer.SET_AUTO_SYNC(Boolean($event))"
             />
           </div>
         </v-card-text>

@@ -115,6 +115,20 @@ from astrbot.core.utils.quoted_message_parser import (
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
+WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
+    {
+        "web_search_baidu",
+        "web_search_tavily",
+        "web_search_bocha",
+        "web_search_brave",
+    }
+)
+WEB_SEARCH_CITATION_PROMPT = (
+    "Always cite web search results you rely on. "
+    "Index is a unique identifier for each search result. "
+    "Use the exact citation format <ref>index</ref> (e.g. <ref>abcd.3</ref>) "
+    "after the sentence that uses the information. Do not invent citations."
+)
 
 
 @dataclass(slots=True)
@@ -150,8 +164,8 @@ class MainAgentBuildConfig:
     """The strategy to handle context length limit reached."""
     llm_compress_instruction: str = ""
     """The instruction for compression in llm_compress strategy."""
-    llm_compress_keep_recent: int = 10
-    """The number of most recent turns to keep during llm_compress strategy."""
+    llm_compress_keep_recent_ratio: float = 0.15
+    """Percent of current context tokens to keep as exact recent context during llm_compress strategy."""
     llm_compress_provider_id: str = ""
     """The provider ID for the LLM used in context compression."""
     max_context_length: int = 50
@@ -1149,6 +1163,23 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
 
 
+def _apply_web_search_citation_prompt(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+) -> None:
+    if event.get_platform_name() != "webchat" or not req.func_tool:
+        return
+
+    if not any(req.func_tool.get_tool(name) for name in WEB_SEARCH_CITATION_TOOL_NAMES):
+        return
+
+    system_prompt = req.system_prompt or ""
+    if WEB_SEARCH_CITATION_PROMPT in system_prompt:
+        return
+
+    req.system_prompt = f"{system_prompt}\n{WEB_SEARCH_CITATION_PROMPT}\n"
+
+
 def _get_compress_provider(
     config: MainAgentBuildConfig,
     plugin_context: Context,
@@ -1210,6 +1241,8 @@ def _get_fallback_chat_providers(
 
 def _provider_supports_modality(provider: Provider, modality: str) -> bool:
     modalities = provider.provider_config.get("modalities", None)
+    if modalities == []:
+        return True  # Empty list from migration is treated as unconfigured for backward compatibility
     return isinstance(modalities, list) and modality in modalities
 
 
@@ -1428,8 +1461,10 @@ async def build_main_agent(
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while applying file extract: %s", exc)
 
+    has_reply = any(isinstance(comp, Reply) for comp in event.message_obj.message)
+
     if not req.prompt and not req.image_urls and not req.audio_urls:
-        if not event.get_group_id() and req.extra_user_content_parts:
+        if has_reply or req.extra_user_content_parts:
             req.prompt = "<attachment>"
         else:
             return None
@@ -1516,6 +1551,8 @@ async def build_main_agent(
     if action_type == "live":
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
 
+    _apply_web_search_citation_prompt(event, req)
+
     reset_coro = agent_runner.reset(
         provider=provider,
         request=req,
@@ -1527,9 +1564,10 @@ async def build_main_agent(
         agent_hooks=MAIN_AGENT_HOOKS,
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
-        llm_compress_keep_recent=config.llm_compress_keep_recent,
+        llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
         llm_compress_provider=_get_compress_provider(config, plugin_context, event),
         truncate_turns=config.dequeue_context_length,
+        enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=fallback_providers,
         tool_result_overflow_dir=(

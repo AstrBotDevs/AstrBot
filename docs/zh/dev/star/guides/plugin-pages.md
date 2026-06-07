@@ -116,7 +116,8 @@ class MyPlugin(Star):
   "pageName": "bridge-demo",
   "pageTitle": "Bridge Demo",
   "locale": "zh-CN",
-  "i18n": {}
+  "i18n": {},
+  "isDark": false
 }
 ```
 
@@ -167,6 +168,56 @@ bridge.onContext(render);
 ```html
 <script src="/api/plugin/page/bridge-sdk.js"></script>
 ```
+
+## 亮暗主题适配
+
+AstrBot 切换亮色/暗色模式时，会自动将主题状态同步给插件 Page。bridge SDK 会在 `<html>` 元素上维护 `data-theme` 属性：
+
+- 亮色模式：`<html data-theme="light">`
+- 暗色模式：`<html data-theme="dark">`
+
+### CSS 适配
+
+推荐使用 CSS 变量：
+
+```css
+:root {
+  --bg: #ffffff;
+  --text: #1a1a1a;
+}
+
+[data-theme="dark"] {
+  --bg: #1a1a1a;
+  --text: #e0e0e0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+```
+
+AstrBot 在服务端返回 HTML 时，会自动在 `<html>` 标签上注入 `data-theme` 属性，不会出现初始闪烁。
+
+### JavaScript 响应主题变化
+
+上下文中的 `isDark` 字段表示当前是否为暗色模式。通过 `onContext()` 可以监听主题切换：
+
+```js
+const bridge = window.AstrBotPluginPage;
+
+function render() {
+  if (bridge.getContext()?.isDark) {
+    // 暗色模式下的 JS 逻辑（如图表滤镜等）
+  }
+}
+
+await bridge.ready();
+render();
+bridge.onContext(render);
+```
+
+切换亮暗模式时，Dashboard 会通过 bridge 将更新后的上下文发送给 iframe；只要 Page 监听了 `onContext()`，就会收到通知。
 
 ## 静态资源路径规则
 
@@ -232,7 +283,8 @@ console.log(context.pluginName, context.pageName, context.locale);
   "pageName": "bridge-demo",
   "pageTitle": "Bridge Demo",
   "locale": "zh-CN",
-  "i18n": {}
+  "i18n": {},
+  "isDark": false
 }
 ```
 

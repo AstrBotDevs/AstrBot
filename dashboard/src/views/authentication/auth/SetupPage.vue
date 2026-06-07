@@ -7,7 +7,7 @@ import { useRouter } from 'vue-router';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
-import axios from 'axios';
+import axios from '@/utils/request';
 
 const router = useRouter();
 const authStore = useAuthStore();

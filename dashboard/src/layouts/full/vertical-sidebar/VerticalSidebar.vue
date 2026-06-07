@@ -2,14 +2,38 @@
 import { ref, shallowRef, onMounted, onUnmounted, watch } from "vue";
 import { useCustomizerStore } from "../../../stores/customizer";
 import { useI18n } from "@/i18n/composables";
-import sidebarItems from "./sidebarItem";
+import sidebarItems, { MORE_GROUP_KEY } from "./sidebarItem";
 import NavItem from "./NavItem.vue";
 import { applySidebarCustomization } from "@/utils/sidebarCustomization";
 import ChangelogDialog from "@/components/shared/ChangelogDialog.vue";
+import { usePluginSidebarItems } from "@/composables/usePluginSidebarItems";
 
 const { t, locale } = useI18n();
 
 const customizer = useCustomizerStore();
+const { pluginItems } = usePluginSidebarItems();
+
+function buildSidebarMenu() {
+  const base = applySidebarCustomization(sidebarItems);
+  if (!pluginItems.value?.children?.length) return base;
+
+  const result = [];
+
+  for (const item of base) {
+    if (item.title === MORE_GROUP_KEY) {
+      result.push(pluginItems.value);
+      result.push(item);
+    } else {
+      result.push(item);
+    }
+  }
+
+  if (!base.some((item) => item.title === MORE_GROUP_KEY)) {
+    result.push(pluginItems.value);
+  }
+
+  return result;
+}
 
 function collectGroupValues(items, values = new Set()) {
   items.forEach((item) => {
@@ -43,7 +67,7 @@ function getInitialOpenedItems(menuItems) {
   }
 }
 
-const sidebarMenu = shallowRef(applySidebarCustomization(sidebarItems));
+const sidebarMenu = shallowRef(buildSidebarMenu());
 
 // 侧边栏分组展开状态持久化
 const openedItems = ref(getInitialOpenedItems(sidebarMenu.value));
@@ -58,8 +82,14 @@ watch(
   { deep: true },
 );
 
+// 当插件项变化时（如插件启用/停用），刷新菜单
+watch(pluginItems, () => {
+  sidebarMenu.value = buildSidebarMenu();
+  openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
+});
+
 function refreshSidebarMenu() {
-  sidebarMenu.value = applySidebarCustomization(sidebarItems);
+  sidebarMenu.value = buildSidebarMenu();
   openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
 }
 
@@ -250,6 +280,14 @@ function startSidebarResize(event) {
   document.body.style.userSelect = "none";
   document.body.style.cursor = "ew-resize";
 
+  // 拖拽时禁用 iframe 的 pointer-events，防止 iframe 截获 mousemove 事件导致拖拽卡住
+  const iframes = document.querySelectorAll(
+    ".plugin-page-frame",
+  ) as NodeListOf<HTMLElement>;
+  iframes.forEach((el) => {
+    el.style.pointerEvents = "none";
+  });
+
   const startX = event.clientX;
   const startWidth = sidebarWidth.value;
 
@@ -268,6 +306,9 @@ function startSidebarResize(event) {
     isResizing.value = false;
     document.body.style.userSelect = "";
     document.body.style.cursor = "";
+    iframes.forEach((el) => {
+      el.style.pointerEvents = "";
+    });
     document.removeEventListener("mousemove", onMouseMoveResize);
     document.removeEventListener("mouseup", onMouseUpResize);
   }

@@ -90,7 +90,7 @@ class WeixinOCAdapter(Platform):
             platform_config.get("weixin_oc_long_poll_timeout_ms", 35000),
         )
         self.api_timeout_ms = int(
-            platform_config.get("weixin_oc_api_timeout_ms", 15000),
+            platform_config.get("weixin_oc_api_timeout_ms", 120_000),
         )
         self.cdn_base_url = str(
             platform_config.get(

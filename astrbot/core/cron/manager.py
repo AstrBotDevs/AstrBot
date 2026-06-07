@@ -16,6 +16,7 @@ from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.utils.history_saver import persist_agent_history
 
@@ -218,9 +219,18 @@ class CronJobManager:
             return None
         return aps_job.next_run_time.astimezone(timezone.utc)
 
-    async def _run_job(self, job_id: str) -> None:
+    async def run_job_now(self, job_id: str) -> None:
+        await self._run_job(job_id, ignore_enabled=True, delete_run_once=False)
+
+    async def _run_job(
+        self,
+        job_id: str,
+        *,
+        ignore_enabled: bool = False,
+        delete_run_once: bool = True,
+    ) -> None:
         job = await self.db.get_cron_job(job_id)
-        if not job or not job.enabled:
+        if not job or (not job.enabled and not ignore_enabled):
             return
         start_time = datetime.now(timezone.utc)
         await self.db.update_cron_job(
@@ -251,7 +261,8 @@ class CronJobManager:
                 last_error=last_error,
                 next_run_time=next_run,
             )
-            if job.run_once:
+            if job.run_once and delete_run_once:
+                # one-shot: remove after execution regardless of success
                 await self.delete_job(job_id)
 
     async def _run_basic_job(self, job: CronJob) -> None:
@@ -265,9 +276,14 @@ class CronJobManager:
 
     async def _run_active_agent_job(self, job: CronJob, start_time: datetime) -> None:
         payload = job.payload or {}
-        session_str = payload.get("session")
-        if not session_str:
-            raise ValueError("ActiveAgentCronJob missing session.")
+        delivery_session_str = str(payload.get("session") or "").strip()
+        session_str = delivery_session_str or str(
+            MessageSession(
+                platform_name="cron",
+                message_type=MessageType.OTHER_MESSAGE,
+                session_id=job.job_id,
+            )
+        )
         note = payload.get("note") or job.description or job.name
         extras = {
             "cron_job": {
@@ -281,7 +297,7 @@ class CronJobManager:
                 "run_at": (
                     job.payload.get("run_at") if isinstance(job.payload, dict) else None
                 ),
-                "session": session_str,
+                "session": delivery_session_str,
             },
             "cron_payload": payload,
         }
@@ -289,6 +305,7 @@ class CronJobManager:
             message=note,
             session_str=session_str,
             extras=extras,
+            delivery_session_str=delivery_session_str,
         )
 
     async def _woke_main_agent(
@@ -297,6 +314,7 @@ class CronJobManager:
         message: str,
         session_str: str,
         extras: dict,
+        delivery_session_str: str = "",
     ) -> None:
         """Woke the main agent to handle the cron job message."""
         from astrbot.core.astr_main_agent import (
@@ -361,9 +379,10 @@ class CronJobManager:
             cron_job=cron_job_str,
         )
         req.prompt = CRON_TASK_WOKE_USER_PROMPT
-        if not req.func_tool:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+        if delivery_session_str:
+            if not req.func_tool:
+                req.func_tool = ToolSet()
+            req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
         result = await build_main_agent(
             event=cron_event,
             plugin_context=self.ctx,

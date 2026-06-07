@@ -20,7 +20,7 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     build_main_agent,
 )
-from astrbot.core.message.components import File, Image, Record, Video
+from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -100,8 +100,8 @@ class InternalAgentSubStage(Stage):
             "llm_compress_instruction",
             "",
         )
-        self.llm_compress_keep_recent: int = settings.get(
-            "llm_compress_keep_recent", 10
+        self.llm_compress_keep_recent_ratio: float = settings.get(
+            "llm_compress_keep_recent_ratio", 0.15
         )
         self.llm_compress_provider_id: str = settings.get(
             "llm_compress_provider_id",
@@ -144,7 +144,7 @@ class InternalAgentSubStage(Stage):
             file_extract_msh_api_key=self.file_extract_msh_api_key,
             context_limit_reached_strategy=self.context_limit_reached_strategy,
             llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent=self.llm_compress_keep_recent,
+            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
             llm_compress_provider_id=self.llm_compress_provider_id,
             max_context_length=self.max_context_length,
             dequeue_context_length=self.dequeue_context_length,
@@ -188,11 +188,15 @@ class InternalAgentSubStage(Stage):
                 isinstance(comp, (Image, File, Record, Video))
                 for comp in event.message_obj.message
             )
+            has_reply = any(
+                isinstance(comp, Reply) for comp in event.message_obj.message
+            )
 
             if (
                 not has_provider_request
                 and not has_valid_message
                 and not has_media_content
+                and not has_reply
             ):
                 logger.debug("skip llm request: empty message and no provider_request")
                 return
@@ -489,18 +493,6 @@ class InternalAgentSubStage(Stage):
                 continue
             if message.role in ["assistant", "user"] and message._no_save:
                 continue
-            # Truncate long tool results before persisting (8192 chars)
-            if (
-                message.role == "tool"
-                and isinstance(message.content, str)
-                and len(message.content) > 8192
-            ):
-                message = Message(
-                    role="tool",
-                    tool_call_id=message.tool_call_id,
-                    content=message.content[:8192]
-                    + f"\n...[truncated {len(message.content) - 8192} chars]",
-                )
             messages_to_save.append(message)
 
         checkpoint_id = event.get_extra("llm_checkpoint_id")

@@ -22,6 +22,12 @@ const routerLoadingStore = useRouterLoadingStore();
 const isCurrentChatRoute = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
+const isPluginPageRoute = computed(
+  () => route.path.startsWith("/plugin-page/"),
+);
+const isFullScreenRoute = computed(
+  () => isCurrentChatRoute.value || isPluginPageRoute.value,
+);
 const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const showSidebar = computed(() => !isCurrentChatRoute.value);
@@ -137,9 +143,9 @@ onMounted(() => {
           class="page-wrapper"
           :class="{ 'chat-mode-container': isCurrentChatRoute }"
           :style="{
-            height: isCurrentChatRoute ? '100%' : 'calc(100% - 8px)',
-            padding: isCurrentChatRoute ? '0' : undefined,
-            minHeight: isCurrentChatRoute ? 'unset' : undefined,
+            height: isFullScreenRoute ? '100%' : 'calc(100% - 8px)',
+            padding: isFullScreenRoute ? '0' : undefined,
+            minHeight: isFullScreenRoute ? 'unset' : undefined,
           }"
         >
           <div
@@ -147,6 +153,7 @@ onMounted(() => {
               height: '100%',
               width: '100%',
               overflow: isCurrentChatRoute ? 'hidden' : undefined,
+              position: isPluginPageRoute ? 'relative' : undefined,
             }"
           >
             <div

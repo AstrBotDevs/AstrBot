@@ -167,17 +167,38 @@
               <div class="umo-source-cell">
                 <div class="umo-source-content">
                   <template v-if="umoDisplayMode === 'parsed'">
-                    <v-chip size="x-small" label>
-                      {{ item.sessionInfo.platform || tm("status.unknown") }}
-                    </v-chip>
-                    <span class="umo-separator">:</span>
-                    <v-chip size="x-small" label>
-                      {{ getMessageTypeDisplay(item.sessionInfo.messageType) }}
-                    </v-chip>
-                    <span class="umo-separator">:</span>
-                    <span class="umo-session-id">{{
-                      item.sessionInfo.sessionId || tm("status.unknown")
-                    }}</span>
+                    <div class="conversation-umo-stack">
+                      <UmoDisplay
+                        v-if="hasConversationUmoReadableName(item)"
+                        v-bind="getConversationUmoDisplayProps(item)"
+                        compact
+                        :show-info="false"
+                        :show-platform="false"
+                        :show-meta="false"
+                        class="conversation-umo-display"
+                      />
+                      <div class="conversation-umo-parsed">
+                        <v-chip size="x-small" label>
+                          {{
+                            getConversationUmoInfo(item).platform ||
+                            tm("status.unknown")
+                          }}
+                        </v-chip>
+                        <span class="umo-separator">:</span>
+                        <v-chip size="x-small" label>
+                          {{
+                            getMessageTypeDisplay(
+                              getConversationUmoInfo(item).message_type,
+                            )
+                          }}
+                        </v-chip>
+                        <span class="umo-separator">:</span>
+                        <span class="umo-session-id">{{
+                          getConversationUmoInfo(item).session_id ||
+                          tm("status.unknown")
+                        }}</span>
+                      </div>
+                    </div>
                   </template>
                   <span v-else class="umo-raw-text">{{
                     item.user_id || tm("status.unknown")
@@ -294,25 +315,47 @@
     <!-- 对话详情对话框 -->
     <v-dialog v-model="dialogView" max-width="900px" scrollable>
       <v-card class="conversation-detail-card">
-        <v-card-title class="ml-2 mt-2 d-flex align-center">
-          <span class="text-truncate">{{
-            selectedConversation?.title || tm("status.noTitle")
-          }}</span>
-          <v-spacer></v-spacer>
-          <div
-            class="d-flex align-center"
-            v-if="selectedConversation?.sessionInfo"
-          >
-            <v-chip text-color="primary" size="small" class="mr-2" rounded="md">
-              {{ selectedConversation.sessionInfo.platform }}
-            </v-chip>
-            <v-chip text-color="secondary" size="small" rounded="md">
-              {{
-                getMessageTypeDisplay(
-                  selectedConversation.sessionInfo.messageType,
-                )
-              }}
-            </v-chip>
+        <v-card-title class="ml-2 mt-2 conversation-detail-title">
+          <div class="conversation-detail-heading">
+            <span class="text-truncate">{{
+              selectedConversation?.title || tm("status.noTitle")
+            }}</span>
+            <UmoDisplay
+              v-if="
+                selectedConversation?.user_id &&
+                hasConversationUmoReadableName(selectedConversation)
+              "
+              v-bind="getConversationUmoDisplayProps(selectedConversation)"
+              compact
+              :show-info="false"
+              :show-platform="false"
+              :show-meta="false"
+              class="conversation-umo-display"
+            />
+            <div
+              v-if="selectedConversation?.user_id"
+              class="conversation-umo-parsed conversation-detail-umo-parsed"
+            >
+              <v-chip size="x-small" label>
+                {{
+                  getConversationUmoInfo(selectedConversation).platform ||
+                  tm("status.unknown")
+                }}
+              </v-chip>
+              <span class="umo-separator">:</span>
+              <v-chip size="x-small" label>
+                {{
+                  getMessageTypeDisplay(
+                    getConversationUmoInfo(selectedConversation).message_type,
+                  )
+                }}
+              </v-chip>
+              <span class="umo-separator">:</span>
+              <span class="umo-session-id">{{
+                getConversationUmoInfo(selectedConversation).session_id ||
+                tm("status.unknown")
+              }}</span>
+            </div>
           </div>
         </v-card-title>
 
@@ -565,6 +608,17 @@ import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,
 } from "@/utils/confirmDialog";
+import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+
+interface UmoInfo {
+  umo?: string;
+  platform?: string;
+  message_type?: string;
+  session_id?: string;
+  auto_name?: string;
+  user_alias?: string;
+  display_name?: string;
+}
 
 interface ConversationItem {
   user_id: string;
@@ -572,6 +626,7 @@ interface ConversationItem {
   title: string;
   created_at?: number;
   updated_at?: number;
+  umo_info?: UmoInfo;
   sessionInfo?: { platform: string; messageType: string; sessionId: string };
 }
 
@@ -597,6 +652,7 @@ export default defineComponent({
   components: {
     VueMonacoEditor,
     MessageList,
+    UmoDisplay,
   },
 
   setup() {
@@ -903,27 +959,57 @@ export default defineComponent({
     getMessageTypeDisplay(messageType: string) {
       const typeMap = {
         GroupMessage: this.tm("messageTypes.group"),
+        group: this.tm("messageTypes.group"),
         FriendMessage: this.tm("messageTypes.friend"),
+        friend: this.tm("messageTypes.friend"),
+        private: this.tm("messageTypes.friend"),
         default: this.tm("messageTypes.unknown"),
       };
 
       return typeMap[messageType] || typeMap.default;
     },
 
-    formatUmoSource(item: ConversationItem) {
-      if (!item?.sessionInfo) {
-        return item?.user_id || this.tm("status.unknown");
-      }
+    getConversationUmoInfo(item: ConversationItem | null | undefined) {
+      const umo = item?.user_id || item?.umo_info?.umo || "";
+      const parsed = this.parseSessionId(umo);
+      const info = item?.umo_info || {};
+      return {
+        umo,
+        platform: info.platform || parsed.platform,
+        message_type: info.message_type || parsed.messageType,
+        session_id: info.session_id || parsed.sessionId,
+        auto_name: info.auto_name || "",
+        user_alias: info.user_alias || "",
+        display_name: info.display_name || umo,
+      };
+    },
 
+    getConversationUmoDisplayProps(item: ConversationItem) {
+      const info = this.getConversationUmoInfo(item);
+      return {
+        umo: info.umo || this.tm("status.unknown"),
+        platform: info.platform,
+        messageType: info.message_type,
+        sessionId: info.session_id,
+        autoName: info.auto_name,
+        userAlias: info.user_alias,
+      };
+    },
+
+    hasConversationUmoReadableName(item: ConversationItem) {
+      const info = this.getConversationUmoInfo(item);
+      return Boolean(info.user_alias || info.auto_name);
+    },
+
+    formatUmoSource(item: ConversationItem) {
       if (this.umoDisplayMode === "raw") {
         return item.user_id || this.tm("status.unknown");
       }
 
-      const platform = item.sessionInfo.platform || this.tm("status.unknown");
-      const messageType = this.getMessageTypeDisplay(
-        item.sessionInfo.messageType,
-      );
-      const sessionId = item.sessionInfo.sessionId || this.tm("status.unknown");
+      const info = this.getConversationUmoInfo(item);
+      const platform = info.platform || this.tm("status.unknown");
+      const messageType = this.getMessageTypeDisplay(info.message_type);
+      const sessionId = info.session_id || this.tm("status.unknown");
       return `${platform}:${messageType}:${sessionId}`;
     },
 
@@ -992,7 +1078,12 @@ export default defineComponent({
             // 处理会话数据，解析sessionId
             this.conversations = (data.conversations || []).map((conv) => {
               // 为每个会话添加会话信息
-              conv.sessionInfo = this.parseSessionId(conv.user_id);
+              const umoInfo = this.getConversationUmoInfo(conv);
+              conv.sessionInfo = {
+                platform: umoInfo.platform,
+                messageType: umoInfo.message_type,
+                sessionId: umoInfo.session_id,
+              };
               return conv;
             });
 
@@ -1042,7 +1133,20 @@ export default defineComponent({
 
         if (response.data.status === "ok") {
           try {
-            const historyData = response.data.data.history || "[]";
+            const detailData = response.data.data || {};
+            const mergedConversation = {
+              ...this.selectedConversation,
+              ...detailData,
+            };
+            const umoInfo = this.getConversationUmoInfo(mergedConversation);
+            mergedConversation.sessionInfo = {
+              platform: umoInfo.platform,
+              messageType: umoInfo.message_type,
+              sessionId: umoInfo.session_id,
+            };
+            this.selectedConversation = mergedConversation;
+
+            const historyData = detailData.history || "[]";
             this.conversationHistory = JSON.parse(historyData);
             this.editedHistory = JSON.stringify(
               this.conversationHistory,
@@ -1613,6 +1717,39 @@ export default defineComponent({
   gap: 4px;
   min-width: 0;
   overflow: hidden;
+}
+
+.conversation-umo-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.conversation-umo-parsed {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.conversation-umo-display {
+  max-width: 100%;
+}
+
+.conversation-detail-title {
+  align-items: flex-start;
+}
+
+.conversation-detail-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.conversation-detail-umo-parsed {
+  max-width: 100%;
 }
 
 .umo-separator {

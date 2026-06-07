@@ -5,7 +5,7 @@ import os
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.25.2"
+VERSION = "4.25.4"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -130,7 +130,7 @@ DEFAULT_CONFIG = {
             "4. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "5. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent": 10,
+        "llm_compress_keep_recent_ratio": 0.15,
         "llm_compress_provider_id": "",
         "max_context_length": 50,
         "dequeue_context_length": 10,
@@ -254,6 +254,17 @@ DEFAULT_CONFIG = {
         "host": "0.0.0.0",
         "port": 6185,
         "disable_access_log": True,
+        "trust_proxy_headers": False,
+        "auth_rate_limit": {
+            "enable": True,
+            "average_interval": 1.0,
+            "max_burst": 3,
+        },
+        "totp": {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        },
         "ssl": {
             "enable": False,
             "cert_file": "",
@@ -406,7 +417,7 @@ CONFIG_METADATA_2 = {
                         "weixin_oc_bot_type": "3",
                         "weixin_oc_qr_poll_interval": 1,
                         "weixin_oc_long_poll_timeout_ms": 35_000,
-                        "weixin_oc_api_timeout_ms": 15_000,
+                        "weixin_oc_api_timeout_ms": 120_000,
                     },
                     "飞书(Lark)": {
                         "id": "lark",
@@ -2042,8 +2053,8 @@ CONFIG_METADATA_2 = {
                             },
                             "max_tokens": {
                                 "name": "Max Tokens",
-                                "description": "最大令牌数",
-                                "hint": "生成的最大令牌数。",
+                                "description": "最大词元（Tokens）数",
+                                "hint": "生成的最大词元（Tokens）数。",
                                 "type": "int",
                                 "default": 8192,
                             },
@@ -2987,6 +2998,10 @@ CONFIG_METADATA_2 = {
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             },
             "dashboard.ssl.enable": {"type": "bool"},
+            "dashboard.trust_proxy_headers": {"type": "bool"},
+            "dashboard.auth_rate_limit.enable": {"type": "bool"},
+            "dashboard.auth_rate_limit.average_interval": {"type": "float"},
+            "dashboard.auth_rate_limit.max_burst": {"type": "int"},
             "dashboard.ssl.cert_file": {
                 "type": "string",
                 "condition": {"dashboard.ssl.enable": True},
@@ -3566,10 +3581,11 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.llm_compress_keep_recent": {
-                        "description": "压缩时保留最近对话轮数",
-                        "type": "int",
-                        "hint": "始终保留的最近 N 轮对话。",
+                    "provider_settings.llm_compress_keep_recent_ratio": {
+                        "description": "压缩时保留最近上下文比例",
+                        "type": "float",
+                        "slider": {"min": 0, "max": 0.3, "step": 0.01},
+                        "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
                             "provider_settings.agent_runner_type": "local",
@@ -3859,7 +3875,7 @@ CONFIG_METADATA_3 = {
                     "disable_builtin_commands": {
                         "description": "禁用自带指令",
                         "type": "bool",
-                        "hint": "禁用所有 AstrBot 的自带指令，如 help, provider, model 等。",
+                        "hint": "禁用所有 AstrBot 的自带指令，如 help, sid, new 等。",
                     },
                 },
             },
@@ -4228,6 +4244,34 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "启用 WebUI HTTPS",
                         "type": "bool",
                         "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。",
+                    },
+                    "dashboard.trust_proxy_headers": {
+                        "description": "信任代理请求头获取客户端 IP",
+                        "type": "bool",
+                        "hint": "关闭时忽略 X-Forwarded-For/X-Real-IP，仅使用连接地址。",
+                    },
+                    "dashboard.auth_rate_limit.enable": {
+                        "description": "启用登录验证速率限制",
+                        "type": "bool",
+                        "hint": "关闭后将不对登录、TOTP 等身份验证接口进行速率限制。",
+                    },
+                    "dashboard.auth_rate_limit.average_interval": {
+                        "description": "验证端点速率限制平均间隔(秒)",
+                        "type": "float",
+                        "hint": "两次身份验证请求之间的最小平均间隔时间。例如设置为 1.0 表示每秒最多处理 1 个请求。",
+                        "condition": {"dashboard.auth_rate_limit.enable": True},
+                    },
+                    "dashboard.auth_rate_limit.max_burst": {
+                        "description": "验证端点速率限制最大突发数",
+                        "type": "int",
+                        "hint": "允许的瞬时最大突发请求数。例如设置为 3 表示在短时间内最多连续处理 3 个请求。",
+                        "condition": {"dashboard.auth_rate_limit.enable": True},
+                    },
+                    "dashboard.totp.enable": {
+                        "description": "启用 WebUI TOTP 双因素认证",
+                        "type": "bool",
+                        "hint": "启用后，登录 WebUI 需要额外输入验证码。",
+                        "_special": "dashboard_totp_manager",
                     },
                     "dashboard.ssl.cert_file": {
                         "description": "SSL 证书文件路径",

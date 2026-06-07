@@ -1,21 +1,28 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { useAuthStore } from "@/stores/auth";
-import { Form } from "vee-validate";
 import { useModuleI18n } from "@/i18n/composables";
 import { useApiStore } from "@/stores/api";
+import AuthStageAccount from "./stages/AuthStageAccount.vue";
+import AuthStageTotp from "./stages/AuthStageTotp.vue";
+import AuthStageRecovery from "./stages/AuthStageRecovery.vue";
 
 const { tm: t } = useModuleI18n("features/auth");
+const authStore = useAuthStore();
 const apiStore = useApiStore();
 
 const emit = defineEmits<{
   (e: "openServerConfig"): void;
 }>();
 
-const show1 = ref(false);
-const password = ref("");
 const username = ref("");
+const password = ref("");
+const totpCode = ref("");
+const trustTotpDevice = ref(false);
+const recoveryCode = ref("");
 const loading = ref(false);
+const apiError = ref("");
+const stage = ref<"account" | "totp" | "recovery">("account");
 
 // 从URL参数读取用户名
 const params = new URLSearchParams(window.location.search);
@@ -38,94 +45,140 @@ onUnmounted(() => {
   window.removeEventListener("astrbot-url-param-username", handleUsernameParam);
 });
 
-async function validate(_values: any, { setErrors }: any) {
-  // Guard: if no backend URL configured, open server config dialog first
+function resetTotpStage() {
+  totpCode.value = "";
+  trustTotpDevice.value = false;
+}
+
+function goToAccountStage() {
+  stage.value = "account";
+  apiError.value = "";
+  resetTotpStage();
+}
+
+function goToTotpStage() {
+  stage.value = "totp";
+  apiError.value = "";
+}
+
+function goToRecoveryStage() {
+  stage.value = "recovery";
+  apiError.value = "";
+  recoveryCode.value = "";
+}
+
+function setRedirectReturnUrl() {
+  authStore.returnUrl = new URLSearchParams(window.location.search).get("redirect");
+}
+
+async function submitAccountStage() {
+  if (!username.value || !password.value) {
+    return;
+  }
   if (!apiStore.apiBaseUrl) {
-    loading.value = false;
     emit("openServerConfig");
     return;
   }
-
   loading.value = true;
+  apiError.value = "";
+  try {
+    setRedirectReturnUrl();
+    const res = await authStore.login(username.value, password.value);
+    if (res === "totp_required") {
+      goToTotpStage();
+    }
+  } catch (err) {
+    apiError.value = String(err || "") || "Login failed";
+  } finally {
+    loading.value = false;
+  }
+}
 
-  const authStore = useAuthStore();
-  const redirectParam = new URLSearchParams(window.location.search).get(
-    "redirect",
-  );
-  // 将 string | null 显式断言为与 store 兼容的类型，避免因 store 初始状态推断不完整而导致的编译错误
-  authStore.returnUrl = redirectParam as unknown as string | null;
-  return authStore
-    .login(username.value, password.value)
-    .then(() => {
-      loading.value = false;
-    })
-    .catch((err) => {
-      setErrors({ apiError: err });
-      loading.value = false;
-    });
+async function submitTotpStage() {
+  if (!totpCode.value) {
+    return;
+  }
+  loading.value = true;
+  apiError.value = "";
+  try {
+    setRedirectReturnUrl();
+    await authStore.login(
+      username.value,
+      password.value,
+      totpCode.value,
+      trustTotpDevice.value,
+    );
+  } catch (err) {
+    apiError.value = String(err || "") || "Verification failed";
+  } finally {
+    loading.value = false;
+  }
+}
+
+defineExpose({ stage });
+
+async function submitRecoveryStage() {
+  if (!recoveryCode.value) {
+    return;
+  }
+  loading.value = true;
+  apiError.value = "";
+  try {
+    setRedirectReturnUrl();
+    await authStore.login(username.value, password.value, recoveryCode.value);
+  } catch (err) {
+    apiError.value = String(err || "") || "Recovery login failed";
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 
 <template>
-  <Form
-    v-slot="{ errors, isSubmitting }"
-    class="mt-4 login-form"
-    @submit="validate"
-  >
-    <v-text-field
-      v-model="username"
-      :label="t('username')"
-      class="mb-6 input-field"
-      required
-      hide-details="auto"
-      variant="outlined"
-      prepend-inner-icon="mdi-account"
-      :disabled="loading"
-      autocomplete="username"
+  <div class="mt-4 login-form">
+    <AuthStageAccount
+      v-if="stage === 'account'"
+      :username="username"
+      :password="password"
+      :loading="loading"
+      @update:username="(value) => (username = value)"
+      @update:password="(value) => (password = value)"
+      @submit="submitAccountStage"
     />
 
-    <v-text-field
-      v-model="password"
-      :label="t('password')"
-      required
-      variant="outlined"
-      hide-details="auto"
-      :append-inner-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
-      :type="show1 ? 'text' : 'password'"
-      class="pwd-input"
-      prepend-inner-icon="mdi-lock"
-      :disabled="loading"
-      autocomplete="current-password"
-      @click:append-inner="show1 = !show1"
+    <AuthStageTotp
+      v-else-if="stage === 'totp'"
+      :username="username"
+      :code="totpCode"
+      :trust-device="trustTotpDevice"
+      :loading="loading"
+      @update:code="(value) => (totpCode = value)"
+      @update:trust-device="(value) => (trustTotpDevice = value)"
+      @submit="submitTotpStage"
+      @back="goToAccountStage"
+      @use-recovery="goToRecoveryStage"
     />
 
-    <div class="mt-2">
-      <small class="hint-label">{{ t("defaultHint") }}</small>
-    </div>
+    <AuthStageRecovery
+      v-else
+      :code="recoveryCode"
+      :loading="loading"
+      @update:code="(value) => (recoveryCode = value)"
+      @submit="submitRecoveryStage"
+      @back="goToTotpStage"
+    />
 
-    <v-btn
-      color="secondary"
-      :loading="isSubmitting || loading"
-      block
-      class="login-btn mt-8"
-      variant="flat"
-      size="large"
-      type="submit"
-    >
-      <span class="login-btn-text">{{ t("login") }}</span>
-    </v-btn>
-
-    <div v-if="errors.apiError" class="mt-4 error-container">
+    <div v-if="apiError" class="mt-4 error-container">
       <v-alert
         color="error"
         variant="tonal"
         icon="mdi-alert-circle"
         border="start"
       >
-        {{ errors.apiError }}
+        {{ apiError }}
       </v-alert>
     </div>
-  </Form>
+  </div>
 </template>
 
 <style lang="scss">
@@ -203,9 +256,19 @@ async function validate(_values: any, { setErrors }: any) {
       border-left-width: 4px !important;
     }
   }
-}
 
-.custom-divider {
-  border-color: rgba(0, 0, 0, 0.08) !important;
+  .account-stage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0 4px;
+  }
+
+  .account-stage-user {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: rgba(var(--v-theme-on-surface), 0.85);
+  }
+
 }
 </style>

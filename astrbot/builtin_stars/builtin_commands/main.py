@@ -1,5 +1,6 @@
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.core.star.filter.command import GreedyStr
 
 from .commands import (
     AdminCommands,
@@ -7,6 +8,7 @@ from .commands import (
     ConversationCommands,
     HelpCommand,
     LLMCommands,
+    NameCommand,
     PluginCommands,
     ProviderCommands,
     SetUnsetCommands,
@@ -25,6 +27,7 @@ class Main(star.Star):
         self.plugin_c = PluginCommands(self.context)
         self.admin_c = AdminCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
+        self.name_c = NameCommand(self.context)
         self.provider_c = ProviderCommands(self.context)
         self.setunset_c = SetUnsetCommands(self.context)
         self.t2i_c = T2ICommand(self.context)
@@ -89,6 +92,12 @@ class Main(star.Star):
     async def sid(self, event: AstrMessageEvent) -> None:
         """获取会话 ID 和 管理员 ID"""
         await self.sid_c.sid(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("name")
+    async def name(self, event: AstrMessageEvent, alias: GreedyStr) -> None:
+        """Set display name for current UMO"""
+        await self.name_c.name(event, alias)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("op")

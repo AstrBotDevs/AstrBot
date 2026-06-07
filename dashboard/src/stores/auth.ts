@@ -46,7 +46,12 @@ export const useAuthStore = defineStore("auth", {
         router.push("/welcome");
       }
     },
-    async login(username: string, password: string): Promise<void> {
+    async login(
+      username: string,
+      password: string,
+      code?: string,
+      trustDeviceToken = false,
+    ): Promise<"totp_required" | void> {
       try {
         const challengeRes = await axios.post("/api/auth/login/challenge");
         const challenge = challengeRes.data?.data as LoginChallenge | undefined;
@@ -59,6 +64,11 @@ export const useAuthStore = defineStore("auth", {
           res = await axios.post("/api/auth/login", {
             username: username,
             password: password,
+            code: code,
+            trust_device_flag: trustDeviceToken,
+          }, {
+            validateStatus: (status) =>
+              (status >= 200 && status < 300) || status === 401,
           });
         } else {
           const passwordProof = await createLoginProof(password, challenge);
@@ -66,7 +76,16 @@ export const useAuthStore = defineStore("auth", {
             username: username,
             challenge_id: challenge.challenge_id,
             password_proof: passwordProof,
+            code: code,
+            trust_device_flag: trustDeviceToken,
+          }, {
+            validateStatus: (status) =>
+              (status >= 200 && status < 300) || status === 401,
           });
+        }
+
+        if (res.status === 401 && res.data?.data?.totp_required) {
+          return "totp_required";
         }
 
         if (res.data.status === "error") {
@@ -78,10 +97,16 @@ export const useAuthStore = defineStore("auth", {
         return Promise.reject(error);
       }
     },
-    async setup(username: string, password: string, confirmPassword: string): Promise<void> {
+    async setup(
+      username: string,
+      password: string,
+      confirmPassword: string,
+    ): Promise<void> {
       try {
-        const setupEndpoint = this.has_token() ? "/api/auth/setup-authenticated" : "/api/auth/setup";
-        const res = await axios.post(setupEndpoint, {
+        const endpoint = this.has_token()
+          ? "/api/auth/setup-authenticated"
+          : "/api/auth/setup";
+        const res = await axios.post(endpoint, {
           username: username,
           password: password,
           confirm_password: confirmPassword,

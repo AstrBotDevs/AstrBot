@@ -387,35 +387,106 @@
                   variant="outlined"
                 >
                   <template #item.source="{ item }">
-                    <div class="d-flex align-center route-source-field">
-                      <v-select
-                        v-if="isEditingRoutes"
-                        v-model="item.messageType"
-                        :items="messageTypeOptions"
-                        item-title="label"
-                        item-value="value"
-                        variant="outlined"
-                        density="compact"
-                        hide-details
-                        class="route-message-type-field"
-                      />
-                      <small v-else>{{
-                        getMessageTypeLabel(item.messageType)
-                      }}</small>
-                      <small class="mx-1">:</small>
-                      <v-text-field
-                        v-if="isEditingRoutes"
-                        v-model="item.sessionId"
-                        variant="outlined"
-                        density="compact"
-                        hide-details
-                        :placeholder="tm('createDialog.sessionIdPlaceholder')"
-                      />
-                      <small v-else>{{
-                        item.sessionId === "*"
-                          ? tm("createDialog.allSessions")
-                          : item.sessionId
-                      }}</small>
+                    <div class="route-source-cell">
+                      <div
+                        class="d-flex align-center route-source-field"
+                        :class="{
+                          'route-source-field--editing': isEditingRoutes,
+                        }"
+                      >
+                        <v-autocomplete
+                          v-if="
+                            isEditingRoutes &&
+                            updatingMode &&
+                            getRouteSourceMode(item) === 'known'
+                          "
+                          v-model="item.sourceUmo"
+                          :items="filteredKnownRouteUmoItems"
+                          :loading="loadingKnownRouteUmos"
+                          variant="outlined"
+                          density="compact"
+                          hide-details
+                          clearable
+                          :placeholder="
+                            tm('createDialog.routeSource.selectPlaceholder')
+                          "
+                          :no-data-text="tm('createDialog.routeSource.noData')"
+                          class="route-known-source-field"
+                          @update:model-value="
+                            applyKnownRouteSource(item, $event)
+                          "
+                          @focus="loadKnownRouteUmos"
+                        >
+                          <template #item="{ props, item: sourceItem }">
+                            <v-list-item v-bind="props">
+                              <template #title>
+                                <UmoDisplay
+                                  v-bind="
+                                    getKnownRouteUmoDisplayProps(sourceItem)
+                                  "
+                                  compact
+                                  :show-info="false"
+                                />
+                              </template>
+                            </v-list-item>
+                          </template>
+                          <template #selection="{ item: sourceItem }">
+                            <v-chip
+                              v-if="
+                                sourceItem &&
+                                getKnownRouteUmoSelectionText(sourceItem)
+                              "
+                              size="small"
+                              variant="tonal"
+                              color="primary"
+                              class="umo-selection-chip"
+                            >
+                              {{
+                                getKnownRouteUmoSelectionText(sourceItem)
+                              }}
+                            </v-chip>
+                          </template>
+                        </v-autocomplete>
+                        <template v-else>
+                          <v-select
+                            v-if="isEditingRoutes"
+                            v-model="item.messageType"
+                            :items="messageTypeOptions"
+                            item-title="label"
+                            item-value="value"
+                            variant="outlined"
+                            density="compact"
+                            hide-details
+                            class="route-message-type-field"
+                          />
+                          <small v-else>{{
+                            getMessageTypeLabel(item.messageType)
+                          }}</small>
+                          <small class="mx-1">:</small>
+                          <v-text-field
+                            v-if="isEditingRoutes"
+                            v-model="item.sessionId"
+                            variant="outlined"
+                            density="compact"
+                            hide-details
+                            :placeholder="
+                              tm('createDialog.sessionIdPlaceholder')
+                            "
+                          />
+                          <small v-else>{{
+                            item.sessionId === "*"
+                              ? tm("createDialog.allSessions")
+                              : item.sessionId
+                          }}</small>
+                        </template>
+                      </div>
+                      <span
+                        v-if="updatingMode && isEditingRoutes"
+                        class="route-source-mode-link"
+                        @click="toggleRouteSourceMode(item)"
+                      >
+                        {{ getRouteSourceModeLinkText(item) }}
+                      </span>
                     </div>
                   </template>
 
@@ -631,6 +702,7 @@ import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
 import ConfigPage from "@/views/ConfigPage.vue";
 import PlatformRegistrationAction from "@/components/platform/PlatformRegistrationAction.vue";
+import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 
 interface RouteEntry {
   umop: string | null;
@@ -638,6 +710,19 @@ interface RouteEntry {
   messageType: string;
   sessionId: string;
   configId: string;
+  sourceUmo?: string | null;
+  sourceMode?: "known" | "manual";
+}
+
+interface KnownRouteUmoInfo {
+  umo: string;
+  platform?: string;
+  message_type?: string;
+  session_id?: string;
+  auto_name?: string;
+  user_alias?: string;
+  display_name?: string;
+  [key: string]: unknown;
 }
 
 interface ConfigInfo {
@@ -652,7 +737,13 @@ interface ToastPayload {
 
 export default {
   name: "AddNewPlatform",
-  components: { AstrBotConfig, AstrBotCoreConfigWrapper, ConfigPage, PlatformRegistrationAction },
+  components: {
+    AstrBotConfig,
+    AstrBotCoreConfigWrapper,
+    ConfigPage,
+    PlatformRegistrationAction,
+    UmoDisplay,
+  },
   emits: ["update:show", "show-toast", "refresh-config"],
   props: {
     show: {
@@ -707,6 +798,9 @@ export default {
       // 平台路由表
       platformRoutes: [] as RouteEntry[],
       isEditingRoutes: false, // 编辑模式开关
+      knownRouteUmos: [] as string[],
+      knownRouteUmoInfoMap: {} as Record<string, KnownRouteUmoInfo>,
+      loadingKnownRouteUmos: false,
 
       // ID冲突确认对话框
       showIdConflictDialog: false,
@@ -842,6 +936,23 @@ export default {
           value: "FriendMessage",
         },
       ];
+    },
+    routePlatformId(): string {
+      if (this.updatingMode) {
+        return String(
+          this.updatingPlatformConfig?.id ||
+            this.originalUpdatingPlatformId ||
+            "",
+        );
+      }
+      return String(this.selectedPlatformConfig?.id || "");
+    },
+    filteredKnownRouteUmoItems(): string[] {
+      const platformId = this.routePlatformId;
+      return this.knownRouteUmos.filter((umo: string) => {
+        const parsed = this.parseUmo(umo);
+        return Boolean(parsed && parsed.platform === platformId);
+      });
     },
     isLarkPlatform(): boolean {
       return this.selectedPlatformConfig?.type === "lark";
@@ -984,6 +1095,9 @@ export default {
 
       this.showConfigSection = false;
       this.isEditingRoutes = false;
+      this.knownRouteUmos = [];
+      this.knownRouteUmoInfoMap = {};
+      this.loadingKnownRouteUmos = false;
 
       this.showConfigDrawer = false;
       this.configDrawerTargetId = null;
@@ -1355,6 +1469,8 @@ export default {
                   parts[1] === "" || parts[1] === "*" ? "*" : parts[1],
                 sessionId: parts[2] === "" || parts[2] === "*" ? "*" : parts[2],
                 configId: confId,
+                sourceUmo: umop,
+                sourceMode: "manual",
               });
             }
           }
@@ -1369,6 +1485,8 @@ export default {
             messageType: "*",
             sessionId: "*",
             configId: "default",
+            sourceUmo: null,
+            sourceMode: "manual",
           });
         }
       } catch (_err) {
@@ -1384,6 +1502,8 @@ export default {
         messageType: "*",
         sessionId: "*",
         configId: "default",
+        sourceUmo: null,
+        sourceMode: "manual",
       });
     },
 
@@ -1457,6 +1577,9 @@ export default {
 
     toggleEditMode(): void {
       this.isEditingRoutes = !this.isEditingRoutes;
+      if (this.isEditingRoutes) {
+        this.loadKnownRouteUmos();
+      }
     },
     toggleConfigSection(): void {
       this.showConfigSection = !this.showConfigSection;
@@ -1483,6 +1606,109 @@ export default {
         FriendMessage: this.tm("createDialog.messageTypeLabels.friend"),
       };
       return typeMap[messageType] || messageType;
+    },
+
+    parseUmo(umo: string | null | undefined): KnownRouteUmoInfo | null {
+      if (!umo) return null;
+      const parts = umo.split(":");
+      if (parts.length < 3) {
+        return { umo };
+      }
+      return {
+        umo,
+        platform: parts[0] || "",
+        message_type: parts[1] || "",
+        session_id: parts.slice(2).join(":"),
+      };
+    },
+
+    normalizeKnownRouteUmos(
+      umos: Array<string | KnownRouteUmoInfo>,
+    ): string[] {
+      const result: string[] = [];
+      const infoMap: Record<string, KnownRouteUmoInfo> = {};
+      for (const entry of umos) {
+        const info =
+          typeof entry === "string"
+            ? this.parseUmo(entry)
+            : {
+                ...(this.parseUmo(entry.umo) || { umo: entry.umo }),
+                ...entry,
+              };
+        if (!info?.umo) continue;
+        result.push(info.umo);
+        infoMap[info.umo] = info;
+      }
+      this.knownRouteUmoInfoMap = {
+        ...this.knownRouteUmoInfoMap,
+        ...infoMap,
+      };
+      return result;
+    },
+
+    async loadKnownRouteUmos(): Promise<void> {
+      if (this.loadingKnownRouteUmos || this.knownRouteUmos.length > 0) {
+        return;
+      }
+      this.loadingKnownRouteUmos = true;
+      try {
+        const response = await axios.get("/api/session/active-umos");
+        const data = response.data?.data || {};
+        this.knownRouteUmos = this.normalizeKnownRouteUmos(data.umos || []);
+      } catch (_err) {
+        console.error("加载已知会话来源失败:", _err);
+      } finally {
+        this.loadingKnownRouteUmos = false;
+      }
+    },
+
+    getKnownRouteUmoInfo(umo: string): KnownRouteUmoInfo {
+      return this.knownRouteUmoInfoMap[umo] || this.parseUmo(umo) || { umo };
+    },
+
+    getKnownRouteUmoDisplayProps(umo: string) {
+      const info = this.getKnownRouteUmoInfo(umo);
+      return {
+        umo: info.umo,
+        platform: info.platform,
+        messageType: info.message_type,
+        sessionId: info.session_id,
+        autoName: info.auto_name,
+        userAlias: info.user_alias,
+      };
+    },
+
+    getKnownRouteUmoSelectionText(umo: string): string {
+      const info = this.getKnownRouteUmoInfo(umo);
+      return info.user_alias || info.auto_name || info.display_name || umo;
+    },
+
+    getRouteSourceMode(route: RouteEntry): "known" | "manual" {
+      return route.sourceMode || "manual";
+    },
+
+    toggleRouteSourceMode(route: RouteEntry): void {
+      route.sourceMode =
+        this.getRouteSourceMode(route) === "known" ? "manual" : "known";
+      if (route.sourceMode === "known") {
+        this.loadKnownRouteUmos();
+      }
+    },
+
+    getRouteSourceModeLinkText(route: RouteEntry): string {
+      return this.getRouteSourceMode(route) === "known"
+        ? this.tm("createDialog.routeSource.switchToManual")
+        : this.tm("createDialog.routeSource.switchToKnown");
+    },
+
+    applyKnownRouteSource(route: RouteEntry, umo: string | null): void {
+      route.sourceUmo = umo;
+      const parsed = this.parseUmo(umo);
+      if (!parsed) {
+        return;
+      }
+      route.messageType = parsed.message_type || "*";
+      route.sessionId = parsed.session_id || "*";
     },
 
     toggleShowConfigSection(): void {
@@ -1553,6 +1779,33 @@ export default {
   min-width: 250px;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.route-source-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 250px;
+}
+
+.route-source-field--editing {
+  align-items: flex-start;
+}
+
+.route-known-source-field {
+  min-width: 260px;
+  max-width: 360px;
+}
+
+.route-source-mode-link {
+  color: rgb(var(--v-theme-primary));
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.umo-selection-chip {
+  max-width: 220px;
 }
 
 .route-message-type-field {

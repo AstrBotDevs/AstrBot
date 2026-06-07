@@ -78,6 +78,13 @@
     <template v-else-if="itemMeta?._special === 't2i_template'">
       <T2ITemplateEditor />
     </template>
+    <template v-else-if="itemMeta?._special === 'dashboard_totp_manager'">
+      <DashboardTotpManager
+        :model-value="Boolean(modelValue)"
+        :config-root="configRoot"
+        @update:model-value="emitUpdate"
+      />
+    </template>
     <template v-else-if="itemMeta?._special === 'get_embedding_dim'">
       <div class="d-flex align-center gap-2">
         <v-text-field
@@ -298,6 +305,7 @@ import PersonaSelector from "./PersonaSelector.vue";
 import KnowledgeBaseSelector from "./KnowledgeBaseSelector.vue";
 import PluginSetSelector from "./PluginSetSelector.vue";
 import T2ITemplateEditor from "./T2ITemplateEditor.vue";
+import DashboardTotpManager from "./DashboardTotpManager.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 
@@ -355,6 +363,10 @@ const props = defineProps({
   showFullscreenBtn: {
     type: Boolean,
     default: false,
+  },
+  configRoot: {
+    type: Object,
+    default: null,
   },
 });
 

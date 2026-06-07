@@ -14,24 +14,17 @@ aiohappyeyeballs==2.6.1
 aiohttp==3.13.3
     # via
     #   aiodocker
-    #   aiohttp-jinja2
     #   astrbot
     #   dashscope
     #   dingtalk-stream
     #   py-cord
     #   qq-botpy
     #   shipyard-python-sdk
-    #   textual-dev
-    #   textual-serve
     #   xinference-client
-aiohttp-jinja2==1.6
-    # via textual-serve
 aiosignal==1.4.0
     # via aiohttp
 aiosqlite==0.22.1
     # via astrbot
-annotated-doc==0.0.4
-    # via fastapi
 annotated-types==0.7.0
     # via pydantic
 anthropic==0.86.0
@@ -39,7 +32,6 @@ anthropic==0.86.0
 anyio==4.12.1
     # via
     #   anthropic
-    #   astrbot
     #   google-genai
     #   httpx
     #   mcp
@@ -53,10 +45,6 @@ apscheduler==3.11.2
     #   qq-botpy
 argcomplete==3.6.3
     # via commitizen
-argon2-cffi==25.1.0
-    # via astrbot
-argon2-cffi-bindings==25.1.0
-    # via argon2-cffi
 attrs==26.1.0
     # via
     #   aiohttp
@@ -66,7 +54,6 @@ audioop-lts==0.2.2 ; python_full_version >= '3.13'
     # via astrbot
 beautifulsoup4==4.14.3
     # via
-    #   astrbot
     #   markdownify
     #   markitdown-no-magika
 blinker==1.9.0
@@ -82,13 +69,10 @@ certifi==2026.2.25
     #   requests
 cffi==2.0.0
     # via
-    #   argon2-cffi-bindings
     #   cryptography
     #   silk-python
 chardet==5.1.0
-    # via
-    #   astrbot
-    #   readability-lxml
+    # via astrbot
 charset-normalizer==3.4.6
     # via
     #   commitizen
@@ -99,7 +83,6 @@ click==8.3.1
     #   astrbot
     #   flask
     #   quart
-    #   textual-dev
     #   uvicorn
 cobble==0.1.4
     # via mammoth
@@ -107,7 +90,6 @@ colorama==0.4.6
     # via
     #   click
     #   commitizen
-    #   griffe
     #   loguru
     #   pytest
     #   qrcode
@@ -121,16 +103,12 @@ cryptography==46.0.5
     #   dashscope
     #   google-auth
     #   pyjwt
-cssselect==1.4.0
-    # via readability-lxml
 dashscope==1.25.14
     # via astrbot
 decli==0.6.3
     # via commitizen
 defusedxml==0.7.1
-    # via
-    #   astrbot
-    #   markitdown-no-magika
+    # via markitdown-no-magika
 deprecated==1.3.1
     # via
     #   astrbot
@@ -150,8 +128,6 @@ et-xmlfile==2.0.0
     # via openpyxl
 faiss-cpu==1.13.2
     # via astrbot
-fastapi==0.135.1
-    # via astrbot
 filelock==3.25.2
     # via astrbot
 filetype==1.2.0
@@ -168,8 +144,6 @@ google-genai==1.68.0
     # via astrbot
 greenlet==3.3.2
     # via sqlalchemy
-griffe==1.15.0
-    # via openai-agents
 h11==0.16.0
     # via
     #   httpcore
@@ -181,8 +155,10 @@ h2==4.3.0
 hpack==4.1.0
     # via h2
 httpcore==1.0.9
-    # via httpx
-httpx[socks]>=0.28.1
+    # via
+    #   httpx
+    #   python-telegram-bot
+httpx==0.28.1
     # via
     #   aiocqhttp
     #   anthropic
@@ -215,11 +191,9 @@ jieba==0.42.1
     # via astrbot
 jinja2==3.1.6
     # via
-    #   aiohttp-jinja2
     #   commitizen
     #   flask
     #   quart
-    #   textual-serve
 jiter==0.13.0
     # via
     #   anthropic
@@ -230,28 +204,12 @@ jsonschema-specifications==2025.9.1
     # via jsonschema
 lark-oapi==1.5.3
     # via astrbot
-librt==0.8.1 ; platform_python_implementation != 'PyPy'
-    # via mypy
-linkify-it-py==2.1.0
-    # via markdown-it-py
 loguru==0.7.3
     # via astrbot
-lxml==6.0.2
-    # via
-    #   lxml-html-clean
-    #   markitdown-no-magika
-    #   readability-lxml
-lxml-html-clean==0.4.4
-    # via
-    #   astrbot
-    #   lxml
+lxml==6.1.1
+    # via markitdown-no-magika
 mammoth==1.12.0
     # via markitdown-no-magika
-markdown-it-py==4.0.0
-    # via
-    #   mdit-py-plugins
-    #   rich
-    #   textual
 markdownify==1.2.2
     # via markitdown-no-magika
 markitdown-no-magika==0.1.2
@@ -263,32 +221,17 @@ markupsafe==3.0.3
     #   quart
     #   werkzeug
 mcp==1.26.0
-    # via
-    #   astrbot
-    #   openai-agents
-mdit-py-plugins==0.5.0
-    # via textual
-mdurl==0.1.2
-    # via markdown-it-py
-msgpack==1.1.2
-    # via textual-dev
+    # via astrbot
 multidict==6.7.1
     # via
     #   aiohttp
     #   yarl
-mypy==1.19.1
-mypy-extensions==1.1.0
-    # via mypy
 numpy==2.4.3
     # via
     #   faiss-cpu
     #   pandas
     #   rank-bm25
 openai==2.29.0
-    # via
-    #   astrbot
-    #   openai-agents
-openai-agents==0.12.5
     # via astrbot
 openpyxl==3.1.5
     # via markitdown-no-magika
@@ -304,20 +247,14 @@ packaging==26.0
     #   pytest
 pandas==3.0.1
     # via markitdown-no-magika
-pathspec==1.0.4
-    # via mypy
 pillow==12.1.1
     # via astrbot
 pip==26.0.1
     # via astrbot
-platformdirs==4.9.4
-    # via textual
 pluggy==1.6.0
     # via
     #   pytest
     #   pytest-cov
-plumbum==1.10.0
-    # via astrbot
 priority==2.0.0
     # via hypercorn
 prompt-toolkit==3.0.51
@@ -344,11 +281,9 @@ pydantic==2.12.5
     # via
     #   anthropic
     #   astrbot
-    #   fastapi
     #   google-genai
     #   mcp
     #   openai
-    #   openai-agents
     #   pydantic-settings
     #   shipyard-neo-sdk
     #   sqlmodel
@@ -357,19 +292,22 @@ pydantic-core==2.41.5
     # via pydantic
 pydantic-settings==2.13.1
     # via mcp
+pydub==0.25.1
+    # via astrbot
 pygments==2.19.2
-    # via
-    #   pytest
-    #   rich
-    #   textual
+    # via pytest
 pyjwt==2.12.1
     # via
     #   astrbot
     #   mcp
+pyotp==2.9.0
+    # via astrbot
 pypdf==6.9.1
     # via astrbot
 pyromark==0.9.9
     # via telegramify-markdown
+pysocks==1.7.1
+    # via astrbot
 pytest==9.0.2
     # via
     #   pytest-asyncio
@@ -384,14 +322,14 @@ python-dotenv==1.2.2
     # via pydantic-settings
 python-multipart==0.0.22
     # via mcp
+python-ripgrep==0.0.8
+    # via astrbot
 python-socks==2.8.1
     # via astrbot
 python-telegram-bot==22.7
     # via astrbot
 pywin32==311 ; sys_platform == 'win32'
-    # via
-    #   mcp
-    #   plumbum
+    # via mcp
 pyyaml==6.0.3
     # via
     #   commitizen
@@ -400,18 +338,13 @@ qq-botpy==1.2.1
     # via astrbot
 qrcode==8.2
     # via astrbot
-quart==0.19.9
+quart==0.20.0
     # via
     #   aiocqhttp
     #   astrbot
-    #   quart-cors
-quart-cors==0.8.0
-    # via astrbot
 questionary==2.1.1
     # via commitizen
 rank-bm25==0.2.2
-    # via astrbot
-readability-lxml==0.8.4.1
     # via astrbot
 referencing==0.37.0
     # via
@@ -425,16 +358,11 @@ requests==2.32.5
     #   google-genai
     #   lark-oapi
     #   markitdown-no-magika
-    #   openai-agents
     #   requests-toolbelt
     #   wechatpy
     #   xinference-client
 requests-toolbelt==1.0.0
     # via lark-oapi
-rich==14.3.3
-    # via
-    #   textual
-    #   textual-serve
 rpds-py==0.30.0
     # via
     #   jsonschema
@@ -472,7 +400,6 @@ sse-starlette==3.3.3
     # via mcp
 starlette==0.52.1
     # via
-    #   fastapi
     #   mcp
     #   sse-starlette
 telegramify-markdown==1.1.1
@@ -483,31 +410,19 @@ tenacity==9.1.4
     #   google-genai
 termcolor==3.3.0
     # via commitizen
-textual==8.1.1
-    # via
-    #   textual-dev
-    #   textual-serve
-textual-dev==1.8.0
-textual-serve==1.1.3
-    # via textual-dev
 tomlkit==0.14.0
     # via commitizen
 tqdm==4.67.3
     # via openai
-types-requests==2.32.4.20260107
-    # via openai-agents
 typing-extensions==4.15.0
     # via
     #   aiosignal
     #   anthropic
     #   anyio
     #   beautifulsoup4
-    #   fastapi
     #   google-genai
     #   mcp
-    #   mypy
     #   openai
-    #   openai-agents
     #   py-cord
     #   pydantic
     #   pydantic-core
@@ -516,13 +431,10 @@ typing-extensions==4.15.0
     #   referencing
     #   sqlalchemy
     #   starlette
-    #   textual
-    #   textual-dev
     #   typing-inspection
     #   xinference-client
 typing-inspection==0.4.2
     # via
-    #   fastapi
     #   mcp
     #   pydantic
     #   pydantic-settings
@@ -532,12 +444,8 @@ tzdata==2025.3 ; sys_platform == 'emscripten' or sys_platform == 'win32'
     #   tzlocal
 tzlocal==5.3.1
     # via apscheduler
-uc-micro-py==2.0.0
-    # via linkify-it-py
 urllib3==2.6.3
-    # via
-    #   requests
-    #   types-requests
+    # via requests
 uvicorn==0.42.0 ; sys_platform != 'emscripten'
     # via mcp
 watchfiles==1.1.1

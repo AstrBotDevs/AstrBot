@@ -30,6 +30,11 @@ const isItemActive = computed(() => {
   }
   return route.path === props.item.to;
 });
+
+const itemTitle = computed(() => {
+  if (!props.item?.title) return "";
+  return props.item.isRawTitle ? props.item.title : t(props.item.title);
+});
 </script>
 
 <template>
@@ -56,7 +61,7 @@ const isItemActive = computed(() => {
             word-break: break-word;
           "
         >
-          {{ t(item.title) }}
+          {{ itemTitle }}
         </v-list-item-title>
       </v-list-item>
     </template>
@@ -92,7 +97,7 @@ const isItemActive = computed(() => {
       />
     </template>
     <v-list-item-title style="font-size: 14px">
-      {{ t(item.title) }}
+      {{ itemTitle }}
     </v-list-item-title>
     <v-list-item-subtitle
       v-if="item.subCaption"

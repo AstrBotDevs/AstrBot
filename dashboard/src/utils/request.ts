@@ -183,5 +183,15 @@ service.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+service.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 429 && error.response?.data?.message) {
+      return Promise.reject(error.response.data.message);
+    }
+    return Promise.reject(error);
+  },
+);
+
 export default service;
 export * from "axios";

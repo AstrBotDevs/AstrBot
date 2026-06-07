@@ -69,6 +69,14 @@ class Context:
     _register_tasks: list[Awaitable] = []
     _star_manager = None
 
+    @property
+    def registered_web_apis(self) -> list[RegisteredWebApi]:
+        return self._registered_web_apis
+
+    @registered_web_apis.setter
+    def registered_web_apis(self, value: list[RegisteredWebApi]) -> None:
+        self._registered_web_apis = value
+
     def __init__(
         self,
         event_queue: Queue,

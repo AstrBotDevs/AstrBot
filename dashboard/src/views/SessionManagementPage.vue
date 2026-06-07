@@ -80,65 +80,18 @@
           >
             <!-- UMO 信息 -->
             <template #item.umo_info="{ item }">
-              <div>
-                <div class="d-flex align-center">
-                  <v-chip
-                    size="x-small"
-                    :color="getPlatformColor(item.platform)"
-                    class="mr-2"
-                  >
-                    {{ item.platform || "unknown" }}
-                  </v-chip>
-                  <span class="text-truncate" style="max-width: 300px">{{
-                    item.umo
-                  }}</span>
-                  <div
-                    v-if="
-                      item.rules?.session_service_config?.custom_name || true
-                    "
-                    class="d-flex align-center"
-                  >
-                    <span
-                      v-if="item.rules?.session_service_config?.custom_name"
-                      class="ml-2"
-                      style="color: gray; font-size: 10px"
-                    >
-                      ({{ item.rules?.session_service_config?.custom_name }})
-                    </span>
-                    <v-btn
-                      icon
-                      size="x-small"
-                      variant="text"
-                      class="ml-1"
-                      @click.stop="openQuickEditName(item)"
-                    >
-                      <v-icon size="small" color="grey"
-                        >mdi-pencil-outline</v-icon
-                      >
-                      <v-tooltip activator="parent" location="top">{{
-                        tm("buttons.editCustomName")
-                      }}</v-tooltip>
-                    </v-btn>
-                  </div>
-                  <v-tooltip location="top">
-                    <template #activator="{ props }">
-                      <v-icon v-bind="props" size="small" class="ml-1"
-                        >mdi-information-outline</v-icon
-                      >
-                    </template>
-                    <div>
-                      <p>UMO: {{ item.umo }}</p>
-                      <p v-if="item.platform">平台: {{ item.platform }}</p>
-                      <p v-if="item.message_type">
-                        消息类型: {{ item.message_type }}
-                      </p>
-                      <p v-if="item.session_id">
-                        会话 ID: {{ item.session_id }}
-                      </p>
-                    </div>
-                  </v-tooltip>
-                </div>
-              </div>
+              <UmoDisplay
+                :umo="item.umo"
+                :platform="item.platform"
+                :message-type="item.message_type"
+                :session-id="item.session_id"
+                :auto-name="item.auto_name"
+                :user-alias="item.user_alias"
+                :custom-name="item.rules?.session_service_config?.custom_name"
+                editable
+                :edit-tooltip="tm('buttons.editCustomName')"
+                @edit="openQuickEditName(item)"
+              />
             </template>
 
             <!-- 规则概览 -->
@@ -470,9 +423,24 @@
                     <template #prepend>
                       <v-icon size="small" color="grey">mdi-plus</v-icon>
                     </template>
-                    <v-list-item-title class="text-caption">{{
-                      formatUmoShort(umo)
-                    }}</v-list-item-title>
+                    <v-list-item-title>
+                      <UmoDisplay
+                        v-bind="getAvailableUmoDisplayProps(umo)"
+                        compact
+                        :show-info="false"
+                        :show-platform="false"
+                      />
+                    </v-list-item-title>
+                    <template #append>
+                      <v-chip
+                        v-if="getAvailableUmoInfo(umo).platform"
+                        size="x-small"
+                        :color="getPlatformColor(getAvailableUmoInfo(umo).platform)"
+                        class="umo-list-platform"
+                      >
+                        {{ getAvailableUmoInfo(umo).platform }}
+                      </v-chip>
+                    </template>
                   </v-list-item>
                   <v-list-item
                     v-if="filteredUnselectedUmos.length === 0 && !loadingUmos"
@@ -548,9 +516,14 @@
                     <template #prepend>
                       <v-icon size="small" color="error">mdi-minus</v-icon>
                     </template>
-                    <v-list-item-title class="text-caption">{{
-                      formatUmoShort(umo)
-                    }}</v-list-item-title>
+                    <v-list-item-title>
+                      <UmoDisplay
+                        v-bind="getAvailableUmoDisplayProps(umo)"
+                        compact
+                        :show-info="false"
+                        :show-platform="false"
+                      />
+                    </v-list-item-title>
                   </v-list-item>
                   <v-list-item v-if="editingGroup.umos.length === 0">
                     <v-list-item-title
@@ -1041,6 +1014,7 @@ import {
   useConfirmDialog,
 } from "@/utils/confirmDialog";
 import { defineComponent } from "vue";
+import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 
 // ---- Type definitions ----
 
@@ -1078,7 +1052,21 @@ interface SessionRuleItem {
   platform?: string;
   message_type?: string;
   session_id?: string;
+  auto_name?: string;
+  user_alias?: string;
+  display_name?: string;
   rules?: SessionRules;
+  [key: string]: unknown;
+}
+
+interface ActiveUmoInfo {
+  umo: string;
+  platform?: string;
+  message_type?: string;
+  session_id?: string;
+  auto_name?: string;
+  user_alias?: string;
+  display_name?: string;
   [key: string]: unknown;
 }
 
@@ -1129,7 +1117,7 @@ interface ListRuleData {
 }
 
 interface ActiveUmosData {
-  umos: string[];
+  umos: Array<string | ActiveUmoInfo>;
   [key: string]: unknown;
 }
 
@@ -1173,6 +1161,9 @@ const FOLLOW_CONFIG_VALUE = "__astrbot_follow_config__";
 
 export default defineComponent({
   name: "SessionManagementPage",
+  components: {
+    UmoDisplay,
+  },
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n("features/session-management");
@@ -1210,6 +1201,7 @@ export default defineComponent({
       // 添加规则
       addRuleDialog: false,
       availableUmos: [] as string[],
+      availableUmoInfoMap: {} as Record<string, ActiveUmoInfo>,
       selectedNewUmo: null as string | null,
 
       // 规则编辑
@@ -1458,7 +1450,7 @@ export default defineComponent({
       if (!this.groupMemberSearch) return this.unselectedUmos;
       const search = this.groupMemberSearch.toLowerCase();
       return this.unselectedUmos.filter((u: string) =>
-        u.toLowerCase().includes(search),
+        this.getAvailableUmoSearchText(u).includes(search),
       );
     },
 
@@ -1467,7 +1459,7 @@ export default defineComponent({
       if (!this.groupSelectedSearch) return this.editingGroup.umos || [];
       const search = this.groupSelectedSearch.toLowerCase();
       return (this.editingGroup.umos || []).filter((u: string) =>
-        u.toLowerCase().includes(search),
+        this.getAvailableUmoSearchText(u).includes(search),
       );
     },
   },
@@ -1511,7 +1503,7 @@ export default defineComponent({
         const resp = response.data as ApiResponse<ListRuleData>;
         if (resp.status === "ok") {
           const data = resp.data;
-          this.rulesList = data.rules;
+          this.rulesList = data.rules.map((item) => this.normalizeRuleItem(item));
           this.totalItems = data.total;
           this.availablePersonas = data.available_personas;
           this.availableChatProviders = data.available_chat_providers;
@@ -1552,9 +1544,10 @@ export default defineComponent({
         const response = await axios.get("/api/session/active-umos");
         const resp = response.data as ApiResponse<ActiveUmosData>;
         if (resp.status === "ok") {
+          const activeUmos = this.normalizeActiveUmos(resp.data.umos || []);
           // 过滤掉已有规则的 umo
           const existingUmos = new Set(this.rulesList.map((r: SessionRuleItem) => r.umo));
-          this.availableUmos = resp.data.umos.filter(
+          this.availableUmos = activeUmos.filter(
             (umo: string) => !existingUmos.has(umo),
           );
         }
@@ -1591,20 +1584,13 @@ export default defineComponent({
       if (!this.selectedNewUmo) return;
 
       // 创建一个新的规则项并打开编辑器
-      const newItem: Record<string, unknown> = {
-        umo: this.selectedNewUmo,
+      const newItem: SessionRuleItem = {
+        ...this.getAvailableUmoInfo(this.selectedNewUmo),
         rules: {},
       };
-      // 解析 umo 格式
-      const parts = this.selectedNewUmo.split(":");
-      if (parts.length >= 3) {
-        newItem.platform = parts[0];
-        newItem.message_type = parts[1];
-        newItem.session_id = parts[2];
-      }
 
       this.addRuleDialog = false;
-      this.openRuleEditor(newItem as SessionRuleItem);
+      this.openRuleEditor(newItem);
     },
 
     openRuleEditor(item: SessionRuleItem): void {
@@ -2232,7 +2218,7 @@ export default defineComponent({
         const response = await axios.get("/api/session/active-umos");
         const resp = response.data as ApiResponse<ActiveUmosData>;
         if (resp.status === "ok") {
-          this.availableUmos = resp.data.umos || [];
+          this.availableUmos = this.normalizeActiveUmos(resp.data.umos || []);
         }
       } catch (error: unknown) {
         console.error("加载会话列表失败:", error);
@@ -2282,13 +2268,79 @@ export default defineComponent({
       this.editingGroup.umos = [];
     },
 
-    formatUmoShort(umo: string): string {
-      // 简化显示：平台:类型:ID -> 只显示ID部分
+    parseUmo(umo: string): ActiveUmoInfo {
       const parts = umo.split(":");
       if (parts.length >= 3) {
-        return `${parts[0]}:${parts[2]}`;
+        return {
+          umo,
+          platform: parts[0] || "",
+          message_type: parts[1] || "",
+          session_id: parts.slice(2).join(":"),
+        };
       }
-      return umo;
+      return { umo };
+    },
+
+    normalizeRuleItem(item: SessionRuleItem): SessionRuleItem {
+      const parsed = this.parseUmo(item.umo);
+      return {
+        ...parsed,
+        ...item,
+        platform: item.platform || parsed.platform,
+        message_type: item.message_type || parsed.message_type,
+        session_id: item.session_id || parsed.session_id,
+      };
+    },
+
+    normalizeActiveUmos(umos: Array<string | ActiveUmoInfo>): string[] {
+      const result: string[] = [];
+      const infoMap: Record<string, ActiveUmoInfo> = {};
+      for (const entry of umos) {
+        const info =
+          typeof entry === "string"
+            ? this.parseUmo(entry)
+            : this.normalizeRuleItem(entry as SessionRuleItem);
+        if (!info.umo) continue;
+        result.push(info.umo);
+        infoMap[info.umo] = info;
+      }
+      this.availableUmoInfoMap = {
+        ...this.availableUmoInfoMap,
+        ...infoMap,
+      };
+      return result;
+    },
+
+    getAvailableUmoInfo(umo: string): ActiveUmoInfo {
+      return this.availableUmoInfoMap[umo] || this.parseUmo(umo);
+    },
+
+    getAvailableUmoDisplayProps(umo: string) {
+      const info = this.getAvailableUmoInfo(umo);
+      return {
+        umo: info.umo,
+        platform: info.platform,
+        messageType: info.message_type,
+        sessionId: info.session_id,
+        autoName: info.auto_name,
+        userAlias: info.user_alias,
+      };
+    },
+
+    getAvailableUmoSearchText(umo: string): string {
+      const info = this.getAvailableUmoInfo(umo);
+      return [
+        info.umo,
+        info.platform,
+        info.message_type,
+        info.session_id,
+        info.auto_name,
+        info.user_alias,
+        info.display_name,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
     },
 
     async saveGroup(): Promise<void> {
