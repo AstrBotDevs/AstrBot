@@ -117,10 +117,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
-import axios from "@/utils/request";
+import { computed, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
+import axios from "@/utils/request";
 
 const props = defineProps({
   modelValue: {
@@ -154,18 +154,13 @@ const loading = ref(false);
 const selectionMode = ref("custom"); // 'all', 'none', 'custom'
 const selectedPlugins = ref<string[]>([]);
 
-const pluginDisplayName = (plugin) => pluginName(plugin) || plugin.name
-const pluginDescription = (plugin) => pluginDesc(plugin)
+const pluginDisplayName = (plugin) => pluginName(plugin) || plugin.name;
+const pluginDescription = (plugin) => pluginDesc(plugin);
 
 // 判断是否为"所有插件"模式
 const isAllPlugins = computed(() => {
-  return (
-    props.modelValue &&
-    props.modelValue.length === 1 &&
-    props.modelValue[0] === "*"
-  );
+  return props.modelValue && props.modelValue.length === 1 && props.modelValue[0] === "*";
 });
-
 
 // 监听 modelValue 变化，同步内部状态
 watch(

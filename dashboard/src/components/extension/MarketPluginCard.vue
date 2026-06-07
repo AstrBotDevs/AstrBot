@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
+import { computed, ref } from "vue";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
+import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 
 const { tm } = useModuleI18n("features/extension");
@@ -29,9 +29,7 @@ const normalizePlatformList = (platforms) => {
   return platforms.filter((item) => typeof item === "string");
 };
 
-const platformDisplayList = computed(() =>
-  normalizePlatformList(props.plugin?.support_platforms),
-);
+const platformDisplayList = computed(() => normalizePlatformList(props.plugin?.support_platforms));
 
 const cardDescription = computed(() =>
   pluginShortDesc(props.plugin, props.plugin?.short_desc || props.plugin?.desc || ""),
@@ -44,7 +42,6 @@ const handleInstall = (plugin) => {
 const handleOpen = () => {
   emit("open", props.plugin);
 };
-
 </script>
 
 <template>

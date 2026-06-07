@@ -3,8 +3,9 @@
 
 @font-face {
   font-family: "Material Design Icons";
-  src: url("./materialdesignicons-webfont-subset.woff2") format("woff2"),
-       url("./materialdesignicons-webfont-subset.woff") format("woff");
+  src:
+    url("./materialdesignicons-webfont-subset.woff2") format("woff2"),
+    url("./materialdesignicons-webfont-subset.woff") format("woff");
   font-weight: normal;
   font-style: normal;
 }
@@ -12,7 +13,7 @@
 .mdi:before,
 .mdi-set {
   display: inline-block;
-  font: normal normal normal 24px/1 "Material Design Icons";
+  font: normal normal normal 24px / 1 "Material Design Icons";
   font-size: inherit;
   text-rendering: auto;
   line-height: inherit;
@@ -1116,19 +1117,23 @@
   visibility: hidden;
 }
 
-.mdi-18px.mdi-set, .mdi-18px.mdi:before {
+.mdi-18px.mdi-set,
+.mdi-18px.mdi:before {
   font-size: 18px;
 }
 
-.mdi-24px.mdi-set, .mdi-24px.mdi:before {
+.mdi-24px.mdi-set,
+.mdi-24px.mdi:before {
   font-size: 24px;
 }
 
-.mdi-36px.mdi-set, .mdi-36px.mdi:before {
+.mdi-36px.mdi-set,
+.mdi-36px.mdi:before {
   font-size: 36px;
 }
 
-.mdi-48px.mdi-set, .mdi-48px.mdi:before {
+.mdi-48px.mdi-set,
+.mdi-48px.mdi:before {
   font-size: 48px;
 }
 

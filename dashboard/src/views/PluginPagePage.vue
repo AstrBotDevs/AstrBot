@@ -3,18 +3,14 @@ import axios from "axios";
 import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useModuleI18n } from "@/i18n/composables";
-import { usePluginI18n } from "@/utils/pluginI18n";
 import { useCustomizerStore } from "@/stores/customizer";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const BRIDGE_CHANNEL = "astrbot-plugin-page";
 
 const route = useRoute();
 const { tm } = useModuleI18n("features/extension");
-const {
-  locale,
-  pluginName: pluginDisplayName,
-  pluginPageTitle,
-} = usePluginI18n();
+const { locale, pluginName: pluginDisplayName, pluginPageTitle } = usePluginI18n();
 const customizer = useCustomizerStore();
 
 const loading = ref(true);
@@ -37,7 +33,7 @@ const localizedPageTitle = computed(() =>
   ),
 );
 const getIframeWindow = () => iframeRef.value?.contentWindow || null;
-const themeParam = computed(() => customizer.isDark ? "dark" : "light");
+const themeParam = computed(() => (customizer.isDark ? "dark" : "light"));
 
 const toPostMessageData = (value, fallback = null) => {
   try {
@@ -60,13 +56,8 @@ const postToIframe = (payload) => {
     return;
   }
   const targetOrigin =
-    typeof iframeMessageOrigin === "string" && iframeMessageOrigin !== "null"
-      ? iframeMessageOrigin
-      : "*";
-  iframeWindow.postMessage(
-    { channel: BRIDGE_CHANNEL, ...payload },
-    targetOrigin,
-  );
+    typeof iframeMessageOrigin === "string" && iframeMessageOrigin !== "null" ? iframeMessageOrigin : "*";
+  iframeWindow.postMessage({ channel: BRIDGE_CHANNEL, ...payload }, targetOrigin);
 };
 
 const parseContentDispositionFilename = (headerValue) => {
@@ -99,19 +90,12 @@ const normalizePluginEndpoint = (endpoint) => {
   if (!trimmed) {
     throw new Error("Plugin bridge endpoint cannot be empty.");
   }
-  if (
-    trimmed.includes("\\") ||
-    trimmed.includes("://") ||
-    trimmed.includes("?") ||
-    trimmed.includes("#")
-  ) {
+  if (trimmed.includes("\\") || trimmed.includes("://") || trimmed.includes("?") || trimmed.includes("#")) {
     throw new Error("Plugin bridge endpoint is invalid.");
   }
 
   const segments = trimmed.split("/");
-  if (
-    segments.some((segment) => !segment || segment === "." || segment === "..")
-  ) {
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
     throw new Error("Plugin bridge endpoint is invalid.");
   }
   return segments.map((segment) => encodeURIComponent(segment)).join("/");
@@ -136,9 +120,7 @@ const isBridgeUploadFile = (value) => {
   if (tag === "[object File]" || tag === "[object Blob]") {
     return true;
   }
-  return (
-    typeof value.arrayBuffer === "function" && typeof value.size === "number"
-  );
+  return typeof value.arrayBuffer === "function" && typeof value.size === "number";
 };
 
 const coerceBridgeUploadFile = async (value, fileName) => {
@@ -150,17 +132,11 @@ const coerceBridgeUploadFile = async (value, fileName) => {
   }
 
   const buffer = await value.arrayBuffer();
-  const fileType =
-    typeof value.type === "string" && value.type
-      ? value.type
-      : "application/octet-stream";
+  const fileType = typeof value.type === "string" && value.type ? value.type : "application/octet-stream";
   if (typeof File !== "undefined") {
     return new File([buffer], fileName, {
       type: fileType,
-      lastModified:
-        typeof value.lastModified === "number"
-          ? value.lastModified
-          : Date.now(),
+      lastModified: typeof value.lastModified === "number" ? value.lastModified : Date.now(),
     });
   }
   return new Blob([buffer], { type: fileType });
@@ -220,10 +196,7 @@ const handleBridgeRequest = async (message) => {
     }
 
     if (action === "api:post") {
-      const response = await axios.post(
-        buildPluginApiPath(message.endpoint),
-        message.body || {},
-      );
+      const response = await axios.post(buildPluginApiPath(message.endpoint), message.body || {});
       if (response.data?.status === "error") {
         throw new Error(response.data.message || "Plugin POST request failed.");
       }
@@ -235,24 +208,16 @@ const handleBridgeRequest = async (message) => {
       const formData = new FormData();
       const uploadFile = await coerceBridgeUploadFile(
         message.file,
-        typeof message.fileName === "string" && message.fileName
-          ? message.fileName
-          : "upload.bin",
+        typeof message.fileName === "string" && message.fileName ? message.fileName : "upload.bin",
       );
       formData.append("file", uploadFile);
-      const response = await axios.post(
-        buildPluginApiPath(message.endpoint),
-        formData,
-        {
-          timeout: 60000,
-          maxContentLength: Infinity,
-          maxBodyLength: Infinity,
-        },
-      );
+      const response = await axios.post(buildPluginApiPath(message.endpoint), formData, {
+        timeout: 60000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
       if (response.data?.status === "error") {
-        throw new Error(
-          response.data.message || "Plugin upload request failed.",
-        );
+        throw new Error(response.data.message || "Plugin upload request failed.");
       }
       sendBridgeResponse(requestId, true, response.data?.data ?? response.data);
       return;
@@ -268,9 +233,7 @@ const handleBridgeRequest = async (message) => {
       anchor.href = blobUrl;
       anchor.download =
         (typeof message.filename === "string" && message.filename) ||
-        parseContentDispositionFilename(
-          response.headers["content-disposition"],
-        );
+        parseContentDispositionFilename(response.headers["content-disposition"]);
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -287,10 +250,7 @@ const handleBridgeRequest = async (message) => {
         throw new Error("Missing SSE subscription id.");
       }
       closeSSEConnection(subscriptionId);
-      const url = new URL(
-        buildPluginApiPath(message.endpoint),
-        window.location.origin,
-      );
+      const url = new URL(buildPluginApiPath(message.endpoint), window.location.origin);
       Object.entries(message.params || {}).forEach(([key, value]) => {
         url.searchParams.set(key, String(value));
       });
@@ -331,11 +291,7 @@ const handleBridgeRequest = async (message) => {
 
     throw new Error(`Unsupported plugin bridge action: ${action}`);
   } catch (error) {
-    sendBridgeResponse(
-      requestId,
-      false,
-      error?.message || "Plugin bridge request failed.",
-    );
+    sendBridgeResponse(requestId, false, error?.message || "Plugin bridge request failed.");
   }
 };
 
@@ -387,9 +343,7 @@ const loadPluginPage = async () => {
       },
     });
     if (detailResponse.data?.status === "error") {
-      throw new Error(
-        detailResponse.data.message || tm("messages.pluginPageLoadFailed"),
-      );
+      throw new Error(detailResponse.data.message || tm("messages.pluginPageLoadFailed"));
     }
 
     const pluginData = detailResponse.data?.data || null;
@@ -410,17 +364,11 @@ const loadPluginPage = async () => {
       },
     });
     if (entryResponse.data?.status === "error") {
-      throw new Error(
-        entryResponse.data.message || tm("messages.pluginPageLoadFailed"),
-      );
+      throw new Error(entryResponse.data.message || tm("messages.pluginPageLoadFailed"));
     }
 
     const pageEntry = entryResponse.data?.data || null;
-    if (
-      !pageEntry ||
-      typeof pageEntry.content_path !== "string" ||
-      !pageEntry.content_path.length
-    ) {
+    if (!pageEntry || typeof pageEntry.content_path !== "string" || !pageEntry.content_path.length) {
       errorMessage.value = tm("messages.pluginPageNotFound");
       return;
     }
@@ -428,13 +376,10 @@ const loadPluginPage = async () => {
     plugin.value = pluginData;
     page.value = pageEntry;
     const contentUrl = new URL(pageEntry.content_path, window.location.origin);
-    contentUrl.searchParams.set('theme', themeParam.value);
+    contentUrl.searchParams.set("theme", themeParam.value);
     iframeSrc.value = contentUrl.pathname + contentUrl.search + contentUrl.hash;
   } catch (error) {
-    errorMessage.value =
-      error?.response?.data?.message ||
-      error?.message ||
-      tm("messages.pluginPageLoadFailed");
+    errorMessage.value = error?.response?.data?.message || error?.message || tm("messages.pluginPageLoadFailed");
   } finally {
     loading.value = false;
   }
@@ -453,9 +398,12 @@ watch([pluginName, pageName], loadPluginPage, { immediate: true });
 watch(locale, () => {
   sendIframeContext();
 });
-watch(() => customizer.uiTheme, () => {
-  sendIframeContext();
-});
+watch(
+  () => customizer.uiTheme,
+  () => {
+    sendIframeContext();
+  },
+);
 </script>
 
 <template>

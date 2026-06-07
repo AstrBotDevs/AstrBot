@@ -690,19 +690,18 @@
 </template>
 
 <script lang="ts">
-import axios from "@/utils/request";
-import { resolveApiUrl } from "@/utils/request";
+import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
+import PlatformRegistrationAction from "@/components/platform/PlatformRegistrationAction.vue";
+import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
+import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import {
   getPlatformIcon as getPlatformBuiltInIcon,
   getPlatformDescription,
   getTutorialLink,
 } from "@/utils/platformUtils";
-import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
-import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
+import axios, { resolveApiUrl } from "@/utils/request";
 import ConfigPage from "@/views/ConfigPage.vue";
-import PlatformRegistrationAction from "@/components/platform/PlatformRegistrationAction.vue";
-import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 
 interface RouteEntry {
   umop: string | null;
@@ -833,7 +832,7 @@ export default {
       },
     },
     platformTemplates(): Record<string, unknown> {
-      const pg = this.metadata["platform_group"] as Record<string, unknown> | undefined;
+      const pg = this.metadata.platform_group as Record<string, unknown> | undefined;
       const meta = pg?.metadata as Record<string, unknown> | undefined;
       const plat = meta?.platform as Record<string, unknown> | undefined;
       return (plat?.config_template as Record<string, unknown>) || {};
@@ -939,11 +938,7 @@ export default {
     },
     routePlatformId(): string {
       if (this.updatingMode) {
-        return String(
-          this.updatingPlatformConfig?.id ||
-            this.originalUpdatingPlatformId ||
-            "",
-        );
+        return String(this.updatingPlatformConfig?.id || this.originalUpdatingPlatformId || "");
       }
       return String(this.selectedPlatformConfig?.id || "");
     },
@@ -962,14 +957,15 @@ export default {
     },
     isDingtalkPlatform(): boolean {
       return this.selectedPlatformConfig?.type === "dingtalk";
-    }
+    },
   },
   watch: {
     selectedPlatformType(newType: string | null) {
       if (newType && this.platformTemplates[newType]) {
-        this.selectedPlatformConfig = JSON.parse(
-          JSON.stringify(this.platformTemplates[newType]),
-        ) as Record<string, unknown>;
+        this.selectedPlatformConfig = JSON.parse(JSON.stringify(this.platformTemplates[newType])) as Record<
+          string,
+          unknown
+        >;
         this.larkCreationMode = "";
         this.dingtalkCreationMode = "";
       } else {
@@ -1070,7 +1066,9 @@ export default {
       if (template && template.logo_token) {
         return resolveApiUrl(`/api/file/${String(template.logo_token)}`);
       }
-      return (template ? getPlatformBuiltInIcon(String(template.type)) : getPlatformBuiltInIcon(platformNameOrType)) ?? "";
+      return (
+        (template ? getPlatformBuiltInIcon(String(template.type)) : getPlatformBuiltInIcon(platformNameOrType)) ?? ""
+      );
     },
     getPlatformOptionIcon(item: unknown): string {
       return this.getPlatformIcon(this.getPlatformOptionLabel(item));
@@ -1158,10 +1156,7 @@ export default {
     openConfigDrawer(configId: string | null | undefined): void {
       const targetId = configId || "default";
 
-      if (
-        configId &&
-        this.configInfoList.findIndex((c: ConfigInfo) => c.id === configId) === -1
-      ) {
+      if (configId && this.configInfoList.findIndex((c: ConfigInfo) => c.id === configId) === -1) {
         this.showError(this.tm("messages.configNotFoundOpenConfig"));
       }
 
@@ -1215,9 +1210,7 @@ export default {
         });
 
         if (resp.data.status === "error") {
-          throw new Error(
-            resp.data.message || this.tm("messages.platformUpdateFailed"),
-          );
+          throw new Error(resp.data.message || this.tm("messages.platformUpdateFailed"));
         }
 
         await this.saveRoutesInternal();
@@ -1241,10 +1234,10 @@ export default {
         return;
       }
 
-      const platformList = (this.config_data as Record<string, unknown>)?.platform as Array<Record<string, unknown>> | undefined;
-      const existingPlatform = platformList?.find(
-        (p: Record<string, unknown>) => p.id === config?.id,
-      );
+      const platformList = (this.config_data as Record<string, unknown>)?.platform as
+        | Array<Record<string, unknown>>
+        | undefined;
+      const existingPlatform = platformList?.find((p: Record<string, unknown>) => p.id === config?.id);
       if (existingPlatform || config?.id === "webchat") {
         const confirmed = await this.confirmIdConflict(config?.id as string);
         if (!confirmed) {
@@ -1264,10 +1257,7 @@ export default {
       }
 
       try {
-        const res = await axios.post(
-          "/api/config/platform/new",
-          config,
-        );
+        const res = await axios.post("/api/config/platform/new", config);
 
         await this.handleConfigFile();
 
@@ -1275,9 +1265,7 @@ export default {
         this.showDialog = false;
         this.resetForm();
         this.$emit("refresh-config");
-        this.showSuccess(
-          res.data.message || this.tm("messages.addSuccessWithConfig"),
-        );
+        this.showSuccess(res.data.message || this.tm("messages.addSuccessWithConfig"));
       } catch (_err) {
         this.loading = false;
         this.showError(this.getErrorMessage(_err));
@@ -1318,18 +1306,13 @@ export default {
         console.info(`成功更新路由表: ${umop} -> ${configId}`);
       } catch (_err) {
         console.error("更新路由表失败:", _err);
-        throw new Error(
-          this.tm("messages.routingUpdateFailed", { message: this.getErrorMessage(_err) }),
-        );
+        throw new Error(this.tm("messages.routingUpdateFailed", { message: this.getErrorMessage(_err) }));
       }
     },
 
     async createNewConfigFile(configName: string): Promise<string> {
       try {
-        const configData =
-          this.aBConfigRadioVal === "1" && this.newConfigData
-            ? this.newConfigData
-            : undefined;
+        const configData = this.aBConfigRadioVal === "1" && this.newConfigData ? this.newConfigData : undefined;
 
         const createRes = await axios.post("/api/config/abconf/new", {
           name: configName,
@@ -1342,9 +1325,7 @@ export default {
         return newConfigId;
       } catch (_err) {
         console.error("创建新配置文件失败:", _err);
-        throw new Error(
-          this.tm("messages.createConfigFailed", { message: this.getErrorMessage(_err) }),
-        );
+        throw new Error(this.tm("messages.createConfigFailed", { message: this.getErrorMessage(_err) }));
       }
     },
 
@@ -1412,14 +1393,17 @@ export default {
 
       let suffix = "";
       const platformIdSuffix = data.platform_id_suffix as string | undefined;
-      const explicitSuffix = String(platformIdSuffix || "").trim().replace(/[!:]/g, "_");
+      const explicitSuffix = String(platformIdSuffix || "")
+        .trim()
+        .replace(/[!:]/g, "_");
       const botName = data.bot_name as string | undefined;
       if (explicitSuffix) {
-        suffix = explicitSuffix.startsWith("_") || explicitSuffix.startsWith("-")
-          ? explicitSuffix
-          : `_${explicitSuffix}`;
+        suffix =
+          explicitSuffix.startsWith("_") || explicitSuffix.startsWith("-") ? explicitSuffix : `_${explicitSuffix}`;
       } else if (botName) {
-        const safeBotName = String(botName || "").trim().replace(/[!:]/g, "_");
+        const safeBotName = String(botName || "")
+          .trim()
+          .replace(/[!:]/g, "_");
         if (safeBotName) {
           suffix = `-${safeBotName}`;
         }
@@ -1435,9 +1419,7 @@ export default {
         return;
       }
 
-      this.selectedPlatformConfig.id = currentId.endsWith(suffix)
-        ? currentId
-        : `${currentId}${suffix}`;
+      this.selectedPlatformConfig.id = currentId.endsWith(suffix) ? currentId : `${currentId}${suffix}`;
     },
 
     isPlatformIdValid(id: string | null | undefined): boolean {
@@ -1465,8 +1447,7 @@ export default {
               routes.push({
                 umop: umop,
                 originalUmop: umop,
-                messageType:
-                  parts[1] === "" || parts[1] === "*" ? "*" : parts[1],
+                messageType: parts[1] === "" || parts[1] === "*" ? "*" : parts[1],
                 sessionId: parts[2] === "" || parts[2] === "*" ? "*" : parts[2],
                 configId: confId,
                 sourceUmo: umop,
@@ -1544,8 +1525,7 @@ export default {
 
         for (const umop in fullRoutingTable) {
           if (
-            (originalPlatformId &&
-              this.isUmopMatchPlatform(umop, originalPlatformId)) ||
+            (originalPlatformId && this.isUmopMatchPlatform(umop, originalPlatformId)) ||
             (newPlatformId && this.isUmopMatchPlatform(umop, newPlatformId))
           ) {
             delete fullRoutingTable[umop];
@@ -1553,8 +1533,7 @@ export default {
         }
 
         for (const route of this.platformRoutes) {
-          const messageType =
-            route.messageType === "*" ? "*" : route.messageType;
+          const messageType = route.messageType === "*" ? "*" : route.messageType;
           const sessionId = route.sessionId === "*" ? "*" : route.sessionId;
           const platformIdForRoute = newPlatformId || originalPlatformId;
           const newUmop = `${platformIdForRoute}:${messageType}:${sessionId}`;
@@ -1569,9 +1548,7 @@ export default {
         });
       } catch (_err) {
         console.error("保存路由表失败:", _err);
-        throw new Error(
-          this.tm("messages.routingSaveFailed", { message: this.getErrorMessage(_err) }),
-        );
+        throw new Error(this.tm("messages.routingSaveFailed", { message: this.getErrorMessage(_err) }));
       }
     },
 
@@ -1622,9 +1599,7 @@ export default {
       };
     },
 
-    normalizeKnownRouteUmos(
-      umos: Array<string | KnownRouteUmoInfo>,
-    ): string[] {
+    normalizeKnownRouteUmos(umos: Array<string | KnownRouteUmoInfo>): string[] {
       const result: string[] = [];
       const infoMap: Record<string, KnownRouteUmoInfo> = {};
       for (const entry of umos) {
@@ -1688,8 +1663,7 @@ export default {
     },
 
     toggleRouteSourceMode(route: RouteEntry): void {
-      route.sourceMode =
-        this.getRouteSourceMode(route) === "known" ? "manual" : "known";
+      route.sourceMode = this.getRouteSourceMode(route) === "known" ? "manual" : "known";
       if (route.sourceMode === "known") {
         this.loadKnownRouteUmos();
       }

@@ -177,31 +177,31 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useModuleI18n } from '@/i18n/composables'
-import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
-import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
-import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
-import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog'
-import { useProviderSources } from '@/composables/useProviderSources'
+import { ref } from "vue";
+import ProviderModelsPanel from "@/components/provider/ProviderModelsPanel.vue";
+import ProviderSourcesPanel from "@/components/provider/ProviderSourcesPanel.vue";
+import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
+import { useProviderModelConfigDialog } from "@/composables/useProviderModelConfigDialog";
+import { useProviderSources } from "@/composables/useProviderSources";
+import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps({
   showBorder: {
     type: Boolean,
-    default: true
-  }
-})
+    default: true,
+  },
+});
 
-const { tm } = useModuleI18n('features/provider')
+const { tm } = useModuleI18n("features/provider");
 
 const snackbar = ref({
   show: false,
-  message: '',
-  color: 'success'
-})
+  message: "",
+  color: "success",
+});
 
-function showMessage(message, color = 'success') {
-  snackbar.value = { show: true, message, color }
+function showMessage(message, color = "success") {
+  snackbar.value = { show: true, message, color };
 }
 
 const {
@@ -239,14 +239,14 @@ const {
   testProvider,
   toggleProviderEnable,
   loadConfig,
-  modelAlreadyConfigured
+  modelAlreadyConfigured,
 } = useProviderSources({
-  defaultTab: 'chat_completion',
+  defaultTab: "chat_completion",
   tm,
-  showMessage
-})
+  showMessage,
+});
 
-const showManualModelDialog = ref(false)
+const showManualModelDialog = ref(false);
 
 const {
   showProviderEditDialog,
@@ -256,7 +256,7 @@ const {
   providerEditDialogTitle,
   openProviderEdit,
   openModelAddDialog,
-  saveEditedProvider
+  saveEditedProvider,
 } = useProviderModelConfigDialog({
   selectedProviderSource,
   configSchema,
@@ -264,36 +264,35 @@ const {
   modelAlreadyConfigured,
   loadConfig,
   tm,
-  showMessage
-})
+  showMessage,
+});
 
 function openManualModelDialog() {
   if (!selectedProviderSource.value) {
-    showMessage(tm('providerSources.selectHint'), 'error')
-    return
+    showMessage(tm("providerSources.selectHint"), "error");
+    return;
   }
-  manualModelId.value = ''
-  showManualModelDialog.value = true
+  manualModelId.value = "";
+  showManualModelDialog.value = true;
 }
 
 async function confirmManualModel() {
-  const modelId = manualModelId.value.trim()
+  const modelId = manualModelId.value.trim();
   if (!selectedProviderSource.value) {
-    showMessage(tm('providerSources.selectHint'), 'error')
-    return
+    showMessage(tm("providerSources.selectHint"), "error");
+    return;
   }
   if (!modelId) {
-    showMessage(tm('models.manualModelRequired'), 'error')
-    return
+    showMessage(tm("models.manualModelRequired"), "error");
+    return;
   }
   if (modelAlreadyConfigured(modelId)) {
-    showMessage(tm('models.manualModelExists'), 'error')
-    return
+    showMessage(tm("models.manualModelExists"), "error");
+    return;
   }
-  showManualModelDialog.value = false
-  openModelAddDialog(modelId)
+  showManualModelDialog.value = false;
+  openModelAddDialog(modelId);
 }
-
 </script>
 
 <style scoped>

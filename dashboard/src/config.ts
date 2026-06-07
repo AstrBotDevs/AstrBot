@@ -1,4 +1,4 @@
-import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
+import { DARK_THEME_NAME, LIGHT_THEME_NAME } from "@/theme/constants";
 
 export type ConfigProps = {
   Sidebar_drawer: boolean;

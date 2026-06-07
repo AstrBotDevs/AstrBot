@@ -9,12 +9,12 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, type PropType } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
-import { usePersonaStore } from "@/stores/personaStore";
 import { mapActions } from "pinia";
+import { defineComponent, type PropType } from "vue";
 import BaseCreateFolderDialog from "@/components/folder/BaseCreateFolderDialog.vue";
 import type { CreateFolderData } from "@/components/folder/types";
+import { useModuleI18n } from "@/i18n/composables";
+import { usePersonaStore } from "@/stores/personaStore";
 
 export default defineComponent({
   name: "CreateFolderDialog",
@@ -60,9 +60,7 @@ export default defineComponent({
     ...mapActions(usePersonaStore, ["createFolder"]),
 
     async handleCreate(data: CreateFolderData) {
-      const baseDialog = this.$refs.baseDialog as InstanceType<
-        typeof BaseCreateFolderDialog
-      >;
+      const baseDialog = this.$refs.baseDialog as InstanceType<typeof BaseCreateFolderDialog>;
       baseDialog.setLoading(true);
 
       try {
@@ -74,10 +72,7 @@ export default defineComponent({
         this.$emit("created", this.tm("folder.messages.createSuccess"));
         this.showDialog = false;
       } catch (error: any) {
-        this.$emit(
-          "error",
-          error.message || this.tm("folder.messages.createError"),
-        );
+        this.$emit("error", error.message || this.tm("folder.messages.createError"));
       } finally {
         baseDialog.setLoading(false);
       }

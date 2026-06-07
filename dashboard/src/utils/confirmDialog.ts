@@ -5,9 +5,7 @@ export type ConfirmDialogOptions = {
   message?: string;
 };
 
-export type ConfirmDialogHandler = (
-  options: ConfirmDialogOptions,
-) => Promise<boolean>;
+export type ConfirmDialogHandler = (options: ConfirmDialogOptions) => Promise<boolean>;
 
 export type ConfirmDialogCandidate = ConfirmDialogHandler | null | undefined;
 
@@ -15,10 +13,7 @@ export function useConfirmDialog(): ConfirmDialogHandler | undefined {
   return inject<ConfirmDialogHandler | undefined>("$confirm", undefined);
 }
 
-export async function askForConfirmation(
-  message: string,
-  candidate?: ConfirmDialogCandidate,
-): Promise<boolean> {
+export async function askForConfirmation(message: string, candidate?: ConfirmDialogCandidate): Promise<boolean> {
   const confirmDialog = candidate ?? undefined;
 
   if (confirmDialog) {

@@ -195,9 +195,7 @@ export default defineComponent({
     },
     truncateText(text: string | undefined | null, maxLength: number): string {
       if (!text) return "";
-      return text.length > maxLength
-        ? text.substring(0, maxLength) + "..."
-        : text;
+      return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
     },
     formatDate(dateString: string | undefined | null): string {
       if (!dateString) return "";

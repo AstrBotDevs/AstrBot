@@ -1,7 +1,4 @@
-import {
-  EXTENSION_DETAILS_ROUTE_NAME,
-  EXTENSION_ROUTE_NAME,
-} from "./routeConstants.mjs";
+import { EXTENSION_DETAILS_ROUTE_NAME, EXTENSION_ROUTE_NAME } from "./routeConstants.mjs";
 
 const MainRoutes = {
   path: "/main",

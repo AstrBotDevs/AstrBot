@@ -177,9 +177,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from "vue";
-import axios from "@/utils/request";
+import { onMounted, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
 const { tm: t } = useModuleI18n("features/knowledge-base/detail");
 
@@ -249,12 +249,8 @@ const loadProviders = async () => {
       params: { provider_type: "embedding,rerank" },
     });
     if (response.data.status === "ok") {
-      embeddingProviders.value = response.data.data.filter(
-        (p: any) => p.provider_type === "embedding",
-      );
-      rerankProviders.value = response.data.data.filter(
-        (p: any) => p.provider_type === "rerank",
-      );
+      embeddingProviders.value = response.data.data.filter((p: any) => p.provider_type === "embedding");
+      rerankProviders.value = response.data.data.filter((p: any) => p.provider_type === "rerank");
     }
   } catch (error) {
     console.error("Failed to load providers:", error);

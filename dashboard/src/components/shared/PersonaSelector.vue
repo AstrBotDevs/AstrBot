@@ -31,12 +31,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import axios from "@/utils/request";
+import { computed, onMounted, ref } from "vue";
 import BaseFolderItemSelector from "@/components/folder/BaseFolderItemSelector.vue";
-import PersonaForm from "./PersonaForm.vue";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
 import type { FolderTreeNode, SelectableItem } from "@/components/folder/types";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
+import PersonaForm from "./PersonaForm.vue";
 
 interface Persona {
   persona_id: string;
@@ -79,10 +79,7 @@ const defaultPersona: SelectableItem = {
 };
 
 // 递归查找文件夹名称
-function findFolderName(
-  nodes: FolderTreeNode[],
-  folderId: string,
-): string | null {
+function findFolderName(nodes: FolderTreeNode[], folderId: string): string | null {
   for (const node of nodes) {
     if (node.folder_id === folderId) {
       return node.name;

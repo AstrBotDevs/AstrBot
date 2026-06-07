@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, useAttrs } from "vue";
-import { useCustomizerStore } from "@/stores/customizer";
+import { computed, ref, useAttrs, watch } from "vue";
+import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { useModuleI18n } from "@/i18n/composables";
-import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
+import { useCustomizerStore } from "@/stores/customizer";
+import { usePluginI18n } from "@/utils/pluginI18n";
 import PluginPlatformChip from "./PluginPlatformChip.vue";
 import StyledMenu from "./StyledMenu.vue";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
-import { usePluginI18n } from "@/utils/pluginI18n";
+import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
 
 const props = defineProps({
   extension: {
@@ -59,22 +59,17 @@ const supportPlatforms = computed(() => {
 
 const astrbotVersionRequirement = computed(() => {
   const versionSpec = props.extension?.astrbot_version;
-  return typeof versionSpec === "string" && versionSpec.trim().length
-    ? versionSpec.trim()
-    : "";
+  return typeof versionSpec === "string" && versionSpec.trim().length ? versionSpec.trim() : "";
 });
 
 // 作者显示（兼容多种字段名）
 const authorDisplay = computed(() => {
   const ext = props.extension || {};
   if (typeof ext.author === "string" && ext.author.trim()) return ext.author;
-  if (Array.isArray(ext.authors) && ext.authors.length)
-    return ext.authors.join(", ");
-  if (typeof ext.author_name === "string" && ext.author_name.trim())
-    return ext.author_name;
+  if (Array.isArray(ext.authors) && ext.authors.length) return ext.authors.join(", ");
+  if (typeof ext.author_name === "string" && ext.author_name.trim()) return ext.author_name;
   if (typeof ext.owner === "string" && ext.owner.trim()) return ext.owner;
-  if (ext.author && typeof ext.author === "object" && ext.author.name)
-    return ext.author.name;
+  if (ext.author && typeof ext.author === "object" && ext.author.name) return ext.author.name;
   return "";
 });
 
@@ -85,9 +80,7 @@ const logoSrc = computed(() => {
   if (logoLoadFailed.value) {
     return defaultPluginIcon;
   }
-  return typeof logo === "string" && logo.trim().length
-    ? logo
-    : defaultPluginIcon;
+  return typeof logo === "string" && logo.trim().length ? logo : defaultPluginIcon;
 });
 
 const localizedName = computed(() => pluginName(props.extension));
@@ -122,10 +115,7 @@ const uninstallExtension = async () => {
   showUninstallDialog.value = true;
 };
 
-const handleUninstallConfirm = (options: {
-  deleteConfig: boolean;
-  deleteData: boolean;
-}) => {
+const handleUninstallConfirm = (options: { deleteConfig: boolean; deleteData: boolean }) => {
   emit("uninstall", props.extension, options);
 };
 

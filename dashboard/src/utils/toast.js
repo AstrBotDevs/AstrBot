@@ -3,8 +3,7 @@ import { useToastStore } from "@/stores/toast";
 export function useToast() {
   const store = useToastStore();
 
-  const toast = (message, color = "info", opts = {}) =>
-    store.add({ message, color, ...opts });
+  const toast = (message, color = "info", opts = {}) => store.add({ message, color, ...opts });
 
   return {
     toast,

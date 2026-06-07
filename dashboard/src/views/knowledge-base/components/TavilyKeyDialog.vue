@@ -91,9 +91,7 @@ const saveKey = async () => {
     if (!currentConfig.provider_settings) {
       currentConfig.provider_settings = {};
     }
-    currentConfig.provider_settings.websearch_tavily_key = [
-      apiKey.value.trim(),
-    ];
+    currentConfig.provider_settings.websearch_tavily_key = [apiKey.value.trim()];
     // 同时将搜索提供商设置为 tavily
     currentConfig.provider_settings.websearch_provider = "tavily";
 
@@ -107,12 +105,10 @@ const saveKey = async () => {
       emit("success");
       closeDialog();
     } else {
-      errorMessage.value =
-        saveResponse.data.message || "保存失败，请检查 Key 是否正确";
+      errorMessage.value = saveResponse.data.message || "保存失败，请检查 Key 是否正确";
     }
   } catch (error: any) {
-    errorMessage.value =
-      error.response?.data?.message || "保存失败，发生未知错误";
+    errorMessage.value = error.response?.data?.message || "保存失败，发生未知错误";
   } finally {
     saving.value = false;
   }

@@ -20,9 +20,9 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
 import BaseFolderCard from "@/components/folder/BaseFolderCard.vue";
 import type { Folder } from "@/components/folder/types";
+import { useModuleI18n } from "@/i18n/composables";
 
 export default defineComponent({
   name: "FolderCard",
@@ -33,26 +33,13 @@ export default defineComponent({
       required: true,
     },
   },
-  emits: [
-    "click",
-    "contextmenu",
-    "open",
-    "rename",
-    "move",
-    "delete",
-    "persona-dropped",
-  ],
+  emits: ["click", "contextmenu", "open", "rename", "move", "delete", "persona-dropped"],
   setup() {
     const { tm } = useModuleI18n("features/persona");
     return { tm };
   },
   methods: {
-    onItemDropped(data: {
-      item_id: string;
-      item_type: string;
-      target_folder_id: string | null;
-      source_data?: any;
-    }) {
+    onItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data?: any }) {
       if (data.item_type === "persona") {
         this.$emit("persona-dropped", {
           persona_id: data.item_id,

@@ -119,7 +119,7 @@
     "addToConfig": "已加入配置",
     "fileCount": "文件：{count}",
     "done": "完成"
-    },
+  },
   "unsavedChangesWarning": {
     "dialogTitle": "未保存的更改",
     "leavePage": "当前配置有未保存的更改，切换前是否保存？",

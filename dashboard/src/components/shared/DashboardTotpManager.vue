@@ -55,109 +55,105 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import DashboardTotpSetupDialog from './DashboardTotpSetupDialog.vue'
-import DashboardTotpRecoveryDialog from './DashboardTotpRecoveryDialog.vue'
-import DashboardTotpManageDialog from './DashboardTotpManageDialog.vue'
-import axios from '@/utils/request'
-import { useModuleI18n } from '@/i18n/composables'
+import { computed, ref } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
+import DashboardTotpManageDialog from "./DashboardTotpManageDialog.vue";
+import DashboardTotpRecoveryDialog from "./DashboardTotpRecoveryDialog.vue";
+import DashboardTotpSetupDialog from "./DashboardTotpSetupDialog.vue";
 
 const props = defineProps({
   modelValue: {
     type: Boolean,
-    default: false
+    default: false,
   },
   configRoot: {
     type: Object,
-    default: null
-  }
-})
+    default: null,
+  },
+});
 
-const emit = defineEmits(['update:modelValue'])
-const { tm } = useModuleI18n('features/config-metadata')
+const emit = defineEmits(["update:modelValue"]);
+const { tm } = useModuleI18n("features/config-metadata");
 
-const setupDialogVisible = ref(false)
-const recoveryDialogVisible = ref(false)
-const manageDialogVisible = ref(false)
-const setupDialogMode = ref('setup')
-const pendingRecoveryCode = ref('')
+const setupDialogVisible = ref(false);
+const recoveryDialogVisible = ref(false);
+const manageDialogVisible = ref(false);
+const setupDialogMode = ref("setup");
+const pendingRecoveryCode = ref("");
 
-const totpSecret = computed(() => props.configRoot?.dashboard?.totp?.secret || '')
-const totpRecoveryCodeHash = computed(
-  () => props.configRoot?.dashboard?.totp?.recovery_code_hash || ''
-)
+const totpSecret = computed(() => props.configRoot?.dashboard?.totp?.secret || "");
+const totpRecoveryCodeHash = computed(() => props.configRoot?.dashboard?.totp?.recovery_code_hash || "");
 const isTotpInitialSetup = computed(
-  () =>
-    props.modelValue === true
-    && (!totpSecret.value || !totpRecoveryCodeHash.value)
-)
+  () => props.modelValue === true && (!totpSecret.value || !totpRecoveryCodeHash.value),
+);
 
 function emitUpdate(val) {
-  emit('update:modelValue', val)
+  emit("update:modelValue", val);
 }
 
 function clearTotpConfig() {
   if (props.configRoot?.dashboard?.totp) {
-    props.configRoot.dashboard.totp.enable = false
+    props.configRoot.dashboard.totp.enable = false;
   }
 }
 
-function writeTotpSecretToConfig(secret, recoveryCodeHash = '') {
-  if (!props.configRoot?.dashboard) return
+function writeTotpSecretToConfig(secret, recoveryCodeHash = "") {
+  if (!props.configRoot?.dashboard) return;
   if (!props.configRoot.dashboard.totp) {
-    props.configRoot.dashboard.totp = {}
+    props.configRoot.dashboard.totp = {};
   }
-  props.configRoot.dashboard.totp.enable = true
-  props.configRoot.dashboard.totp.secret = secret
-  props.configRoot.dashboard.totp.recovery_code_hash = recoveryCodeHash
+  props.configRoot.dashboard.totp.enable = true;
+  props.configRoot.dashboard.totp.secret = secret;
+  props.configRoot.dashboard.totp.recovery_code_hash = recoveryCodeHash;
 }
 
 function onTotpToggle(val) {
   if (!val) {
-    clearTotpConfig()
-    emitUpdate(val)
-    return
+    clearTotpConfig();
+    emitUpdate(val);
+    return;
   }
   if (!totpSecret.value || !totpRecoveryCodeHash.value) {
-    setupDialogMode.value = 'setup'
-    setupDialogVisible.value = true
+    setupDialogMode.value = "setup";
+    setupDialogVisible.value = true;
   }
-  emitUpdate(true)
+  emitUpdate(true);
 }
 
 function openTotpDialog() {
   if (isTotpInitialSetup.value) {
-    setupDialogMode.value = 'setup'
-    setupDialogVisible.value = true
-    return
+    setupDialogMode.value = "setup";
+    setupDialogVisible.value = true;
+    return;
   }
-  manageDialogVisible.value = true
+  manageDialogVisible.value = true;
 }
 
 function onSetupComplete({ secret, recoveryCode, recoveryCodeHash }) {
-  writeTotpSecretToConfig(secret, recoveryCodeHash)
-  pendingRecoveryCode.value = recoveryCode
-  recoveryDialogVisible.value = true
+  writeTotpSecretToConfig(secret, recoveryCodeHash);
+  pendingRecoveryCode.value = recoveryCode;
+  recoveryDialogVisible.value = true;
 }
 
 function onStartRotate() {
-  manageDialogVisible.value = false
-  setupDialogMode.value = 'rotate'
-  setupDialogVisible.value = true
+  manageDialogVisible.value = false;
+  setupDialogMode.value = "rotate";
+  setupDialogVisible.value = true;
 }
 
 async function onStartRotateRecovery() {
-  manageDialogVisible.value = false
-  if (!totpSecret.value) return
+  manageDialogVisible.value = false;
+  if (!totpSecret.value) return;
   try {
-    const res = await axios.post('/api/auth/totp/recovery')
-    if (res.data.status !== 'ok') return
-    const { recovery_code: recoveryCode, recovery_code_hash: recoveryCodeHash } = res.data.data || {}
-    if (!recoveryCode || !recoveryCodeHash) return
-    if (!props.configRoot?.dashboard?.totp) return
-    props.configRoot.dashboard.totp.recovery_code_hash = recoveryCodeHash
-    pendingRecoveryCode.value = recoveryCode
-    recoveryDialogVisible.value = true
+    const res = await axios.post("/api/auth/totp/recovery");
+    if (res.data.status !== "ok") return;
+    const { recovery_code: recoveryCode, recovery_code_hash: recoveryCodeHash } = res.data.data || {};
+    if (!recoveryCode || !recoveryCodeHash) return;
+    if (!props.configRoot?.dashboard?.totp) return;
+    props.configRoot.dashboard.totp.recovery_code_hash = recoveryCodeHash;
+    pendingRecoveryCode.value = recoveryCode;
+    recoveryDialogVisible.value = true;
   } catch {
     // silently fail
   }

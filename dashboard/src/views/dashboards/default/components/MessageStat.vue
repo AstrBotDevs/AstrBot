@@ -91,9 +91,9 @@
 </template>
 
 <script lang="ts">
-import axios from "@/utils/request";
-import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
+import { useCustomizerStore } from "@/stores/customizer";
+import axios from "@/utils/request";
 
 interface TimeRangeOption {
   label: string;
@@ -159,8 +159,7 @@ export default {
           },
         },
         tooltip: {
-          theme:
-            useCustomizerStore().uiTheme === "PurpleTheme" ? "light" : "dark",
+          theme: useCustomizerStore().uiTheme === "PurpleTheme" ? "light" : "dark",
           x: {
             format: "yyyy-MM-dd HH:mm",
           },
@@ -176,14 +175,13 @@ export default {
             text: "",
           },
           labels: {
-            formatter: function (value: number) {
-              return new Date(value).toLocaleString("zh-CN", {
+            formatter: (value: number) =>
+              new Date(value).toLocaleString("zh-CN", {
                 month: "short",
                 day: "numeric",
                 hour: "2-digit",
                 minute: "2-digit",
-              });
-            },
+              }),
           },
           tooltip: {
             enabled: false,
@@ -193,9 +191,7 @@ export default {
           title: {
             text: "",
           },
-          min: function (min: number) {
-            return min < 10 ? 0 : Math.floor(min * 0.8);
-          },
+          min: (min: number) => (min < 10 ? 0 : Math.floor(min * 0.8)),
         },
         grid: {
           borderColor: "gray100",
@@ -238,14 +234,9 @@ export default {
     this.selectedTimeRange = this.timeRanges[0];
 
     // 设置图表翻译文本
-    this.chartOptions.tooltip.y.title.formatter = () =>
-      this.t("charts.messageTrend.messageCount") + " ";
-    this.chartOptions.xaxis.title.text = this.t(
-      "charts.messageTrend.timeLabel",
-    );
-    this.chartOptions.yaxis.title.text = this.t(
-      "charts.messageTrend.messageCount",
-    );
+    this.chartOptions.tooltip.y.title.formatter = () => `${this.t("charts.messageTrend.messageCount")} `;
+    this.chartOptions.xaxis.title.text = this.t("charts.messageTrend.timeLabel");
+    this.chartOptions.yaxis.title.text = this.t("charts.messageTrend.messageCount");
     this.chartSeries[0].name = this.t("charts.messageTrend.messageCount");
 
     // 初始加载
@@ -262,9 +253,7 @@ export default {
 
       try {
         const offsetSec = this.selectedTimeRange?.value ?? 86400;
-        const response = await axios.get(
-          `/api/stat/get?offset_sec=${offsetSec}`,
-        );
+        const response = await axios.get(`/api/stat/get?offset_sec=${offsetSec}`);
         const data = response.data.data;
 
         if (data && data.message_time_series) {
@@ -311,19 +300,13 @@ export default {
       // 计算前半部分和后半部分的消息总数
       const halfIndex = Math.floor(this.messageTimeSeries.length / 2);
 
-      const firstHalf = this.messageTimeSeries
-        .slice(0, halfIndex)
-        .reduce((sum, item) => sum + item[1], 0);
+      const firstHalf = this.messageTimeSeries.slice(0, halfIndex).reduce((sum, item) => sum + item[1], 0);
 
-      const secondHalf = this.messageTimeSeries
-        .slice(halfIndex)
-        .reduce((sum, item) => sum + item[1], 0);
+      const secondHalf = this.messageTimeSeries.slice(halfIndex).reduce((sum, item) => sum + item[1], 0);
 
       // 计算增长率
       if (firstHalf > 0) {
-        this.growthRate = Math.round(
-          ((secondHalf - firstHalf) / firstHalf) * 100,
-        );
+        this.growthRate = Math.round(((secondHalf - firstHalf) / firstHalf) * 100);
       } else {
         this.growthRate = secondHalf > 0 ? 100 : 0;
       }

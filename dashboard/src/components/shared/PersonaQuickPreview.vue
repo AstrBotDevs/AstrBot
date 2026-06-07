@@ -134,9 +134,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
-import axios from "@/utils/request";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
 const props = defineProps({
   modelValue: {
@@ -159,12 +159,8 @@ const defaultPersonaData = {
   skills: null,
 };
 
-const normalizedTools = computed(() =>
-  Array.isArray(personaData.value?.tools) ? personaData.value.tools : [],
-);
-const normalizedSkills = computed(() =>
-  Array.isArray(personaData.value?.skills) ? personaData.value.skills : [],
-);
+const normalizedTools = computed(() => (Array.isArray(personaData.value?.tools) ? personaData.value.tools : []));
+const normalizedSkills = computed(() => (Array.isArray(personaData.value?.skills) ? personaData.value.skills : []));
 const allToolsCount = computed(() => Object.keys(toolMetaMap.value).length);
 const allSkillsCount = computed(() => availableSkills.value.length);
 const resolvedTools = computed(() =>
@@ -209,14 +205,10 @@ async function loadSkillsMeta() {
     if (response.data?.status === "ok") {
       const payload = response.data?.data || [];
       if (Array.isArray(payload)) {
-        availableSkills.value = payload.filter(
-          (skill) => skill.active !== false,
-        );
+        availableSkills.value = payload.filter((skill) => skill.active !== false);
       } else {
         const skills = payload.skills || [];
-        availableSkills.value = skills.filter(
-          (skill) => skill.active !== false,
-        );
+        availableSkills.value = skills.filter((skill) => skill.active !== false);
       }
     } else {
       availableSkills.value = [];
@@ -243,8 +235,7 @@ async function loadPersonaPreview(personaId) {
     const response = await axios.get("/api/persona/list");
     if (response.data?.status === "ok") {
       const personas = response.data?.data || [];
-      personaData.value =
-        personas.find((item) => item.persona_id === personaId) || null;
+      personaData.value = personas.find((item) => item.persona_id === personaId) || null;
     } else {
       personaData.value = null;
     }

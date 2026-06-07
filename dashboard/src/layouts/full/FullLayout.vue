@@ -1,16 +1,17 @@
 <script setup lang="ts">
+import { computed, onMounted, ref, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
-import { ref, onMounted, computed, watch } from "vue";
-import axios from "@/utils/request";
-import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
-import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
+import Chat from "@/components/chat/Chat.vue";
+// biome-ignore lint/style/useImportType: Vue template components require runtime imports.
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
-import Chat from "@/components/chat/Chat.vue";
+import { useI18n } from "@/i18n/composables";
+import { useCommonStore } from "@/stores/common";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
-import { useCommonStore } from "@/stores/common";
-import { useI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
+import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
+import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
 
 const FIRST_NOTICE_SEEN_KEY = "astrbot:first_notice_seen:v1";
 
@@ -19,15 +20,9 @@ const commonStore = useCommonStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
-const isCurrentChatRoute = computed(
-  () => route.path === "/chat" || route.path.startsWith("/chat/"),
-);
-const isPluginPageRoute = computed(
-  () => route.path.startsWith("/plugin-page/"),
-);
-const isFullScreenRoute = computed(
-  () => isCurrentChatRoute.value || isPluginPageRoute.value,
-);
+const isCurrentChatRoute = computed(() => route.path === "/chat" || route.path.startsWith("/chat/"));
+const isPluginPageRoute = computed(() => route.path.startsWith("/plugin-page/"));
+const isFullScreenRoute = computed(() => isCurrentChatRoute.value || isPluginPageRoute.value);
 const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const showSidebar = computed(() => !isCurrentChatRoute.value);
@@ -45,16 +40,10 @@ const checkMigration = async (): Promise<boolean> => {
   try {
     const response = await axios.get("/api/stat/version");
     if (response.data.status === "ok") {
-      commonStore.setAstrBotVersion(
-        response.data.data?.version,
-        response.data.data?.dashboard_version,
-      );
+      commonStore.setAstrBotVersion(response.data.data?.version, response.data.data?.dashboard_version);
     }
     if (response.data.status === "ok" && response.data.data.need_migration) {
-      if (
-        migrationDialog.value &&
-        typeof migrationDialog.value.open === "function"
-      ) {
+      if (migrationDialog.value && typeof migrationDialog.value.open === "function") {
         const result = await migrationDialog.value.open();
         if (result.success) {
           console.log("Migration completed successfully:", result.message);

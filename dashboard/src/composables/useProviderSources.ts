@@ -1,11 +1,8 @@
-import { ref, computed, onMounted, nextTick, watch } from "vue";
-import axios from "@/utils/request";
-import { getProviderIcon } from "@/utils/providerUtils";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
 import { normalizeTextInput } from "@/utils/inputValue";
+import { getProviderIcon } from "@/utils/providerUtils";
+import axios from "@/utils/request";
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string;
@@ -16,26 +13,15 @@ export interface UseProviderSourcesOptions {
 export function resolveDefaultTab(value?: string) {
   const normalized = (value || "").toLowerCase();
 
-  if (
-    normalized.startsWith("select_agent_runner_provider") ||
-    normalized === "agent_runner"
-  ) {
+  if (normalized.startsWith("select_agent_runner_provider") || normalized === "agent_runner") {
     return "agent_runner";
   }
 
-  if (
-    normalized === "select_provider_stt" ||
-    normalized === "speech_to_text" ||
-    normalized.includes("stt")
-  ) {
+  if (normalized === "select_provider_stt" || normalized === "speech_to_text" || normalized.includes("stt")) {
     return "speech_to_text";
   }
 
-  if (
-    normalized === "select_provider_tts" ||
-    normalized === "text_to_speech" ||
-    normalized.includes("tts")
-  ) {
+  if (normalized === "select_provider_tts" || normalized === "text_to_speech" || normalized.includes("tts")) {
     return "text_to_speech";
   }
 
@@ -64,9 +50,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const metadata = ref<Record<string, any>>({});
   const providerSources = ref<any[]>([]);
   const providers = ref<any[]>([]);
-  const selectedProviderType = ref<string>(
-    resolveDefaultTab(options.defaultTab),
-  );
+  const selectedProviderType = ref<string>(resolveDefaultTab(options.defaultTab));
   const selectedProviderSource = ref<any | null>(null);
   const selectedProviderSourceOriginalId = ref<string | null>(null);
   const editableProviderSource = ref<any | null>(null);
@@ -118,17 +102,12 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   // ===== Computed =====
   const availableSourceTypes = computed(() => {
-    if (
-      !providerTemplates.value ||
-      Object.keys(providerTemplates.value).length === 0
-    ) {
+    if (!providerTemplates.value || Object.keys(providerTemplates.value).length === 0) {
       return [];
     }
 
     const types: Array<{ value: string; label: string; icon: string }> = [];
-    for (const [templateName, template] of Object.entries(
-      providerTemplates.value,
-    )) {
+    for (const [templateName, template] of Object.entries(providerTemplates.value)) {
       if (template.provider_type === selectedProviderType.value) {
         types.push({
           value: templateName,
@@ -147,8 +126,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return providerSources.value.filter(
       (source) =>
         source.provider_type === selectedProviderType.value ||
-        (source.type &&
-          isTypeMatchingProviderType(source.type, selectedProviderType.value)),
+        (source.type && isTypeMatchingProviderType(source.type, selectedProviderType.value)),
     );
   });
 
@@ -159,9 +137,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const sourceProviders = computed(() => {
     if (!selectedProviderSource.value || !providers.value) return [];
 
-    return providers.value.filter(
-      (p) => p.provider_source_id === selectedProviderSource.value.id,
-    );
+    return providers.value.filter((p) => p.provider_source_id === selectedProviderSource.value.id);
   });
 
   const existingModelsForSelectedSource = computed(() => {
@@ -183,13 +159,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   });
 
   const mergedModelEntries = computed(() => {
-    const configuredEntries = (sourceProviders.value || []).map(
-      (provider: any) => ({
-        type: "configured",
-        provider,
-        metadata: getModelMetadata(provider.model),
-      }),
-    );
+    const configuredEntries = (sourceProviders.value || []).map((provider: any) => ({
+      type: "configured",
+      provider,
+      metadata: getModelMetadata(provider.model),
+    }));
 
     const availableEntries = (sortedAvailableModels.value || [])
       .filter((item: any) => {
@@ -201,8 +175,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         return {
           type: "available",
           model: name,
-          metadata:
-            typeof item === "object" ? item?.metadata : getModelMetadata(name),
+          metadata: typeof item === "object" ? item?.metadata : getModelMetadata(name),
         };
       });
 
@@ -256,15 +229,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const advancedSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null;
 
-    const excluded = new Set([
-      "id",
-      "key",
-      "api_base",
-      "enable",
-      "type",
-      "provider_type",
-      "provider",
-    ]);
+    const excluded = new Set(["id", "key", "api_base", "enable", "type", "provider_type", "provider"]);
     const advanced: Record<string, any> = {};
 
     for (const key of Object.keys(editableProviderSource.value)) {
@@ -287,10 +252,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return [];
     }
 
-    return providers.value.filter(
-      (provider: any) =>
-        getProviderType(provider) === selectedProviderType.value,
-    );
+    return providers.value.filter((provider: any) => getProviderType(provider) === selectedProviderType.value);
   });
 
   const providerSourceSchema = computed(() => {
@@ -305,18 +267,12 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (customSchema.provider?.items?.id) {
       customSchema.provider.items.id.hint = tm("providerSources.hints.id");
       customSchema.provider.items.key.hint = tm("providerSources.hints.key");
-      customSchema.provider.items.api_base.hint = tm(
-        "providerSources.hints.apiBase",
-      );
+      customSchema.provider.items.api_base.hint = tm("providerSources.hints.apiBase");
     }
     // 为 proxy 字段添加描述和提示
     if (customSchema.provider?.items?.proxy) {
-      customSchema.provider.items.proxy.description = tm(
-        "providerSources.labels.proxy",
-      );
-      customSchema.provider.items.proxy.hint = tm(
-        "providerSources.hints.proxy",
-      );
+      customSchema.provider.items.proxy.description = tm("providerSources.labels.proxy");
+      customSchema.provider.items.proxy.hint = tm("providerSources.hints.proxy");
     }
 
     return customSchema;
@@ -424,9 +380,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     selectedProviderSource.value = source;
     selectedProviderSourceOriginalId.value = source?.id || null;
     suppressSourceWatch = true;
-    editableProviderSource.value = source
-      ? ensureProviderSourceDefaults(JSON.parse(JSON.stringify(source)))
-      : null;
+    editableProviderSource.value = source ? ensureProviderSourceDefaults(JSON.parse(JSON.stringify(source))) : null;
     nextTick(() => {
       suppressSourceWatch = false;
     });
@@ -440,10 +394,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return source;
     }
 
-    if (
-      source.provider === "ollama" &&
-      source.ollama_disable_thinking === undefined
-    ) {
+    if (source.provider === "ollama" && source.ollama_disable_thinking === undefined) {
       source.ollama_disable_thinking = false;
     }
 
@@ -452,14 +403,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   function extractSourceFieldsFromTemplate(template: Record<string, any>) {
     const sourceFields: Record<string, any> = {};
-    const excludeKeys = [
-      "id",
-      "enable",
-      "model",
-      "provider_source_id",
-      "modalities",
-      "custom_extra_body",
-    ];
+    const excludeKeys = ["id", "enable", "model", "provider_source_id", "modalities", "custom_extra_body"];
 
     for (const [key, value] of Object.entries(template)) {
       if (!excludeKeys.includes(key)) {
@@ -511,9 +455,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function deleteProviderSource(source: any) {
-    const confirmed = await askForConfirmation(
-      tm("providerSources.deleteConfirm", { id: source.id }),
-    );
+    const confirmed = await askForConfirmation(tm("providerSources.deleteConfirm", { id: source.id }));
     if (!confirmed) return;
 
     try {
@@ -521,12 +463,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         id: source.id,
       });
 
-      providers.value = providers.value.filter(
-        (p) => p.provider_source_id !== source.id,
-      );
-      providerSources.value = providerSources.value.filter(
-        (s) => s.id !== source.id,
-      );
+      providers.value = providers.value.filter((p) => p.provider_source_id !== source.id);
+      providerSources.value = providerSources.value.filter((s) => s.id !== source.id);
 
       if (selectedProviderSource.value?.id === source.id) {
         selectedProviderSource.value = null;
@@ -546,8 +484,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!selectedProviderSource.value) return;
 
     savingSource.value = true;
-    const originalId =
-      selectedProviderSourceOriginalId.value || selectedProviderSource.value.id;
+    const originalId = selectedProviderSourceOriginalId.value || selectedProviderSource.value.id;
     try {
       const response = await axios.post("/api/config/provider_sources/update", {
         config: editableProviderSource.value,
@@ -560,19 +497,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
       if (editableProviderSource.value!.id !== originalId) {
         providers.value = providers.value.map((p) =>
-          p.provider_source_id === originalId
-            ? { ...p, provider_source_id: editableProviderSource.value!.id }
-            : p,
+          p.provider_source_id === originalId ? { ...p, provider_source_id: editableProviderSource.value!.id } : p,
         );
-        selectedProviderSourceOriginalId.value =
-          editableProviderSource.value!.id;
+        selectedProviderSourceOriginalId.value = editableProviderSource.value!.id;
       }
 
       const idx = providerSources.value.findIndex((ps) => ps.id === originalId);
       if (idx !== -1) {
-        providerSources.value[idx] = JSON.parse(
-          JSON.stringify(editableProviderSource.value),
-        );
+        providerSources.value[idx] = JSON.parse(JSON.stringify(editableProviderSource.value));
         selectedProviderSource.value = providerSources.value[idx];
       }
 
@@ -586,12 +518,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       showMessage(response.data.message || tm("providerSources.saveSuccess"));
       return true;
     } catch (error: any) {
-      showMessage(
-        error.response?.data?.message ||
-          error.message ||
-          tm("providerSources.saveError"),
-        "error",
-      );
+      showMessage(error.response?.data?.message || error.message || tm("providerSources.saveError"), "error");
       return false;
     } finally {
       savingSource.value = false;
@@ -611,20 +538,17 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     loadingModels.value = true;
     try {
-      const sourceId =
-        editableProviderSource.value?.id || selectedProviderSource.value.id;
+      const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id;
       const response = await axios.get("/api/config/provider_sources/models", {
         params: { source_id: sourceId },
       });
       if (response.data.status === "ok") {
         const metadataMap = response.data.data.model_metadata || {};
         modelMetadata.value = metadataMap;
-        availableModels.value = (response.data.data.models || []).map(
-          (model: string) => ({
-            name: model,
-            metadata: metadataMap?.[model] || null,
-          }),
-        );
+        availableModels.value = (response.data.data.models || []).map((model: string) => ({
+          name: model,
+          metadata: metadataMap?.[model] || null,
+        }));
         if (availableModels.value.length === 0) {
           showMessage(tm("models.noModelsFound"), "info");
         }
@@ -633,12 +557,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       }
     } catch (error: any) {
       modelMetadata.value = {};
-      showMessage(
-        error.response?.data?.message ||
-          error.message ||
-          tm("models.fetchError"),
-        "error",
-      );
+      showMessage(error.response?.data?.message || error.message || tm("models.fetchError"), "error");
     } finally {
       loadingModels.value = false;
     }
@@ -647,8 +566,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   function buildModelProviderConfig(modelName: string) {
     if (!selectedProviderSource.value) return;
 
-    const sourceId =
-      editableProviderSource.value?.id || selectedProviderSource.value.id;
+    const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id;
     const newId = `${sourceId}/${modelName}`;
 
     const metadata = getModelMetadata(modelName);
@@ -670,10 +588,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     let max_context_tokens = 0;
-    if (
-      metadata?.limit?.context &&
-      typeof metadata.limit.context === "number"
-    ) {
+    if (metadata?.limit?.context && typeof metadata.limit.context === "number") {
       max_context_tokens = metadata.limit.context;
     }
 
@@ -698,16 +613,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         throw new Error(res.data.message);
       }
       providers.value.push(newProvider);
-      showMessage(
-        res.data.message || tm("models.addSuccess", { model: modelName }),
-      );
+      showMessage(res.data.message || tm("models.addSuccess", { model: modelName }));
     } catch (error: any) {
-      showMessage(
-        error.response?.data?.message ||
-          error.message ||
-          tm("providerSources.saveError"),
-        "error",
-      );
+      showMessage(error.response?.data?.message || error.message || tm("providerSources.saveError"), "error");
     } finally {
       await loadConfig();
     }
@@ -718,9 +626,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function deleteProvider(provider: any) {
-    const confirmed = await askForConfirmation(
-      tm("models.deleteConfirm", { id: provider.id }),
-    );
+    const confirmed = await askForConfirmation(tm("models.deleteConfirm", { id: provider.id }));
     if (!confirmed) return;
 
     try {
@@ -743,23 +649,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       });
       if (response.data.status === "ok" && response.data.data.error === null) {
         const latency = Math.max(0, Math.round(performance.now() - startTime));
-        showMessage(
-          tm("models.testSuccessWithLatency", { id: provider.id, latency }),
-        );
+        showMessage(tm("models.testSuccessWithLatency", { id: provider.id, latency }));
       } else {
         throw new Error(response.data.data.error || tm("models.testError"));
       }
     } catch (error: any) {
-      showMessage(
-        error.response?.data?.message ||
-          error.message ||
-          tm("models.testError"),
-        "error",
-      );
+      showMessage(error.response?.data?.message || error.message || tm("models.testError"), "error");
     } finally {
-      testingProviders.value = testingProviders.value.filter(
-        (id) => id !== provider.id,
-      );
+      testingProviders.value = testingProviders.value.filter((id) => id !== provider.id);
     }
   }
 

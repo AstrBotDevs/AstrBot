@@ -1,9 +1,9 @@
 import { createRouter, createWebHashHistory } from "vue-router";
-import MainRoutes from "./MainRoutes";
-import AuthRoutes from "./AuthRoutes";
-import ChatBoxRoutes from "./ChatBoxRoutes";
 import { useAuthStore } from "@/stores/auth";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
+import AuthRoutes from "./AuthRoutes";
+import ChatBoxRoutes from "./ChatBoxRoutes";
+import MainRoutes from "./MainRoutes";
 
 export const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -18,7 +18,7 @@ interface AuthStore {
     password: string,
     code?: string,
     trustDeviceToken?: boolean,
-  ): Promise<void | 'totp_required'>;
+  ): Promise<undefined | "totp_required">;
   logout(): void;
   has_token(): boolean;
 }

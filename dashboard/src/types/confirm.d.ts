@@ -7,5 +7,3 @@ declare module "vue" {
     $confirm?: ConfirmDialogHandler;
   }
 }
-
-export {};

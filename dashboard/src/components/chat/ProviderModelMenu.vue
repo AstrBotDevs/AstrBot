@@ -63,112 +63,112 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import axios from 'axios';
+import axios from "axios";
+import { computed, onMounted, ref } from "vue";
 
 interface ModelMetadata {
-    modalities?: { input?: string[] };
-    tool_call?: boolean;
-    reasoning?: boolean;
+  modalities?: { input?: string[] };
+  tool_call?: boolean;
+  reasoning?: boolean;
 }
 
 interface ProviderConfig {
-    id: string;
-    model: string;
-    api_base?: string;
-    model_metadata?: ModelMetadata;
-    enable?: boolean;
+  id: string;
+  model: string;
+  api_base?: string;
+  model_metadata?: ModelMetadata;
+  enable?: boolean;
 }
 
 const providerConfigs = ref<ProviderConfig[]>([]);
-const selectedProviderId = ref('');
-const searchQuery = ref('');
+const selectedProviderId = ref("");
+const searchQuery = ref("");
 const menuOpen = ref(false);
 
 const filteredProviders = computed(() => {
-    if (!searchQuery.value) {
-        return providerConfigs.value;
-    }
-    const query = searchQuery.value.toLowerCase();
-    return providerConfigs.value.filter(p => 
-        p.id.toLowerCase().includes(query) || 
-        p.model.toLowerCase().includes(query)
-    );
+  if (!searchQuery.value) {
+    return providerConfigs.value;
+  }
+  const query = searchQuery.value.toLowerCase();
+  return providerConfigs.value.filter(
+    (p) => p.id.toLowerCase().includes(query) || p.model.toLowerCase().includes(query),
+  );
 });
 
 function loadFromStorage() {
-    const savedProvider = localStorage.getItem('selectedProvider');
-    if (savedProvider) {
-        selectedProviderId.value = savedProvider;
-    }
+  const savedProvider = localStorage.getItem("selectedProvider");
+  if (savedProvider) {
+    selectedProviderId.value = savedProvider;
+  }
 }
 
 function saveToStorage() {
-    if (selectedProviderId.value) {
-        localStorage.setItem('selectedProvider', selectedProviderId.value);
-    }
+  if (selectedProviderId.value) {
+    localStorage.setItem("selectedProvider", selectedProviderId.value);
+  }
 }
 
 function loadProviderConfigs() {
-    axios.get('/api/config/provider/list', {
-        params: { provider_type: 'chat_completion' }
-    }).then(response => {
-        if (response.data.status === 'ok') {
-            // 过滤掉 enable 为 false 的配置
-            providerConfigs.value = (response.data.data || []).filter(
-                (p: ProviderConfig) => p.enable !== false
-            );
-        }
-    }).catch(error => {
-        console.error('获取提供商列表失败:', error);
+  axios
+    .get("/api/config/provider/list", {
+      params: { provider_type: "chat_completion" },
+    })
+    .then((response) => {
+      if (response.data.status === "ok") {
+        // 过滤掉 enable 为 false 的配置
+        providerConfigs.value = (response.data.data || []).filter((p: ProviderConfig) => p.enable !== false);
+      }
+    })
+    .catch((error) => {
+      console.error("获取提供商列表失败:", error);
     });
 }
 
 function selectProvider(provider: ProviderConfig) {
-    selectedProviderId.value = provider.id;
-    saveToStorage();
+  selectedProviderId.value = provider.id;
+  saveToStorage();
 }
 
 function supportsImageInput(provider: ProviderConfig): boolean {
-    const inputs = provider.model_metadata?.modalities?.input || [];
-    return inputs.includes('image');
+  const inputs = provider.model_metadata?.modalities?.input || [];
+  return inputs.includes("image");
 }
 
 function supportsAudioInput(provider: ProviderConfig): boolean {
-    const inputs = provider.model_metadata?.modalities?.input || [];
-    return inputs.includes('audio');
+  const inputs = provider.model_metadata?.modalities?.input || [];
+  return inputs.includes("audio");
 }
 
 function supportsToolCall(provider: ProviderConfig): boolean {
-    return Boolean(provider.model_metadata?.tool_call);
+  return Boolean(provider.model_metadata?.tool_call);
 }
 
 function supportsReasoning(provider: ProviderConfig): boolean {
-    return Boolean(provider.model_metadata?.reasoning);
+  return Boolean(provider.model_metadata?.reasoning);
 }
 
 function getCurrentSelection() {
-    const provider = providerConfigs.value.find(p => p.id === selectedProviderId.value);
-    return {
-        providerId: selectedProviderId.value,
-        modelName: provider?.model || ''
-    };
+  const provider = providerConfigs.value.find((p) => p.id === selectedProviderId.value);
+  return {
+    providerId: selectedProviderId.value,
+    modelName: provider?.model || "",
+  };
 }
 
 function handleMenuToggle(isOpen: boolean) {
-    if (isOpen) {
-        // 每次打开菜单时重新获取数据
-        loadProviderConfigs();
-    }
+  if (isOpen) {
+    // 每次打开菜单时重新获取数据
+    loadProviderConfigs();
+  }
 }
 
 onMounted(() => {
-    loadFromStorage();
-    loadProviderConfigs();
+  loadFromStorage();
+  loadProviderConfigs();
 });
 
 defineExpose({
-    getCurrentSelection
+  getCurrentSelection,
 });
 </script>
 

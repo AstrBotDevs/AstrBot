@@ -67,13 +67,13 @@
 </template>
 
 <script lang="ts">
+import { mapActions, mapState } from "pinia";
 import { defineComponent, type PropType } from "vue";
+import type { FolderTreeNode } from "@/components/folder/types";
+import { collectFolderAndChildrenIds } from "@/components/folder/useFolderManager";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePersonaStore } from "@/stores/personaStore";
-import { mapState, mapActions } from "pinia";
 import MoveTargetNode from "./MoveTargetNode.vue";
-import { collectFolderAndChildrenIds } from "@/components/folder/useFolderManager";
-import type { FolderTreeNode } from "@/components/folder/types";
 
 interface PersonaItem {
   persona_id: string;
@@ -132,18 +132,13 @@ export default defineComponent({
 
     itemName(): string {
       if (!this.item) return "";
-      return this.itemType === "persona"
-        ? (this.item as PersonaItem).persona_id
-        : (this.item as FolderItem).name;
+      return this.itemType === "persona" ? (this.item as PersonaItem).persona_id : (this.item as FolderItem).name;
     },
 
     // 禁用的文件夹 ID（不能移动到自己或子文件夹）
     disabledFolderIds(): string[] {
       if (this.itemType !== "folder" || !this.item) return [];
-      return collectFolderAndChildrenIds(
-        this.folderTree as FolderTreeNode[],
-        (this.item as FolderItem).folder_id,
-      );
+      return collectFolderAndChildrenIds(this.folderTree as FolderTreeNode[], (this.item as FolderItem).folder_id);
     },
 
     // 过滤掉禁用的文件夹
@@ -165,10 +160,7 @@ export default defineComponent({
     },
   },
   methods: {
-    ...mapActions(usePersonaStore, [
-      "movePersonaToFolder",
-      "moveFolderToFolder",
-    ]),
+    ...mapActions(usePersonaStore, ["movePersonaToFolder", "moveFolderToFolder"]),
 
     selectFolder(folderId: string | null) {
       // 检查是否禁用
@@ -186,15 +178,9 @@ export default defineComponent({
       this.loading = true;
       try {
         if (this.itemType === "persona") {
-          await this.movePersonaToFolder(
-            (this.item as PersonaItem).persona_id,
-            this.selectedFolderId,
-          );
+          await this.movePersonaToFolder((this.item as PersonaItem).persona_id, this.selectedFolderId);
         } else {
-          await this.moveFolderToFolder(
-            (this.item as FolderItem).folder_id,
-            this.selectedFolderId,
-          );
+          await this.moveFolderToFolder((this.item as FolderItem).folder_id, this.selectedFolderId);
         }
         this.$emit("moved", this.tm("moveDialog.success"));
         this.closeDialog();

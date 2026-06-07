@@ -276,7 +276,7 @@ const props = defineProps({
   },
   supportsAudioInput: {
     type: Function,
-    required: true
+    required: true,
   },
   supportsToolCall: {
     type: Function,
@@ -316,8 +316,7 @@ const modelSearchProxy = computed({
   set: (val) => emit("update:modelSearch", normalizeTextInput(val)),
 });
 
-const isProviderTesting = (providerId) =>
-  props.testingProviders.includes(providerId);
+const isProviderTesting = (providerId) => props.testingProviders.includes(providerId);
 </script>
 
 <style scoped>

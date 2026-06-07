@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
-import { getPlatformDisplayName, getPlatformIcon } from "@/utils/platformUtils";
+import { computed, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
+import { getPlatformDisplayName, getPlatformIcon } from "@/utils/platformUtils";
 
 const props = defineProps({
   platforms: {

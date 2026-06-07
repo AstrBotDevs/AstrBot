@@ -43,9 +43,7 @@ function draw() {
   const my = smoothY;
 
   // Grid lines — dark mode: faint white, light mode: nearly invisible
-  ctx.strokeStyle = isDark
-    ? "rgba(255, 255, 255, 0.025)"
-    : "rgba(0, 49, 83, 0.03)";
+  ctx.strokeStyle = isDark ? "rgba(255, 255, 255, 0.025)" : "rgba(0, 49, 83, 0.03)";
   ctx.lineWidth = 0.5;
   for (let x = 0; x <= W; x += GRID) {
     ctx.beginPath();
@@ -71,9 +69,7 @@ function draw() {
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       // Socket dot — dark: deeper black, light: deeper white
-      ctx.fillStyle = isDark
-        ? "rgba(5, 5, 8, 0.1)"
-        : "rgba(240, 244, 248, 0.6)";
+      ctx.fillStyle = isDark ? "rgba(5, 5, 8, 0.1)" : "rgba(240, 244, 248, 0.6)";
       ctx.beginPath();
       ctx.arc(cx, cy, SOCKET_RADIUS, 0, Math.PI * 2);
       ctx.fill();
@@ -115,9 +111,7 @@ function draw() {
         strokeColor = `rgba(${ink}, ${Math.floor(ink * 0.6)}, ${Math.floor(ink * 0.4)}, ${crossAlpha})`;
       } else {
         // Idle: neutral gray
-        strokeColor = isDark
-          ? `rgba(255, 255, 255, ${crossAlpha})`
-          : `rgba(26, 46, 60, ${crossAlpha})`;
+        strokeColor = isDark ? `rgba(255, 255, 255, ${crossAlpha})` : `rgba(26, 46, 60, ${crossAlpha})`;
       }
 
       ctx.strokeStyle = strokeColor;

@@ -32,9 +32,9 @@
 </template>
 
 <script lang="ts">
+import { EventSourcePolyfill } from "event-source-polyfill";
 import { useCommonStore } from "@/stores/common";
 import axios, { resolveApiUrl } from "@/utils/request";
-import { EventSourcePolyfill } from "event-source-polyfill";
 
 declare module "event-source-polyfill" {
   export class EventSourcePolyfill {
@@ -115,10 +115,7 @@ export default {
     document.addEventListener("fullscreenchange", this.handleFullscreenChange);
   },
   beforeUnmount() {
-    document.removeEventListener(
-      "fullscreenchange",
-      this.handleFullscreenChange,
-    );
+    document.removeEventListener("fullscreenchange", this.handleFullscreenChange);
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
@@ -140,16 +137,13 @@ export default {
 
       const token = localStorage.getItem("token");
 
-      this.eventSource = new EventSourcePolyfill(
-        resolveApiUrl("/api/live-log"),
-        {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : "",
-          },
-          heartbeatTimeout: 300000,
-          withCredentials: true,
+      this.eventSource = new EventSourcePolyfill(resolveApiUrl("/api/live-log"), {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
         },
-      );
+        heartbeatTimeout: 300000,
+        withCredentials: true,
+      });
 
       this.eventSource.onopen = () => {
         console.info("日志流连接成功！");
@@ -186,20 +180,13 @@ export default {
         }
 
         if (this.retryAttempts >= this.maxRetryAttempts) {
-          console.error(
-            "❌ 已达到最大重试次数，停止重连。请刷新页面重试。",
-          );
+          console.error("❌ 已达到最大重试次数，停止重连。请刷新页面重试。");
           return;
         }
 
-        const delay = Math.min(
-          this.baseRetryDelay * Math.pow(2, this.retryAttempts),
-          30000,
-        );
+        const delay = Math.min(this.baseRetryDelay * 2 ** this.retryAttempts, 30000);
 
-        console.info(
-          `⏳ ${delay}ms 后尝试第 ${this.retryAttempts + 1} 次重连...`,
-        );
+        console.info(`⏳ ${delay}ms 后尝试第 ${this.retryAttempts + 1} 次重连...`);
 
         if (this.retryTimer) {
           clearTimeout(this.retryTimer);
@@ -225,10 +212,7 @@ export default {
 
       newLogs.forEach((log) => {
         const exists = this.localLogCache.some(
-          (existing) =>
-            existing.time === log.time &&
-            existing.data === log.data &&
-            existing.level === log.level,
+          (existing) => existing.time === log.time && existing.data === log.data && existing.level === log.level,
         );
 
         if (!exists) {
@@ -299,9 +283,7 @@ export default {
       const container = document.getElementById("console-wrapper");
       if (!document.fullscreenElement) {
         container.requestFullscreen().catch((err: Error) => {
-          console.error(
-            `Error attempting to enable full-screen mode: ${err.message}`,
-          );
+          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
         });
       } else {
         document.exitFullscreen();
@@ -313,9 +295,7 @@ export default {
     },
 
     appendLogContent(element: HTMLElement, log: string) {
-      const levelMatch = log.match(
-        /\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/,
-      );
+      const levelMatch = log.match(/\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/);
       if (!levelMatch) {
         element.innerText = `${log}`;
         return;
@@ -351,7 +331,7 @@ export default {
       }
 
       const span = document.createElement("pre");
-      let style = this.logColorAnsiMap["default"];
+      let style = this.logColorAnsiMap.default;
       for (const key in this.logColorAnsiMap) {
         if (log.startsWith(key)) {
           style = this.logColorAnsiMap[key];

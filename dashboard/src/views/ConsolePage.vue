@@ -1,10 +1,10 @@
 <script setup>
-import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
-import { useModuleI18n } from '@/i18n/composables';
-import axios from 'axios';
-import { useToast } from '@/utils/toast';
+import axios from "axios";
+import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { useToast } from "@/utils/toast";
 
-const { tm } = useModuleI18n('features/console');
+const { tm } = useModuleI18n("features/console");
 </script>
 
 <template>

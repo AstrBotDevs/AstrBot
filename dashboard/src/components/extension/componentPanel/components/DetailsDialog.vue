@@ -12,9 +12,7 @@ defineProps<{
 }>();
 
 // Emits
-const emit = defineEmits<{
-  (e: "update:show", value: boolean): void;
-}>();
+const emit = defineEmits<(e: "update:show", value: boolean) => void>();
 
 // 获取类型信息
 const getTypeInfo = (type: string): TypeInfo => {

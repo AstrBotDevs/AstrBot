@@ -116,10 +116,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
 import { useToastStore } from "@/stores/toast";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
+import axios from "@/utils/request";
 
 const { tm } = useModuleI18n("features/settings");
 const toastStore = useToastStore();
@@ -198,19 +198,12 @@ const loadStorageStatus = async () => {
   try {
     const res = await axios.get("/api/stat/storage");
     if (res.data.status !== "ok") {
-      showToast(
-        res.data.message || tm("system.cleanup.messages.statusFailed"),
-        "error",
-      );
+      showToast(res.data.message || tm("system.cleanup.messages.statusFailed"), "error");
       return;
     }
     storageStatus.value = res.data.data || storageStatus.value;
   } catch (error) {
-    showToast(
-      error?.response?.data?.message ||
-        tm("system.cleanup.messages.statusFailed"),
-      "error",
-    );
+    showToast(error?.response?.data?.message || tm("system.cleanup.messages.statusFailed"), "error");
   } finally {
     statusLoading.value = false;
   }
@@ -229,10 +222,7 @@ const cleanupStorage = async (target) => {
   try {
     const res = await axios.post("/api/stat/storage/cleanup", { target });
     if (res.data.status !== "ok") {
-      showToast(
-        res.data.message || tm("system.cleanup.messages.cleanupFailed"),
-        "error",
-      );
+      showToast(res.data.message || tm("system.cleanup.messages.cleanupFailed"), "error");
       return;
     }
 
@@ -245,11 +235,7 @@ const cleanupStorage = async (target) => {
       }),
     );
   } catch (error) {
-    showToast(
-      error?.response?.data?.message ||
-        tm("system.cleanup.messages.cleanupFailed"),
-      "error",
-    );
+    showToast(error?.response?.data?.message || tm("system.cleanup.messages.cleanupFailed"), "error");
   } finally {
     cleaningTarget.value = "";
   }

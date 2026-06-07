@@ -37,7 +37,7 @@
 
 <script>
 export default {
-  name: 'UmoDisplay',
+  name: "UmoDisplay",
   props: {
     umo: {
       type: String,
@@ -45,27 +45,27 @@ export default {
     },
     platform: {
       type: String,
-      default: '',
+      default: "",
     },
     messageType: {
       type: String,
-      default: '',
+      default: "",
     },
     sessionId: {
       type: String,
-      default: '',
+      default: "",
     },
     autoName: {
       type: String,
-      default: '',
+      default: "",
     },
     userAlias: {
       type: String,
-      default: '',
+      default: "",
     },
     customName: {
       type: String,
-      default: '',
+      default: "",
     },
     compact: {
       type: Boolean,
@@ -89,50 +89,50 @@ export default {
     },
     editTooltip: {
       type: String,
-      default: '',
+      default: "",
     },
   },
-  emits: ['edit'],
+  emits: ["edit"],
   computed: {
     umoParts() {
-      return this.umo.split(':')
+      return this.umo.split(":");
     },
     resolvedPlatform() {
-      return this.platform || this.umoParts[0] || ''
+      return this.platform || this.umoParts[0] || "";
     },
     resolvedMessageType() {
-      return this.messageType || this.umoParts[1] || ''
+      return this.messageType || this.umoParts[1] || "";
     },
     resolvedSessionId() {
-      return this.sessionId || this.umoParts.slice(2).join(':') || this.umo
+      return this.sessionId || this.umoParts.slice(2).join(":") || this.umo;
     },
     aliasName() {
-      return this.userAlias || this.customName || ''
+      return this.userAlias || this.customName || "";
     },
     displayName() {
       if (this.aliasName && this.autoName && this.aliasName !== this.autoName) {
-        return `${this.aliasName}（${this.autoName}）`
+        return `${this.aliasName}（${this.autoName}）`;
       }
-      return this.aliasName || this.autoName || this.umo
+      return this.aliasName || this.autoName || this.umo;
     },
     displayNameTitle() {
-      return this.hasReadableName ? `${this.displayName} / UMO: ${this.umo}` : this.umo
+      return this.hasReadableName ? `${this.displayName} / UMO: ${this.umo}` : this.umo;
     },
     hasReadableName() {
-      return Boolean(this.aliasName || this.autoName)
+      return Boolean(this.aliasName || this.autoName);
     },
     platformColor() {
       const colors = {
-        aiocqhttp: 'blue',
-        qq_official: 'purple',
-        telegram: 'light-blue',
-        discord: 'indigo',
-        webchat: 'orange',
-      }
-      return colors[this.resolvedPlatform] || 'grey'
+        aiocqhttp: "blue",
+        qq_official: "purple",
+        telegram: "light-blue",
+        discord: "indigo",
+        webchat: "orange",
+      };
+      return colors[this.resolvedPlatform] || "grey";
     },
   },
-}
+};
 </script>
 
 <style scoped>

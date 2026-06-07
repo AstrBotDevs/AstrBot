@@ -1,9 +1,9 @@
 /**
  * 指令过滤逻辑 Composable
  */
-import { ref, computed, type Ref } from "vue";
-import type { CommandItem, FilterState } from "../types";
+import { computed, type Ref, ref } from "vue";
 import { normalizeTextInput } from "@/utils/inputValue";
+import type { CommandItem, FilterState } from "../types";
 
 export function useCommandFilters(commands: Ref<CommandItem[]>) {
   // 过滤状态
@@ -36,9 +36,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
    */
   const availablePlugins = computed(() => {
     const plugins = new Set(
-      commands.value
-        .filter((cmd) => effectiveShowSystemPlugins.value || !cmd.reserved)
-        .map((cmd) => cmd.plugin),
+      commands.value.filter((cmd) => effectiveShowSystemPlugins.value || !cmd.reserved).map((cmd) => cmd.plugin),
     );
     return Array.from(plugins).sort();
   });
@@ -69,8 +67,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
     // 权限过滤
     if (permissionFilter.value !== "all") {
       if (permissionFilter.value === "everyone") {
-        if (cmd.permission !== "everyone" && cmd.permission !== "member")
-          return false;
+        if (cmd.permission !== "everyone" && cmd.permission !== "member") return false;
       } else if (cmd.permission !== permissionFilter.value) {
         return false;
       }
@@ -86,10 +83,8 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
     // 类型过滤
     if (typeFilter.value !== "all") {
       if (typeFilter.value === "group" && cmd.type !== "group") return false;
-      if (typeFilter.value === "command" && cmd.type !== "command")
-        return false;
-      if (typeFilter.value === "sub_command" && cmd.type !== "sub_command")
-        return false;
+      if (typeFilter.value === "command" && cmd.type !== "command") return false;
+      if (typeFilter.value === "sub_command" && cmd.type !== "sub_command") return false;
     }
 
     return true;
@@ -107,9 +102,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
       // 对于指令组，检查组本身或子指令是否匹配
       if (cmd.is_group) {
         const groupMatches = matchesFilters(cmd, query);
-        const matchingSubCmds = (cmd.sub_commands || []).filter((sub) =>
-          matchesFilters(sub, query),
-        );
+        const matchingSubCmds = (cmd.sub_commands || []).filter((sub) => matchesFilters(sub, query));
 
         // 如果组匹配或有匹配的子指令，则包含它
         if (groupMatches || matchingSubCmds.length > 0) {
@@ -144,9 +137,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
     }
 
     // 按 effective_command 排序冲突指令，使其分组在一起
-    conflictCmds.sort((a, b) =>
-      (a.effective_command || "").localeCompare(b.effective_command || ""),
-    );
+    conflictCmds.sort((a, b) => (a.effective_command || "").localeCompare(b.effective_command || ""));
 
     return [...conflictCmds, ...normalCmds];
   });

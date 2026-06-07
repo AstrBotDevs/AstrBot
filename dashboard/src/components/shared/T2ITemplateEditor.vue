@@ -273,11 +273,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from "vue";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
+import { computed, nextTick, ref, watch } from "vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { useToast } from "@/utils/toast";
 import axios from "@/utils/request";
+import { useToast } from "@/utils/toast";
 
 const { t } = useI18n();
 const { tm } = useModuleI18n("core.shared");
@@ -324,9 +324,7 @@ const syncPreviewVersion = async () => {
     const res = await axios.get("/api/stat/version");
     const rawVersion = res?.data?.data?.version || res?.data?.version;
     if (rawVersion) {
-      previewVersion.value = rawVersion.startsWith("v")
-        ? rawVersion
-        : `v${rawVersion}`;
+      previewVersion.value = rawVersion.startsWith("v") ? rawVersion : `v${rawVersion}`;
     }
   } catch (error) {
     console.warn("Failed to fetch version:", error);
@@ -343,14 +341,8 @@ const previewData = computed(() => ({
 const previewContent = computed(() => {
   try {
     let content = templateContent.value;
-    content = content.replace(
-      /\{\{\s*text\s*\|\s*safe\s*\}\}/g,
-      previewData.value.text,
-    );
-    content = content.replace(
-      /\{\{\s*version\s*\}\}/g,
-      previewData.value.version,
-    );
+    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, previewData.value.text);
+    content = content.replace(/\{\{\s*version\s*\}\}/g, previewData.value.version);
     return content;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

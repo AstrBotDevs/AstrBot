@@ -1,11 +1,11 @@
 <script setup>
-import TraceDisplayer from '@/components/shared/TraceDisplayer.vue';
-import { useModuleI18n } from '@/i18n/composables';
-import { computed, ref, onMounted } from 'vue';
-import { useTheme } from 'vuetify';
-import axios from 'axios';
+import axios from "axios";
+import { computed, onMounted, ref } from "vue";
+import { useTheme } from "vuetify";
+import TraceDisplayer from "@/components/shared/TraceDisplayer.vue";
+import { useModuleI18n } from "@/i18n/composables";
 
-const { tm } = useModuleI18n('features/trace');
+const { tm } = useModuleI18n("features/trace");
 const theme = useTheme();
 
 const isDark = computed(() => theme.global.current.value.dark);
@@ -15,25 +15,25 @@ const traceDisplayerKey = ref(0);
 
 const fetchTraceSettings = async () => {
   try {
-    const res = await axios.get('/api/trace/settings');
-    if (res.data?.status === 'ok') {
+    const res = await axios.get("/api/trace/settings");
+    if (res.data?.status === "ok") {
       traceEnabled.value = res.data.data?.trace_enable ?? true;
     }
   } catch (err) {
-    console.error('Failed to fetch trace settings:', err);
+    console.error("Failed to fetch trace settings:", err);
   }
 };
 
 const updateTraceSettings = async () => {
   loading.value = true;
   try {
-    await axios.post('/api/trace/settings', {
-      trace_enable: traceEnabled.value
+    await axios.post("/api/trace/settings", {
+      trace_enable: traceEnabled.value,
     });
     // Refresh the TraceDisplayer component to reconnect SSE
     traceDisplayerKey.value += 1;
   } catch (err) {
-    console.error('Failed to update trace settings:', err);
+    console.error("Failed to update trace settings:", err);
   } finally {
     loading.value = false;
   }

@@ -39,7 +39,7 @@ export const useCommonStore = defineStore("common", {
       };
       const token = localStorage.getItem("token");
       if (token) {
-        headers.Authorization = "Bearer " + token;
+        headers.Authorization = `Bearer ${token}`;
       }
 
       // Resolve the URL using resolveApiUrl so base URL / proxy rules are applied
@@ -100,38 +100,24 @@ export const useCommonStore = defineStore("common", {
               const logObject = JSON.parse(logLine);
 
               if (!logObject.uuid) {
-                if (
-                  typeof crypto !== "undefined" &&
-                  typeof crypto.randomUUID === "function"
-                ) {
+                if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
                   logObject.uuid = crypto.randomUUID();
                 } else {
                   // Fallback UUID v4 generator
-                  logObject.uuid =
-                    "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
-                      /[xy]/g,
-                      function (c) {
-                        const r = (Math.random() * 16) | 0,
-                          v = c == "x" ? r : (r & 0x3) | 0x8;
-                        return v.toString(16);
-                      },
-                    );
+                  logObject.uuid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+                    const r = (Math.random() * 16) | 0,
+                      v = c === "x" ? r : (r & 0x3) | 0x8;
+                    return v.toString(16);
+                  });
                 }
               }
 
               this.log_cache.push(logObject);
               if (this.log_cache.length > this.log_cache_max_len) {
-                this.log_cache.splice(
-                  0,
-                  this.log_cache.length - this.log_cache_max_len,
-                );
+                this.log_cache.splice(0, this.log_cache.length - this.log_cache_max_len);
               }
             } catch (err) {
-              console.warn(
-                "Failed to parse SSE log line, skipping:",
-                err,
-                logLine,
-              );
+              console.warn("Failed to parse SSE log line, skipping:", err, logLine);
             }
           });
 
@@ -147,7 +133,7 @@ export const useCommonStore = defineStore("common", {
           level: "ERROR",
           time: Date.now() / 1000,
           data: "SSE Connection failed, retrying...",
-          uuid: "error-" + Date.now(),
+          uuid: `error-${Date.now()}`,
         });
         setTimeout(() => {
           this.eventSource = null;
@@ -202,7 +188,7 @@ export const useCommonStore = defineStore("common", {
         return this.startTime;
       }
       // Fire-and-forget fetch to populate startTime
-      this.fetchStartTime().catch(() => {});
+      this.fetchStartTime().catch(() => undefined);
       return this.startTime;
     },
 
@@ -211,14 +197,10 @@ export const useCommonStore = defineStore("common", {
         return Promise.resolve(this.pluginMarketData);
       }
 
-      let url = force
-        ? "/api/plugin/market_list?force_refresh=true"
-        : "/api/plugin/market_list";
+      let url = force ? "/api/plugin/market_list?force_refresh=true" : "/api/plugin/market_list";
 
       if (customSource) {
-        url +=
-          (url.includes("?") ? "&" : "?") +
-          `custom_registry=${encodeURIComponent(customSource)}`;
+        url += `${url.includes("?") ? "&" : "?"}custom_registry=${encodeURIComponent(customSource)}`;
       }
 
       try {
@@ -242,19 +224,10 @@ export const useCommonStore = defineStore("common", {
               pinned: pluginData?.pinned ? pluginData.pinned : false,
               stars: pluginData?.stars ? pluginData.stars : 0,
               updated_at: pluginData?.updated_at ? pluginData.updated_at : "",
-              download_url: pluginData?.download_url
-                ? pluginData.download_url
-                : "",
-              display_name: pluginData?.display_name
-                ? pluginData.display_name
-                : "",
-              i18n:
-                pluginData?.i18n && typeof pluginData.i18n === "object"
-                  ? pluginData.i18n
-                  : {},
-              astrbot_version: pluginData?.astrbot_version
-                ? pluginData.astrbot_version
-                : "",
+              download_url: pluginData?.download_url ? pluginData.download_url : "",
+              display_name: pluginData?.display_name ? pluginData.display_name : "",
+              i18n: pluginData?.i18n && typeof pluginData.i18n === "object" ? pluginData.i18n : {},
+              astrbot_version: pluginData?.astrbot_version ? pluginData.astrbot_version : "",
               category: pluginData?.category ? pluginData.category : "",
               support_platforms: Array.isArray(pluginData?.support_platforms)
                 ? pluginData.support_platforms

@@ -297,22 +297,16 @@
 </template>
 
 <script setup lang="ts">
-import {
-  ref,
-  computed,
-  watch,
-  nextTick,
-  onMounted,
-  onBeforeUnmount,
-} from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useDisplay } from "vuetify";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import type { Session } from "@/composables/useSessions";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { isComposingEnter } from "@/utils/imeInput.mjs";
 import ConfigSelector from "./ConfigSelector.vue";
+// biome-ignore lint/style/useImportType: Vue template components require runtime imports.
 import ProviderModelMenu from "./ProviderModelMenu.vue";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import type { Session } from "@/composables/useSessions";
 
 interface StagedFileInfo {
   attachment_id: string;
@@ -369,15 +363,11 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
-const isDark = computed(
-  () => useCustomizerStore().uiTheme === "PurpleThemeDark",
-);
+const isDark = computed(() => useCustomizerStore().uiTheme === "PurpleThemeDark");
 
 const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
-const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
-  null,
-);
+const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(null);
 const showProviderSelector = ref(true);
 const isReplyClosing = ref(false);
 const isComposing = ref(false);
@@ -390,9 +380,7 @@ const localPrompt = computed({
   set: (value) => emit("update:prompt", value),
 });
 
-const sessionPlatformId = computed(
-  () => props.currentSession?.platform_id || "webchat",
-);
+const sessionPlatformId = computed(() => props.currentSession?.platform_id || "webchat");
 const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
 const canSend = computed(() => {
@@ -404,10 +392,7 @@ const canSend = computed(() => {
   );
 });
 
-const fileTypeStyles: Record<
-  string,
-  { color: string; icon: string; label: string }
-> = {
+const fileTypeStyles: Record<string, { color: string; icon: string; label: string }> = {
   pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
   txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
   md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
@@ -465,7 +450,7 @@ function autoResize() {
   const el = inputField.value;
   if (!el) return;
   el.style.height = "auto";
-  el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
 }
 
 watch(localPrompt, () => {
@@ -494,10 +479,7 @@ function handleKeyDown(e: KeyboardEvent) {
     return;
   }
 
-  const isSendHotkey =
-    e.ctrlKey ||
-    e.metaKey ||
-    (props.sendShortcut === "enter" ? !e.shiftKey : e.shiftKey);
+  const isSendHotkey = e.ctrlKey || e.metaKey || (props.sendShortcut === "enter" ? !e.shiftKey : e.shiftKey);
 
   if (isSendHotkey) {
     e.preventDefault();
@@ -599,10 +581,7 @@ function handleRecordClick() {
   }
 }
 
-function handleConfigChange(payload: {
-  configId: string;
-  agentRunnerType: string;
-}) {
+function handleConfigChange(payload: { configId: string; agentRunnerType: string }) {
   const runnerType = (payload.agentRunnerType || "").toLowerCase();
   const isInternal = runnerType === "internal" || runnerType === "local";
   showProviderSelector.value = isInternal;

@@ -455,24 +455,19 @@
 </template>
 
 <script lang="ts">
+import { mapActions, mapState } from "pinia";
 import { defineComponent } from "vue";
+import type { Folder, FolderTreeNode } from "@/components/folder/types";
+import PersonaForm from "@/components/shared/PersonaForm.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { usePersonaStore } from "@/stores/personaStore";
-import { mapState, mapActions } from "pinia";
-
-import FolderTree from "./FolderTree.vue";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
+import CreateFolderDialog from "./CreateFolderDialog.vue";
 import FolderBreadcrumb from "./FolderBreadcrumb.vue";
 import FolderCard from "./FolderCard.vue";
-import PersonaCard from "./PersonaCard.vue";
-import PersonaForm from "@/components/shared/PersonaForm.vue";
-import CreateFolderDialog from "./CreateFolderDialog.vue";
+import FolderTree from "./FolderTree.vue";
 import MoveToFolderDialog from "./MoveToFolderDialog.vue";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
-
-import type { Folder, FolderTreeNode } from "@/components/folder/types";
+import PersonaCard from "./PersonaCard.vue";
 
 interface Persona {
   persona_id: string;
@@ -548,13 +543,7 @@ export default defineComponent({
     };
   },
   computed: {
-    ...mapState(usePersonaStore, [
-      "folderTree",
-      "currentFolderId",
-      "currentFolders",
-      "currentPersonas",
-      "loading",
-    ]),
+    ...mapState(usePersonaStore, ["folderTree", "currentFolderId", "currentFolders", "currentPersonas", "loading"]),
     currentFolderName(): string | null {
       if (!this.currentFolderId) {
         return null; // 根目录，PersonaForm 会使用 tm('form.rootFolder')
@@ -693,10 +682,7 @@ export default defineComponent({
 
       this.cloneLoading = true;
       try {
-        await this.clonePersona(
-          this.cloningPersona.persona_id,
-          this.cloneNewPersonaId,
-        );
+        await this.clonePersona(this.cloningPersona.persona_id, this.cloneNewPersonaId);
         this.showSuccess(this.tm("cloneDialog.success"));
         this.showCloneDialog = false;
       } catch (error: any) {
@@ -748,10 +734,7 @@ export default defineComponent({
             if (i < dialogs.length) {
               if (typeof dialogs[i] === "string") {
                 userMessage = dialogs[i];
-              } else if (
-                typeof dialogs[i] === "object" &&
-                dialogs[i] !== null
-              ) {
+              } else if (typeof dialogs[i] === "object" && dialogs[i] !== null) {
                 userMessage = (dialogs[i] as any).user || "";
               }
             }
@@ -761,10 +744,7 @@ export default defineComponent({
             if (i + 1 < dialogs.length) {
               if (typeof dialogs[i + 1] === "string") {
                 assistantMessage = dialogs[i + 1];
-              } else if (
-                typeof dialogs[i + 1] === "object" &&
-                dialogs[i + 1] !== null
-              ) {
+              } else if (typeof dialogs[i + 1] === "object" && dialogs[i + 1] !== null) {
                 assistantMessage = (dialogs[i + 1] as any).assistant || "";
               }
             }
@@ -776,7 +756,7 @@ export default defineComponent({
         }
 
         // 清理文件名中的特殊字符
-        const safeFileName = persona.persona_id.replace(/[\/\\:*?"<>|]/g, "_");
+        const safeFileName = persona.persona_id.replace(/[/\\:*?"<>|]/g, "_");
 
         // 创建 JSON 文件并下载
         const jsonStr = JSON.stringify(exportData, null, 2);
@@ -833,10 +813,7 @@ export default defineComponent({
             };
 
             // 转换对话对
-            if (
-              firstPersona.begin_dialogs &&
-              Array.isArray(firstPersona.begin_dialogs)
-            ) {
+            if (firstPersona.begin_dialogs && Array.isArray(firstPersona.begin_dialogs)) {
               for (const dialog of firstPersona.begin_dialogs) {
                 if (dialog.user) {
                   importData.begin_dialogs.push(dialog.user);
@@ -854,13 +831,9 @@ export default defineComponent({
           }
 
           // 检查ID是否已存在
-          const existingPersonas = this.currentPersonas.map(
-            (p) => p.persona_id,
-          );
+          const existingPersonas = this.currentPersonas.map((p) => p.persona_id);
           if (existingPersonas.includes(importData.persona_id)) {
-            throw new Error(
-              this.tm("messages.importExists", { id: importData.persona_id }),
-            );
+            throw new Error(this.tm("messages.importExists", { id: importData.persona_id }));
           }
 
           // 执行导入

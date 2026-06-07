@@ -38,10 +38,7 @@ const refIndex = computed(() => props.node?.content?.trim() || "");
 // 根据 refIndex 查找对应的 URL
 const resultData = computed(() => {
   if (!refIndex.value) return null;
-  const results =
-    typeof webSearchResults === "function"
-      ? webSearchResults()
-      : webSearchResults;
+  const results = typeof webSearchResults === "function" ? webSearchResults() : webSearchResults;
   return results?.[refIndex.value] || null;
 });
 
@@ -58,18 +55,12 @@ const domain = computed(() => {
 });
 
 const chipStyle = computed(() => ({
-  backgroundColor: isDark
-    ? "rgba(var(--v-theme-on-surface), 0.08)"
-    : "rgba(var(--v-theme-on-surface), 0.04)",
-  color: isDark
-    ? "rgba(var(--v-theme-on-surface), 0.62)"
-    : "rgba(var(--v-theme-on-surface), 0.72)",
+  backgroundColor: isDark ? "rgba(var(--v-theme-on-surface), 0.08)" : "rgba(var(--v-theme-on-surface), 0.04)",
+  color: isDark ? "rgba(var(--v-theme-on-surface), 0.62)" : "rgba(var(--v-theme-on-surface), 0.72)",
 }));
 
 const fallbackStyle = computed(() => ({
-  color: isDark
-    ? "rgba(var(--v-theme-on-surface), 0.62)"
-    : "rgba(var(--v-theme-on-surface), 0.72)",
+  color: isDark ? "rgba(var(--v-theme-on-surface), 0.62)" : "rgba(var(--v-theme-on-surface), 0.72)",
 }));
 </script>
 

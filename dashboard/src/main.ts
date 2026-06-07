@@ -1,17 +1,16 @@
-import { createApp } from "vue";
 import { createPinia } from "pinia";
+import { createApp } from "vue";
 import App from "./App.vue";
-import { router } from "./router";
-import vuetify from "./plugins/vuetify";
-import confirmPlugin from "./plugins/confirmPlugin";
 import { setupI18n } from "./i18n/composables";
+import confirmPlugin from "./plugins/confirmPlugin";
+import vuetify from "./plugins/vuetify";
+import { router } from "./router";
 import "@/scss/style.scss";
-import VueApexCharts from "vue3-apexcharts";
-import { useCustomizerStore } from "./stores/customizer";
-
-import print from "vue3-print-nb";
 import { loader } from "@guolao/vue-monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
+import VueApexCharts from "vue3-apexcharts";
+import print from "vue3-print-nb";
+import { useCustomizerStore } from "./stores/customizer";
 import "monaco-editor/esm/vs/basic-languages/dockerfile/dockerfile.contribution";
 import "monaco-editor/esm/vs/basic-languages/ini/ini.contribution";
 import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution";
@@ -27,17 +26,12 @@ import "monaco-editor/esm/vs/language/css/monaco.contribution";
 import "monaco-editor/esm/vs/language/html/monaco.contribution";
 import "monaco-editor/esm/vs/language/json/monaco.contribution";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import cssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
 import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
-import {
-  getApiBaseUrl,
-  resolveApiUrl,
-  resolvePublicUrl,
-  setApiBaseUrl,
-} from "@/utils/request";
+import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
+import { DARK_THEME_NAME, LIGHT_THEME_NAME } from "@/theme/constants";
+import { getApiBaseUrl, resolveApiUrl, resolvePublicUrl, setApiBaseUrl } from "@/utils/request";
 import { waitForRouterReadyInBackground } from "./utils/routerReadiness.mjs";
-import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
 
 // Monaco worker configuration
 (window as any).MonacoEnvironment = {
@@ -92,10 +86,8 @@ async function mountApp(app: any, pinia: any, waitForRouter = true) {
       if (!theme?.colors) return;
       if (storedPrimary) theme.colors.primary = storedPrimary;
       if (storedSecondary) theme.colors.secondary = storedSecondary;
-      if (storedPrimary && theme.colors.darkprimary)
-        theme.colors.darkprimary = storedPrimary;
-      if (storedSecondary && theme.colors.darksecondary)
-        theme.colors.darksecondary = storedSecondary;
+      if (storedPrimary && theme.colors.darkprimary) theme.colors.darkprimary = storedPrimary;
+      if (storedSecondary && theme.colors.darksecondary) theme.colors.darksecondary = storedSecondary;
     });
   }
 }
@@ -109,13 +101,10 @@ async function initApp() {
 
   // 优先使用 localStorage 中的配置，其次是 config.json，最后是空字符串
   const localApiUrl = localStorage.getItem("apiBaseUrl");
-  const apiBaseUrl =
-    localApiUrl !== null ? localApiUrl : configApiUrl || envApiUrl;
+  const apiBaseUrl = localApiUrl !== null ? localApiUrl : configApiUrl || envApiUrl;
 
   if (apiBaseUrl) {
-    console.info(
-      `API Base URL set to: ${apiBaseUrl} (Local: ${localApiUrl}, Config: ${configApiUrl})`,
-    );
+    console.info(`API Base URL set to: ${apiBaseUrl} (Local: ${localApiUrl}, Config: ${configApiUrl})`);
   }
 
   setApiBaseUrl(apiBaseUrl);
@@ -134,10 +123,7 @@ async function initApp() {
 
     const token = localStorage.getItem("token");
 
-    const inputHeaders =
-      typeof input !== "string" && "headers" in input
-        ? (input as Request).headers
-        : undefined;
+    const inputHeaders = typeof input !== "string" && "headers" in input ? (input as Request).headers : undefined;
     const headers = new Headers(init?.headers ?? inputHeaders);
     if (token && !headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${token}`);
@@ -162,8 +148,7 @@ async function initApp() {
 
     // Suppress known Vuetify 4 internal warning about slot invocation
     app.config.warnHandler = (msg, _instance, _trace) => {
-      if (msg.includes('Slot "default" invoked outside of the render function'))
-        return;
+      if (msg.includes('Slot "default" invoked outside of the render function')) return;
       console.warn(msg);
     };
 

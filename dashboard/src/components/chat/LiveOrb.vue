@@ -79,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const props = defineProps<{
   energy: number; // 0.0 - 1.0
@@ -214,7 +214,7 @@ onMounted(() => {
       if (Math.random() > 0.7) {
         content += "\n";
       } else {
-        content += chars[Math.floor(Math.random() * chars.length)] + "\n";
+        content += `${chars[Math.floor(Math.random() * chars.length)]}\n`;
       }
     }
     // Repeat once to make it seamless

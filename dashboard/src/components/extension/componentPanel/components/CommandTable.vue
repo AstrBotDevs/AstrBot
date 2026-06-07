@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import type { CommandItem, TypeInfo, StatusInfo } from "../types";
+import type { CommandItem, StatusInfo, TypeInfo } from "../types";
 
 const { tm } = useModuleI18n("features/command");
 
@@ -18,11 +18,7 @@ const emit = defineEmits<{
   (e: "toggle-command", cmd: CommandItem): void;
   (e: "rename", cmd: CommandItem): void;
   (e: "view-details", cmd: CommandItem): void;
-  (
-    e: "update-permission",
-    cmd: CommandItem,
-    permission: "admin" | "member",
-  ): void;
+  (e: "update-permission", cmd: CommandItem, permission: "admin" | "member"): void;
 }>();
 
 // 表格表头
@@ -141,8 +137,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
 
 const canToggle = (cmd: CommandItem): boolean => cmd.supports_toggle !== false;
 const canRename = (cmd: CommandItem): boolean => cmd.supports_rename !== false;
-const canEditPermission = (cmd: CommandItem): boolean =>
-  cmd.supports_permission !== false;
+const canEditPermission = (cmd: CommandItem): boolean => cmd.supports_permission !== false;
 </script>
 
 <template>

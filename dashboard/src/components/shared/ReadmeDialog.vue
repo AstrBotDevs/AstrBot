@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, watch, computed, onUnmounted } from "vue";
-import MarkdownIt from "markdown-it";
-import hljs from "highlight.js";
-import axios from "@/utils/request";
 import DOMPurify from "dompurify";
+import hljs from "highlight.js";
+import MarkdownIt from "markdown-it";
+import { computed, onUnmounted, ref, watch } from "vue";
+import axios from "@/utils/request";
 import "highlight.js/styles/github.css";
 import { useI18n } from "@/i18n/composables";
 
@@ -35,8 +35,7 @@ const props = defineProps({
   mode: {
     type: String,
     default: "readme",
-    validator: (value) =>
-      ["readme", "changelog", "first-notice"].includes(value),
+    validator: (value) => ["readme", "changelog", "first-notice"].includes(value),
   },
 });
 
@@ -78,9 +77,7 @@ md.renderer.rules.fence = (tokens, idx) => {
   const code = token.content;
 
   const highlighted =
-    lang && hljs.getLanguage(lang)
-      ? hljs.highlight(code, { language: lang }).value
-      : md.utils.escapeHtml(code);
+    lang && hljs.getLanguage(lang) ? hljs.highlight(code, { language: lang }).value : md.utils.escapeHtml(code);
 
   return `<div class="code-block-wrapper">
       ${lang ? `<span class="code-lang-label">${lang}</span>` : ""}
@@ -234,9 +231,7 @@ const modeConfig = computed(() => {
   };
 });
 
-const requiresPluginName = computed(
-  () => props.mode === "readme" || props.mode === "changelog",
-);
+const requiresPluginName = computed(() => props.mode === "readme" || props.mode === "changelog");
 
 async function fetchContent() {
   if (requiresPluginName.value && !props.pluginName) return;
@@ -305,9 +300,7 @@ function handleContainerClick(event: MouseEvent) {
   const targetId = rawHref ? decodeURIComponent(rawHref.slice(1)) : "";
   if (!targetId) return;
 
-  const target = scrollContainer.value?.querySelector(
-    `#${CSS.escape(targetId)}`,
-  );
+  const target = scrollContainer.value?.querySelector(`#${CSS.escape(targetId)}`);
   if (!target) return;
 
   event.preventDefault();

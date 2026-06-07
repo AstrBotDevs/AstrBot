@@ -61,9 +61,7 @@ export const usePersonaStore = defineStore("persona", {
       if (this.breadcrumbPath.length === 0) {
         return "根目录";
       }
-      return (
-        this.breadcrumbPath[this.breadcrumbPath.length - 1]?.name || "根目录"
-      );
+      return this.breadcrumbPath[this.breadcrumbPath.length - 1]?.name || "根目录";
     },
   },
 
@@ -181,10 +179,7 @@ export const usePersonaStore = defineStore("persona", {
     /**
      * 移动 Persona 到文件夹
      */
-    async movePersonaToFolder(
-      personaId: string,
-      targetFolderId: string | null,
-    ): Promise<void> {
+    async movePersonaToFolder(personaId: string, targetFolderId: string | null): Promise<void> {
       const response = await axios.post("/api/persona/move", {
         persona_id: personaId,
         folder_id: targetFolderId,
@@ -201,10 +196,7 @@ export const usePersonaStore = defineStore("persona", {
     /**
      * 移动文件夹到另一个文件夹
      */
-    async moveFolderToFolder(
-      folderId: string,
-      targetParentId: string | null,
-    ): Promise<void> {
+    async moveFolderToFolder(folderId: string, targetParentId: string | null): Promise<void> {
       const response = await axios.post("/api/persona/folder/update", {
         folder_id: folderId,
         parent_id: targetParentId,
@@ -244,11 +236,7 @@ export const usePersonaStore = defineStore("persona", {
     /**
      * 更新文件夹
      */
-    async updateFolder(data: {
-      folder_id: string;
-      name?: string;
-      description?: string;
-    }): Promise<void> {
+    async updateFolder(data: { folder_id: string; name?: string; description?: string }): Promise<void> {
       const response = await axios.post("/api/persona/folder/update", data);
 
       if (response.data.status !== "ok") {
@@ -294,10 +282,7 @@ export const usePersonaStore = defineStore("persona", {
     /**
      * 克隆 Persona
      */
-    async clonePersona(
-      sourcePersonaId: string,
-      newPersonaId: string,
-    ): Promise<Persona> {
+    async clonePersona(sourcePersonaId: string, newPersonaId: string): Promise<Persona> {
       const response = await axios.post("/api/persona/clone", {
         source_persona_id: sourcePersonaId,
         new_persona_id: newPersonaId,

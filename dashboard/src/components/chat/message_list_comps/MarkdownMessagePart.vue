@@ -15,8 +15,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, provide } from "vue";
 import { MarkdownRender } from "markstream-vue";
+import { computed, provide } from "vue";
 
 const props = defineProps<{
   content: string;
@@ -29,8 +29,7 @@ const props = defineProps<{
 const isDarkRef = computed(() => props.isDark);
 const refsByIndex = computed(() => {
   const messageRefs = props.refs;
-  const refs =
-    messageRefs && Array.isArray(messageRefs.used) ? messageRefs.used : [];
+  const refs = messageRefs && Array.isArray(messageRefs.used) ? messageRefs.used : [];
   return refs.reduce<Record<string, Record<string, unknown>>>((acc, item) => {
     if (item.index != null) {
       acc[String(item.index)] = item;

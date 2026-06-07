@@ -44,41 +44,41 @@
 </template>
 
 <script>
-import axios from 'axios';
-import { useModuleI18n } from '@/i18n/composables';
-import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
+import axios from "axios";
+import QrCodeViewer from "@/components/shared/QrCodeViewer.vue";
+import { useModuleI18n } from "@/i18n/composables";
 
-const FEISHU_DOMAIN = 'https://open.feishu.cn';
+const FEISHU_DOMAIN = "https://open.feishu.cn";
 
 const REGISTRATION_ACTIONS = {
   lark: {
-    endpoint: '/api/platform/registration/lark',
-    icon: 'mdi-qrcode',
-    titleKey: 'registrationAction.lark.title',
-    scanTitleKey: 'registrationAction.lark.scanTitle',
-    successKey: 'registrationAction.created',
+    endpoint: "/api/platform/registration/lark",
+    icon: "mdi-qrcode",
+    titleKey: "registrationAction.lark.title",
+    scanTitleKey: "registrationAction.lark.scanTitle",
+    successKey: "registrationAction.created",
   },
   weixin_oc: {
-    endpoint: '/api/platform/registration/weixin_oc',
-    icon: 'mdi-qrcode',
-    titleKey: 'registrationAction.weixinOc.title',
-    scanTitleKey: 'registrationAction.weixinOc.scanTitle',
-    successKey: 'registrationAction.weixinOc.created',
-    statusKeyPrefix: 'registrationAction.weixinOc.status',
+    endpoint: "/api/platform/registration/weixin_oc",
+    icon: "mdi-qrcode",
+    titleKey: "registrationAction.weixinOc.title",
+    scanTitleKey: "registrationAction.weixinOc.scanTitle",
+    successKey: "registrationAction.weixinOc.created",
+    statusKeyPrefix: "registrationAction.weixinOc.status",
   },
   dingtalk: {
-    endpoint: '/api/platform/registration/dingtalk',
-    icon: 'mdi-qrcode',
-    titleKey: 'registrationAction.dingtalk.title',
-    scanTitleKey: 'registrationAction.dingtalk.scanTitle',
-    successKey: 'registrationAction.dingtalk.created',
+    endpoint: "/api/platform/registration/dingtalk",
+    icon: "mdi-qrcode",
+    titleKey: "registrationAction.dingtalk.title",
+    scanTitleKey: "registrationAction.dingtalk.scanTitle",
+    successKey: "registrationAction.dingtalk.created",
   },
 };
 
 export default {
-  name: 'PlatformRegistrationAction',
+  name: "PlatformRegistrationAction",
   components: { QrCodeViewer },
-  emits: ['success', 'error', 'created'],
+  emits: ["success", "error", "created"],
   props: {
     platformConfig: {
       type: Object,
@@ -90,13 +90,13 @@ export default {
     },
   },
   setup() {
-    const { tm } = useModuleI18n('features/platform');
+    const { tm } = useModuleI18n("features/platform");
     return { tm };
   },
   data() {
     return {
       flow: {
-        status: 'idle',
+        status: "idle",
       },
       loading: false,
       pollTimer: null,
@@ -110,10 +110,7 @@ export default {
       return this.platformConfig?.domain || FEISHU_DOMAIN;
     },
     qrValue() {
-      return this.flow.verification_uri_complete
-        || this.flow.qrcode_img_content
-        || this.flow.qrcode
-        || '';
+      return this.flow.verification_uri_complete || this.flow.qrcode_img_content || this.flow.qrcode || "";
     },
   },
   watch: {
@@ -127,7 +124,7 @@ export default {
         }
       },
     },
-    'platformConfig.type'() {
+    "platformConfig.type"() {
       this.resetFlow();
       this.ensureStarted();
     },
@@ -138,10 +135,10 @@ export default {
   methods: {
     resetFlow() {
       this.stopPolling();
-      this.flow = { status: 'idle' };
+      this.flow = { status: "idle" };
     },
     ensureStarted() {
-      if (!this.active || !this.action || this.flow.status !== 'idle') {
+      if (!this.active || !this.action || this.flow.status !== "idle") {
         return;
       }
       this.startAction();
@@ -162,25 +159,25 @@ export default {
       }
       this.stopPolling();
       this.loading = true;
-      this.flow = { status: 'starting' };
+      this.flow = { status: "starting" };
       try {
-        const res = await axios.post(this.action.endpoint, this.buildPayload('start'));
-        if (res.data.status !== 'ok') {
-          throw new Error(res.data.message || this.tm('registrationAction.startFailed'));
+        const res = await axios.post(this.action.endpoint, this.buildPayload("start"));
+        if (res.data.status !== "ok") {
+          throw new Error(res.data.message || this.tm("registrationAction.startFailed"));
         }
         this.flow = {
           ...res.data.data,
-          status: res.data.data?.status || 'pending',
+          status: res.data.data?.status || "pending",
         };
-        if (this.flow.registration_code && this.flow.status === 'pending') {
+        if (this.flow.registration_code && this.flow.status === "pending") {
           this.schedulePoll(this.flow.interval || 5);
         }
       } catch (err) {
         this.flow = {
-          status: 'error',
-          message: err.response?.data?.message || err.message || this.tm('registrationAction.startFailed'),
+          status: "error",
+          message: err.response?.data?.message || err.message || this.tm("registrationAction.startFailed"),
         };
-        this.$emit('error', this.flow.message);
+        this.$emit("error", this.flow.message);
       } finally {
         this.loading = false;
       }
@@ -203,29 +200,31 @@ export default {
         return;
       }
       try {
-        const res = await axios.post(this.action.endpoint, this.buildPayload('poll', {
-          registration_code: this.flow.registration_code,
-        }));
-        if (res.data.status !== 'ok') {
-          throw new Error(res.data.message || this.tm('registrationAction.pollFailed'));
+        const res = await axios.post(
+          this.action.endpoint,
+          this.buildPayload("poll", {
+            registration_code: this.flow.registration_code,
+          }),
+        );
+        if (res.data.status !== "ok") {
+          throw new Error(res.data.message || this.tm("registrationAction.pollFailed"));
         }
         const data = res.data.data || {};
         this.flow = {
           ...this.flow,
           ...data,
-          status: data.status || 'error',
+          status: data.status || "error",
         };
-        if (this.flow.status === 'created') {
+        if (this.flow.status === "created") {
           this.applyRegistrationResult(data);
           this.stopPolling();
-          this.$emit('created', data);
-          this.$emit('success', this.tm(this.action.successKey || 'registrationAction.created'));
+          this.$emit("created", data);
+          this.$emit("success", this.tm(this.action.successKey || "registrationAction.created"));
           return;
         }
-        if (this.flow.status === 'pending' || this.flow.status === 'slow_down') {
-          const nextInterval = this.flow.status === 'slow_down'
-            ? Number(this.flow.interval || 5) + 5
-            : Number(this.flow.interval || 5);
+        if (this.flow.status === "pending" || this.flow.status === "slow_down") {
+          const nextInterval =
+            this.flow.status === "slow_down" ? Number(this.flow.interval || 5) + 5 : Number(this.flow.interval || 5);
           this.flow.interval = nextInterval;
           this.schedulePoll(nextInterval);
           return;
@@ -234,10 +233,10 @@ export default {
       } catch (err) {
         this.flow = {
           ...this.flow,
-          status: 'error',
-          message: err.response?.data?.message || err.message || this.tm('registrationAction.pollFailed'),
+          status: "error",
+          message: err.response?.data?.message || err.message || this.tm("registrationAction.pollFailed"),
         };
-        this.$emit('error', this.flow.message);
+        this.$emit("error", this.flow.message);
         this.stopPolling();
       }
     },
@@ -271,7 +270,7 @@ export default {
       }
     },
     getStatusText(status) {
-      const normalizedStatus = status || 'idle';
+      const normalizedStatus = status || "idle";
       if (this.action?.statusKeyPrefix) {
         const platformStatusKey = `${this.action.statusKeyPrefix}.${normalizedStatus}`;
         const platformStatusText = this.tm(platformStatusKey);
@@ -283,26 +282,35 @@ export default {
     },
     getStatusColor(status) {
       switch (status) {
-        case 'created': return 'success';
-        case 'error':
-        case 'denied':
-        case 'expired': return 'error';
-        case 'starting':
-        case 'pending':
-        case 'slow_down': return 'warning';
-        default: return 'grey';
+        case "created":
+          return "success";
+        case "error":
+        case "denied":
+        case "expired":
+          return "error";
+        case "starting":
+        case "pending":
+        case "slow_down":
+          return "warning";
+        default:
+          return "grey";
       }
     },
     getStatusIcon(status) {
       switch (status) {
-        case 'created': return 'mdi-check-circle';
-        case 'error':
-        case 'denied':
-        case 'expired': return 'mdi-alert-circle';
-        case 'starting': return 'mdi-loading';
-        case 'pending':
-        case 'slow_down': return 'mdi-timer-sand';
-        default: return 'mdi-circle-outline';
+        case "created":
+          return "mdi-check-circle";
+        case "error":
+        case "denied":
+        case "expired":
+          return "mdi-alert-circle";
+        case "starting":
+          return "mdi-loading";
+        case "pending":
+        case "slow_down":
+          return "mdi-timer-sand";
+        default:
+          return "mdi-circle-outline";
       }
     },
   },

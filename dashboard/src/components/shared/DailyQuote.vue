@@ -163,10 +163,7 @@ const getQuoteOfTheDay = (): Quote => {
   const langQuotes = quotes[lang] || quotes["en-US"];
   // Use date as seed so the quote stays the same for the whole day
   const today = new Date();
-  const dayOfYear = Math.floor(
-    (today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) /
-      86400000,
-  );
+  const dayOfYear = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / 86400000);
   const index = dayOfYear % langQuotes.length;
   return langQuotes[index];
 };

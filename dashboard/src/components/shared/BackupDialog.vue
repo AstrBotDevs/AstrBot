@@ -563,11 +563,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
-import axios, { isAxiosError } from "@/utils/request";
-import { resolveApiUrl } from "@/utils/request";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
+import axios, { isAxiosError, resolveApiUrl } from "@/utils/request";
 import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
 import WaitingForRestart from "./WaitingForRestart.vue";
 
@@ -651,9 +650,7 @@ const renameError = ref("");
 // 计算属性
 const isProcessing = computed(() => {
   return (
-    exportStatus.value === "processing" ||
-    importStatus.value === "processing" ||
-    importStatus.value === "uploading"
+    exportStatus.value === "processing" || importStatus.value === "processing" || importStatus.value === "uploading"
   );
 });
 
@@ -674,19 +671,15 @@ const versionAlertIcon = computed(() => {
 
 const versionAlertTitle = computed(() => {
   const status = checkResult.value?.version_status;
-  if (status === "major_diff")
-    return t("features.settings.backup.import.version.majorDiffTitle");
-  if (status === "minor_diff")
-    return t("features.settings.backup.import.version.minorDiffTitle");
+  if (status === "major_diff") return t("features.settings.backup.import.version.majorDiffTitle");
+  if (status === "minor_diff") return t("features.settings.backup.import.version.minorDiffTitle");
   return t("features.settings.backup.import.version.matchTitle");
 });
 
 const versionAlertMessage = computed(() => {
   const status = checkResult.value?.version_status;
-  if (status === "major_diff")
-    return t("features.settings.backup.import.version.majorDiffMessage");
-  if (status === "minor_diff")
-    return t("features.settings.backup.import.version.minorDiffMessage");
+  if (status === "major_diff") return t("features.settings.backup.import.version.majorDiffMessage");
+  if (status === "minor_diff") return t("features.settings.backup.import.version.minorDiffMessage");
   return t("features.settings.backup.import.version.matchMessage");
 });
 
@@ -831,9 +824,7 @@ const uploadChunksInParallel = async (
     // 更新进度（累加已完成字节）
     completedBytes += chunkSizes[chunkIndex];
     uploadProgress.value.uploaded = completedBytes;
-    uploadProgress.value.percent = Math.round(
-      (completedBytes / file.size) * 100,
-    );
+    uploadProgress.value.percent = Math.round((completedBytes / file.size) * 100);
 
     return response;
   };
@@ -845,10 +836,7 @@ const uploadChunksInParallel = async (
   // 处理队列中的分片
   while (pendingChunks.length > 0 || activePromises.length > 0) {
     // 填充并发槽位
-    while (
-      pendingChunks.length > 0 &&
-      activePromises.length < CONCURRENT_UPLOADS
-    ) {
+    while (pendingChunks.length > 0 && activePromises.length < CONCURRENT_UPLOADS) {
       const chunkIndex = pendingChunks.shift();
       const promise = uploadSingleChunk(chunkIndex).then(() => {
         // 完成后从活动列表移除
@@ -896,21 +884,12 @@ const uploadAndCheck = async () => {
     const totalChunks = initResponse.data.data.total_chunks;
 
     // 步骤2: 并行分片上传（5个并发连接）
-    uploadProgress.value.message = t(
-      "features.settings.backup.import.uploadingChunks",
-    );
+    uploadProgress.value.message = t("features.settings.backup.import.uploadingChunks");
 
-    await uploadChunksInParallel(
-      file,
-      totalChunks,
-      uploadId.value,
-      chunkSize.value,
-    );
+    await uploadChunksInParallel(file, totalChunks, uploadId.value, chunkSize.value);
 
     // 步骤3: 完成上传
-    uploadProgress.value.message = t(
-      "features.settings.backup.import.uploadComplete",
-    );
+    uploadProgress.value.message = t("features.settings.backup.import.uploadComplete");
 
     const completeResponse = await axios.post("/api/backup/upload/complete", {
       upload_id: uploadId.value,
@@ -923,9 +902,7 @@ const uploadAndCheck = async () => {
     uploadedFilename.value = completeResponse.data.data.filename;
 
     // 步骤4: 预检查
-    uploadProgress.value.message = t(
-      "features.settings.backup.import.checking",
-    );
+    uploadProgress.value.message = t("features.settings.backup.import.checking");
 
     const checkResponse = await axios.post("/api/backup/check", {
       filename: uploadedFilename.value,
@@ -940,9 +917,7 @@ const uploadAndCheck = async () => {
     // 检查是否有效
     if (!checkResult.value.valid) {
       importStatus.value = "failed";
-      importError.value =
-        checkResult.value.error ||
-        t("features.settings.backup.import.invalidBackup");
+      importError.value = checkResult.value.error || t("features.settings.backup.import.invalidBackup");
       return;
     }
 
@@ -1103,10 +1078,7 @@ const restoreFromList = async (filename: string) => {
     checkResult.value = checkResponse.data.data;
 
     if (!checkResult.value.valid) {
-      alert(
-        checkResult.value.error ||
-          t("features.settings.backup.import.invalidBackup"),
-      );
+      alert(checkResult.value.error || t("features.settings.backup.import.invalidBackup"));
       return;
     }
 
@@ -1126,13 +1098,7 @@ const restoreFromList = async (filename: string) => {
 
 // 删除备份
 const deleteBackup = async (filename: string) => {
-  if (
-    !(await askForConfirmation(
-      t("features.settings.backup.list.confirmDelete"),
-      confirmDialog,
-    ))
-  )
-    return;
+  if (!(await askForConfirmation(t("features.settings.backup.list.confirmDelete"), confirmDialog))) return;
 
   try {
     const response = await axios.post("/api/backup/delete", { filename });
@@ -1199,9 +1165,7 @@ const confirmRename = async () => {
       closeRenameDialog();
       loadBackupList();
     } else {
-      renameError.value =
-        response.data.message ||
-        t("features.settings.backup.list.renameFailed");
+      renameError.value = response.data.message || t("features.settings.backup.list.renameFailed");
     }
   } catch (error: unknown) {
     if (isAxiosError(error)) {
@@ -1222,7 +1186,7 @@ const formatFileSize = (bytes: number) => {
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
 };
 
 // 格式化日期（从时间戳）

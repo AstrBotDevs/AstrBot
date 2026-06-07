@@ -388,20 +388,17 @@
 </template>
 
 <script lang="ts">
-import axios from "@/utils/request";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
+import axios from "@/utils/request";
 
 export default {
   name: "McpServersSection",
   components: {
     VueMonacoEditor,
-    OutlinedActionListItem
+    OutlinedActionListItem,
   },
   setup() {
     const { t } = useI18n();
@@ -448,9 +445,7 @@ export default {
         if (server.command) {
           return `${server.command} ${(server.args || []).join(" ")}`;
         }
-        const configKeys = Object.keys(server).filter(
-          (key) => !["name", "active", "tools"].includes(key),
-        );
+        const configKeys = Object.keys(server).filter((key) => !["name", "active", "tools"].includes(key));
         if (configKeys.length > 0) {
           return this.tm("mcpServers.status.configSummary", {
             keys: configKeys.join(", "),
@@ -461,19 +456,19 @@ export default {
     },
     getServerConfigIcon() {
       return (server) => {
-        const transport = String(server.transport || '').toLowerCase();
-        if (transport === 'streamable_http') {
-          return 'mdi-web';
+        const transport = String(server.transport || "").toLowerCase();
+        if (transport === "streamable_http") {
+          return "mdi-web";
         }
-        if (transport === 'sse') {
-          return 'mdi-broadcast';
+        if (transport === "sse") {
+          return "mdi-broadcast";
         }
         if (server.command) {
-          return 'mdi-console-line';
+          return "mdi-console-line";
         }
-        return 'mdi-file-code-outline';
+        return "mdi-file-code-outline";
       };
-    }
+    },
   },
   mounted() {
     this.getServers();
@@ -497,10 +492,7 @@ export default {
         .get("/api/tools/mcp/servers")
         .then((response) => {
           if (response.data.status === "error") {
-            this.showError(
-              response.data.message ||
-                this.tm("messages.getServersError", { error: "Unknown error" }),
-            );
+            this.showError(response.data.message || this.tm("messages.getServersError", { error: "Unknown error" }));
             return;
           }
           this.mcpServers = response.data.data || [];
@@ -511,9 +503,7 @@ export default {
           });
         })
         .catch((error) => {
-          this.showError(
-            this.tm("messages.getServersError", { error: error.message }),
-          );
+          this.showError(this.tm("messages.getServersError", { error: error.message }));
         })
         .finally(() => {
           this.loadingGettingServers = false;
@@ -576,26 +566,19 @@ export default {
         if (this.isEditMode && this.originalServerName) {
           serverData.oldName = this.originalServerName;
         }
-        const endpoint = this.isEditMode
-          ? "/api/tools/mcp/update"
-          : "/api/tools/mcp/add";
+        const endpoint = this.isEditMode ? "/api/tools/mcp/update" : "/api/tools/mcp/add";
         axios
           .post(endpoint, serverData)
           .then((response) => {
             this.loading = false;
             if (response.data.status === "error") {
-              this.showError(
-                response.data.message ||
-                  this.tm("messages.saveError", { error: "Unknown error" }),
-              );
+              this.showError(response.data.message || this.tm("messages.saveError", { error: "Unknown error" }));
               return;
             }
             this.showMcpServerDialog = false;
             this.addServerDialogMessage = "";
             this.getServers();
-            this.showSuccess(
-              response.data.message || this.tm("messages.saveSuccess"),
-            );
+            this.showSuccess(response.data.message || this.tm("messages.saveSuccess"));
             this.resetForm();
           })
           .catch((error) => {
@@ -608,9 +591,7 @@ export default {
           });
       } catch (e) {
         this.loading = false;
-        this.showError(
-          this.tm("dialogs.addServer.errors.jsonParse", { error: e.message }),
-        );
+        this.showError(this.tm("dialogs.addServer.errors.jsonParse", { error: e.message }));
       }
     },
     async deleteServer(server) {
@@ -624,9 +605,7 @@ export default {
         .post("/api/tools/mcp/delete", { name: serverName })
         .then((response) => {
           this.getServers();
-          this.showSuccess(
-            response.data.message || this.tm("messages.deleteSuccess"),
-          );
+          this.showSuccess(response.data.message || this.tm("messages.deleteSuccess"));
         })
         .catch((error) => {
           this.showError(
@@ -659,9 +638,7 @@ export default {
         .post("/api/tools/mcp/update", server)
         .then((response) => {
           this.getServers();
-          this.showSuccess(
-            response.data.message || this.tm("messages.updateSuccess"),
-          );
+          this.showSuccess(response.data.message || this.tm("messages.updateSuccess"));
         })
         .catch((error) => {
           this.showError(
@@ -690,9 +667,7 @@ export default {
         configObj = JSON.parse(this.serverConfigJson);
       } catch (e) {
         this.loading = false;
-        this.showError(
-          this.tm("dialogs.addServer.errors.jsonParse", { error: e.message }),
-        );
+        this.showError(this.tm("dialogs.addServer.errors.jsonParse", { error: e.message }));
         return;
       }
       axios
@@ -751,15 +726,9 @@ export default {
           }
           requestData.access_token = this.mcpProviderToken.trim();
         }
-        const response = await axios.post(
-          "/api/tools/mcp/sync-provider",
-          requestData,
-        );
+        const response = await axios.post("/api/tools/mcp/sync-provider", requestData);
         if (response.data.status === "ok") {
-          this.showSuccess(
-            response.data.message ||
-              this.tm("syncProvider.messages.syncSuccess"),
-          );
+          this.showSuccess(response.data.message || this.tm("syncProvider.messages.syncSuccess"));
           this.showSyncMcpServerDialog = false;
           this.mcpProviderToken = "";
           this.getServers();
@@ -774,10 +743,7 @@ export default {
       } catch (error) {
         this.showError(
           this.tm("syncProvider.messages.syncError", {
-            error:
-              error.response?.data?.message ||
-              error.message ||
-              "网络连接或访问令牌问题",
+            error: error.response?.data?.message || error.message || "网络连接或访问令牌问题",
           }),
         );
       } finally {

@@ -99,12 +99,12 @@
 </template>
 
 <script lang="ts">
+import { mapActions, mapState } from "pinia";
 import { defineComponent } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
-import { usePersonaStore } from "@/stores/personaStore";
-import { mapState, mapActions } from "pinia";
 import BaseFolderTree from "@/components/folder/BaseFolderTree.vue";
 import type { FolderTreeNode as FolderTreeNodeType } from "@/components/folder/types";
+import { useModuleI18n } from "@/i18n/composables";
+import { usePersonaStore } from "@/stores/personaStore";
 
 interface ContextMenuState {
   show: boolean;
@@ -158,22 +158,14 @@ export default defineComponent({
     };
   },
   computed: {
-    ...mapState(usePersonaStore, [
-      "folderTree",
-      "currentFolderId",
-      "treeLoading",
-      "expandedFolderIds",
-    ]),
+    ...mapState(usePersonaStore, ["folderTree", "currentFolderId", "treeLoading", "expandedFolderIds"]),
 
     filteredFolderTree(): FolderTreeNodeType[] {
       if (!this.searchQuery) {
         return this.folderTree as FolderTreeNodeType[];
       }
       const query = this.searchQuery.toLowerCase();
-      return this.filterTreeBySearch(
-        this.folderTree as FolderTreeNodeType[],
-        query,
-      );
+      return this.filterTreeBySearch(this.folderTree as FolderTreeNodeType[], query);
     },
   },
   methods: {
@@ -184,17 +176,11 @@ export default defineComponent({
       "toggleFolderExpansion",
       "setFolderExpansion",
     ]),
-    filterTreeBySearch(
-      nodes: FolderTreeNodeType[],
-      query: string,
-    ): FolderTreeNodeType[] {
+    filterTreeBySearch(nodes: FolderTreeNodeType[], query: string): FolderTreeNodeType[] {
       return nodes
         .filter((node) => {
           const matches = node.name.toLowerCase().includes(query);
-          const childMatches = this.filterTreeBySearch(
-            node.children || [],
-            query,
-          );
+          const childMatches = this.filterTreeBySearch(node.children || [], query);
           return matches || childMatches.length > 0;
         })
         .map((node) => ({
@@ -220,12 +206,7 @@ export default defineComponent({
       this.deleteDialog.show = true;
     },
 
-    onItemDropped(data: {
-      item_id: string;
-      item_type: string;
-      target_folder_id: string | null;
-      source_data?: any;
-    }) {
+    onItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data?: any }) {
       if (data.item_type === "persona") {
         this.$emit("persona-dropped", {
           persona_id: data.item_id,
@@ -246,10 +227,7 @@ export default defineComponent({
         this.$emit("success", this.tm("folder.messages.renameSuccess"));
         this.renameDialog.show = false;
       } catch (error: any) {
-        this.$emit(
-          "error",
-          error.message || this.tm("folder.messages.renameError"),
-        );
+        this.$emit("error", error.message || this.tm("folder.messages.renameError"));
       } finally {
         this.renameDialog.loading = false;
       }
@@ -264,10 +242,7 @@ export default defineComponent({
         this.$emit("success", this.tm("folder.messages.deleteSuccess"));
         this.deleteDialog.show = false;
       } catch (error: any) {
-        this.$emit(
-          "error",
-          error.message || this.tm("folder.messages.deleteError"),
-        );
+        this.$emit("error", error.message || this.tm("folder.messages.deleteError"));
       } finally {
         this.deleteDialog.loading = false;
       }

@@ -116,8 +116,8 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
-import type { FolderTreeNode, ContextMenuEvent } from "./types";
 import BaseFolderTreeNode from "./BaseFolderTreeNode.vue";
+import type { ContextMenuEvent, FolderTreeNode } from "./types";
 
 interface ContextMenuState {
   show: boolean;
@@ -230,17 +230,11 @@ export default defineComponent({
     },
   },
   methods: {
-    filterTreeBySearch(
-      nodes: FolderTreeNode[],
-      query: string,
-    ): FolderTreeNode[] {
+    filterTreeBySearch(nodes: FolderTreeNode[], query: string): FolderTreeNode[] {
       return nodes
         .filter((node) => {
           const matches = node.name.toLowerCase().includes(query);
-          const childMatches = this.filterTreeBySearch(
-            node.children || [],
-            query,
-          );
+          const childMatches = this.filterTreeBySearch(node.children || [], query);
           return matches || childMatches.length > 0;
         })
         .map((node) => ({
@@ -269,10 +263,7 @@ export default defineComponent({
 
       try {
         const data = JSON.parse(event.dataTransfer.getData("application/json"));
-        if (
-          this.acceptDropTypes.length === 0 ||
-          this.acceptDropTypes.includes(data.type)
-        ) {
+        if (this.acceptDropTypes.length === 0 || this.acceptDropTypes.includes(data.type)) {
           this.$emit("item-dropped", {
             item_id: data.id || data.persona_id || data.item_id,
             item_type: data.type,

@@ -409,11 +409,11 @@
 </template>
 
 <script setup lang="ts">
-import TavilyKeyDialog from "./TavilyKeyDialog.vue";
-import { ref, onMounted, onUnmounted, computed } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
+import TavilyKeyDialog from "./TavilyKeyDialog.vue";
 
 const { tm: t } = useModuleI18n("features/knowledge-base/detail");
 const router = useRouter();
@@ -492,10 +492,7 @@ const isUploadDisabled = computed(() => {
     if (!uploadUrl.value) {
       return true;
     }
-    if (
-      uploadSettings.value.enable_cleaning &&
-      !uploadSettings.value.cleaning_provider_id
-    ) {
+    if (uploadSettings.value.enable_cleaning && !uploadSettings.value.cleaning_provider_id) {
       return true;
     }
     return false;
@@ -600,10 +597,7 @@ const uploadFiles = async () => {
       formData.append("chunk_size", uploadSettings.value.chunk_size.toString());
     }
     if (uploadSettings.value.chunk_overlap) {
-      formData.append(
-        "chunk_overlap",
-        uploadSettings.value.chunk_overlap.toString(),
-      );
+      formData.append("chunk_overlap", uploadSettings.value.chunk_overlap.toString());
     }
     formData.append("batch_size", uploadSettings.value.batch_size.toString());
     formData.append("tasks_limit", uploadSettings.value.tasks_limit.toString());
@@ -647,10 +641,7 @@ const uploadFiles = async () => {
         startProgressPolling(taskId);
       }
     } else {
-      showSnackbar(
-        response.data.message || t("documents.uploadFailed"),
-        "error",
-      );
+      showSnackbar(response.data.message || t("documents.uploadFailed"), "error");
     }
   } catch (error) {
     console.error("Failed to upload document:", error);
@@ -686,8 +677,7 @@ const uploadFromUrl = async () => {
     if (uploadSettings.value.enable_cleaning) {
       payload.enable_cleaning = true;
       if (uploadSettings.value.cleaning_provider_id) {
-        payload.cleaning_provider_id =
-          uploadSettings.value.cleaning_provider_id;
+        payload.cleaning_provider_id = uploadSettings.value.cleaning_provider_id;
       }
     }
 
@@ -723,15 +713,11 @@ const uploadFromUrl = async () => {
         startProgressPolling(taskId);
       }
     } else {
-      showSnackbar(
-        response.data.message || t("documents.uploadFailed"),
-        "error",
-      );
+      showSnackbar(response.data.message || t("documents.uploadFailed"), "error");
     }
   } catch (error: any) {
     console.error("Failed to upload from URL:", error);
-    const message =
-      error.response?.data?.message || t("documents.uploadFailed");
+    const message = error.response?.data?.message || t("documents.uploadFailed");
     showSnackbar(message, "error");
   } finally {
     uploading.value = false;
@@ -763,7 +749,7 @@ const startProgressPolling = (taskId: string) => {
           // 更新对应文件的进度
           documents.value = documents.value.map((doc) => {
             if (doc.taskId === taskId) {
-              const docIndex = parseInt(doc.doc_id.split("_").pop() || "0");
+              const docIndex = parseInt(doc.doc_id.split("_").pop() || "0", 10);
               if (docIndex === fileIndex) {
                 return {
                   ...doc,
@@ -786,9 +772,7 @@ const startProgressPolling = (taskId: string) => {
           const failedCount = result?.failed_count || 0;
 
           // 移除上传中的占位文档
-          documents.value = documents.value.filter(
-            (doc) => doc.taskId !== taskId,
-          );
+          documents.value = documents.value.filter((doc) => doc.taskId !== taskId);
 
           // 重新加载文档列表
           await loadDocuments();
@@ -797,28 +781,21 @@ const startProgressPolling = (taskId: string) => {
           if (failedCount === 0) {
             showSnackbar(`成功上传 ${successCount} 个文档`);
           } else {
-            showSnackbar(
-              `上传完成: ${successCount} 个成功, ${failedCount} 个失败`,
-              "warning",
-            );
+            showSnackbar(`上传完成: ${successCount} 个成功, ${failedCount} 个失败`, "warning");
           }
         } else if (status === "failed") {
           // 任务失败
           stopProgressPolling();
 
           // 移除上传中的占位文档
-          documents.value = documents.value.filter(
-            (doc) => doc.taskId !== taskId,
-          );
+          documents.value = documents.value.filter((doc) => doc.taskId !== taskId);
 
           showSnackbar(`上传失败: ${data.error || "未知错误"}`, "error");
         }
       } else {
         // 任务不存在，停止轮询
         stopProgressPolling();
-        documents.value = documents.value.filter(
-          (doc) => doc.taskId !== taskId,
-        );
+        documents.value = documents.value.filter((doc) => doc.taskId !== taskId);
       }
     } catch (error) {
       console.error("Failed to fetch progress:", error);
@@ -896,10 +873,7 @@ const deleteDocument = async () => {
       await loadDocuments();
       emit("refresh");
     } else {
-      showSnackbar(
-        response.data.message || t("documents.deleteFailed"),
-        "error",
-      );
+      showSnackbar(response.data.message || t("documents.deleteFailed"), "error");
     }
   } catch (error) {
     console.error("Failed to delete document:", error);
@@ -911,26 +885,26 @@ const deleteDocument = async () => {
 
 // 工具函数
 const getFileIcon = (fileType: string) => {
-  const type = fileType?.toLowerCase() || ''
-  if (type.includes('pdf')) return 'mdi-file-pdf-box'
-  if (type.includes('epub')) return 'mdi-book-open-page-variant'
-  if (type.includes('rst') || type.includes('adoc')) return 'mdi-file-document-outline'
-  if (type.includes('md') || type.includes('markdown')) return 'mdi-language-markdown'
-  if (type.includes('txt')) return 'mdi-file-document-outline'
-  if (type.includes('url')) return 'mdi-link-variant'
-  return 'mdi-file'
-}
+  const type = fileType?.toLowerCase() || "";
+  if (type.includes("pdf")) return "mdi-file-pdf-box";
+  if (type.includes("epub")) return "mdi-book-open-page-variant";
+  if (type.includes("rst") || type.includes("adoc")) return "mdi-file-document-outline";
+  if (type.includes("md") || type.includes("markdown")) return "mdi-language-markdown";
+  if (type.includes("txt")) return "mdi-file-document-outline";
+  if (type.includes("url")) return "mdi-link-variant";
+  return "mdi-file";
+};
 
 const getFileColor = (fileType: string) => {
-  const type = fileType?.toLowerCase() || ''
-  if (type.includes('pdf')) return 'error'
-  if (type.includes('epub')) return 'warning'
-  if (type.includes('rst') || type.includes('adoc')) return 'success'
-  if (type.includes('md')) return 'info'
-  if (type.includes('txt')) return 'success'
-  if (type.includes('url')) return 'primary'
-  return 'grey'
-}
+  const type = fileType?.toLowerCase() || "";
+  if (type.includes("pdf")) return "error";
+  if (type.includes("epub")) return "warning";
+  if (type.includes("rst") || type.includes("adoc")) return "success";
+  if (type.includes("md")) return "info";
+  if (type.includes("txt")) return "success";
+  if (type.includes("url")) return "primary";
+  return "grey";
+};
 
 const formatFileSize = (bytes: number) => {
   if (!bytes) return "-";
@@ -979,11 +953,7 @@ const checkTavilyConfig = async () => {
     if (response.data.status === "ok") {
       const config = response.data.data.config;
       const tavilyKeys = config?.provider_settings?.websearch_tavily_key;
-      if (
-        Array.isArray(tavilyKeys) &&
-        tavilyKeys.length > 0 &&
-        tavilyKeys.some((key) => key.trim() !== "")
-      ) {
+      if (Array.isArray(tavilyKeys) && tavilyKeys.length > 0 && tavilyKeys.some((key) => key.trim() !== "")) {
         tavilyConfigStatus.value = "configured";
       } else {
         tavilyConfigStatus.value = "not_configured";

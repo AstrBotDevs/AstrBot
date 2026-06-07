@@ -100,10 +100,7 @@ export default {
 
     const tm = (key) => {
       const metadataResult = tmMetadata(key);
-      if (
-        !metadataResult.startsWith("[MISSING:") &&
-        !metadataResult.startsWith("[INVALID:")
-      ) {
+      if (!metadataResult.startsWith("[MISSING:") && !metadataResult.startsWith("[INVALID:")) {
         return metadataResult;
       }
       return tmConfig(key);
@@ -135,9 +132,7 @@ export default {
       if (!this.normalizedSearchKeyword) {
         return allSections;
       }
-      return allSections.filter((section) =>
-        this.sectionHasSearchMatch(section.value),
-      );
+      return allSections.filter((section) => this.sectionHasSearchMatch(section.value));
     },
   },
   watch: {
@@ -159,9 +154,7 @@ export default {
         return true;
       }
       const sectionMetadata = section?.metadata || {};
-      return Object.values(sectionMetadata).some((metaItem) =>
-        this.metaObjectHasSearchMatch(metaItem, keyword),
-      );
+      return Object.values(sectionMetadata).some((metaItem) => this.metaObjectHasSearchMatch(metaItem, keyword));
     },
     metaObjectHasSearchMatch(metaObject, keyword) {
       if (!metaObject || typeof metaObject !== "object") {
@@ -170,13 +163,11 @@ export default {
       const target = [
         this.tm(metaObject.description || ""),
         this.tm(metaObject.hint || ""),
-        ...Object.entries(metaObject.items || {}).flatMap(
-          ([itemKey, itemMeta]) => [
-            itemKey,
-            this.tm(itemMeta?.description || ""),
-            this.tm(itemMeta?.hint || ""),
-          ],
-        ),
+        ...Object.entries(metaObject.items || {}).flatMap(([itemKey, itemMeta]) => [
+          itemKey,
+          this.tm(itemMeta?.description || ""),
+          this.tm(itemMeta?.hint || ""),
+        ]),
       ]
         .join(" ")
         .toLowerCase();

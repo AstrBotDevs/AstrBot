@@ -2,9 +2,9 @@ import { createVuetify } from "vuetify";
 // MDI font loaded in index.html via CDN
 import * as components from "vuetify/components";
 import * as directives from "vuetify/directives";
-import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
 import { BlueBusinessDarkTheme } from "@/theme/BlueBusinessDarkTheme";
-import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
+import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
+import { DARK_THEME_NAME, LIGHT_THEME_NAME } from "@/theme/constants";
 
 export default createVuetify({
   components,

@@ -148,22 +148,14 @@ export class I18nLoader {
   /**
    * 通用模块加载器 - 减少重复代码，提高可维护性
    */
-  private async loadModules(
-    locale: string,
-    prefix: string,
-    overrideList: string[] = [],
-  ): Promise<any> {
+  private async loadModules(locale: string, prefix: string, overrideList: string[] = []): Promise<any> {
     // 使用覆盖列表或从注册表中筛选符合前缀的模块名
     const moduleNames =
       overrideList.length > 0
         ? overrideList
-        : Array.from(this.moduleRegistry.keys()).filter((key) =>
-            key.startsWith(prefix),
-          );
+        : Array.from(this.moduleRegistry.keys()).filter((key) => key.startsWith(prefix));
 
-    const results = await Promise.all(
-      moduleNames.map((module) => this.loadModule(locale, module)),
-    );
+    const results = await Promise.all(moduleNames.map((module) => this.loadModule(locale, module)));
 
     return this.mergeModules(results, moduleNames);
   }
@@ -260,9 +252,7 @@ export class I18nLoader {
   async preloadEssentials(locale: string): Promise<void> {
     const essentials = ["core/common", "core/navigation", "features/chat"];
 
-    await Promise.all(
-      essentials.map((module) => this.loadModule(locale, module)),
-    );
+    await Promise.all(essentials.map((module) => this.loadModule(locale, module)));
   }
 
   /**
@@ -271,9 +261,7 @@ export class I18nLoader {
   clearCache(locale?: string): void {
     if (locale) {
       // 清理特定语言的缓存
-      const keys = Array.from(this.cache.keys()).filter((key: string) =>
-        key.startsWith(`${locale}:`),
-      );
+      const keys = Array.from(this.cache.keys()).filter((key: string) => key.startsWith(`${locale}:`));
       keys.forEach((key: string) => this.cache.delete(key));
     } else {
       // 清理所有缓存

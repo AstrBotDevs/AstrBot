@@ -11,8 +11,7 @@ const normalizeLooseFromNormalized = (normalized) =>
     .replace(/\[/g, "")
     .replace(/\]/g, "");
 
-export const normalizeLoose = (s) =>
-  normalizeLooseFromNormalized(normalizeStr(s));
+export const normalizeLoose = (s) => normalizeLooseFromNormalized(normalizeStr(s));
 
 const memoizeStringFn = (fn) => {
   const cache = new Map();
@@ -31,18 +30,14 @@ const memoizeStringFn = (fn) => {
 
 const getNormalizedText = memoizeStringFn(normalizeStr);
 
-const getLooseText = memoizeStringFn((text) =>
-  normalizeLooseFromNormalized(getNormalizedText(text)),
-);
+const getLooseText = memoizeStringFn((text) => normalizeLooseFromNormalized(getNormalizedText(text)));
 
 export const toPinyinText = memoizeStringFn((text) =>
   pinyin(text, { toneType: "none" }).toLowerCase().replace(/\s+/g, ""),
 );
 
 export const toInitials = memoizeStringFn((text) =>
-  pinyin(text, { pattern: "first", toneType: "none" })
-    .toLowerCase()
-    .replace(/\s+/g, ""),
+  pinyin(text, { pattern: "first", toneType: "none" }).toLowerCase().replace(/\s+/g, ""),
 );
 
 export const buildSearchQuery = (raw) => {
@@ -76,9 +71,7 @@ export const matchesText = (value, query) => {
 };
 
 export const getPluginSearchFields = (plugin) => {
-  const supportPlatforms = Array.isArray(plugin?.support_platforms)
-    ? plugin.support_platforms.join(" ")
-    : "";
+  const supportPlatforms = Array.isArray(plugin?.support_platforms) ? plugin.support_platforms.join(" ") : "";
   const tags = Array.isArray(plugin?.tags) ? plugin.tags.join(" ") : "";
 
   return [
@@ -99,7 +92,5 @@ export const getPluginSearchFields = (plugin) => {
 export const matchesPluginSearch = (plugin, query) => {
   if (!query) return true;
 
-  return getPluginSearchFields(plugin).some((candidate) =>
-    matchesText(candidate, query),
-  );
+  return getPluginSearchFields(plugin).some((candidate) => matchesText(candidate, query));
 };

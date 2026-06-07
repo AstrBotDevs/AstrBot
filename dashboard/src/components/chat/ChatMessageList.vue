@@ -314,31 +314,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref } from "vue";
 import axios from "axios";
 import { setCustomComponents } from "markstream-vue";
+import { computed, nextTick, reactive, ref } from "vue";
 import "markstream-vue/index.css";
-import RegenerateMenu, {
-  type RegenerateModelSelection,
-} from "@/components/chat/RegenerateMenu.vue";
-import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
+import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
+import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
+import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
+import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
+import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
+import ThreadNode from "@/components/chat/message_list_comps/ThreadNode.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
-import ThreadNode from "@/components/chat/message_list_comps/ThreadNode.vue";
-import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
-import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import RegenerateMenu, { type RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
+import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
-import type {
-  ChatContent,
-  ChatRecord,
-  ChatThread,
-  MessagePart,
-} from "@/composables/useMessages";
+import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import type { ChatContent, ChatRecord, ChatThread, MessagePart } from "@/composables/useMessages";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 
 const props = withDefaults(
@@ -377,10 +370,7 @@ const emit = defineEmits<{
   cancelEdit: [];
   saveEdit: [];
   regenerate: [message: ChatRecord];
-  regenerateWithModel: [
-    message: ChatRecord,
-    selection: RegenerateModelSelection,
-  ];
+  regenerateWithModel: [message: ChatRecord, selection: RegenerateModelSelection];
   selectBotText: [event: MouseEvent, message: ChatRecord];
   openThread: [thread: ChatThread];
   openRefs: [refs: unknown];
@@ -418,19 +408,11 @@ function messageParts(message: ChatRecord): MessagePart[] {
 }
 
 function isMessageStreaming(message: ChatRecord, messageIndex: number) {
-  return (
-    props.isStreaming &&
-    !isUserMessage(message) &&
-    messageIndex === props.messages.length - 1
-  );
+  return props.isStreaming && !isUserMessage(message) && messageIndex === props.messages.length - 1;
 }
 
 function isEditingMessage(message: ChatRecord) {
-  return (
-    props.editingMessageId != null &&
-    message.id != null &&
-    String(props.editingMessageId) === String(message.id)
-  );
+  return props.editingMessageId != null && message.id != null && String(props.editingMessageId) === String(message.id);
 }
 
 function canEditMessage(message: ChatRecord, messageIndex: number) {
@@ -446,11 +428,7 @@ function canEditMessage(message: ChatRecord, messageIndex: number) {
 function latestEditableUserIndex() {
   for (let index = props.messages.length - 1; index >= 0; index -= 1) {
     const message = props.messages[index];
-    if (
-      isUserMessage(message) &&
-      message.id != null &&
-      !String(message.id).startsWith("local-")
-    ) {
+    if (isUserMessage(message) && message.id != null && !String(message.id).startsWith("local-")) {
       return index;
     }
   }
@@ -468,10 +446,7 @@ function canRegenerateMessage(message: ChatRecord, messageIndex: number) {
 }
 
 function showMessageMeta(message: ChatRecord, messageIndex: number) {
-  return (
-    !messageContent(message).isLoading &&
-    !isMessageStreaming(message, messageIndex)
-  );
+  return !messageContent(message).isLoading && !isMessageStreaming(message, messageIndex);
 }
 
 function hasNonReasoningContent(message: ChatRecord) {
@@ -504,9 +479,7 @@ function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
   if (part.attachment_id) {
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
-      part.attachment_id,
-    )}`;
+    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
   }
   if (part.filename) {
     return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
@@ -523,9 +496,7 @@ function plainTextFromMessage(message: ChatRecord) {
 
 function replyPreview(messageId?: string | number, fallback?: string) {
   if (fallback) return truncate(fallback, 80);
-  const found = props.messages.find(
-    (message) => String(message.id) === String(messageId),
-  );
+  const found = props.messages.find((message) => String(message.id) === String(messageId));
   const text = found ? plainTextFromMessage(found) : "";
   return text ? truncate(text, 80) : tm("reply.replyTo");
 }
@@ -536,14 +507,10 @@ function truncate(value: string, max: number) {
 
 function scrollToMessage(messageId?: string | number) {
   if (!messageId) return;
-  const index = props.messages.findIndex(
-    (message) => String(message.id) === String(messageId),
-  );
+  const index = props.messages.findIndex((message) => String(message.id) === String(messageId));
   if (index < 0) return;
   nextTick(() => {
-    listRoot.value
-      ?.querySelectorAll(".message-row")
-      [index]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    listRoot.value?.querySelectorAll(".message-row")[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
 }
 
@@ -579,11 +546,7 @@ function resolvedMessageRefs(message: ChatRecord) {
 
 function normalizeRefs(refs: unknown) {
   if (!refs) return { used: [] as Array<Record<string, unknown>> };
-  const used = Array.isArray((refs as any)?.used)
-    ? (refs as any).used
-    : Array.isArray(refs)
-      ? refs
-      : [];
+  const used = Array.isArray((refs as any)?.used) ? (refs as any).used : Array.isArray(refs) ? refs : [];
   return { used: normalizeRefItems(used) };
 }
 
@@ -604,8 +567,7 @@ function handleOpenRefs(refs: unknown) {
     emit("openRefs", refs);
     return;
   }
-  selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : undefined;
+  selectedRefs.value = refs && typeof refs === "object" ? (refs as Record<string, unknown>) : undefined;
   refsSidebarOpen.value = true;
 }
 
@@ -680,10 +642,7 @@ function outputTokens(stats: any) {
 }
 
 function agentDuration(stats: any) {
-  const directDuration = readPositiveNumber(stats, [
-    "duration",
-    "total_duration",
-  ]);
+  const directDuration = readPositiveNumber(stats, ["duration", "total_duration"]);
   if (directDuration !== null) return formatDuration(directDuration);
 
   const startTime = readPositiveNumber(stats, ["start_time"]);
@@ -693,11 +652,7 @@ function agentDuration(stats: any) {
 }
 
 function agentTtft(stats: any) {
-  const ttft = readPositiveNumber(stats, [
-    "time_to_first_token",
-    "ttft",
-    "first_token_latency",
-  ]);
+  const ttft = readPositiveNumber(stats, ["time_to_first_token", "ttft", "first_token_latency"]);
   if (ttft === null) return "";
   return formatDuration(ttft);
 }

@@ -210,79 +210,79 @@
 </template>
 
 <script setup lang="ts">
-import axios from 'axios'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
-import { useTheme } from 'vuetify'
-import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue'
-import PersonaSelector from '@/components/shared/PersonaSelector.vue'
-import ProviderSelector from '@/components/shared/ProviderSelector.vue'
-import { useModuleI18n } from '@/i18n/composables'
-import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
+import axios from "axios";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { onBeforeRouteLeave } from "vue-router";
+import { useTheme } from "vuetify";
+import PersonaQuickPreview from "@/components/shared/PersonaQuickPreview.vue";
+import PersonaSelector from "@/components/shared/PersonaSelector.vue";
+import ProviderSelector from "@/components/shared/ProviderSelector.vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 
 type SubAgentItem = {
-  __key: string
-  name: string
-  persona_id: string
-  public_description: string
-  enabled: boolean
-  provider_id?: string
-}
+  __key: string;
+  name: string;
+  persona_id: string;
+  public_description: string;
+  enabled: boolean;
+  provider_id?: string;
+};
 
 type SubAgentConfig = {
-  main_enable: boolean
-  remove_main_duplicate_tools: boolean
-  agents: SubAgentItem[]
-}
+  main_enable: boolean;
+  remove_main_duplicate_tools: boolean;
+  agents: SubAgentItem[];
+};
 
-const { tm } = useModuleI18n('features/subagent')
-const theme = useTheme()
-const confirmDialog = useConfirmDialog()
+const { tm } = useModuleI18n("features/subagent");
+const theme = useTheme();
+const confirmDialog = useConfirmDialog();
 
-const loading = ref(false)
-const saving = ref(false)
-const isDark = computed(() => theme.global.current.value.dark)
+const loading = ref(false);
+const saving = ref(false);
+const isDark = computed(() => theme.global.current.value.dark);
 
 const snackbar = ref({
   show: false,
-  message: '',
-  color: 'success'
-})
-const expandedAgents = ref<Record<string, boolean>>({})
-const initialSnapshot = ref('')
-const hasLoaded = ref(false)
+  message: "",
+  color: "success",
+});
+const expandedAgents = ref<Record<string, boolean>>({});
+const initialSnapshot = ref("");
+const hasLoaded = ref(false);
 
-function toast(message: string, color: 'success' | 'error' | 'warning' = 'success') {
-  snackbar.value = { show: true, message, color }
+function toast(message: string, color: "success" | "error" | "warning" = "success") {
+  snackbar.value = { show: true, message, color };
 }
 
 const cfg = ref<SubAgentConfig>({
   main_enable: false,
   remove_main_duplicate_tools: false,
-  agents: []
-})
+  agents: [],
+});
 
 const mainStateDescription = computed(() =>
-  cfg.value.main_enable ? tm('description.enabled') : tm('description.disabled')
-)
+  cfg.value.main_enable ? tm("description.enabled") : tm("description.disabled"),
+);
 
-const hasUnsavedChanges = computed(() => hasLoaded.value && serializeConfig(cfg.value) !== initialSnapshot.value)
+const hasUnsavedChanges = computed(() => hasLoaded.value && serializeConfig(cfg.value) !== initialSnapshot.value);
 
 function normalizeConfig(raw: any): SubAgentConfig {
-  const main_enable = !!raw?.main_enable
-  const remove_main_duplicate_tools = !!raw?.remove_main_duplicate_tools
-  const agentsRaw = Array.isArray(raw?.agents) ? raw.agents : []
+  const main_enable = !!raw?.main_enable;
+  const remove_main_duplicate_tools = !!raw?.remove_main_duplicate_tools;
+  const agentsRaw = Array.isArray(raw?.agents) ? raw.agents : [];
 
   const agents: SubAgentItem[] = agentsRaw.map((a: any, i: number) => ({
     __key: `${Date.now()}_${i}_${Math.random().toString(16).slice(2)}`,
-    name: (a?.name ?? '').toString(),
-    persona_id: (a?.persona_id ?? '').toString(),
-    public_description: (a?.public_description ?? '').toString(),
+    name: (a?.name ?? "").toString(),
+    persona_id: (a?.persona_id ?? "").toString(),
+    public_description: (a?.public_description ?? "").toString(),
     enabled: a?.enabled !== false,
-    provider_id: (a?.provider_id ?? undefined) as string | undefined
-  }))
+    provider_id: (a?.provider_id ?? undefined) as string | undefined,
+  }));
 
-  return { main_enable, remove_main_duplicate_tools, agents }
+  return { main_enable, remove_main_duplicate_tools, agents };
 }
 
 function serializeConfig(config: SubAgentConfig): string {
@@ -294,89 +294,89 @@ function serializeConfig(config: SubAgentConfig): string {
       persona_id: agent.persona_id,
       public_description: agent.public_description,
       enabled: agent.enabled,
-      provider_id: agent.provider_id ?? null
-    }))
-  })
+      provider_id: agent.provider_id ?? null,
+    })),
+  });
 }
 
 async function loadConfig() {
-  loading.value = true
+  loading.value = true;
   try {
-    const res = await axios.get('/api/subagent/config')
-    if (res.data.status === 'ok') {
-      cfg.value = normalizeConfig(res.data.data)
-      expandedAgents.value = Object.fromEntries(cfg.value.agents.map((agent) => [agent.__key, false]))
-      initialSnapshot.value = serializeConfig(cfg.value)
-      hasLoaded.value = true
+    const res = await axios.get("/api/subagent/config");
+    if (res.data.status === "ok") {
+      cfg.value = normalizeConfig(res.data.data);
+      expandedAgents.value = Object.fromEntries(cfg.value.agents.map((agent) => [agent.__key, false]));
+      initialSnapshot.value = serializeConfig(cfg.value);
+      hasLoaded.value = true;
     } else {
-      toast(res.data.message || tm('messages.loadConfigFailed'), 'error')
+      toast(res.data.message || tm("messages.loadConfigFailed"), "error");
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.loadConfigFailed'), 'error')
+    toast(e?.response?.data?.message || tm("messages.loadConfigFailed"), "error");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function addAgent() {
-  const key = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+  const key = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
   cfg.value.agents.push({
     __key: key,
-    name: '',
-    persona_id: '',
-    public_description: '',
+    name: "",
+    persona_id: "",
+    public_description: "",
     enabled: true,
-    provider_id: undefined
-  })
-  expandedAgents.value[key] = false
+    provider_id: undefined,
+  });
+  expandedAgents.value[key] = false;
 }
 
 function removeAgent(idx: number) {
-  const [removed] = cfg.value.agents.splice(idx, 1)
+  const [removed] = cfg.value.agents.splice(idx, 1);
   if (removed) {
-    delete expandedAgents.value[removed.__key]
+    delete expandedAgents.value[removed.__key];
   }
 }
 
 function isAgentExpanded(key: string): boolean {
-  return expandedAgents.value[key] !== false
+  return expandedAgents.value[key] !== false;
 }
 
 function toggleAgentExpanded(key: string) {
-  expandedAgents.value[key] = !isAgentExpanded(key)
+  expandedAgents.value[key] = !isAgentExpanded(key);
 }
 
 function validateBeforeSave(): boolean {
-  const nameRe = /^[a-z][a-z0-9_]{0,63}$/
-  const seen = new Set<string>()
+  const nameRe = /^[a-z][a-z0-9_]{0,63}$/;
+  const seen = new Set<string>();
 
   for (const agent of cfg.value.agents) {
-    const name = (agent.name || '').trim()
+    const name = (agent.name || "").trim();
     if (!name) {
-      toast(tm('messages.nameMissing'), 'warning')
-      return false
+      toast(tm("messages.nameMissing"), "warning");
+      return false;
     }
     if (!nameRe.test(name)) {
-      toast(tm('messages.nameInvalid'), 'warning')
-      return false
+      toast(tm("messages.nameInvalid"), "warning");
+      return false;
     }
     if (seen.has(name)) {
-      toast(tm('messages.nameDuplicate', { name }), 'warning')
-      return false
+      toast(tm("messages.nameDuplicate", { name }), "warning");
+      return false;
     }
-    seen.add(name)
+    seen.add(name);
     if (!agent.persona_id) {
-      toast(tm('messages.personaMissing', { name }), 'warning')
-      return false
+      toast(tm("messages.personaMissing", { name }), "warning");
+      return false;
     }
   }
 
-  return true
+  return true;
 }
 
 async function save() {
-  if (!validateBeforeSave()) return
-  saving.value = true
+  if (!validateBeforeSave()) return;
+  saving.value = true;
   try {
     const payload = {
       main_enable: cfg.value.main_enable,
@@ -386,70 +386,64 @@ async function save() {
         persona_id: agent.persona_id,
         public_description: agent.public_description,
         enabled: agent.enabled,
-        provider_id: agent.provider_id
-      }))
-    }
+        provider_id: agent.provider_id,
+      })),
+    };
 
-    const res = await axios.post('/api/subagent/config', payload)
-    if (res.data.status === 'ok') {
-      initialSnapshot.value = serializeConfig(cfg.value)
-      hasLoaded.value = true
-      toast(res.data.message || tm('messages.saveSuccess'), 'success')
+    const res = await axios.post("/api/subagent/config", payload);
+    if (res.data.status === "ok") {
+      initialSnapshot.value = serializeConfig(cfg.value);
+      hasLoaded.value = true;
+      toast(res.data.message || tm("messages.saveSuccess"), "success");
     } else {
-      toast(res.data.message || tm('messages.saveFailed'), 'error')
+      toast(res.data.message || tm("messages.saveFailed"), "error");
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.saveFailed'), 'error')
+    toast(e?.response?.data?.message || tm("messages.saveFailed"), "error");
   } finally {
-    saving.value = false
+    saving.value = false;
   }
 }
 
 async function reload() {
   if (hasUnsavedChanges.value) {
-    const confirmed = await askForConfirmation(
-      tm('messages.unsavedChangesReloadConfirm'),
-      confirmDialog
-    )
+    const confirmed = await askForConfirmation(tm("messages.unsavedChangesReloadConfirm"), confirmDialog);
     if (!confirmed) {
-      return
+      return;
     }
   }
-  await loadConfig()
+  await loadConfig();
 }
 
 async function confirmLeaveIfNeeded(): Promise<boolean> {
   if (!hasUnsavedChanges.value) {
-    return true
+    return true;
   }
 
-  return askForConfirmation(
-    tm('messages.unsavedChangesLeaveConfirm'),
-    confirmDialog
-  )
+  return askForConfirmation(tm("messages.unsavedChangesLeaveConfirm"), confirmDialog);
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {
   if (!hasUnsavedChanges.value) {
-    return
+    return;
   }
 
-  event.preventDefault()
-  event.returnValue = ''
+  event.preventDefault();
+  event.returnValue = "";
 }
 
 onMounted(() => {
-  window.addEventListener('beforeunload', handleBeforeUnload)
-  reload()
-})
+  window.addEventListener("beforeunload", handleBeforeUnload);
+  reload();
+});
 
 onBeforeUnmount(() => {
-  window.removeEventListener('beforeunload', handleBeforeUnload)
-})
+  window.removeEventListener("beforeunload", handleBeforeUnload);
+});
 
 onBeforeRouteLeave(async () => {
-  return await confirmLeaveIfNeeded()
-})
+  return await confirmLeaveIfNeeded();
+});
 </script>
 
 <style scoped>

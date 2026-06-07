@@ -25,11 +25,14 @@
 <script setup lang="ts">
 import { ref } from "vue";
 
-const props = withDefaults(defineProps<{
-  isDark?: boolean;
-}>(), {
-  isDark: false,
-});
+const props = withDefaults(
+  defineProps<{
+    isDark?: boolean;
+  }>(),
+  {
+    isDark: false,
+  },
+);
 
 const isExpanded = ref(false);
 

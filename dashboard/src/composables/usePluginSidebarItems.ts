@@ -1,6 +1,6 @@
-import { reactive, shallowRef, onMounted, watch } from "vue";
-import axios from "@/utils/request";
+import { onMounted, reactive, shallowRef, watch } from "vue";
 import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
+import axios from "@/utils/request";
 
 const DEFAULT_ICON = "mdi-puzzle";
 const GROUP_I18N_KEY = "core.navigation.pluginWebui";
@@ -21,9 +21,7 @@ export const pluginSidebarState = reactive<{
 });
 
 function buildPluginItems(plugins: PluginEntry[]): menu | null {
-  const activeWithPages = plugins.filter(
-    (p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0,
-  );
+  const activeWithPages = plugins.filter((p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0);
 
   if (activeWithPages.length === 0) return null;
 

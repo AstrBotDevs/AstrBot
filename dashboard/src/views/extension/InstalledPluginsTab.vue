@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import PluginSortControl from "@/components/extension/PluginSortControl.vue";
+import { computed, ref, watch } from "vue";
+import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import PinnedPluginItem from "@/components/extension/PinnedPluginItem.vue";
+import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { normalizeTextInput } from "@/utils/inputValue";
-import { ref, computed, watch } from "vue";
 
 const props = defineProps({
   state: {
@@ -135,16 +135,10 @@ const onDragEnd = (e: DragEvent) => {
 const pinnedPlugins = computed(() => {
   if (!Array.isArray(pinnedNames.value)) return [];
 
-  const installedAll = Array.isArray(extension_data?.data)
-    ? extension_data.data
-    : [];
+  const installedAll = Array.isArray(extension_data?.data) ? extension_data.data : [];
   const all = Array.isArray(sortedPlugins?.value) ? sortedPlugins.value : [];
-  const filtered = Array.isArray(filteredPlugins?.value)
-    ? filteredPlugins.value
-    : [];
-  const market = Array.isArray(pluginMarketData?.value)
-    ? pluginMarketData.value
-    : [];
+  const filtered = Array.isArray(filteredPlugins?.value) ? filteredPlugins.value : [];
+  const market = Array.isArray(pluginMarketData?.value) ? pluginMarketData.value : [];
 
   const findByName = (name) => {
     return (

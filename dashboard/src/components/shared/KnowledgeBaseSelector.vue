@@ -133,9 +133,9 @@
 
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import axios from "@/utils/request";
 import { useRouter } from "vue-router";
 import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
 const props = defineProps({
   modelValue: {
@@ -168,9 +168,7 @@ watch(
 
 async function openDialog() {
   // 初始化选中状态
-  selectedKnowledgeBases.value = Array.isArray(props.modelValue)
-    ? [...props.modelValue]
-    : [];
+  selectedKnowledgeBases.value = Array.isArray(props.modelValue) ? [...props.modelValue] : [];
 
   dialog.value = true;
   await loadKnowledgeBases();
@@ -231,9 +229,7 @@ function confirmSelection() {
 
 function cancelSelection() {
   // 恢复到原始值
-  selectedKnowledgeBases.value = Array.isArray(props.modelValue)
-    ? [...props.modelValue]
-    : [];
+  selectedKnowledgeBases.value = Array.isArray(props.modelValue) ? [...props.modelValue] : [];
   dialog.value = false;
 }
 

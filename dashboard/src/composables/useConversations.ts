@@ -1,6 +1,6 @@
-import { ref, computed } from "vue";
-import axios from "@/utils/request";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
+import axios from "@/utils/request";
 
 export interface Conversation {
   cid: string;
@@ -32,9 +32,7 @@ export function useConversations(chatboxMode = false) {
 
       // 处理待加载的会话
       if (pendingCid.value) {
-        const conversation = conversations.value.find(
-          (c) => c.cid === pendingCid.value,
-        );
+        const conversation = conversations.value.find((c) => c.cid === pendingCid.value);
         if (conversation) {
           selectedConversations.value = [pendingCid.value];
           pendingCid.value = null;
@@ -72,7 +70,7 @@ export function useConversations(chatboxMode = false) {
 
   async function deleteConversation(cid: string) {
     try {
-      await axios.get("/api/chat/delete_conversation?conversation_id=" + cid);
+      await axios.get(`/api/chat/delete_conversation?conversation_id=${cid}`);
       await getConversations();
       currCid.value = "";
       selectedConversations.value = [];
@@ -98,9 +96,7 @@ export function useConversations(chatboxMode = false) {
       });
 
       // 更新本地会话标题
-      const conversation = conversations.value.find(
-        (c) => c.cid === editingCid.value,
-      );
+      const conversation = conversations.value.find((c) => c.cid === editingCid.value);
       if (conversation) {
         conversation.title = trimmedTitle;
       }

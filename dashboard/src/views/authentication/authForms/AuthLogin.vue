@@ -1,19 +1,17 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { useAuthStore } from "@/stores/auth";
 import { useModuleI18n } from "@/i18n/composables";
 import { useApiStore } from "@/stores/api";
+import { useAuthStore } from "@/stores/auth";
 import AuthStageAccount from "./stages/AuthStageAccount.vue";
-import AuthStageTotp from "./stages/AuthStageTotp.vue";
 import AuthStageRecovery from "./stages/AuthStageRecovery.vue";
+import AuthStageTotp from "./stages/AuthStageTotp.vue";
 
 const { tm: t } = useModuleI18n("features/auth");
 const authStore = useAuthStore();
 const apiStore = useApiStore();
 
-const emit = defineEmits<{
-  (e: "openServerConfig"): void;
-}>();
+const emit = defineEmits<(e: "openServerConfig") => void>();
 
 const username = ref("");
 const password = ref("");
@@ -102,12 +100,7 @@ async function submitTotpStage() {
   apiError.value = "";
   try {
     setRedirectReturnUrl();
-    await authStore.login(
-      username.value,
-      password.value,
-      totpCode.value,
-      trustTotpDevice.value,
-    );
+    await authStore.login(username.value, password.value, totpCode.value, trustTotpDevice.value);
   } catch (err) {
     apiError.value = String(err || "") || "Verification failed";
   } finally {

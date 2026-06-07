@@ -11,13 +11,7 @@
         },
         "agent_runner_type": {
           "description": "Runner",
-          "labels": [
-            "Built-in Agent",
-            "Dify",
-            "Coze",
-            "Alibaba Cloud Bailian Application",
-            "DeerFlow"
-          ]
+          "labels": ["Built-in Agent", "Dify", "Coze", "Alibaba Cloud Bailian Application", "DeerFlow"]
         },
         "coze_agent_runner_provider_id": {
           "description": "Coze Agent Runner Provider ID"
@@ -170,10 +164,6 @@
           "booter": {
             "description": "Sandbox Environment Driver"
           },
-          "bwrap_rw_binds": {
-            "description": "Bubblewrap Read & Write Binds",
-            "hint": "Additional read-write mount directories for the Bubblewrap sandbox (press Enter to add, multiple can be added. /tmp and /var/tmp are read-write by default)."
-          },
           "bwrap_ro_binds": {
             "description": "Bubblewrap Read Only Binds",
             "hint": "Additional read-only mount directories for the Bubblewrap sandbox (press Enter to add, multiple can be added. Host system directories /usr, /etc, /opt are mounted read-only at the same location by default)."
@@ -267,10 +257,7 @@
         },
         "context_limit_reached_strategy": {
           "description": "Handling for History Limits or Context Window Pressure",
-          "labels": [
-            "Truncate by Turns",
-            "Compress by LLM"
-          ],
+          "labels": ["Truncate by Turns", "Compress by LLM"],
           "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
         },
         "llm_compress_instruction": {
@@ -363,10 +350,7 @@
         "tool_schema_mode": {
           "description": "Tool Schema Mode",
           "hint": "Lazy-tool-load sends name/description first and re-queries for parameters; Full sends the complete schema in one step.",
-          "labels": [
-            "Lazy-tool-load (two-stage)",
-            "Full schema"
-          ]
+          "labels": ["Lazy-tool-load (two-stage)", "Full schema"]
         },
         "streaming_response": {
           "description": "Streaming Output"
@@ -374,10 +358,7 @@
         "unsupported_streaming_strategy": {
           "description": "Platforms Without Streaming Support",
           "hint": "Select the handling method for platforms that don't support streaming responses. Real-time segmented reply sends content immediately when the system detects segment points like punctuation during streaming reception",
-          "labels": [
-            "Real-time Segmented Reply",
-            "Disable Streaming Response"
-          ]
+          "labels": ["Real-time Segmented Reply", "Disable Streaming Response"]
         },
         "wake_prefix": {
           "description": "Additional LLM Chat Wake Prefix",
@@ -479,10 +460,7 @@
       },
       "lark_connection_mode": {
         "description": "Subscription Mode",
-        "labels": [
-          "Long Connection Mode",
-          "Webhook Server Mode"
-        ]
+        "labels": ["Long Connection Mode", "Webhook Server Mode"]
       },
       "lark_encrypt_key": {
         "description": "Encrypt Key",
@@ -971,10 +949,7 @@
           "split_mode": {
             "description": "Split Mode",
             "hint": "Used to segment a message. By default, it will be separated by punctuation marks like period, question mark, etc. For example, filling `[。？！]` will remove all periods, question marks, and exclamation marks. re.findall(r'<regex>', text)",
-            "labels": [
-              "Regex",
-              "Words List"
-            ]
+            "labels": ["Regex", "Words List"]
           },
           "regex": {
             "description": "Segmentation Regular Expression",
@@ -1229,22 +1204,22 @@
         "hint": "Only effective for qwen3-rerank models. Recommended to write in English."
       },
       "nvidia_rerank_api_base": {
-          "description": "API Base URL"
+        "description": "API Base URL"
       },
       "nvidia_rerank_api_key": {
-          "description": "API Key"
+        "description": "API Key"
       },
       "nvidia_rerank_model": {
-          "description": "Rerank Model Name",
-          "hint": "Please refer to the NVIDIA Docs for the model name."
+        "description": "Rerank Model Name",
+        "hint": "Please refer to the NVIDIA Docs for the model name."
       },
       "nvidia_rerank_model_endpoint": {
-          "description": "Custom Model Endpoint",
-          "hint": "Custom URL suffix endpoint, defaults to /reranking."
+        "description": "Custom Model Endpoint",
+        "hint": "Custom URL suffix endpoint, defaults to /reranking."
       },
       "nvidia_rerank_truncate": {
-          "description": "Text Truncation Strategy",
-          "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
+        "description": "Text Truncation Strategy",
+        "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
       },
       "launch_model_if_not_running": {
         "description": "Auto-start model if not running",
@@ -1253,12 +1228,7 @@
       "modalities": {
         "description": "Model capabilities",
         "hint": "Modalities supported by the model. If the model does not support images, uncheck image.",
-        "labels": [
-          "Text",
-          "Image",
-          "Audio",
-          "Tool use"
-        ]
+        "labels": ["Text", "Image", "Audio", "Tool use"]
       },
       "custom_headers": {
         "description": "Custom request headers",

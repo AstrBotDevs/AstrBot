@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  PINNED_EXTENSIONS_STORAGE_KEY,
   PIN_UPDATES_ON_TOP_STORAGE_KEY,
+  PINNED_EXTENSIONS_STORAGE_KEY,
   readBooleanPreference,
   readPinnedExtensions,
   writeBooleanPreference,
@@ -66,9 +66,7 @@ test("readPinnedExtensions uses the legacy pinned extension storage key", () => 
 test("readPinnedExtensions parses stored pinned extension names", () => {
   const storage = {
     getItem(key) {
-      return key === PINNED_EXTENSIONS_STORAGE_KEY
-        ? JSON.stringify(["alpha", "beta", "alpha", "", 1])
-        : null;
+      return key === PINNED_EXTENSIONS_STORAGE_KEY ? JSON.stringify(["alpha", "beta", "alpha", "", 1]) : null;
     },
   };
 
@@ -95,9 +93,7 @@ test("writePinnedExtensions stores normalized pinned extension names", () => {
 
   writePinnedExtensions(["alpha", "beta", "alpha", "", null], storage);
 
-  assert.deepEqual(writes, [
-    [PINNED_EXTENSIONS_STORAGE_KEY, JSON.stringify(["alpha", "beta"])],
-  ]);
+  assert.deepEqual(writes, [[PINNED_EXTENSIONS_STORAGE_KEY, JSON.stringify(["alpha", "beta"])]]);
 });
 
 test("writePinnedExtensions ignores unavailable storage", () => {

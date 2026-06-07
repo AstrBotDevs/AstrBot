@@ -48,7 +48,7 @@ export const useCommonStore = defineStore("common", () => {
 
     const headers = {
       "Content-Type": "multipart/form-data",
-      Authorization: "Bearer " + localStorage.getItem("token"),
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
     };
 
     fetch(resolveApiUrl("/api/live-log"), {
@@ -71,13 +71,7 @@ export const useCommonStore = defineStore("common", () => {
         const decoder = new TextDecoder();
         let bufferedText = "";
 
-        const processStream = ({
-          done,
-          value,
-        }: {
-          done: boolean;
-          value?: Uint8Array;
-        }): Promise<void> => {
+        const processStream = ({ done, value }: { done: boolean; value?: Uint8Array }): Promise<void> => {
           if (done) {
             console.info("SSE stream closed");
             setTimeout(() => {
@@ -109,37 +103,23 @@ export const useCommonStore = defineStore("common", () => {
               const logObject = JSON.parse(logLine) as LogObject;
 
               if (!logObject.uuid) {
-                if (
-                  typeof crypto !== "undefined" &&
-                  typeof crypto.randomUUID === "function"
-                ) {
+                if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
                   logObject.uuid = crypto.randomUUID();
                 } else {
-                  logObject.uuid =
-                    "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
-                      /[xy]/g,
-                      function (c) {
-                        const r = (Math.random() * 16) | 0,
-                          v = c == "x" ? r : (r & 0x3) | 0x8;
-                        return v.toString(16);
-                      },
-                    );
+                  logObject.uuid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+                    const r = (Math.random() * 16) | 0,
+                      v = c === "x" ? r : (r & 0x3) | 0x8;
+                    return v.toString(16);
+                  });
                 }
               }
 
               log_cache.value.push(logObject);
               if (log_cache.value.length > log_cache_max_len.value) {
-                log_cache.value.splice(
-                  0,
-                  log_cache.value.length - log_cache_max_len.value,
-                );
+                log_cache.value.splice(0, log_cache.value.length - log_cache_max_len.value);
               }
             } catch (err) {
-              console.warn(
-                "Failed to parse SSE log line, skipping:",
-                err,
-                logLine,
-              );
+              console.warn("Failed to parse SSE log line, skipping:", err, logLine);
             }
           });
 
@@ -155,7 +135,7 @@ export const useCommonStore = defineStore("common", () => {
           level: "ERROR",
           time: Date.now() / 1000,
           data: "SSE Connection failed, retrying in 5 seconds...",
-          uuid: "error-" + Date.now(),
+          uuid: `error-${Date.now()}`,
         } as LogObject);
         setTimeout(() => {
           if (isUnmounted.value) return;
@@ -193,21 +173,14 @@ export const useCommonStore = defineStore("common", () => {
     return startTime.value;
   }
 
-  async function getPluginCollections(
-    force = false,
-    customSource: string | null = null,
-  ) {
+  async function getPluginCollections(force = false, customSource: string | null = null) {
     if (!force && pluginMarketData.value.length > 0 && !customSource) {
       return Promise.resolve(pluginMarketData.value);
     }
 
-    let url = force
-      ? "/api/plugin/market_list?force_refresh=true"
-      : "/api/plugin/market_list";
+    let url = force ? "/api/plugin/market_list?force_refresh=true" : "/api/plugin/market_list";
     if (customSource) {
-      url +=
-        (url.includes("?") ? "&" : "?") +
-        `custom_registry=${encodeURIComponent(customSource)}`;
+      url += `${url.includes("?") ? "&" : "?"}custom_registry=${encodeURIComponent(customSource)}`;
     }
 
     return axios
@@ -231,12 +204,8 @@ export const useCommonStore = defineStore("common", () => {
               pinned: pluginData?.pinned ? pluginData.pinned : false,
               stars: pluginData?.stars ? pluginData.stars : 0,
               updated_at: pluginData?.updated_at ? pluginData.updated_at : "",
-              display_name: pluginData?.display_name
-                ? pluginData.display_name
-                : "",
-              astrbot_version: pluginData?.astrbot_version
-                ? pluginData.astrbot_version
-                : "",
+              display_name: pluginData?.display_name ? pluginData.display_name : "",
+              astrbot_version: pluginData?.astrbot_version ? pluginData.astrbot_version : "",
               category: pluginData?.category ? pluginData.category : "",
               support_platforms: Array.isArray(pluginData?.support_platforms)
                 ? pluginData.support_platforms

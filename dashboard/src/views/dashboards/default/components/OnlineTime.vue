@@ -99,15 +99,8 @@ export default defineComponent({
   },
   computed: {
     memoryPercentage(): number {
-      if (
-        !this.stat.memory ||
-        !this.stat.memory.process ||
-        !this.stat.memory.system
-      )
-        return 0;
-      return Math.round(
-        (this.stat.memory.process / this.stat.memory.system) * 100,
-      );
+      if (!this.stat.memory || !this.stat.memory.process || !this.stat.memory.system) return 0;
+      return Math.round((this.stat.memory.process / this.stat.memory.system) * 100);
     },
   },
 });

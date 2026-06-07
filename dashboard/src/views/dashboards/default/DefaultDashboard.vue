@@ -74,14 +74,14 @@
 </template>
 
 <script lang="ts">
-import TotalMessage from "./components/TotalMessage.vue";
-import OnlinePlatform from "./components/OnlinePlatform.vue";
-import RunningTime from "./components/RunningTime.vue";
+import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 import MemoryUsage from "./components/MemoryUsage.vue";
 import MessageStat from "./components/MessageStat.vue";
+import OnlinePlatform from "./components/OnlinePlatform.vue";
 import PlatformStat from "./components/PlatformStat.vue";
-import axios from "@/utils/request";
-import { useModuleI18n } from "@/i18n/composables";
+import RunningTime from "./components/RunningTime.vue";
+import TotalMessage from "./components/TotalMessage.vue";
 
 export default {
   name: "DefaultDashboard",

@@ -1,4 +1,4 @@
-import { ref, computed } from "vue";
+import { computed, ref } from "vue";
 import { translations as staticTranslations } from "./translations";
 import type { Locale } from "./types";
 
@@ -73,12 +73,9 @@ export function useI18n() {
 
     // 处理参数插值
     if (params) {
-      result = result.replace(
-        /\{(\w+)\}/g,
-        (match: string, paramKey: string) => {
-          return params[paramKey]?.toString() || match;
-        },
-      );
+      result = result.replace(/\{(\w+)\}/g, (match: string, paramKey: string) => {
+        return params[paramKey]?.toString() || match;
+      });
     }
 
     return result;
@@ -128,10 +125,7 @@ export function useI18n() {
 export function useModuleI18n(moduleName: string) {
   const { t } = useI18n();
 
-  const tm = (
-    key: string,
-    params?: Record<string, string | number>,
-  ): string => {
+  const tm = (key: string, params?: Record<string, string | number>): string => {
     // 将斜杠转换为点号以匹配嵌套对象结构
     const normalizedModuleName = moduleName.replace(/\//g, ".");
     return t(`${normalizedModuleName}.${key}`, params);
@@ -192,10 +186,7 @@ export function useLanguageSwitcher() {
  * @param modulePath 模块路径，如 'features.config-metadata'
  * @param allLocaleData 所有语言的翻译数据，如 { "zh-CN": {...}, "en-US": {...} }
  */
-export function mergeDynamicTranslations(
-  modulePath: string,
-  allLocaleData: Record<string, any>,
-) {
+export function mergeDynamicTranslations(modulePath: string, allLocaleData: Record<string, any>) {
   const locale = currentLocale.value;
   const localeData = allLocaleData[locale];
   if (!localeData || typeof localeData !== "object") return;
@@ -217,11 +208,7 @@ export function mergeDynamicTranslations(
 
 function deepMerge(target: Record<string, any>, source: Record<string, any>) {
   for (const key of Object.keys(source)) {
-    if (
-      source[key] &&
-      typeof source[key] === "object" &&
-      !Array.isArray(source[key])
-    ) {
+    if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
       if (!(key in target) || typeof target[key] !== "object") {
         target[key] = {};
       }
@@ -236,10 +223,7 @@ function deepMerge(target: Record<string, any>, source: Record<string, any>) {
 export async function setupI18n() {
   // 从localStorage获取保存的语言设置
   const savedLocale = localStorage.getItem("astrbot-locale") as Locale;
-  const initialLocale =
-    savedLocale && ["zh-CN", "en-US", "ru-RU"].includes(savedLocale)
-      ? savedLocale
-      : "zh-CN";
+  const initialLocale = savedLocale && ["zh-CN", "en-US", "ru-RU"].includes(savedLocale) ? savedLocale : "zh-CN";
 
   await initI18n(initialLocale);
 }

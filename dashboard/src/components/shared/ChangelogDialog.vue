@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, computed } from "vue";
+import { enableKatex, enableMermaid, MarkdownRender } from "markstream-vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "@/i18n/composables";
 import axios from "@/utils/request";
-import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
@@ -50,8 +50,7 @@ async function getCurrentVersion() {
 
 // 加载更新日志
 async function loadChangelog(version) {
-  const targetVersion =
-    version || selectedVersion.value || changelogVersion.value;
+  const targetVersion = version || selectedVersion.value || changelogVersion.value;
   if (!targetVersion) {
     changelogError.value = t("core.navigation.changelogDialog.selectVersion");
     return;
@@ -70,15 +69,11 @@ async function loadChangelog(version) {
       changelogContent.value = res.data.data.content;
       selectedVersion.value = targetVersion;
     } else {
-      changelogError.value =
-        res.data.message || t("core.navigation.changelogDialog.error");
+      changelogError.value = res.data.message || t("core.navigation.changelogDialog.error");
     }
   } catch (err) {
     console.error("Failed to load changelog:", err);
-    if (
-      err.response?.status === 404 ||
-      err.response?.data?.message?.includes("not found")
-    ) {
+    if (err.response?.status === 404 || err.response?.data?.message?.includes("not found")) {
       changelogError.value = t("core.navigation.changelogDialog.notFound");
     } else {
       changelogError.value = t("core.navigation.changelogDialog.error");
@@ -122,10 +117,7 @@ watch(dialog, async (newValue) => {
     }
 
     // 如果当前版本在列表中，默认选择当前版本
-    if (
-      changelogVersion.value &&
-      availableVersions.value.includes(changelogVersion.value)
-    ) {
+    if (changelogVersion.value && availableVersions.value.includes(changelogVersion.value)) {
       selectedVersion.value = changelogVersion.value;
       await loadChangelog();
     } else if (availableVersions.value.length > 0) {

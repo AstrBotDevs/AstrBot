@@ -128,15 +128,11 @@ export default {
       return this.platforms.reduce((sum, platform) => sum + platform.count, 0);
     },
     mostActivePlatform() {
-      return this.sortedPlatforms.length > 0
-        ? this.sortedPlatforms[0].name
-        : "-";
+      return this.sortedPlatforms.length > 0 ? this.sortedPlatforms[0].name : "-";
     },
     topPlatformPercentage() {
       if (this.totalCount === 0 || this.sortedPlatforms.length === 0) return 0;
-      return Math.round(
-        (this.sortedPlatforms[0].count / this.totalCount) * 100,
-      );
+      return Math.round((this.sortedPlatforms[0].count / this.totalCount) * 100);
     },
   },
   watch: {

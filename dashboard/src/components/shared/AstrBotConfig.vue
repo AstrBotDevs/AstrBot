@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
-import { ref, computed } from "vue";
-import ConfigItemRenderer from "./ConfigItemRenderer.vue";
-import TemplateListEditor from "./TemplateListEditor.vue";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { computed, ref } from "vue";
 import { useConfigTextResolver } from "@/composables/useConfigTextResolver";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
+import ConfigItemRenderer from "./ConfigItemRenderer.vue";
+import TemplateListEditor from "./TemplateListEditor.vue";
 
 const props = defineProps({
   metadata: {
@@ -27,7 +27,7 @@ const props = defineProps({
   },
   pluginI18n: {
     type: Object,
-    default: () => ({})
+    default: () => ({}),
   },
   pathPrefix: {
     type: String,
@@ -108,23 +108,14 @@ async function getEmbeddingDimensions(providerConfig) {
 
   loadingEmbeddingDim.value = true;
   try {
-    const response = await axios.post(
-      "/api/config/provider/get_embedding_dim",
-      {
-        provider_config: providerConfig,
-      },
-    );
+    const response = await axios.post("/api/config/provider/get_embedding_dim", {
+      provider_config: providerConfig,
+    });
 
-    if (
-      response.data.status != "error" &&
-      response.data.data?.embedding_dimensions
-    ) {
+    if (response.data.status !== "error" && response.data.data?.embedding_dimensions) {
       console.info(response.data.data.embedding_dimensions);
-      providerConfig.embedding_dimensions =
-        response.data.data.embedding_dimensions;
-      useToast().success(
-        "获取成功: " + response.data.data.embedding_dimensions,
-      );
+      providerConfig.embedding_dimensions = response.data.data.embedding_dimensions;
+      useToast().success(`获取成功: ${response.data.data.embedding_dimensions}`);
     } else {
       useToast().error(response.data.message);
     }
@@ -152,9 +143,7 @@ function shouldShowItem(itemMeta, itemKey) {
   if (!itemMeta?.condition) {
     return true;
   }
-  for (const [conditionKey, expectedValue] of Object.entries(
-    itemMeta.condition,
-  )) {
+  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
     const actualValue = getValueBySelector(props.iterable, conditionKey);
     if (actualValue !== expectedValue) {
       return false;

@@ -439,10 +439,10 @@
 import axios from "axios";
 import { computed, onMounted, ref } from "vue";
 import { useTheme } from "vuetify";
-import { useModuleI18n } from "@/i18n/composables";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import { useModuleI18n } from "@/i18n/composables";
 
 const { tm } = useModuleI18n("features/cron");
 const theme = useTheme();
@@ -452,9 +452,7 @@ const loading = ref(false);
 const jobs = ref<any[]>([]);
 const taskSearch = ref("");
 const selectedUmoFilter = ref<string | null>(null);
-const proactivePlatforms = ref<
-  { id: string; name: string; display_name?: string }[]
->([]);
+const proactivePlatforms = ref<{ id: string; name: string; display_name?: string }[]>([]);
 const availableUmos = ref<string[]>([]);
 const availableUmoInfoMap = ref<Record<string, UmoInfo>>({});
 const loadingUmos = ref(false);
@@ -464,13 +462,7 @@ const creating = ref(false);
 const editingJobId = ref("");
 const runningJobIds = ref(new Set<string>());
 const NO_DELIVERY_TARGET_FILTER = "__astrbot_no_delivery_target__";
-type ScheduleMode =
-  | "once"
-  | "interval"
-  | "daily"
-  | "weekly"
-  | "monthly"
-  | "cron";
+type ScheduleMode = "once" | "interval" | "daily" | "weekly" | "monthly" | "cron";
 type IntervalUnit = "minutes" | "hours" | "days";
 type UmoInfo = {
   umo: string;
@@ -558,12 +550,8 @@ const sortedJobs = computed(() =>
 );
 
 const isEditing = computed(() => !!editingJobId.value);
-const dialogTitle = computed(() =>
-  tm(isEditing.value ? "form.editTitle" : "form.title"),
-);
-const dialogSubmitText = computed(() =>
-  tm(isEditing.value ? "actions.save" : "actions.submit"),
-);
+const dialogTitle = computed(() => tm(isEditing.value ? "form.editTitle" : "form.title"));
+const dialogSubmitText = computed(() => tm(isEditing.value ? "actions.save" : "actions.submit"));
 const scheduleModeOptions = computed(() => [
   { label: tm("form.scheduleModes.once"), value: "once" },
   { label: tm("form.scheduleModes.interval"), value: "interval" },
@@ -587,10 +575,7 @@ const weekdayOptions = computed(() => [
   { label: tm("form.weekdays.saturday"), value: 6 },
 ]);
 
-function toast(
-  message: string,
-  color: "success" | "error" | "warning" = "success",
-) {
+function toast(message: string, color: "success" | "error" | "warning" = "success") {
   snackbar.value = { show: true, message, color };
 }
 
@@ -634,9 +619,7 @@ function nextRunText(item: any): string {
 }
 
 function lastRunTooltipText(item: any): string {
-  const lastRun = `${tm("table.headers.lastRun")}: ${formatTime(
-    item.last_run_at,
-  )}`;
+  const lastRun = `${tm("table.headers.lastRun")}: ${formatTime(item.last_run_at)}`;
   const lastError = String(item.last_error || "").trim();
   if (!lastError) {
     return lastRun;
@@ -657,35 +640,17 @@ function scheduleProductLabel(item: any): string {
 
   const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
   const minuteInterval = /^\*\/(\d+)$/.exec(minute);
-  if (
-    minuteInterval &&
-    hour === "*" &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
+  if (minuteInterval && hour === "*" && dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
     return tm("card.everyMinutes", { count: Number(minuteInterval[1]) });
   }
 
   const hourInterval = /^\*\/(\d+)$/.exec(hour);
-  if (
-    minute === "0" &&
-    hourInterval &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
+  if (minute === "0" && hourInterval && dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
     return tm("card.everyHours", { count: Number(hourInterval[1]) });
   }
 
   const dayInterval = /^\*\/(\d+)$/.exec(dayOfMonth);
-  if (
-    minute === "0" &&
-    hour === "0" &&
-    dayInterval &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
+  if (minute === "0" && hour === "0" && dayInterval && month === "*" && dayOfWeek === "*") {
     return tm("card.everyDays", { count: Number(dayInterval[1]) });
   }
 
@@ -725,15 +690,7 @@ function scheduleProductLabel(item: any): string {
 }
 
 function weekdayText(value: number): string {
-  const keyMap = [
-    "sunday",
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-  ];
+  const keyMap = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
   return tm(`form.weekdays.${keyMap[value]}`);
 }
 
@@ -804,13 +761,9 @@ async function loadUmos(force = false) {
   try {
     const res = await axios.get("/api/session/active-umos");
     if (res.data.status === "ok") {
-      const loadedUmos = Array.isArray(res.data.data?.umos)
-        ? res.data.data.umos
-        : [];
+      const loadedUmos = Array.isArray(res.data.data?.umos) ? res.data.data.umos : [];
       mergeUmoInfos(res.data.data?.umo_infos || []);
-      availableUmos.value = Array.from(
-        new Set([...availableUmos.value, ...loadedUmos]),
-      );
+      availableUmos.value = Array.from(new Set([...availableUmos.value, ...loadedUmos]));
     }
   } catch {
     // The field remains editable through free search only when a UMO list is available.
@@ -829,9 +782,7 @@ async function loadJobs() {
         ...job,
         session: job?.payload?.session || job?.session || "",
       }));
-      mergeUmoInfos(
-        jobs.value.map(getJobSession).filter(Boolean).map(parseUmoInfo),
-      );
+      mergeUmoInfos(jobs.value.map(getJobSession).filter(Boolean).map(parseUmoInfo));
     } else {
       toast(res.data.message || tm("messages.loadFailed"), "error");
     }
@@ -979,9 +930,7 @@ function openEdit(job: any) {
   loadUmos(true);
 }
 
-function parseTimeParts(
-  value: string,
-): { hour: number; minute: number } | null {
+function parseTimeParts(value: string): { hour: number; minute: number } | null {
   const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(value || "");
   if (!match) return null;
   const hour = Number(match[1]);
@@ -995,14 +944,7 @@ function padTimePart(value: string | number): string {
 }
 
 function isCronTime(minute: number, hour: number): boolean {
-  return (
-    Number.isInteger(minute) &&
-    minute >= 0 &&
-    minute <= 59 &&
-    Number.isInteger(hour) &&
-    hour >= 0 &&
-    hour <= 23
-  );
+  return Number.isInteger(minute) && minute >= 0 && minute <= 59 && Number.isInteger(hour) && hour >= 0 && hour <= 23;
 }
 
 function buildCronExpression(): string {
@@ -1031,10 +973,7 @@ function buildCronExpression(): string {
   if (mode === "monthly") {
     const time = parseTimeParts(newJob.value.monthly_time);
     if (!time) return "";
-    const day = Math.min(
-      Math.max(Number(newJob.value.monthly_day || 1), 1),
-      31,
-    );
+    const day = Math.min(Math.max(Number(newJob.value.monthly_day || 1), 1), 31);
     return `${time.minute} ${time.hour} ${day} * *`;
   }
   return newJob.value.cron_expression.trim();
@@ -1068,18 +1007,10 @@ function readScheduleFromJob(job: any) {
   const dayOfMonthNumber = Number(dayOfMonth);
   const dayOfWeekNumber = Number(dayOfWeek);
   const hasCronTime = isCronTime(minuteNumber, hourNumber);
-  const time = hasCronTime
-    ? `${padTimePart(hourNumber)}:${padTimePart(minuteNumber)}`
-    : "09:00";
+  const time = hasCronTime ? `${padTimePart(hourNumber)}:${padTimePart(minuteNumber)}` : "09:00";
 
   const minuteInterval = /^\*\/(\d+)$/.exec(minute);
-  if (
-    minuteInterval &&
-    hour === "*" &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
+  if (minuteInterval && hour === "*" && dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
     return {
       ...fallback,
       schedule_mode: "interval" as ScheduleMode,
@@ -1089,13 +1020,7 @@ function readScheduleFromJob(job: any) {
   }
 
   const hourInterval = /^\*\/(\d+)$/.exec(hour);
-  if (
-    minute === "0" &&
-    hourInterval &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
+  if (minute === "0" && hourInterval && dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
     return {
       ...fallback,
       schedule_mode: "interval" as ScheduleMode,
@@ -1105,13 +1030,7 @@ function readScheduleFromJob(job: any) {
   }
 
   const dayInterval = /^\*\/(\d+)$/.exec(dayOfMonth);
-  if (
-    minute === "0" &&
-    hour === "0" &&
-    dayInterval &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
+  if (minute === "0" && hour === "0" && dayInterval && month === "*" && dayOfWeek === "*") {
     return {
       ...fallback,
       schedule_mode: "interval" as ScheduleMode,
@@ -1202,9 +1121,7 @@ function validateScheduleFields(): boolean {
 
   if (mode === "interval") {
     const value = Number(newJob.value.interval_value);
-    const validUnit = ["minutes", "hours", "days"].includes(
-      newJob.value.interval_unit,
-    );
+    const validUnit = ["minutes", "hours", "days"].includes(newJob.value.interval_unit);
     if (!Number.isInteger(value) || value < 1 || !validUnit) {
       toast(tm("messages.intervalRequired"), "warning");
       return false;
@@ -1222,12 +1139,7 @@ function validateScheduleFields(): boolean {
 
   if (mode === "weekly") {
     const weekday = Number(newJob.value.weekly_day);
-    if (
-      !parseTimeParts(newJob.value.weekly_time) ||
-      !Number.isInteger(weekday) ||
-      weekday < 0 ||
-      weekday > 6
-    ) {
+    if (!parseTimeParts(newJob.value.weekly_time) || !Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
       toast(tm("messages.weeklyTimeRequired"), "warning");
       return false;
     }
@@ -1236,12 +1148,7 @@ function validateScheduleFields(): boolean {
 
   if (mode === "monthly") {
     const day = Number(newJob.value.monthly_day);
-    if (
-      !parseTimeParts(newJob.value.monthly_time) ||
-      !Number.isInteger(day) ||
-      day < 1 ||
-      day > 31
-    ) {
+    if (!parseTimeParts(newJob.value.monthly_time) || !Number.isInteger(day) || day < 1 || day > 31) {
       toast(tm("messages.monthlyTimeRequired"), "warning");
       return false;
     }
@@ -1294,10 +1201,7 @@ async function updateJob() {
       ...buildPayload(),
       description: newJob.value.note,
     };
-    const res = await axios.patch(
-      `/api/cron/jobs/${editingJobId.value}`,
-      payload,
-    );
+    const res = await axios.patch(`/api/cron/jobs/${editingJobId.value}`, payload);
     if (res.data.status === "ok") {
       toast(tm("messages.updateSuccess"));
       createDialog.value = false;

@@ -10,12 +10,12 @@
 </template>
 
 <script lang="ts">
+import { mapActions, mapState } from "pinia";
 import { defineComponent } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
-import { usePersonaStore } from "@/stores/personaStore";
-import { mapState, mapActions } from "pinia";
 import BaseFolderBreadcrumb from "@/components/folder/BaseFolderBreadcrumb.vue";
 import type { FolderTreeNode } from "@/components/folder/types";
+import { useModuleI18n } from "@/i18n/composables";
+import { usePersonaStore } from "@/stores/personaStore";
 
 interface BreadcrumbItem {
   title: string;

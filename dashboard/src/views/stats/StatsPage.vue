@@ -239,10 +239,10 @@
 
 <script setup lang="ts">
 import type { ApexOptions } from "apexcharts";
-import axios from "@/utils/request";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useTheme } from "vuetify";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
 type TokenRange = 1 | 3 | 7;
 type ChartSeries = Array<{
@@ -332,8 +332,7 @@ const themePalette = computed(() => {
     border: colors.border ?? colors.borderLight ?? colors.primary,
     mutedText: colors.secondaryText ?? colors.primaryText ?? colors.primary,
     lightPrimary: colors.lightprimary ?? colors.surface ?? colors.background,
-    lightSecondary:
-      colors.lightsecondary ?? colors.surface ?? colors.background,
+    lightSecondary: colors.lightsecondary ?? colors.surface ?? colors.background,
   };
 });
 
@@ -402,25 +401,18 @@ function formatRunningTime(running?: RunningStats | null): string {
   if (!running) return "—";
   const parts = [
     running.hours > 0 ? `${running.hours}${t("units.hoursShort")}` : "",
-    running.minutes > 0 || running.hours > 0
-      ? `${running.minutes}${t("units.minutesShort")}`
-      : "",
+    running.minutes > 0 || running.hours > 0 ? `${running.minutes}${t("units.minutesShort")}` : "",
     `${running.seconds}${t("units.secondsShort")}`,
   ].filter(Boolean);
   return parts.join(" ");
 }
 
-function aggregateOverflowSeries(
-  series: ProviderTrendItem[],
-): ProviderTrendItem[] {
+function aggregateOverflowSeries(series: ProviderTrendItem[]): ProviderTrendItem[] {
   if (series.length <= 5) return series;
   const leading = series.slice(0, 4);
   const overflow = series.slice(4);
   const mergedPoints = overflow[0].data.map(([timestamp], index) => {
-    const total = overflow.reduce(
-      (sum, item) => sum + (item.data[index]?.[1] ?? 0),
-      0,
-    );
+    const total = overflow.reduce((sum, item) => sum + (item.data[index]?.[1] ?? 0), 0);
     return [timestamp, total] as [number, number];
   });
   return [
@@ -529,40 +521,26 @@ const overviewCards = computed(() => [
 const messageChartSeries = computed<ChartSeries>(() => [
   {
     name: t("chart.messages"),
-    data: (baseStats.value?.message_time_series ?? []).map(
-      ([timestamp, value]) => [timestamp * 1000, value],
-    ),
+    data: (baseStats.value?.message_time_series ?? []).map(([timestamp, value]) => [timestamp * 1000, value]),
   },
 ]);
 
 const providerTrendSeries = computed<ChartSeries>(() =>
-  aggregateOverflowSeries(providerStats.value?.trend.series ?? []).map(
-    (item) => ({
-      name: item.name,
-      data: item.data,
-    }),
-  ),
+  aggregateOverflowSeries(providerStats.value?.trend.series ?? []).map((item) => ({
+    name: item.name,
+    data: item.data,
+  })),
 );
 
-const rangeProviderRanking = computed(
-  () => providerStats.value?.range_by_provider ?? [],
-);
+const rangeProviderRanking = computed(() => providerStats.value?.range_by_provider ?? []);
 
-const rangeUmoRanking = computed(() =>
-  (providerStats.value?.range_by_umo ?? []).slice(0, 10),
-);
+const rangeUmoRanking = computed(() => (providerStats.value?.range_by_umo ?? []).slice(0, 10));
 
-const rangeAvgTtftLabel = computed(() =>
-  formatDurationMs(providerStats.value?.range_avg_ttft_ms ?? 0),
-);
+const rangeAvgTtftLabel = computed(() => formatDurationMs(providerStats.value?.range_avg_ttft_ms ?? 0));
 
-const rangeAvgDurationLabel = computed(() =>
-  formatDurationMs(providerStats.value?.range_avg_duration_ms ?? 0),
-);
+const rangeAvgDurationLabel = computed(() => formatDurationMs(providerStats.value?.range_avg_duration_ms ?? 0));
 
-const rangeAvgTpmLabel = computed(() =>
-  formatTpm(providerStats.value?.range_avg_tpm ?? 0),
-);
+const rangeAvgTpmLabel = computed(() => formatTpm(providerStats.value?.range_avg_tpm ?? 0));
 
 const rangeSuccessRateLabel = computed(() => {
   if (!(providerStats.value?.range_total_calls ?? 0)) {
@@ -573,37 +551,15 @@ const rangeSuccessRateLabel = computed(() => {
 });
 
 const platformRanking = computed(() =>
-  [...(baseStats.value?.platform ?? [])]
-    .sort((left, right) => right.count - left.count)
-    .slice(0, 6),
+  [...(baseStats.value?.platform ?? [])].sort((left, right) => right.count - left.count).slice(0, 6),
 );
 
-const startTimeLabel = computed(() =>
-  formatDateTime(baseStats.value?.start_time ?? 0),
-);
+const startTimeLabel = computed(() => formatDateTime(baseStats.value?.start_time ?? 0));
 
 const providerChartColors = computed(() =>
   isDark.value
-    ? [
-        "#6F8FAF",
-        "#7E9A73",
-        "#A78468",
-        "#8A78A8",
-        "#6B9995",
-        "#B07A87",
-        "#8C8F62",
-        "#7C8798",
-      ]
-    : [
-        "#5F7E9B",
-        "#708865",
-        "#9A7557",
-        "#786696",
-        "#5D8985",
-        "#9C6674",
-        "#80844F",
-        "#69788D",
-      ],
+    ? ["#6F8FAF", "#7E9A73", "#A78468", "#8A78A8", "#6B9995", "#B07A87", "#8C8F62", "#7C8798"]
+    : ["#5F7E9B", "#708865", "#9A7557", "#786696", "#5D8985", "#9C6674", "#80844F", "#69788D"],
 );
 
 const messageChartOptions = computed<ApexOptions>(() => ({
@@ -611,8 +567,7 @@ const messageChartOptions = computed<ApexOptions>(() => ({
     background: "transparent",
     toolbar: { show: false },
     zoom: { enabled: false },
-    fontFamily:
-      '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   },
   theme: {
     mode: isDark.value ? "dark" : "light",
@@ -627,10 +582,7 @@ const messageChartOptions = computed<ApexOptions>(() => ({
     opacity: 0.12,
   },
   grid: {
-    borderColor: hexToRgba(
-      themePalette.value.border,
-      isDark.value ? 0.4 : 0.26,
-    ),
+    borderColor: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
     strokeDashArray: 0,
   },
   dataLabels: { enabled: false },
@@ -668,8 +620,7 @@ const providerChartOptions = computed<ApexOptions>(() => ({
     toolbar: { show: false },
     zoom: { enabled: false },
     stacked: true,
-    fontFamily:
-      '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   },
   theme: {
     mode: isDark.value ? "dark" : "light",
@@ -684,10 +635,7 @@ const providerChartOptions = computed<ApexOptions>(() => ({
   colors: providerChartColors.value,
   dataLabels: { enabled: false },
   grid: {
-    borderColor: hexToRgba(
-      themePalette.value.border,
-      isDark.value ? 0.4 : 0.26,
-    ),
+    borderColor: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
   },
   xaxis: {
     type: "datetime",

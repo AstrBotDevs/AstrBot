@@ -360,28 +360,19 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from "vue";
+import { enableKatex, enableMermaid, MarkdownCodeBlockNode, setCustomComponents } from "markstream-vue";
 import type { PropType } from "vue";
+import { defineComponent } from "vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import {
-  enableKatex,
-  enableMermaid,
-  MarkdownCodeBlockNode,
-  setCustomComponents,
-} from "markstream-vue";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
-import type {
-  ChatRecord,
-  MessagePart,
-  ToolCall,
-} from "@/composables/useMessages";
+import type { ChatRecord, MessagePart, ToolCall } from "@/composables/useMessages";
 import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
-import ReasoningBlock from "./message_list_comps/ReasoningBlock.vue";
-import MessagePartsRenderer from "./message_list_comps/MessagePartsRenderer.vue";
 import ActionRef from "./message_list_comps/ActionRef.vue";
+import MessagePartsRenderer from "./message_list_comps/MessagePartsRenderer.vue";
+import ReasoningBlock from "./message_list_comps/ReasoningBlock.vue";
 
 enableKatex();
 enableMermaid();
@@ -481,10 +472,7 @@ export default defineComponent({
   methods: {
     // 从消息中提取 web_search_tavily 的搜索结果
     extractWebSearchResults(): void {
-      const results: Record<
-        string,
-        { url: string; title: string; snippet: string }
-      > = {};
+      const results: Record<string, { url: string; title: string; snippet: string }> = {};
 
       this.messages.forEach((msg: ChatRecord) => {
         if (msg.content.type !== "bot" || !Array.isArray(msg.content.message)) {
@@ -503,9 +491,7 @@ export default defineComponent({
 
             try {
               const resultData = (
-                typeof toolCall.result === "string"
-                  ? JSON.parse(toolCall.result)
-                  : toolCall.result
+                typeof toolCall.result === "string" ? JSON.parse(toolCall.result) : toolCall.result
               ) as {
                 results?: Array<{
                   index: string;
@@ -566,9 +552,7 @@ export default defineComponent({
         return;
       }
 
-      const messageItems = (
-        this.$refs.messageContainer as HTMLElement | null
-      )?.querySelectorAll(".message-item");
+      const messageItems = (this.$refs.messageContainer as HTMLElement | null)?.querySelectorAll(".message-item");
       let messageIndex = -1;
       if (messageItems) {
         for (let i = 0; i < messageItems.length; i++) {
@@ -599,8 +583,7 @@ export default defineComponent({
     handleQuoteSelected(): void {
       if (this.selectedText.messageIndex === null) return;
 
-      const msg: ChatRecord | undefined =
-        this.messages[this.selectedText.messageIndex];
+      const msg: ChatRecord | undefined = this.messages[this.selectedText.messageIndex];
       if (!msg || !msg.id) return;
 
       this.$emit("replyWithText", {
@@ -617,16 +600,12 @@ export default defineComponent({
     // 检查 message 中是否有音频
     hasAudio(messageParts: MessagePart[]): boolean {
       if (!Array.isArray(messageParts)) return false;
-      return messageParts.some(
-        (part) => part.type === "record" && part.embedded_url,
-      );
+      return messageParts.some((part) => part.type === "record" && part.embedded_url);
     },
 
     // 获取被引用消息的内容
     getReplyContent(messageId: string | number | undefined): string {
-      const replyMsg = this.messages.find(
-        (m: ChatRecord) => m.id === messageId,
-      );
+      const replyMsg = this.messages.find((m: ChatRecord) => m.id === messageId);
       if (!replyMsg) {
         return this.tm("reply.notFound");
       }
@@ -639,16 +618,14 @@ export default defineComponent({
       }
       // 截断过长内容
       if (content.length > 50) {
-        content = content.substring(0, 50) + "...";
+        content = `${content.substring(0, 50)}...`;
       }
       return content || "[媒体内容]";
     },
 
     // 滚动到指定消息
     scrollToMessage(messageId: string | number | undefined): void {
-      const msgIndex = this.messages.findIndex(
-        (m: ChatRecord) => m.id === messageId,
-      );
+      const msgIndex = this.messages.findIndex((m: ChatRecord) => m.id === messageId);
       if (msgIndex === -1) return;
 
       const container = this.$refs.messageContainer as HTMLElement | null;
@@ -658,13 +635,9 @@ export default defineComponent({
           behavior: "smooth",
           block: "center",
         });
-        (messageItems[msgIndex] as HTMLElement).classList.add(
-          "highlight-message",
-        );
+        (messageItems[msgIndex] as HTMLElement).classList.add("highlight-message");
         setTimeout(() => {
-          (messageItems[msgIndex] as HTMLElement).classList.remove(
-            "highlight-message",
-          );
+          (messageItems[msgIndex] as HTMLElement).classList.remove("highlight-message");
         }, 2000);
       }
     },
@@ -685,22 +658,16 @@ export default defineComponent({
     },
 
     // 下载文件
-    async downloadFile(file: {
-      attachment_id?: string;
-      filename?: string;
-    }): Promise<void> {
+    async downloadFile(file: { attachment_id?: string; filename?: string }): Promise<void> {
       if (!file.attachment_id) return;
 
       this.downloadingFiles.add(file.attachment_id);
       this.downloadingFiles = new Set(this.downloadingFiles);
 
       try {
-        const response = await axios.get(
-          `/api/chat/get_attachment?attachment_id=${file.attachment_id}`,
-          {
-            responseType: "blob",
-          },
-        );
+        const response = await axios.get(`/api/chat/get_attachment?attachment_id=${file.attachment_id}`, {
+          responseType: "blob",
+        });
 
         const url = URL.createObjectURL(response.data);
         const a = document.createElement("a");
@@ -740,9 +707,7 @@ export default defineComponent({
       }
     },
 
-    async copyTextToClipboard(
-      text: string,
-    ): Promise<{ ok: boolean; method: string; error?: unknown }> {
+    async copyTextToClipboard(text: string): Promise<{ ok: boolean; method: string; error?: unknown }> {
       if (this.tryExecCommandCopy(text)) {
         return { ok: true, method: "execCommand" };
       }
@@ -800,17 +765,13 @@ export default defineComponent({
 
       let textToCopy = textContents.join("\n");
 
-      const imageCount = messageParts.filter(
-        (part: MessagePart) => part?.type === "image" && part.embedded_url,
-      ).length;
+      const imageCount = messageParts.filter((part: MessagePart) => part?.type === "image" && part.embedded_url).length;
       if (imageCount > 0) {
         if (textToCopy) textToCopy += "\n\n";
         textToCopy += `[包含 ${imageCount} 张图片]`;
       }
 
-      const hasAudio = messageParts.some(
-        (part: MessagePart) => part?.type === "record" && part.embedded_url,
-      );
+      const hasAudio = messageParts.some((part: MessagePart) => part?.type === "record" && part.embedded_url);
       if (hasAudio) {
         if (textToCopy) textToCopy += "\n\n";
         textToCopy += "[包含音频内容]";
@@ -819,19 +780,14 @@ export default defineComponent({
       return String(textToCopy || "").trim();
     },
 
-    async copyCodeToClipboard(
-      code: string,
-    ): Promise<{ ok: boolean; method: string }> {
+    async copyCodeToClipboard(code: string): Promise<{ ok: boolean; method: string }> {
       const text = String(code ?? "");
       if (!text) return { ok: false, method: "empty" };
       return await this.copyWithFeedback(text, null);
     },
 
     // 复制bot消息到剪贴板
-    async copyBotMessage(
-      messageParts: MessagePart[],
-      messageIndex: number,
-    ): Promise<void> {
+    async copyBotMessage(messageParts: MessagePart[], messageIndex: number): Promise<void> {
       let textToCopy = this.buildCopyTextFromParts(messageParts);
       if (!textToCopy) textToCopy = "[媒体内容]";
       await this.copyWithFeedback(textToCopy, messageIndex);
@@ -870,8 +826,7 @@ export default defineComponent({
     // 获取复制按钮图标
     getCopyIcon(messageIndex: number): string {
       if (this.copiedMessages.has(messageIndex)) return "mdi-check";
-      if (this.copyFailedMessages.has(messageIndex))
-        return "mdi-alert-circle-outline";
+      if (this.copyFailedMessages.has(messageIndex)) return "mdi-alert-circle-outline";
       return "mdi-content-copy";
     },
 
@@ -888,8 +843,7 @@ export default defineComponent({
     // 获取复制按钮提示文本
     getCopyTitle(messageIndex: number): string {
       if (this.isCopySuccess(messageIndex)) return this.t("core.common.copied");
-      if (this.isCopyFailure(messageIndex))
-        return this.t("core.common.copyFailed");
+      if (this.isCopyFailure(messageIndex)) return this.t("core.common.copyFailed");
       return this.t("core.common.copy");
     },
 
@@ -922,20 +876,11 @@ export default defineComponent({
             button.innerHTML = this.getCopyIconSvg();
             button.title = this.t("core.common.copy");
             button.addEventListener("click", async () => {
-              const res = await this.copyCodeToClipboard(
-                codeBlock.textContent || "",
-              );
+              const res = await this.copyCodeToClipboard(codeBlock.textContent || "");
               const ok = !!res?.ok;
-              button.innerHTML = ok
-                ? this.getSuccessIconSvg()
-                : this.getErrorIconSvg();
-              button.style.color = ok
-                ? "rgb(var(--v-theme-success))"
-                : "rgb(var(--v-theme-error))";
-              button.setAttribute(
-                "title",
-                this.t(`core.common.${ok ? "copied" : "copyFailed"}`),
-              );
+              button.innerHTML = ok ? this.getSuccessIconSvg() : this.getErrorIconSvg();
+              button.style.color = ok ? "rgb(var(--v-theme-success))" : "rgb(var(--v-theme-error))";
+              button.setAttribute("title", this.t(`core.common.${ok ? "copied" : "copyFailed"}`));
               setTimeout(() => {
                 button.innerHTML = this.getCopyIconSvg();
                 button.style.color = "";
@@ -952,9 +897,7 @@ export default defineComponent({
     initImageClickEvents(): void {
       this.$nextTick(() => {
         if (this.isUnmounted) return;
-        const images = document.querySelectorAll<HTMLImageElement>(
-          ".markdown-content img",
-        );
+        const images = document.querySelectorAll<HTMLImageElement>(".markdown-content img");
         images.forEach((img: HTMLImageElement) => {
           if (!img.hasAttribute("data-click-enabled")) {
             img.style.cursor = "pointer";
@@ -1029,16 +972,8 @@ export default defineComponent({
       const date = new Date(dateStr);
       const now = new Date();
 
-      const dateDay = new Date(
-        date.getFullYear(),
-        date.getMonth(),
-        date.getDate(),
-      );
-      const todayDay = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-      );
+      const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const yesterdayDay = new Date(todayDay);
       yesterdayDay.setDate(yesterdayDay.getDate() - 1);
 
@@ -1071,8 +1006,7 @@ export default defineComponent({
             Array.isArray(msg.content.message) &&
             msg.content.message.some(
               (part: MessagePart) =>
-                part.type === "tool_call" &&
-                part.tool_calls?.some((tc: ToolCall) => !tc.finished_ts),
+                part.type === "tool_call" && part.tool_calls?.some((tc: ToolCall) => !tc.finished_ts),
             ),
         );
 
@@ -1083,10 +1017,7 @@ export default defineComponent({
               msg.content.message.some(
                 (part: MessagePart) =>
                   part.type === "tool_call" &&
-                  part.tool_calls?.some(
-                    (tc: ToolCall) =>
-                      !tc.finished_ts && this.currentTime - (tc.ts ?? 0) < 1,
-                  ),
+                  part.tool_calls?.some((tc: ToolCall) => !tc.finished_ts && this.currentTime - (tc.ts ?? 0) < 1),
               ),
           );
 
@@ -1124,20 +1055,13 @@ export default defineComponent({
     },
 
     // Get input tokens (input_other + input_cached)
-    getInputTokens(
-      tokenUsage:
-        | { input_other?: number; input_cached?: number }
-        | null
-        | undefined,
-    ): number {
+    getInputTokens(tokenUsage: { input_other?: number; input_cached?: number } | null | undefined): number {
       if (!tokenUsage) return 0;
       return (tokenUsage.input_other || 0) + (tokenUsage.input_cached || 0);
     },
 
     // Format agent duration
-    formatAgentDuration(
-      agentStats: { start_time: number; end_time: number } | null | undefined,
-    ): string {
+    formatAgentDuration(agentStats: { start_time: number; end_time: number } | null | undefined): string {
       if (!agentStats) return "";
       const duration = agentStats.end_time - agentStats.start_time;
       return this.formatDuration(duration);

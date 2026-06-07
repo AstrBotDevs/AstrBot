@@ -596,19 +596,16 @@
 </template>
 
 <script lang="ts">
-import axios, { AxiosError } from "@/utils/request";
+import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { debounce } from "lodash";
 import { defineComponent } from "vue";
-import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
+import MessageList from "@/components/chat/MessageList.vue";
+import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCommonStore } from "@/stores/common";
 import { useCustomizerStore } from "@/stores/customizer";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import MessageList from "@/components/chat/MessageList.vue";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
-import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
+import axios, { AxiosError } from "@/utils/request";
 
 interface UmoInfo {
   umo?: string;
@@ -794,7 +791,7 @@ export default defineComponent({
       // 解析 tutorial_map
       const tutorialMap = this.commonStore.tutorial_map;
       for (const platform in tutorialMap) {
-        if (tutorialMap.hasOwnProperty(platform)) {
+        if (Object.hasOwn(tutorialMap, platform)) {
           platforms.push({
             title: platform,
             value: platform,
@@ -814,9 +811,7 @@ export default defineComponent({
 
     // 当前的筛选条件对象
     currentFilters() {
-      const platforms = this.platformFilter.map((item) =>
-        typeof item === "object" ? item.value : item,
-      );
+      const platforms = this.platformFilter.map((item) => (typeof item === "object" ? item.value : item));
       return {
         platforms: platforms,
         messageTypes: this.messageTypeFilter,
@@ -840,60 +835,54 @@ export default defineComponent({
         }
       }
 
-      return this.conversationHistory
-        // tool / system 等非聊天角色不直接渲染为气泡，避免大文本走 markdown 路径卡死页面
-        .filter((msg) => msg.role === "user" || msg.role === "assistant")
-        .map((msg) => {
-          console.info("处理消息:", msg.role, msg.content);
+      return (
+        this.conversationHistory
+          // tool / system 等非聊天角色不直接渲染为气泡，避免大文本走 markdown 路径卡死页面
+          .filter((msg) => msg.role === "user" || msg.role === "assistant")
+          .map((msg) => {
+            console.info("处理消息:", msg.role, msg.content);
 
-          const messageParts = this.convertContentToMessageParts(msg.content)
-            // 丢弃 convertContentToMessageParts 兜底插入的空 plain，避免 assistant 仅有工具调用时渲染空气泡
-            .filter(
-              (part) =>
-                part.type !== "plain" || (part.text && part.text.trim()),
-            );
+            const messageParts = this.convertContentToMessageParts(msg.content)
+              // 丢弃 convertContentToMessageParts 兜底插入的空 plain，避免 assistant 仅有工具调用时渲染空气泡
+              .filter((part) => part.type !== "plain" || (part.text && part.text.trim()));
 
-          // 把 OpenAI 风格的 assistant.tool_calls 转成 MessageList 已支持的 tool_call part
-          if (
-            msg.role === "assistant" &&
-            Array.isArray((msg as Record<string, unknown>).tool_calls) &&
-            ((msg as Record<string, unknown>).tool_calls as unknown[]).length
-          ) {
-            const toolCalls = ((msg as Record<string, unknown>).tool_calls as unknown[]).map(
-              (tc: unknown) => {
+            // 把 OpenAI 风格的 assistant.tool_calls 转成 MessageList 已支持的 tool_call part
+            if (
+              msg.role === "assistant" &&
+              Array.isArray((msg as Record<string, unknown>).tool_calls) &&
+              ((msg as Record<string, unknown>).tool_calls as unknown[]).length
+            ) {
+              const toolCalls = ((msg as Record<string, unknown>).tool_calls as unknown[]).map((tc: unknown) => {
                 const tcObj = tc as Record<string, unknown>;
                 const fn = (tcObj.function || {}) as Record<string, unknown>;
                 return {
                   id: tcObj.id,
                   name: (fn.name || tcObj.name) as string,
                   args: (fn.arguments ?? tcObj.arguments) as string,
-                  result:
-                    toolResultsById[tcObj.id as string],
+                  result: toolResultsById[tcObj.id as string],
                   // 历史回放无真实耗时数据：
                   // ts: 0  → ToolCallCard.toolCallDuration 在 startTime<=0 时早退，跳过时长显示
                   // finished_ts: 1 → MessageList.toolCallStatusText 视为已完成（避免误显示"运行中"）
                   ts: 0,
                   finished_ts: 1,
                 };
+              });
+              messageParts.push({
+                type: "tool_call",
+                tool_calls: toolCalls,
+              } as unknown as MessageContentPart);
+            }
+
+            const finalParts = messageParts.length ? messageParts : [{ type: "plain", text: "" }];
+
+            return {
+              content: {
+                type: msg.role === "user" ? "user" : "bot",
+                message: finalParts,
               },
-            );
-            messageParts.push({
-              type: "tool_call",
-              tool_calls: toolCalls,
-            } as unknown as MessageContentPart);
-          }
-
-          const finalParts = messageParts.length
-            ? messageParts
-            : [{ type: "plain", text: "" }];
-
-          return {
-            content: {
-              type: msg.role === "user" ? "user" : "bot",
-              message: finalParts,
-            },
-          };
-        });
+            };
+          })
+      );
     },
   },
 
@@ -929,8 +918,7 @@ export default defineComponent({
 
     // 从会话ID解析平台和消息类型信息
     parseSessionId(userId: string | null | undefined) {
-      if (!userId)
-        return { platform: "default", messageType: "default", sessionId: "" };
+      if (!userId) return { platform: "default", messageType: "default", sessionId: "" };
 
       // 使用冒号进行分割，格式: platform:messageType:sessionId
       const parts = userId.split(":");
@@ -1041,9 +1029,7 @@ export default defineComponent({
 
           // 添加筛选条件 - 处理combobox的混合数据格式
           if (this.platformFilter.length > 0) {
-            const platforms = this.platformFilter.map((item) =>
-              typeof item === "object" ? item.value : item,
-            );
+            const platforms = this.platformFilter.map((item) => (typeof item === "object" ? item.value : item));
             params.platforms = platforms.join(",");
           }
 
@@ -1099,17 +1085,13 @@ export default defineComponent({
               console.warn("API 响应中没有分页信息");
             }
           } else {
-            this.showErrorMessage(
-              response.data.message || this.tm("messages.fetchError"),
-            );
+            this.showErrorMessage(response.data.message || this.tm("messages.fetchError"));
           }
         } catch (error: unknown) {
           if (axios.isCancel(error)) return;
 
           console.error("获取对话列表出错:", error);
-          this.showErrorMessage(
-            this.getErrorMessage(error, this.tm("messages.fetchError")),
-          );
+          this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.fetchError")));
         } finally {
           this.loading = false;
         }
@@ -1123,9 +1105,7 @@ export default defineComponent({
       this.isEditingHistory = false;
 
       try {
-        console.info(
-          `正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`,
-        );
+        console.info(`正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`);
         const response = await axios.post("/api/conversation/detail", {
           user_id: item.user_id,
           cid: item.cid,
@@ -1148,11 +1128,7 @@ export default defineComponent({
 
             const historyData = detailData.history || "[]";
             this.conversationHistory = JSON.parse(historyData);
-            this.editedHistory = JSON.stringify(
-              this.conversationHistory,
-              null,
-              2,
-            );
+            this.editedHistory = JSON.stringify(this.conversationHistory, null, 2);
           } catch (e) {
             this.conversationHistory = [];
             this.editedHistory = "[]";
@@ -1160,15 +1136,11 @@ export default defineComponent({
           }
           this.dialogView = true;
         } else {
-          this.showErrorMessage(
-            response.data.message || this.tm("messages.historyError"),
-          );
+          this.showErrorMessage(response.data.message || this.tm("messages.historyError"));
         }
       } catch (error: unknown) {
         console.error("获取对话详情出错:", error);
-        this.showErrorMessage(
-          this.getErrorMessage(error, this.tm("messages.historyError")),
-        );
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.historyError")));
       } finally {
         this.loading = false;
       }
@@ -1201,15 +1173,11 @@ export default defineComponent({
           this.showSuccessMessage(this.tm("messages.historySaveSuccess"));
           this.isEditingHistory = false;
         } else {
-          this.showErrorMessage(
-            response.data.message || this.tm("messages.historySaveError"),
-          );
+          this.showErrorMessage(response.data.message || this.tm("messages.historySaveError"));
         }
       } catch (error: unknown) {
         console.error("更新对话历史出错:", error);
-        this.showErrorMessage(
-          this.getErrorMessage(error, this.tm("messages.historySaveError")),
-        );
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.historySaveError")));
       } finally {
         this.savingHistory = false;
       }
@@ -1218,12 +1186,7 @@ export default defineComponent({
     // 关闭对话历史对话框
     async closeHistoryDialog() {
       if (this.isEditingHistory) {
-        if (
-          await askForConfirmationDialog(
-            this.tm("dialogs.view.confirmClose"),
-            this.confirmDialog,
-          )
-        ) {
+        if (await askForConfirmationDialog(this.tm("dialogs.view.confirmClose"), this.confirmDialog)) {
           this.dialogView = false;
         }
       } else {
@@ -1253,9 +1216,7 @@ export default defineComponent({
         if (response.data.status === "ok") {
           // 更新本地数据
           const index = this.conversations.findIndex(
-            (item) =>
-              item.user_id === this.editedItem.user_id &&
-              item.cid === this.editedItem.cid,
+            (item) => item.user_id === this.editedItem.user_id && item.cid === this.editedItem.cid,
           );
 
           if (index !== -1) {
@@ -1268,14 +1229,10 @@ export default defineComponent({
           // 刷新数据
           this.fetchConversations();
         } else {
-          this.showErrorMessage(
-            response.data.message || this.tm("messages.saveError"),
-          );
+          this.showErrorMessage(response.data.message || this.tm("messages.saveError"));
         }
       } catch (error: unknown) {
-        this.showErrorMessage(
-          this.getErrorMessage(error, this.tm("messages.saveError")),
-        );
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.saveError")));
       } finally {
         this.loading = false;
       }
@@ -1300,9 +1257,7 @@ export default defineComponent({
 
         if (response.data.status === "ok") {
           const index = this.conversations.findIndex(
-            (item) =>
-              item.user_id === target.user_id &&
-              item.cid === target.cid,
+            (item) => item.user_id === target.user_id && item.cid === target.cid,
           );
 
           if (index !== -1) {
@@ -1312,22 +1267,14 @@ export default defineComponent({
           this.dialogDelete = false;
           this.showSuccessMessage(this.tm("messages.deleteSuccess"));
         } else {
-          this.showErrorMessage(
-            response.data.message || this.tm("messages.deleteError"),
-          );
+          this.showErrorMessage(response.data.message || this.tm("messages.deleteError"));
         }
       } catch (error: unknown) {
-        this.showErrorMessage(
-          this.getErrorMessage(error, this.tm("messages.deleteError")),
-        );
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.deleteError")));
       } finally {
         this.loading = false;
         this.selectedItems = this.selectedItems.filter(
-          (item) =>
-            !(
-              item.user_id === target.user_id &&
-              item.cid === target.cid
-            ),
+          (item) => !(item.user_id === target.user_id && item.cid === target.cid),
         );
         this.selectedConversation = null;
       }
@@ -1351,8 +1298,7 @@ export default defineComponent({
     // 从选择中移除项目
     removeFromSelection(item: ConversationItem) {
       const index = this.selectedItems.findIndex(
-        (selected) =>
-          selected.user_id === item.user_id && selected.cid === item.cid,
+        (selected) => selected.user_id === item.user_id && selected.cid === item.cid,
       );
       if (index !== -1) {
         this.selectedItems.splice(index, 1);
@@ -1402,15 +1348,11 @@ export default defineComponent({
           // 刷新列表
           this.fetchConversations();
         } else {
-          this.showErrorMessage(
-            response.data.message || this.tm("messages.batchDeleteError"),
-          );
+          this.showErrorMessage(response.data.message || this.tm("messages.batchDeleteError"));
         }
       } catch (error: unknown) {
         console.error("批量删除对话出错:", error);
-        this.showErrorMessage(
-          this.getErrorMessage(error, this.tm("messages.batchDeleteError")),
-        );
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.batchDeleteError")));
       } finally {
         this.loading = false;
       }
@@ -1447,10 +1389,7 @@ export default defineComponent({
         link.href = url;
 
         // 生成文件名（使用时间戳）
-        const timestamp = new Date()
-          .toISOString()
-          .replace(/[:.]/g, "-")
-          .slice(0, -5);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
         const filename = `conversations_export_${timestamp}.jsonl`;
 
         link.setAttribute("download", filename);
@@ -1464,9 +1403,7 @@ export default defineComponent({
         this.showSuccessMessage(this.tm("messages.exportSuccess"));
       } catch (error: unknown) {
         console.error(this.tm("messages.exportError"), error);
-        this.showErrorMessage(
-          this.getErrorMessage(error, this.tm("messages.exportError")),
-        );
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.exportError")));
       } finally {
         this.loading = false;
       }

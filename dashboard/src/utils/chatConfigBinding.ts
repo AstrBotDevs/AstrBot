@@ -38,25 +38,17 @@ export function getStoredDashboardUsername(): string {
 }
 
 export function getStoredSelectedChatConfigId(): string {
-  return (
-    getFromLocalStorage(CHAT_SELECTED_CONFIG_STORAGE_KEY, "").trim() ||
-    "default"
-  );
+  return getFromLocalStorage(CHAT_SELECTED_CONFIG_STORAGE_KEY, "").trim() || "default";
 }
 
 export function setStoredSelectedChatConfigId(configId: string): void {
   setToLocalStorage(CHAT_SELECTED_CONFIG_STORAGE_KEY, configId);
 }
 
-export function buildWebchatUmoDetails(
-  sessionId: string,
-  isGroup = false,
-): WebchatUmoDetails {
+export function buildWebchatUmoDetails(sessionId: string, isGroup = false): WebchatUmoDetails {
   const platformId = "webchat";
   const username = getStoredDashboardUsername();
-  const messageType: ChatMessageType = isGroup
-    ? "GroupMessage"
-    : "FriendMessage";
+  const messageType: ChatMessageType = isGroup ? "GroupMessage" : "FriendMessage";
   const sessionKey = `${platformId}!${username}!${sessionId}`;
   return {
     platformId,

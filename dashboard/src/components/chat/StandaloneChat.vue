@@ -69,17 +69,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
-import axios from "@/utils/request";
-import { useCustomizerStore } from "@/stores/customizer";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import MessageList from "@/components/chat/MessageList.vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+// biome-ignore lint/style/useImportType: Vue template components require runtime imports.
 import ChatInput from "@/components/chat/ChatInput.vue";
-import { useMessages } from "@/composables/useMessages";
+// biome-ignore lint/style/useImportType: Vue template components require runtime imports.
+import MessageList from "@/components/chat/MessageList.vue";
 import { useMediaHandling } from "@/composables/useMediaHandling";
+import { useMessages } from "@/composables/useMessages";
 import { useRecording } from "@/composables/useRecording";
-import { useToast } from "@/utils/toast";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { useCustomizerStore } from "@/stores/customizer";
 import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
+import axios from "@/utils/request";
+import { useToast } from "@/utils/toast";
 
 interface Props {
   configId?: string | null;
@@ -155,11 +157,7 @@ const {
   cleanupMediaCache,
 } = useMediaHandling();
 
-const {
-  isRecording,
-  startRecording: startRec,
-  stopRecording: stopRec,
-} = useRecording();
+const { isRecording, startRecording: startRec, stopRecording: stopRec } = useRecording();
 
 const {
   messages,
@@ -202,11 +200,7 @@ async function handleFileSelect(files: FileList) {
 }
 
 async function handleSendMessage() {
-  if (
-    !prompt.value.trim() &&
-    stagedFiles.value.length === 0 &&
-    !stagedAudioUrl.value
-  ) {
+  if (!prompt.value.trim() && stagedFiles.value.length === 0 && !stagedAudioUrl.value) {
     return;
   }
 
@@ -233,13 +227,7 @@ async function handleSendMessage() {
     const selectedProviderId = selection?.providerId || "";
     const selectedModelName = selection?.modelName || "";
 
-    await sendMsg(
-      promptToSend,
-      filesToSend,
-      audioNameToSend,
-      selectedProviderId,
-      selectedModelName,
-    );
+    await sendMsg(promptToSend, filesToSend, audioNameToSend, selectedProviderId, selectedModelName);
 
     // 滚动到底部
     nextTick(() => {

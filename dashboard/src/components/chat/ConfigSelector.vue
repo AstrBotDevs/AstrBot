@@ -83,14 +83,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import axios from "@/utils/request";
-import { useToast } from "@/utils/toast";
 import { useModuleI18n } from "@/i18n/composables";
 import {
   getStoredDashboardUsername,
   getStoredSelectedChatConfigId,
   setStoredSelectedChatConfigId,
 } from "@/utils/chatConfigBinding";
+import axios from "@/utils/request";
+import { useToast } from "@/utils/toast";
 
 interface ConfigInfo {
   id: string;
@@ -141,9 +141,7 @@ const normalizedSessionId = computed(() => {
 
 const hasActiveSession = computed(() => !!normalizedSessionId.value);
 
-const messageType = computed(() =>
-  props.isGroup ? "GroupMessage" : "FriendMessage",
-);
+const messageType = computed(() => (props.isGroup ? "GroupMessage" : "FriendMessage"));
 
 const username = computed(() => getStoredDashboardUsername());
 
@@ -162,9 +160,7 @@ const targetUmo = computed(() => {
 });
 
 const selectedConfigLabel = computed(() => {
-  const target = configOptions.value.find(
-    (item) => item.id === selectedConfigId.value,
-  );
+  const target = configOptions.value.find((item) => item.id === selectedConfigId.value);
   return target?.name || selectedConfigId.value || "default";
 });
 
@@ -210,9 +206,7 @@ function matchesPattern(pattern: string, target: string): boolean {
   if (parts.length !== 3 || targetParts.length !== 3) {
     return false;
   }
-  return parts.every(
-    (part, index) => part === "" || part === "*" || part === targetParts[index],
-  );
+  return parts.every((part, index) => part === "" || part === "*" || part === targetParts[index]);
 }
 
 function resolveConfigId(umo: string | null): string {
@@ -235,8 +229,7 @@ async function getAgentRunnerType(confId: string): Promise<string> {
     const res = await axios.get("/api/config/abconf", {
       params: { id: confId },
     });
-    const type =
-      res.data.data?.config?.provider_settings?.agent_runner_type || "local";
+    const type = res.data.data?.config?.provider_settings?.agent_runner_type || "local";
     configCache.value[confId] = type;
     return type;
   } catch (error) {
@@ -267,9 +260,7 @@ async function applySelectionToBackend(confId: string): Promise<boolean> {
       umo: targetUmo.value,
       conf_id: confId,
     });
-    const filtered = routingEntries.value.filter(
-      (entry) => entry.pattern !== targetUmo.value,
-    );
+    const filtered = routingEntries.value.filter((entry) => entry.pattern !== targetUmo.value);
     filtered.push({ pattern: targetUmo.value, confId });
     routingEntries.value = filtered;
     return true;

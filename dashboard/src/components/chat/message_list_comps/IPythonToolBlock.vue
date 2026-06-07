@@ -25,9 +25,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { type BundledLanguage, type BundledTheme, createHighlighter, type HighlighterGeneric } from "shiki";
+import { computed, onMounted, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { createHighlighter, type HighlighterGeneric, type BundledLanguage, type BundledTheme } from "shiki";
 
 const props = defineProps({
   toolCall: {

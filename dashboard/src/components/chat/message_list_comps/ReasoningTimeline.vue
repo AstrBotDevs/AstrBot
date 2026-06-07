@@ -60,8 +60,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
 import { MarkdownRender } from "markstream-vue";
+import { computed } from "vue";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";

@@ -7,23 +7,15 @@ export type DesktopRuntimeInfo = {
 
 export async function getDesktopRuntimeInfo(): Promise<DesktopRuntimeInfo> {
   const bridge = window.astrbotDesktop;
-  const hasDesktopRuntimeProbe =
-    !!bridge && typeof bridge.isDesktopRuntime === "function";
-  const hasDesktopRestartCapability =
-    !!bridge &&
-    typeof bridge.restartBackend === "function" &&
-    hasDesktopRuntimeProbe;
+  const hasDesktopRuntimeProbe = !!bridge && typeof bridge.isDesktopRuntime === "function";
+  const hasDesktopRestartCapability = !!bridge && typeof bridge.restartBackend === "function" && hasDesktopRuntimeProbe;
 
   let isDesktopRuntime = !!bridge?.isDesktop;
   if (hasDesktopRuntimeProbe) {
     try {
-      isDesktopRuntime =
-        isDesktopRuntime || !!(await bridge.isDesktopRuntime());
+      isDesktopRuntime = isDesktopRuntime || !!(await bridge.isDesktopRuntime());
     } catch (error) {
-      console.warn(
-        "[desktop-runtime] Failed to detect desktop runtime.",
-        error,
-      );
+      console.warn("[desktop-runtime] Failed to detect desktop runtime.", error);
     }
   }
 

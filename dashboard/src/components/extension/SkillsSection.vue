@@ -768,12 +768,12 @@
 </template>
 
 <script lang="ts">
-import axios from "@/utils/request";
-import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
+import axios from "@/utils/request";
 
 interface Skill {
   name: string;
@@ -789,7 +789,7 @@ interface UploadResultEntry {
   filename?: string;
 }
 
-type UploadStatus = 'waiting' | 'uploading' | 'success' | 'error' | 'skipped';
+type UploadStatus = "waiting" | "uploading" | "success" | "error" | "skipped";
 
 interface UploadItem {
   id: string;
@@ -871,7 +871,11 @@ export default {
     const deleteDialog = ref(false);
     const deleting = ref(false);
     const skillToDelete = ref<Skill | null>(null);
-    const snackbar = reactive<{ show: boolean; message: string; color: string }>({ show: false, message: "", color: "success" });
+    const snackbar = reactive<{ show: boolean; message: string; color: string }>({
+      show: false,
+      message: "",
+      color: "success",
+    });
 
     const neoLoading = ref(false);
     const neoCandidates = ref<NeoCandidate[]>([]);
@@ -922,9 +926,7 @@ export default {
       { title: "stable", value: "stable" },
     ]);
 
-    const activeReleaseCount = computed(
-      () => neoReleases.value.filter((item: NeoRelease) => item?.is_active).length,
-    );
+    const activeReleaseCount = computed(() => neoReleases.value.filter((item: NeoRelease) => item?.is_active).length);
     const editorLanguage = computed(() => {
       const path = String(editorDialog.filePath || "").toLowerCase();
       if (path.endsWith(".json")) return "json";
@@ -939,9 +941,7 @@ export default {
       if (path.endsWith(".md") || path.endsWith(".txt")) return "markdown";
       return "plaintext";
     });
-    const editorTheme = computed(() =>
-      customizer.uiTheme === "PurpleThemeDark" ? "vs-dark" : "vs-light",
-    );
+    const editorTheme = computed(() => (customizer.uiTheme === "PurpleThemeDark" ? "vs-dark" : "vs-light"));
     const editorOptions = computed(() => ({
       automaticLayout: true,
       fontSize: 13,
@@ -970,10 +970,7 @@ export default {
       ),
     );
     const hasUploadableItems = computed(() =>
-      uploadItems.value.some(
-        (item: UploadItem) =>
-          item.status === STATUS_WAITING || item.status === STATUS_ERROR,
-      ),
+      uploadItems.value.some((item: UploadItem) => item.status === STATUS_WAITING || item.status === STATUS_ERROR),
     );
 
     const candidateHeaders = computed(() => [
@@ -1044,11 +1041,9 @@ export default {
       return "primary";
     };
 
-    const isSandboxPresetSkill = (skill: Skill): boolean =>
-      skill?.source_type === "sandbox_only";
+    const isSandboxPresetSkill = (skill: Skill): boolean => skill?.source_type === "sandbox_only";
     const isPluginProvidedSkill = (skill) => skill?.source_type === "plugin";
-    const isReadOnlySourceSkill = (skill) =>
-      isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
+    const isReadOnlySourceSkill = (skill) => isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
 
     const normalizeNeoItemsPayload = <T>(res: { data?: { data?: T[] | { items?: T[] } } }): T[] => {
       const payload = res?.data?.data || [];
@@ -1087,8 +1082,7 @@ export default {
       return tm("skills.statusWaiting");
     };
 
-    const statusChipClass = (status: string): string =>
-      `skills-status-chip skills-status-chip--${status}`;
+    const statusChipClass = (status: string): string => `skills-status-chip skills-status-chip--${status}`;
 
     const resetUploadState = (): void => {
       uploadItems.value = [];
@@ -1113,9 +1107,7 @@ export default {
     };
 
     const addUploadFiles = (filesToAdd: File[]): void => {
-      const existingNames = new Set(
-        uploadItems.value.map((item: UploadItem) => item.filenameKey),
-      );
+      const existingNames = new Set(uploadItems.value.map((item: UploadItem) => item.filenameKey));
       const nextItems: UploadItem[] = [];
 
       for (const file of filesToAdd) {
@@ -1123,31 +1115,17 @@ export default {
         const filenameKey = normalizeUploadName(file.name);
 
         if (existingNames.has(filenameKey)) {
-          nextItems.push(
-            buildUploadItem(
-              file,
-              STATUS_SKIPPED,
-              tm("skills.validationDuplicate"),
-            ),
-          );
+          nextItems.push(buildUploadItem(file, STATUS_SKIPPED, tm("skills.validationDuplicate")));
           continue;
         }
 
         existingNames.add(filenameKey);
         if (!/\.zip$/i.test(file.name)) {
-          nextItems.push(
-            buildUploadItem(
-              file,
-              STATUS_SKIPPED,
-              tm("skills.validationZipOnly"),
-            ),
-          );
+          nextItems.push(buildUploadItem(file, STATUS_SKIPPED, tm("skills.validationZipOnly")));
           continue;
         }
 
-        nextItems.push(
-          buildUploadItem(file, STATUS_WAITING, tm("skills.validationReady")),
-        );
+        nextItems.push(buildUploadItem(file, STATUS_WAITING, tm("skills.validationReady")));
       }
 
       if (nextItems.length > 0) {
@@ -1173,9 +1151,7 @@ export default {
     };
 
     const removeUploadItem = (itemId: string): void => {
-      uploadItems.value = uploadItems.value.filter(
-        (item: UploadItem) => item.id !== itemId,
-      );
+      uploadItems.value = uploadItems.value.filter((item: UploadItem) => item.id !== itemId);
     };
 
     const takeFirstMatch = (
@@ -1190,9 +1166,7 @@ export default {
       return entry;
     };
 
-    const buildResultMap = (
-      items: UploadResultEntry[] = [],
-    ): Map<string, UploadResultEntry[]> => {
+    const buildResultMap = (items: UploadResultEntry[] = []): Map<string, UploadResultEntry[]> => {
       const resultMap = new Map<string, UploadResultEntry[]>();
       for (const item of items) {
         const filenameKey = normalizeUploadName(item?.filename || "");
@@ -1230,16 +1204,14 @@ export default {
         const skippedEntry = takeFirstMatch(skippedMap, item.filenameKey);
         if (skippedEntry) {
           item.status = STATUS_SKIPPED;
-          item.validationMessage =
-            skippedEntry.error || tm("skills.validationDuplicate");
+          item.validationMessage = skippedEntry.error || tm("skills.validationDuplicate");
           continue;
         }
 
         const failedEntry = takeFirstMatch(failedMap, item.filenameKey);
         if (failedEntry) {
           item.status = STATUS_ERROR;
-          item.validationMessage =
-            failedEntry.error || tm("skills.validationUploadFailed");
+          item.validationMessage = failedEntry.error || tm("skills.validationUploadFailed");
           continue;
         }
 
@@ -1270,16 +1242,14 @@ export default {
         showMessage(successMessage, "success");
         if (onSuccess) onSuccess();
       } else {
-        const msg =
-          (res && res.data && res.data.message) || failureMessageDefault;
+        const msg = (res && res.data && res.data.message) || failureMessageDefault;
         showMessage(msg, "error");
       }
     };
 
     const uploadSkillBatch = async (): Promise<void> => {
       const attemptedItems = uploadItems.value.filter(
-        (item: UploadItem) =>
-          item.status === STATUS_WAITING || item.status === STATUS_ERROR,
+        (item: UploadItem) => item.status === STATUS_WAITING || item.status === STATUS_ERROR,
       );
       if (attemptedItems.length === 0) return;
 
@@ -1302,22 +1272,10 @@ export default {
         const payload = res?.data?.data || {};
         applyUploadResults(attemptedItems, payload);
 
-        const succeededCount = Array.isArray(payload.succeeded)
-          ? payload.succeeded.length
-          : 0;
-        const failedCount = Array.isArray(payload.failed)
-          ? payload.failed.length
-          : 0;
-        const responseColor =
-          res?.data?.status === "error"
-            ? "error"
-            : failedCount > 0
-              ? "warning"
-              : "success";
-        showMessage(
-          res?.data?.message || tm("skills.uploadSuccess"),
-          responseColor,
-        );
+        const succeededCount = Array.isArray(payload.succeeded) ? payload.succeeded.length : 0;
+        const failedCount = Array.isArray(payload.failed) ? payload.failed.length : 0;
+        const responseColor = res?.data?.status === "error" ? "error" : failedCount > 0 ? "warning" : "success";
+        showMessage(res?.data?.message || tm("skills.uploadSuccess"), responseColor);
 
         if (succeededCount > 0) {
           await fetchSkills();
@@ -1345,14 +1303,9 @@ export default {
           name: skill.name,
           active: nextActive,
         });
-        handleApiResponse(
-          res,
-          tm("skills.updateSuccess"),
-          tm("skills.updateFailed"),
-          () => {
-            skill.active = nextActive;
-          },
-        );
+        handleApiResponse(res, tm("skills.updateSuccess"), tm("skills.updateFailed"), () => {
+          skill.active = nextActive;
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.updateFailed"), "error");
       } finally {
@@ -1380,15 +1333,10 @@ export default {
         const res = await axios.post("/api/skills/delete", {
           name: skillToDelete.value.name,
         });
-        handleApiResponse(
-          res,
-          tm("skills.deleteSuccess"),
-          tm("skills.deleteFailed"),
-          async () => {
-            deleteDialog.value = false;
-            await fetchSkills();
-          },
-        );
+        handleApiResponse(res, tm("skills.deleteSuccess"), tm("skills.deleteFailed"), async () => {
+          deleteDialog.value = false;
+          await fetchSkills();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.deleteFailed"), "error");
       } finally {
@@ -1451,15 +1399,12 @@ export default {
           params: { name: editorDialog.skillName, path },
         });
         if (res?.data?.status !== "ok") {
-          editorDialog.error =
-            res?.data?.message || tm("skills.editorLoadFailed");
+          editorDialog.error = res?.data?.message || tm("skills.editorLoadFailed");
           return [];
         }
         const payload = res.data.data || {};
         editorDialog.currentDir = payload.path || "";
-        editorDialog.entries = Array.isArray(payload.entries)
-          ? payload.entries
-          : [];
+        editorDialog.entries = Array.isArray(payload.entries) ? payload.entries : [];
         return editorDialog.entries;
       } catch (_err) {
         editorDialog.error = tm("skills.editorLoadFailed");
@@ -1471,10 +1416,7 @@ export default {
 
     const loadSkillFile = async (path) => {
       if (!editorDialog.skillName || !path) return;
-      if (
-        editorDialog.fileDirty &&
-        !window.confirm(tm("skills.discardChanges"))
-      ) {
+      if (editorDialog.fileDirty && !window.confirm(tm("skills.discardChanges"))) {
         return;
       }
       editorDialog.loadingFile = true;
@@ -1484,8 +1426,7 @@ export default {
           params: { name: editorDialog.skillName, path },
         });
         if (res?.data?.status !== "ok") {
-          editorDialog.error =
-            res?.data?.message || tm("skills.editorLoadFailed");
+          editorDialog.error = res?.data?.message || tm("skills.editorLoadFailed");
           return;
         }
         const payload = res.data.data || {};
@@ -1518,10 +1459,7 @@ export default {
 
     const closeSkillEditor = () => {
       if (editorDialog.saving) return;
-      if (
-        editorDialog.fileDirty &&
-        !window.confirm(tm("skills.discardChanges"))
-      ) {
+      if (editorDialog.fileDirty && !window.confirm(tm("skills.discardChanges"))) {
         return;
       }
       editorDialog.show = false;
@@ -1531,10 +1469,7 @@ export default {
     const openSkillEntry = async (entry) => {
       if (!entry) return;
       if (entry.type === "directory") {
-        if (
-          editorDialog.fileDirty &&
-          !window.confirm(tm("skills.discardChanges"))
-        ) {
+        if (editorDialog.fileDirty && !window.confirm(tm("skills.discardChanges"))) {
           return;
         }
         await loadSkillDir(entry.path);
@@ -1545,10 +1480,7 @@ export default {
 
     const openParentSkillDir = async () => {
       if (!editorDialog.currentDir) return;
-      if (
-        editorDialog.fileDirty &&
-        !window.confirm(tm("skills.discardChanges"))
-      ) {
+      if (editorDialog.fileDirty && !window.confirm(tm("skills.discardChanges"))) {
         return;
       }
       const parts = editorDialog.currentDir.split("/").filter(Boolean);
@@ -1557,11 +1489,7 @@ export default {
     };
 
     const saveSkillFile = async () => {
-      if (
-        !editorDialog.skillName ||
-        !editorDialog.filePath ||
-        !editorDialog.fileEditable
-      ) {
+      if (!editorDialog.skillName || !editorDialog.filePath || !editorDialog.fileEditable) {
         return;
       }
       editorDialog.saving = true;
@@ -1573,8 +1501,7 @@ export default {
           content: editorDialog.content,
         });
         if (res?.data?.status !== "ok") {
-          editorDialog.error =
-            res?.data?.message || tm("skills.editorSaveFailed");
+          editorDialog.error = res?.data?.message || tm("skills.editorSaveFailed");
           showMessage(editorDialog.error, "error");
           return;
         }
@@ -1620,11 +1547,9 @@ export default {
         const res = await axios.get("/api/config/get");
         const config = res?.data?.data?.config || {};
         const providerSettings = config?.provider_settings || {};
-        const currentRuntime =
-          providerSettings?.computer_use_runtime || "local";
+        const currentRuntime = providerSettings?.computer_use_runtime || "local";
         const booter = providerSettings?.sandbox?.booter || "";
-        neoEnabled.value =
-          currentRuntime === "sandbox" && booter === "shipyard_neo";
+        neoEnabled.value = currentRuntime === "sandbox" && booter === "shipyard_neo";
       } catch (_err: unknown) {
         neoEnabled.value = false;
       }
@@ -1654,28 +1579,21 @@ export default {
           score: passed ? 1.0 : 0.0,
           report: passed ? "approved_from_webui" : "rejected_from_webui",
         });
-        handleApiResponse(
-          res,
-          tm("skills.neoEvaluateSuccess"),
-          tm("skills.neoEvaluateFailed"),
-          async () => {
-            await fetchNeoCandidates();
-          },
-        );
+        handleApiResponse(res, tm("skills.neoEvaluateSuccess"), tm("skills.neoEvaluateFailed"), async () => {
+          await fetchNeoCandidates();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.neoEvaluateFailed"), "error");
       }
     };
 
-    const candidatePromoteLoadingKey = (candidateId: string, stage: string): string =>
-      `${candidateId}:${stage}`;
+    const candidatePromoteLoadingKey = (candidateId: string, stage: string): string => `${candidateId}:${stage}`;
     const isCandidatePromoteLoading = (candidateId: string, stage: string): boolean =>
       !!candidatePromoteLoading[candidatePromoteLoadingKey(candidateId, stage)];
     const isCandidatePromoting = (candidateId: string): boolean =>
-      isCandidatePromoteLoading(candidateId, "canary") ||
-      isCandidatePromoteLoading(candidateId, "stable");
+      isCandidatePromoteLoading(candidateId, "canary") || isCandidatePromoteLoading(candidateId, "stable");
 
-    const promoteCandidate = async (candidate: NeoCandidate, stage: 'canary' | 'stable'): Promise<void> => {
+    const promoteCandidate = async (candidate: NeoCandidate, stage: "canary" | "stable"): Promise<void> => {
       const candidateId = candidate?.id;
       if (!candidateId) return;
       const loadingKey = candidatePromoteLoadingKey(candidateId, stage);
@@ -1689,10 +1607,7 @@ export default {
         });
         const ok = res?.data?.status === "ok";
         if (!ok) {
-          showMessage(
-            res?.data?.message || tm("skills.neoPromoteFailed"),
-            "error",
-          );
+          showMessage(res?.data?.message || tm("skills.neoPromoteFailed"), "error");
         } else {
           showMessage(tm("skills.neoPromoteSuccess"), "success");
         }
@@ -1712,14 +1627,9 @@ export default {
         const res = await axios.post("/api/skills/neo/rollback", {
           release_id: release.id,
         });
-        handleApiResponse(
-          res,
-          tm("skills.neoRollbackSuccess"),
-          tm("skills.neoRollbackFailed"),
-          async () => {
-            await fetchNeoData();
-          },
-        );
+        handleApiResponse(res, tm("skills.neoRollbackSuccess"), tm("skills.neoRollbackFailed"), async () => {
+          await fetchNeoData();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.neoRollbackFailed"), "error");
       }
@@ -1730,14 +1640,9 @@ export default {
         const res = await axios.post("/api/skills/neo/rollback", {
           release_id: release.id,
         });
-        handleApiResponse(
-          res,
-          tm("skills.neoDeactivateSuccess"),
-          tm("skills.neoDeactivateFailed"),
-          async () => {
-            await fetchNeoData();
-          },
-        );
+        handleApiResponse(res, tm("skills.neoDeactivateSuccess"), tm("skills.neoDeactivateFailed"), async () => {
+          await fetchNeoData();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.neoDeactivateFailed"), "error");
       }
@@ -1756,14 +1661,9 @@ export default {
         const res = await axios.post("/api/skills/neo/sync", {
           release_id: release.id,
         });
-        handleApiResponse(
-          res,
-          tm("skills.neoSyncSuccess"),
-          tm("skills.neoSyncFailed"),
-          async () => {
-            await fetchSkills();
-          },
-        );
+        handleApiResponse(res, tm("skills.neoSyncSuccess"), tm("skills.neoSyncFailed"), async () => {
+          await fetchSkills();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.neoSyncFailed"), "error");
       }
@@ -1776,10 +1676,7 @@ export default {
           params: { payload_ref: payloadRef },
         });
         if (res?.data?.status !== "ok") {
-          showMessage(
-            res?.data?.message || tm("skills.neoPayloadFailed"),
-            "error",
-          );
+          showMessage(res?.data?.message || tm("skills.neoPayloadFailed"), "error");
           return;
         }
         const payload = res?.data?.data || {};
@@ -1796,14 +1693,9 @@ export default {
           candidate_id: candidate.id,
           reason: "deleted_from_webui",
         });
-        handleApiResponse(
-          res,
-          tm("skills.neoDeleteSuccess"),
-          tm("skills.neoDeleteFailed"),
-          async () => {
-            await fetchNeoData();
-          },
-        );
+        handleApiResponse(res, tm("skills.neoDeleteSuccess"), tm("skills.neoDeleteFailed"), async () => {
+          await fetchNeoData();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.neoDeleteFailed"), "error");
       }
@@ -1815,14 +1707,9 @@ export default {
           release_id: release.id,
           reason: "deleted_from_webui",
         });
-        handleApiResponse(
-          res,
-          tm("skills.neoDeleteSuccess"),
-          tm("skills.neoDeleteFailed"),
-          async () => {
-            await fetchNeoData();
-          },
-        );
+        handleApiResponse(res, tm("skills.neoDeleteSuccess"), tm("skills.neoDeleteFailed"), async () => {
+          await fetchNeoData();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.neoDeleteFailed"), "error");
       }

@@ -10,9 +10,9 @@
 </template>
 
 <script lang="ts">
-import axios from "@/utils/request";
-import { useCommonStore } from "@/stores/common";
 import { useI18n } from "@/i18n/composables";
+import { useCommonStore } from "@/stores/common";
+import axios from "@/utils/request";
 
 export default {
   name: "WaitingForRestart",
@@ -35,10 +35,7 @@ export default {
       this.cnt = 0;
       this.visible = true;
       this.status = "";
-      if (
-        typeof initialStartTime === "number" &&
-        Number.isFinite(initialStartTime)
-      ) {
+      if (typeof initialStartTime === "number" && Number.isFinite(initialStartTime)) {
         this.startTime = initialStartTime;
       } else {
         const commonStore = useCommonStore();
