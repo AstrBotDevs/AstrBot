@@ -624,12 +624,16 @@ export const useExtensionPage = () => {
   const findMarketPluginForExtension = (extension) => {
     if (!extension) return null;
     const repo = normalizeInstallUrl(extension.repo).toLowerCase();
+
+    if (repo) {
+      return (
+        pluginMarketData.value.find(
+          (plugin) => normalizeInstallUrl(plugin?.repo).toLowerCase() === repo,
+        ) || null
+      );
+    }
+
     return (
-      pluginMarketData.value.find(
-        (plugin) =>
-          repo &&
-          normalizeInstallUrl(plugin?.repo).toLowerCase() === repo,
-      ) ||
       pluginMarketData.value.find((plugin) => plugin.name === extension.name) ||
       null
     );
