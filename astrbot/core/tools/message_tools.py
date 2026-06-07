@@ -31,10 +31,12 @@ def _file_send_allowed_roots(umo: str | None) -> tuple[Path, ...]:
     roots = []
     if umo:
         roots.append(workspace_root(umo))
-    roots.extend([
-        Path(get_astrbot_temp_path()).resolve(strict=False),
-        Path(get_astrbot_system_tmp_path()).resolve(strict=False),
-    ])
+    roots.extend(
+        [
+            Path(get_astrbot_temp_path()).resolve(strict=False),
+            Path(get_astrbot_system_tmp_path()).resolve(strict=False),
+        ]
+    )
     return tuple(roots)
 
 
