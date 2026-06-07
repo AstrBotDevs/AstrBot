@@ -5,11 +5,8 @@ from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import Column, Text, bindparam
-from sqlalchemy.dialects import sqlite
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlalchemy.schema import CreateTable
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
 
 from astrbot.core import logger
@@ -63,7 +60,8 @@ class DocumentStorage:
         """Initialize the SQLite database and create the documents table if it doesn't exist."""
         await self.connect()
         async with self.engine.begin() as conn:  # type: ignore
-            await self._ensure_documents_table(conn)
+            # Create tables using SQLModel
+            await conn.run_sync(BaseDocModel.metadata.create_all)
 
             try:
                 await conn.execute(
@@ -93,58 +91,14 @@ class DocumentStorage:
             except BaseException:
                 pass
 
+            await conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_doc_id_unique ON documents(doc_id)",
+                ),
+            )
+
             await self._initialize_fts5(conn)
             await conn.commit()
-
-    async def _ensure_documents_table(self, executor) -> None:
-        """Create the document table from the SQLModel definition."""
-        result = await executor.execute(
-            text(
-                """
-                SELECT 1
-                FROM sqlite_master
-                WHERE type='table' AND name=:table_name
-                LIMIT 1
-                """,
-            ),
-            {"table_name": Document.__tablename__},
-        )
-        if result.scalar_one_or_none() is not None:
-            await self._ensure_doc_id_unique_index(executor)
-            return
-
-        create_table = CreateTable(Document.__table__, if_not_exists=True)  # type: ignore[attr-defined]
-
-        await executor.execute(
-            text(str(create_table.compile(dialect=sqlite.dialect())))
-        )
-        await self._ensure_doc_id_unique_index(executor)
-
-    async def _ensure_doc_id_unique_index(self, executor) -> None:
-        duplicate_result = await executor.execute(
-            text(
-                """
-                SELECT doc_id
-                FROM documents
-                GROUP BY doc_id
-                HAVING COUNT(*) > 1
-                LIMIT 1
-                """,
-            ),
-        )
-        if duplicate_result.scalar_one_or_none() is not None:
-            logger.warning(
-                "Skipping documents.doc_id unique index migration because duplicate "
-                f"doc_id values already exist in {self.db_path}.",
-            )
-            return
-
-        await executor.execute(
-            text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS "
-                "idx_documents_doc_id_unique ON documents(doc_id)",
-            ),
-        )
 
     async def _initialize_fts5(self, executor) -> None:
         try:
@@ -249,7 +203,6 @@ class DocumentStorage:
                 self.DATABASE_URL,
                 echo=False,
                 future=True,
-                poolclass=NullPool,
             )
             self.async_session_maker = sessionmaker(
                 self.engine,  # type: ignore

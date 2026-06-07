@@ -53,6 +53,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
             await conn.execute(text("PRAGMA journal_mode=WAL"))
+            await conn.execute(text("PRAGMA busy_timeout=30000"))
             await conn.execute(text("PRAGMA synchronous=NORMAL"))
             await conn.execute(text("PRAGMA cache_size=20000"))
             await conn.execute(text("PRAGMA temp_store=MEMORY"))

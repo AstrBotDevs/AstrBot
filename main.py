@@ -54,9 +54,6 @@ def check_env() -> None:
 
     site_packages_path = get_astrbot_site_packages_path()
     if not is_packaged_desktop_runtime() and site_packages_path not in sys.path:
-        # Packaged desktop runtime keeps shared plugin dependencies out of the
-        # global import path so bundled core libraries don't mix with user-
-        # installed wheels from ~/.astrbot/data/site-packages.
         sys.path.append(site_packages_path)
 
     os.makedirs(get_astrbot_config_path(), exist_ok=True)
