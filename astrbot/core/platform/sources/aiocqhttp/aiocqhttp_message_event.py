@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 from collections.abc import AsyncGenerator
 
@@ -30,6 +31,13 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
+
+    @staticmethod
+    def _parse_session_id_int(session_id: str | None) -> int | None:
+        try:
+            return int(str(session_id).strip())
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     async def _from_segment_to_dict(segment: BaseMessageComponent) -> dict:
@@ -86,6 +94,37 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 ret.append(d)
         return ret
 
+    @staticmethod
+    async def _upload_file_segment(
+        bot: CQHttp,
+        segment: File,
+        is_group: bool,
+        session_id: str | None,
+    ) -> None:
+        session_id_int = AiocqhttpMessageEvent._parse_session_id_int(session_id)
+        if not isinstance(session_id_int, int):
+            raise ValueError(
+                f"无法发送文件：缺少有效的数字 session_id({session_id})",
+            )
+
+        file_path = await segment.get_file(allow_return_url=True)
+        if not file_path:
+            raise ValueError("无法发送文件：文件路径为空")
+        name = segment.name or os.path.basename(str(file_path)) or "file"
+
+        if is_group:
+            await bot.upload_group_file(
+                group_id=session_id_int,
+                file=file_path,
+                name=name,
+            )
+        else:
+            await bot.upload_private_file(
+                user_id=session_id_int,
+                file=file_path,
+                name=name,
+            )
+
     @classmethod
     async def _dispatch_send(
         cls,
@@ -95,10 +134,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         session_id: str | None,
         messages: list[dict],
     ) -> None:
-        # session_id 必须是纯数字字符串
-        session_id_int = (
-            int(session_id) if session_id and session_id.isdigit() else None
-        )
+        # session_id 必须是数字字符串
+        session_id_int = cls._parse_session_id_int(session_id)
 
         if is_group and isinstance(session_id_int, int):
             await bot.send_group_msg(group_id=session_id_int, message=messages)
@@ -156,8 +193,11 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     payload["user_id"] = session_id
                     await bot.call_action("send_private_forward_msg", **payload)
             elif isinstance(seg, File):
-                d = await cls._from_segment_to_dict(seg)
-                await cls._dispatch_send(bot, event, is_group, session_id, [d])
+                try:
+                    await cls._upload_file_segment(bot, seg, is_group, session_id)
+                except Exception:
+                    messages = await cls._parse_onebot_json(MessageChain([seg]))
+                    await cls._dispatch_send(bot, event, is_group, session_id, messages)
             else:
                 messages = await cls._parse_onebot_json(MessageChain([seg]))
                 if not messages:

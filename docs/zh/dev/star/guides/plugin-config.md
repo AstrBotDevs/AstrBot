@@ -233,3 +233,5 @@ class ConfigPlugin(Star):
 ## 配置更新
 
 您在发布不同版本更新 Schema 时，AstrBot 会递归检查 Schema 的配置项，自动为缺失的配置项添加默认值、移除不存在的配置项。
+
+需要注意的是，`default` 只会用于“新建配置文件”或“已有配置中缺失的字段”。如果某个字段已经存在于 `data/config/<plugin_name>_config.json` 中，那么后续即使您修改了 Schema 里的 `default`，AstrBot 也不会自动覆盖这个已保存的值。这是为了避免升级插件时意外覆盖用户已经手动修改过的配置。

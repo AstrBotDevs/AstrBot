@@ -31,6 +31,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.tools.registry import unregister_builtin_tools_by_module_prefix
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_path,
@@ -744,6 +745,14 @@ class PluginManager:
             if self._is_plugin_module_path(handler_module_path, module_prefix):
                 llm_tools.func_list.remove(tool)
                 logger.info(f"清理工具: {tool.name}")
+
+        for tool_name in llm_tools.clear_builtin_tool_cache_by_module_prefix(
+            module_prefix
+        ):
+            logger.info(f"清理内置工具缓存: {tool_name}")
+
+        for tool_name in unregister_builtin_tools_by_module_prefix(module_prefix):
+            logger.info(f"清理内置工具注册: {tool_name}")
 
         for adapter_name in unregister_platform_adapters_by_module(module_prefix):
             logger.info(f"清理平台适配器: {adapter_name}")
@@ -1667,6 +1676,18 @@ class PluginManager:
         # module_path is like "data.plugins.my_plugin.main", extract prefix like "data.plugins.my_plugin"
         module_prefix = ".".join(plugin_module_path.split(".")[:-1])
         if module_prefix:
+            for tool_name in llm_tools.clear_builtin_tool_cache_by_module_prefix(
+                module_prefix
+            ):
+                logger.info(
+                    f"移除了插件 {plugin_name} 的内置工具缓存 {tool_name}",
+                )
+
+            for tool_name in unregister_builtin_tools_by_module_prefix(module_prefix):
+                logger.info(
+                    f"移除了插件 {plugin_name} 的内置工具注册 {tool_name}",
+                )
+
             unregistered_adapters = unregister_platform_adapters_by_module(
                 module_prefix
             )

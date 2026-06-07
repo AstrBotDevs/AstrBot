@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import threading
+from typing import Any
 from pathlib import Path
 
 import pytest
@@ -59,6 +62,125 @@ def test_list_skills_merges_local_and_sandbox_cache(monkeypatch, tmp_path: Path)
     assert by_name["custom-local"].path == "skills/custom-local/SKILL.md"
     assert by_name["python-sandbox"].description == "ship built-in"
     assert by_name["python-sandbox"].path == "/app/skills/python-sandbox/SKILL.md"
+
+
+def test_sandbox_cache_isolated_by_provider(monkeypatch, tmp_path: Path):
+    data_dir = tmp_path / "data"
+    temp_dir = tmp_path / "temp"
+    skills_root = tmp_path / "skills"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    skills_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+
+    mgr = SkillManager(skills_root=str(skills_root))
+    mgr.set_sandbox_skills_cache(
+        [
+            {
+                "name": "python-sandbox",
+                "description": "ship built-in",
+                "path": "/home/ship_1e53ee8e/workspace/skills/python-sandbox/SKILL.md",
+            }
+        ],
+        provider_id="shipyard",
+    )
+
+    skills = mgr.list_skills(runtime="sandbox", provider_id="cua")
+
+    assert all(skill.name != "python-sandbox" for skill in skills)
+
+
+def test_sandbox_cache_updates_are_serialized_across_instances(
+    monkeypatch,
+    tmp_path: Path,
+):
+    data_dir = tmp_path / "data"
+    temp_dir = tmp_path / "temp"
+    skills_root = tmp_path / "skills"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    skills_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+
+    mgr_a = SkillManager(skills_root=str(skills_root))
+    mgr_b = SkillManager(skills_root=str(skills_root))
+
+    original_save = SkillManager._save_sandbox_skills_cache
+    save_started = threading.Event()
+    release_first_save = threading.Event()
+    save_calls = 0
+    save_calls_lock = threading.Lock()
+
+    def blocking_save(self, cache: dict[str, Any]) -> None:
+        nonlocal save_calls
+        with save_calls_lock:
+            save_calls += 1
+            current_call = save_calls
+        if current_call == 1:
+            save_started.set()
+            assert release_first_save.wait(timeout=1)
+        original_save(self, cache)
+
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.SkillManager._save_sandbox_skills_cache",
+        blocking_save,
+    )
+
+    thread_a = threading.Thread(
+        target=mgr_a.set_sandbox_skills_cache,
+        kwargs={
+            "skills": [
+                {
+                    "name": "ship-skill",
+                    "description": "ship",
+                    "path": "/home/ship/workspace/skills/ship-skill/SKILL.md",
+                }
+            ],
+            "provider_id": "shipyard",
+        },
+    )
+    thread_b = threading.Thread(
+        target=mgr_b.set_sandbox_skills_cache,
+        kwargs={
+            "skills": [
+                {
+                    "name": "cua-skill",
+                    "description": "cua",
+                    "path": "/home/cua/workspace/skills/cua-skill/SKILL.md",
+                }
+            ],
+            "provider_id": "cua",
+        },
+    )
+
+    thread_a.start()
+    assert save_started.wait(timeout=1)
+    thread_b.start()
+    release_first_save.set()
+    thread_a.join(timeout=1)
+    thread_b.join(timeout=1)
+
+    assert not thread_a.is_alive()
+    assert not thread_b.is_alive()
+
+    cache = json.loads((data_dir / "sandbox_skills_cache.json").read_text(encoding="utf-8"))
+    assert set(cache["providers"]) == {"shipyard", "cua"}
 
 
 def test_sandbox_cached_skill_respects_active_and_display_path(
@@ -154,4 +276,3 @@ def test_sandbox_and_local_path_resolution_with_show_sandbox_path_false(
     assert local_skill_path.is_relative_to(skills_root)
     assert local_skill_path == skills_root / "custom-local" / "SKILL.md"
     assert by_name["python-sandbox"].path == "/app/skills/python-sandbox/SKILL.md"
-

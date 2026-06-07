@@ -9,6 +9,7 @@ from typing import Any
 from quart import jsonify, make_response, request
 
 from astrbot.core import astrbot_config, file_token_service, logger
+from astrbot.core.computer import computer_client
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -284,58 +285,27 @@ def _protected_2fa_config_changed(old_config: dict, new_config: dict) -> bool:
     )
 
 
+def _normalize_unavailable_sandbox_booter(config: dict) -> dict:
+    sandbox = config.get("provider_settings", {}).get("sandbox", {})
+    if not isinstance(sandbox, dict):
+        return config
+    booter = str(sandbox.get("booter") or "").strip()
+    if not booter:
+        return config
+    provider_ids = {
+        str(provider.get("provider_id") or "")
+        for provider in computer_client.list_sandbox_providers()
+    }
+    if booter not in provider_ids:
+        sandbox["booter"] = ""
+    return config
+
+
 async def _validate_neo_connectivity(
     post_config: dict,
 ) -> str | None:
-    """Check if Bay is reachable when Shipyard Neo sandbox is configured.
-
-    Returns a warning message string if Bay isn't reachable, or None if
-    everything looks fine (or Neo isn't configured).
-    """
-    ps = post_config.get("provider_settings", {})
-    runtime = ps.get("computer_use_runtime", "none")
-    sandbox = ps.get("sandbox", {})
-    booter = sandbox.get("booter", "")
-
-    # Only check when sandbox mode + shipyard_neo is selected
-    if runtime != "sandbox" or booter != "shipyard_neo":
-        return None
-
-    endpoint = sandbox.get("shipyard_neo_endpoint", "").rstrip("/")
-    if not endpoint:
-        return "⚠️ Shipyard Neo endpoint 未设置"
-
-    access_token = sandbox.get("shipyard_neo_access_token", "")
-    if not access_token:
-        # Try auto-discovery
-        from astrbot.core.computer.computer_client import _discover_bay_credentials
-
-        access_token = _discover_bay_credentials(endpoint)
-
-    if not access_token:
-        return (
-            "⚠️ 未找到 Bay API Key。请填写访问令牌，"
-            "或确保 Bay 的 credentials.json 可被自动发现。"
-        )
-
-    # Connectivity check
-    import aiohttp
-
-    health_url = f"{endpoint}/health"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                health_url,
-                timeout=aiohttp.ClientTimeout(total=5),
-            ) as resp:
-                if resp.status != 200:
-                    return (
-                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
-                        f"请确认 Bay 正在运行: {endpoint}"
-                    )
-    except Exception:
-        return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
-
+    """Concrete sandbox providers own their connectivity checks."""
+    del post_config
     return None
 
 
@@ -632,8 +602,11 @@ class ConfigRoute(Route):
 
     async def get_default_config(self):
         """获取默认配置文件"""
-        metadata = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
-        return Response().ok({"config": DEFAULT_CONFIG, "metadata": metadata}).__dict__
+        metadata = ConfigMetadataI18n.convert_to_i18n_keys(
+            self._inject_sandbox_provider_options(copy.deepcopy(CONFIG_METADATA_3))
+        )
+        config = _normalize_unavailable_sandbox_booter(copy.deepcopy(DEFAULT_CONFIG))
+        return Response().ok({"config": config, "metadata": metadata}).__dict__
 
     async def get_abconf_list(self):
         """获取所有 AstrBot 配置文件的列表"""
@@ -664,15 +637,23 @@ class ConfigRoute(Route):
 
         try:
             if system_config:
-                abconf = self.acm.confs["default"]
+                abconf = _normalize_unavailable_sandbox_booter(
+                    copy.deepcopy(dict(self.acm.confs["default"]))
+                )
                 metadata = ConfigMetadataI18n.convert_to_i18n_keys(
-                    CONFIG_METADATA_3_SYSTEM
+                    self._inject_sandbox_provider_options(
+                        copy.deepcopy(CONFIG_METADATA_3_SYSTEM)
+                    )
                 )
                 return Response().ok({"config": abconf, "metadata": metadata}).__dict__
             if abconf_id is None:
                 raise ValueError("abconf_id cannot be None")
-            abconf = self.acm.confs[abconf_id]
-            metadata = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
+            abconf = _normalize_unavailable_sandbox_booter(
+                copy.deepcopy(dict(self.acm.confs[abconf_id]))
+            )
+            metadata = ConfigMetadataI18n.convert_to_i18n_keys(
+                self._inject_sandbox_provider_options(copy.deepcopy(CONFIG_METADATA_3))
+            )
             return Response().ok({"config": abconf, "metadata": metadata}).__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
@@ -1588,11 +1569,28 @@ class ConfigRoute(Route):
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
 
+        self._inject_sandbox_provider_options(metadata)
+
         return {
             "metadata": metadata,
             "config": config,
             "platform_i18n_translations": platform_i18n_translations,
         }
+
+    def _inject_sandbox_provider_options(self, metadata: dict) -> dict:
+        try:
+            items = metadata["ai_group"]["metadata"]["agent_computer_use"]["items"]
+            booter = items.get("provider_settings.sandbox.booter")
+        except KeyError:
+            return metadata
+        if not isinstance(booter, dict):
+            return metadata
+
+        providers = computer_client.list_sandbox_providers()
+        options = [provider["provider_id"] for provider in providers]
+        booter["options"] = options
+        booter["labels"] = options.copy()
+        return metadata
 
     async def _get_plugin_config(self, plugin_name: str):
         ret: dict = {"metadata": None, "config": None, "i18n": {}}

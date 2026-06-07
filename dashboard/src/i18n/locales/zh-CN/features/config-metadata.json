@@ -158,11 +158,11 @@
     },
     "agent_computer_use": {
       "description": "使用电脑能力",
-      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。详见: [电脑使用](https://docs.astrbot.app/use/computer.html)。",
+      "hint": "让 AstrBot 使用本机环境或隔离沙盒来执行 Shell、Python、文件操作等任务。详见：[电脑使用](https://docs.astrbot.app/use/computer.html)。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
-          "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。"
+          "hint": "Agent 可以使用的执行环境。local 表示本机环境，sandbox 表示隔离沙盒，none 表示不开放电脑能力。"
         },
         "computer_use_require_admin": {
           "description": "需要 AstrBot 管理员权限",
@@ -170,63 +170,41 @@
         },
         "sandbox": {
           "booter": {
-            "description": "沙箱环境驱动器"
+            "description": "默认沙盒驱动"
           },
-          "shipyard_neo_endpoint": {
-            "description": "Shipyard Neo API Endpoint",
-            "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。"
+          "sandbox_lease_timeout": {
+            "description": "沙盒占用超时",
+            "hint": "单位为秒。Agent 占用沙盒后的租约，默认 600 秒；到期后需要重新占用或续租。`0` 表示占用不会过期，需要手动释放。"
           },
-          "shipyard_neo_access_token": {
-            "description": "Shipyard Neo 访问令牌",
-            "hint": "Bay 的 API Key（sk-bay-...）。留空时自动从 credentials.json 发现。"
+          "sandbox_idle_timeout": {
+            "description": "沙盒空闲清理时间",
+            "hint": "单位为秒。沙盒释放后开始计算，超过这个时间仍未被再次占用就会自动清理，默认 1800 秒。`0` 表示不启用空闲清理。"
           },
-          "shipyard_neo_profile": {
-            "description": "Shipyard Neo Profile",
-            "hint": "Shipyard Neo 沙箱 profile，例如 python-default。留空时自动选择能力更完整的 profile。"
+          "sandbox_ttl": {
+            "description": "沙盒存活时间",
+            "hint": "单位为秒。仅在空闲清理为 `0` 时生效，从创建开始计时，到期后强制清理。`0` 表示不自动过期。"
           },
-          "shipyard_neo_ttl": {
-            "description": "Shipyard Neo Sandbox 存活时间(秒)",
-            "hint": "Shipyard Neo 沙箱的生存时间（秒）。"
+          "max_sandboxes": {
+            "description": "最大沙盒数量",
+            "hint": "全局托管沙盒数量上限，默认 10。`0` 表示不限制。"
           },
-          "cua_image": {
-            "description": "CUA 镜像",
-            "hint": "CUA 沙箱镜像/系统类型，默认 linux。可填写 linux、macos、windows、android，具体取决于 CUA SDK 支持。"
-          },
-          "cua_os_type": {
-            "description": "CUA 操作系统类型",
-            "hint": "CUA 沙箱操作系统类型，默认 linux。"
-          },
-          "cua_idle_timeout": {
-            "description": "CUA 空闲超时(秒)",
-            "hint": "CUA 沙箱空闲超时时间（秒）。大于 0 时，AstrBot 会在会话空闲达到该时长后主动关闭 CUA 沙箱；0 表示禁用。"
-          },
-          "cua_telemetry_enabled": {
-            "description": "CUA 遥测",
-            "hint": "是否允许 CUA SDK 发送遥测数据。默认关闭。"
-          },
-          "cua_local": {
-            "description": "CUA 本地沙箱",
-            "hint": "是否优先使用 CUA 本地沙箱。默认开启，避免云端沙箱要求 CUA_API_KEY。关闭后可使用 CUA 云端沙箱。"
-          },
-          "cua_api_key": {
-            "description": "CUA API Key",
-            "hint": "CUA 云端沙箱 API Key。仅在关闭本地沙箱时需要。也可以通过 CUA_API_KEY 环境变量提供。"
-          },
-          "shipyard_endpoint": {
-            "description": "Shipyard API Endpoint",
-            "hint": "Shipyard 服务的 API 访问地址。"
-          },
-          "shipyard_access_token": {
-            "description": "Shipyard 访问令牌",
-            "hint": "用于访问 Shipyard 服务的访问令牌。"
-          },
-          "shipyard_ttl": {
-            "description": "Shipyard Ship 存活时间(秒)",
-            "hint": "Shipyard 会话的生存时间（秒）。"
-          },
-          "shipyard_max_sessions": {
-            "description": "Shipyard Ship 会话复用上限",
-            "hint": "决定了一个实例承载的最大会话数量。"
+          "member_permissions": {
+            "create": {
+              "description": "允许普通用户创建沙盒",
+              "hint": "允许普通用户创建新的托管沙盒。创建请求仍会受到最大沙盒数量限制。"
+            },
+            "set_retention_policy": {
+              "description": "允许普通用户修改沙盒保留策略",
+              "hint": "允许普通用户在临时沙盒和持久沙盒之间切换。持久沙盒会保留环境，方便后续复用。"
+            },
+            "takeover": {
+              "description": "允许普通用户接管沙盒",
+              "hint": "允许普通用户接管被其他会话占用的沙盒。此操作会转移占用权，建议谨慎开启。"
+            },
+            "destroy": {
+              "description": "允许普通用户删除沙盒",
+              "hint": "允许普通用户删除自己可访问的托管沙盒。删除后，沙盒环境和对应记录都会被移除。"
+            }
           }
         }
       }
