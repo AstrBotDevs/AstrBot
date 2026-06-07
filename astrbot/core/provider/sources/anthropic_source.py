@@ -302,12 +302,14 @@ class ProviderAnthropic(Provider):
 
         return system_prompt, new_messages
 
-    def _extract_usage(self, usage: Usage) -> TokenUsage:
+    def _extract_usage(self, usage: Usage | None) -> TokenUsage:
+        if usage is None:
+            return TokenUsage()
         # https://docs.claude.com/en/docs/build-with-claude/prompt-caching#tracking-cache-performance
         return TokenUsage(
             input_other=usage.input_tokens or 0,
             input_cached=usage.cache_read_input_tokens or 0,
-            output=usage.output_tokens,
+            output=usage.output_tokens or 0,
         )
 
     def _update_usage(self, token_usage: TokenUsage, usage: MessageDeltaUsage) -> None:
