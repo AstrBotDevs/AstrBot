@@ -57,6 +57,7 @@ class TestEventBusInit:
         assert bus.event_queue == event_queue
         assert bus.pipeline_scheduler_mapping == {"test": mock_pipeline_scheduler}
         assert bus.astrbot_config_mgr == mock_config_manager
+        assert bus._pending_tasks == set()
 
 
 class TestEventBusDispatch:
@@ -100,6 +101,76 @@ class TestEventBusDispatch:
         mock_config_manager.get_conf_info.assert_called_once_with(
             "test-platform:group:123"
         )
+        assert not event_bus._pending_tasks
+
+    @pytest.mark.asyncio
+    async def test_dispatch_keeps_pending_task_reference(
+        self, event_bus, event_queue, mock_pipeline_scheduler
+    ):
+        """Dispatch should retain pipeline tasks until they complete."""
+        started = asyncio.Event()
+        release = asyncio.Event()
+        finished = asyncio.Event()
+
+        async def execute_and_wait(event):  # noqa: ARG001
+            started.set()
+            await release.wait()
+            finished.set()
+
+        mock_pipeline_scheduler.execute.side_effect = execute_and_wait
+
+        mock_event = MagicMock()
+        mock_event.unified_msg_origin = "test-platform:group:123"
+        mock_event.get_platform_id.return_value = "test-platform"
+        mock_event.get_platform_name.return_value = "Test Platform"
+        mock_event.get_sender_name.return_value = "TestUser"
+        mock_event.get_sender_id.return_value = "user123"
+        mock_event.get_message_outline.return_value = "Hello"
+
+        await event_queue.put(mock_event)
+
+        dispatch_task = asyncio.create_task(event_bus.dispatch())
+        try:
+            await asyncio.wait_for(started.wait(), timeout=1.0)
+            assert len(event_bus._pending_tasks) == 1
+
+            release.set()
+            await asyncio.wait_for(finished.wait(), timeout=1.0)
+            await asyncio.sleep(0)
+        finally:
+            dispatch_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await dispatch_task
+
+        assert not event_bus._pending_tasks
+
+    @pytest.mark.asyncio
+    async def test_pipeline_task_exception_logs_traceback_tuple(self, event_bus):
+        """Task exceptions should log the original traceback."""
+
+        async def fail_pipeline():
+            raise RuntimeError("pipeline failed")
+
+        with patch("astrbot.core.event_bus.logger") as mock_logger:
+            task = asyncio.create_task(fail_pipeline())
+            callback_done = asyncio.Event()
+
+            def on_task_done(task: asyncio.Task[None]) -> None:
+                event_bus._on_task_done(task)
+                callback_done.set()
+
+            event_bus._pending_tasks.add(task)
+            task.add_done_callback(on_task_done)
+
+            await asyncio.wait_for(callback_done.wait(), timeout=1.0)
+
+        assert task not in event_bus._pending_tasks
+        mock_logger.error.assert_called_once()
+        exc_info = mock_logger.error.call_args.kwargs["exc_info"]
+        assert exc_info[0] is RuntimeError
+        assert isinstance(exc_info[1], RuntimeError)
+        assert str(exc_info[1]) == "pipeline failed"
+        assert exc_info[2] is exc_info[1].__traceback__
 
     @pytest.mark.asyncio
     async def test_dispatch_handles_missing_scheduler(
