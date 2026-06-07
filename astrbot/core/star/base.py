@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 from astrbot.core import html_renderer
 from astrbot.core.utils.command_parser import CommandParserMixin
 from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
 
 from .star import StarMetadata, star_map, star_registry
+
+if TYPE_CHECKING:
+    from .context import Context
 
 logger = logging.getLogger("astrbot")
 
@@ -17,11 +20,9 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
 
     author: str
     name: str
+    context: Context
 
-    class _ContextLike(Protocol):
-        def get_config(self, umo: str | None = None) -> Any: ...
-
-    def __init__(self, context: _ContextLike, config: dict | None = None) -> None:
+    def __init__(self, context: Context, config: dict | None = None) -> None:
         self.context = context
 
     def _get_context_config(self) -> Any:
