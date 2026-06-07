@@ -67,6 +67,15 @@
       <pre class="result-terminal" v-text="resultText"></pre>
     </template>
 
+    <!-- ── spcode 插件的 9 个工具 ────────────────────────────────── -->
+    <template v-else-if="isSpcodeTool">
+      <SpcodeToolResultView
+        :tool-name="toolName"
+        :result="resultText"
+        :args="toolArgs"
+      />
+    </template>
+
     <!-- ── fallback ────────────────────────────────────────────── -->
     <template v-else>
       <pre class="result-raw">{{ formattedResult }}</pre>
@@ -85,6 +94,8 @@ import {
   renderShikiCode,
 } from "@/utils/shiki";
 import { findSystemNoticeIndex } from "@/utils/systemNotice";
+import SpcodeToolResultView from "./SpcodeToolResultView.vue";
+import { SPCODE_TOOL_NAMES } from "./spcode_tools/icons";
 
 const props = defineProps<{
   toolName: string;
@@ -180,6 +191,10 @@ const formattedResult = computed(() => {
     return resultText.value;
   }
 });
+
+// ── spcode 插件工具分发 ─────────────────────────────────────────
+
+const isSpcodeTool = computed(() => SPCODE_TOOL_NAMES.has(props.toolName));
 
 // ── file_read_tool ──────────────────────────────────────────────
 

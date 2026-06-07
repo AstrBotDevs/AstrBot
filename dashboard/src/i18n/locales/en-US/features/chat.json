@@ -54,7 +54,36 @@
     "providerConfig": "Model Configuration",
     "toolsUsed": "Tool Used",
     "toolCallUsed": "Used {name} tool",
-    "pythonCodeAnalysis": "Python Code Analysis Used"
+    "pythonCodeAnalysis": "Python Code Analysis Used",
+    "spcodeTool": {
+      "codeCheck": "Code Check",
+      "codeIndex": "Code Index",
+      "codeExplore": "Code Explore",
+      "esSearch": "File Search",
+      "fileRemove": "File Remove",
+      "fileDiff": "File Diff",
+      "todoList": "Todo List",
+      "labels": {
+        "found": "Found",
+        "match": "matches",
+        "events": "events",
+        "items": "items",
+        "progress": "Progress",
+        "attention": "Attention",
+        "identical": "Files identical",
+        "noIssues": "No issues",
+        "ok": "OK",
+        "failed": "Failed",
+        "create": "Created",
+        "updated": "Updated",
+        "deleted": "Deleted",
+        "cleared": "Cleared",
+        "listCleared": "List cleared",
+        "proposal": "Suggestion",
+        "options": "Or:",
+        "listCreated": "List created ({n} items)"
+      }
+    }
   },
   "ipython": {
     "output": "Output"

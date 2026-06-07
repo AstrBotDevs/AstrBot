@@ -1,4 +1,4 @@
-﻿{
+{
   "title": "Давай пообщаемся!",
   "subtitle": "Общение с AI-помощником",
   "input": {
@@ -54,7 +54,36 @@
     "providerConfig": "Настройки AI",
     "toolsUsed": "Использованные инструменты",
     "toolCallUsed": "Использован инструмент {name}",
-    "pythonCodeAnalysis": "Использован анализ кода Python"
+    "pythonCodeAnalysis": "Использован анализ кода Python",
+    "spcodeTool": {
+      "codeCheck": "Проверка кода",
+      "codeIndex": "Индекс кода",
+      "codeExplore": "Поиск по коду",
+      "esSearch": "Поиск файлов",
+      "fileRemove": "Удаление",
+      "fileDiff": "Различия",
+      "todoList": "Список задач",
+      "labels": {
+        "found": "Найдено",
+        "match": "совпадений",
+        "events": "событий",
+        "items": "элементов",
+        "progress": "Прогресс",
+        "attention": "Внимание",
+        "identical": "Файлы идентичны",
+        "noIssues": "Нет проблем",
+        "ok": "Успех",
+        "failed": "Ошибка",
+        "create": "Создано",
+        "updated": "Обновлено",
+        "deleted": "Удалено",
+        "cleared": "Очищено",
+        "listCleared": "Список очищен",
+        "proposal": "Предложение",
+        "options": "Или:",
+        "listCreated": "Список создан ({n})"
+      }
+    }
   },
   "ipython": {
     "output": "Вывод"

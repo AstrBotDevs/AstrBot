@@ -54,7 +54,36 @@
     "providerConfig": "模型配置",
     "toolsUsed": "已使用工具",
     "toolCallUsed": "已使用 {name} 工具",
-    "pythonCodeAnalysis": "已使用 Python 代码分析"
+    "pythonCodeAnalysis": "已使用 Python 代码分析",
+    "spcodeTool": {
+      "codeCheck": "代码检查",
+      "codeIndex": "建立索引",
+      "codeExplore": "代码查询",
+      "esSearch": "文件搜索",
+      "fileRemove": "删除文件",
+      "fileDiff": "文件差异",
+      "todoList": "任务清单",
+      "labels": {
+        "found": "找到",
+        "match": "匹配",
+        "events": "事件",
+        "items": "项",
+        "progress": "进度",
+        "attention": "需关注",
+        "identical": "两文件相同",
+        "noIssues": "无问题",
+        "ok": "成功",
+        "failed": "失败",
+        "create": "已创建",
+        "updated": "已更新",
+        "deleted": "已删除",
+        "cleared": "已清空",
+        "listCleared": "清单已清空",
+        "proposal": "建议",
+        "options": "或选择:",
+        "listCreated": "已创建清单（{n} 项）"
+      }
+    }
   },
   "ipython": {
     "output": "输出"

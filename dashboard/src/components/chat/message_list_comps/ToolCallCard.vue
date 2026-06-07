@@ -91,6 +91,7 @@ import { useModuleI18n } from "@/i18n/composables";
 import { findSystemNoticeIndex } from "@/utils/systemNotice";
 import DiffPreview from "./DiffPreview.vue";
 import ToolResultView from "./ToolResultView.vue";
+import { SPCODE_ICONS } from "./spcode_tools/icons";
 
 const props = defineProps({
   toolCall: {
@@ -134,6 +135,7 @@ const toolCallIcon = computed(() => {
   if (name === "astrbot_upload_file") return "mdi-upload-outline";
   if (name === "astrbot_download_file") return "mdi-download-outline";
   if (name.includes("web_search") || name.includes("tavily")) return "mdi-web";
+  if (SPCODE_ICONS[name]) return SPCODE_ICONS[name];
   return "mdi-wrench";
 });
 
