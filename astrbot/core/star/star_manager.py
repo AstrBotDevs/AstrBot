@@ -1616,6 +1616,7 @@ class PluginManager:
         plugin.star_cls_type = None
 
         plugin_dir_norm = os.path.normcase(os.path.normpath(plugin_dir))
+        self_locals_id = id(locals())
         for obj in gc.get_objects():
             if not isinstance(obj, ImageFont.FreeTypeFont):
                 continue
@@ -1626,8 +1627,9 @@ class PluginManager:
                 plugin_dir_norm + os.sep
             ):
                 continue
+            logger.debug(f"释放字体句柄: {font_path}")
             for referrer in gc.get_referrers(obj):
-                if not isinstance(referrer, dict):
+                if not isinstance(referrer, dict) or id(referrer) == self_locals_id:
                     continue
                 for k in [k for k, v in referrer.items() if v is obj]:
                     referrer[k] = None
