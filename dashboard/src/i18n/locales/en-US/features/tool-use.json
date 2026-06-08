@@ -47,6 +47,9 @@
       "origin": "Origin",
       "originName": "Origin Name",
       "readonly": "Read-only",
+      "permission": "Permission",
+      "permissionAdmin": "Admin",
+      "permissionMember": "All Users",
       "actions": "Actions"
     },
     "configTags": {
@@ -167,6 +170,8 @@
     "toggleToolSuccess": "Tool status toggled successfully!",
     "toggleToolReadonly": "Builtin tools are read-only and cannot be enabled or disabled.",
     "toggleToolError": "Failed to toggle tool status: {error}",
+    "updateToolPermissionSuccess": "Permission for {name} updated",
+    "updateToolPermissionFailed": "Failed to update tool permission",
     "testError": "Test connection failed: {error}"
   }
 }

@@ -12,14 +12,16 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'toggle-tool', tool: ToolItem): void;
+  (e: 'update-permission', tool: ToolItem, permission: 'admin' | 'member'): void;
 }>();
 
 const toolHeaders = computed(() => [
   { title: tmTool('functionTools.title'), key: 'name', minWidth: '320px' },
   { title: tmTool('functionTools.description'), key: 'description' },
-  { title: tmTool('functionTools.table.origin'), key: 'origin', sortable: false, width: '120px' },
-  { title: tmTool('functionTools.table.originName'), key: 'origin_name', sortable: false, width: '160px' },
-  { title: tmTool('functionTools.table.actions'), key: 'actions', sortable: false, width: '120px' }
+  { title: tmTool('functionTools.table.origin'), key: 'origin', sortable: false, width: '100px' },
+  { title: tmTool('functionTools.table.originName'), key: 'origin_name', sortable: false, width: '140px' },
+  { title: tmTool('functionTools.table.permission'), key: 'permission', sortable: false, width: '110px' },
+  { title: tmTool('functionTools.table.actions'), key: 'actions', sortable: false, width: '100px' }
 ]);
 
 const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.properties || {});
@@ -133,9 +135,25 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
       </template>
 
       <template #item.origin_name="{ item }">
-        <div class="text-body-2 text-medium-emphasis" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.origin_name">
+        <div class="text-body-2 text-medium-emphasis" style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.origin_name">
           {{ item.origin_name || '-' }}
         </div>
+      </template>
+
+      <template #item.permission="{ item }">
+        <span v-if="!item.permission" class="text-medium-emphasis text-caption">
+          <v-icon size="14" color="grey">mdi-lock</v-icon>
+        </span>
+        <v-btn
+          v-else
+          size="x-small"
+          variant="tonal"
+          :color="item.permission === 'admin' ? 'warning' : 'success'"
+          class="text-caption font-weight-medium"
+          @click="emit('update-permission', item, item.permission === 'admin' ? 'member' : 'admin')"
+        >
+          {{ item.permission === 'admin' ? tmTool('functionTools.table.permissionAdmin') : tmTool('functionTools.table.permissionMember') }}
+        </v-btn>
       </template>
 
       <template #item.actions="{ item }">

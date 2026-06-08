@@ -119,4 +119,8 @@ export interface ToolItem {
   origin_name?: string;
   builtin_config_statuses?: BuiltinToolConfigTag[];
   builtin_config_tags?: BuiltinToolConfigTag[];
+  /** Per-tool permission level ("admin" | "member").  Builtin tools omit this. */
+  permission?: 'admin' | 'member';
+  /** True when permission was explicitly configured rather than a fallback default. */
+  permission_configured?: boolean;
 }

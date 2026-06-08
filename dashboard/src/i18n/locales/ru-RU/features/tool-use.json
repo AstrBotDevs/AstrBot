@@ -47,6 +47,9 @@
             "origin": "Источник",
             "originName": "Имя источника",
             "readonly": "Только чтение",
+            "permission": "Доступ",
+            "permissionAdmin": "Админ",
+            "permissionMember": "Все",
             "actions": "Действия"
         },
         "configTags": {
@@ -167,6 +170,8 @@
         "toggleToolSuccess": "Статус инструмента изменен!",
         "toggleToolReadonly": "Встроенные инструменты доступны только для чтения и не могут быть включены или выключены.",
         "toggleToolError": "Не удалось изменить статус: {error}",
+        "updateToolPermissionSuccess": "Доступ к {name} обновлён",
+        "updateToolPermissionFailed": "Не удалось обновить доступ к инструменту",
         "testError": "Ошибка теста связи: {error}"
     },
     "syncProvider": {
