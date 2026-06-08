@@ -296,7 +296,7 @@ def test_subagent_session_manager_matches_non_string_dict_tool_call_id():
         key,
         ttl_seconds=3600,
         config_fingerprint="fp",
-        现在=101.0,
+        now=101.0,
     )
 
     assert [message.role for message in trimmed] == ["assistant", "tool"]
