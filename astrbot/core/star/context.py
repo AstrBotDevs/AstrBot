@@ -491,7 +491,7 @@ class Context:
         for tool in tools:
             if not module_path:
                 _parts = []
-                module_part = tool.__module__.split(".")
+                module_part = tool.__module__.split(".") if tool.__module__ else []
                 flags = ["builtin_stars", "plugins"]
                 found_flag = False
                 for i, part in enumerate(module_part):
@@ -501,11 +501,13 @@ class Context:
                         _parts.append("main")
                         found_flag = True
                         break
-                if not found_flag:
+                if not found_flag and module_part:
                     # Subdirectory tool: construct path matching star_manager format
+                    # Only apply to known plugin naming patterns (astrbot_plugin_*)
                     plugin_name = module_part[0]
-                    _parts = ["data", "plugins", plugin_name, "main"]
-                tool.handler_module_path = ".".join(_parts)
+                    if plugin_name.startswith("astrbot_plugin_"):
+                        _parts = ["data", "plugins", plugin_name, "main"]
+                tool.handler_module_path = ".".join(_parts) if _parts else tool.__module__ or ""
                 module_path = tool.handler_module_path
             else:
                 tool.handler_module_path = module_path
