@@ -150,6 +150,7 @@ async def test_do_handoff_background_reports_prepared_image_urls(
         cls, tool, run_context, image_urls_prepared=False, **tool_args
     ):
         assert image_urls_prepared is True
+        assert tool_args["use_subagent_runner"] is False
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text="ok")]
         )
@@ -178,6 +179,56 @@ async def test_do_handoff_background_reports_prepared_image_urls(
     )
 
     assert captured["tool_args"]["image_urls"] == ["https://example.com/raw.png"]
+
+
+@pytest.mark.asyncio
+async def test_do_handoff_background_bypasses_subagent_runner(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured["tool_loop_agent"] = kwargs
+        return SimpleNamespace(completion_text="background ok")
+
+    async def _fake_run_internal(**_kwargs):
+        raise AssertionError("background handoff should not use SubAgentRunner")
+
+    async def _fake_wake(cls, run_context, **kwargs):
+        captured["wake"] = kwargs
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        _run_tool_loop_agent_internal=_fake_run_internal,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    context.subagent_orchestrator = SubAgentOrchestrator(
+        tool_mgr=SimpleNamespace(), persona_mgr=SimpleNamespace()
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = _build_persistent_handoff_tool()
+
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_wake_main_agent_for_background_result",
+        classmethod(_fake_wake),
+    )
+
+    await FunctionToolExecutor._do_handoff_background(
+        tool=tool,
+        run_context=run_context,
+        task_id="task-id",
+        input="hello",
+        image_urls=[],
+    )
+
+    assert captured["tool_loop_agent"]["prompt"] == "hello"
+    assert captured["wake"]["result_text"] == "background ok\n"
 
 
 @pytest.mark.asyncio
