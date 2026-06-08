@@ -7,11 +7,12 @@ import sys
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
-from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
-from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
+
+from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
+from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 
 logger = logging.getLogger("astrbot")
 
