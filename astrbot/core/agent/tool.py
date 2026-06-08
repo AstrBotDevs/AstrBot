@@ -271,20 +271,20 @@ class ToolSet:
                 union_value = schema.get(union_key)
                 if isinstance(union_value, list):
                     converted_branches = [
-                        convert_schema(item)
+                        convert_schema(item) if isinstance(item, dict) else item
                         for item in union_value
-                        if isinstance(item, dict)
                     ]
                     non_null_branches = [
                         item
                         for item in converted_branches
-                        if item.get("type") != "null"
+                        if not (isinstance(item, dict) and item.get("type") == "null")
                     ]
-                    if len(non_null_branches) == 1 and len(non_null_branches) < len(
-                        converted_branches
+                    if len(non_null_branches) == 1 and isinstance(
+                        non_null_branches[0], dict
                     ):
                         result = non_null_branches[0].copy()
-                        result["nullable"] = True
+                        if len(converted_branches) > 1:
+                            result["nullable"] = True
                         apply_supported_fields(result, schema)
                         return result
                     return {union_key: converted_branches}

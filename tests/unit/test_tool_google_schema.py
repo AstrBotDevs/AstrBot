@@ -116,6 +116,68 @@ def test_google_schema_collapses_nullable_anyof_property():
     assert "default" not in time_range
 
 
+def test_google_schema_collapses_single_branch_anyof_property():
+    tool_module = load_tool_module()
+    FunctionTool = tool_module.FunctionTool
+    ToolSet = tool_module.ToolSet
+
+    tool = FunctionTool(
+        name="search_sources",
+        description="Search sources by query.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "description": "Search query.",
+                    "anyOf": [
+                        {
+                            "type": "string",
+                        }
+                    ],
+                }
+            },
+        },
+    )
+
+    schema = ToolSet([tool]).google_schema()
+    query = schema["function_declarations"][0]["parameters"]["properties"]["query"]
+
+    assert query["type"] == "string"
+    assert query["description"] == "Search query."
+    assert "nullable" not in query
+    assert "anyOf" not in query
+
+
+def test_google_schema_preserves_non_dict_union_branches():
+    tool_module = load_tool_module()
+    FunctionTool = tool_module.FunctionTool
+    ToolSet = tool_module.ToolSet
+
+    tool = FunctionTool(
+        name="search_sources",
+        description="Search sources by literal value.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "value": {
+                    "anyOf": [
+                        {"type": "string"},
+                        False,
+                    ],
+                }
+            },
+        },
+    )
+
+    schema = ToolSet([tool]).google_schema()
+    value = schema["function_declarations"][0]["parameters"]["properties"]["value"]
+
+    assert value["anyOf"] == [
+        {"type": "string"},
+        False,
+    ]
+
+
 def test_google_schema_marks_type_list_with_null_as_nullable():
     tool_module = load_tool_module()
     FunctionTool = tool_module.FunctionTool
