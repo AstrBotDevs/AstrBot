@@ -264,9 +264,10 @@ class EmbeddingStorage:
             await self._save_index_locked()
 
     async def _save_index_locked(self) -> None:
-        """内部方法：在已持有 _write_lock 的情况下保存索引到磁盘。
+        """内部方法：在已持有 _write_lock 的情况下原子性保存索引到磁盘。
 
         调用者必须已经获取 _write_lock。
+        使用临时文件 + os.replace() 确保原子性，防止进程崩溃导致索引损坏。
         """
         if self.index is None:
             return
@@ -275,7 +276,23 @@ class EmbeddingStorage:
                 "无法保存 FAISS 索引：索引文件路径未设置。"
                 "请确保在创建 EmbeddingStorage 时提供了有效的 path 参数。"
             )
-        await asyncio.to_thread(faiss.write_index, self.index, self.path)
+
+        # 原子性保存：先写临时文件，成功后再替换
+        temp_path = f"{self.path}.tmp.{os.getpid()}"
+        try:
+            await asyncio.to_thread(faiss.write_index, self.index, temp_path)
+            # 使用 os.replace 确保原子性（POSIX 保证）
+            await asyncio.to_thread(os.replace, temp_path, self.path)
+        except Exception as exc:
+            # 清理临时文件
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+            raise RuntimeError(
+                f"保存 FAISS 索引失败: {exc}。索引未更新，保持原有状态。"
+            ) from exc
 
     async def save_index(self) -> None:
         """保存索引（在单独线程中执行以避免阻塞事件循环）
