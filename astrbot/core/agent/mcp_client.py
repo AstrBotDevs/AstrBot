@@ -663,7 +663,7 @@ class MCPClient:
                 continue
 
             try:
-                return await (
+                return await self.session.call_tool(
                     name=tool_name,
                     arguments=arguments,
                     read_timeout_seconds=read_timeout_seconds,
