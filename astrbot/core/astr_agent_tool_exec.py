@@ -299,6 +299,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         *,
         image_urls_prepared: bool = False,
+        use_subagent_runner: bool = True,
         **tool_args: T.Any,
     ):
         tool_args = dict(tool_args)
@@ -351,8 +352,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
         agent_max_step = int(prov_settings.get("max_agent_step", 30))
         stream = prov_settings.get("streaming_response", False)
-        orchestrator = getattr(ctx, "subagent_orchestrator", None)
-        subagent_runner = getattr(orchestrator, "runner", None)
+        subagent_runner = None
+        if use_subagent_runner:
+            orchestrator = getattr(ctx, "subagent_orchestrator", None)
+            subagent_runner = getattr(orchestrator, "runner", None)
         if subagent_runner is not None:
             llm_resp = await subagent_runner.run(
                 tool=tool,
@@ -449,6 +452,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 tool,
                 run_context,
                 image_urls_prepared=True,
+                use_subagent_runner=False,
                 **tool_args,
             ):
                 if isinstance(r, mcp.types.CallToolResult):
