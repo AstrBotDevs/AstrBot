@@ -5,9 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, event, func, or_, select, text, update
+from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
 from sqlmodel import col, desc
 
 from astrbot.core import logger
