@@ -177,9 +177,10 @@ class PluginPageService:
         if not plugin:
             return None
 
-        resolved_locale = (
-            payload.get("locale") if isinstance(payload.get("locale"), str) else locale
-        )
+        resolved_locale = locale
+        token_locale = payload.get("locale")
+        if isinstance(token_locale, str):
+            resolved_locale = token_locale
         plugin_i18n = plugin.i18n or {}
         try:
             plugin_root = self.get_plugin_root_dir(plugin)

@@ -477,7 +477,7 @@ def _coerce_view_result(result: Any):
             (item for item in result[1:] if isinstance(item, dict)),
             None,
         )
-        if isinstance(content, Response):
+        if content is not None and isinstance(content, Response):
             content.status_code = status_code
             if headers:
                 content.headers.update(headers)
@@ -537,6 +537,7 @@ class FastAPIAppAdapter:
     def __init__(self, app: FastAPI, static_folder: str | None = None) -> None:
         self._app = app
         self.static_folder = static_folder
+        self._dashboard_server: Any | None = None
         self.config: dict[str, Any] = {}
         self.debug = False
         self.testing = False

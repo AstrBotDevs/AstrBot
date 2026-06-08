@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.schemas import MigrationRequest, PipInstallRequest, UpdateRequest
 from astrbot.dashboard.services.update_service import (
     UpdateService,
     UpdateServiceError,
@@ -10,7 +12,6 @@ from astrbot.dashboard.services.update_service import (
 )
 
 from .auth import AuthContext, require_dashboard_user, require_scope
-from .schemas import MigrationRequest, PipInstallRequest, UpdateRequest
 
 router = APIRouter(tags=["Updates"])
 dashboard_router = APIRouter(
@@ -63,9 +64,7 @@ def _service_error(exc: UpdateServiceError) -> JSONResponse:
 
 async def _run(operation) -> JSONResponse:
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         return _service_response(result)
     except UpdateServiceError as exc:
         return _service_error(exc)

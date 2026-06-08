@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 
+from astrbot.dashboard.responses import ApiError, ok
+from astrbot.dashboard.schemas import ApiKeyCreateRequest, ApiKeyIdRequest
 from astrbot.dashboard.services.api_key_service import (
     ApiKeyService,
     ApiKeyServiceError,
 )
 
 from .auth import AuthContext, require_dashboard_user, require_scope
-from .responses import ApiError, ok
-from .schemas import ApiKeyCreateRequest, ApiKeyIdRequest
 
 router = APIRouter(tags=["API Keys"])
 dashboard_router = APIRouter(

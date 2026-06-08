@@ -233,13 +233,16 @@ class ConversationService:
         )
 
     async def _delete_conversations(self, conversations: object) -> dict:
-        if not conversations:
+        if not isinstance(conversations, list) or not conversations:
             raise ConversationServiceError("批量删除时conversations参数不能为空")
 
         deleted_count = 0
         failed_items = []
 
         for conv in conversations:
+            if not isinstance(conv, dict):
+                failed_items.append(f"{conv!r} - 格式错误")
+                continue
             user_id = conv.get("user_id")
             cid = conv.get("cid")
 

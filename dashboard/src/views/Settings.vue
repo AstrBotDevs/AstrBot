@@ -294,7 +294,7 @@ const apiKeys = ref([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref('');
 const newApiKeyExpiresInDays = ref(30);
-const newApiKeyScopes = ref(['chat', 'config', 'file', 'im']);
+const newApiKeyScopes = ref(['chat', 'config', 'im']);
 const createdApiKeyPlaintext = ref('');
 const apiKeyExpiryOptions = computed(() => [
     { title: tm('apiKey.expiryOptions.day1'), value: 1 },
@@ -305,10 +305,13 @@ const apiKeyExpiryOptions = computed(() => [
 ]);
 
 const availableScopes = [
-    { value: 'chat', label: 'chat' },
+    { value: 'bot', label: 'bot' },
+    { value: 'provider', label: 'provider' },
+    { value: 'persona', label: 'persona' },
+    { value: 'im', label: 'im' },
     { value: 'config', label: 'config' },
-    { value: 'file', label: 'file' },
-    { value: 'im', label: 'im' }
+    { value: 'chat', label: 'chat' },
+    { value: 'plugin', label: 'plugin' }
 ];
 
 const showToast = (message, color = 'success') => {

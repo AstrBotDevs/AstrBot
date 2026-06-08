@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.dashboard.responses import ApiError, ok
+from astrbot.dashboard.schemas import CronJobRequest
 from astrbot.dashboard.services.cron_service import CronService, CronServiceError
 
 from .auth import AuthContext, require_dashboard_user, require_scope
-from .responses import ApiError, ok
-from .schemas import CronJobRequest
 
 router = APIRouter(tags=["Cron"])
 dashboard_router = APIRouter(

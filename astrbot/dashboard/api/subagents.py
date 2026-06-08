@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 
+from astrbot.dashboard.responses import ApiError, ok
+from astrbot.dashboard.schemas import SubAgentConfigRequest
 from astrbot.dashboard.services.subagent_service import (
     SubAgentService,
     SubAgentServiceError,
 )
 
 from .auth import AuthContext, require_dashboard_user, require_scope
-from .responses import ApiError, ok
-from .schemas import SubAgentConfigRequest
 
 router = APIRouter(tags=["Subagents"])
 dashboard_router = APIRouter(

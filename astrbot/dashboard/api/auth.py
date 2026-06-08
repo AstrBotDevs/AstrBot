@@ -6,6 +6,13 @@ import jwt
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from astrbot.dashboard.responses import ApiError
+from astrbot.dashboard.schemas import (
+    AccountUpdateRequest,
+    AuthSetupRequest,
+    LoginRequest,
+    TotpSetupRequest,
+)
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import (
     ALL_OPEN_API_SCOPES,
@@ -15,14 +22,6 @@ from astrbot.dashboard.services.auth_service import (
     TOTP_TRUSTED_DEVICE_MAX_AGE,
     AuthService,
     AuthServiceResult,
-)
-
-from .responses import ApiError
-from .schemas import (
-    AccountUpdateRequest,
-    AuthSetupRequest,
-    LoginRequest,
-    TotpSetupRequest,
 )
 
 router = APIRouter(tags=["Auth"])
@@ -112,14 +111,17 @@ async def _require_api_key_scope(
     raw_key: str,
     scope: str,
 ) -> AuthContext:
+    if scope not in ALL_OPEN_API_SCOPES:
+        raise ApiError("Insufficient API key scope", status_code=403)
+
     key_hash = ApiKeyService.hash_key(raw_key)
     api_key = await request.app.state.db.get_active_api_key_by_hash(key_hash)
     if not api_key:
         raise ApiError("Invalid API key", status_code=401)
     scopes = (
-        api_key.scopes
+        [str(scope) for scope in api_key.scopes]
         if isinstance(api_key.scopes, list)
-        else list(ALL_OPEN_API_SCOPES)
+        else [str(scope) for scope in ALL_OPEN_API_SCOPES]
     )
     if "*" not in scopes and scope not in scopes:
         raise ApiError("Insufficient API key scope", status_code=403)
@@ -205,7 +207,7 @@ def _set_dashboard_jwt_cookie(
         token,
         max_age=DASHBOARD_JWT_COOKIE_MAX_AGE,
         httponly=True,
-        samesite="Strict",
+        samesite="strict",
         secure=_use_secure_dashboard_jwt_cookie(request),
         path="/",
     )
@@ -215,7 +217,7 @@ def _clear_dashboard_jwt_cookie(request: Request, response: JSONResponse) -> Non
     response.delete_cookie(
         DASHBOARD_JWT_COOKIE_NAME,
         httponly=True,
-        samesite="Strict",
+        samesite="strict",
         secure=_use_secure_dashboard_jwt_cookie(request),
         path="/",
     )
@@ -231,7 +233,7 @@ def _set_trusted_device_cookie(
         token,
         max_age=TOTP_TRUSTED_DEVICE_MAX_AGE,
         httponly=True,
-        samesite="Strict",
+        samesite="strict",
         secure=_use_secure_dashboard_jwt_cookie(request),
         path="/api/auth",
     )

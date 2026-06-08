@@ -4,7 +4,7 @@ import os
 import socket
 import time
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 import jwt
 import psutil
@@ -29,9 +29,9 @@ from astrbot.dashboard.asgi_runtime import (
     DashboardRequestState,
     FastAPIAppAdapter,
 )
+from astrbot.dashboard.responses import error
 
 from .api.app import create_dashboard_asgi_app
-from .api.responses import error
 from .plugin_page_auth import PluginPageAuth
 from .services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 
@@ -568,7 +568,9 @@ class AstrBotDashboard:
             config.accesslog = "-"
             config.access_log_format = "%(h)s %(r)s %(s)s %(b)s %(D)s"
 
-        return serve(self.asgi_app, config, shutdown_trigger=self.shutdown_trigger)
+        return serve(
+            cast(Any, self.asgi_app), config, shutdown_trigger=self.shutdown_trigger
+        )
 
     async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()

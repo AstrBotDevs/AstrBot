@@ -1380,6 +1380,8 @@ class ChatService:
 
         try:
             message_id = int(message_id)
+            if not isinstance(content, dict):
+                raise ValueError("Missing key: content")
             content = sanitize_message_content(content)
         except (TypeError, ValueError) as exc:
             raise ChatServiceError(str(exc)) from exc

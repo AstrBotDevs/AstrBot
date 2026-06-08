@@ -3,11 +3,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import ApiError, ok
+from astrbot.dashboard.schemas import T2iActiveTemplateRequest, T2iTemplateRequest
 from astrbot.dashboard.services.t2i_service import T2iService, T2iServiceError
 
 from .auth import AuthContext, require_dashboard_user, require_scope
-from .responses import ApiError, ok
-from .schemas import T2iActiveTemplateRequest, T2iTemplateRequest
 
 router = APIRouter(tags=["Text To Image"])
 dashboard_router = APIRouter(
@@ -57,9 +58,7 @@ async def _run(
     result_as_message: bool = False,
 ):
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         if isinstance(result, tuple):
             payload, result_message = result
             return _response(payload, message=result_message)

@@ -31,7 +31,8 @@ from astrbot.core.utils.totp import (
     verify_configured_2fa_code,
 )
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
-from astrbot.dashboard.api.responses import ApiError
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import ApiError
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -129,7 +130,7 @@ def config_key_to_folder(key_path: str) -> str:
     return _config_key_to_folder(key_path)
 
 
-def _normalize_rel_path(path: str) -> str | None:
+def _normalize_rel_path(path: object) -> str | None:
     if not isinstance(path, str):
         return None
     rel = path.replace("\\", "/").lstrip("/")
@@ -1245,8 +1246,10 @@ class BotConfigService:
     async def delete_bot_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         platform_id = data.get("id")
+        if not platform_id:
+            raise ValueError("缺少平台 ID")
         try:
-            await self.delete_bot(platform_id)
+            await self.delete_bot(str(platform_id))
         except ValueError as exc:
             if "not found" in str(exc):
                 raise ValueError("未找到对应平台") from exc
@@ -1412,9 +1415,7 @@ class ProviderConfigService:
         inst = cls_type(source, {})
         init_fn = getattr(inst, "initialize", None)
         if callable(init_fn):
-            maybe_coro = init_fn()
-            if hasattr(maybe_coro, "__await__"):
-                await maybe_coro
+            await run_maybe_async(init_fn)
         try:
             models = await inst.get_models()
             models = models or []
@@ -1430,9 +1431,7 @@ class ProviderConfigService:
         finally:
             terminate_fn = getattr(inst, "terminate", None)
             if callable(terminate_fn):
-                maybe_coro = terminate_fn()
-                if hasattr(maybe_coro, "__await__"):
-                    await maybe_coro
+                await run_maybe_async(terminate_fn)
 
     async def list_provider_source_models_for_dashboard(
         self,
@@ -1514,9 +1513,7 @@ class ProviderConfigService:
         try:
             init_fn = getattr(inst, "initialize", None)
             if callable(init_fn):
-                maybe_coro = init_fn()
-                if hasattr(maybe_coro, "__await__"):
-                    await maybe_coro
+                await run_maybe_async(init_fn)
 
             if not isinstance(inst, EmbeddingProvider):
                 raise ValueError("提供商不是 EmbeddingProvider 类型")
@@ -1530,9 +1527,7 @@ class ProviderConfigService:
         finally:
             terminate_fn = getattr(inst, "terminate", None)
             if callable(terminate_fn):
-                maybe_coro = terminate_fn()
-                if hasattr(maybe_coro, "__await__"):
-                    await maybe_coro
+                await run_maybe_async(terminate_fn)
 
     async def get_embedding_dimension_from_dashboard_payload(
         self,
@@ -1655,12 +1650,11 @@ class ProviderConfigService:
         if not target:
             raise ValueError(f"Provider {provider_id} not found")
         meta = target.meta()
+        provider_type = getattr(meta, "provider_type", None)
         result = {
             "id": getattr(meta, "id", provider_id),
             "model": getattr(meta, "model", None),
-            "type": getattr(meta, "provider_type", None).value
-            if getattr(meta, "provider_type", None)
-            else None,
+            "type": getattr(provider_type, "value", None),
             "name": provider_id,
             "status": "unavailable",
             "error": None,
@@ -1716,4 +1710,4 @@ class ProviderConfigService:
         if not callable(reload_fn):
             return
         for provider in providers:
-            await reload_fn(provider)
+            await run_maybe_async(lambda provider=provider: reload_fn(provider))

@@ -4,17 +4,18 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceError
-
-from .auth import AuthContext, require_dashboard_user, require_scope
-from .responses import ApiError, ok
-from .schemas import (
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import ApiError, ok
+from astrbot.dashboard.schemas import (
     McpServerByNameRequest,
     McpServerRequest,
     ModelScopeSyncRequest,
     ToolEnabledRequest,
     ToolPermissionRequest,
 )
+from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceError
+
+from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Extension Components"])
 dashboard_router = APIRouter(
@@ -94,9 +95,7 @@ async def _run(
     operation, *, result_as_message: bool = False, message: str | None = None
 ):
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         if result_as_message:
             return ok(None, str(result))
         return ok(result, message)

@@ -5,14 +5,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from astrbot.dashboard.asgi_runtime import DashboardRequest
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import ApiError, ok
+from astrbot.dashboard.schemas import BotRegistrationRequest
 from astrbot.dashboard.services.platform_service import (
     PlatformService,
     PlatformServiceError,
 )
 
 from .auth import AuthContext, require_dashboard_user, require_scope
-from .responses import ApiError, ok
-from .schemas import BotRegistrationRequest
 
 router = APIRouter(tags=["Platforms"])
 dashboard_router = APIRouter(
@@ -48,9 +49,7 @@ def _model_dict(payload) -> dict[str, Any]:
 
 async def _run(operation):
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         return ok(result)
     except PlatformServiceError as exc:
         _raise_platform_error(exc)

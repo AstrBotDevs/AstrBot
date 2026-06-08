@@ -312,12 +312,10 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError(f"测试嵌入模型失败: {exc!s}") from exc
 
         if rerank_provider_id:
-            rerank_provider: RerankProvider = (
-                await kb_manager.provider_manager.get_provider_by_id(
-                    rerank_provider_id,
-                )
+            rerank_provider = await kb_manager.provider_manager.get_provider_by_id(
+                rerank_provider_id,
             )
-            if not rerank_provider:
+            if not isinstance(rerank_provider, RerankProvider):
                 raise KnowledgeBaseServiceError("重排序模型不存在")
             try:
                 result = await rerank_provider.rerank(
@@ -377,9 +375,16 @@ class KnowledgeBaseService:
         if all(payload.get(key) is None for key in update_keys):
             raise KnowledgeBaseServiceError("至少需要提供一个更新字段")
 
+        current_kb = await self.get_kb_manager().get_kb(kb_id)
+        kb_name = payload.get("kb_name")
+        if kb_name is None:
+            if not current_kb:
+                raise KnowledgeBaseServiceError("知识库不存在")
+            kb_name = current_kb.kb.kb_name
+
         kb_helper = await self.get_kb_manager().update_kb(
             kb_id=kb_id,
-            kb_name=payload.get("kb_name"),
+            kb_name=kb_name,
             description=payload.get("description"),
             emoji=payload.get("emoji"),
             embedding_provider_id=payload.get("embedding_provider_id"),

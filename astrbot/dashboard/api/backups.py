@@ -4,19 +4,20 @@ from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from astrbot.core import logger
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.schemas import (
+    BackupImportRequest,
+    BackupRenameRequest,
+    BackupUploadInitRequest,
+    BackupUploadSessionRequest,
+)
 from astrbot.dashboard.services.backup_service import (
     BackupService,
     BackupServiceError,
 )
 
 from .auth import AuthContext, require_dashboard_user, require_scope
-from .responses import error, ok
-from .schemas import (
-    BackupImportRequest,
-    BackupRenameRequest,
-    BackupUploadInitRequest,
-    BackupUploadSessionRequest,
-)
 
 router = APIRouter(tags=["Backups"])
 dashboard_router = APIRouter(
@@ -55,9 +56,7 @@ async def _json_or_empty(request: Request) -> dict:
 
 async def _run(operation, *, prefix: str):
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         return _ok_result(result)
     except BackupServiceError as exc:
         return error(str(exc))

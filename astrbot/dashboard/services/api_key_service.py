@@ -64,11 +64,15 @@ class ApiKeyService:
         if not isinstance(raw_scopes, list):
             raise ApiKeyServiceError("Invalid scopes")
 
-        scopes = [
-            scope
-            for scope in raw_scopes
-            if isinstance(scope, str) and scope in ALL_OPEN_API_SCOPES
-        ]
+        scopes = []
+        invalid_scopes = []
+        for scope in raw_scopes:
+            if isinstance(scope, str) and scope in ALL_OPEN_API_SCOPES:
+                scopes.append(scope)
+            else:
+                invalid_scopes.append(str(scope))
+        if invalid_scopes:
+            raise ApiKeyServiceError(f"Invalid scopes: {', '.join(invalid_scopes)}")
         normalized_scopes = list(dict.fromkeys(scopes))
         if not normalized_scopes:
             raise ApiKeyServiceError("At least one valid scope is required")

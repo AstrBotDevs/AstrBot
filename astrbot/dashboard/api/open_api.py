@@ -5,6 +5,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from astrbot.dashboard.responses import ApiError, error, ok
+from astrbot.dashboard.schemas import ImMessageRequest, OpenApiChatRequest
 from astrbot.dashboard.services.chat_service import (
     ChatService,
     ChatServiceError,
@@ -18,8 +20,6 @@ from astrbot.dashboard.services.open_api_service import (
 
 from .auth import AuthContext, require_scope
 from .multipart import single_upload
-from .responses import ApiError, error, ok
-from .schemas import ImMessageRequest, OpenApiChatRequest
 
 router = APIRouter(tags=["Open API"])
 
@@ -143,7 +143,9 @@ def _build_chat_ws_bridge(
     chat_service: ChatService,
 ) -> OpenApiWebSocketChatBridge:
     return OpenApiWebSocketChatBridge(
-        build_user_message_parts=chat_service.build_user_message_parts,
+        build_user_message_parts=lambda message: chat_service.build_user_message_parts(
+            message if isinstance(message, str | list) else str(message),
+        ),
         create_attachment_from_file=chat_service.create_attachment_from_file,
         extract_web_search_refs=extract_web_search_refs,
         insert_user_message=lambda session_id, effective_username, message_parts: (

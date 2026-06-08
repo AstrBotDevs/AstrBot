@@ -29,9 +29,11 @@ from .t2i import router as t2i_router
 from .tools import router as tools_router
 from .updates import router as updates_router
 
+API_V1_PREFIX = "/api/v1"
+
 
 def build_api_router() -> APIRouter:
-    router = APIRouter(prefix="/api/v1")
+    router = APIRouter(prefix=API_V1_PREFIX)
     router.include_router(auth_router)
     router.include_router(backups_router)
     router.include_router(config_profiles_router)

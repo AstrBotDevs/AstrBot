@@ -6,6 +6,14 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse
 
 from astrbot.core import logger
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.schemas import (
+    SkillByNameUpdateRequest,
+    SkillFileUpdateRequest,
+    SkillNeoRequest,
+    SkillUpdateRequest,
+)
 from astrbot.dashboard.services.skills_service import (
     SkillArchive,
     SkillsOperationResult,
@@ -15,13 +23,6 @@ from astrbot.dashboard.services.skills_service import (
 
 from .auth import AuthContext, require_dashboard_user, require_scope
 from .multipart import multipart_parts, single_upload
-from .responses import error, ok
-from .schemas import (
-    SkillByNameUpdateRequest,
-    SkillFileUpdateRequest,
-    SkillNeoRequest,
-    SkillUpdateRequest,
-)
 
 router = APIRouter(tags=["Skills"])
 dashboard_router = APIRouter(
@@ -70,9 +71,7 @@ def _serialize_result(result: SkillsOperationResult):
 
 async def _run(operation, *, trace: bool = True):
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         if isinstance(result, SkillsOperationResult):
             return _serialize_result(result)
         return ok(result)

@@ -48,17 +48,13 @@ from astrbot.dashboard.password_state import (
 )
 
 ALL_OPEN_API_SCOPES = (
-    "chat",
-    "config",
-    "file",
-    "im",
-    "plugin",
-    "tool",
-    "skill",
-    "kb",
+    "bot",
+    "provider",
     "persona",
-    "data",
-    "system",
+    "im",
+    "config",
+    "chat",
+    "plugin",
 )
 
 DASHBOARD_JWT_COOKIE_NAME = "astrbot_dashboard_jwt"

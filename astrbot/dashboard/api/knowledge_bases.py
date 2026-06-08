@@ -6,6 +6,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from astrbot.core import logger
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.schemas import (
+    KnowledgeBaseImportRequest,
+    KnowledgeBaseRequest,
+    KnowledgeBaseRetrieveRequest,
+    KnowledgeBaseUrlImportRequest,
+)
 from astrbot.dashboard.services.knowledge_base_service import (
     KnowledgeBaseService,
     KnowledgeBaseServiceError,
@@ -13,13 +21,6 @@ from astrbot.dashboard.services.knowledge_base_service import (
 
 from .auth import AuthContext, require_dashboard_user, require_scope
 from .multipart import multipart_parts
-from .responses import error, ok
-from .schemas import (
-    KnowledgeBaseImportRequest,
-    KnowledgeBaseRequest,
-    KnowledgeBaseRetrieveRequest,
-    KnowledgeBaseUrlImportRequest,
-)
 
 router = APIRouter(tags=["Knowledge Bases"])
 dashboard_router = APIRouter(
@@ -62,9 +63,7 @@ def _model_dict(payload) -> dict[str, Any]:
 
 async def _run(operation, *, prefix: str):
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         if isinstance(result, tuple):
             data, message = result
             return ok(data, message)

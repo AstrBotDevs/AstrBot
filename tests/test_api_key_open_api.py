@@ -1,11 +1,9 @@
 import asyncio
 import uuid
-from io import BytesIO
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -15,8 +13,8 @@ from astrbot.core.utils.auth_password import (
     hash_md5_dashboard_password,
 )
 from astrbot.dashboard.api import open_api as open_api_routes
-from astrbot.dashboard.api.responses import ok
 from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter
+from astrbot.dashboard.responses import ok
 from astrbot.dashboard.server import AstrBotDashboard
 
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
@@ -759,41 +757,18 @@ async def test_open_send_message_error_paths(
 
 
 @pytest.mark.asyncio
-async def test_open_file_upload_requires_file_and_can_upload(
+async def test_file_scope_is_not_available_for_developer_api_key(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
 ):
     test_client = app.test_client()
-    raw_key, _ = await _create_api_key(
-        app,
-        authenticated_header,
-        scopes=["file"],
-        name_prefix="file-scope-key",
+    create_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "file-scope-key", "scopes": ["file"]},
+        headers=authenticated_header,
     )
+    create_data = await create_res.get_json()
 
-    missing_file_res = await test_client.post(
-        "/api/v1/file",
-        data={},
-        headers={"X-API-Key": raw_key},
-    )
-    missing_file_data = await missing_file_res.get_json()
-    assert missing_file_data["status"] == "error"
-    assert missing_file_data["message"] == "Missing key: file"
-
-    upload_res = await test_client.post(
-        "/api/v1/file",
-        files={
-            "file": FileStorage(
-                stream=BytesIO(b"openapi-file-content"),
-                filename="openapi_test.txt",
-                content_type="text/plain",
-            )
-        },
-        headers={"X-API-Key": raw_key},
-    )
-    assert upload_res.status_code == 200
-    upload_data = await upload_res.get_json()
-    assert upload_data["status"] == "ok"
-    assert isinstance(upload_data["data"]["attachment_id"], str)
-    assert upload_data["data"]["filename"] == "openapi_test.txt"
-    assert upload_data["data"]["type"] == "file"
+    assert create_res.status_code == 400
+    assert create_data["status"] == "error"
+    assert create_data["message"] == "Invalid scopes: file"

@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.schemas import (
+    EnabledPatch,
+    ProviderConfigRequest,
+    ProviderSourceRequest,
+)
 from astrbot.dashboard.services.config_service import ProviderConfigService
 
 from .auth import AuthContext, require_scope
-from .responses import error, ok
-from .schemas import EnabledPatch, ProviderConfigRequest, ProviderSourceRequest
 
 router = APIRouter(tags=["Providers"])
 dashboard_router = APIRouter(
@@ -16,8 +20,8 @@ dashboard_router = APIRouter(
 )
 
 
-async def require_config_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "config")
+async def require_provider_scope(request: Request) -> AuthContext:
+    return await require_scope(request, "provider")
 
 
 def get_service(request: Request) -> ProviderConfigService:
@@ -86,7 +90,7 @@ def _alias_error(message: str):
 
 @router.get("/providers/schema")
 async def get_provider_schema(
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(service.get_provider_schema())
@@ -94,7 +98,7 @@ async def get_provider_schema(
 
 @router.get("/provider-sources")
 async def list_provider_sources(
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(service.list_provider_sources())
@@ -103,7 +107,7 @@ async def list_provider_sources(
 @router.post("/provider-sources")
 async def create_provider_source(
     payload: ProviderSourceRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     config = payload.to_dashboard_config()
@@ -117,7 +121,7 @@ async def create_provider_source(
 @router.get("/provider-sources/by-id")
 async def get_provider_source_by_id(
     source_id: str = Query(...),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(service.get_provider_source(source_id))
@@ -126,7 +130,7 @@ async def get_provider_source_by_id(
 @router.put("/provider-sources/by-id")
 async def upsert_provider_source_by_id(
     payload: ProviderSourceRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     source_id = _required_text(payload.source_id, "source_id")
@@ -140,7 +144,7 @@ async def upsert_provider_source_by_id(
 @router.delete("/provider-sources/by-id")
 async def delete_provider_source_by_id(
     source_id: str = Query(...),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     await service.delete_provider_source(source_id)
@@ -150,7 +154,7 @@ async def delete_provider_source_by_id(
 @router.get("/provider-sources/models")
 async def list_provider_source_models_by_id(
     source_id: str = Query(...),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(await service.list_provider_source_models(source_id))
@@ -160,7 +164,7 @@ async def list_provider_source_models_by_id(
 async def list_providers_by_source_id(
     source_id: str = Query(...),
     capability: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(service.list_providers(capability=capability, source_id=source_id))
@@ -169,7 +173,7 @@ async def list_providers_by_source_id(
 @router.post("/provider-sources/providers")
 async def create_provider_in_source_by_id(
     payload: ProviderConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     source_id = _required_text(payload.source_id, "source_id")
@@ -183,7 +187,7 @@ async def create_provider_in_source_by_id(
 @router.get("/provider-sources/{source_id:path}/models")
 async def list_provider_source_models(
     source_id: str,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(await service.list_provider_source_models(source_id))
@@ -193,7 +197,7 @@ async def list_provider_source_models(
 async def list_providers_by_source(
     source_id: str,
     capability: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(service.list_providers(capability=capability, source_id=source_id))
@@ -203,7 +207,7 @@ async def list_providers_by_source(
 async def create_provider_in_source(
     source_id: str,
     payload: ProviderConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     await service.create_provider(
@@ -215,7 +219,7 @@ async def create_provider_in_source(
 @router.get("/provider-sources/{source_id:path}")
 async def get_provider_source(
     source_id: str,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(service.get_provider_source(source_id))
@@ -225,7 +229,7 @@ async def get_provider_source(
 async def upsert_provider_source(
     source_id: str,
     payload: ProviderSourceRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     await service.upsert_provider_source(
@@ -238,7 +242,7 @@ async def upsert_provider_source(
 @router.delete("/provider-sources/{source_id:path}")
 async def delete_provider_source(
     source_id: str,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     await service.delete_provider_source(source_id)
@@ -250,7 +254,7 @@ async def list_providers(
     capability: str | None = Query(default=None),
     source_id: str | None = Query(default=None),
     enabled: bool | None = Query(default=None),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(
@@ -265,7 +269,7 @@ async def list_providers(
 @router.post("/providers")
 async def create_provider(
     payload: ProviderConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     await service.create_provider(payload.to_dashboard_config())
@@ -276,7 +280,7 @@ async def create_provider(
 async def get_provider_by_id(
     provider_id: str = Query(...),
     merged: bool = Query(default=False),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(service.get_provider(provider_id, merged=merged))
@@ -285,7 +289,7 @@ async def get_provider_by_id(
 @router.put("/providers/by-id")
 async def update_provider_by_id(
     payload: ProviderConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     provider_id = _required_text(payload.provider_id, "provider_id")
@@ -299,7 +303,7 @@ async def update_provider_by_id(
 @router.delete("/providers/by-id")
 async def delete_provider_by_id(
     provider_id: str = Query(...),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     await service.delete_provider(provider_id)
@@ -309,7 +313,7 @@ async def delete_provider_by_id(
 @router.patch("/providers/enabled")
 async def set_provider_enabled_by_id(
     payload: ProviderConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     provider_id = _required_text(payload.provider_id, "provider_id")
@@ -320,7 +324,7 @@ async def set_provider_enabled_by_id(
 @router.post("/providers/test")
 async def test_provider_by_id(
     payload: ProviderConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     provider_id = _required_text(payload.provider_id, "provider_id")
@@ -330,7 +334,7 @@ async def test_provider_by_id(
 @router.post("/providers/embedding-dimension")
 async def get_embedding_dimension_by_id(
     payload: ProviderConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     body = _model_dict(payload)
@@ -346,7 +350,7 @@ async def get_embedding_dimension_by_id(
 async def set_provider_enabled(
     provider_id: str,
     payload: EnabledPatch,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     await service.set_provider_enabled(provider_id, payload.enabled)
@@ -356,7 +360,7 @@ async def set_provider_enabled(
 @router.post("/providers/{provider_id:path}/test")
 async def test_provider(
     provider_id: str,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(await service.test_provider(provider_id))
@@ -366,7 +370,7 @@ async def test_provider(
 async def get_embedding_dimension(
     provider_id: str,
     payload: ProviderConfigRequest | None = None,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     body = _model_dict(payload)
@@ -381,7 +385,7 @@ async def get_embedding_dimension(
 async def get_provider(
     provider_id: str,
     merged: bool = Query(default=False),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(service.get_provider(provider_id, merged=merged))
@@ -391,7 +395,7 @@ async def get_provider(
 async def update_provider(
     provider_id: str,
     payload: ProviderConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     await service.update_provider(
@@ -404,7 +408,7 @@ async def update_provider(
 @router.delete("/providers/{provider_id:path}")
 async def delete_provider(
     provider_id: str,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     await service.delete_provider(provider_id)
@@ -413,7 +417,7 @@ async def delete_provider(
 
 @dashboard_router.get("/provider/template")
 async def get_dashboard_alias_provider_template(
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     return ok(service.get_provider_schema())
@@ -422,7 +426,7 @@ async def get_dashboard_alias_provider_template(
 @dashboard_router.get("/provider/list")
 async def list_dashboard_alias_providers(
     provider_type: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     if not provider_type:
@@ -442,7 +446,7 @@ async def list_dashboard_alias_providers(
 @dashboard_router.post("/provider/new")
 async def create_dashboard_alias_provider(
     payload: ProviderConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     try:
@@ -455,7 +459,7 @@ async def create_dashboard_alias_provider(
 @dashboard_router.post("/provider/update")
 async def update_dashboard_alias_provider(
     request: Request,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     body = await _json_or_empty(request)
@@ -478,7 +482,7 @@ async def update_dashboard_alias_provider(
 @dashboard_router.post("/provider/delete")
 async def delete_dashboard_alias_provider(
     request: Request,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     body = await _json_or_empty(request)
@@ -495,7 +499,7 @@ async def delete_dashboard_alias_provider(
 @dashboard_router.get("/provider/check_one")
 async def check_dashboard_alias_provider(
     id: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     if not id:
@@ -509,7 +513,7 @@ async def check_dashboard_alias_provider(
 @dashboard_router.get("/provider/model_list")
 async def list_dashboard_alias_provider_models(
     provider_id: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     try:
@@ -521,7 +525,7 @@ async def list_dashboard_alias_provider_models(
 @dashboard_router.post("/provider/get_embedding_dim")
 async def get_dashboard_alias_provider_embedding_dimension(
     request: Request,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     body = await _json_or_empty(request)
@@ -534,7 +538,7 @@ async def get_dashboard_alias_provider_embedding_dimension(
 @dashboard_router.get("/provider_sources/models")
 async def list_dashboard_alias_provider_source_models(
     source_id: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     if not source_id:
@@ -550,7 +554,7 @@ async def list_dashboard_alias_provider_source_models(
 @dashboard_router.post("/provider_sources/update")
 async def update_dashboard_alias_provider_source(
     request: Request,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     body = await _json_or_empty(request)
@@ -575,7 +579,7 @@ async def update_dashboard_alias_provider_source(
 @dashboard_router.post("/provider_sources/delete")
 async def delete_dashboard_alias_provider_source(
     request: Request,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
     body = await _json_or_empty(request)

@@ -4,6 +4,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.schemas import (
+    ConfigContentRequest,
+    ConfigProfileCreateRequest,
+    ConfigRoutesReplaceRequest,
+    ConfigRouteUpsertRequest,
+    RenameRequest,
+)
 from astrbot.dashboard.services.config_service import (
     ConfigDisplayService,
     ConfigFileService,
@@ -13,14 +21,6 @@ from astrbot.dashboard.services.config_service import (
 
 from .auth import AuthContext, require_scope
 from .multipart import multipart_parts
-from .responses import error, ok
-from .schemas import (
-    ConfigContentRequest,
-    ConfigProfileCreateRequest,
-    ConfigRoutesReplaceRequest,
-    ConfigRouteUpsertRequest,
-    RenameRequest,
-)
 
 router = APIRouter(tags=["Config Profiles"])
 dashboard_router = APIRouter(

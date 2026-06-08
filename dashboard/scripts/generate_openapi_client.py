@@ -15,6 +15,7 @@ DEFAULT_SPEC = ROOT_DIR / "openspec" / "openapi-v1.yaml"
 DEFAULT_OUTPUT = DASHBOARD_DIR / "src" / "api" / "generated" / "openapi-v1.ts"
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
+API_V1_PREFIX = "/api/v1"
 
 
 def load_spec(source: str) -> dict[str, Any]:
@@ -53,6 +54,14 @@ def property_name(name: str) -> str:
 
 def ref_name(ref: str) -> str:
     return ref.rsplit("/", 1)[-1]
+
+
+def client_path(path: str) -> str:
+    if path == API_V1_PREFIX:
+        return "/"
+    if path.startswith(f"{API_V1_PREFIX}/"):
+        return path.removeprefix(API_V1_PREFIX)
+    return path
 
 
 class TypeScriptGenerator:
@@ -108,7 +117,10 @@ class TypeScriptGenerator:
         if schema_type == "boolean":
             return "boolean"
         if schema_type == "array":
-            return f"{self.schema_to_ts(schema.get('items'))}[]"
+            item_type = self.schema_to_ts(schema.get("items"))
+            if " | " in item_type or " & " in item_type:
+                item_type = f"({item_type})"
+            return f"{item_type}[]"
         if schema_type == "object" or "properties" in schema:
             properties = schema.get("properties") or {}
             additional = schema.get("additionalProperties")
@@ -287,7 +299,8 @@ class TypeScriptGenerator:
         function = (
             f"  {operation_name}({args_signature}, config?: AxiosRequestConfig) {{\n"
             f"    return request<{response_type}>("
-            f"{quote(method.upper())}, {quote(path)}, {args_value}, config"
+            f"{quote(method.upper())}, {quote(client_path(path))}, "
+            f"{args_value}, config"
             f");\n"
             f"  }}"
         )

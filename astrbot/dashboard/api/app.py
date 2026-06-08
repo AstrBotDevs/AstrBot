@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.dashboard.responses import ApiError, error
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import AuthService
 from astrbot.dashboard.services.backup_service import BackupService
@@ -69,8 +70,7 @@ from .personas import dashboard_router as dashboard_personas_router
 from .platform import dashboard_router as dashboard_platform_router
 from .plugins import dashboard_router as dashboard_plugins_router
 from .providers import dashboard_router as dashboard_providers_router
-from .responses import ApiError, error
-from .router import build_api_router
+from .router import API_V1_PREFIX, build_api_router
 from .sessions import dashboard_router as dashboard_sessions_router
 from .skills import dashboard_router as dashboard_skills_router
 from .static_files import router as static_files_router
@@ -93,9 +93,9 @@ def create_dashboard_asgi_app(
     app = FastAPI(
         title="AstrBot OpenAPI",
         version="1.0.0",
-        openapi_url="/api/v1/openapi.json",
-        docs_url="/api/v1/docs",
-        redoc_url="/api/v1/redoc",
+        openapi_url=f"{API_V1_PREFIX}/openapi.json",
+        docs_url=f"{API_V1_PREFIX}/docs",
+        redoc_url=f"{API_V1_PREFIX}/redoc",
     )
     app.state.core_lifecycle = core_lifecycle
     app.state.db = db

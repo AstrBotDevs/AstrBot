@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 
 class StaticFileService:
     INDEX_ROUTES = (
@@ -34,3 +36,32 @@ class StaticFileService:
 
     def get_not_found_message(self) -> str:
         return self.NOT_FOUND_MESSAGE
+
+    def resolve_index_file(self, static_folder: str | Path | None) -> Path | None:
+        if not static_folder:
+            return None
+        index_file = Path(static_folder) / "index.html"
+        if index_file.is_file():
+            return index_file
+        return None
+
+    def resolve_static_file(
+        self,
+        static_folder: str | Path | None,
+        requested_path: str,
+    ) -> Path | None:
+        if not static_folder or not requested_path:
+            return None
+        if requested_path.startswith("api/"):
+            return None
+
+        static_root = Path(static_folder).resolve()
+        target_file = (static_root / requested_path).resolve()
+        try:
+            target_file.relative_to(static_root)
+        except ValueError:
+            return None
+
+        if target_file.is_file():
+            return target_file
+        return None

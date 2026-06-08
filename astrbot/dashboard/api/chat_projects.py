@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.schemas import ChatProjectRequest
 from astrbot.dashboard.services.chatui_project_service import (
     ChatUIProjectService,
     ChatUIProjectServiceError,
 )
 
 from .auth import AuthContext, require_dashboard_user, require_scope
-from .responses import error, ok
-from .schemas import ChatProjectRequest
 
 router = APIRouter(tags=["Chat Projects"])
 dashboard_router = APIRouter(
@@ -41,9 +42,7 @@ def _model_dict(payload) -> dict:
 
 async def _run(operation):
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         return ok(result)
     except ChatUIProjectServiceError as exc:
         return error(str(exc))

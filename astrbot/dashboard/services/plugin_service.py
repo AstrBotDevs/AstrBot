@@ -382,7 +382,7 @@ class PluginService:
             info["handler_name"] = handler.handler_name
 
             component_type = "hook"
-            component = None
+            component: dict[str, Any] | None = None
             if handler.event_type == EventType.AdapterMessageEvent:
                 has_admin = False
                 for event_filter in handler.event_filters:
@@ -508,7 +508,7 @@ class PluginService:
         parts = self._get_command_filter_display_name(command_filter).split()
         if not parts:
             parts = [command_filter.command_name]
-        component = {
+        component: dict[str, Any] = {
             "type": "command",
             "name": parts[-1],
             "description": self._get_command_description(
@@ -530,7 +530,7 @@ class PluginService:
             self._build_command_group_child(sub_filter)
             for sub_filter in command_group_filter.sub_command_filters
         ]
-        component = {
+        component: dict[str, Any] = {
             "type": "command",
             "name": parts[-1],
             "description": self._get_command_description(
@@ -547,7 +547,7 @@ class PluginService:
         command_filter: CommandFilter | CommandGroupFilter,
     ) -> dict:
         if isinstance(command_filter, CommandGroupFilter):
-            component = {
+            component: dict[str, Any] = {
                 "name": command_filter.group_name,
                 "description": self._get_command_description(command_filter),
             }
@@ -821,7 +821,7 @@ class PluginService:
         download_url = str(payload.get("download_url") or "").strip()
         ignore_version_check = bool(payload.get("ignore_version_check", False))
 
-        proxy: str = payload.get("proxy", None)
+        proxy: str | None = payload.get("proxy", None)
         if proxy:
             proxy = proxy.removesuffix("/")
 
@@ -829,13 +829,13 @@ class PluginService:
             logger.info(f"正在安装插件 {repo_url}")
             plugin_info = await self.plugin_manager.install_plugin(
                 repo_url,
-                proxy,
+                proxy or "",
                 ignore_version_check=ignore_version_check,
                 download_url=download_url,
             )
             await self.sync_skills_after_plugin_change()
             logger.info(f"安装插件 {repo_url} 成功。")
-            return plugin_info, "安装成功。"
+            return plugin_info or {}, "安装成功。"
         except PluginVersionUnsupportedError as exc:
             raise PluginServiceWarning(
                 str(exc),
@@ -865,7 +865,7 @@ class PluginService:
             )
             await self.sync_skills_after_plugin_change()
             logger.info(f"安装插件 {upload_file.filename} 成功")
-            return plugin_info, "安装成功。"
+            return plugin_info or {}, "安装成功。"
         except PluginVersionUnsupportedError as exc:
             raise PluginServiceWarning(
                 str(exc),
@@ -925,11 +925,11 @@ class PluginService:
         self._ensure_not_demo()
         payload = data if isinstance(data, dict) else {}
         plugin_name = payload["name"]
-        proxy: str = payload.get("proxy", None)
+        proxy: str | None = payload.get("proxy", None)
         download_url = str(payload.get("download_url") or "").strip()
         logger.info(f"正在更新插件 {plugin_name}")
         await self.plugin_manager.update_plugin(
-            plugin_name, proxy, download_url=download_url
+            plugin_name, proxy or "", download_url=download_url
         )
         await self.plugin_manager.reload(plugin_name)
         await self.sync_skills_after_plugin_change()

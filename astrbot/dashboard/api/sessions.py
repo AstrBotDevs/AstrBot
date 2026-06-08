@@ -3,20 +3,21 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request
 
 from astrbot.core import logger
-from astrbot.dashboard.services.session_management_service import (
-    SessionManagementService,
-    SessionManagementServiceError,
-)
-
-from .auth import AuthContext, require_dashboard_user, require_scope
-from .responses import error, ok
-from .schemas import (
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.schemas import (
     BatchSessionProviderRequest,
     BatchSessionServiceRequest,
     SessionGroupRequest,
     SessionRuleRequest,
     UmoListRequest,
 )
+from astrbot.dashboard.services.session_management_service import (
+    SessionManagementService,
+    SessionManagementServiceError,
+)
+
+from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Sessions"])
 dashboard_router = APIRouter(
@@ -53,9 +54,7 @@ def _unexpected_error(prefix: str, exc: Exception) -> dict:
 
 async def _run(operation, *, label: str) -> dict:
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         return ok(result)
     except SessionManagementServiceError as exc:
         return _service_error(exc)

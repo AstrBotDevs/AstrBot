@@ -5,11 +5,12 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.services.chat_service import ChatService, ChatServiceError
 from astrbot.dashboard.services.file_service import FileService, FileServiceError
 
 from .auth import AuthContext, require_scope
-from .responses import error, ok
 
 router = APIRouter(tags=["Files"])
 dashboard_router = APIRouter(prefix="/api", include_in_schema=False)
@@ -52,9 +53,7 @@ def _file_response(file_path: str, mimetype: str | None = None) -> FileResponse:
 
 async def _run_file(operation, *, error_message: str = "File access error"):
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         return result
     except ChatServiceError as exc:
         return error(str(exc))

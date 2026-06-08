@@ -5,15 +5,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from astrbot.dashboard.services.chat_service import (
-    ChatService,
-    ChatServiceError,
-)
-
-from .auth import AuthContext, require_dashboard_user, require_scope
-from .multipart import single_upload
-from .responses import error, ok
-from .schemas import (
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.schemas import (
     ChatMessagePatchRequest,
     ChatMessageRegenerateRequest,
     ChatSessionBatchDeleteRequest,
@@ -21,6 +15,13 @@ from .schemas import (
     ChatThreadCreateRequest,
     ChatThreadMessageRequest,
 )
+from astrbot.dashboard.services.chat_service import (
+    ChatService,
+    ChatServiceError,
+)
+
+from .auth import AuthContext, require_dashboard_user, require_scope
+from .multipart import single_upload
 
 router = APIRouter(tags=["Chat"])
 dashboard_router = APIRouter(
@@ -67,9 +68,7 @@ def _model_dict(payload) -> dict[str, Any]:
 
 async def _run(operation):
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         return ok(result)
     except ChatServiceError as exc:
         return error(str(exc))
@@ -210,7 +209,7 @@ async def regenerate_chat_message(
 ):
     body = _model_dict(payload) if payload is not None else {}
     try:
-        payload = await service.prepare_regenerate_message_payload(
+        chat_payload = await service.prepare_regenerate_message_payload(
             auth.username,
             {"session_id": session_id, "message_id": message_id, **body},
         )
@@ -220,7 +219,7 @@ async def regenerate_chat_message(
         request=request,
         username=auth.username,
         service=service,
-        payload=payload,
+        payload=chat_payload,
     )
 
 
@@ -270,7 +269,7 @@ async def send_chat_thread_message(
     service: ChatService = Depends(get_service),
 ):
     try:
-        payload = await service.prepare_thread_chat_payload(
+        chat_payload = await service.prepare_thread_chat_payload(
             auth.username,
             {"thread_id": thread_id, **_model_dict(payload)},
         )
@@ -280,7 +279,7 @@ async def send_chat_thread_message(
         request=request,
         username=auth.username,
         service=service,
-        payload=payload,
+        payload=chat_payload,
     )
 
 

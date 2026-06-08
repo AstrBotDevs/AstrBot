@@ -13,7 +13,6 @@ from fastapi.responses import PlainTextResponse
 import astrbot.dashboard.services.config_service as config_service
 from astrbot.core import file_token_service
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
-from astrbot.dashboard.api.responses import ok
 from astrbot.dashboard.asgi_runtime import (
     FastAPIAppAdapter,
     g,
@@ -21,6 +20,7 @@ from astrbot.dashboard.asgi_runtime import (
 from astrbot.dashboard.asgi_runtime import (
     request as dashboard_request,
 )
+from astrbot.dashboard.responses import ok
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.skills_service import SkillArchive
 
@@ -981,12 +981,79 @@ async def test_v1_openapi_is_served_by_fastapi(asgi_client: httpx.AsyncClient):
     assert response.status_code == 200
     spec = response.json()
     assert spec["openapi"].startswith("3.")
+    assert all(path.startswith("/api/v1/") for path in spec["paths"])
     assert "/api/v1/bots" in spec["paths"]
     assert "/api/v1/providers" in spec["paths"]
     assert "/api/v1/plugins" in spec["paths"]
     assert "/api/v1/conversations" in spec["paths"]
     assert "/api/v1/mcp/servers" in spec["paths"]
     assert "/api/v1/skills" in spec["paths"]
+
+
+def test_static_openapi_v1_paths_include_api_version():
+    spec_path = Path(__file__).resolve().parents[1] / "openspec" / "openapi-v1.yaml"
+    in_paths = False
+    path_keys = []
+    for line in spec_path.read_text(encoding="utf-8").splitlines():
+        if line == "paths:":
+            in_paths = True
+            continue
+        if line == "components:":
+            in_paths = False
+        if in_paths and line.startswith("  /") and line.endswith(":"):
+            path_keys.append(line.strip()[:-1])
+
+    assert path_keys
+    assert all(path.startswith("/api/v1/") for path in path_keys)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_static_dist_files_are_served(
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+    tmp_path: Path,
+):
+    static_folder = tmp_path / "dist"
+    assets_folder = static_folder / "assets"
+    assets_folder.mkdir(parents=True)
+    (static_folder / "index.html").write_text(
+        '<script type="module" src="/assets/index-demo.js"></script>',
+        encoding="utf-8",
+    )
+    (static_folder / "favicon.svg").write_text("<svg></svg>", encoding="utf-8")
+    (assets_folder / "index-demo.js").write_text(
+        "window.__astrbotStaticTest = true;",
+        encoding="utf-8",
+    )
+    (tmp_path / "secret.txt").write_text("outside static root", encoding="utf-8")
+
+    app = create_dashboard_asgi_app(
+        core_lifecycle=fake_core_lifecycle,
+        db=fake_db,
+        jwt_secret=JWT_SECRET,
+        static_folder=str(static_folder),
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        asset_response = await client.get("/assets/index-demo.js")
+        favicon_response = await client.get("/favicon.svg")
+        page_response = await client.get("/config")
+        missing_response = await client.get("/assets/missing.js")
+        traversal_response = await client.get("/assets/%2E%2E/%2E%2E/secret.txt")
+        api_response = await client.get("/api/not-found")
+
+    assert asset_response.status_code == 200
+    assert "window.__astrbotStaticTest" in asset_response.text
+    assert favicon_response.status_code == 200
+    assert favicon_response.text == "<svg></svg>"
+    assert page_response.status_code == 200
+    assert "/assets/index-demo.js" in page_response.text
+    assert missing_response.status_code == 404
+    assert traversal_response.status_code == 404
+    assert api_response.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -1397,7 +1464,10 @@ async def test_v1_safe_provider_routes_accept_slash_ids(
     assert config["provider"][-1]["enable"] is False
     assert embedding_response.status_code == 400
     assert embedding_response.json()["status"] == "error"
-    assert "提供商适配器加载失败" in embedding_response.json()["message"]
+    assert embedding_response.json()["message"] in {
+        "提供商适配器加载失败，请检查提供商类型配置或查看服务端日志",
+        "提供商不是 EmbeddingProvider 类型",
+    }
     assert source_models_response.status_code == 200
     assert source_models_response.json()["data"]["provider_source_id"] == source_id
     assert source_providers_response.status_code == 200
@@ -1451,16 +1521,26 @@ async def test_v1_safe_bot_routes_accept_slash_ids(
 
 
 @pytest.mark.asyncio
-async def test_v1_config_scope_accepts_api_key(
+async def test_v1_bot_scope_accepts_api_key(
     asgi_client: httpx.AsyncClient,
     fake_db: FakeDb,
 ):
-    raw_key = "abk_fastapi_v1_config"
-    fake_db.add_api_key(raw_key, scopes=["config"])
+    config_key = "abk_fastapi_v1_config"
+    fake_db.add_api_key(config_key, scopes=["config"])
+
+    config_response = await asgi_client.get(
+        "/api/v1/bots",
+        headers={"X-API-Key": config_key},
+    )
+
+    assert config_response.status_code == 403
+
+    bot_key = "abk_fastapi_v1_bot"
+    fake_db.add_api_key(bot_key, scopes=["bot"])
 
     response = await asgi_client.get(
         "/api/v1/bots",
-        headers={"X-API-Key": raw_key},
+        headers={"X-API-Key": bot_key},
     )
 
     assert response.status_code == 200
@@ -1933,7 +2013,7 @@ async def test_v1_safe_mcp_routes_accept_slash_server_names(
 
 
 @pytest.mark.asyncio
-async def test_v1_skills_accept_skill_scope(
+async def test_v1_skills_reject_developer_api_key_scope(
     asgi_app: FastAPI,
     asgi_client: httpx.AsyncClient,
     fake_db: FakeDb,
@@ -1952,10 +2032,10 @@ async def test_v1_skills_accept_skill_scope(
         headers={"X-API-Key": raw_key},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 403
     data = response.json()
-    assert data["status"] == "ok"
-    assert data["data"]["skills"] == [{"name": "demo_skill"}]
+    assert data["status"] == "error"
+    assert data["message"] == "Insufficient API key scope"
 
 
 @pytest.mark.asyncio

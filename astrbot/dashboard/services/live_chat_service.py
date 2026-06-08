@@ -490,8 +490,8 @@ class LiveChatService:
         back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
         llm_checkpoint_id = str(uuid.uuid4())
 
+        pending_bot_message_flusher = None
         try:
-            pending_bot_message_flusher = None
             chat_queue = webchat_queue_mgr.get_or_create_queue(session_id)
             await chat_queue.put(
                 (

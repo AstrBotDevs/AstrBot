@@ -26,18 +26,25 @@ X-API-Key: abk_xxx
 - `POST /api/v1/chat`：请求体必须包含 `username`
 - `GET /api/v1/chat/sessions`：查询参数必须包含 `username`
 
+本地 OpenAPI 描述文件地址为 `http://localhost:6185/api/v1/openapi.json`，交互式文档地址为 `http://localhost:6185/api/v1/docs`。
+
 ## Scope 权限说明
 
 创建 API Key 时可配置 `scopes`。每个 scope 控制可访问的接口范围：
 
 | Scope | 作用 | 可访问接口 |
 | --- | --- | --- |
-| `chat` | 调用对话能力、查询对话会话 | `POST /api/v1/chat`、`GET /api/v1/chat/sessions` |
-| `config` | 获取可用配置文件列表 | `GET /api/v1/configs` |
-| `file` | 上传附件文件，获取 `attachment_id` | `POST /api/v1/file` |
+| `bot` | 管理机器人/平台配置 | `GET /api/v1/bot-types`、`GET/POST /api/v1/bots`、`PATCH /api/v1/bots/enabled` |
+| `provider` | 管理模型提供商和提供商源 | `GET/POST /api/v1/providers`、`GET/PUT/DELETE /api/v1/provider-sources/by-id` |
+| `persona` | 管理人格和人格文件夹 | `GET/POST /api/v1/personas`、`GET/POST /api/v1/persona-folders` |
 | `im` | 主动发 IM 消息、查询 bot/platform 列表 | `POST /api/v1/im/message`、`GET /api/v1/im/bots` |
+| `config` | 管理配置文件、系统配置和通用配置 | `GET /api/v1/configs`、`GET/PUT /api/v1/system-config`、`GET/POST /api/v1/config-profiles` |
+| `chat` | 调用对话能力、查询对话会话 | `POST /api/v1/chat`、`GET /api/v1/chat/sessions` |
+| `plugin` | 管理插件、插件配置、插件源和插件市场 | `GET /api/v1/plugins`、`GET/PUT /api/v1/plugins/config`、`POST /api/v1/plugins/install/url` |
 
 如果 API Key 未包含目标接口所需 scope，请求会返回 `403 Insufficient API key scope`。
+
+当前开发者 API Key 仅开放以上 7 个 scope。`file`、`tool`、`skill`、`kb`、`data`、`system` 暂不支持作为开发者 API Key scope；相关接口可能仍出现在 `/api/v1` 文档中，但不对开发者 API Key 开放。
 
 ## 常用接口
 
@@ -49,9 +56,17 @@ X-API-Key: abk_xxx
 - `GET /api/v1/chat/sessions`：分页获取指定 `username` 的会话
 - `GET /api/v1/configs`：获取可用配置文件列表
 
-**文件上传**
+**机器人和模型提供商**
 
-- `POST /api/v1/file`：上传附件
+- `GET /api/v1/bots`：获取机器人/平台配置列表
+- `POST /api/v1/bots`：创建机器人/平台配置
+- `GET /api/v1/providers`：获取模型提供商配置列表
+- `GET /api/v1/provider-sources`：获取提供商源配置列表
+
+**人格和插件**
+
+- `GET /api/v1/personas`：获取人格列表
+- `GET /api/v1/plugins`：获取插件列表
 
 **IM 消息发送**
 
@@ -100,7 +115,7 @@ X-API-Key: abk_xxx
 
 说明：
 
-- `attachment_id` 来自 `POST /api/v1/file` 上传结果。
+- `attachment_id` 来自已存在的附件记录。开发者 API Key 当前不能使用 `POST /api/v1/file` 上传附件。
 - `reply` 不能单独作为唯一内容，至少需要一个有实际内容的段（如 `plain/image/file/...`）。
 - 仅 `reply` 或空内容会返回错误。
 

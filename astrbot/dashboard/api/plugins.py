@@ -12,6 +12,21 @@ from astrbot.dashboard.asgi_runtime import (
     DashboardRequestState,
     call_request_view,
 )
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import ok
+from astrbot.dashboard.schemas import (
+    EnabledPatch,
+    PluginByIdRequest,
+    PluginConfigFileDeleteRequest,
+    PluginConfigPayload,
+    PluginConfigUpdateRequest,
+    PluginEnabledRequest,
+    PluginInstallRequest,
+    PluginSourceRequest,
+    PluginUninstallRequest,
+    PluginUpdateRequest,
+    PluginVersionSupportRequest,
+)
 from astrbot.dashboard.services.config_service import (
     ConfigDisplayService,
     ConfigFileService,
@@ -29,20 +44,6 @@ from astrbot.dashboard.services.plugin_service import (
 
 from .auth import AuthContext, require_dashboard_user, require_scope
 from .multipart import multipart_parts
-from .responses import ok
-from .schemas import (
-    EnabledPatch,
-    PluginByIdRequest,
-    PluginConfigFileDeleteRequest,
-    PluginConfigPayload,
-    PluginConfigUpdateRequest,
-    PluginEnabledRequest,
-    PluginInstallRequest,
-    PluginSourceRequest,
-    PluginUninstallRequest,
-    PluginUpdateRequest,
-    PluginVersionSupportRequest,
-)
 
 router = APIRouter(tags=["Plugins"])
 dashboard_router = APIRouter(tags=["Dashboard Plugins"], include_in_schema=False)
@@ -104,9 +105,7 @@ def _service_ok(result):
 
 async def _run_service(operation, *, log_label: str | None = None):
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         return _service_ok(result)
     except PluginServiceWarning as exc:
         return {
@@ -189,10 +188,7 @@ async def _call_plugin_extension(
     view_handler, path_values = matched_api
     app_adapter = getattr(request.app.state, "dashboard_app_adapter", None)
     if app_adapter is None:
-        result = view_handler(**path_values)
-        while hasattr(result, "__await__"):
-            result = await result
-        return result
+        return await run_maybe_async(lambda: view_handler(**path_values))
 
     g_obj = DashboardRequestState()
     g_obj.username = username
@@ -473,15 +469,15 @@ async def install_plugin_from_github(
     repository = str(body.get("repository") or body.get("url") or "").strip()
     if repository and not repository.startswith(("http://", "https://")):
         repository = f"https://github.com/{repository}"
-    payload = {
+    install_payload = {
         "url": repository,
         "proxy": body.get("proxy"),
         "ignore_version_check": body.get("ignore_version_check", False),
     }
     if body.get("download_url"):
-        payload["download_url"] = body["download_url"]
+        install_payload["download_url"] = body["download_url"]
     return await _run_service(
-        service.install_plugin(payload),
+        service.install_plugin(install_payload),
         log_label="/api/plugin/install",
     )
 

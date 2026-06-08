@@ -80,8 +80,9 @@ class SubAgentService:
         data.setdefault("remove_main_duplicate_tools", False)
         data.setdefault("agents", [])
 
-        if isinstance(data.get("agents"), list):
-            for agent in data["agents"]:
+        agents = data.get("agents")
+        if isinstance(agents, list):
+            for agent in agents:
                 if isinstance(agent, dict):
                     agent.setdefault("provider_id", None)
                     agent.setdefault("persona_id", None)

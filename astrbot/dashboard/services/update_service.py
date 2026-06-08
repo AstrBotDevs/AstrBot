@@ -78,7 +78,7 @@ class UpdateService:
         core_lifecycle: AstrBotCoreLifecycle,
         *,
         download_dashboard_func: Callable[..., Awaitable[Any]],
-        get_dashboard_version_func: Callable[..., Awaitable[str]],
+        get_dashboard_version_func: Callable[..., Awaitable[str | None]],
         pip_install_func: Callable[..., Awaitable[Any]],
         check_migration_needed_func: Callable[..., Awaitable[bool]],
         do_migration_func: Callable[..., Awaitable[Any]],
@@ -172,7 +172,7 @@ class UpdateService:
         else:
             latest = False
 
-        proxy: str = payload.get("proxy", None)
+        proxy: str | None = payload.get("proxy", None)
         if proxy:
             proxy = proxy.removesuffix("/")
 
@@ -188,7 +188,7 @@ class UpdateService:
             await self.download_dashboard(
                 latest=latest,
                 version=version,
-                proxy=proxy,
+                proxy=proxy or "",
                 progress_callback=self._make_progress_callback(
                     progress_id,
                     "dashboard",
@@ -214,7 +214,7 @@ class UpdateService:
             await self.astrbot_updator.update(
                 latest=latest,
                 version=version,
-                proxy=proxy,
+                proxy=proxy or "",
                 progress_callback=self._make_progress_callback(
                     progress_id,
                     "core",

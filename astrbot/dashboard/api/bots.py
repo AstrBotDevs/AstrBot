@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.schemas import BotConfigRequest, EnabledPatch
 from astrbot.dashboard.services.config_service import BotConfigService
 
 from .auth import AuthContext, require_scope
-from .responses import error, ok
-from .schemas import BotConfigRequest, EnabledPatch
 
 router = APIRouter(tags=["Bots"])
 dashboard_router = APIRouter(
@@ -16,8 +16,8 @@ dashboard_router = APIRouter(
 )
 
 
-async def require_config_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "config")
+async def require_bot_scope(request: Request) -> AuthContext:
+    return await require_scope(request, "bot")
 
 
 def get_service(request: Request) -> BotConfigService:
@@ -56,7 +56,7 @@ def _alias_error(message: str):
 
 @router.get("/bot-types")
 async def list_bot_types(
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     return ok(service.list_bot_types())
@@ -66,7 +66,7 @@ async def list_bot_types(
 async def list_bots(
     enabled: bool | None = Query(default=None),
     type_: str | None = Query(default=None, alias="type"),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     return ok(service.list_bots(enabled=enabled, type_=type_))
@@ -75,7 +75,7 @@ async def list_bots(
 @router.post("/bots")
 async def create_bot(
     payload: BotConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     await service.create_bot(payload.to_dashboard_config())
@@ -84,7 +84,7 @@ async def create_bot(
 
 @router.get("/bots/stats")
 async def list_bot_stats(
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     return ok(service.get_bot_stats())
@@ -93,7 +93,7 @@ async def list_bot_stats(
 @router.get("/bots/by-id")
 async def get_bot_by_id(
     bot_id: str = Query(...),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     return ok(service.get_bot(bot_id))
@@ -102,7 +102,7 @@ async def get_bot_by_id(
 @router.put("/bots/by-id")
 async def update_bot_by_id(
     payload: BotConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     bot_id = _required_text(payload.bot_id, "bot_id")
@@ -116,7 +116,7 @@ async def update_bot_by_id(
 @router.delete("/bots/by-id")
 async def delete_bot_by_id(
     bot_id: str = Query(...),
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     await service.delete_bot(bot_id)
@@ -126,7 +126,7 @@ async def delete_bot_by_id(
 @router.patch("/bots/enabled")
 async def set_bot_enabled_by_id(
     payload: BotConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     bot_id = _required_text(payload.bot_id, "bot_id")
@@ -137,7 +137,7 @@ async def set_bot_enabled_by_id(
 @router.post("/bots/test")
 async def test_bot_by_id(
     payload: BotConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
 ):
     bot_id = _required_text(payload.bot_id, "bot_id")
     return ok({"id": bot_id, "status": "unsupported"})
@@ -147,7 +147,7 @@ async def test_bot_by_id(
 async def set_bot_enabled(
     bot_id: str,
     payload: EnabledPatch,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     await service.set_bot_enabled(bot_id, payload.enabled)
@@ -157,7 +157,7 @@ async def set_bot_enabled(
 @router.post("/bots/{bot_id:path}/test")
 async def test_bot(
     bot_id: str,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
 ):
     return ok({"id": bot_id, "status": "unsupported"})
 
@@ -165,7 +165,7 @@ async def test_bot(
 @router.get("/bots/{bot_id:path}")
 async def get_bot(
     bot_id: str,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     return ok(service.get_bot(bot_id))
@@ -175,7 +175,7 @@ async def get_bot(
 async def update_bot(
     bot_id: str,
     payload: BotConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     await service.update_bot(bot_id, payload.to_dashboard_config(fallback_id=bot_id))
@@ -185,7 +185,7 @@ async def update_bot(
 @router.delete("/bots/{bot_id:path}")
 async def delete_bot(
     bot_id: str,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     await service.delete_bot(bot_id)
@@ -194,7 +194,7 @@ async def delete_bot(
 
 @dashboard_router.get("/list")
 async def list_dashboard_alias_platforms(
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     return ok({"platforms": service.list_bots()["bots"]})
@@ -203,7 +203,7 @@ async def list_dashboard_alias_platforms(
 @dashboard_router.post("/new")
 async def create_dashboard_alias_platform(
     payload: BotConfigRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     try:
@@ -216,7 +216,7 @@ async def create_dashboard_alias_platform(
 @dashboard_router.post("/update")
 async def update_dashboard_alias_platform(
     request: Request,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     body = await _json_or_empty(request)
@@ -239,7 +239,7 @@ async def update_dashboard_alias_platform(
 @dashboard_router.post("/delete")
 async def delete_dashboard_alias_platform(
     request: Request,
-    _auth: AuthContext = Depends(require_config_scope),
+    _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
     body = await _json_or_empty(request)

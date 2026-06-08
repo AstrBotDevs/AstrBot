@@ -3,11 +3,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import StreamingResponse
 
+from astrbot.dashboard.responses import ApiError, ok
+from astrbot.dashboard.schemas import TraceSettingsRequest
 from astrbot.dashboard.services.log_service import LogService, LogServiceError
 
 from .auth import AuthContext, require_dashboard_user, require_scope
-from .responses import ApiError, ok
-from .schemas import TraceSettingsRequest
 
 router = APIRouter(tags=["Logs"])
 dashboard_router = APIRouter(

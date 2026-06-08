@@ -75,7 +75,7 @@ export interface TotpSetupRequest {
 
 export interface CreateApiKeyRequest {
   name: string;
-  scopes?: string[];
+  scopes?: ("bot" | "provider" | "persona" | "im" | "config" | "chat" | "plugin")[];
   expires_at?: string;
   expires_in_days?: number;
 }
@@ -351,7 +351,7 @@ export interface PersonaMoveRequest {
 }
 
 export interface ReorderRequest {
-  items: { id: string; type: "persona" | "folder"; sort_order: number; }[];
+  items: ({ id: string; type: "persona" | "folder"; sort_order: number; })[];
 }
 
 export interface SessionRuleRequest {

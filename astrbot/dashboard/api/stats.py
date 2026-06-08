@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.responses import ApiError, ok
+from astrbot.dashboard.schemas import GhProxyTestRequest, StorageCleanupRequest
 from astrbot.dashboard.services.stat_service import StatService, StatServiceError
 
 from .auth import AuthContext, require_dashboard_user, require_scope
-from .responses import ApiError, ok
-from .schemas import GhProxyTestRequest, StorageCleanupRequest
 
 router = APIRouter(tags=["System Stats"])
 dashboard_router = APIRouter(
@@ -30,17 +31,19 @@ def _raise_stat_error(exc: StatServiceError) -> None:
 
 async def _run(operation):
     try:
-        result = operation() if callable(operation) else operation
-        while hasattr(result, "__await__"):
-            result = await result
+        result = await run_maybe_async(operation)
         return ok(result)
     except StatServiceError as exc:
         _raise_stat_error(exc)
 
 
 def _parse_int(value: object, default: int, name: str) -> int:
+    if value is None:
+        return default
+    if not isinstance(value, int | float | str | bytes | bytearray):
+        raise ApiError(f"{name} must be an integer")
     try:
-        return int(value if value is not None else default)
+        return int(value)
     except (TypeError, ValueError) as exc:
         raise ApiError(f"{name} must be an integer") from exc
 
