@@ -1,3 +1,4 @@
+import { commandApi, pluginApi } from "@/api/v1";
 import { pluginSidebarState } from "@/composables/usePluginSidebarItems";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCommonStore } from "@/stores/common";
@@ -11,7 +12,6 @@ import {
     toInitials,
     toPinyinText,
 } from "@/utils/pluginSearch";
-import axios from "axios";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
@@ -51,7 +51,7 @@ export const useExtensionPage = () => {
   });
   const checkAndPromptConflicts = async () => {
     try {
-      const res = await axios.get("/api/commands");
+      const res = await commandApi.list();
       if (res.data.status === "ok") {
         const conflicts = res.data.data.summary?.conflicts || 0;
         if (conflicts > 0) {
@@ -479,13 +479,13 @@ export const useExtensionPage = () => {
       loading_.value = true;
     }
     try {
-      const res = await axios.get("/api/plugin/get");
+      const res = await pluginApi.list();
       Object.assign(extension_data, res.data);
 
       // 同步插件数据到侧边栏共享状态
       pluginSidebarState.plugins = (res.data?.data || []);
 
-      const failRes = await axios.get("/api/plugin/source/get-failed-plugins");
+      const failRes = await pluginApi.failed();
       failedPluginsDict.value = failRes.data.data || {};
 
       // checkUpdate() is called after pluginMarketData is loaded in onMounted
@@ -508,7 +508,7 @@ export const useExtensionPage = () => {
     loading_.value = true;
     try {
       const promises = dirNames.map((dir) =>
-        axios.post("/api/plugin/reload-failed", { dir_name: dir }),
+        pluginApi.reloadFailed(dir),
       );
       await Promise.all(promises);
 
@@ -531,9 +531,7 @@ export const useExtensionPage = () => {
     if (!dirName) return;
 
     try {
-      const res = await axios.post("/api/plugin/reload-failed", {
-        dir_name: dirName,
-      });
+      const res = await pluginApi.reloadFailed(dirName);
       if (res.data.status === "error") {
         toast(res.data.message || tm("messages.reloadFailed"), "error");
         return;
@@ -563,25 +561,17 @@ export const useExtensionPage = () => {
     }
 
     const isFailed = target.kind === "failed";
-    const endpoint = isFailed
-      ? "/api/plugin/uninstall-failed"
-      : "/api/plugin/uninstall";
-    const payload = isFailed
-      ? {
-          dir_name: target.id,
-          delete_config: deleteConfig,
-          delete_data: deleteData,
-        }
-      : {
-          name: target.id,
-          delete_config: deleteConfig,
-          delete_data: deleteData,
-        };
+    const options = {
+      delete_config: deleteConfig,
+      delete_data: deleteData,
+    };
 
     toast(`${tm("messages.uninstalling")} ${target.id}`, "primary");
 
     try {
-      const res = await axios.post(endpoint, payload);
+      const res = isFailed
+        ? await pluginApi.uninstallFailed(target.id, options)
+        : await pluginApi.uninstall(target.id, options);
       if (res.data.status === "error") {
         toast(res.data.message, "error");
         return;
@@ -750,8 +740,7 @@ export const useExtensionPage = () => {
     loadingDialog.result = "";
     loadingDialog.show = true;
     try {
-      const res = await axios.post("/api/plugin/update", {
-        name: extensionName,
+      const res = await pluginApi.update(extensionName, {
         download_url: downloadUrl,
         proxy: downloadUrl ? "" : getSelectedGitHubProxy(),
       });
@@ -832,7 +821,7 @@ export const useExtensionPage = () => {
         .filter(([, downloadUrl]) => downloadUrl),
     );
     try {
-      const res = await axios.post("/api/plugin/update-all", {
+      const res = await pluginApi.updateMany({
         names: targets,
         download_urls: downloadUrls,
         proxy: getSelectedGitHubProxy(),
@@ -884,7 +873,7 @@ export const useExtensionPage = () => {
 
   const pluginOn = async (extension) => {
     try {
-      const res = await axios.post("/api/plugin/on", { name: extension.name });
+      const res = await pluginApi.setEnabled(extension.name, true);
       if (res.data.status === "error") {
         toast(res.data.message, "error");
         return;
@@ -900,7 +889,7 @@ export const useExtensionPage = () => {
 
   const pluginOff = async (extension) => {
     try {
-      const res = await axios.post("/api/plugin/off", { name: extension.name });
+      const res = await pluginApi.setEnabled(extension.name, false);
       if (res.data.status === "error") {
         toast(res.data.message, "error");
         return;
@@ -917,9 +906,7 @@ export const useExtensionPage = () => {
     currentConfigPlugin.value = extension_name;
     configDialog.value = true;
     try {
-      const res = await axios.get(
-        "/api/config/get?plugin_name=" + extension_name,
-      );
+      const res = await pluginApi.config(extension_name);
       extension_config.metadata = res.data.data.metadata;
       extension_config.config = res.data.data.config;
       extension_config.i18n = res.data.data.i18n || {};
@@ -930,8 +917,8 @@ export const useExtensionPage = () => {
 
   const updateConfig = async () => {
     try {
-      const res = await axios.post(
-        "/api/config/plugin/update?plugin_name=" + curr_namespace.value,
+      const res = await pluginApi.updateConfig(
+        curr_namespace.value,
         extension_config.config,
       );
       if (res.data.status === "ok") {
@@ -961,7 +948,7 @@ export const useExtensionPage = () => {
 
   const reloadPlugin = async (plugin_name) => {
     try {
-      const res = await axios.post("/api/plugin/reload", { name: plugin_name });
+      const res = await pluginApi.reload(plugin_name);
       if (res.data.status === "error") {
         toast(res.data.message || tm("messages.reloadFailed"), "error");
         return;
@@ -1066,9 +1053,9 @@ export const useExtensionPage = () => {
   // 自定义插件源管理方法
   const loadCustomSources = async () => {
     try {
-      const res = await axios.get("/api/plugin/source/get");
+      const res = await pluginApi.sources();
       if (res.data.status === "ok") {
-        customSources.value = res.data.data;
+        customSources.value = res.data.data?.sources || res.data.data || [];
       } else {
         toast(res.data.message, "error");
       }
@@ -1086,9 +1073,7 @@ export const useExtensionPage = () => {
 
   const saveCustomSources = async () => {
     try {
-      const res = await axios.post("/api/plugin/source/save", {
-        sources: customSources.value,
-      });
+      const res = await pluginApi.replaceSources(customSources.value);
       if (res.data.status !== "ok") {
         toast(res.data.message, "error");
       }
@@ -1466,19 +1451,19 @@ export const useExtensionPage = () => {
       const formData = new FormData();
       formData.append("file", upload_file.value);
       formData.append("ignore_version_check", String(ignoreVersionCheck));
-      return axios.post("/api/plugin/install-upload", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      return pluginApi.installUpload(formData);
     }
 
-    return axios.post("/api/plugin/install", {
+    const payload = {
       url: extension_url.value,
       download_url: selectedInstallDownloadUrl.value,
       proxy: selectedInstallDownloadUrl.value ? "" : getSelectedGitHubProxy(),
       ignore_version_check: ignoreVersionCheck,
-    });
+    };
+
+    return installUsesGithubSource.value
+      ? pluginApi.installGithub(payload)
+      : pluginApi.installUrl(payload);
   };
 
   const finalizeSuccessfulInstall = async (resData, source) => {

@@ -29,8 +29,10 @@ import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
 import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
-import axios from 'axios';
+import { setupHttpClient } from './api/http';
 import { waitForRouterReadyInBackground } from './utils/routerReadiness.mjs';
+
+setupHttpClient();
 
 (self as any).MonacoEnvironment = {
   getWorker(_: string, label: string) {
@@ -132,45 +134,5 @@ setupI18n().then(async () => {
   setupThemeSync(pinia);
 });
 
-
-axios.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers['Authorization'] = `Bearer ${token}`;
-  }
-  const locale = localStorage.getItem('astrbot-locale');
-  if (locale) {
-    config.headers['Accept-Language'] = locale;
-  }
-  return config;
-});
-
-axios.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 429 && error.response?.data?.message) {
-      return Promise.reject(error.response.data.message);
-    }
-    return Promise.reject(error);
-  }
-);
-
-// Keep fetch() calls consistent with axios by automatically attaching the JWT.
-// Some parts of the UI use fetch directly; without this, those requests will 401.
-const _origFetch = window.fetch.bind(window);
-window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-  const token = localStorage.getItem('token');
-  if (!token) return _origFetch(input, init);
-
-  const headers = new Headers(init?.headers || (typeof input !== 'string' && 'headers' in input ? (input as Request).headers : undefined));
-  if (!headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-  const locale = localStorage.getItem('astrbot-locale');
-  if (locale && !headers.has('Accept-Language')) {
-    headers.set('Accept-Language', locale);
-  }
-  return _origFetch(input, { ...init, headers });
-};
 
 loader.config({ monaco })

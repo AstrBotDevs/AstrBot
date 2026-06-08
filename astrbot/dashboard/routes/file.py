@@ -1,6 +1,5 @@
-from quart import abort, send_file
-
-from astrbot.core import file_token_service
+from astrbot.dashboard.fastapi_compat import abort, send_file
+from astrbot.dashboard.services.file_service import FileService, FileServiceError
 
 from .route import Route, RouteContext
 
@@ -11,6 +10,7 @@ class FileRoute(Route):
         context: RouteContext,
     ) -> None:
         super().__init__(context)
+        self.service = FileService()
         self.routes = {
             "/file/<file_token>": ("GET", self.serve_file),
         }
@@ -18,7 +18,7 @@ class FileRoute(Route):
 
     async def serve_file(self, file_token: str):
         try:
-            file_path = await file_token_service.handle_file(file_token)
+            file_path = await self.service.resolve_token_file(file_token)
             return await send_file(file_path)
-        except (FileNotFoundError, KeyError):
+        except FileServiceError:
             return abort(404)

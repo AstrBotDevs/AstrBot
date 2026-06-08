@@ -1,5 +1,6 @@
 import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
-import axios from "axios";
+import { chatApi, fileApi } from "@/api/v1";
+import { fetchWithAuth } from "@/api/http";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -169,18 +170,25 @@ export function useMessages(options: UseMessagesOptions) {
     let cacheKey: string;
     if (part.attachment_id) {
       cacheKey = `att:${part.attachment_id}`;
-      url = `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
+      url = fileApi.contentUrl(part.attachment_id);
     } else if (part.filename) {
       cacheKey = `file:${part.filename}`;
-      url = `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+      url = "";
     } else {
       return;
     }
     let promise = attachmentBlobCache.get(cacheKey);
     if (!promise) {
-      promise = axios
-        .get(url, { responseType: "blob" })
-        .then((resp) => URL.createObjectURL(resp.data));
+      if (part.filename) {
+        promise = fileApi
+          .getByName(part.filename)
+          .then((resp) => URL.createObjectURL(resp.data));
+      } else {
+        promise = fetchWithAuth(url).then(async (resp) => {
+          if (!resp.ok) throw new Error(`Media request failed: ${resp.status}`);
+          return URL.createObjectURL(await resp.blob());
+        });
+      }
       attachmentBlobCache.set(cacheKey, promise);
     }
     try {
@@ -208,9 +216,7 @@ export function useMessages(options: UseMessagesOptions) {
     if (!sessionId) return;
     loadingMessages.value = true;
     try {
-      const response = await axios.get("/api/chat/get_session", {
-        params: { session_id: sessionId },
-      });
+      const response = await chatApi.getSession(sessionId);
       const payload = response.data?.data || {};
       const history = payload.history || [];
       const records = history.map(normalizeHistoryRecord);
@@ -311,10 +317,8 @@ export function useMessages(options: UseMessagesOptions) {
   ) {
     if (!sessionId || record.id == null) return { needsRegenerate: false };
     const content = cloneContentWithEditedText(record, editedText);
-    const response = await axios.post("/api/chat/message/edit", {
-      session_id: sessionId,
-      message_id: record.id,
-      content,
+    const response = await chatApi.updateMessage(sessionId, record.id, {
+      content: content as unknown as Record<string, unknown>,
     });
     const payload = response.data?.data || {};
     const updated = payload.message ? normalizeHistoryRecord(payload.message) : null;
@@ -406,15 +410,12 @@ export function useMessages(options: UseMessagesOptions) {
     };
 
     try {
-      const response = await fetch("/api/chat/message/regenerate", {
+      const response = await fetchWithAuth(chatApi.regenerateMessageUrl(sessionId, targetMessageId), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
         body: JSON.stringify({
-          session_id: sessionId,
-          message_id: targetMessageId,
           selected_provider: selectedProvider,
           selected_model: selectedModel,
         }),
@@ -445,7 +446,7 @@ export function useMessages(options: UseMessagesOptions) {
 
   async function stopSession(sessionId: string) {
     if (!sessionId) return;
-    await axios.post("/api/chat/stop", { session_id: sessionId });
+    await chatApi.stopSession(sessionId);
   }
 
   function cleanupConnections() {
@@ -509,11 +510,10 @@ export function useMessages(options: UseMessagesOptions) {
       abort,
     };
 
-    fetch("/api/chat/send", {
+    fetchWithAuth(chatApi.sendStreamUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
       },
       body: JSON.stringify({
         session_id: sessionId,
@@ -556,11 +556,8 @@ export function useMessages(options: UseMessagesOptions) {
     selectedProvider: string,
     selectedModel: string,
   ) {
-    const token = encodeURIComponent(localStorage.getItem("token") || "");
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(
-      `${protocol}//${window.location.host}/api/unified_chat/ws?token=${token}`,
-    );
+    const token = localStorage.getItem("token") || "";
+    const ws = new WebSocket(chatApi.unifiedWebSocketUrl(token));
 
     activeConnections[sessionId] = {
       sessionId,

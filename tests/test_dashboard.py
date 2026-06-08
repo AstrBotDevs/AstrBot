@@ -15,7 +15,6 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 import pyotp
 import pytest
 import pytest_asyncio
-from quart import Quart, jsonify
 from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
@@ -33,6 +32,7 @@ from astrbot.core.utils.totp import (
     TOTP_TRUSTED_DEVICE_COOKIE_NAME,
     generate_recovery_code,
 )
+from astrbot.dashboard.fastapi_compat import FastAPIAppAdapter, jsonify
 from astrbot.dashboard.password_state import (
     get_dashboard_password_hash,
     is_password_change_required,
@@ -40,9 +40,10 @@ from astrbot.dashboard.password_state import (
     set_password_change_required,
     set_password_storage_upgraded,
 )
-from astrbot.dashboard.routes.auth import DASHBOARD_JWT_COOKIE_NAME
-from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
+from astrbot.dashboard.services.plugin_page_service import PluginPageService
+from astrbot.dashboard.services.plugin_service import PluginService
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
@@ -203,7 +204,7 @@ async def core_lifecycle_td(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def app(core_lifecycle_td: AstrBotCoreLifecycle):
-    """Creates a Quart app instance for testing."""
+    """Creates a FastAPIAppAdapter app instance for testing."""
     shutdown_event = asyncio.Event()
     # The db instance is already part of the core_lifecycle_td
     server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
@@ -281,7 +282,9 @@ async def _restore_dashboard_password_state(
 
 
 @pytest_asyncio.fixture(scope="module")
-async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
+async def authenticated_header(
+    app: FastAPIAppAdapter, core_lifecycle_td: AstrBotCoreLifecycle
+):
     """Handles login and returns an authenticated header."""
     test_client = app.test_client()
     response = await test_client.post(
@@ -299,7 +302,7 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
 
 @pytest.mark.asyncio
 async def test_auth_login(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -336,7 +339,7 @@ async def test_auth_login(
 
 @pytest.mark.asyncio
 async def test_auth_login_secure_cookie_override(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -364,7 +367,7 @@ async def test_auth_login_secure_cookie_override(
 
 @pytest.mark.asyncio
 async def test_auth_rate_limit_uses_same_bucket_across_paths(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -400,7 +403,7 @@ async def test_auth_rate_limit_uses_same_bucket_across_paths(
 
 @pytest.mark.asyncio
 async def test_auth_rate_limit_separates_different_client_ips(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -448,7 +451,7 @@ async def test_auth_rate_limit_separates_different_client_ips(
 
 @pytest.mark.asyncio
 async def test_auth_rate_limit_ignores_proxy_headers_by_default(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -489,7 +492,7 @@ async def test_auth_rate_limit_ignores_proxy_headers_by_default(
 
 @pytest.mark.asyncio
 async def test_auth_login_requires_totp_when_enabled_and_not_trusted(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     original_dashboard_config = copy.deepcopy(
@@ -525,7 +528,7 @@ async def test_auth_login_requires_totp_when_enabled_and_not_trusted(
 
 @pytest.mark.asyncio
 async def test_auth_login_accepts_valid_totp_code(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     original_dashboard_config = copy.deepcopy(
@@ -561,7 +564,7 @@ async def test_auth_login_accepts_valid_totp_code(
 
 @pytest.mark.asyncio
 async def test_auth_login_rejects_invalid_totp_code(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     original_dashboard_config = copy.deepcopy(
@@ -599,7 +602,7 @@ async def test_auth_login_rejects_invalid_totp_code(
 
 @pytest.mark.asyncio
 async def test_auth_login_with_recovery_code_disables_totp(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     original_dashboard_config = copy.deepcopy(
@@ -639,7 +642,7 @@ async def test_auth_login_with_recovery_code_disables_totp(
 
 @pytest.mark.asyncio
 async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     original_dashboard_config = copy.deepcopy(
@@ -688,7 +691,7 @@ async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
 
 @pytest.mark.asyncio
 async def test_auth_login_skips_totp_when_trusted_cookie_valid(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     original_dashboard_config = copy.deepcopy(
@@ -735,7 +738,7 @@ async def test_auth_login_skips_totp_when_trusted_cookie_valid(
 
 @pytest.mark.asyncio
 async def test_config_save_requires_two_factor_for_protected_totp_changes(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -781,7 +784,7 @@ async def test_config_save_requires_two_factor_for_protected_totp_changes(
 
 @pytest.mark.asyncio
 async def test_config_save_accepts_totp_code_for_protected_totp_changes(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -828,7 +831,7 @@ async def test_config_save_accepts_totp_code_for_protected_totp_changes(
 
 @pytest.mark.asyncio
 async def test_config_save_rejects_recovery_code_for_protected_totp_changes(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -877,7 +880,7 @@ async def test_config_save_rejects_recovery_code_for_protected_totp_changes(
 
 @pytest.mark.asyncio
 async def test_auth_totp_setup_with_valid_code_returns_recovery_code(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
 ):
     test_client = app.test_client()
@@ -897,7 +900,7 @@ async def test_auth_totp_setup_with_valid_code_returns_recovery_code(
 
 @pytest.mark.asyncio
 async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     original_dashboard_config = copy.deepcopy(
@@ -984,7 +987,7 @@ async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
 
 @pytest.mark.asyncio
 async def test_legacy_md5_login_failure_includes_upgrade_faq_hint(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     original_dashboard_config = copy.deepcopy(
@@ -1026,7 +1029,7 @@ async def test_legacy_md5_login_failure_includes_upgrade_faq_hint(
 
 @pytest.mark.asyncio
 async def test_password_storage_flag_repairs_after_rollback_clears_pbkdf2(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     original_dashboard_config = copy.deepcopy(
@@ -1094,7 +1097,7 @@ def test_password_hash_lookup_falls_back_to_legacy_when_pbkdf2_missing(
 
 @pytest.mark.asyncio
 async def test_generated_password_requires_password_change_until_changed(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     original_dashboard_config = copy.deepcopy(
@@ -1167,7 +1170,7 @@ async def test_generated_password_requires_password_change_until_changed(
 
 @pytest.mark.asyncio
 async def test_local_setup_can_skip_default_password_auth(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -1228,7 +1231,7 @@ async def test_local_setup_can_skip_default_password_auth(
 
 @pytest.mark.asyncio
 async def test_authenticated_default_password_login_can_complete_setup(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     original_dashboard_config = copy.deepcopy(
@@ -1289,7 +1292,7 @@ async def test_authenticated_default_password_login_can_complete_setup(
 
 @pytest.mark.asyncio
 async def test_setup_skip_requires_local_host(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -1328,7 +1331,7 @@ async def test_setup_skip_requires_local_host(
 
 @pytest.mark.asyncio
 async def test_plugin_web_api_supports_dynamic_route(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     authenticated_header: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
@@ -1366,11 +1369,13 @@ async def test_plugin_web_api_supports_dynamic_route(
 
 def test_plugin_page_content_path_escapes_plugin_name():
     assert (
-        PluginRoute._build_plugin_page_content_path("plugin with space", "main page")
+        PluginPageService.build_plugin_page_content_path(
+            "plugin with space", "main page"
+        )
         == "/api/plugin/page/content/plugin%20with%20space/main%20page/"
     )
     assert (
-        PluginRoute._build_plugin_page_content_path(
+        PluginPageService.build_plugin_page_content_path(
             "plugin with space", "main page", "assets/main file.js"
         )
         == "/api/plugin/page/content/plugin%20with%20space/main%20page/assets/main%20file.js"
@@ -1379,7 +1384,7 @@ def test_plugin_page_content_path_escapes_plugin_name():
 
 @pytest.mark.asyncio
 async def test_plugin_get_excludes_scanned_pages(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
@@ -1401,7 +1406,7 @@ async def test_plugin_get_excludes_scanned_pages(
 
 @pytest.mark.asyncio
 async def test_plugin_detail_includes_scanned_page_component(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
@@ -1435,7 +1440,7 @@ async def test_plugin_detail_includes_scanned_page_component(
 
 @pytest.mark.asyncio
 async def test_plugin_page_entry_returns_signed_content_path(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
@@ -1461,7 +1466,7 @@ async def test_plugin_page_entry_returns_signed_content_path(
 
 @pytest.mark.asyncio
 async def test_plugin_page_content_requires_auth(
-    app: Quart,
+    app: FastAPIAppAdapter,
     registered_plugin_page: StarMetadata,
 ):
     test_client = app.test_client()
@@ -1475,7 +1480,7 @@ async def test_plugin_page_content_requires_auth(
 
 @pytest.mark.asyncio
 async def test_plugin_page_content_supports_cookie_auth(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     registered_plugin_page: StarMetadata,
 ):
@@ -1529,7 +1534,7 @@ async def test_plugin_page_content_supports_cookie_auth(
 
 @pytest.mark.asyncio
 async def test_plugin_page_content_issues_scoped_asset_token(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
@@ -1595,7 +1600,7 @@ async def test_plugin_page_content_issues_scoped_asset_token(
 
 @pytest.mark.asyncio
 async def test_plugin_page_bridge_sdk_includes_is_dark_when_theme_param_provided(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
@@ -1646,7 +1651,7 @@ async def test_plugin_page_bridge_sdk_includes_is_dark_when_theme_param_provided
 
 @pytest.mark.asyncio
 async def test_plugin_page_content_propagates_theme_in_rewritten_urls(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
@@ -1708,7 +1713,7 @@ async def test_plugin_page_content_propagates_theme_in_rewritten_urls(
 
 @pytest.mark.asyncio
 async def test_plugin_page_assets_require_dashboard_auth(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
@@ -1740,7 +1745,7 @@ async def test_plugin_page_assets_require_dashboard_auth(
 
 @pytest.mark.asyncio
 async def test_plugin_page_content_blocks_path_traversal(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     registered_plugin_page: StarMetadata,
 ):
@@ -1754,7 +1759,7 @@ async def test_plugin_page_content_blocks_path_traversal(
 
 @pytest.mark.asyncio
 async def test_logout_clears_cookie_for_plugin_page(
-    app: Quart,
+    app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
     registered_plugin_page: StarMetadata,
 ):
@@ -1800,7 +1805,7 @@ async def test_logout_clears_cookie_for_plugin_page(
 
 
 @pytest.mark.asyncio
-async def test_get_stat(app: Quart, authenticated_header: dict):
+async def test_get_stat(app: FastAPIAppAdapter, authenticated_header: dict):
     test_client = app.test_client()
     response = await test_client.get("/api/stat/get")
     assert response.status_code == 401
@@ -1864,7 +1869,7 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
 
 @pytest.mark.asyncio
 async def test_subagent_config_accepts_default_persona(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -1914,7 +1919,7 @@ async def test_subagent_config_accepts_default_persona(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [[], "x"])
 async def test_batch_delete_sessions_rejects_non_object_payload(
-    app: Quart, authenticated_header: dict, payload
+    app: FastAPIAppAdapter, authenticated_header: dict, payload
 ):
     test_client = app.test_client()
     response = await test_client.post(
@@ -1931,7 +1936,7 @@ async def test_batch_delete_sessions_rejects_non_object_payload(
 
 @pytest.mark.asyncio
 async def test_batch_delete_sessions_masks_internal_error(
-    app: Quart, authenticated_header: dict, monkeypatch
+    app: FastAPIAppAdapter, authenticated_header: dict, monkeypatch
 ):
     test_client = app.test_client()
 
@@ -1946,7 +1951,7 @@ async def test_batch_delete_sessions_masks_internal_error(
         raise RuntimeError("secret-internal-error")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.chat.ChatRoute._delete_session_internal",
+        "astrbot.dashboard.services.chat_service.ChatService.delete_session_internal",
         _raise_error,
     )
 
@@ -1967,7 +1972,7 @@ async def test_batch_delete_sessions_masks_internal_error(
 
 @pytest.mark.asyncio
 async def test_batch_delete_sessions_uses_batch_lookup(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -2016,7 +2021,7 @@ async def test_batch_delete_sessions_uses_batch_lookup(
 
 @pytest.mark.asyncio
 async def test_plugins(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -2153,14 +2158,14 @@ async def test_plugins(
 
 @pytest.mark.asyncio
 async def test_plugins_when_installed_at_unresolved(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch,
 ):
     """Tests plugin payload when installed_at cannot be resolved."""
     test_client = app.test_client()
 
-    monkeypatch.setattr(PluginRoute, "_get_plugin_installed_at", lambda *_args: None)
+    monkeypatch.setattr(PluginService, "get_plugin_installed_at", lambda *_args: None)
 
     response = await test_client.get("/api/plugin/get", headers=authenticated_header)
     assert response.status_code == 200
@@ -2174,7 +2179,7 @@ async def test_plugins_when_installed_at_unresolved(
 
 
 @pytest.mark.asyncio
-async def test_commands_api(app: Quart, authenticated_header: dict):
+async def test_commands_api(app: FastAPIAppAdapter, authenticated_header: dict):
     """Tests the command management API endpoints."""
     test_client = app.test_client()
 
@@ -2203,7 +2208,7 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
 
 @pytest.mark.asyncio
 async def test_t2i_set_active_template_syncs_all_configs(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -2270,7 +2275,7 @@ async def test_t2i_set_active_template_syncs_all_configs(
 
 @pytest.mark.asyncio
 async def test_t2i_reset_default_template_syncs_all_configs(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -2343,7 +2348,7 @@ async def test_t2i_reset_default_template_syncs_all_configs(
 
 @pytest.mark.asyncio
 async def test_t2i_update_active_template_reloads_all_schedulers(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -2421,7 +2426,7 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
 
 @pytest.mark.asyncio
 async def test_check_update(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -2446,7 +2451,7 @@ async def test_check_update(
         mock_check_update,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.update.get_dashboard_version",
+        "astrbot.dashboard.services.update_service.get_dashboard_version",
         mock_get_dashboard_version,
     )
 
@@ -2459,7 +2464,7 @@ async def test_check_update(
 
 @pytest.mark.asyncio
 async def test_do_update(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -2494,11 +2499,11 @@ async def test_do_update(
 
     monkeypatch.setattr(core_lifecycle_td.astrbot_updator, "update", mock_update)
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.update.download_dashboard",
+        "astrbot.dashboard.services.update_service.download_dashboard",
         mock_download_dashboard,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.update.pip_installer.install",
+        "astrbot.dashboard.services.update_service.pip_installer.install",
         mock_pip_install,
     )
 
@@ -2525,7 +2530,7 @@ async def test_do_update(
 
 @pytest.mark.asyncio
 async def test_install_pip_package_returns_pip_install_error_message(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch,
 ):
@@ -2536,7 +2541,7 @@ async def test_install_pip_package_returns_pip_install_error_message(
         raise PipInstallError("install failed", code=2)
 
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.update.pip_installer.install",
+        "astrbot.dashboard.services.update_service.pip_installer.install",
         mock_pip_install,
     )
 
@@ -2613,7 +2618,7 @@ class _FakeNeoBayClient:
 
 @pytest.mark.asyncio
 async def test_neo_skills_routes(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -2644,11 +2649,11 @@ async def test_neo_skills_routes(
         return
 
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.NeoSkillSyncManager.sync_release",
+        "astrbot.dashboard.services.skills_service.NeoSkillSyncManager.sync_release",
         _fake_sync_release,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
 
@@ -2735,7 +2740,7 @@ async def test_neo_skills_routes(
 
 @pytest.mark.asyncio
 async def test_batch_upload_skills_returns_error_when_all_files_invalid(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
 ):
     test_client = app.test_client()
@@ -2760,7 +2765,7 @@ async def test_batch_upload_skills_returns_error_when_all_files_invalid(
 
 @pytest.mark.asyncio
 async def test_batch_upload_skills_accepts_zip_files(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch,
 ):
@@ -2778,11 +2783,11 @@ async def test_batch_upload_skills_accepts_zip_files(
         return "demo_skill"
 
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.SkillManager.install_skill_from_zip",
+        "astrbot.dashboard.services.skills_service.SkillManager.install_skill_from_zip",
         _fake_install_skill_from_zip,
     )
 
@@ -2813,7 +2818,7 @@ async def test_batch_upload_skills_accepts_zip_files(
 
 @pytest.mark.asyncio
 async def test_batch_upload_skills_accepts_valid_skill_archive(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch,
     tmp_path,
@@ -2829,7 +2834,7 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
         return
 
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
@@ -2845,7 +2850,7 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
         lambda: str(temp_dir),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.get_astrbot_temp_path",
+        "astrbot.dashboard.services.skills_service.get_astrbot_temp_path",
         lambda: str(temp_dir),
     )
 
@@ -2886,7 +2891,7 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
 
 @pytest.mark.asyncio
 async def test_batch_upload_skills_partial_success(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch,
 ):
@@ -2905,11 +2910,11 @@ async def test_batch_upload_skills_partial_success(
         raise RuntimeError("install failed")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.SkillManager.install_skill_from_zip",
+        "astrbot.dashboard.services.skills_service.SkillManager.install_skill_from_zip",
         _fake_install_skill_from_zip,
     )
 
@@ -2955,7 +2960,7 @@ async def test_batch_upload_skills_partial_success(
 
 @pytest.mark.asyncio
 async def test_skill_file_browser_and_editor_security(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch,
     tmp_path,
@@ -2984,7 +2989,7 @@ async def test_skill_file_browser_and_editor_security(
         lambda: str(skills_root),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
 

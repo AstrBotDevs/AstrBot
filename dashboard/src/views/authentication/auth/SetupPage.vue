@@ -7,7 +7,7 @@ import { useRouter } from 'vue-router';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
-import axios from 'axios';
+import { authApi } from '@/api/v1';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -36,7 +36,7 @@ onMounted(async () => {
   const hasToken = authStore.has_token();
 
   try {
-    const setupStatus = await axios.get('/api/auth/setup-status');
+    const setupStatus = await authApi.setupStatus();
     const setupRequired = !!setupStatus.data?.data?.setup_required;
     const canSkipDefaultPassword = !!setupStatus.data?.data?.skip_default_password_auth;
     if (

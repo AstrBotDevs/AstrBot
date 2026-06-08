@@ -1,6 +1,6 @@
 from urllib.parse import unquote
 
-from quart import request
+from astrbot.dashboard.fastapi_compat import request
 
 PLUGIN_PAGE_CONTENT_PREFIX = "/api/plugin/page/content/"
 PLUGIN_PAGE_BRIDGE_PATH = "/api/plugin/page/bridge-sdk.js"

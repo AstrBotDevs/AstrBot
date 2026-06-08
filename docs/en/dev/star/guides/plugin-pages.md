@@ -70,8 +70,8 @@ When the frontend calls `bridge.apiGet("ping")`, the Dashboard forwards it to:
 The registered Web API route must include the plugin name as a prefix:
 
 ```python
-from quart import jsonify
 from astrbot.api.star import Context, Star
+from astrbot.dashboard.fastapi_compat import jsonify
 
 PLUGIN_NAME = "astrbot_plugin_page_demo"
 

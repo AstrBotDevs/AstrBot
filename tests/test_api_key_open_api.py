@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from quart import Quart, g, request
 from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
@@ -15,27 +14,19 @@ from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
     hash_legacy_dashboard_password,
 )
-from astrbot.dashboard.routes.route import Response
+from astrbot.dashboard.fastapi_compat import FastAPIAppAdapter
 from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.v1.responses import ok
 
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
 
-def _get_open_api_route(app: Quart):
-    rule = next(
-        (
-            item
-            for item in app.url_map.iter_rules()
-            if item.rule == "/api/v1/chat" and "POST" in item.methods
-        ),
-        None,
-    )
-    assert rule is not None
-    return app.view_functions[rule.endpoint].__self__
+def _get_open_api_route(app: FastAPIAppAdapter):
+    return app._dashboard_server.open_api_route
 
 
 async def _create_api_key(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     *,
     scopes: list[str],
@@ -107,7 +98,9 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
 
 
 @pytest_asyncio.fixture(scope="module")
-async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
+async def authenticated_header(
+    app: FastAPIAppAdapter, core_lifecycle_td: AstrBotCoreLifecycle
+):
     test_client = app.test_client()
     response = await test_client.post(
         "/api/auth/login",
@@ -122,7 +115,9 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
 
 
 @pytest.mark.asyncio
-async def test_api_key_scope_and_revoke(app: Quart, authenticated_header: dict):
+async def test_api_key_scope_and_revoke(
+    app: FastAPIAppAdapter, authenticated_header: dict
+):
     test_client = app.test_client()
 
     raw_key, key_id = await _create_api_key(
@@ -177,7 +172,9 @@ async def test_api_key_scope_and_revoke(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
-async def test_open_send_message_with_api_key(app: Quart, authenticated_header: dict):
+async def test_open_send_message_with_api_key(
+    app: FastAPIAppAdapter, authenticated_header: dict
+):
     test_client = app.test_client()
 
     raw_key, _ = await _create_api_key(
@@ -202,7 +199,7 @@ async def test_open_send_message_with_api_key(app: Quart, authenticated_header: 
 
 @pytest.mark.asyncio
 async def test_open_chat_send_auto_session_id_and_username(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -216,22 +213,17 @@ async def test_open_chat_send_auto_session_id_and_username(
     )
     open_api_route = _get_open_api_route(app)
 
-    original_chat = open_api_route.chat_route.chat
+    original_chat = open_api_route._chat_response
 
-    async def fake_chat(post_data: dict | None = None):
-        payload = post_data or await request.get_json()
-        return (
-            Response()
-            .ok(
-                data={
-                    "session_id": payload.get("session_id"),
-                    "creator": g.get("username"),
-                }
-            )
-            .__dict__
+    async def fake_chat_response(username: str, post_data: dict):
+        return ok(
+            {
+                "session_id": post_data.get("session_id"),
+                "creator": username,
+            }
         )
 
-    open_api_route.chat_route.chat = fake_chat
+    open_api_route._chat_response = fake_chat_response
     try:
         send_res = await test_client.post(
             "/api/v1/chat",
@@ -243,7 +235,7 @@ async def test_open_chat_send_auto_session_id_and_username(
             headers={"X-API-Key": raw_key},
         )
     finally:
-        open_api_route.chat_route.chat = original_chat
+        open_api_route._chat_response = original_chat
 
     assert send_res.status_code == 200
     send_data = await send_res.get_json()
@@ -293,7 +285,7 @@ async def test_open_chat_send_auto_session_id_and_username(
 
 @pytest.mark.asyncio
 async def test_open_chat_sessions_pagination(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -358,7 +350,7 @@ async def test_open_chat_sessions_pagination(
 
 @pytest.mark.asyncio
 async def test_open_chat_configs_list(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
 ):
     test_client = app.test_client()
@@ -388,7 +380,7 @@ async def test_open_chat_configs_list(
 
 @pytest.mark.asyncio
 async def test_open_api_auth_validation_and_key_carriers(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
 ):
     test_client = app.test_client()
@@ -432,7 +424,7 @@ async def test_open_api_auth_validation_and_key_carriers(
 
 @pytest.mark.asyncio
 async def test_open_chat_send_conversation_alias_and_blank_username(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
@@ -446,14 +438,13 @@ async def test_open_chat_send_conversation_alias_and_blank_username(
     )
     open_api_route = _get_open_api_route(app)
 
-    async def fake_chat(post_data: dict | None = None):
-        payload = post_data or await request.get_json()
-        resolved_session_id = payload.get("session_id") or payload.get(
+    async def fake_chat_response(_username: str, post_data: dict):
+        resolved_session_id = post_data.get("session_id") or post_data.get(
             "conversation_id"
         )
-        return Response().ok(data={"session_id": resolved_session_id}).__dict__
+        return ok({"session_id": resolved_session_id})
 
-    monkeypatch.setattr(open_api_route.chat_route, "chat", fake_chat)
+    monkeypatch.setattr(open_api_route, "_chat_response", fake_chat_response)
 
     conversation_id = f"open_api_conversation_{uuid.uuid4().hex[:10]}"
     send_res = await test_client.post(
@@ -494,7 +485,7 @@ async def test_open_chat_send_conversation_alias_and_blank_username(
 
 @pytest.mark.asyncio
 async def test_open_chat_send_config_resolution(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -533,20 +524,15 @@ async def test_open_chat_send_config_resolution(
         delete_route,
     )
 
-    async def fake_chat(post_data: dict | None = None):
-        payload = post_data or await request.get_json()
-        return (
-            Response()
-            .ok(
-                data={
-                    "session_id": payload.get("session_id"),
-                    "creator": g.get("username"),
-                }
-            )
-            .__dict__
+    async def fake_chat_response(username: str, post_data: dict):
+        return ok(
+            {
+                "session_id": post_data.get("session_id"),
+                "creator": username,
+            }
         )
 
-    monkeypatch.setattr(open_api_route.chat_route, "chat", fake_chat)
+    monkeypatch.setattr(open_api_route, "_chat_response", fake_chat_response)
 
     invalid_config_id_res = await test_client.post(
         "/api/v1/chat",
@@ -632,7 +618,7 @@ async def test_open_chat_send_config_resolution(
 
 @pytest.mark.asyncio
 async def test_open_chat_sessions_input_validation_and_filtering(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -708,7 +694,9 @@ async def test_open_chat_sessions_input_validation_and_filtering(
 
 
 @pytest.mark.asyncio
-async def test_open_send_message_error_paths(app: Quart, authenticated_header: dict):
+async def test_open_send_message_error_paths(
+    app: FastAPIAppAdapter, authenticated_header: dict
+):
     test_client = app.test_client()
     raw_key, _ = await _create_api_key(
         app,
@@ -764,7 +752,7 @@ async def test_open_send_message_error_paths(app: Quart, authenticated_header: d
 
 @pytest.mark.asyncio
 async def test_open_file_upload_requires_file_and_can_upload(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
 ):
     test_client = app.test_client()

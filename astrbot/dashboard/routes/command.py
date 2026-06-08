@@ -1,17 +1,7 @@
-from quart import request
-
-from astrbot.core.star.command_management import (
-    list_command_conflicts,
-    list_commands,
-)
-from astrbot.core.star.command_management import (
-    rename_command as rename_command_service,
-)
-from astrbot.core.star.command_management import (
-    toggle_command as toggle_command_service,
-)
-from astrbot.core.star.command_management import (
-    update_command_permission as update_command_permission_service,
+from astrbot.dashboard.fastapi_compat import request
+from astrbot.dashboard.services.command_service import (
+    CommandService,
+    CommandServiceError,
 )
 
 from .route import Response, Route, RouteContext
@@ -20,7 +10,7 @@ from .route import Response, Route, RouteContext
 class CommandRoute(Route):
     def __init__(self, context: RouteContext, core_lifecycle=None) -> None:
         super().__init__(context)
-        self.core_lifecycle = core_lifecycle
+        self.service = CommandService(self.config, core_lifecycle)
         self.routes = {
             "/commands": ("GET", self.get_commands),
             "/commands/conflicts": ("GET", self.get_conflicts),
@@ -30,88 +20,50 @@ class CommandRoute(Route):
         }
         self.register_routes()
 
+    @staticmethod
+    def _ok(data=None):
+        return Response().ok(data).__dict__
+
+    @staticmethod
+    def _error(message: str):
+        return Response().error(message).__dict__
+
+    @staticmethod
+    async def _json_body() -> dict:
+        data = await request.get_json()
+        return data if isinstance(data, dict) else {}
+
+    async def _run(self, operation):
+        try:
+            result = operation() if callable(operation) else operation
+            while hasattr(result, "__await__"):
+                result = await result
+            return self._ok(result)
+        except CommandServiceError as exc:
+            return self._error(str(exc))
+
+    async def _run_json(self, operation):
+        async def invoke():
+            data = await self._json_body()
+            return operation(data)
+
+        return await self._run(invoke)
+
     async def get_commands(self):
-        commands = await list_commands()
-        summary = {
-            "total": len(commands),
-            "disabled": len([cmd for cmd in commands if not cmd["enabled"]]),
-            "conflicts": len([cmd for cmd in commands if cmd.get("has_conflict")]),
-        }
-        # 优先从指定 config_id 的配置中读取唤醒词，否则使用默认配置
-        config_id = request.args.get("config_id", "").strip()
-        wake_prefix = self.config.get("wake_prefix", ["/"])
-        if config_id and self.core_lifecycle:
-            acm = getattr(self.core_lifecycle, "astrbot_config_mgr", None)
-            if acm and config_id in acm.confs:
-                wake_prefix = acm.confs[config_id].get("wake_prefix", wake_prefix)
-        return (
-            Response()
-            .ok({"items": commands, "summary": summary, "wake_prefix": wake_prefix})
-            .__dict__
+        return await self._run(
+            self.service.list_commands_from_legacy_query(
+                request.args.get("config_id", "")
+            )
         )
 
     async def get_conflicts(self):
-        conflicts = await list_command_conflicts()
-        return Response().ok(conflicts).__dict__
+        return await self._run(self.service.list_conflicts())
 
     async def toggle_command(self):
-        data = await request.get_json()
-        handler_full_name = data.get("handler_full_name")
-        enabled = data.get("enabled")
-
-        if handler_full_name is None or enabled is None:
-            return Response().error("handler_full_name 与 enabled 均为必填。").__dict__
-
-        if isinstance(enabled, str):
-            enabled = enabled.lower() in ("1", "true", "yes", "on")
-
-        try:
-            await toggle_command_service(handler_full_name, bool(enabled))
-        except ValueError as exc:
-            return Response().error(str(exc)).__dict__
-
-        payload = await _get_command_payload(handler_full_name)
-        return Response().ok(payload).__dict__
+        return await self._run_json(self.service.toggle_command_from_legacy_payload)
 
     async def rename_command(self):
-        data = await request.get_json()
-        handler_full_name = data.get("handler_full_name")
-        new_name = data.get("new_name")
-        aliases = data.get("aliases")
-
-        if not handler_full_name or not new_name:
-            return Response().error("handler_full_name 与 new_name 均为必填。").__dict__
-
-        try:
-            await rename_command_service(handler_full_name, new_name, aliases=aliases)
-        except ValueError as exc:
-            return Response().error(str(exc)).__dict__
-
-        payload = await _get_command_payload(handler_full_name)
-        return Response().ok(payload).__dict__
+        return await self._run_json(self.service.rename_command_from_legacy_payload)
 
     async def update_permission(self):
-        data = await request.get_json()
-        handler_full_name = data.get("handler_full_name")
-        permission = data.get("permission")
-
-        if not handler_full_name or not permission:
-            return (
-                Response().error("handler_full_name 与 permission 均为必填。").__dict__
-            )
-
-        try:
-            await update_command_permission_service(handler_full_name, permission)
-        except ValueError as exc:
-            return Response().error(str(exc)).__dict__
-
-        payload = await _get_command_payload(handler_full_name)
-        return Response().ok(payload).__dict__
-
-
-async def _get_command_payload(handler_full_name: str):
-    commands = await list_commands()
-    for cmd in commands:
-        if cmd["handler_full_name"] == handler_full_name:
-            return cmd
-    return {}
+        return await self._run_json(self.service.update_permission_from_legacy_payload)

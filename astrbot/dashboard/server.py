@@ -1,49 +1,68 @@
 import asyncio
-import hashlib
 import ipaddress
-import logging
 import os
+import re
 import socket
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Protocol, cast
 
 import jwt
 import psutil
-from flask.json.provider import DefaultJSONProvider
 from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from hypercorn.logging import AccessLogAtoms
 from hypercorn.logging import Logger as HypercornLogger
-from quart import Quart, g, jsonify, request
-from quart.logging import default_handler
-from werkzeug.exceptions import MethodNotAllowed, NotFound
-from werkzeug.routing import Map, Rule
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import (
     get_bundled_dashboard_dist_path,
     get_local_ip_addresses,
     should_use_bundled_dashboard_dist,
 )
+from astrbot.dashboard.fastapi_compat import (
+    CompatG,
+    FastAPIAppAdapter,
+    bind_request_context,
+    g,
+    jsonify,
+    request,
+)
 
 from .plugin_page_auth import PluginPageAuth
-from .routes import *
-from .routes.api_key import ALL_OPEN_API_SCOPES
-from .routes.auth import DASHBOARD_JWT_COOKIE_NAME
+from .routes.api_key import ApiKeyRoute
+from .routes.auth import AuthRoute
 from .routes.backup import BackupRoute
+from .routes.chat import ChatRoute
+from .routes.chatui_project import ChatUIProjectRoute
+from .routes.command import CommandRoute
+from .routes.config import ConfigRoute
+from .routes.conversation import ConversationRoute
+from .routes.cron import CronRoute
+from .routes.file import FileRoute
+from .routes.knowledge_base import KnowledgeBaseRoute
 from .routes.live_chat import LiveChatRoute
+from .routes.log import LogRoute
+from .routes.open_api import OpenApiRoute
+from .routes.persona import PersonaRoute
 from .routes.platform import PlatformRoute
+from .routes.plugin import PluginRoute
 from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
+from .routes.skills import SkillsRoute
+from .routes.stat import StatRoute
+from .routes.static_file import StaticFileRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
+from .routes.tools import ToolsRoute
+from .routes.update import UpdateRoute
+from .services.auth_service import DASHBOARD_JWT_COOKIE_NAME
+from .services.chat_service import ChatService
+from .v1.app import create_v1_asgi_app
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
@@ -120,7 +139,7 @@ class _AddrWithPort(Protocol):
     port: int
 
 
-APP: Quart
+APP: FastAPIAppAdapter | None = None
 
 
 def _normalize_plugin_api_route(route: str) -> str:
@@ -139,25 +158,26 @@ def _match_registered_web_api(registered_web_apis, subpath: str, method: str):
         if request_method not in allowed_methods:
             continue
 
-        url_map = Map(
-            [
-                Rule(
-                    _normalize_plugin_api_route(route),
-                    endpoint="plugin_api",
-                    methods=allowed_methods,
-                ),
-            ]
-        )
-        try:
-            _, path_values = url_map.bind("").match(
-                request_path,
-                method=request_method,
-            )
-        except (MethodNotAllowed, NotFound):
+        pattern = _plugin_api_route_pattern(route)
+        matched = re.fullmatch(pattern, request_path)
+        if not matched:
             continue
-        return view_handler, path_values
+        return view_handler, matched.groupdict()
 
     return None
+
+
+def _plugin_api_route_pattern(route: str) -> str:
+    normalized = _normalize_plugin_api_route(route)
+    chunks = []
+    pos = 0
+    for match in re.finditer(r"<(?:(path):)?([A-Za-z_][A-Za-z0-9_]*)>", normalized):
+        chunks.append(re.escape(normalized[pos : match.start()]))
+        name = match.group(2)
+        chunks.append(f"(?P<{name}>.*)" if match.group(1) else f"(?P<{name}>[^/]+)")
+        pos = match.end()
+    chunks.append(re.escape(normalized[pos:]))
+    return "".join(chunks)
 
 
 def _parse_env_bool(value: str | None, default: bool) -> bool:
@@ -213,13 +233,6 @@ class _ProxyAwareHypercornLogger(HypercornLogger):
         return atoms
 
 
-class AstrBotJSONProvider(DefaultJSONProvider):
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return to_utc_isoformat(obj)
-        return super().default(obj)
-
-
 class AstrBotDashboard:
     def __init__(
         self,
@@ -254,16 +267,30 @@ class AstrBotDashboard:
                 self.data_path = os.path.abspath(user_dist)
 
         self._rate_limiter_registry = _RateLimiterRegistry()
-        self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
-        APP = self.app  # noqa
+        self._init_jwt_secret()
+        self.asgi_app = create_v1_asgi_app(
+            core_lifecycle=core_lifecycle,
+            db=db,
+            jwt_secret=self._jwt_secret,
+        )
+        self.app = FastAPIAppAdapter(self.asgi_app, static_folder=self.data_path)
+        self.asgi_app.state.dashboard_app_adapter = self.app
+        self.app._dashboard_server = self
+        global APP
+        APP = self.app
         self.app.config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
         )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
-        self.app.json = AstrBotJSONProvider(self.app)
-        self.app.json.sort_keys = False
-        self.app.before_request(self.auth_middleware)
-        # token 用于验证请求
-        logging.getLogger(self.app.name).removeHandler(default_handler)
+
+        @self.asgi_app.middleware("http")
+        async def dashboard_auth_middleware(request_, call_next):
+            request_.state.dashboard_g = CompatG()
+            with bind_request_context(request_, self.app, request_.state.dashboard_g):
+                auth_response = await self.auth_middleware()
+            if auth_response is not None:
+                return auth_response
+            return await call_next(request_)
+
         self.context = RouteContext(self.config, self.app)
         self.ur = UpdateRoute(
             self.context,
@@ -282,13 +309,21 @@ class AstrBotDashboard:
         self.sfr = StaticFileRoute(self.context)
         self.ar = AuthRoute(self.context, db)
         self.api_key_route = ApiKeyRoute(self.context, db)
-        self.chat_route = ChatRoute(self.context, db, core_lifecycle)
+        self.chat_service = ChatService(db, core_lifecycle)
+        self.chat_route = ChatRoute(
+            self.context,
+            db,
+            core_lifecycle,
+            service=self.chat_service,
+        )
         self.open_api_route = OpenApiRoute(
             self.context,
             db,
             core_lifecycle,
-            self.chat_route,
+            self.chat_service,
+            register_routes=False,
         )
+        self.asgi_app.state.open_api_route = self.open_api_route
         self.chatui_project_route = ChatUIProjectRoute(self.context, db)
         self.tools_root = ToolsRoute(self.context, core_lifecycle)
         self.subagent_route = SubAgentRoute(self.context, core_lifecycle)
@@ -307,6 +342,7 @@ class AstrBotDashboard:
         self.platform_route = PlatformRoute(self.context, core_lifecycle)
         self.backup_route = BackupRoute(self.context, db, core_lifecycle)
         self.live_chat_route = LiveChatRoute(self.context, db, core_lifecycle)
+        self.asgi_app.state.live_chat_route = self.live_chat_route
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
@@ -315,8 +351,6 @@ class AstrBotDashboard:
         )
 
         self.shutdown_event = shutdown_event
-
-        self._init_jwt_secret()
 
     async def srv_plug_route(self, subpath, *args, **kwargs):
         """插件路由"""
@@ -335,37 +369,6 @@ class AstrBotDashboard:
         if not request.path.startswith("/api"):
             return None
         if request.path.startswith("/api/v1"):
-            raw_key = self._extract_raw_api_key()
-            if not raw_key:
-                r = jsonify(Response().error("Missing API key").__dict__)
-                r.status_code = 401
-                return r
-            key_hash = hashlib.pbkdf2_hmac(
-                "sha256",
-                raw_key.encode("utf-8"),
-                b"astrbot_api_key",
-                100_000,
-            ).hex()
-            api_key = await self.db.get_active_api_key_by_hash(key_hash)
-            if not api_key:
-                r = jsonify(Response().error("Invalid API key").__dict__)
-                r.status_code = 401
-                return r
-
-            if isinstance(api_key.scopes, list):
-                scopes = api_key.scopes
-            else:
-                scopes = list(ALL_OPEN_API_SCOPES)
-            required_scope = self._get_required_open_api_scope(request.path)
-            if required_scope and "*" not in scopes and required_scope not in scopes:
-                r = jsonify(Response().error("Insufficient API key scope").__dict__)
-                r.status_code = 403
-                return r
-
-            g.api_key_id = api_key.key_id
-            g.api_key_scopes = scopes
-            g.username = f"api_key:{api_key.key_id}"
-            await self.db.touch_api_key(api_key.key_id)
             return None
 
         if (
@@ -403,6 +406,7 @@ class AstrBotDashboard:
         }
         allowed_endpoint_prefixes = [
             "/api/file",
+            "/api/v1/files/tokens",
             "/api/platform/webhook",
             "/api/stat/start-time",
             "/api/backup/download",  # 备份下载使用 URL 参数传递 token
@@ -485,34 +489,6 @@ class AstrBotDashboard:
         if cookie_token:
             return cookie_token
         return None
-
-    @staticmethod
-    def _extract_raw_api_key() -> str | None:
-        if key := request.args.get("api_key"):
-            return key.strip()
-        if key := request.args.get("key"):
-            return key.strip()
-        if key := request.headers.get("X-API-Key"):
-            return key.strip()
-        auth_header = request.headers.get("Authorization", "").strip()
-        if auth_header.startswith("Bearer "):
-            return auth_header.removeprefix("Bearer ").strip()
-        if auth_header.startswith("ApiKey "):
-            return auth_header.removeprefix("ApiKey ").strip()
-        return None
-
-    @staticmethod
-    def _get_required_open_api_scope(path: str) -> str | None:
-        scope_map = {
-            "/api/v1/chat": "chat",
-            "/api/v1/chat/ws": "chat",
-            "/api/v1/chat/sessions": "chat",
-            "/api/v1/configs": "config",
-            "/api/v1/file": "file",
-            "/api/v1/im/message": "im",
-            "/api/v1/im/bots": "im",
-        }
-        return scope_map.get(path)
 
     def check_port_in_use(self, port: int) -> bool:
         """跨平台检测端口是否被占用"""
@@ -725,7 +701,7 @@ class AstrBotDashboard:
             config.accesslog = "-"
             config.access_log_format = "%(h)s %(r)s %(s)s %(b)s %(D)s"
 
-        return serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
+        return serve(self.asgi_app, config, shutdown_trigger=self.shutdown_trigger)
 
     async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()

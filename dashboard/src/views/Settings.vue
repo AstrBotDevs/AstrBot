@@ -228,7 +228,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import axios from 'axios';
+import { apiKeyApi } from '@/api/v1';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';
@@ -328,7 +328,7 @@ const formatDate = (value) => {
 
 const loadApiKeys = async () => {
     try {
-        const res = await axios.get('/api/apikey/list');
+        const res = await apiKeyApi.list();
         if (res.data.status !== 'ok') {
             showToast(res.data.message || tm('apiKey.messages.loadFailed'), 'error');
             return;
@@ -367,7 +367,7 @@ const createApiKey = async () => {
         if (newApiKeyExpiresInDays.value !== 'permanent') {
             payload.expires_in_days = Number(newApiKeyExpiresInDays.value);
         }
-        const res = await axios.post('/api/apikey/create', payload);
+        const res = await apiKeyApi.create(payload);
         if (res.data.status !== 'ok') {
             showToast(res.data.message || tm('apiKey.messages.createFailed'), 'error');
             return;
@@ -386,7 +386,7 @@ const createApiKey = async () => {
 
 const revokeApiKey = async (keyId) => {
     try {
-        const res = await axios.post('/api/apikey/revoke', { key_id: keyId });
+        const res = await apiKeyApi.revoke(keyId);
         if (res.data.status !== 'ok') {
             showToast(res.data.message || tm('apiKey.messages.revokeFailed'), 'error');
             return;
@@ -400,7 +400,7 @@ const revokeApiKey = async (keyId) => {
 
 const deleteApiKey = async (keyId) => {
     try {
-        const res = await axios.post('/api/apikey/delete', { key_id: keyId });
+        const res = await apiKeyApi.delete(keyId);
         if (res.data.status !== 'ok') {
             showToast(res.data.message || tm('apiKey.messages.deleteFailed'), 'error');
             return;

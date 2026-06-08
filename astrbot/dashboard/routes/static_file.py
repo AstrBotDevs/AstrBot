@@ -1,37 +1,19 @@
+from astrbot.dashboard.services.static_file_service import StaticFileService
+
 from .route import Route, RouteContext
 
 
 class StaticFileRoute(Route):
     def __init__(self, context: RouteContext) -> None:
         super().__init__(context)
+        self.service = StaticFileService()
 
-        index_ = [
-            "/",
-            "/auth/login",
-            "/config",
-            "/logs",
-            "/extension",
-            "/dashboard/default",
-            "/alkaid",
-            "/alkaid/knowledge-base",
-            "/alkaid/long-term-memory",
-            "/alkaid/other",
-            "/console",
-            "/chat",
-            "/settings",
-            "/platforms",
-            "/providers",
-            "/about",
-            "/extension-marketplace",
-            "/conversation",
-            "/tool-use",
-        ]
-        for i in index_:
+        for i in self.service.list_index_routes():
             self.app.add_url_rule(i, view_func=self.index)
 
         @self.app.errorhandler(404)
         async def page_not_found(e) -> str:
-            return "404 Not found。如果你初次使用打开面板发现 404, 请参考文档: https://docs.astrbot.app/faq.html。如果你正在测试回调地址可达性，显示这段文字说明测试成功了。"
+            return self.service.get_not_found_message()
 
     async def index(self):
         return await self.app.send_static_file("index.html")

@@ -2,7 +2,7 @@
  * Persona 文件夹管理 Store
  */
 import { defineStore } from 'pinia';
-import axios from 'axios';
+import { personaApi } from '@/api/v1';
 
 // 类型定义
 export interface PersonaFolder {
@@ -96,7 +96,7 @@ export const usePersonaStore = defineStore("persona", {
     async loadFolderTree(): Promise<void> {
       this.treeLoading = true;
       try {
-        const response = await axios.get('/api/persona/folder/tree');
+        const response = await personaApi.tree();
         if (response.data.status === 'ok') {
           this.folderTree = response.data.data || [];
         } else {
@@ -117,12 +117,8 @@ export const usePersonaStore = defineStore("persona", {
 
         // 并行加载子文件夹和 Persona
         const [foldersRes, personasRes] = await Promise.all([
-          axios.get('/api/persona/folder/list', {
-            params: { parent_id: folderId ?? '' }
-          }),
-          axios.get('/api/persona/list', {
-            params: { folder_id: folderId ?? '' }
-          }),
+          personaApi.folders(folderId),
+          personaApi.list(folderId),
         ]);
 
         if (foldersRes.data.status === 'ok') {
@@ -180,10 +176,7 @@ export const usePersonaStore = defineStore("persona", {
      * 移动 Persona 到文件夹
      */
     async movePersonaToFolder(personaId: string, targetFolderId: string | null): Promise<void> {
-      const response = await axios.post('/api/persona/move', {
-        persona_id: personaId,
-        folder_id: targetFolderId
-      });
+      const response = await personaApi.move(personaId, targetFolderId);
 
       if (response.data.status !== 'ok') {
         throw new Error(response.data.message || '移动人格失败');
@@ -200,9 +193,8 @@ export const usePersonaStore = defineStore("persona", {
      * 移动文件夹到另一个文件夹
      */
     async moveFolderToFolder(folderId: string, targetParentId: string | null): Promise<void> {
-      const response = await axios.post('/api/persona/folder/update', {
-        folder_id: folderId,
-        parent_id: targetParentId
+      const response = await personaApi.updateFolder(folderId, {
+        parent_id: targetParentId,
       });
 
       if (response.data.status !== 'ok') {
@@ -224,7 +216,7 @@ export const usePersonaStore = defineStore("persona", {
       parent_id?: string | null;
       description?: string;
     }): Promise<PersonaFolder> {
-      const response = await axios.post('/api/persona/folder/create', {
+      const response = await personaApi.createFolder({
         ...data,
         parent_id: data.parent_id ?? this.currentFolderId,
       });
@@ -239,7 +231,7 @@ export const usePersonaStore = defineStore("persona", {
         this.loadFolderTree(),
       ]);
 
-      return response.data.data.folder;
+      return response.data.data.folder as PersonaFolder;
     },
 
     /**
@@ -250,7 +242,7 @@ export const usePersonaStore = defineStore("persona", {
       name?: string;
       description?: string;
     }): Promise<void> {
-      const response = await axios.post('/api/persona/folder/update', data);
+      const response = await personaApi.updateFolder(data.folder_id, data);
 
       if (response.data.status !== 'ok') {
         throw new Error(response.data.message || '更新文件夹失败');
@@ -267,9 +259,7 @@ export const usePersonaStore = defineStore("persona", {
      * 删除文件夹
      */
     async deleteFolder(folderId: string): Promise<void> {
-      const response = await axios.post('/api/persona/folder/delete', {
-        folder_id: folderId
-      });
+      const response = await personaApi.deleteFolder(folderId);
 
       if (response.data.status !== 'ok') {
         throw new Error(response.data.message || '删除文件夹失败');
@@ -286,9 +276,7 @@ export const usePersonaStore = defineStore("persona", {
      * 删除 Persona
      */
     async deletePersona(personaId: string): Promise<void> {
-      const response = await axios.post('/api/persona/delete', {
-        persona_id: personaId
-      });
+      const response = await personaApi.delete(personaId);
 
       if (response.data.status !== 'ok') {
         throw new Error(response.data.message || '删除人格失败');
@@ -302,7 +290,7 @@ export const usePersonaStore = defineStore("persona", {
      * 批量更新排序
      */
     async reorderItems(items: ReorderItem[]): Promise<void> {
-      const response = await axios.post('/api/persona/reorder', { items });
+      const response = await personaApi.reorder(items);
 
       if (response.data.status !== 'ok') {
         throw new Error(response.data.message || '更新排序失败');

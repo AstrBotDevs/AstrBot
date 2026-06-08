@@ -70,8 +70,8 @@ document.getElementById("ping").addEventListener("click", async () => {
 因此注册 Web API 时，路由必须带上插件名作为前缀：
 
 ```python
-from quart import jsonify
 from astrbot.api.star import Context, Star
+from astrbot.dashboard.fastapi_compat import jsonify
 
 PLUGIN_NAME = "astrbot_plugin_page_demo"
 

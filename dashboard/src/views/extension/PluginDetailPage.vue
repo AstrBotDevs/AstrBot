@@ -11,6 +11,7 @@ import axios from "axios";
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import { pluginApi } from "@/api/v1";
 import { usePluginI18n } from "@/utils/pluginI18n";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 
@@ -575,9 +576,7 @@ const fetchPluginDetail = async () => {
   if (isMarketDetail.value || !props.plugin?.name) return;
 
   try {
-    const res = await axios.get("/api/plugin/detail", {
-      params: { name: props.plugin.name },
-    });
+    const res = await pluginApi.get(props.plugin.name);
     if (res.data.status === "ok" && res.data.data) {
       pluginDetail.value = res.data.data;
       await scrollToHashTarget();
@@ -651,9 +650,7 @@ const fetchReadme = async () => {
   }
 
   try {
-    const res = await axios.get("/api/plugin/readme", {
-      params: { name: plugin.name },
-    });
+    const res = await pluginApi.readme(plugin.name);
 
     if (res.data.status !== "ok") {
       readmeError.value = res.data.message || tm("messages.operationFailed");
@@ -707,9 +704,7 @@ const fetchChangelog = async () => {
   }
 
   try {
-    const res = await axios.get("/api/plugin/changelog", {
-      params: { name: plugin.name },
-    });
+    const res = await pluginApi.changelog(plugin.name);
 
     if (res.data.status !== "ok") {
       changelogError.value = res.data.message || tm("messages.operationFailed");

@@ -157,7 +157,7 @@ class Platform(abc.ABC):
         当 Dashboard 收到 /api/platform/webhook/{uuid} 请求时，会调用此方法。
 
         Args:
-            request: Quart 请求对象
+            request: webhook 请求对象
 
         Returns:
             响应内容，格式取决于具体平台的要求
