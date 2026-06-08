@@ -133,9 +133,24 @@ class EmbeddingStorage:
         new_index.add_with_ids(vectors, ids)
 
         self._backup_existing_index_before_migration()
-        self.index = new_index
-        # 立即保存迁移后的索引
-        faiss.write_index(self.index, self.path)
+
+        # 原子性保存：先写临时文件，成功后再替换
+        temp_path = f"{self.path}.migrating"
+        try:
+            faiss.write_index(new_index, temp_path)
+            # 使用 os.replace 确保原子性（POSIX 保证）
+            os.replace(temp_path, self.path)
+            self.index = new_index
+        except Exception as exc:
+            # 清理临时文件
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+            raise RuntimeError(
+                f"FAISS 索引迁移失败: {exc}。旧索引已备份，当前索引保持不变。"
+            ) from exc
 
     def _backup_existing_index_before_migration(self) -> Path:
         if self.path is None:
@@ -255,6 +270,11 @@ class EmbeddingStorage:
         """
         if self.index is None:
             return
+        if self.path is None:
+            raise RuntimeError(
+                "无法保存 FAISS 索引：索引文件路径未设置。"
+                "请确保在创建 EmbeddingStorage 时提供了有效的 path 参数。"
+            )
         await asyncio.to_thread(faiss.write_index, self.index, self.path)
 
     async def save_index(self) -> None:
