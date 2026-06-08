@@ -305,9 +305,11 @@ class KnowledgeBaseManager:
         """获取知识库实例"""
         async with self._ensure_kb_instances_lock():
             kb_helper = self._get_kb_unlocked(kb_id)
-            if kb_helper is not None:
-                await self._retry_helper_init_if_due(kb_helper)
-            return kb_helper
+
+        # 在锁外执行重试初始化，避免死锁
+        if kb_helper is not None:
+            await self._retry_helper_init_if_due(kb_helper)
+        return kb_helper
 
     async def get_kb_by_name(self, kb_name: str) -> KBHelper | None:
         """通过名称获取知识库实例"""
