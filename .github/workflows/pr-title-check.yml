@@ -21,6 +21,8 @@ jobs:
             // Allow Conventional Commit style PR titles.
             // Examples:
             // feat: xxx
+            // feat(scope): xxx
+            // fix: xxx
             // fix(scope): xxx
             const allowedTypes = "feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert";
             const pattern = new RegExp(`^(${allowedTypes})(\\([a-z0-9-]+\\))?:\\s.+$`, "i");
@@ -39,6 +41,8 @@ jobs:
                       "⚠️ PR title format check failed.",
                       "Required formats:",
                       "- `feat: xxx`",
+                      "- `feat(scope): xxx`",
+                      "- `fix: xxx`",
                       "- `fix(scope): xxx`",
                       "- `chore: xxx`",
                       "",
@@ -56,5 +60,5 @@ jobs:
             }
 
             if (!isValid) {
-              core.setFailed("Invalid PR title. Expected Conventional Commit format, e.g. feat: xxx or fix(scope): xxx.");
+              core.setFailed("Invalid PR title. Expected Conventional Commit format, e.g. feat: xxx, feat(scope): xxx, or fix: xxx.");
             }
