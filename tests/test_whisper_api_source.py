@@ -11,9 +11,7 @@ from astrbot.core.provider.sources.whisper_api_source import ProviderOpenAIWhisp
 class _FakeAsyncOpenAI:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
-
-    async def close(self):
-        return None
+        self.close = AsyncMock()
 
 
 def _make_provider() -> ProviderOpenAIWhisperAPI:
@@ -39,7 +37,7 @@ def _make_provider() -> ProviderOpenAIWhisperAPI:
 
 def test_provider_passes_configured_proxy_to_openai_http_client(monkeypatch):
     captured: dict[str, object] = {}
-    fake_http_client = object()
+    fake_http_client = SimpleNamespace(aclose=AsyncMock())
 
     def fake_create_proxy_client(
         provider_label: str,
@@ -78,13 +76,91 @@ def test_provider_passes_configured_proxy_to_openai_http_client(monkeypatch):
     assert provider.client.kwargs["base_url"] == "https://api.example.com/v1"
     assert provider.client.kwargs["timeout"] == 30
     assert provider.client.kwargs["http_client"] is fake_http_client
+    assert set(provider.client.kwargs) == {
+        "api_key",
+        "base_url",
+        "timeout",
+        "http_client",
+    }
+    assert provider.http_client is fake_http_client
     assert captured["provider_label"] == "OpenAI Whisper"
     assert captured["proxy"] == "http://127.0.0.1:7890"
     assert captured["headers"] is None
+    assert captured["httpx_module"] is not None
 
-    from openai import _base_client as openai_base_client
 
-    assert captured["httpx_module"] is openai_base_client.httpx
+def test_provider_uses_default_http_client_when_proxy_missing(monkeypatch):
+    captured: dict[str, object] = {}
+    fake_http_client = SimpleNamespace(aclose=AsyncMock())
+
+    def fake_create_proxy_client(
+        provider_label: str,
+        proxy: str | None = None,
+        headers: dict[str, str] | None = None,
+        verify=None,
+        httpx_module=None,
+    ):
+        captured["provider_label"] = provider_label
+        captured["proxy"] = proxy
+        captured["headers"] = headers
+        captured["httpx_module"] = httpx_module
+        return fake_http_client
+
+    monkeypatch.setattr(whisper_api_source, "AsyncOpenAI", _FakeAsyncOpenAI)
+    monkeypatch.setattr(
+        whisper_api_source,
+        "create_proxy_client",
+        fake_create_proxy_client,
+    )
+
+    provider = ProviderOpenAIWhisperAPI(
+        provider_config={
+            "id": "test-whisper-api",
+            "type": "openai_whisper_api",
+            "model": "whisper-1",
+            "api_key": "test-key",
+        },
+        provider_settings={},
+    )
+
+    assert provider.client.kwargs["http_client"] is fake_http_client
+    assert set(provider.client.kwargs) == {
+        "api_key",
+        "base_url",
+        "timeout",
+        "http_client",
+    }
+    assert provider.http_client is fake_http_client
+    assert captured["provider_label"] == "OpenAI Whisper"
+    assert captured["proxy"] is None
+    assert captured["headers"] is None
+
+
+@pytest.mark.asyncio
+async def test_terminate_closes_openai_client_and_custom_http_client(monkeypatch):
+    fake_http_client = SimpleNamespace(aclose=AsyncMock())
+
+    monkeypatch.setattr(whisper_api_source, "AsyncOpenAI", _FakeAsyncOpenAI)
+    monkeypatch.setattr(
+        whisper_api_source,
+        "create_proxy_client",
+        lambda *args, **kwargs: fake_http_client,
+    )
+
+    provider = ProviderOpenAIWhisperAPI(
+        provider_config={
+            "id": "test-whisper-api",
+            "type": "openai_whisper_api",
+            "model": "whisper-1",
+            "api_key": "test-key",
+        },
+        provider_settings={},
+    )
+
+    await provider.terminate()
+
+    provider.client.close.assert_awaited_once()
+    fake_http_client.aclose.assert_awaited_once()
 
 
 @pytest.mark.asyncio

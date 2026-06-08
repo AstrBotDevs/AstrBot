@@ -33,6 +33,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = provider_config.get("api_key", "")
+        self.http_client: httpx.AsyncClient | None = None
 
         self.client = AsyncOpenAI(
             api_key=self.chosen_api_key,
@@ -44,7 +45,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         self.set_model(provider_config["model"])
 
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
-        proxy = provider_config.get("proxy", "")
+        proxy = provider_config.get("proxy")
         httpx_module: Any = httpx
         try:
             from openai import _base_client as openai_base_client
@@ -52,11 +53,12 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             httpx_module = getattr(openai_base_client, "httpx", httpx)
         except ImportError:
             pass
-        return create_proxy_client(
+        self.http_client = create_proxy_client(
             "OpenAI Whisper",
             proxy,
             httpx_module=httpx_module,
         )
+        return self.http_client
 
     async def _get_audio_format(self, file_path) -> str | None:
         # 定义要检测的头部字节
@@ -152,3 +154,5 @@ class ProviderOpenAIWhisperAPI(STTProvider):
     async def terminate(self):
         if self.client:
             await self.client.close()
+        if self.http_client:
+            await self.http_client.aclose()
