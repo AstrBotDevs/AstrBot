@@ -805,6 +805,25 @@ class KBHelper:
             except KnowledgeBaseUploadError:
                 raise
             except Exception as exc:
+                # 检查是否是并发插入重复文档导致的唯一约束冲突
+                error_msg = str(exc).lower()
+                if "unique constraint" in error_msg or "unique" in error_msg:
+                    # 尝试获取已存在的文档
+                    try:
+                        existing_doc = await self.kb_db.get_document_by_content_hash(
+                            kb_id=self.kb.kb_id,
+                            content_hash=content_hash,
+                        )
+                        if existing_doc is not None:
+                            raise _build_duplicate_document_error(
+                                file_name=file_name,
+                                content_hash=content_hash,
+                                existing_doc=existing_doc,
+                            )
+                    except KnowledgeBaseUploadError:
+                        raise
+                    except Exception:
+                        pass  # 无法获取已存在文档，继续抛出原始错误
                 raise KnowledgeBaseUploadError(
                     stage="metadata",
                     user_message=(
