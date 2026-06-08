@@ -265,9 +265,9 @@
           "description": "Context Compression Instruction",
           "hint": "If empty, the default prompt will be used."
         },
-        "llm_compress_keep_recent": {
-          "description": "Keep Recent Turns When Compressing",
-          "hint": "Always keep the most recent N turns of conversation when compressing context."
+        "llm_compress_keep_recent_ratio": {
+          "description": "Recent Context Token Ratio to Keep",
+          "hint": "Keep recent exact context by current context token ratio, from 0-0.3. 0.15 means keeping 15%; values above 0 keep at least the latest round."
         },
         "llm_compress_provider_id": {
           "description": "Model Provider ID for Context Compression",
@@ -785,7 +785,7 @@
       },
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",
-        "hint": "Disable all built-in AstrBot commands such as help, provider, model, etc."
+        "hint": "Disable all built-in AstrBot commands such as help, sid, new, etc."
       }
     },
     "whitelist": {
@@ -1084,6 +1084,24 @@
         "hint": "When disabled, AstrBot will not upload anonymous usage statistics."
       },
       "dashboard": {
+        "trust_proxy_headers": {
+          "description": "Trust Proxy Headers for Client IP",
+          "hint": "When disabled, ignore X-Forwarded-For/X-Real-IP and use the connection address only."
+        },
+        "auth_rate_limit": {
+          "enable": {
+            "description": "Enable Login Rate Limiting",
+            "hint": "When disabled, authentication endpoints (login, TOTP, etc.) will not be rate-limited."
+          },
+          "average_interval": {
+            "description": "Endpoint Rate Limit Average Interval (seconds)",
+            "hint": "Minimum average interval between authentication requests. For example, 1.0 means at most 1 request per second."
+          },
+          "max_burst": {
+            "description": "Endpoint Rate Limit Max Burst",
+            "hint": "Maximum number of consecutive burst requests allowed. For example, 3 allows up to 3 requests in a short burst."
+          }
+        },
         "ssl": {
           "enable": {
             "description": "Enable WebUI HTTPS",
@@ -1101,6 +1119,52 @@
             "description": "SSL CA Certificate File Path",
             "hint": "Optional. Path to CA certificate file."
           }
+        },
+        "totp": {
+          "enable": {
+            "description": "Enable WebUI TOTP",
+            "hint": "When enabled, a TOTP code is required during dashboard login."
+          },
+          "manage": "Manage",
+          "configuration": "TOTP",
+          "statusPending": "Setup required",
+          "statusEnabled": "Enabled",
+          "setupRequiredHint": "TOTP is enabled but not yet configured. Click Manage to complete setup.",
+          "setupTitle": "Set up TOTP",
+          "setupSubtitle": "Scan this QR code in your authenticator app, then enter a verification code.",
+          "setupConfirm": "Verify and continue",
+          "activeSubtitle": "Use this QR code or secret to add another authenticator device.",
+          "rotateTitle": "Rotate TOTP Secret",
+          "rotateSubtitle": "Generate a new secret, then enter a code from your authenticator to confirm the replacement.",
+          "rotate": "Rotate",
+          "rotateRecovery": "Rotate Recovery Code",
+          "rotateConfirm": "Confirm Rotation",
+          "rotateCancel": "Cancel",
+          "rotateCode": "Verification Code",
+          "rotateCodeHint": "Enter the code from your authenticator app to confirm the new key.",
+          "rotateError": "Invalid code, please try again.",
+          "recoveryTitle": "Recovery Codes",
+          "recoverySubtitle": "This recovery code is shown once. Save it before continuing.",
+          "recoveryWarning": "If lost, account access cannot be restored through normal means.",
+          "recoveryAcknowledge": "I have saved my recovery codes",
+          "recoveryClose": "Done",
+          "disableTitle": "Disable TOTP",
+          "disableSubtitle": "Enter a verification code to disable two-factor authentication.",
+          "disableRecoverySubtitle": "Enter a recovery code to disable two-factor authentication.",
+          "disableCode": "Verification Code",
+          "disableRecoveryCode": "Recovery Code",
+          "disableConfirm": "Disable",
+          "disableCancel": "Cancel",
+          "disableError": "Verification failed. Please try again.",
+          "disableUseRecovery": "Can't use TOTP?",
+          "disableUseCode": "Use verification code",
+          "configSaveTitle": "Two-Factor Verification",
+          "configSaveSubtitle": "Enter a verification code to change protected configuration.",
+          "configSaveRotationHint": "When rotating TOTP keys, both the old and new verification codes are accepted (allowed once per rotation operation).",
+          "configSaveCode": "Verification Code",
+          "configSaveConfirm": "Continue",
+          "configSaveCancel": "Cancel",
+          "configSaveError": "Verification failed. Please try again."
         }
       },
       "timezone": {

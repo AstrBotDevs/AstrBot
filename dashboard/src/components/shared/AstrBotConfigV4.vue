@@ -307,6 +307,7 @@ function getSpecialSubtype(value) {
               v-else
               v-model="createSelectorModel(itemKey).value"
               :item-meta="itemMeta || null"
+              :config-root="iterable"
               :plugin-name="pluginName"
               :plugin-i18n="pluginI18n"
               :config-key="getItemPath(itemKey)"
@@ -393,6 +394,7 @@ function getSpecialSubtype(value) {
                     v-else
                     v-model="createSelectorModel(itemKey).value"
                     :item-meta="itemMeta || null"
+                    :config-root="iterable"
                     :plugin-name="pluginName"
                     :plugin-i18n="pluginI18n"
                     :config-key="getItemPath(itemKey)"
