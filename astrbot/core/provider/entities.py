@@ -453,6 +453,10 @@ class LLMResponse:
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
             if idx >= len(self.tools_call_name):
+                logger.warning(
+                    "Skipping tool call argument without matching tool name at index %s.",
+                    idx,
+                )
                 break
             tool_name = self.tools_call_name[idx]
             if not isinstance(tool_name, str) or not tool_name.strip():
@@ -483,6 +487,10 @@ class LLMResponse:
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
             if idx >= len(self.tools_call_name):
+                logger.warning(
+                    "Skipping tool call argument without matching tool name at index %s.",
+                    idx,
+                )
                 break
             tool_name = self.tools_call_name[idx]
             if not isinstance(tool_name, str) or not tool_name.strip():
