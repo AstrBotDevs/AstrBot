@@ -754,7 +754,9 @@ class RetrievalManager:
                 # 单 KB 场景下应该向上抛出异常，而不是静默处理
                 if len(kb_ids) == 1 and isinstance(result, RuntimeError):
                     raise result
-                logger.error(f"知识库 {kb_ids[i]} 稠密检索异常: {result}", exc_info=True)
+                logger.error(
+                    f"知识库 {kb_ids[i]} 稠密检索异常: {result}", exc_info=True
+                )
                 continue
             all_results.extend(result)
 
