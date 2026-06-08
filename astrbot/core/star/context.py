@@ -493,12 +493,18 @@ class Context:
                 _parts = []
                 module_part = tool.__module__.split(".")
                 flags = ["builtin_stars", "plugins"]
+                found_flag = False
                 for i, part in enumerate(module_part):
                     _parts.append(part)
                     if part in flags and i + 1 < len(module_part):
                         _parts.append(module_part[i + 1])
                         _parts.append("main")
+                        found_flag = True
                         break
+                if not found_flag:
+                    # Subdirectory tool: construct path matching star_manager format
+                    plugin_name = module_part[0]
+                    _parts = ["data", "plugins", plugin_name, "main"]
                 tool.handler_module_path = ".".join(_parts)
                 module_path = tool.handler_module_path
             else:
