@@ -18,18 +18,23 @@ class EmbeddingCache:
     """基于 LRU 的文本 → 嵌入向量缓存（线程安全）
 
     使用 SHA256 哈希文本作为缓存 key，避免对相同内容重复调用 embedding API。
+    缓存 key 包含向量维度，确保维度变更时缓存失效。
     """
 
-    def __init__(self, max_size: int = 10000) -> None:
+    def __init__(self, max_size: int = 10000, dimension: int | None = None) -> None:
         import asyncio
 
         self._cache: OrderedDict[str, np.ndarray] = OrderedDict()
         self._max_size = max_size
+        self._dimension = dimension
         self._lock = asyncio.Lock()
 
-    @staticmethod
-    def _hash(text: str) -> str:
-        return sha256(text.encode()).hexdigest()
+    def _hash(self, text: str) -> str:
+        """生成包含维度信息的缓存 key"""
+        text_hash = sha256(text.encode()).hexdigest()
+        if self._dimension is not None:
+            return f"{text_hash}:{self._dimension}"
+        return text_hash
 
     async def get(self, text: str) -> np.ndarray | None:
         async with self._lock:
@@ -80,7 +85,7 @@ class FaissVecDB(BaseVecDB):
         )
         self.embedding_provider = embedding_provider
         self.rerank_provider = rerank_provider
-        self.embedding_cache = EmbeddingCache()
+        self.embedding_cache = EmbeddingCache(dimension=embedding_provider.get_dim())
 
     async def initialize(self) -> None:
         await self.document_storage.initialize()
@@ -257,7 +262,8 @@ class FaissVecDB(BaseVecDB):
             metadatas,
         )
         if len(int_ids) != content_count:
-            await self._cleanup_batch_insert(int_ids=[], doc_ids=ids)
+            # 返回的 int_ids 数量不对，但部分记录已经写入 SQLite，需要全部清理
+            await self._cleanup_batch_insert(int_ids=int_ids, doc_ids=ids)
             raise KnowledgeBaseUploadError(
                 stage="storage",
                 user_message=(

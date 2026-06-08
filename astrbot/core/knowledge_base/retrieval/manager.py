@@ -316,6 +316,13 @@ class RetrievalManager:
             if not kb_helper:
                 logger.warning(f"知识库 ID {kb_id} 实例未找到, 已跳过该知识库的检索")
                 continue
+            # 跳过初始化失败的知识库
+            if getattr(kb_helper, "init_error", None):
+                logger.warning(
+                    f"知识库 {kb_helper.kb.kb_name}({kb_id}) 初始化失败，"
+                    f"已跳过检索: {kb_helper.init_error}"
+                )
+                continue
             kb = kb_helper.kb
             kb_option = {
                 "top_k_dense": kb.top_k_dense or DEFAULT_TOP_K_DENSE,
