@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { router } from '@/router';
-import axios from 'axios';
+import { authApi, providerApi, systemConfigApi } from '@/api/v1';
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -53,26 +53,23 @@ export const useAuthStore = defineStore("auth", {
       trustDeviceToken = false,
     ): Promise<'totp_required' | void> {
       try {
-        const res = await axios.post('/api/auth/login', {
-          username: username,
-          password: password,
-          code: code,
+        const res = await authApi.login({
+          username,
+          password,
+          code,
           trust_device_flag: trustDeviceToken,
-        }, {
-          validateStatus: (status) => (status >= 200 && status < 300) || status === 401
         });
-
-        if (res.status === 401 && res.data?.data?.totp_required) {
-          return 'totp_required';
-        }
 
         if (res.data.status === 'error') {
           return Promise.reject(res.data.message);
         }
 
         await this.finishAuthenticatedSession(res.data.data);
-      } catch (error) {
-        return Promise.reject(error);
+      } catch (error: any) {
+        if (error?.response?.status === 401 && error.response?.data?.data?.totp_required) {
+          return 'totp_required';
+        }
+        return Promise.reject(error?.response?.data?.message || error);
       }
     },
     async setup(
@@ -81,10 +78,9 @@ export const useAuthStore = defineStore("auth", {
       confirmPassword: string,
     ): Promise<void> {
       try {
-        const endpoint = this.has_token() ? '/api/auth/setup-authenticated' : '/api/auth/setup';
-        const res = await axios.post(endpoint, {
-          username: username,
-          password: password,
+        const res = await authApi.setup({
+          username,
+          password,
           confirm_password: confirmPassword,
         });
 
@@ -100,12 +96,13 @@ export const useAuthStore = defineStore("auth", {
     async checkOnboardingCompleted(): Promise<boolean> {
       try {
         // 1. 检查平台配置
-        const platformRes = await axios.get('/api/config/get');
-        const hasPlatform = (platformRes.data.data.config.platform || []).length > 0;
+        const platformRes = await systemConfigApi.get();
+        const systemConfig = (platformRes.data.data as any).config || {};
+        const hasPlatform = (systemConfig.platform || []).length > 0;
         if (!hasPlatform) return false;
 
         // 2. 检查提供者配置
-        const providerRes = await axios.get('/api/config/provider/template');
+        const providerRes = await providerApi.schema();
         const providers = providerRes.data.data?.providers || [];
         const sources = providerRes.data.data?.provider_sources || [];
         const sourceMap = new Map();
@@ -133,7 +130,7 @@ export const useAuthStore = defineStore("auth", {
       localStorage.removeItem('change_pwd_hint');
       localStorage.removeItem('legacy_pwd_hint');
       localStorage.removeItem('password_upgrade_required');
-      void axios.post('/api/auth/logout').catch(() => undefined);
+      void authApi.logout().catch(() => undefined);
       router.push('/auth/login');
     },
     has_token(): boolean {

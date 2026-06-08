@@ -44,7 +44,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { botApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
 
@@ -52,14 +52,12 @@ const FEISHU_DOMAIN = 'https://open.feishu.cn';
 
 const REGISTRATION_ACTIONS = {
   lark: {
-    endpoint: '/api/platform/registration/lark',
     icon: 'mdi-qrcode',
     titleKey: 'registrationAction.lark.title',
     scanTitleKey: 'registrationAction.lark.scanTitle',
     successKey: 'registrationAction.created',
   },
   weixin_oc: {
-    endpoint: '/api/platform/registration/weixin_oc',
     icon: 'mdi-qrcode',
     titleKey: 'registrationAction.weixinOc.title',
     scanTitleKey: 'registrationAction.weixinOc.scanTitle',
@@ -67,7 +65,6 @@ const REGISTRATION_ACTIONS = {
     statusKeyPrefix: 'registrationAction.weixinOc.status',
   },
   dingtalk: {
-    endpoint: '/api/platform/registration/dingtalk',
     icon: 'mdi-qrcode',
     titleKey: 'registrationAction.dingtalk.title',
     scanTitleKey: 'registrationAction.dingtalk.scanTitle',
@@ -164,7 +161,10 @@ export default {
       this.loading = true;
       this.flow = { status: 'starting' };
       try {
-        const res = await axios.post(this.action.endpoint, this.buildPayload('start'));
+        const res = await botApi.registration(
+          this.platformConfig.type,
+          this.buildPayload('start'),
+        );
         if (res.data.status !== 'ok') {
           throw new Error(res.data.message || this.tm('registrationAction.startFailed'));
         }
@@ -203,9 +203,12 @@ export default {
         return;
       }
       try {
-        const res = await axios.post(this.action.endpoint, this.buildPayload('poll', {
-          registration_code: this.flow.registration_code,
-        }));
+        const res = await botApi.registration(
+          this.platformConfig.type,
+          this.buildPayload('poll', {
+            registration_code: this.flow.registration_code,
+          }),
+        );
         if (res.data.status !== 'ok') {
           throw new Error(res.data.message || this.tm('registrationAction.pollFailed'));
         }

@@ -31,7 +31,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import axios from 'axios'
+import { personaApi } from '@/api/v1'
 import BaseFolderItemSelector from '@/components/folder/BaseFolderItemSelector.vue'
 import PersonaForm from './PersonaForm.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
@@ -132,7 +132,7 @@ function handleUpdate(value: string) {
 async function loadFolderTree() {
   treeLoading.value = true
   try {
-    const response = await axios.get('/api/persona/folder/tree')
+    const response = await personaApi.tree()
     if (response.data.status === 'ok') {
       folderTree.value = response.data.data || []
     }
@@ -148,15 +148,7 @@ async function loadFolderTree() {
 async function loadPersonasInFolder(folderId: string | null) {
   itemsLoading.value = true
   try {
-    // 使用 /api/persona/list 端点，通过 folder_id 参数筛选
-    const params = new URLSearchParams()
-    if (folderId !== null) {
-      params.set('folder_id', folderId)
-    } else {
-      // 根目录：folder_id 为空字符串表示获取根目录下的人格
-      params.set('folder_id', '')
-    }
-    const response = await axios.get(`/api/persona/list?${params.toString()}`)
+    const response = await personaApi.list(folderId)
     if (response.data.status === 'ok') {
       currentPersonas.value = response.data.data || []
     }

@@ -13,7 +13,7 @@
  * - components/DetailsDialog.vue: 详情对话框
  */
 import { computed, onActivated, onMounted, ref, watch} from 'vue';
-import axios from 'axios';
+import { toolApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import { normalizeTextInput } from '@/utils/inputValue';
 
@@ -109,10 +109,7 @@ const handleToggleTool = async (tool: ToolItem) => {
   const previous = tool.active;
   tool.active = !tool.active;
   try {
-    const res = await axios.post('/api/tools/toggle-tool', {
-      name: tool.name,
-      activate: tool.active
-    });
+    const res = await toolApi.setEnabled(tool.name, tool.active);
     if (res.data.status === 'ok') {
       toast(res.data.message || tmTool('messages.toggleToolSuccess'));
     } else {

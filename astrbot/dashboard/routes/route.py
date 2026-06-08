@@ -1,14 +1,13 @@
 from dataclasses import dataclass
 
-from quart import Quart
-
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.dashboard.fastapi_compat import FastAPIAppAdapter
 
 
 @dataclass
 class RouteContext:
     config: AstrBotConfig
-    app: Quart
+    app: FastAPIAppAdapter
 
 
 class Route:

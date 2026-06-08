@@ -2,6 +2,7 @@
 import axios from "axios";
 import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import { useRoute } from "vue-router";
+import { pluginApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -119,7 +120,7 @@ const normalizePluginEndpoint = (endpoint) => {
 
 const buildPluginApiPath = (endpoint) => {
   const normalized = normalizePluginEndpoint(endpoint);
-  return `/api/plug/${encodeURIComponent(pluginName.value)}/${normalized}`;
+  return `/api/v1/plugins/extensions/${encodeURIComponent(pluginName.value)}/${normalized}`;
 };
 
 const isBridgeUploadFile = (value) => {
@@ -381,11 +382,7 @@ const loadPluginPage = async () => {
   cleanupSSEConnections();
 
   try {
-    const detailResponse = await axios.get("/api/plugin/detail", {
-      params: {
-        name: pluginName.value,
-      },
-    });
+    const detailResponse = await pluginApi.get(pluginName.value);
     if (detailResponse.data?.status === "error") {
       throw new Error(
         detailResponse.data.message || tm("messages.pluginPageLoadFailed"),
@@ -403,12 +400,7 @@ const loadPluginPage = async () => {
       return;
     }
 
-    const entryResponse = await axios.get("/api/plugin/page/entry", {
-      params: {
-        name: pluginName.value,
-        page: pageName.value,
-      },
-    });
+    const entryResponse = await pluginApi.page(pluginName.value, pageName.value);
     if (entryResponse.data?.status === "error") {
       throw new Error(
         entryResponse.data.message || tm("messages.pluginPageLoadFailed"),

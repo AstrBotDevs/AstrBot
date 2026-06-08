@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue';
+import { changelogApi, statsApi } from '@/api/v1';
 import { useI18n } from '@/i18n/composables';
-import axios from 'axios';
 import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue';
 import 'markstream-vue/index.css';
 import 'katex/dist/katex.min.css';
@@ -36,7 +36,7 @@ const loadingVersions = ref(false);
 // 获取当前版本号（从版本信息中提取）
 async function getCurrentVersion() {
   try {
-    const res = await axios.get('/api/stat/version');
+    const res = await statsApi.version();
     const version = res.data.data?.version || '';
     changelogVersion.value = version;
     selectedVersion.value = version;
@@ -60,9 +60,7 @@ async function loadChangelog(version) {
   changelogContent.value = '';
 
   try {
-    const res = await axios.get('/api/stat/changelog', {
-      params: { version: targetVersion }
-    });
+    const res = await changelogApi.get(targetVersion);
     
     if (res.data.status === 'ok') {
       changelogContent.value = res.data.data.content;
@@ -86,7 +84,7 @@ async function loadChangelog(version) {
 async function loadAvailableVersions() {
   loadingVersions.value = true;
   try {
-    const res = await axios.get('/api/stat/changelog/list');
+    const res = await changelogApi.listVersions();
     if (res.data.status === 'ok') {
       availableVersions.value = res.data.data.versions || [];
     }

@@ -17,6 +17,7 @@ import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import AboutPage from "@/views/AboutPage.vue";
+import { authApi, statsApi, updatesApi } from "@/api/v1";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
 
 enableKatex();
@@ -47,7 +48,7 @@ let hasNewVersion = ref(false);
 let botCurrVersion = ref("");
 let dashboardHasNewVersion = ref(false);
 let dashboardCurrentVersion = ref("");
-let releases = ref([]);
+let releases = ref<any[]>([]);
 let releasesLoading = ref(false);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
@@ -350,24 +351,24 @@ function accountEdit() {
     ? confirmPassword.value
     : "";
 
-  axios
-    .post("/api/auth/account/edit", {
+  authApi
+    .updateAccount({
       password: currentPasswordValue,
       new_password: newPasswordValue,
       confirm_password: confirmPasswordValue,
-      new_username: newUsername.value ? newUsername.value : username,
+      new_username: newUsername.value || username || undefined,
     })
     .then((res) => {
       if (res.data.status == "error") {
         accountEditStatus.value.error = true;
-        accountEditStatus.value.message = res.data.message;
+        accountEditStatus.value.message = res.data.message || "";
         password.value = "";
         newPassword.value = "";
         confirmPassword.value = "";
         return;
       }
       accountEditStatus.value.success = true;
-      accountEditStatus.value.message = res.data.message;
+      accountEditStatus.value.message = res.data.message || "";
       setTimeout(() => {
         dialog.value = !dialog.value;
         const authStore = useAuthStore();
@@ -391,14 +392,14 @@ function accountEdit() {
 }
 
 function getVersion() {
-  axios
-    .get("/api/stat/version")
+  statsApi
+    .version()
     .then((res) => {
-      botCurrVersion.value = "v" + res.data.data.version;
-      dashboardCurrentVersion.value = res.data.data?.dashboard_version;
+      botCurrVersion.value = "v" + (res.data.data.version || "");
+      dashboardCurrentVersion.value = res.data.data?.dashboard_version || "";
       commonStore.setAstrBotVersion(
-        res.data.data.version,
-        res.data.data?.dashboard_version,
+        res.data.data.version || "",
+        res.data.data?.dashboard_version || undefined,
       );
       const change_pwd_hint = res.data.data?.change_pwd_hint;
       const legacy_pwd_hint = res.data.data?.legacy_pwd_hint;
@@ -457,16 +458,16 @@ function initPasswordWarningFromStorage() {
 
 function checkUpdate() {
   updateStatus.value = t("core.header.updateDialog.status.checking");
-  axios
-    .get("/api/update/check")
+  updatesApi
+    .check()
     .then((res) => {
       hasNewVersion.value = res.data.data.has_new_version;
 
       if (res.data.data.has_new_version) {
-        releaseMessage.value = res.data.message;
+        releaseMessage.value = res.data.message || "";
         updateStatus.value = t("core.header.version.hasNewVersion");
       } else {
-        updateStatus.value = res.data.message;
+        updateStatus.value = res.data.message || "";
       }
       dashboardHasNewVersion.value = isDesktopReleaseMode.value
         ? false
@@ -486,8 +487,8 @@ function checkUpdate() {
 
 function getReleases() {
   releasesLoading.value = true;
-  return axios
-    .get("/api/update/releases")
+  return updatesApi
+    .releases()
     .then((res) => {
       releases.value = res.data.data.map((item: any) => {
         item.published_at = new Date(item.published_at).toLocaleString();
@@ -563,8 +564,11 @@ function stopRestartPolling() {
 }
 
 async function fetchAstrBotStartTime() {
-  const res = await axios.get("/api/stat/start-time", { timeout: 3000 });
-  const startTime = res.data?.data?.start_time ?? null;
+  const res = await statsApi.startTime();
+  const rawStartTime = res.data?.data?.start_time;
+  const parsedStartTime =
+    typeof rawStartTime === "number" ? rawStartTime : Number(rawStartTime || 0);
+  const startTime = Number.isFinite(parsedStartTime) ? parsedStartTime : 0;
   commonStore.startTime = startTime;
   return startTime;
 }
@@ -626,8 +630,8 @@ function applyUpdateProgress(payload: UpdateProgress) {
 function startUpdateProgressPolling(progressId: string) {
   stopUpdateProgressPolling();
   const poll = () => {
-    axios
-      .get("/api/update/progress", { params: { id: progressId } })
+    updatesApi
+      .progress(progressId)
       .then((res) => {
         if (res.data?.data) {
           applyUpdateProgress(res.data.data);
@@ -665,19 +669,19 @@ async function switchVersion(targetVersion: string) {
   restartStartTime.value = initialStartTime;
   startUpdateProgressPolling(progressId);
 
-  axios
-    .post("/api/update/do", {
+  updatesApi
+    .core({
       version: targetVersion,
       proxy: getSelectedGitHubProxy(),
       progress_id: progressId,
     })
     .then((res) => {
-      updateStatus.value = res.data.message;
+      updateStatus.value = res.data.message || "";
       updateProgress.value = {
         ...updateProgress.value,
         status:
           res.data.status === "ok" ? "success" : updateProgress.value.status,
-        message: res.data.message,
+        message: res.data.message || "",
         overall_percent:
           res.data.status === "ok" ? 100 : updateProgress.value.overall_percent,
       };
@@ -706,10 +710,10 @@ async function switchVersion(targetVersion: string) {
 function updateDashboard() {
   updatingDashboardLoading.value = true;
   updateStatus.value = t("core.header.updateDialog.status.updating");
-  axios
-    .post("/api/update/dashboard")
+  updatesApi
+    .dashboard()
     .then((res) => {
-      updateStatus.value = res.data.message;
+      updateStatus.value = res.data.message || "";
       if (res.data.status == "ok") {
         setTimeout(() => {
           window.location.reload();
