@@ -233,8 +233,9 @@ async def test_retrieval_manager_memory_efficiency():
         )
 
         sparse_retriever = SparseRetriever(kb_db)
-        rank_fusion = RankFusion()
-        retrieval_mgr = RetrievalManager(kb_db, sparse_retriever, rank_fusion)
+        rank_fusion = RankFusion(kb_db)
+        # 注意参数顺序: sparse_retriever, rank_fusion, kb_db
+        retrieval_mgr = RetrievalManager(sparse_retriever, rank_fusion, kb_db)
 
         # 执行多次检索
         initial_memory = get_memory_usage_mb()

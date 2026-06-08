@@ -30,8 +30,9 @@ class TestFaissSaveIndexAsync:
 
     @pytest.mark.asyncio
     async def test_save_index_uses_to_thread(self):
-        """save_index offloads faiss.write_index to a thread."""
+        """save_index offloads faiss.write_index to a thread with atomic write."""
         import faiss  # noqa: F401 — ensure faiss is importable
+        import os
 
         storage = _make_storage()
 
@@ -41,11 +42,23 @@ class TestFaissSaveIndexAsync:
             mock_to_thread.return_value = None  # simulate completion
             await storage.save_index()
 
-        mock_to_thread.assert_awaited_once_with(
-            faiss.write_index,
-            storage.index,
-            storage.path,
-        )
+        # Atomic write uses two to_thread calls:
+        # 1. faiss.write_index to temp file
+        # 2. os.replace to atomically replace original
+        assert mock_to_thread.await_count == 2, "Expected 2 to_thread calls for atomic write"
+
+        # Verify first call writes to temp file
+        first_call = mock_to_thread.await_args_list[0]
+        assert first_call[0][0] == faiss.write_index
+        assert first_call[0][1] == storage.index
+        temp_path = first_call[0][2]
+        assert temp_path.startswith(storage.path + ".tmp.")
+
+        # Verify second call atomically replaces
+        second_call = mock_to_thread.await_args_list[1]
+        assert second_call[0][0] == os.replace
+        assert second_call[0][1] == temp_path
+        assert second_call[0][2] == storage.path
 
     @pytest.mark.asyncio
     async def test_save_index_skips_when_index_none(self):
