@@ -9,8 +9,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-import astrbot.core.message.components as Comp
 from anthropic.types import Message as AnthropicMessage
+from google.genai.types import GenerateContentResponse
+from openai.types.chat.chat_completion import ChatCompletion
+
+import astrbot.core.message.components as Comp
+from astrbot import logger
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
     ContentPart,
@@ -23,10 +27,6 @@ from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file, download_image_by_url
-from google.genai.types import GenerateContentResponse
-from openai.types.chat.chat_completion import ChatCompletion
-
-from astrbot import logger
 
 
 class ProviderType(enum.Enum):
