@@ -749,9 +749,12 @@ class RetrievalManager:
         results_per_kb = await asyncio.gather(*tasks, return_exceptions=True)
 
         all_results: list[Result] = []
-        for result in results_per_kb:
+        for i, result in enumerate(results_per_kb):
             if isinstance(result, Exception):
-                logger.error(f"稠密检索异常: {result}", exc_info=True)
+                # 单 KB 场景下应该向上抛出异常，而不是静默处理
+                if len(kb_ids) == 1 and isinstance(result, RuntimeError):
+                    raise result
+                logger.error(f"知识库 {kb_ids[i]} 稠密检索异常: {result}", exc_info=True)
                 continue
             all_results.extend(result)
 
