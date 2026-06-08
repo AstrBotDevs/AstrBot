@@ -453,7 +453,9 @@ class SkillsService:
         )
         return SkillArchive(path=zip_path, filename=f"{skill_name}.zip")
 
-    def prepare_skill_archive_from_legacy_query(self, name: str | None) -> SkillArchive:
+    def prepare_skill_archive_from_dashboard_query(
+        self, name: str | None
+    ) -> SkillArchive:
         return self.prepare_skill_archive(name or "")
 
     def list_skill_files(self, name: str, relative_path: str | None = "") -> dict:
@@ -493,7 +495,7 @@ class SkillsService:
             "entries": entries,
         }
 
-    def list_skill_files_from_legacy_query(
+    def list_skill_files_from_dashboard_query(
         self,
         *,
         name: str | None,
@@ -529,7 +531,7 @@ class SkillsService:
             "editable": not SkillManager().is_plugin_skill(skill_name),
         }
 
-    def get_skill_file_from_legacy_query(
+    def get_skill_file_from_dashboard_query(
         self,
         *,
         name: str | None,
@@ -618,7 +620,7 @@ class SkillsService:
 
         return await self.with_neo_client(_do)
 
-    async def get_neo_candidates_from_legacy_query(
+    async def get_neo_candidates_from_dashboard_query(
         self,
         *,
         status: str | None,
@@ -627,7 +629,7 @@ class SkillsService:
         offset: str | None,
     ) -> SkillsOperationResult:
         return await self.get_neo_candidates(
-            self._legacy_query(
+            self._dashboard_query(
                 status=status,
                 skill_key=skill_key,
                 limit=limit,
@@ -658,7 +660,7 @@ class SkillsService:
 
         return await self.with_neo_client(_do)
 
-    async def get_neo_releases_from_legacy_query(
+    async def get_neo_releases_from_dashboard_query(
         self,
         *,
         skill_key: str | None,
@@ -668,7 +670,7 @@ class SkillsService:
         offset: str | None,
     ) -> SkillsOperationResult:
         return await self.get_neo_releases(
-            self._legacy_query(
+            self._dashboard_query(
                 skill_key=skill_key,
                 stage=stage,
                 active_only=active_only,
@@ -690,11 +692,13 @@ class SkillsService:
 
         return await self.with_neo_client(_do)
 
-    async def get_neo_payload_from_legacy_query(
+    async def get_neo_payload_from_dashboard_query(
         self,
         payload_ref: str | None,
     ) -> SkillsOperationResult:
-        return await self.get_neo_payload(self._legacy_query(payload_ref=payload_ref))
+        return await self.get_neo_payload(
+            self._dashboard_query(payload_ref=payload_ref)
+        )
 
     async def evaluate_neo_candidate(
         self,
@@ -869,7 +873,7 @@ class SkillsService:
         return await self.with_neo_client(_do)
 
     @staticmethod
-    def _legacy_query(**values: Any) -> dict[str, Any]:
+    def _dashboard_query(**values: Any) -> dict[str, Any]:
         return {
             key: value
             for key, value in values.items()

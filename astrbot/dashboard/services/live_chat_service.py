@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import jwt
+from starlette.websockets import WebSocketDisconnect
 
 from astrbot import logger
 from astrbot.core import sp
@@ -126,7 +127,7 @@ class LiveChatService:
         self.platform_history_mgr = core_lifecycle.platform_message_history_manager
         self.sessions: dict[str, LiveChatSession] = {}
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
-        self.legacy_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
+        self.webchat_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         os.makedirs(self.attachments_dir, exist_ok=True)
 
     def authenticate_token(
@@ -192,6 +193,10 @@ class LiveChatService:
                         send_json,
                     )
 
+        except WebSocketDisconnect as exc:
+            logger.debug(
+                f"[Live Chat] WebSocket disconnected: {username}, code={exc.code}"
+            )
         except Exception as exc:
             logger.error(f"[Live Chat] WebSocket 错误: {exc}", exc_info=True)
 
@@ -207,7 +212,7 @@ class LiveChatService:
             attach_type=attach_type,
             insert_attachment=self.db.insert_attachment,
             attachments_dir=self.attachments_dir,
-            fallback_dirs=[self.legacy_img_dir],
+            fallback_dirs=[self.webchat_img_dir],
         )
 
     @staticmethod

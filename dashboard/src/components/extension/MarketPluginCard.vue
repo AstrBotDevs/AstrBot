@@ -88,13 +88,13 @@ const handleOpen = () => {
             {{ tm("market.recommended") }}
           </v-chip>
           <v-chip
-            v-if="plugin?.astrbot_compatible === false"
+            v-if="plugin?.astrbot_version_supported === false"
             color="error"
             size="x-small"
             label
-            class="market-incompatible-chip"
+            class="market-unsupported-chip"
           >
-            {{ tm("status.incompatible") }}
+            {{ tm("status.unsupported") }}
           </v-chip>
         </div>
 
@@ -273,7 +273,7 @@ const handleOpen = () => {
   height: 20px;
 }
 
-.market-incompatible-chip {
+.market-unsupported-chip {
   flex-shrink: 0;
   font-weight: 700;
   height: 20px;

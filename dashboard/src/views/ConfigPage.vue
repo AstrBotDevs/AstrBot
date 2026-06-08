@@ -452,15 +452,12 @@ export default {
     // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
     handleLocaleChange() {
       // 重新加载当前配置
-      if (this.selectedConfigID) {
-        this.getConfig(this.selectedConfigID);
-      } else if (this.isSystemConfig) {
+      if (this.isSystemConfig) {
         this.getConfig();
+      } else if (this.selectedConfigID) {
+        this.getConfig(this.selectedConfigID);
       }
     },
-
-  },
-  methods: {
     onConfigSearchInput(value) {
       this.configSearchKeyword = normalizeTextInput(value);
     },

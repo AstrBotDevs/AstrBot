@@ -242,19 +242,6 @@ class SessionManagementService:
             "available_rule_keys": AVAILABLE_SESSION_RULE_KEYS,
         }
 
-    async def list_session_rules_from_legacy_query(
-        self,
-        *,
-        page,
-        page_size,
-        search,
-    ) -> dict:
-        return await self.list_session_rules(
-            page=self._to_int(page, 1),
-            page_size=self._to_int(page_size, 10),
-            search=str(search or "").strip(),
-        )
-
     async def update_session_rule(self, data: object) -> dict:
         payload = self._payload(data)
         umo = payload.get("umo")
@@ -447,23 +434,6 @@ class SessionManagementService:
                 getattr(provider_manager, "stt_provider_insts", [])
             ),
         }
-
-    async def list_all_umos_with_status_from_legacy_query(
-        self,
-        *,
-        page,
-        page_size,
-        search,
-        message_type,
-        platform,
-    ) -> dict:
-        return await self.list_all_umos_with_status(
-            page=self._to_int(page, 1),
-            page_size=self._to_int(page_size, 20),
-            search=str(search or "").strip(),
-            message_type=str(message_type or "all"),
-            platform=str(platform or ""),
-        )
 
     async def batch_update_service(self, data: object) -> dict:
         payload = self._payload(data)
@@ -695,13 +665,6 @@ class SessionManagementService:
         if page_size > 100:
             page_size = 100
         return page, page_size
-
-    @staticmethod
-    def _to_int(value, default: int) -> int:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
 
     @staticmethod
     def _serialize_provider_insts(provider_insts: list) -> list[dict]:

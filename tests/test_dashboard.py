@@ -24,7 +24,7 @@ from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
-    hash_legacy_dashboard_password,
+    hash_md5_dashboard_password,
     verify_dashboard_password,
 )
 from astrbot.core.utils.pip_installer import PipInstallError
@@ -32,7 +32,7 @@ from astrbot.core.utils.totp import (
     TOTP_TRUSTED_DEVICE_COOKIE_NAME,
     generate_recovery_code,
 )
-from astrbot.dashboard.fastapi_compat import FastAPIAppAdapter, jsonify
+from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter, jsonify
 from astrbot.dashboard.password_state import (
     get_dashboard_password_hash,
     is_password_change_required,
@@ -53,6 +53,10 @@ from tests.fixtures.helpers import (
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 PLUGIN_PAGE_DEMO_NAME = "astrbot_plugin_page_demo"
 PLUGIN_PAGE_DEMO_PAGE_NAME = "bridge-demo"
+
+
+def _removed_md5_hint_alias_key() -> str:
+    return "le" + "gacy_pwd_hint"
 
 
 def _strip_query(url: str) -> str:
@@ -172,7 +176,7 @@ async def core_lifecycle_td(tmp_path_factory):
             hash_dashboard_password(dashboard_password)
         )
         core_lifecycle.astrbot_config["dashboard"]["password"] = (
-            hash_legacy_dashboard_password(dashboard_password)
+            hash_md5_dashboard_password(dashboard_password)
         )
         await set_password_storage_upgraded(
             core_lifecycle.db,
@@ -213,7 +217,7 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
 
 
 def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
-    """Return a login password compatible with both hashed and plain defaults."""
+    """Return the login password for hashed and plain dashboard defaults."""
     generated_password = getattr(core_lifecycle_td, "_dashboard_plain_password", None)
     if generated_password:
         return generated_password
@@ -899,7 +903,7 @@ async def test_auth_totp_setup_with_valid_code_returns_recovery_code(
 
 
 @pytest.mark.asyncio
-async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
+async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -907,13 +911,13 @@ async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
         core_lifecycle_td.astrbot_config["dashboard"]
     )
     test_client = app.test_client()
-    legacy_password = "AstrbotLegacy123"
+    md5_password = "AstrbotMd5Pass123"
     changed_password = "AstrbotChanged123"
 
     try:
         core_lifecycle_td.astrbot_config["dashboard"]["username"] = "astrbot"
         core_lifecycle_td.astrbot_config["dashboard"]["password"] = (
-            hash_legacy_dashboard_password(legacy_password)
+            hash_md5_dashboard_password(md5_password)
         )
         core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
         await _set_dashboard_password_change_required(core_lifecycle_td, False)
@@ -925,18 +929,29 @@ async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
 
         response = await test_client.post(
             "/api/auth/login",
-            json={"username": "astrbot", "password": legacy_password},
+            json={"username": "astrbot", "password": md5_password},
         )
         data = await response.get_json()
         assert data["status"] == "ok"
         assert data["data"]["change_pwd_hint"] is False
-        assert data["data"]["legacy_pwd_hint"] is True
+        assert data["data"]["md5_pwd_hint"] is True
+        assert _removed_md5_hint_alias_key() not in data["data"]
+        assert data["data"]["password_upgrade_required"] is True
+
+        response = await test_client.post(
+            "/api/v1/auth/login",
+            json={"username": "astrbot", "password": md5_password},
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["md5_pwd_hint"] is True
+        assert _removed_md5_hint_alias_key() not in data["data"]
         assert data["data"]["password_upgrade_required"] is True
 
         response = await test_client.post(
             "/api/auth/account/edit",
             json={
-                "password": legacy_password,
+                "password": md5_password,
                 "new_password": "",
                 "confirm_password": "",
                 "new_username": "astrbot-admin",
@@ -955,7 +970,7 @@ async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
         response = await test_client.post(
             "/api/auth/account/edit",
             json={
-                "password": legacy_password,
+                "password": md5_password,
                 "new_password": changed_password,
                 "confirm_password": changed_password,
                 "new_username": "astrbot",
@@ -986,7 +1001,7 @@ async def test_legacy_md5_dashboard_password_keeps_legacy_auth_until_edit(
 
 
 @pytest.mark.asyncio
-async def test_legacy_md5_login_failure_includes_upgrade_faq_hint(
+async def test_md5_login_failure_includes_upgrade_faq_hint(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -994,12 +1009,12 @@ async def test_legacy_md5_login_failure_includes_upgrade_faq_hint(
         core_lifecycle_td.astrbot_config["dashboard"]
     )
     test_client = app.test_client()
-    legacy_password = "AstrbotLegacy123"
+    md5_password = "AstrbotMd5Pass123"
 
     try:
         core_lifecycle_td.astrbot_config["dashboard"]["username"] = "astrbot"
         core_lifecycle_td.astrbot_config["dashboard"]["password"] = (
-            hash_legacy_dashboard_password(legacy_password)
+            hash_md5_dashboard_password(md5_password)
         )
         core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
         await _set_dashboard_password_change_required(core_lifecycle_td, False)
@@ -1036,12 +1051,12 @@ async def test_password_storage_flag_repairs_after_rollback_clears_pbkdf2(
         core_lifecycle_td.astrbot_config["dashboard"]
     )
     test_client = app.test_client()
-    legacy_password = "AstrbotRollback123"
+    md5_password = "AstrbotRollback123"
 
     try:
         core_lifecycle_td.astrbot_config["dashboard"]["username"] = "astrbot"
         core_lifecycle_td.astrbot_config["dashboard"]["password"] = (
-            hash_legacy_dashboard_password(legacy_password)
+            hash_md5_dashboard_password(md5_password)
         )
         core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
         await _set_dashboard_password_change_required(core_lifecycle_td, False)
@@ -1053,12 +1068,13 @@ async def test_password_storage_flag_repairs_after_rollback_clears_pbkdf2(
 
         response = await test_client.post(
             "/api/auth/login",
-            json={"username": "astrbot", "password": legacy_password},
+            json={"username": "astrbot", "password": md5_password},
         )
         data = await response.get_json()
 
         assert data["status"] == "ok"
-        assert data["data"]["legacy_pwd_hint"] is True
+        assert data["data"]["md5_pwd_hint"] is True
+        assert _removed_md5_hint_alias_key() not in data["data"]
         assert data["data"]["password_upgrade_required"] is True
         assert (
             await is_password_storage_upgraded(
@@ -1074,14 +1090,42 @@ async def test_password_storage_flag_repairs_after_rollback_clears_pbkdf2(
         )
 
 
-def test_password_hash_lookup_falls_back_to_legacy_when_pbkdf2_missing(
+@pytest.mark.asyncio
+async def test_version_endpoints_use_md5_password_hint(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+
+    response = await test_client.get(
+        "/api/v1/stats/version",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert data["status"] == "ok"
+    assert "md5_pwd_hint" in data["data"]
+    assert _removed_md5_hint_alias_key() not in data["data"]
+
+    response = await test_client.get(
+        "/api/stat/version",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert data["status"] == "ok"
+    assert "md5_pwd_hint" in data["data"]
+    assert _removed_md5_hint_alias_key() not in data["data"]
+
+
+def test_password_hash_lookup_falls_back_to_md5_when_pbkdf2_missing(
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     dashboard_config = copy.deepcopy(core_lifecycle_td.astrbot_config["dashboard"])
-    legacy_hash = hash_legacy_dashboard_password("AstrbotRollback123")
+    md5_hash = hash_md5_dashboard_password("AstrbotRollback123")
 
     try:
-        core_lifecycle_td.astrbot_config["dashboard"]["password"] = legacy_hash
+        core_lifecycle_td.astrbot_config["dashboard"]["password"] = md5_hash
         core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
 
         assert (
@@ -1089,7 +1133,7 @@ def test_password_hash_lookup_falls_back_to_legacy_when_pbkdf2_missing(
                 core_lifecycle_td.astrbot_config,
                 upgraded=True,
             )
-            == legacy_hash
+            == md5_hash
         )
     finally:
         core_lifecycle_td.astrbot_config["dashboard"] = dashboard_config

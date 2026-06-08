@@ -25,14 +25,6 @@ class PersonaService:
             personas = await self.persona_mgr.get_all_personas()
         return [self.serialize_persona(persona) for persona in personas]
 
-    async def list_personas_from_legacy_query(
-        self,
-        *,
-        folder_id: str | None,
-        has_folder_id: bool,
-    ) -> list[dict]:
-        return await self.list_personas(folder_id, has_folder_id)
-
     async def get_persona_detail(self, data: object) -> dict:
         payload = self._payload(data)
         persona_id = payload.get("persona_id")
@@ -142,16 +134,10 @@ class PersonaService:
         return {"message": "人格移动成功"}
 
     async def list_folders(self, parent_id: str | None) -> list[dict]:
-        folders = await self.persona_mgr.get_folders(parent_id)
-        return [self.serialize_folder(folder) for folder in folders]
-
-    async def list_folders_from_legacy_query(
-        self,
-        parent_id: str | None,
-    ) -> list[dict]:
         if parent_id == "":
             parent_id = None
-        return await self.list_folders(parent_id)
+        folders = await self.persona_mgr.get_folders(parent_id)
+        return [self.serialize_folder(folder) for folder in folders]
 
     async def get_folder_tree(self):
         return await self.persona_mgr.get_folder_tree()

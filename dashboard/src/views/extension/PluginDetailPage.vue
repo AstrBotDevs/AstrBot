@@ -335,7 +335,7 @@ const componentGroupIcons = {
   hook: "mdi-hook",
 };
 
-const getLegacyHandlerGroupKey = (handler) => {
+const getFallbackHandlerGroupKey = (handler) => {
   const type = String(handler?.type || "").trim();
   const eventType = String(handler?.event_type || "").trim();
   const eventTypeH = String(handler?.event_type_h || "").trim();
@@ -357,7 +357,7 @@ const getComponentGroupKey = (component) => {
     component?.type || component?.component_type || "",
   ).trim();
   if (componentGroupOrder.includes(type)) return type;
-  return getLegacyHandlerGroupKey(component);
+  return getFallbackHandlerGroupKey(component);
 };
 
 const normalizeComponent = (component, fallbackType = "") => {
@@ -395,7 +395,7 @@ const normalizeComponentList = (source) => {
 
   return normalizeHandlerList(source).map((handler) => ({
     ...handler,
-    type: getLegacyHandlerGroupKey(handler),
+    type: getFallbackHandlerGroupKey(handler),
   }));
 };
 

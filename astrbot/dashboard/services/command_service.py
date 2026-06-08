@@ -38,9 +38,6 @@ class CommandService:
             "wake_prefix": wake_prefix,
         }
 
-    async def list_commands_from_legacy_query(self, config_id: str | None) -> dict:
-        return await self.list_commands(config_id or "")
-
     async def list_conflicts(self):
         return await list_command_conflicts()
 
@@ -58,13 +55,6 @@ class CommandService:
 
         return await self._get_command_payload(handler_full_name)
 
-    async def toggle_command_from_legacy_payload(self, data: object) -> dict:
-        payload = self._payload(data)
-        return await self.toggle_command(
-            payload.get("handler_full_name"),
-            payload.get("enabled"),
-        )
-
     async def rename_command(
         self,
         handler_full_name: str | None,
@@ -81,14 +71,6 @@ class CommandService:
 
         return await self._get_command_payload(handler_full_name)
 
-    async def rename_command_from_legacy_payload(self, data: object) -> dict:
-        payload = self._payload(data)
-        return await self.rename_command(
-            payload.get("handler_full_name"),
-            payload.get("new_name"),
-            aliases=payload.get("aliases"),
-        )
-
     async def update_permission(
         self,
         handler_full_name: str | None,
@@ -103,13 +85,6 @@ class CommandService:
             raise CommandServiceError(str(exc)) from exc
 
         return await self._get_command_payload(handler_full_name)
-
-    async def update_permission_from_legacy_payload(self, data: object) -> dict:
-        payload = self._payload(data)
-        return await self.update_permission(
-            payload.get("handler_full_name"),
-            payload.get("permission"),
-        )
 
     def _get_wake_prefix(self, config_id: str) -> list:
         wake_prefix = self.config.get("wake_prefix", ["/"])
@@ -127,7 +102,3 @@ class CommandService:
             if cmd["handler_full_name"] == handler_full_name:
                 return cmd
         return {}
-
-    @staticmethod
-    def _payload(data: object) -> dict:
-        return data if isinstance(data, dict) else {}

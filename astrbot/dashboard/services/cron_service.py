@@ -51,12 +51,6 @@ class CronService:
             logger.error(traceback.format_exc())
             raise CronServiceError(f"Failed to list jobs: {exc!s}") from exc
 
-    async def list_jobs_from_legacy_query(
-        self,
-        job_type: str | None,
-    ) -> list[dict]:
-        return await self.list_jobs(job_type)
-
     async def create_job(self, payload: object) -> dict:
         try:
             cron_mgr = self._get_cron_manager()

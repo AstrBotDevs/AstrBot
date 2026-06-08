@@ -12,17 +12,14 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
-    hash_legacy_dashboard_password,
+    hash_md5_dashboard_password,
 )
-from astrbot.dashboard.fastapi_compat import FastAPIAppAdapter
+from astrbot.dashboard.api import open_api as open_api_routes
+from astrbot.dashboard.api.responses import ok
+from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter
 from astrbot.dashboard.server import AstrBotDashboard
-from astrbot.dashboard.v1.responses import ok
 
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
-
-
-def _get_open_api_route(app: FastAPIAppAdapter):
-    return app._dashboard_server.open_api_route
 
 
 async def _create_api_key(
@@ -62,7 +59,7 @@ async def core_lifecycle_td(tmp_path_factory):
             hash_dashboard_password(dashboard_password)
         )
         core_lifecycle.astrbot_config["dashboard"]["password"] = (
-            hash_legacy_dashboard_password(dashboard_password)
+            hash_md5_dashboard_password(dashboard_password)
         )
     object.__setattr__(
         core_lifecycle,
@@ -211,11 +208,8 @@ async def test_open_chat_send_auto_session_id_and_username(
         scopes=["chat"],
         name_prefix="chat-send-key",
     )
-    open_api_route = _get_open_api_route(app)
 
-    original_chat = open_api_route._chat_response
-
-    async def fake_chat_response(username: str, post_data: dict):
+    async def fake_chat_response(_chat_service, username: str, post_data: dict):
         return ok(
             {
                 "session_id": post_data.get("session_id"),
@@ -223,7 +217,12 @@ async def test_open_chat_send_auto_session_id_and_username(
             }
         )
 
-    open_api_route._chat_response = fake_chat_response
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        open_api_routes,
+        "_build_streaming_chat_response",
+        fake_chat_response,
+    )
     try:
         send_res = await test_client.post(
             "/api/v1/chat",
@@ -235,7 +234,7 @@ async def test_open_chat_send_auto_session_id_and_username(
             headers={"X-API-Key": raw_key},
         )
     finally:
-        open_api_route._chat_response = original_chat
+        monkeypatch.undo()
 
     assert send_res.status_code == 200
     send_data = await send_res.get_json()
@@ -436,15 +435,18 @@ async def test_open_chat_send_conversation_alias_and_blank_username(
         scopes=["chat"],
         name_prefix="chat-conversation-key",
     )
-    open_api_route = _get_open_api_route(app)
 
-    async def fake_chat_response(_username: str, post_data: dict):
+    async def fake_chat_response(_chat_service, _username: str, post_data: dict):
         resolved_session_id = post_data.get("session_id") or post_data.get(
             "conversation_id"
         )
         return ok({"session_id": resolved_session_id})
 
-    monkeypatch.setattr(open_api_route, "_chat_response", fake_chat_response)
+    monkeypatch.setattr(
+        open_api_routes,
+        "_build_streaming_chat_response",
+        fake_chat_response,
+    )
 
     conversation_id = f"open_api_conversation_{uuid.uuid4().hex[:10]}"
     send_res = await test_client.post(
@@ -496,8 +498,6 @@ async def test_open_chat_send_config_resolution(
         scopes=["chat"],
         name_prefix="chat-config-resolution-key",
     )
-    open_api_route = _get_open_api_route(app)
-
     conf_list = [
         {
             "id": "default",
@@ -509,22 +509,26 @@ async def test_open_chat_send_config_resolution(
         {"id": "cfg-1", "name": "Duplicated", "path": "a.json", "is_default": False},
         {"id": "cfg-2", "name": "Duplicated", "path": "b.json", "is_default": False},
     ]
-    monkeypatch.setattr(open_api_route, "_get_chat_config_list", lambda: conf_list)
+    monkeypatch.setattr(
+        open_api_routes,
+        "_get_chat_config_list",
+        lambda _service: conf_list,
+    )
 
     update_route = AsyncMock()
     delete_route = AsyncMock()
     monkeypatch.setattr(
-        open_api_route.core_lifecycle.umop_config_router,
+        app._dashboard_server.core_lifecycle.umop_config_router,
         "update_route",
         update_route,
     )
     monkeypatch.setattr(
-        open_api_route.core_lifecycle.umop_config_router,
+        app._dashboard_server.core_lifecycle.umop_config_router,
         "delete_route",
         delete_route,
     )
 
-    async def fake_chat_response(username: str, post_data: dict):
+    async def fake_chat_response(_chat_service, username: str, post_data: dict):
         return ok(
             {
                 "session_id": post_data.get("session_id"),
@@ -532,7 +536,11 @@ async def test_open_chat_send_config_resolution(
             }
         )
 
-    monkeypatch.setattr(open_api_route, "_chat_response", fake_chat_response)
+    monkeypatch.setattr(
+        open_api_routes,
+        "_build_streaming_chat_response",
+        fake_chat_response,
+    )
 
     invalid_config_id_res = await test_client.post(
         "/api/v1/chat",

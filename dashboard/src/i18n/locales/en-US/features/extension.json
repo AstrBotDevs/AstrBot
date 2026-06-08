@@ -67,7 +67,7 @@
     "loading": "Loading...",
     "installed": "Installed",
     "unknown": "Unknown",
-    "incompatible": "Incompatible"
+    "unsupported": "Unsupported"
   },
   "tooltips": {
     "enable": "Click to Enable",
@@ -229,8 +229,8 @@
       "confirm": "Continue",
       "cancel": "Cancel"
     },
-    "versionCompatibility": {
-      "title": "Version Compatibility Warning",
+    "versionSupport": {
+      "title": "Version Support Warning",
       "message": "This plugin declares an AstrBot version range that does not match your current version. You can ignore this warning and continue installation, but it may not work correctly.",
       "confirm": "Ignore Warning and Install",
       "cancel": "Cancel Installation"

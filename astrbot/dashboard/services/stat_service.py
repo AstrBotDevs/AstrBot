@@ -24,7 +24,7 @@ from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
-    is_legacy_dashboard_password,
+    is_md5_dashboard_password,
 )
 from astrbot.core.utils.io import get_dashboard_version
 from astrbot.core.utils.storage_cleaner import StorageCleaner
@@ -97,11 +97,12 @@ class StatService:
             upgraded=storage_upgraded,
         )
 
+        md5_pwd_hint = is_md5_dashboard_password(password)
         return {
             "version": VERSION,
             "dashboard_version": await get_dashboard_version(),
             "change_pwd_hint": await self.is_default_cred(),
-            "legacy_pwd_hint": is_legacy_dashboard_password(password),
+            "md5_pwd_hint": md5_pwd_hint,
             "password_upgrade_required": not storage_upgraded,
             "need_migration": need_migration,
         }
@@ -126,12 +127,6 @@ class StatService:
         except Exception as exc:
             logger.error("清理存储失败", exc_info=True)
             raise StatServiceError("清理存储失败，请查看后端日志了解详情。") from exc
-
-    async def cleanup_storage_from_legacy_payload(self, payload: object) -> dict:
-        target = "all"
-        if isinstance(payload, dict):
-            target = str(payload.get("target", "all"))
-        return await self.cleanup_storage(target)
 
     async def get_stat(self, offset_sec: int) -> dict:
         try:
@@ -196,13 +191,6 @@ class StatService:
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise StatServiceError(str(exc)) from exc
-
-    async def get_stat_from_legacy_query(self, offset_sec_raw) -> dict:
-        try:
-            offset_sec = int(offset_sec_raw if offset_sec_raw is not None else 86400)
-        except (TypeError, ValueError) as exc:
-            raise StatServiceError("offset_sec must be an integer") from exc
-        return await self.get_stat(offset_sec)
 
     @staticmethod
     def _ensure_aware_utc(value: datetime) -> datetime:
@@ -395,13 +383,6 @@ class StatService:
             logger.error(traceback.format_exc())
             raise StatServiceError(f"Error: {exc!s}") from exc
 
-    async def get_provider_token_stats_from_legacy_query(self, days_raw) -> dict:
-        try:
-            days = int(days_raw if days_raw is not None else 1)
-        except (TypeError, ValueError):
-            days = 1
-        return await self.get_provider_token_stats(days)
-
     async def test_ghproxy_connection(self, proxy_url: str | None) -> dict:
         try:
             if not proxy_url:
@@ -430,13 +411,6 @@ class StatService:
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise StatServiceError(f"Error: {exc!s}") from exc
-
-    async def test_ghproxy_connection_from_legacy_payload(
-        self,
-        payload: object,
-    ) -> dict:
-        proxy_url = payload.get("proxy_url") if isinstance(payload, dict) else None
-        return await self.test_ghproxy_connection(proxy_url)
 
     def get_changelog(self, version: str | None) -> dict:
         try:

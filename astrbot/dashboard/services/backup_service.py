@@ -268,12 +268,6 @@ class BackupService:
             "page_size": page_size,
         }
 
-    def list_backups_from_legacy_query(self, *, page, page_size) -> dict:
-        return self.list_backups(
-            page=self._to_int(page, 1),
-            page_size=self._to_int(page_size, 20),
-        )
-
     def export_backup(self) -> dict:
         task_id = str(uuid.uuid4())
         self._init_task(task_id, "export", "pending")
@@ -589,9 +583,6 @@ class BackupService:
 
         return response_data
 
-    def get_progress_from_legacy_query(self, task_id: str | None) -> dict:
-        return self.get_progress(task_id)
-
     def prepare_download(
         self,
         *,
@@ -627,19 +618,6 @@ class BackupService:
         if not os.path.exists(file_path):
             raise BackupServiceError("备份文件不存在")
         return BackupDownload(path=file_path, filename=filename)
-
-    def prepare_download_from_legacy_query(
-        self,
-        *,
-        filename: str | None,
-        token: str | None,
-        jwt_secret: str | None = None,
-    ) -> BackupDownload:
-        return self.prepare_download(
-            filename=filename,
-            token=token,
-            jwt_secret=jwt_secret or self.config.get("dashboard", {}).get("jwt_secret"),
-        )
 
     def delete_backup(self, data: object) -> tuple[dict | None, str | None]:
         payload = self._payload(data)
@@ -685,10 +663,3 @@ class BackupService:
             "old_filename": filename,
             "new_filename": new_filename,
         }
-
-    @staticmethod
-    def _to_int(value, default: int) -> int:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default

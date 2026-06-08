@@ -2183,18 +2183,18 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /plugins/compatibility/check:
+  /plugins/version-support/check:
     post:
       tags: [Plugins]
-      summary: Check whether a plugin version constraint is compatible
-      operationId: checkPluginCompatibility
+      summary: Check whether a plugin version constraint is supported
+      operationId: checkPluginVersionSupport
       x-astrbot-scope: plugin
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PluginCompatibilityCheckRequest"
+              $ref: "#/components/schemas/PluginVersionSupportRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5398,7 +5398,7 @@ components:
           default: false
       additionalProperties: true
 
-    PluginCompatibilityCheckRequest:
+    PluginVersionSupportRequest:
       type: object
       properties:
         astrbot_version:
@@ -5414,8 +5414,13 @@ components:
           description: GitHub URL or owner/repository slug.
         ref:
           type: string
+        download_url:
+          type: string
+          description: Optional downloadable ZIP URL to use instead of GitHub archive resolution.
         proxy:
           type: string
+        ignore_version_check:
+          type: boolean
       additionalProperties: false
 
     PluginUrlInstallRequest:
@@ -5425,8 +5430,14 @@ components:
         url:
           type: string
           format: uri
+        download_url:
+          type: string
+          format: uri
+          description: Optional downloadable ZIP URL when url is the plugin source page or repository.
         proxy:
           type: string
+        ignore_version_check:
+          type: boolean
       additionalProperties: false
 
     PluginUploadInstallRequest:

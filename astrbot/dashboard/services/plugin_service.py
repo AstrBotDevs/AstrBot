@@ -27,7 +27,7 @@ from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from astrbot.core.star.star_manager import (
     PluginManager,
-    PluginVersionIncompatibleError,
+    PluginVersionUnsupportedError,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 
@@ -102,14 +102,14 @@ class PluginService:
         except Exception:
             logger.warning("Failed to sync plugin-provided skills to active sandboxes.")
 
-    async def check_plugin_compatibility(self, data: object) -> dict:
+    async def check_plugin_version_support(self, data: object) -> dict:
         payload = self._payload(data)
         version_spec = payload.get("astrbot_version", "")
         is_valid, message = self.plugin_manager._validate_astrbot_version_specifier(
             version_spec
         )
         return {
-            "compatible": is_valid,
+            "supported": is_valid,
             "message": message,
             "astrbot_version": version_spec,
         }
@@ -171,9 +171,9 @@ class PluginService:
                     "pages": [page.name for page in pages],
                 }
             )
-        return payload, self.plugin_manager.failed_plugin_info
+        return payload, getattr(self.plugin_manager, "failed_plugin_info", None)
 
-    async def list_plugins_from_legacy_query(
+    async def list_plugins_from_dashboard_query(
         self,
         *,
         plugin_name: str | None,
@@ -218,7 +218,7 @@ class PluginService:
 
         raise PluginServiceError("插件不存在")
 
-    async def get_plugin_detail_from_legacy_query(
+    async def get_plugin_detail_from_dashboard_query(
         self,
         *,
         plugin_name: str | None,
@@ -690,7 +690,7 @@ class PluginService:
 
         raise PluginServiceError("获取插件列表失败，且没有可用的缓存数据")
 
-    async def get_online_plugins_from_legacy_query(
+    async def get_online_plugins_from_dashboard_query(
         self,
         *,
         custom_registry: str | None,
@@ -836,11 +836,11 @@ class PluginService:
             await self.sync_skills_after_plugin_change()
             logger.info(f"安装插件 {repo_url} 成功。")
             return plugin_info, "安装成功。"
-        except PluginVersionIncompatibleError as exc:
+        except PluginVersionUnsupportedError as exc:
             raise PluginServiceWarning(
                 str(exc),
                 {
-                    "warning_type": "astrbot_version_incompatible",
+                    "warning_type": "astrbot_version_unsupported",
                     "can_ignore": True,
                 },
             ) from exc
@@ -866,16 +866,16 @@ class PluginService:
             await self.sync_skills_after_plugin_change()
             logger.info(f"安装插件 {upload_file.filename} 成功")
             return plugin_info, "安装成功。"
-        except PluginVersionIncompatibleError as exc:
+        except PluginVersionUnsupportedError as exc:
             raise PluginServiceWarning(
                 str(exc),
                 {
-                    "warning_type": "astrbot_version_incompatible",
+                    "warning_type": "astrbot_version_unsupported",
                     "can_ignore": True,
                 },
             ) from exc
 
-    async def install_plugin_upload_from_legacy_form(
+    async def install_plugin_upload_from_dashboard_form(
         self,
         *,
         upload_file,
@@ -1055,7 +1055,7 @@ class PluginService:
         except Exception as exc:
             raise PluginServiceError(f"读取README文件失败: {exc!s}") from exc
 
-    def get_plugin_readme_from_legacy_query(
+    def get_plugin_readme_from_dashboard_query(
         self,
         plugin_name: str | None,
     ) -> tuple[dict, str]:
@@ -1084,7 +1084,7 @@ class PluginService:
         logger.warning(f"插件 {plugin_name} 没有更新日志文件")
         return {"content": None}, "该插件没有更新日志文件"
 
-    def get_plugin_changelog_from_legacy_query(
+    def get_plugin_changelog_from_dashboard_query(
         self,
         plugin_name: str | None,
     ) -> tuple[dict, str]:

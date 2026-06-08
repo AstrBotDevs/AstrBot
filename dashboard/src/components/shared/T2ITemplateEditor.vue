@@ -363,16 +363,16 @@ const previewContent = computed(() => {
     let content = normalizeMarkdownSource(templateContent.value)
     content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, () => previewData.value.text)
     content = content.replace(/\{\{\s*version\s*\}\}/g, () => previewData.value.version)
-    let usedLegacyShikiPlaceholder = false
+    let usedExistingShikiPlaceholder = false
     content = content.replace(/<script\b[^>]*>\s*\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}\s*<\/script>/gi, () => {
-      usedLegacyShikiPlaceholder = true
+      usedExistingShikiPlaceholder = true
       return getShikiRuntimeScript()
     })
     content = content.replace(/\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}/g, () => {
-      usedLegacyShikiPlaceholder = true
+      usedExistingShikiPlaceholder = true
       return getShikiRuntimeScript()
     })
-    return usedLegacyShikiPlaceholder ? content : injectShikiRuntime(content)
+    return usedExistingShikiPlaceholder ? content : injectShikiRuntime(content)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     return `<div style="color: red; padding: 20px;">模板渲染错误: ${errorMessage}</div>`

@@ -71,10 +71,6 @@ class T2iService:
 
         return {"name": name}
 
-    def create_template_from_legacy_payload(self, data: object) -> dict:
-        payload = self._payload(data)
-        return self.create_template(payload.get("name"), payload.get("content"))
-
     async def update_template(self, name: str, content: str | None) -> tuple[dict, str]:
         name = name.strip()
         if content is None:
@@ -94,14 +90,6 @@ class T2iService:
             raise T2iServiceError(str(exc)) from exc
 
         return {"name": name}, message
-
-    async def update_template_from_legacy_payload(
-        self,
-        name: str,
-        data: object,
-    ) -> tuple[dict, str]:
-        payload = self._payload(data)
-        return await self.update_template(name, payload.get("content"))
 
     def delete_template(self, name: str) -> None:
         name = name.strip()
@@ -129,10 +117,6 @@ class T2iService:
 
         return f"模板 '{name}' 已成功应用。"
 
-    async def set_active_template_from_legacy_payload(self, data: object) -> str:
-        payload = self._payload(data)
-        return await self.set_active_template(payload.get("name"))
-
     async def reset_default_template(self) -> str:
         try:
             self.manager.reset_default_template()
@@ -144,7 +128,3 @@ class T2iService:
             raise T2iServiceError(str(exc)) from exc
 
         return "Default template has been reset and activated."
-
-    @staticmethod
-    def _payload(data: object) -> dict:
-        return data if isinstance(data, dict) else {}

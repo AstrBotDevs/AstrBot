@@ -14,7 +14,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
-    is_legacy_dashboard_password,
+    is_md5_dashboard_password,
     validate_dashboard_password,
     verify_dashboard_password,
 )
@@ -64,7 +64,7 @@ ALL_OPEN_API_SCOPES = (
 DASHBOARD_JWT_COOKIE_NAME = "astrbot_dashboard_jwt"
 DASHBOARD_JWT_COOKIE_MAX_AGE = 7 * 24 * 60 * 60
 SKIP_DEFAULT_PASSWORD_AUTH_ENV = "ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH"
-SKIP_DEFAULT_PASSWORD_AUTH_ENV_LEGACY = "DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH"
+SKIP_DEFAULT_PASSWORD_AUTH_ENV_OLD = "DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH"
 LOCAL_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
 DEFAULT_PASSWORD_LOGIN_FAILURE_MESSAGE = (
     "Login failed. If this is your first time using AstrBot, the old default "
@@ -75,7 +75,7 @@ DEFAULT_PASSWORD_LOGIN_FAILURE_MESSAGE = (
     "随机强密码。请使用日志中提供的的初始密码来登录。了解更多："
     "https://docs.astrbot.app/faq.html"
 )
-LEGACY_PASSWORD_LOGIN_FAILURE_MESSAGE = (
+MD5_PASSWORD_LOGIN_FAILURE_MESSAGE = (
     "Incorrect username or password. If you cannot log in after upgrading "
     "AstrBot even though the password is correct, see "
     "https://docs.astrbot.app/en/faq.html\n\n"
@@ -223,7 +223,7 @@ class AuthService:
                 "token": token,
                 "username": username,
                 "change_pwd_hint": False,
-                "legacy_pwd_hint": False,
+                "md5_pwd_hint": False,
                 "password_upgrade_required": False,
             },
             message="Setup completed successfully",
@@ -264,8 +264,8 @@ class AuthService:
             await asyncio.sleep(3)
             if req_password == "astrbot":
                 return self.error(DEFAULT_PASSWORD_LOGIN_FAILURE_MESSAGE)
-            if is_legacy_dashboard_password(password):
-                return self.error(LEGACY_PASSWORD_LOGIN_FAILURE_MESSAGE)
+            if is_md5_dashboard_password(password):
+                return self.error(MD5_PASSWORD_LOGIN_FAILURE_MESSAGE)
             return self.error("用户名或密码错误", status_code=401)
 
         totp_verified = False
@@ -303,7 +303,7 @@ class AuthService:
                     return self.error("恢复码无效", status_code=401)
 
         change_pwd_hint = False
-        legacy_pwd_hint = is_legacy_dashboard_password(password)
+        md5_pwd_hint = is_md5_dashboard_password(password)
         password_change_required = await is_password_change_required(
             self.db,
             self.config,
@@ -315,7 +315,7 @@ class AuthService:
             and not self.demo_mode
         ):
             change_pwd_hint = True
-            legacy_pwd_hint = True
+            md5_pwd_hint = True
             logger.warning("为了保证安全，请尽快修改默认密码。")
         if password_change_required and not self.demo_mode:
             change_pwd_hint = True
@@ -325,7 +325,7 @@ class AuthService:
                 "token": token,
                 "username": username,
                 "change_pwd_hint": change_pwd_hint,
-                "legacy_pwd_hint": legacy_pwd_hint,
+                "md5_pwd_hint": md5_pwd_hint,
                 "password_upgrade_required": not storage_upgraded,
             },
             jwt_token=token,
@@ -434,7 +434,7 @@ class AuthService:
     def env_flag_enabled(name: str) -> bool:
         value = os.environ.get(name)
         if value is None and name == SKIP_DEFAULT_PASSWORD_AUTH_ENV:
-            value = os.environ.get(SKIP_DEFAULT_PASSWORD_AUTH_ENV_LEGACY)
+            value = os.environ.get(SKIP_DEFAULT_PASSWORD_AUTH_ENV_OLD)
         return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
     @staticmethod

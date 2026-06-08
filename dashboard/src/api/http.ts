@@ -11,7 +11,6 @@ let configured = false;
 let originalFetch: typeof window.fetch | null = null;
 
 export const httpClient = axios;
-export const legacyApiClient = axios.create({ baseURL: '/api' });
 export const apiV1Client = axios.create({ baseURL: '/api/v1' });
 
 function getToken(): string | null {
@@ -94,7 +93,6 @@ export function setupHttpClient() {
   }
 
   installAxiosInterceptors(axios);
-  installAxiosInterceptors(legacyApiClient);
   installAxiosInterceptors(apiV1Client);
 
   originalFetch = window.fetch.bind(window);

@@ -88,27 +88,6 @@ class ConversationService:
             },
         }
 
-    async def list_conversations_from_legacy_query(
-        self,
-        *,
-        page,
-        page_size,
-        platforms: str | None,
-        message_types: str | None,
-        search_query: str | None,
-        exclude_ids: str | None,
-        exclude_platforms: str | None,
-    ) -> dict:
-        return await self.list_conversations(
-            page=self._to_int(page, 1),
-            page_size=self._to_int(page_size, 20),
-            platforms=platforms or "",
-            message_types=message_types or "",
-            search_query=search_query or "",
-            exclude_ids=exclude_ids or "",
-            exclude_platforms=exclude_platforms or "",
-        )
-
     async def get_conversation_detail(self, data: object) -> dict:
         payload = self._payload(data)
         user_id, cid = self._require_user_and_cid(payload)
@@ -328,10 +307,3 @@ class ConversationService:
     @staticmethod
     def _payload(data: object) -> dict:
         return data if isinstance(data, dict) else {}
-
-    @staticmethod
-    def _to_int(value, default: int) -> int:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default

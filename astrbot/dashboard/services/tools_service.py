@@ -92,6 +92,17 @@ class ToolsService:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to get MCP server list: {exc!s}") from exc
 
+    def get_mcp_server_config(self, name: str) -> dict | None:
+        config = self.tool_mgr.load_mcp_config()
+        mcp_servers = config.get("mcpServers", {})
+        if not isinstance(mcp_servers, dict):
+            return None
+
+        server_config = mcp_servers.get(name)
+        if not isinstance(server_config, dict):
+            return None
+        return dict(server_config)
+
     async def add_mcp_server(self, server_data: Any) -> str:
         try:
             name = server_data.get("name", "")

@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from starlette.websockets import WebSocketDisconnect
 
 from astrbot.dashboard.services.live_chat_service import LiveChatService
 
@@ -85,5 +86,57 @@ async def test_run_websocket_session_routes_messages_and_cleans_session(monkeypa
     assert [(kind, username) for kind, username, _ in routed] == [
         ("chat", "alice"),
         ("live", "alice"),
+    ]
+    assert service.sessions == {}
+
+
+@pytest.mark.asyncio
+async def test_run_websocket_session_handles_disconnect_without_error_log(
+    monkeypatch,
+):
+    service = _service()
+    messages = iter([{"ct": "chat", "t": "bind", "session_id": "chat-session"}])
+    routed: list[dict] = []
+
+    monkeypatch.setattr(service, "authenticate_token", lambda _token: "alice")
+
+    async def handle_chat_message(session, message, _send_json) -> None:
+        routed.append({"username": session.username, "message": message})
+
+    monkeypatch.setattr(service, "handle_chat_message", handle_chat_message)
+
+    async def receive_json() -> dict:
+        try:
+            return next(messages)
+        except StopIteration as exc:
+            raise WebSocketDisconnect(1006) from exc
+
+    async def send_json(_payload: dict) -> None:
+        pass
+
+    async def close(_code: int, _reason: str) -> None:
+        raise AssertionError("close should not be called")
+
+    def fail_error_log(*_args, **_kwargs) -> None:
+        raise AssertionError("disconnect should not be logged as an error")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.live_chat_service.logger.error",
+        fail_error_log,
+    )
+
+    await service.run_websocket_session(
+        token="valid",
+        force_ct=None,
+        receive_json=receive_json,
+        send_json=send_json,
+        close=close,
+    )
+
+    assert routed == [
+        {
+            "username": "alice",
+            "message": {"ct": "chat", "t": "bind", "session_id": "chat-session"},
+        }
     ]
     assert service.sessions == {}

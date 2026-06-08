@@ -566,7 +566,7 @@ class OpenApiService:
             "total": total,
         }
 
-    async def get_chat_sessions_from_legacy_query(
+    async def get_chat_sessions_from_dashboard_query(
         self,
         *,
         username: str | None,

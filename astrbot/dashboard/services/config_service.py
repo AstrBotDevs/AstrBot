@@ -31,7 +31,7 @@ from astrbot.core.utils.totp import (
     verify_configured_2fa_code,
 )
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
-from astrbot.dashboard.v1.responses import ApiError
+from astrbot.dashboard.api.responses import ApiError
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -472,6 +472,9 @@ class ConfigProfileService:
             ),
         }
 
+    def get_system_config(self) -> dict:
+        return self.get_system_schema()
+
     def list_profiles(self) -> dict:
         return {"info_list": self.acm.get_conf_list()}
 
@@ -480,7 +483,7 @@ class ConfigProfileService:
         await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
 
-    async def create_profile_from_legacy_payload(
+    async def create_profile_from_dashboard_payload(
         self,
         payload: object,
     ) -> dict:
@@ -497,7 +500,7 @@ class ConfigProfileService:
             "metadata": ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3),
         }
 
-    def get_profile_from_legacy_query(
+    def get_profile_from_dashboard_query(
         self,
         *,
         config_id: str | None,
@@ -511,9 +514,9 @@ class ConfigProfileService:
             raise ValueError("abconf_id cannot be None")
         return self.get_profile(config_id)
 
-    def get_profile_from_legacy_args(self, args) -> dict:
+    def get_profile_from_dashboard_args(self, args) -> dict:
         system_config = str(args.get("system_config", "0")).lower() == "1"
-        return self.get_profile_from_legacy_query(
+        return self.get_profile_from_dashboard_query(
             config_id=args.get("id"),
             system_config=system_config,
         )
@@ -560,7 +563,7 @@ class ConfigProfileService:
             return f"保存成功。{warning}"
         return "保存成功~"
 
-    async def update_profile_from_legacy_payload(
+    async def update_profile_from_dashboard_payload(
         self,
         payload: object,
         *,
@@ -600,7 +603,7 @@ class ConfigProfileService:
         if not self.acm.update_conf_info(config_id, name=name):
             raise ValueError("Failed to update config profile")
 
-    def rename_profile_from_legacy_payload(self, payload: object) -> str:
+    def rename_profile_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         if not data:
             raise ValueError("缺少配置数据")
@@ -615,7 +618,7 @@ class ConfigProfileService:
             raise ValueError("Failed to delete config profile")
         self.core_lifecycle.pipeline_scheduler_mapping.pop(config_id, None)
 
-    def delete_profile_from_legacy_payload(self, payload: object) -> str:
+    def delete_profile_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         if not data:
             raise ValueError("缺少配置数据")
@@ -643,7 +646,7 @@ class ConfigRoutingService:
             raise ValueError("缺少或错误的路由表数据")
         await self.replace_route_mapping(new_routing)
 
-    async def replace_routes_from_legacy_payload(self, payload: object) -> str:
+    async def replace_routes_from_dashboard_payload(self, payload: object) -> str:
         if not isinstance(payload, dict) or not payload:
             raise ValueError("缺少配置数据")
         await self.replace_routes(payload)
@@ -663,7 +666,7 @@ class ConfigRoutingService:
             return
         await self.ucr.update_route(umo, config_id)
 
-    async def upsert_route_from_legacy_payload(self, payload: object) -> str:
+    async def upsert_route_from_dashboard_payload(self, payload: object) -> str:
         if not isinstance(payload, dict) or not payload:
             raise ValueError("缺少配置数据")
         await self.upsert_route(payload)
@@ -681,7 +684,7 @@ class ConfigRoutingService:
             del self.ucr.umop_to_conf_id[umo]
             await self.ucr.update_routing_data(self.ucr.umop_to_conf_id)
 
-    async def delete_route_from_legacy_payload(self, payload: object) -> str:
+    async def delete_route_from_dashboard_payload(self, payload: object) -> str:
         if not isinstance(payload, dict) or not payload:
             raise ValueError("缺少配置数据")
         await self.delete_route(payload)
@@ -699,7 +702,7 @@ class ConfigDisplayService:
             return await self.get_astrbot_config()
         return self.get_plugin_config(plugin_name)
 
-    async def get_configs_from_legacy_args(self, args) -> dict:
+    async def get_configs_from_dashboard_args(self, args) -> dict:
         return await self.get_configs(args.get("plugin_name", None))
 
     async def get_astrbot_config(self) -> dict:
@@ -923,7 +926,7 @@ class ConfigFileService:
         metadata.config.save_config(post_configs)
         await self.core_lifecycle.plugin_manager.reload(plugin_name)
 
-    async def save_plugin_configs_from_legacy_payload(
+    async def save_plugin_configs_from_dashboard_payload(
         self,
         payload: object,
         *,
@@ -997,7 +1000,7 @@ class ConfigFileService:
 
         return {"uploaded": uploaded, "errors": errors}
 
-    async def upload_config_file_from_legacy_request(self, args, files) -> dict:
+    async def upload_config_file_from_dashboard_request(self, args, files) -> dict:
         return await self.upload_config_file(
             scope=args.get("scope"),
             name=args.get("name"),
@@ -1032,7 +1035,7 @@ class ConfigFileService:
         if target_path.is_file():
             target_path.unlink()
 
-    def delete_config_file_from_legacy_payload(
+    def delete_config_file_from_dashboard_payload(
         self,
         *,
         scope: str | None,
@@ -1047,12 +1050,12 @@ class ConfigFileService:
         )
         return "Deleted"
 
-    def delete_config_file_from_legacy_request(
+    def delete_config_file_from_dashboard_request(
         self,
         args,
         payload: object,
     ) -> str:
-        return self.delete_config_file_from_legacy_payload(
+        return self.delete_config_file_from_dashboard_payload(
             scope=args.get("scope") or "plugin",
             name=args.get("name"),
             payload=payload,
@@ -1096,7 +1099,7 @@ class ConfigFileService:
                 files.append(rel_path)
         return {"files": files}
 
-    def list_config_files_from_legacy_args(self, args) -> dict:
+    def list_config_files_from_dashboard_args(self, args) -> dict:
         return self.list_config_files(
             scope=args.get("scope"),
             name=args.get("name"),
@@ -1213,16 +1216,16 @@ class BotConfigService:
                 return
         raise ValueError(f"Bot {bot_id} not found")
 
-    def list_platforms_for_legacy(self) -> dict:
+    def list_platforms_for_dashboard(self) -> dict:
         return {"platforms": self.list_bots()["bots"]}
 
-    async def create_bot_from_legacy_payload(self, payload: object) -> str:
+    async def create_bot_from_dashboard_payload(self, payload: object) -> str:
         if not isinstance(payload, dict):
             raise ValueError("参数错误")
         await self.create_bot(payload)
         return "新增平台配置成功~"
 
-    async def update_bot_from_legacy_payload(self, payload: object) -> str:
+    async def update_bot_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         origin_platform_id = data.get("id")
         new_config = data.get("config")
@@ -1239,7 +1242,7 @@ class BotConfigService:
             raise
         return "更新平台配置成功~"
 
-    async def delete_bot_from_legacy_payload(self, payload: object) -> str:
+    async def delete_bot_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         platform_id = data.get("id")
         try:
@@ -1349,7 +1352,9 @@ class ProviderConfigService:
         save_config(self.config, self.config, is_core=True)
         self.provider_manager.provider_sources_config = next_sources
 
-    async def upsert_provider_source_from_legacy_payload(self, payload: object) -> str:
+    async def upsert_provider_source_from_dashboard_payload(
+        self, payload: object
+    ) -> str:
         if not isinstance(payload, dict) or not payload:
             raise ValueError("缺少配置数据")
 
@@ -1365,7 +1370,9 @@ class ProviderConfigService:
         await self.upsert_provider_source(str(original_id), new_source_config)
         return "更新 provider source 成功"
 
-    async def delete_provider_source_from_legacy_payload(self, payload: object) -> str:
+    async def delete_provider_source_from_dashboard_payload(
+        self, payload: object
+    ) -> str:
         if not isinstance(payload, dict) or not payload:
             raise ValueError("缺少配置数据")
 
@@ -1427,7 +1434,7 @@ class ProviderConfigService:
                 if hasattr(maybe_coro, "__await__"):
                     await maybe_coro
 
-    async def list_provider_source_models_for_legacy(
+    async def list_provider_source_models_for_dashboard(
         self,
         source_id: str | None,
     ) -> dict:
@@ -1459,7 +1466,7 @@ class ProviderConfigService:
             },
         }
 
-    async def list_provider_models_for_legacy(
+    async def list_provider_models_for_dashboard(
         self,
         provider_id: str | None,
     ) -> dict:
@@ -1467,8 +1474,10 @@ class ProviderConfigService:
             raise ValueError("缺少参数 provider_id")
         return await self.list_provider_models(provider_id)
 
-    async def list_provider_models_from_legacy_args(self, args) -> dict:
-        return await self.list_provider_models_for_legacy(args.get("provider_id", None))
+    async def list_provider_models_from_dashboard_args(self, args) -> dict:
+        return await self.list_provider_models_for_dashboard(
+            args.get("provider_id", None)
+        )
 
     async def get_embedding_dimension(self, provider_config: dict | None) -> dict:
         if not provider_config:
@@ -1483,7 +1492,14 @@ class ProviderConfigService:
 
         if provider_type not in provider_cls_map:
             try:
-                self.provider_manager.dynamic_import_provider(provider_type)
+                dynamic_import_provider = getattr(
+                    self.provider_manager,
+                    "dynamic_import_provider",
+                    None,
+                )
+                if not callable(dynamic_import_provider):
+                    raise ImportError(provider_type)
+                dynamic_import_provider(provider_type)
             except ImportError as exc:
                 raise ValueError(
                     "提供商适配器加载失败，请检查提供商类型配置或查看服务端日志"
@@ -1518,7 +1534,7 @@ class ProviderConfigService:
                 if hasattr(maybe_coro, "__await__"):
                     await maybe_coro
 
-    async def get_embedding_dimension_from_legacy_payload(
+    async def get_embedding_dimension_from_dashboard_payload(
         self,
         payload: object,
     ) -> dict:
@@ -1558,7 +1574,9 @@ class ProviderConfigService:
                 providers.append(copy.deepcopy(provider))
         return {"providers": providers}
 
-    def list_providers_for_legacy_types(self, provider_type: str | None) -> list[dict]:
+    def list_providers_for_dashboard_types(
+        self, provider_type: str | None
+    ) -> list[dict]:
         if not provider_type:
             raise ValueError("缺少参数 provider_type")
 
@@ -1574,8 +1592,8 @@ class ProviderConfigService:
                 provider_list.append(provider)
         return provider_list
 
-    def list_providers_from_legacy_args(self, args) -> list[dict]:
-        return self.list_providers_for_legacy_types(args.get("provider_type", None))
+    def list_providers_from_dashboard_args(self, args) -> list[dict]:
+        return self.list_providers_for_dashboard_types(args.get("provider_type", None))
 
     def get_provider(self, provider_id: str, *, merged: bool = False) -> dict:
         provider = self.provider_manager.get_provider_config_by_id(
@@ -1607,13 +1625,13 @@ class ProviderConfigService:
     async def delete_provider(self, provider_id: str) -> None:
         await self.provider_manager.delete_provider(provider_id=provider_id)
 
-    async def create_provider_from_legacy_payload(self, payload: object) -> str:
+    async def create_provider_from_dashboard_payload(self, payload: object) -> str:
         if not isinstance(payload, dict):
             raise ValueError("参数错误")
         await self.create_provider(payload)
         return "新增服务提供商配置成功"
 
-    async def update_provider_from_legacy_payload(self, payload: object) -> str:
+    async def update_provider_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         origin_provider_id = data.get("id")
         new_config = data.get("config")
@@ -1623,7 +1641,7 @@ class ProviderConfigService:
         await self.update_provider(origin_provider_id, new_config)
         return "更新成功，已经实时生效~"
 
-    async def delete_provider_from_legacy_payload(self, payload: object) -> str:
+    async def delete_provider_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         provider_id = data.get("id", "")
         if not provider_id:
@@ -1654,7 +1672,7 @@ class ProviderConfigService:
             result["error"] = str(exc)
         return result
 
-    async def test_provider_from_legacy_args(self, args) -> dict:
+    async def test_provider_from_dashboard_args(self, args) -> dict:
         provider_id = args.get("id")
         if not provider_id:
             raise ValueError("Missing provider_id parameter")

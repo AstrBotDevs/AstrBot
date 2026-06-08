@@ -277,7 +277,7 @@ class KnowledgeBaseService:
 
         return {"items": kb_list, "page": page, "page_size": page_size}
 
-    async def list_kbs_from_legacy_query(self, *, page, page_size) -> dict[str, Any]:
+    async def list_kbs_from_dashboard_query(self, *, page, page_size) -> dict[str, Any]:
         return await self.list_kbs(
             page=self._to_int(page, 1),
             page_size=self._to_int(page_size, 20),
@@ -353,7 +353,7 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("知识库不存在")
         return kb_helper.kb.model_dump()
 
-    async def get_kb_from_legacy_query(self, kb_id: str | None) -> dict[str, Any]:
+    async def get_kb_from_dashboard_query(self, kb_id: str | None) -> dict[str, Any]:
         return await self.get_kb(kb_id)
 
     async def update_kb(self, data: object) -> tuple[dict[str, Any], str]:
@@ -420,7 +420,7 @@ class KnowledgeBaseService:
             "updated_at": kb.updated_at.isoformat(),
         }
 
-    async def get_kb_stats_from_legacy_query(
+    async def get_kb_stats_from_dashboard_query(
         self,
         kb_id: str | None,
     ) -> dict[str, Any]:
@@ -447,7 +447,7 @@ class KnowledgeBaseService:
             "page_size": page_size,
         }
 
-    async def list_documents_from_legacy_query(
+    async def list_documents_from_dashboard_query(
         self,
         *,
         kb_id: str | None,
@@ -617,7 +617,7 @@ class KnowledgeBaseService:
             response_data["error"] = task_info["error"]
         return response_data
 
-    def get_upload_progress_from_legacy_query(
+    def get_upload_progress_from_dashboard_query(
         self,
         task_id: str | None,
     ) -> dict[str, Any]:
@@ -641,7 +641,7 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("文档不存在")
         return doc.model_dump()
 
-    async def get_document_from_legacy_query(
+    async def get_document_from_dashboard_query(
         self,
         *,
         kb_id: str | None,
@@ -708,7 +708,7 @@ class KnowledgeBaseService:
             "total": await kb_helper.get_chunk_count_by_doc_id(doc_id),
         }
 
-    async def list_chunks_from_legacy_query(
+    async def list_chunks_from_dashboard_query(
         self,
         *,
         kb_id: str | None,

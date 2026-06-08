@@ -35,7 +35,7 @@ import {
   type MigrationRequest,
   type ModelScopeSyncRequest,
   type PipInstallRequest,
-  type PluginCompatibilityCheckRequest,
+  type PluginVersionSupportRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
   type BatchSessionProviderRequest,
@@ -91,7 +91,7 @@ export interface VersionData {
   dashboard_version?: string;
   need_migration?: boolean;
   change_pwd_hint?: boolean;
-  legacy_pwd_hint?: boolean;
+  md5_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
   [key: string]: unknown;
 }
@@ -1049,9 +1049,9 @@ export const pluginApi = {
       openApiV1.updatePlugins({ body: body as any }),
     );
   },
-  checkCompatibility(payload: PluginCompatibilityCheckRequest) {
+  checkVersionSupport(payload: PluginVersionSupportRequest) {
     return typed<any>(
-      openApiV1.checkPluginCompatibility({ body: payload }),
+      openApiV1.checkPluginVersionSupport({ body: payload }),
     );
   },
   config(pluginId: string) {

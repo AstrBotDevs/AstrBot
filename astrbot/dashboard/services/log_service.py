@@ -92,6 +92,3 @@ class LogService:
         except Exception as exc:
             logger.error(f"更新 Trace 设置失败: {exc}")
             raise LogServiceError(f"更新 Trace 设置失败: {exc}") from exc
-
-    def update_trace_settings_from_legacy_payload(self, data: object) -> str:
-        return self.update_trace_settings(data if isinstance(data, dict) else None)

@@ -63,7 +63,7 @@ async def poll_webchat_stream_result(back_queue, username: str):
     return result, False
 
 
-def normalize_legacy_reasoning_message_parts(
+def normalize_reasoning_message_parts(
     message_parts: list[dict] | None,
     reasoning: str = "",
 ) -> list[dict]:
@@ -107,12 +107,12 @@ def build_bot_history_content(
     *,
     agent_stats: dict | None = None,
     refs: dict | None = None,
-    include_legacy_reasoning_field: bool = True,
+    include_reasoning_field: bool = True,
 ) -> dict[str, Any]:
-    normalized_parts = normalize_legacy_reasoning_message_parts(message_parts)
+    normalized_parts = normalize_reasoning_message_parts(message_parts)
     content: dict[str, Any] = {"type": "bot", "message": normalized_parts}
     reasoning = extract_reasoning_from_message_parts(normalized_parts)
-    if reasoning and include_legacy_reasoning_field:
+    if reasoning and include_reasoning_field:
         content["reasoning"] = reasoning
     if agent_stats:
         content["agent_stats"] = agent_stats
@@ -480,7 +480,7 @@ class ChatService:
         self.db = db
         self.core_lifecycle = core_lifecycle
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
-        self.legacy_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
+        self.webchat_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         os.makedirs(self.attachments_dir, exist_ok=True)
 
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
@@ -504,7 +504,7 @@ class ChatService:
             attach_type=attach_type,
             insert_attachment=self.db.insert_attachment,
             attachments_dir=self.attachments_dir,
-            fallback_dirs=[self.legacy_img_dir],
+            fallback_dirs=[self.webchat_img_dir],
         )
 
     async def resolve_webchat_file(
@@ -519,11 +519,11 @@ class ChatService:
         file_root = attachments_dir
 
         if not file_path.exists():
-            legacy_img_dir = Path(self.legacy_img_dir).resolve(strict=False)
-            legacy_file_path = (legacy_img_dir / safe_name).resolve(strict=False)
-            if legacy_file_path.exists():
-                file_path = legacy_file_path
-                file_root = legacy_img_dir
+            webchat_img_dir = Path(self.webchat_img_dir).resolve(strict=False)
+            webchat_file_path = (webchat_img_dir / safe_name).resolve(strict=False)
+            if webchat_file_path.exists():
+                file_path = webchat_file_path
+                file_root = webchat_img_dir
 
         if not file_path.is_relative_to(file_root):
             raise ChatServiceError("Invalid file path")
@@ -537,7 +537,7 @@ class ChatService:
             return str(file_path), "image/jpeg"
         return str(file_path), None
 
-    async def resolve_webchat_file_from_legacy_query(
+    async def resolve_webchat_file_from_dashboard_query(
         self,
         filename: str | None,
     ) -> tuple[str, str | None]:
@@ -559,7 +559,7 @@ class ChatService:
             raise ChatServiceError("File access error")
         return str(file_path), attachment.mime_type
 
-    async def resolve_attachment_file_from_legacy_query(
+    async def resolve_attachment_file_from_dashboard_query(
         self,
         attachment_id: str | None,
     ) -> tuple[str, str | None]:
@@ -599,7 +599,7 @@ class ChatService:
             "type": attach_type,
         }
 
-    async def save_uploaded_file_from_legacy_files(self, files) -> dict:
+    async def save_uploaded_file_from_dashboard_files(self, files) -> dict:
         if "file" not in files:
             raise ChatServiceError("Missing key: file")
         return await self.save_uploaded_file(files["file"])
@@ -978,12 +978,12 @@ class ChatService:
         stopped_count = active_event_registry.request_agent_stop_all(unified_msg_origin)
         return {"stopped_count": stopped_count}
 
-    async def stop_session_from_legacy_payload(
+    async def stop_session_from_dashboard_payload(
         self,
         username: str,
         payload: object,
     ) -> dict:
-        data = self._legacy_payload(payload)
+        data = self._dashboard_payload(payload)
         session_id = data.get("session_id")
         if not session_id:
             raise ChatServiceError("Missing key: session_id")
@@ -1038,7 +1038,7 @@ class ChatService:
             raise ChatServiceError("Permission denied")
         await self.delete_session_internal(session, username)
 
-    async def delete_webchat_session_from_legacy_query(
+    async def delete_webchat_session_from_dashboard_query(
         self,
         username: str,
         session_id: str | None,
@@ -1086,13 +1086,13 @@ class ChatService:
             "failed_items": failed_items,
         }
 
-    async def batch_delete_sessions_from_legacy_payload(
+    async def batch_delete_sessions_from_dashboard_payload(
         self,
         username: str,
         payload: object,
         delete_session=None,
     ) -> dict:
-        data = self._legacy_payload(payload)
+        data = self._dashboard_payload(payload)
         session_ids = data.get("session_ids")
         if not session_ids or not isinstance(session_ids, list):
             raise ChatServiceError("Missing or invalid key: session_ids")
@@ -1129,7 +1129,7 @@ class ChatService:
             "platform_id": session.platform_id,
         }
 
-    async def new_session_from_legacy_query(
+    async def new_session_from_dashboard_query(
         self,
         username: str,
         platform_id: str | None,
@@ -1161,7 +1161,7 @@ class ChatService:
             )
         return sessions_data
 
-    async def get_sessions_from_legacy_query(
+    async def get_sessions_from_dashboard_query(
         self,
         username: str,
         platform_id: str | None,
@@ -1199,7 +1199,7 @@ class ChatService:
             }
         return response_data
 
-    async def get_session_from_legacy_query(
+    async def get_session_from_dashboard_query(
         self,
         username: str,
         session_id: str | None,
@@ -1281,12 +1281,12 @@ class ChatService:
         )
         return serialize_thread(thread)
 
-    async def create_thread_from_legacy_payload(
+    async def create_thread_from_dashboard_payload(
         self,
         username: str,
         payload: object,
     ) -> dict:
-        return await self.create_thread(username, self._legacy_payload(payload))
+        return await self.create_thread(username, self._dashboard_payload(payload))
 
     async def get_thread(self, username: str, thread_id: str) -> dict:
         thread = await self.db.get_webchat_thread_by_id(thread_id)
@@ -1307,7 +1307,7 @@ class ChatService:
             "is_running": self.running_convs.get(thread_id, False),
         }
 
-    async def get_thread_from_legacy_query(
+    async def get_thread_from_dashboard_query(
         self,
         username: str,
         thread_id: str | None,
@@ -1337,14 +1337,14 @@ class ChatService:
             "_thread_selected_text": thread.selected_text,
         }
 
-    async def prepare_thread_chat_payload_from_legacy_payload(
+    async def prepare_thread_chat_payload_from_dashboard_payload(
         self,
         username: str,
         payload: object,
     ) -> dict:
         return await self.prepare_thread_chat_payload(
             username,
-            self._legacy_payload(payload),
+            self._dashboard_payload(payload),
         )
 
     async def delete_thread(self, username: str, thread_id: str) -> dict:
@@ -1358,12 +1358,12 @@ class ChatService:
         await self.delete_threads_by_ids([thread_id], username)
         return {"thread_id": thread_id}
 
-    async def delete_thread_from_legacy_payload(
+    async def delete_thread_from_dashboard_payload(
         self,
         username: str,
         payload: object,
     ) -> dict:
-        data = self._legacy_payload(payload)
+        data = self._dashboard_payload(payload)
         thread_id = data.get("thread_id")
         if not thread_id:
             raise ChatServiceError("Missing key: thread_id")
@@ -1460,12 +1460,12 @@ class ChatService:
             "truncated_after_message": True,
         }
 
-    async def update_message_from_legacy_payload(
+    async def update_message_from_dashboard_payload(
         self,
         username: str,
         payload: object,
     ) -> dict:
-        return await self.update_message(username, self._legacy_payload(payload))
+        return await self.update_message(username, self._dashboard_payload(payload))
 
     async def prepare_regenerate_message_payload(
         self,
@@ -1573,14 +1573,14 @@ class ChatService:
             "_llm_checkpoint_id": new_checkpoint_id,
         }
 
-    async def prepare_regenerate_message_payload_from_legacy_payload(
+    async def prepare_regenerate_message_payload_from_dashboard_payload(
         self,
         username: str,
         payload: object,
     ) -> dict:
         return await self.prepare_regenerate_message_payload(
             username,
-            self._legacy_payload(payload),
+            self._dashboard_payload(payload),
         )
 
     async def update_session_display_name(
@@ -1601,12 +1601,12 @@ class ChatService:
         )
         return {}
 
-    async def update_session_display_name_from_legacy_payload(
+    async def update_session_display_name_from_dashboard_payload(
         self,
         username: str,
         payload: object,
     ) -> dict:
-        data = self._legacy_payload(payload)
+        data = self._dashboard_payload(payload)
         session_id = data.get("session_id")
         display_name = data.get("display_name")
         if not session_id:
@@ -1618,7 +1618,7 @@ class ChatService:
         )
 
     @staticmethod
-    def _legacy_payload(payload: object) -> dict:
+    def _dashboard_payload(payload: object) -> dict:
         if payload is None:
             raise ChatServiceError("Missing JSON body")
         if not isinstance(payload, dict):

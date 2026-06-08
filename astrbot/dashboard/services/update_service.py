@@ -107,12 +107,6 @@ class UpdateService:
             )
         return UpdateServiceResult(data=progress)
 
-    def get_update_progress_from_legacy_query(
-        self,
-        progress_id: str | None,
-    ) -> UpdateServiceResult:
-        return self.get_update_progress(progress_id or "")
-
     async def do_migration_v4(self, data: object) -> UpdateServiceResult:
         need_migration = await self.check_migration_needed(self.core_lifecycle.db)
         if not need_migration:
@@ -158,12 +152,6 @@ class UpdateService:
         except Exception as exc:
             logger.warning(f"检查更新失败: {exc!s} (不影响除项目更新外的正常使用)")
             raise UpdateServiceError(exc.__str__()) from exc
-
-    async def check_update_from_legacy_query(
-        self,
-        update_type: str | None,
-    ) -> UpdateServiceResult:
-        return await self.check_update(update_type)
 
     async def get_releases(self) -> UpdateServiceResult:
         try:

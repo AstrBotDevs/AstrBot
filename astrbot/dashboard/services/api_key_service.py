@@ -109,31 +109,12 @@ class ApiKeyService:
         result["api_key"] = raw_key
         return result
 
-    async def create_api_key_from_legacy_payload(
-        self,
-        payload: object,
-        *,
-        created_by: str,
-    ) -> dict:
-        data = payload if isinstance(payload, dict) else {}
-        return await self.create_api_key(data, created_by=created_by)
-
     async def revoke_api_key(self, key_id: str | None) -> bool:
         if not key_id:
             raise ApiKeyServiceError("Missing key: key_id")
         return await self.db.revoke_api_key(key_id)
 
-    async def revoke_api_key_from_legacy_payload(self, payload: object) -> None:
-        data = payload if isinstance(payload, dict) else {}
-        if not await self.revoke_api_key(data.get("key_id")):
-            raise ApiKeyServiceError("API key not found")
-
     async def delete_api_key(self, key_id: str | None) -> bool:
         if not key_id:
             raise ApiKeyServiceError("Missing key: key_id")
         return await self.db.delete_api_key(key_id)
-
-    async def delete_api_key_from_legacy_payload(self, payload: object) -> None:
-        data = payload if isinstance(payload, dict) else {}
-        if not await self.delete_api_key(data.get("key_id")):
-            raise ApiKeyServiceError("API key not found")

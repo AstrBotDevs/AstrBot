@@ -219,19 +219,23 @@ export interface PluginBatchUpdateRequest {
   [key: string]: unknown;
 }
 
-export interface PluginCompatibilityCheckRequest {
+export interface PluginVersionSupportRequest {
   astrbot_version?: string;
 }
 
 export interface PluginGithubInstallRequest {
   repository: string;
   ref?: string;
+  download_url?: string;
   proxy?: string;
+  ignore_version_check?: boolean;
 }
 
 export interface PluginUrlInstallRequest {
   url: string;
+  download_url?: string;
   proxy?: string;
+  ignore_version_check?: boolean;
 }
 
 export interface PluginUploadInstallRequest {
@@ -1502,10 +1506,6 @@ export interface GetPluginChangelogByIdArgs {
   query?: GetPluginChangelogByIdQuery;
 }
 
-export interface CheckPluginCompatibilityArgs {
-  body: PluginCompatibilityCheckRequest;
-}
-
 export interface GetPluginConfigByIdQuery {
   plugin_id: string;
 }
@@ -1685,6 +1685,10 @@ export interface ReloadPluginByIdArgs {
 
 export interface UpdatePluginsArgs {
   body: PluginBatchUpdateRequest;
+}
+
+export interface CheckPluginVersionSupportArgs {
+  body: PluginVersionSupportRequest;
 }
 
 export interface GetPluginPath {
@@ -2872,9 +2876,6 @@ export const openApiV1 = {
   getPluginChangelogById(args: GetPluginChangelogByIdArgs, config?: AxiosRequestConfig) {
     return request<SuccessEnvelope>("GET", "/plugins/changelog", args, config);
   },
-  checkPluginCompatibility(args: CheckPluginCompatibilityArgs, config?: AxiosRequestConfig) {
-    return request<SuccessEnvelope>("POST", "/plugins/compatibility/check", args, config);
-  },
   getPluginConfigById(args: GetPluginConfigByIdArgs, config?: AxiosRequestConfig) {
     return request<SuccessEnvelope>("GET", "/plugins/config", args, config);
   },
@@ -2955,6 +2956,9 @@ export const openApiV1 = {
   },
   updatePlugins(args: UpdatePluginsArgs, config?: AxiosRequestConfig) {
     return request<SuccessEnvelope>("POST", "/plugins/update", args, config);
+  },
+  checkPluginVersionSupport(args: CheckPluginVersionSupportArgs, config?: AxiosRequestConfig) {
+    return request<SuccessEnvelope>("POST", "/plugins/version-support/check", args, config);
   },
   getPlugin(args: GetPluginArgs, config?: AxiosRequestConfig) {
     return request<SuccessEnvelope>("GET", "/plugins/{plugin_id}", args, config);

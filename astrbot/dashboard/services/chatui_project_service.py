@@ -40,7 +40,7 @@ class ChatUIProjectService:
         project = await self._get_owned_project(username, project_id)
         return self._serialize_project(project)
 
-    async def get_project_from_legacy_query(
+    async def get_project_from_query(
         self,
         username: str,
         project_id: str | None,
@@ -68,7 +68,7 @@ class ChatUIProjectService:
         await self._get_owned_project(username, project_id)
         await self.db.delete_chatui_project(project_id)
 
-    async def delete_project_from_legacy_query(
+    async def delete_project_from_query(
         self,
         username: str,
         project_id: str | None,
@@ -111,7 +111,7 @@ class ChatUIProjectService:
         sessions = await self.db.get_project_sessions(project_id)
         return [self._serialize_session(session) for session in sessions]
 
-    async def get_project_sessions_from_legacy_query(
+    async def get_project_sessions_from_query(
         self,
         username: str,
         project_id: str | None,

@@ -97,7 +97,7 @@
   "accountDialog": {
     "title": "修改账户",
     "securityWarning": "安全提醒: 请修改密码以确保账户安全",
-    "securityWarningLegacy": "新的 AstrBot 版本强化了安全策略，请重新修改密码",
+    "securityWarningMd5": "新的 AstrBot 版本强化了安全策略，请重新修改密码",
     "securityWarningUpgrade": "检测到旧版本密码存储方式，请修改密码以完成安全升级",
     "form": {
       "currentPassword": "当前密码",
