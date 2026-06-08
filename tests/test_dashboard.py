@@ -374,7 +374,11 @@ async def test_auth_rate_limit_uses_same_bucket_across_paths(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
-    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
     cfg["trust_proxy_headers"] = True
 
     try:
@@ -406,7 +410,11 @@ async def test_auth_rate_limit_separates_different_client_ips(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
-    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
     cfg["trust_proxy_headers"] = True
 
     try:
@@ -450,7 +458,11 @@ async def test_auth_rate_limit_ignores_proxy_headers_by_default(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
-    cfg["auth_rate_limit"] = {"enable": True, "average_interval": 3600.0, "max_burst": 1}
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
     cfg["trust_proxy_headers"] = False
 
     try:
@@ -1579,6 +1591,119 @@ async def test_plugin_page_content_issues_scoped_asset_token(
         f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/another-page/app.js?asset_token={asset_token}"
     )
     assert cross_page_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_bridge_sdk_includes_is_dark_when_theme_param_provided(
+    app: Quart,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    """Bridge SDK initial context should include isDark based on ?theme= query param."""
+    authorized_client = app.test_client()
+    response = await authorized_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    html_text = (await response.get_data()).decode("utf-8")
+    bridge_sdk_url = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        html_text,
+    )
+    assert bridge_sdk_url is not None
+
+    anonymous_client = app.test_client()
+
+    # theme=dark → isDark: true
+    dark_response = await anonymous_client.get(bridge_sdk_url.group(1) + "&theme=dark")
+    assert dark_response.status_code == 200
+    dark_js = (await dark_response.get_data()).decode("utf-8")
+    assert '"isDark": true' in dark_js
+
+    # theme=light → isDark: false
+    light_response = await anonymous_client.get(
+        bridge_sdk_url.group(1) + "&theme=light"
+    )
+    assert light_response.status_code == 200
+    light_js = (await light_response.get_data()).decode("utf-8")
+    assert '"isDark": false' in light_js
+
+    # no theme param → isDark: false (default)
+    base_response = await anonymous_client.get(bridge_sdk_url.group(1))
+    assert base_response.status_code == 200
+    base_js = (await base_response.get_data()).decode("utf-8")
+    assert '"isDark": false' in base_js
+
+    # invalid theme value → should NOT be treated as dark
+    invalid_response = await anonymous_client.get(
+        bridge_sdk_url.group(1) + "&theme=invalid"
+    )
+    assert invalid_response.status_code == 200
+    invalid_js = (await invalid_response.get_data()).decode("utf-8")
+    assert '"isDark": false' in invalid_js
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_content_propagates_theme_in_rewritten_urls(
+    app: Quart,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    """Theme query param should be propagated through rewritten asset and bridge URLs."""
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+        "?asset_token=&theme=dark",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    html_text = (await response.get_data()).decode("utf-8")
+
+    # Verify theme=dark appears in bridge SDK URL in rewritten HTML
+    bridge_sdk_url_match = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        html_text,
+    )
+    assert bridge_sdk_url_match is not None
+    bridge_query = parse_qs(urlsplit(bridge_sdk_url_match.group(1)).query)
+    assert bridge_query.get("theme") == ["dark"]
+
+    # Verify theme=dark appears in CSS asset URL in rewritten HTML
+    css_url_match = re.search(
+        r'href="([^"]+/base\.css[^"]*)"',
+        html_text,
+    )
+    assert css_url_match is not None
+    css_query = parse_qs(urlsplit(css_url_match.group(1)).query)
+    assert css_query.get("theme") == ["dark"]
+
+    # Verify data-theme is injected on <html> tag to prevent flash
+    assert 'data-theme="dark"' in html_text
+    # Verify color-scheme meta tag is injected for browser-level default styles
+    assert '<meta name="color-scheme" content="dark">' in html_text
+
+    # theme=light → data-theme="light" on <html> and color-scheme meta
+    light_response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+        "?asset_token=&theme=light",
+        headers=authenticated_header,
+    )
+    assert light_response.status_code == 200
+    light_html = (await light_response.get_data()).decode("utf-8")
+    assert 'data-theme="light"' in light_html
+    assert '<meta name="color-scheme" content="light">' in light_html
+
+    # no theme param → no data-theme or color-scheme meta on <html>
+    no_theme_response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+        "?asset_token=",
+        headers=authenticated_header,
+    )
+    assert no_theme_response.status_code == 200
+    no_theme_html = (await no_theme_response.get_data()).decode("utf-8")
+    assert "data-theme=" not in no_theme_html
+    assert "color-scheme" not in no_theme_html
 
 
 @pytest.mark.asyncio

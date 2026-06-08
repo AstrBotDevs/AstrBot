@@ -13,6 +13,7 @@ import {
 import { getValidHashTab, replaceTabRoute } from "@/utils/hashRouteTabs.mjs";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { pluginSidebarState } from "@/composables/usePluginSidebarItems";
 
 const buildFailedPluginItems = (raw) => {
   return Object.entries(raw || {}).map(([dirName, info]) => {
@@ -480,6 +481,9 @@ export const useExtensionPage = () => {
     try {
       const res = await axios.get("/api/plugin/get");
       Object.assign(extension_data, res.data);
+
+      // 同步插件数据到侧边栏共享状态
+      pluginSidebarState.plugins = (res.data?.data || []);
 
       const failRes = await axios.get("/api/plugin/source/get-failed-plugins");
       failedPluginsDict.value = failRes.data.data || {};
