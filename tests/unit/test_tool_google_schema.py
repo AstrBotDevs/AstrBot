@@ -75,3 +75,69 @@ def test_google_schema_fills_missing_array_items_with_string_schema():
 
     assert source_uuids["type"] == "array"
     assert source_uuids["items"] == {"type": "string"}
+
+
+def test_google_schema_collapses_nullable_anyof_property():
+    tool_module = load_tool_module()
+    FunctionTool = tool_module.FunctionTool
+    ToolSet = tool_module.ToolSet
+
+    tool = FunctionTool(
+        name="search_sources",
+        description="Search sources by recency.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "time_range": {
+                    "description": "Optional recency filter.",
+                    "anyOf": [
+                        {
+                            "type": "string",
+                            "enum": ["day", "week", "month", "year"],
+                        },
+                        {"type": "null"},
+                    ],
+                    "default": None,
+                }
+            },
+        },
+    )
+
+    schema = ToolSet([tool]).google_schema()
+    time_range = schema["function_declarations"][0]["parameters"]["properties"][
+        "time_range"
+    ]
+
+    assert time_range["type"] == "string"
+    assert time_range["description"] == "Optional recency filter."
+    assert time_range["enum"] == ["day", "week", "month", "year"]
+    assert time_range["nullable"] is True
+    assert "anyOf" not in time_range
+    assert "default" not in time_range
+
+
+def test_google_schema_marks_type_list_with_null_as_nullable():
+    tool_module = load_tool_module()
+    FunctionTool = tool_module.FunctionTool
+    ToolSet = tool_module.ToolSet
+
+    tool = FunctionTool(
+        name="search_sources",
+        description="Search sources by recency.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": ["string", "null"],
+                    "description": "Optional query.",
+                }
+            },
+        },
+    )
+
+    schema = ToolSet([tool]).google_schema()
+    query = schema["function_declarations"][0]["parameters"]["properties"]["query"]
+
+    assert query["type"] == "string"
+    assert query["description"] == "Optional query."
+    assert query["nullable"] is True

@@ -250,9 +250,44 @@ class ToolSet:
                 "integer": {"int32", "int64"},
                 "number": {"float", "double"},
             }
+            support_fields = {
+                "title",
+                "description",
+                "enum",
+                "minimum",
+                "maximum",
+                "maxItems",
+                "minItems",
+                "nullable",
+                "required",
+            }
 
-            if "anyOf" in schema:
-                return {"anyOf": [convert_schema(s) for s in schema["anyOf"]]}
+            def apply_supported_fields(result: dict, source: dict) -> None:
+                for key in support_fields:
+                    if key in source and key not in result:
+                        result[key] = source[key]
+
+            for union_key in ("anyOf", "oneOf"):
+                union_value = schema.get(union_key)
+                if isinstance(union_value, list):
+                    converted_branches = [
+                        convert_schema(item)
+                        for item in union_value
+                        if isinstance(item, dict)
+                    ]
+                    non_null_branches = [
+                        item
+                        for item in converted_branches
+                        if item.get("type") != "null"
+                    ]
+                    if len(non_null_branches) == 1 and len(non_null_branches) < len(
+                        converted_branches
+                    ):
+                        result = non_null_branches[0].copy()
+                        result["nullable"] = True
+                        apply_supported_fields(result, schema)
+                        return result
+                    return {union_key: converted_branches}
 
             result = {}
 
@@ -268,6 +303,12 @@ class ToolSet:
 
             if target_type in supported_types:
                 result["type"] = target_type
+                if (
+                    isinstance(origin_type, list)
+                    and "null" in origin_type
+                    and target_type != "null"
+                ):
+                    result["nullable"] = True
                 if "format" in schema and schema["format"] in supported_formats.get(
                     result["type"],
                     set(),
@@ -276,18 +317,7 @@ class ToolSet:
             else:
                 result["type"] = "null"
 
-            support_fields = {
-                "title",
-                "description",
-                "enum",
-                "minimum",
-                "maximum",
-                "maxItems",
-                "minItems",
-                "nullable",
-                "required",
-            }
-            result.update({k: schema[k] for k in support_fields if k in schema})
+            apply_supported_fields(result, schema)
 
             if "properties" in schema:
                 properties = {}
