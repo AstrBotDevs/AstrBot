@@ -15,6 +15,7 @@ from astrbot.core.db.po import (
     ChatUIProject,
     CommandConfig,
     CommandConflict,
+    CommandStat,
     ConversationV2,
     CronJob,
     Persona,
@@ -164,6 +165,64 @@ class SQLiteDatabase(BaseDatabase):
                         "count": count,
                     },
                 )
+
+    async def insert_command_stats(
+        self,
+        command_name,
+        plugin_name="",
+        count=1,
+        timestamp=None,
+    ) -> None:
+        """Insert (or increment) a command trigger statistic record."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                if timestamp is None:
+                    timestamp = datetime.now().replace(
+                        minute=0,
+                        second=0,
+                        microsecond=0,
+                    )
+                await session.execute(
+                    text("""
+                    INSERT INTO command_stats (timestamp, plugin_name, command_name, count)
+                    VALUES (:timestamp, :plugin_name, :command_name, :count)
+                    ON CONFLICT(timestamp, plugin_name, command_name) DO UPDATE SET
+                        count = command_stats.count + EXCLUDED.count
+                    """),
+                    {
+                        "timestamp": timestamp,
+                        "plugin_name": plugin_name,
+                        "command_name": command_name,
+                        "count": count,
+                    },
+                )
+
+    async def get_top_commands(
+        self,
+        offset_sec=86400,
+        limit=20,
+    ) -> list[tuple[str, str, int]]:
+        """Get the most frequently triggered commands within the offset."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            start_time = datetime.now() - timedelta(seconds=offset_sec)
+            total = func.sum(CommandStat.count).label("total")
+            result = await session.execute(
+                select(
+                    CommandStat.command_name,
+                    CommandStat.plugin_name,
+                    total,
+                )
+                .where(CommandStat.timestamp >= start_time)
+                .group_by(CommandStat.plugin_name, CommandStat.command_name)
+                .order_by(desc(total))
+                .limit(limit),
+            )
+            return [
+                (command_name, plugin_name or "", int(count))
+                for command_name, plugin_name, count in result.all()
+            ]
 
     async def count_platform_stats(self) -> int:
         """Count the number of platform statistics records."""

@@ -47,6 +47,7 @@ class StatRoute(Route):
         super().__init__(context)
         self.routes = {
             "/stat/get": ("GET", self.get_stat),
+            "/stat/top-commands": ("GET", self.get_top_commands),
             "/stat/provider-tokens": ("GET", self.get_provider_token_stats),
             "/stat/version": ("GET", self.get_version),
             "/stat/start-time": ("GET", self.get_start_time),
@@ -220,6 +221,25 @@ class StatRoute(Route):
             )
 
             return Response().ok(stat_dict).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(e.__str__()).__dict__
+
+    async def get_top_commands(self):
+        """获取最常被触发的指令排行。"""
+        offset_sec = int(request.args.get("offset_sec", 86400))
+        limit = int(request.args.get("limit", 20))
+        try:
+            rows = await self.db_helper.get_top_commands(offset_sec, limit)
+            commands = [
+                {
+                    "command_name": command_name,
+                    "plugin_name": plugin_name,
+                    "count": count,
+                }
+                for command_name, plugin_name, count in rows
+            ]
+            return Response().ok({"commands": commands}).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(e.__str__()).__dict__

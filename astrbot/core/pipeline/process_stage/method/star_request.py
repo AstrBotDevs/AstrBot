@@ -1,17 +1,31 @@
 """本地 Agent 模式的 AstrBot 插件调用 Stage"""
 
+import asyncio
 import traceback
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from astrbot.core import logger
+from astrbot.core import db_helper, logger
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.star.filter.command import CommandFilter
+from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 
 from ...context import PipelineContext, call_event_hook, call_handler
 from ..stage import Stage
+
+
+async def _record_command_stat(command_name: str, plugin_name: str) -> None:
+    """异步记录指令触发统计，吞掉并记录异常，避免未捕获的后台任务错误。"""
+    try:
+        await db_helper.insert_command_stats(
+            command_name=command_name,
+            plugin_name=plugin_name,
+        )
+    except Exception as e:
+        logger.error(f"记录指令触发统计失败: {e}")
 
 
 class StarRequestSubStage(Stage):
@@ -44,6 +58,20 @@ class StarRequestSubStage(Stage):
                 )
                 continue
             logger.debug(f"plugin -> {md.name} - {handler.handler_name}")
+
+            # 统计指令触发次数（仅统计带指令过滤器的 handler）
+            command_name = None
+            for f in handler.event_filters:
+                if isinstance(f, (CommandFilter, CommandGroupFilter)):
+                    complete_names = f.get_complete_command_names()
+                    if complete_names:
+                        command_name = complete_names[0]
+                    break
+            if command_name:
+                asyncio.create_task(
+                    _record_command_stat(command_name, md.name or ""),
+                )
+
             try:
                 wrapper = call_handler(event, handler.handler, **params)
                 async for ret in wrapper:

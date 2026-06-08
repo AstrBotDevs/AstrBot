@@ -109,6 +109,31 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def insert_command_stats(
+        self,
+        command_name: str,
+        plugin_name: str = "",
+        count: int = 1,
+        timestamp: datetime.datetime | None = None,
+    ) -> None:
+        """Insert (or increment) a command trigger statistic record."""
+        ...
+
+    @abc.abstractmethod
+    async def get_top_commands(
+        self,
+        offset_sec: int = 86400,
+        limit: int = 20,
+    ) -> list[tuple[str, str, int]]:
+        """Get the most frequently triggered commands within the offset.
+
+        Each (plugin_name, command_name) pair is counted separately. Returns a
+        list of (command_name, plugin_name, total_count) ordered by total_count
+        descending.
+        """
+        ...
+
+    @abc.abstractmethod
     async def insert_provider_stat(
         self,
         *,

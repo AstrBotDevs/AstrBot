@@ -54,6 +54,13 @@
     "title": "Platform Message Ranking",
     "subtitle": "{range}, sorted by aggregated message volume"
   },
+  "commandRanking": {
+    "title": "Command Usage Ranking",
+    "subtitle": "{range}, sorted by trigger count",
+    "plugin": "Plugin",
+    "times": "times",
+    "total": "{count} total"
+  },
   "modelCalls": {
     "title": "Model Calls",
     "subtitle": "Model call statistics"
@@ -81,7 +88,8 @@
   "empty": {
     "platformStats": "No platform message statistics available.",
     "modelCalls": "No model call data for {range}.",
-    "sessionCalls": "No session call data for {range}."
+    "sessionCalls": "No session call data for {range}.",
+    "commandStats": "No command trigger statistics available."
   },
   "chart": {
     "messages": "Messages",
