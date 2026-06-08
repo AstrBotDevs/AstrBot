@@ -314,8 +314,8 @@ class KBSQLiteDatabase:
             "progress": cls._decode_json(task.progress),
             "result": cls._decode_json(task.result),
             "error": cls._decode_json(task.error),
-            "created_at": task.created_at.isoformat(),
-            "updated_at": task.updated_at.isoformat(),
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "updated_at": task.updated_at.isoformat() if task.updated_at else None,
         }
 
     async def close(self) -> None:
@@ -717,18 +717,22 @@ class KBSQLiteDatabase:
         if not candidates:
             return results
 
+        # 限制并发删除数量，避免 FAISS 写锁竞争
+        semaphore = asyncio.Semaphore(10)
+
         async def _delete_one(doc_id: str) -> tuple[str, bool]:
-            metadata_filters = {"kb_doc_id": doc_id}
-            if kb_id is not None:
-                metadata_filters["kb_id"] = kb_id
-            try:
-                await vec_db.delete_documents(metadata_filters=metadata_filters)
-                return doc_id, True
-            except Exception as e:
-                logger.error(
-                    f"删除文档 {doc_id} 的向量数据失败: {e}",
-                )
-                return doc_id, False
+            async with semaphore:
+                metadata_filters = {"kb_doc_id": doc_id}
+                if kb_id is not None:
+                    metadata_filters["kb_id"] = kb_id
+                try:
+                    await vec_db.delete_documents(metadata_filters=metadata_filters)
+                    return doc_id, True
+                except Exception as e:
+                    logger.error(
+                        f"删除文档 {doc_id} 的向量数据失败: {e}",
+                    )
+                    return doc_id, False
 
         vec_results = await asyncio.gather(
             *[_delete_one(doc_id) for doc_id in candidates],
