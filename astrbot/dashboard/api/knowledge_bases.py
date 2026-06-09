@@ -23,7 +23,7 @@ from .auth import AuthContext, require_dashboard_user, require_scope
 from .multipart import multipart_parts
 
 router = APIRouter(tags=["Knowledge Bases"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/kb",
     tags=["Dashboard Knowledge Bases"],
     include_in_schema=False,
@@ -313,7 +313,7 @@ async def retrieve_knowledge_base(
     )
 
 
-@dashboard_router.get("/list")
+@legacy_router.get("/list")
 async def dashboard_list_kbs(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -328,7 +328,7 @@ async def dashboard_list_kbs(
     )
 
 
-@dashboard_router.post("/create")
+@legacy_router.post("/create")
 async def dashboard_create_kb(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -337,7 +337,7 @@ async def dashboard_create_kb(
     return await _run_json(request, service.create_kb, prefix="创建知识库失败")
 
 
-@dashboard_router.get("/get")
+@legacy_router.get("/get")
 async def dashboard_get_kb(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -349,7 +349,7 @@ async def dashboard_get_kb(
     )
 
 
-@dashboard_router.post("/update")
+@legacy_router.post("/update")
 async def dashboard_update_kb(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -358,7 +358,7 @@ async def dashboard_update_kb(
     return await _run_json(request, service.update_kb, prefix="更新知识库失败")
 
 
-@dashboard_router.post("/delete")
+@legacy_router.post("/delete")
 async def dashboard_delete_kb(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -367,7 +367,7 @@ async def dashboard_delete_kb(
     return await _run_json(request, service.delete_kb, prefix="删除知识库失败")
 
 
-@dashboard_router.get("/stats")
+@legacy_router.get("/stats")
 async def dashboard_get_kb_stats(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -379,7 +379,7 @@ async def dashboard_get_kb_stats(
     )
 
 
-@dashboard_router.get("/document/list")
+@legacy_router.get("/document/list")
 async def dashboard_list_documents(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -395,7 +395,7 @@ async def dashboard_list_documents(
     )
 
 
-@dashboard_router.post("/document/upload")
+@legacy_router.post("/document/upload")
 async def dashboard_upload_document(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -412,7 +412,7 @@ async def dashboard_upload_document(
     return await _run(_operation, prefix="上传文档失败")
 
 
-@dashboard_router.post("/document/import")
+@legacy_router.post("/document/import")
 async def dashboard_import_documents(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -421,7 +421,7 @@ async def dashboard_import_documents(
     return await _run_json(request, service.import_documents, prefix="导入文档失败")
 
 
-@dashboard_router.post("/document/upload/url")
+@legacy_router.post("/document/upload/url")
 async def dashboard_upload_document_from_url(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -434,7 +434,7 @@ async def dashboard_upload_document_from_url(
     )
 
 
-@dashboard_router.get("/document/upload/progress")
+@legacy_router.get("/document/upload/progress")
 async def dashboard_get_upload_progress(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -446,7 +446,7 @@ async def dashboard_get_upload_progress(
     )
 
 
-@dashboard_router.get("/document/get")
+@legacy_router.get("/document/get")
 async def dashboard_get_document(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -461,7 +461,7 @@ async def dashboard_get_document(
     )
 
 
-@dashboard_router.post("/document/delete")
+@legacy_router.post("/document/delete")
 async def dashboard_delete_document(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -470,7 +470,7 @@ async def dashboard_delete_document(
     return await _run_json(request, service.delete_document, prefix="删除文档失败")
 
 
-@dashboard_router.get("/chunk/list")
+@legacy_router.get("/chunk/list")
 async def dashboard_list_chunks(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -487,7 +487,7 @@ async def dashboard_list_chunks(
     )
 
 
-@dashboard_router.post("/chunk/delete")
+@legacy_router.post("/chunk/delete")
 async def dashboard_delete_chunk(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -496,7 +496,7 @@ async def dashboard_delete_chunk(
     return await _run_json(request, service.delete_chunk, prefix="删除文本块失败")
 
 
-@dashboard_router.post("/retrieve")
+@legacy_router.post("/retrieve")
 async def dashboard_retrieve(
     request: Request,
     _username: str = Depends(require_dashboard_user),

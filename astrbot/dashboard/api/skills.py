@@ -25,7 +25,7 @@ from .auth import AuthContext, require_dashboard_user, require_scope
 from .multipart import multipart_parts, single_upload
 
 router = APIRouter(tags=["Skills"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/skills",
     tags=["Dashboard Skills"],
     include_in_schema=False,
@@ -377,7 +377,7 @@ async def delete_neo_skill_release(
     return await _run(lambda: service.delete_neo_release(_model_dict(payload)))
 
 
-@dashboard_router.get("")
+@legacy_router.get("")
 async def list_dashboard_skills(
     _username: str = Depends(require_dashboard_user),
     service: SkillsService = Depends(get_service),
@@ -385,7 +385,7 @@ async def list_dashboard_skills(
     return await _run(service.get_skills)
 
 
-@dashboard_router.post("/upload")
+@legacy_router.post("/upload")
 async def upload_dashboard_skill(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -397,7 +397,7 @@ async def upload_dashboard_skill(
     return await _run(_operation)
 
 
-@dashboard_router.post("/batch-upload")
+@legacy_router.post("/batch-upload")
 async def batch_upload_dashboard_skills(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -410,7 +410,7 @@ async def batch_upload_dashboard_skills(
     return await _run(_operation)
 
 
-@dashboard_router.get("/download")
+@legacy_router.get("/download")
 async def download_dashboard_skill(
     name: str,
     _username: str = Depends(require_dashboard_user),
@@ -419,7 +419,7 @@ async def download_dashboard_skill(
     return await _download_skill(service, name)
 
 
-@dashboard_router.get("/files")
+@legacy_router.get("/files")
 async def list_dashboard_skill_files(
     request: Request,
     name: str,
@@ -431,7 +431,7 @@ async def list_dashboard_skill_files(
     )
 
 
-@dashboard_router.get("/file")
+@legacy_router.get("/file")
 async def get_dashboard_skill_file(
     name: str,
     path: str = "SKILL.md",
@@ -441,7 +441,7 @@ async def get_dashboard_skill_file(
     return await _run(lambda: service.get_skill_file(name, path))
 
 
-@dashboard_router.post("/file")
+@legacy_router.post("/file")
 async def update_dashboard_skill_file(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -451,7 +451,7 @@ async def update_dashboard_skill_file(
     return await _run(lambda: service.update_skill_file(body))
 
 
-@dashboard_router.post("/update")
+@legacy_router.post("/update")
 async def update_dashboard_skill(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -461,7 +461,7 @@ async def update_dashboard_skill(
     return await _run(lambda: service.update_skill(body))
 
 
-@dashboard_router.post("/delete")
+@legacy_router.post("/delete")
 async def delete_dashboard_skill(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -471,7 +471,7 @@ async def delete_dashboard_skill(
     return await _run(lambda: service.delete_skill(body))
 
 
-@dashboard_router.get("/neo/candidates")
+@legacy_router.get("/neo/candidates")
 async def list_dashboard_neo_skill_candidates(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -480,7 +480,7 @@ async def list_dashboard_neo_skill_candidates(
     return await _run(service.get_neo_candidates(dict(request.query_params)))
 
 
-@dashboard_router.get("/neo/releases")
+@legacy_router.get("/neo/releases")
 async def list_dashboard_neo_skill_releases(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -489,7 +489,7 @@ async def list_dashboard_neo_skill_releases(
     return await _run(service.get_neo_releases(dict(request.query_params)))
 
 
-@dashboard_router.get("/neo/payload")
+@legacy_router.get("/neo/payload")
 async def get_dashboard_neo_skill_payload(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -498,7 +498,7 @@ async def get_dashboard_neo_skill_payload(
     return await _run(service.get_neo_payload(dict(request.query_params)))
 
 
-@dashboard_router.post("/neo/evaluate")
+@legacy_router.post("/neo/evaluate")
 async def evaluate_dashboard_neo_skill_candidate(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -508,7 +508,7 @@ async def evaluate_dashboard_neo_skill_candidate(
     return await _run(lambda: service.evaluate_neo_candidate(body))
 
 
-@dashboard_router.post("/neo/promote")
+@legacy_router.post("/neo/promote")
 async def promote_dashboard_neo_skill_candidate(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -518,7 +518,7 @@ async def promote_dashboard_neo_skill_candidate(
     return await _run(lambda: service.promote_neo_candidate(body))
 
 
-@dashboard_router.post("/neo/rollback")
+@legacy_router.post("/neo/rollback")
 async def rollback_dashboard_neo_skill_release(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -528,7 +528,7 @@ async def rollback_dashboard_neo_skill_release(
     return await _run(lambda: service.rollback_neo_release(body))
 
 
-@dashboard_router.post("/neo/sync")
+@legacy_router.post("/neo/sync")
 async def sync_dashboard_neo_skill_release(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -538,7 +538,7 @@ async def sync_dashboard_neo_skill_release(
     return await _run(lambda: service.sync_neo_release(body))
 
 
-@dashboard_router.post("/neo/delete-candidate")
+@legacy_router.post("/neo/delete-candidate")
 async def delete_dashboard_neo_skill_candidate(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -548,7 +548,7 @@ async def delete_dashboard_neo_skill_candidate(
     return await _run(lambda: service.delete_neo_candidate(body))
 
 
-@dashboard_router.post("/neo/delete-release")
+@legacy_router.post("/neo/delete-release")
 async def delete_dashboard_neo_skill_release(
     request: Request,
     _username: str = Depends(require_dashboard_user),

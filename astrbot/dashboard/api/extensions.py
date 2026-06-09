@@ -17,7 +17,7 @@ from astrbot.dashboard.services.command_service import (
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Extension Components"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api",
     tags=["Dashboard Extension Components"],
     include_in_schema=False,
@@ -136,7 +136,7 @@ async def update_command(
     )
 
 
-@dashboard_router.get("/commands")
+@legacy_router.get("/commands")
 async def list_dashboard_commands(
     config_id: str | None = None,
     _username: str = Depends(require_dashboard_user),
@@ -145,7 +145,7 @@ async def list_dashboard_commands(
     return await _list_commands(config_id, service)
 
 
-@dashboard_router.get("/commands/conflicts")
+@legacy_router.get("/commands/conflicts")
 async def list_dashboard_command_conflicts(
     _username: str = Depends(require_dashboard_user),
     service: CommandService = Depends(get_command_service),
@@ -153,7 +153,7 @@ async def list_dashboard_command_conflicts(
     return await _list_command_conflicts(service)
 
 
-@dashboard_router.post("/commands/toggle")
+@legacy_router.post("/commands/toggle")
 async def toggle_dashboard_command(
     payload: CommandToggleRequest,
     _username: str = Depends(require_dashboard_user),
@@ -162,7 +162,7 @@ async def toggle_dashboard_command(
     return await _toggle_command(payload, service)
 
 
-@dashboard_router.post("/commands/rename")
+@legacy_router.post("/commands/rename")
 async def rename_dashboard_command(
     payload: CommandRenameRequest,
     _username: str = Depends(require_dashboard_user),
@@ -171,7 +171,7 @@ async def rename_dashboard_command(
     return await _rename_command(payload, service)
 
 
-@dashboard_router.post("/commands/permission")
+@legacy_router.post("/commands/permission")
 async def update_dashboard_command_permission(
     payload: CommandPermissionRequest,
     _username: str = Depends(require_dashboard_user),

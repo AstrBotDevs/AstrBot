@@ -13,7 +13,7 @@ from astrbot.dashboard.services.file_service import FileService, FileServiceErro
 from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Files"])
-dashboard_router = APIRouter(prefix="/api", include_in_schema=False)
+legacy_router = APIRouter(prefix="/api", include_in_schema=False)
 
 
 def get_service(request: Request) -> FileService:
@@ -122,7 +122,7 @@ async def delete_file(
     return ok({"attachment_id": attachment_id})
 
 
-@dashboard_router.get("/file/{file_token}")
+@legacy_router.get("/file/{file_token}")
 async def get_dashboard_token_file(
     file_token: str,
     service: FileService = Depends(get_service),

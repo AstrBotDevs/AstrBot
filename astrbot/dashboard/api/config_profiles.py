@@ -23,7 +23,7 @@ from .auth import AuthContext, require_scope
 from .multipart import multipart_parts
 
 router = APIRouter(tags=["Config Profiles"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/config",
     tags=["Dashboard Config"],
     include_in_schema=False,
@@ -215,7 +215,7 @@ async def delete_config_route(
     return ok(message="删除成功")
 
 
-@dashboard_router.get("/default")
+@legacy_router.get("/default")
 async def get_dashboard_alias_default_config(
     _auth: AuthContext = Depends(require_config_scope),
     service: ConfigProfileService = Depends(get_service),
@@ -223,7 +223,7 @@ async def get_dashboard_alias_default_config(
     return ok(service.get_profile_schema())
 
 
-@dashboard_router.get("/abconfs")
+@legacy_router.get("/abconfs")
 async def list_dashboard_alias_config_profiles(
     _auth: AuthContext = Depends(require_config_scope),
     service: ConfigProfileService = Depends(get_service),
@@ -231,7 +231,7 @@ async def list_dashboard_alias_config_profiles(
     return ok(service.list_profiles())
 
 
-@dashboard_router.post("/abconf/new")
+@legacy_router.post("/abconf/new")
 async def create_dashboard_alias_config_profile(
     request: Request,
     _auth: AuthContext = Depends(require_config_scope),
@@ -250,7 +250,7 @@ async def create_dashboard_alias_config_profile(
         return _alias_error(str(exc))
 
 
-@dashboard_router.get("/abconf")
+@legacy_router.get("/abconf")
 async def get_dashboard_alias_config_profile(
     id: str | None = Query(default=None),
     system_config: str = Query(default="0"),
@@ -267,7 +267,7 @@ async def get_dashboard_alias_config_profile(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/abconf/delete")
+@legacy_router.post("/abconf/delete")
 async def delete_dashboard_alias_config_profile(
     request: Request,
     _auth: AuthContext = Depends(require_config_scope),
@@ -284,7 +284,7 @@ async def delete_dashboard_alias_config_profile(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/abconf/update")
+@legacy_router.post("/abconf/update")
 async def rename_dashboard_alias_config_profile(
     request: Request,
     _auth: AuthContext = Depends(require_config_scope),
@@ -301,7 +301,7 @@ async def rename_dashboard_alias_config_profile(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/astrbot/update")
+@legacy_router.post("/astrbot/update")
 async def update_dashboard_alias_astrbot_config(
     request: Request,
     _auth: AuthContext = Depends(require_config_scope),
@@ -325,7 +325,7 @@ async def update_dashboard_alias_astrbot_config(
         return _alias_error(str(exc))
 
 
-@dashboard_router.get("/get")
+@legacy_router.get("/get")
 async def get_dashboard_alias_configs(
     request: Request,
     _auth: AuthContext = Depends(require_config_scope),
@@ -337,7 +337,7 @@ async def get_dashboard_alias_configs(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/plugin/update")
+@legacy_router.post("/plugin/update")
 async def update_dashboard_alias_plugin_configs(
     request: Request,
     plugin_name: str = Query(default="unknown"),
@@ -355,7 +355,7 @@ async def update_dashboard_alias_plugin_configs(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/file/upload")
+@legacy_router.post("/file/upload")
 async def upload_dashboard_alias_config_file(
     request: Request,
     scope: str | None = Query(default=None),
@@ -378,7 +378,7 @@ async def upload_dashboard_alias_config_file(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/file/delete")
+@legacy_router.post("/file/delete")
 async def delete_dashboard_alias_config_file(
     request: Request,
     scope: str | None = Query(default=None),
@@ -398,7 +398,7 @@ async def delete_dashboard_alias_config_file(
         return _alias_error(str(exc))
 
 
-@dashboard_router.get("/file/get")
+@legacy_router.get("/file/get")
 async def list_dashboard_alias_config_files(
     scope: str | None = Query(default=None),
     name: str | None = Query(default=None),
@@ -418,7 +418,7 @@ async def list_dashboard_alias_config_files(
         return _alias_error(str(exc))
 
 
-@dashboard_router.get("/umo_abconf_routes")
+@legacy_router.get("/umo_abconf_routes")
 async def get_dashboard_alias_config_routes(
     _auth: AuthContext = Depends(require_config_scope),
     service: ConfigRoutingService = Depends(get_routing_service),
@@ -426,7 +426,7 @@ async def get_dashboard_alias_config_routes(
     return ok(service.list_routes())
 
 
-@dashboard_router.post("/umo_abconf_route/update_all")
+@legacy_router.post("/umo_abconf_route/update_all")
 async def update_dashboard_alias_config_routes(
     request: Request,
     _auth: AuthContext = Depends(require_config_scope),
@@ -440,7 +440,7 @@ async def update_dashboard_alias_config_routes(
     return ok(message="更新成功")
 
 
-@dashboard_router.post("/umo_abconf_route/update")
+@legacy_router.post("/umo_abconf_route/update")
 async def upsert_dashboard_alias_config_route(
     request: Request,
     _auth: AuthContext = Depends(require_config_scope),
@@ -454,7 +454,7 @@ async def upsert_dashboard_alias_config_route(
     return ok(message="更新成功")
 
 
-@dashboard_router.post("/umo_abconf_route/delete")
+@legacy_router.post("/umo_abconf_route/delete")
 async def delete_dashboard_alias_config_route(
     request: Request,
     _auth: AuthContext = Depends(require_config_scope),

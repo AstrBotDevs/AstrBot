@@ -9,7 +9,7 @@ from astrbot.dashboard.services.cron_service import CronService, CronServiceErro
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Cron"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/cron",
     tags=["Dashboard Cron"],
     include_in_schema=False,
@@ -115,7 +115,7 @@ async def run_cron_job(
     return await _run_job(job_id, service)
 
 
-@dashboard_router.get("/jobs")
+@legacy_router.get("/jobs")
 async def list_dashboard_cron_jobs(
     job_type: str | None = Query(default=None, alias="type"),
     _username: str = Depends(require_dashboard_user),
@@ -124,7 +124,7 @@ async def list_dashboard_cron_jobs(
     return await _list_jobs(job_type, service)
 
 
-@dashboard_router.post("/jobs")
+@legacy_router.post("/jobs")
 async def create_dashboard_cron_job(
     payload: CronJobRequest,
     _username: str = Depends(require_dashboard_user),
@@ -133,7 +133,7 @@ async def create_dashboard_cron_job(
     return await _create_job(payload, service)
 
 
-@dashboard_router.patch("/jobs/{job_id}")
+@legacy_router.patch("/jobs/{job_id}")
 async def update_dashboard_cron_job(
     job_id: str,
     payload: CronJobRequest,
@@ -143,7 +143,7 @@ async def update_dashboard_cron_job(
     return await _update_job(job_id, payload, service)
 
 
-@dashboard_router.delete("/jobs/{job_id}")
+@legacy_router.delete("/jobs/{job_id}")
 async def delete_dashboard_cron_job(
     job_id: str,
     _username: str = Depends(require_dashboard_user),
@@ -152,7 +152,7 @@ async def delete_dashboard_cron_job(
     return await _delete_job(job_id, service)
 
 
-@dashboard_router.post("/jobs/{job_id}/run")
+@legacy_router.post("/jobs/{job_id}/run")
 async def run_dashboard_cron_job(
     job_id: str,
     _username: str = Depends(require_dashboard_user),

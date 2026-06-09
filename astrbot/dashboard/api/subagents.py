@@ -12,7 +12,7 @@ from astrbot.dashboard.services.subagent_service import (
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Subagents"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/subagent",
     tags=["Dashboard Subagents"],
     include_in_schema=False,
@@ -82,7 +82,7 @@ async def get_subagent_tools(
     return await _get_available_tools(service)
 
 
-@dashboard_router.get("/config")
+@legacy_router.get("/config")
 async def get_dashboard_subagent_config(
     _username: str = Depends(require_dashboard_user),
     service: SubAgentService = Depends(get_service),
@@ -90,7 +90,7 @@ async def get_dashboard_subagent_config(
     return await _get_config(service)
 
 
-@dashboard_router.post("/config")
+@legacy_router.post("/config")
 async def update_dashboard_subagent_config(
     payload: SubAgentConfigRequest,
     _username: str = Depends(require_dashboard_user),
@@ -99,7 +99,7 @@ async def update_dashboard_subagent_config(
     return await _update_config(payload, service)
 
 
-@dashboard_router.get("/available-tools")
+@legacy_router.get("/available-tools")
 async def get_dashboard_subagent_tools(
     _username: str = Depends(require_dashboard_user),
     service: SubAgentService = Depends(get_service),

@@ -12,7 +12,7 @@ from astrbot.dashboard.services.api_key_service import (
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["API Keys"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/apikey",
     tags=["Dashboard API Keys"],
     include_in_schema=False,
@@ -112,7 +112,7 @@ async def delete_api_key(
     return await _delete_api_key(key_id, service)
 
 
-@dashboard_router.get("/list")
+@legacy_router.get("/list")
 async def list_dashboard_api_keys(
     _username: str = Depends(require_dashboard_user),
     service: ApiKeyService = Depends(get_service),
@@ -120,7 +120,7 @@ async def list_dashboard_api_keys(
     return await _list_api_keys(service)
 
 
-@dashboard_router.post("/create")
+@legacy_router.post("/create")
 async def create_dashboard_api_key(
     payload: ApiKeyCreateRequest,
     username: str = Depends(require_dashboard_user),
@@ -129,7 +129,7 @@ async def create_dashboard_api_key(
     return await _create_api_key(payload, created_by=username, service=service)
 
 
-@dashboard_router.post("/revoke")
+@legacy_router.post("/revoke")
 async def revoke_dashboard_api_key(
     payload: ApiKeyIdRequest,
     _username: str = Depends(require_dashboard_user),
@@ -138,7 +138,7 @@ async def revoke_dashboard_api_key(
     return await _revoke_api_key(payload.key_id, service)
 
 
-@dashboard_router.post("/delete")
+@legacy_router.post("/delete")
 async def delete_dashboard_api_key(
     payload: ApiKeyIdRequest,
     _username: str = Depends(require_dashboard_user),

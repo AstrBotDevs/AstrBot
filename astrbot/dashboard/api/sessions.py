@@ -20,7 +20,7 @@ from astrbot.dashboard.services.session_management_service import (
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Sessions"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/session",
     tags=["Dashboard Sessions"],
     include_in_schema=False,
@@ -254,7 +254,7 @@ async def delete_session_group(
         return _unexpected_error("删除分组失败", exc)
 
 
-@dashboard_router.get("/list-rule")
+@legacy_router.get("/list-rule")
 async def list_dashboard_session_rules(
     page: int = Query(1),
     page_size: int = Query(10),
@@ -272,7 +272,7 @@ async def list_dashboard_session_rules(
     )
 
 
-@dashboard_router.post("/update-rule")
+@legacy_router.post("/update-rule")
 async def update_dashboard_session_rule(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -285,7 +285,7 @@ async def update_dashboard_session_rule(
     )
 
 
-@dashboard_router.post("/delete-rule")
+@legacy_router.post("/delete-rule")
 async def delete_dashboard_session_rule(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -298,7 +298,7 @@ async def delete_dashboard_session_rule(
     )
 
 
-@dashboard_router.post("/batch-delete-rule")
+@legacy_router.post("/batch-delete-rule")
 async def batch_delete_dashboard_session_rule(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -311,7 +311,7 @@ async def batch_delete_dashboard_session_rule(
     )
 
 
-@dashboard_router.get("/active-umos")
+@legacy_router.get("/active-umos")
 async def list_dashboard_active_umos(
     _username: str = Depends(require_dashboard_user),
     service: SessionManagementService = Depends(get_service),
@@ -319,7 +319,7 @@ async def list_dashboard_active_umos(
     return await _run(service.list_active_umos, label="获取 UMO 列表失败")
 
 
-@dashboard_router.get("/list-all-with-status")
+@legacy_router.get("/list-all-with-status")
 async def list_dashboard_umos_with_status(
     page: int = Query(1),
     page_size: int = Query(20),
@@ -341,7 +341,7 @@ async def list_dashboard_umos_with_status(
     )
 
 
-@dashboard_router.post("/batch-update-service")
+@legacy_router.post("/batch-update-service")
 async def batch_update_dashboard_session_service(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -354,7 +354,7 @@ async def batch_update_dashboard_session_service(
     )
 
 
-@dashboard_router.post("/batch-update-provider")
+@legacy_router.post("/batch-update-provider")
 async def batch_update_dashboard_session_provider(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -367,7 +367,7 @@ async def batch_update_dashboard_session_provider(
     )
 
 
-@dashboard_router.get("/groups")
+@legacy_router.get("/groups")
 async def list_dashboard_session_groups(
     _username: str = Depends(require_dashboard_user),
     service: SessionManagementService = Depends(get_service),
@@ -375,7 +375,7 @@ async def list_dashboard_session_groups(
     return await _run(service.list_groups, label="获取分组列表失败")
 
 
-@dashboard_router.post("/group/create")
+@legacy_router.post("/group/create")
 async def create_dashboard_session_group(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -388,7 +388,7 @@ async def create_dashboard_session_group(
     )
 
 
-@dashboard_router.post("/group/update")
+@legacy_router.post("/group/update")
 async def update_dashboard_session_group(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -401,7 +401,7 @@ async def update_dashboard_session_group(
     )
 
 
-@dashboard_router.post("/group/delete")
+@legacy_router.post("/group/delete")
 async def delete_dashboard_session_group(
     request: Request,
     _username: str = Depends(require_dashboard_user),

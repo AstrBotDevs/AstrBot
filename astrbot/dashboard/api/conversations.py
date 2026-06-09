@@ -22,7 +22,7 @@ from astrbot.dashboard.services.conversation_service import (
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Conversations"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/conversation",
     tags=["Dashboard Conversations"],
     include_in_schema=False,
@@ -210,7 +210,7 @@ async def delete_conversation(
     )
 
 
-@dashboard_router.get("/list")
+@legacy_router.get("/list")
 async def list_dashboard_conversations(
     page: int = Query(default=1),
     page_size: int = Query(default=20),
@@ -234,7 +234,7 @@ async def list_dashboard_conversations(
     )
 
 
-@dashboard_router.post("/detail")
+@legacy_router.post("/detail")
 async def get_dashboard_conversation_detail(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -244,7 +244,7 @@ async def get_dashboard_conversation_detail(
     return await _run(lambda: service.get_conversation_detail(body))
 
 
-@dashboard_router.post("/update")
+@legacy_router.post("/update")
 async def update_dashboard_conversation(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -254,7 +254,7 @@ async def update_dashboard_conversation(
     return await _run(lambda: service.update_conversation(body))
 
 
-@dashboard_router.post("/delete")
+@legacy_router.post("/delete")
 async def delete_dashboard_conversation(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -264,7 +264,7 @@ async def delete_dashboard_conversation(
     return await _run(lambda: service.delete_conversation(body))
 
 
-@dashboard_router.post("/update_history")
+@legacy_router.post("/update_history")
 async def update_dashboard_conversation_history(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -274,7 +274,7 @@ async def update_dashboard_conversation_history(
     return await _run(lambda: service.update_history(body))
 
 
-@dashboard_router.post("/export")
+@legacy_router.post("/export")
 async def export_dashboard_conversations(
     request: Request,
     _username: str = Depends(require_dashboard_user),

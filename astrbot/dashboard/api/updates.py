@@ -14,7 +14,7 @@ from astrbot.dashboard.services.update_service import (
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Updates"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/update",
     tags=["Dashboard Updates"],
     include_in_schema=False,
@@ -79,7 +79,7 @@ async def check_updates(
     return await _run(lambda: service.check_update(update_type))
 
 
-@dashboard_router.get("/check")
+@legacy_router.get("/check")
 async def check_dashboard_updates(
     update_type: str | None = Query(default=None, alias="type"),
     _username: str = Depends(require_dashboard_user),
@@ -96,7 +96,7 @@ async def update_releases(
     return await _run(service.get_releases)
 
 
-@dashboard_router.get("/releases")
+@legacy_router.get("/releases")
 async def dashboard_update_releases(
     _username: str = Depends(require_dashboard_user),
     service: UpdateService = Depends(get_service),
@@ -113,7 +113,7 @@ async def update_progress(
     return await _run(lambda: service.get_update_progress(task_id))
 
 
-@dashboard_router.get("/progress")
+@legacy_router.get("/progress")
 async def dashboard_update_progress(
     progress_id: str | None = Query(default=None, alias="id"),
     _username: str = Depends(require_dashboard_user),
@@ -131,7 +131,7 @@ async def update_core(
     return await _run(lambda: service.update_project(_model_dict(payload)))
 
 
-@dashboard_router.post("/do")
+@legacy_router.post("/do")
 async def update_dashboard_core(
     payload: UpdateRequest,
     _username: str = Depends(require_dashboard_user),
@@ -148,7 +148,7 @@ async def update_dashboard(
     return await _run(service.update_dashboard)
 
 
-@dashboard_router.post("/dashboard")
+@legacy_router.post("/dashboard")
 async def update_dashboard_assets(
     _username: str = Depends(require_dashboard_user),
     service: UpdateService = Depends(get_service),
@@ -165,7 +165,7 @@ async def install_pip_package(
     return await _run(lambda: service.install_pip_package(_model_dict(payload)))
 
 
-@dashboard_router.post("/pip-install")
+@legacy_router.post("/pip-install")
 async def install_dashboard_pip_package(
     payload: PipInstallRequest,
     _username: str = Depends(require_dashboard_user),
@@ -184,7 +184,7 @@ async def run_migration(
     return await _run(lambda: service.do_migration_v4(body))
 
 
-@dashboard_router.post("/migration")
+@legacy_router.post("/migration")
 async def run_dashboard_migration(
     payload: MigrationRequest | None = None,
     _username: str = Depends(require_dashboard_user),

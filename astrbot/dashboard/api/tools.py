@@ -18,7 +18,7 @@ from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceE
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Extension Components"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api",
     tags=["Dashboard Extension Components"],
     include_in_schema=False,
@@ -317,7 +317,7 @@ async def sync_modelscope_mcp_servers(
     return await _sync_modelscope_mcp_servers(access_token or "", service)
 
 
-@dashboard_router.get("/tools/list")
+@legacy_router.get("/tools/list")
 async def list_dashboard_tools(
     _username: str = Depends(require_dashboard_user),
     service: ToolsService = Depends(get_service),
@@ -325,7 +325,7 @@ async def list_dashboard_tools(
     return await _run(service.get_tool_list)
 
 
-@dashboard_router.post("/tools/toggle-tool")
+@legacy_router.post("/tools/toggle-tool")
 async def toggle_dashboard_tool(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -336,7 +336,7 @@ async def toggle_dashboard_tool(
     return await _toggle_tool(tool_id, bool(body.get("activate")), service)
 
 
-@dashboard_router.post("/tools/permission")
+@legacy_router.post("/tools/permission")
 async def update_dashboard_tool_permission(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -352,7 +352,7 @@ async def update_dashboard_tool_permission(
     )
 
 
-@dashboard_router.get("/tools/mcp/servers")
+@legacy_router.get("/tools/mcp/servers")
 async def list_dashboard_mcp_servers(
     _username: str = Depends(require_dashboard_user),
     service: ToolsService = Depends(get_service),
@@ -360,7 +360,7 @@ async def list_dashboard_mcp_servers(
     return await _run(service.get_mcp_servers)
 
 
-@dashboard_router.post("/tools/mcp/add")
+@legacy_router.post("/tools/mcp/add")
 async def add_dashboard_mcp_server(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -369,7 +369,7 @@ async def add_dashboard_mcp_server(
     return await _create_mcp_server(await _json_or_empty(request), service)
 
 
-@dashboard_router.post("/tools/mcp/update")
+@legacy_router.post("/tools/mcp/update")
 async def update_dashboard_mcp_server(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -379,7 +379,7 @@ async def update_dashboard_mcp_server(
     return await _update_mcp_server(_server_name_from_body(body), body, service)
 
 
-@dashboard_router.post("/tools/mcp/delete")
+@legacy_router.post("/tools/mcp/delete")
 async def delete_dashboard_mcp_server(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -389,7 +389,7 @@ async def delete_dashboard_mcp_server(
     return await _delete_mcp_server(_required_text(body.get("name"), "name"), service)
 
 
-@dashboard_router.post("/tools/mcp/test")
+@legacy_router.post("/tools/mcp/test")
 async def test_dashboard_mcp_connection(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -409,7 +409,7 @@ async def test_dashboard_mcp_connection(
     )
 
 
-@dashboard_router.post("/tools/mcp/sync-provider")
+@legacy_router.post("/tools/mcp/sync-provider")
 async def sync_dashboard_mcp_provider(
     request: Request,
     _username: str = Depends(require_dashboard_user),

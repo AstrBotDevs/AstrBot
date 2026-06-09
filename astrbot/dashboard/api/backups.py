@@ -20,7 +20,7 @@ from astrbot.dashboard.services.backup_service import (
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Backups"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/backup",
     tags=["Dashboard Backups"],
     include_in_schema=False,
@@ -107,7 +107,7 @@ async def list_backups(
     )
 
 
-@dashboard_router.get("/list")
+@legacy_router.get("/list")
 async def list_dashboard_backups(
     page: int = Query(default=1),
     page_size: int = Query(default=20),
@@ -128,7 +128,7 @@ async def create_backup(
     return await _run(service.export_backup, prefix="创建备份失败")
 
 
-@dashboard_router.post("/export")
+@legacy_router.post("/export")
 async def export_dashboard_backup(
     _username: str = Depends(require_dashboard_user),
     service: BackupService = Depends(get_service),
@@ -145,7 +145,7 @@ async def upload_backup(
     return await _run(lambda: service.upload_backup(file), prefix="上传备份文件失败")
 
 
-@dashboard_router.post("/upload")
+@legacy_router.post("/upload")
 async def upload_dashboard_backup(
     file: UploadFile = File(...),
     _username: str = Depends(require_dashboard_user),
@@ -166,7 +166,7 @@ async def init_backup_upload(
     )
 
 
-@dashboard_router.post("/upload/init")
+@legacy_router.post("/upload/init")
 async def init_dashboard_backup_upload(
     payload: BackupUploadInitRequest,
     _username: str = Depends(require_dashboard_user),
@@ -196,7 +196,7 @@ async def upload_backup_chunk(
     )
 
 
-@dashboard_router.post("/upload/chunk")
+@legacy_router.post("/upload/chunk")
 async def upload_dashboard_backup_chunk(
     upload_id: str = Form(...),
     chunk_index: str = Form(...),
@@ -226,7 +226,7 @@ async def complete_backup_upload(
     )
 
 
-@dashboard_router.post("/upload/complete")
+@legacy_router.post("/upload/complete")
 async def complete_dashboard_backup_upload(
     payload: BackupUploadSessionRequest,
     _username: str = Depends(require_dashboard_user),
@@ -250,7 +250,7 @@ async def abort_backup_upload(
     )
 
 
-@dashboard_router.post("/upload/abort")
+@legacy_router.post("/upload/abort")
 async def abort_dashboard_backup_upload(
     payload: BackupUploadSessionRequest,
     _username: str = Depends(require_dashboard_user),
@@ -271,7 +271,7 @@ async def get_backup_progress(
     return await _run(lambda: service.get_progress(task_id), prefix="获取任务进度失败")
 
 
-@dashboard_router.get("/progress")
+@legacy_router.get("/progress")
 async def get_dashboard_backup_progress(
     task_id: str | None = Query(default=None),
     _username: str = Depends(require_dashboard_user),
@@ -292,7 +292,7 @@ async def download_backup(
     return _download_backup(filename=filename, token=token, service=service)
 
 
-@dashboard_router.get("/download")
+@legacy_router.get("/download")
 async def download_dashboard_backup(
     filename: str | None = Query(default=None),
     token: str | None = Query(default=None),
@@ -314,7 +314,7 @@ async def rename_backup(
     )
 
 
-@dashboard_router.post("/rename")
+@legacy_router.post("/rename")
 async def rename_dashboard_backup(
     payload: BackupRenameRequest,
     filename: str | None = Query(default=None),
@@ -339,7 +339,7 @@ async def delete_backup(
     )
 
 
-@dashboard_router.post("/delete")
+@legacy_router.post("/delete")
 async def delete_dashboard_backup(
     request: Request,
     filename: str | None = Query(default=None),
@@ -365,7 +365,7 @@ async def check_backup(
     )
 
 
-@dashboard_router.post("/check")
+@legacy_router.post("/check")
 async def check_dashboard_backup(
     request: Request,
     filename: str | None = Query(default=None),
@@ -392,7 +392,7 @@ async def import_backup(
     )
 
 
-@dashboard_router.post("/import")
+@legacy_router.post("/import")
 async def import_dashboard_backup(
     request: Request,
     filename: str | None = Query(default=None),

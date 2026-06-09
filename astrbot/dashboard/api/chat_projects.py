@@ -13,7 +13,7 @@ from astrbot.dashboard.services.chatui_project_service import (
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Chat Projects"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/chatui_project",
     tags=["Dashboard Chat Projects"],
     include_in_schema=False,
@@ -56,7 +56,7 @@ async def list_chat_projects(
     return await _run(lambda: service.list_projects(auth.username))
 
 
-@dashboard_router.get("/list")
+@legacy_router.get("/list")
 async def list_dashboard_chat_projects(
     username: str = Depends(require_dashboard_user),
     service: ChatUIProjectService = Depends(get_service),
@@ -75,7 +75,7 @@ async def create_chat_project(
     )
 
 
-@dashboard_router.post("/create")
+@legacy_router.post("/create")
 async def create_dashboard_chat_project(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -94,7 +94,7 @@ async def get_chat_project(
     return await _run(lambda: service.get_project(auth.username, project_id))
 
 
-@dashboard_router.get("/get")
+@legacy_router.get("/get")
 async def get_dashboard_chat_project(
     project_id: str | None = Query(default=None),
     username: str = Depends(require_dashboard_user),
@@ -118,7 +118,7 @@ async def update_chat_project(
     )
 
 
-@dashboard_router.post("/update")
+@legacy_router.post("/update")
 async def update_dashboard_chat_project(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -137,7 +137,7 @@ async def delete_chat_project(
     return await _run(lambda: service.delete_project(auth.username, project_id))
 
 
-@dashboard_router.get("/delete")
+@legacy_router.get("/delete")
 async def delete_dashboard_chat_project(
     project_id: str | None = Query(default=None),
     username: str = Depends(require_dashboard_user),
@@ -155,7 +155,7 @@ async def list_chat_project_sessions(
     return await _run(lambda: service.get_project_sessions(auth.username, project_id))
 
 
-@dashboard_router.get("/get_sessions")
+@legacy_router.get("/get_sessions")
 async def list_dashboard_chat_project_sessions(
     project_id: str | None = Query(default=None),
     username: str = Depends(require_dashboard_user),
@@ -181,7 +181,7 @@ async def add_chat_project_session(
     )
 
 
-@dashboard_router.post("/add_session")
+@legacy_router.post("/add_session")
 async def add_dashboard_chat_project_session(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -205,7 +205,7 @@ async def remove_chat_project_session(
     )
 
 
-@dashboard_router.post("/remove_session")
+@legacy_router.post("/remove_session")
 async def remove_dashboard_chat_project_session(
     request: Request,
     username: str = Depends(require_dashboard_user),

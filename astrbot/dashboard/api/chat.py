@@ -24,7 +24,7 @@ from .auth import AuthContext, require_dashboard_user, require_scope
 from .multipart import single_upload
 
 router = APIRouter(tags=["Chat"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/chat",
     tags=["Dashboard Chat"],
     include_in_schema=False,
@@ -283,7 +283,7 @@ async def send_chat_thread_message(
     )
 
 
-@dashboard_router.post("/send")
+@legacy_router.post("/send")
 async def dashboard_send_chat(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -292,7 +292,7 @@ async def dashboard_send_chat(
     return await _send_chat(request=request, username=username, service=service)
 
 
-@dashboard_router.get("/new_session")
+@legacy_router.get("/new_session")
 async def dashboard_new_session(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -306,7 +306,7 @@ async def dashboard_new_session(
     )
 
 
-@dashboard_router.get("/sessions")
+@legacy_router.get("/sessions")
 async def dashboard_get_sessions(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -317,7 +317,7 @@ async def dashboard_get_sessions(
     )
 
 
-@dashboard_router.get("/get_session")
+@legacy_router.get("/get_session")
 async def dashboard_get_session(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -331,7 +331,7 @@ async def dashboard_get_session(
     )
 
 
-@dashboard_router.post("/stop")
+@legacy_router.post("/stop")
 async def dashboard_stop_session(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -343,7 +343,7 @@ async def dashboard_stop_session(
     )
 
 
-@dashboard_router.get("/delete_session")
+@legacy_router.get("/delete_session")
 async def dashboard_delete_session(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -357,7 +357,7 @@ async def dashboard_delete_session(
     )
 
 
-@dashboard_router.post("/batch_delete_sessions")
+@legacy_router.post("/batch_delete_sessions")
 async def dashboard_batch_delete_sessions(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -369,7 +369,7 @@ async def dashboard_batch_delete_sessions(
     )
 
 
-@dashboard_router.post("/update_session_display_name")
+@legacy_router.post("/update_session_display_name")
 async def dashboard_update_session_display_name(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -384,7 +384,7 @@ async def dashboard_update_session_display_name(
     )
 
 
-@dashboard_router.post("/message/edit")
+@legacy_router.post("/message/edit")
 async def dashboard_update_message(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -394,7 +394,7 @@ async def dashboard_update_message(
     return await _run(lambda: service.update_message(username, body))
 
 
-@dashboard_router.post("/message/regenerate")
+@legacy_router.post("/message/regenerate")
 async def dashboard_regenerate_message(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -417,7 +417,7 @@ async def dashboard_regenerate_message(
     )
 
 
-@dashboard_router.post("/thread/create")
+@legacy_router.post("/thread/create")
 async def dashboard_create_thread(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -427,7 +427,7 @@ async def dashboard_create_thread(
     return await _run(lambda: service.create_thread(username, body))
 
 
-@dashboard_router.get("/thread/get")
+@legacy_router.get("/thread/get")
 async def dashboard_get_thread(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -441,7 +441,7 @@ async def dashboard_get_thread(
     )
 
 
-@dashboard_router.post("/thread/send")
+@legacy_router.post("/thread/send")
 async def dashboard_send_thread_message(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -462,7 +462,7 @@ async def dashboard_send_thread_message(
     )
 
 
-@dashboard_router.post("/thread/delete")
+@legacy_router.post("/thread/delete")
 async def dashboard_delete_thread(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -474,7 +474,7 @@ async def dashboard_delete_thread(
     )
 
 
-@dashboard_router.get("/get_file")
+@legacy_router.get("/get_file")
 async def dashboard_get_file(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -491,7 +491,7 @@ async def dashboard_get_file(
         return JSONResponse(error("File access error"))
 
 
-@dashboard_router.get("/get_attachment")
+@legacy_router.get("/get_attachment")
 async def dashboard_get_attachment(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -511,7 +511,7 @@ async def dashboard_get_attachment(
         return JSONResponse(error("File access error"))
 
 
-@dashboard_router.post("/post_file")
+@legacy_router.post("/post_file")
 async def dashboard_post_file(
     request: Request,
     _username: str = Depends(require_dashboard_user),

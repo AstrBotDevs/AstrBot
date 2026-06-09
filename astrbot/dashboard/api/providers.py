@@ -13,7 +13,7 @@ from astrbot.dashboard.services.config_service import ProviderConfigService
 from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Providers"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/config",
     tags=["Dashboard Providers"],
     include_in_schema=False,
@@ -415,7 +415,7 @@ async def delete_provider(
     return ok(message="删除成功，已经实时生效。")
 
 
-@dashboard_router.get("/provider/template")
+@legacy_router.get("/provider/template")
 async def get_dashboard_alias_provider_template(
     _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
@@ -423,7 +423,7 @@ async def get_dashboard_alias_provider_template(
     return ok(service.get_provider_schema())
 
 
-@dashboard_router.get("/provider/list")
+@legacy_router.get("/provider/list")
 async def list_dashboard_alias_providers(
     provider_type: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_provider_scope),
@@ -443,7 +443,7 @@ async def list_dashboard_alias_providers(
     return ok(providers)
 
 
-@dashboard_router.post("/provider/new")
+@legacy_router.post("/provider/new")
 async def create_dashboard_alias_provider(
     payload: ProviderConfigRequest,
     _auth: AuthContext = Depends(require_provider_scope),
@@ -456,7 +456,7 @@ async def create_dashboard_alias_provider(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/provider/update")
+@legacy_router.post("/provider/update")
 async def update_dashboard_alias_provider(
     request: Request,
     _auth: AuthContext = Depends(require_provider_scope),
@@ -479,7 +479,7 @@ async def update_dashboard_alias_provider(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/provider/delete")
+@legacy_router.post("/provider/delete")
 async def delete_dashboard_alias_provider(
     request: Request,
     _auth: AuthContext = Depends(require_provider_scope),
@@ -496,7 +496,7 @@ async def delete_dashboard_alias_provider(
         return _alias_error(str(exc))
 
 
-@dashboard_router.get("/provider/check_one")
+@legacy_router.get("/provider/check_one")
 async def check_dashboard_alias_provider(
     id: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_provider_scope),
@@ -510,7 +510,7 @@ async def check_dashboard_alias_provider(
         return _alias_error(str(exc))
 
 
-@dashboard_router.get("/provider/model_list")
+@legacy_router.get("/provider/model_list")
 async def list_dashboard_alias_provider_models(
     provider_id: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_provider_scope),
@@ -522,7 +522,7 @@ async def list_dashboard_alias_provider_models(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/provider/get_embedding_dim")
+@legacy_router.post("/provider/get_embedding_dim")
 async def get_dashboard_alias_provider_embedding_dimension(
     request: Request,
     _auth: AuthContext = Depends(require_provider_scope),
@@ -535,7 +535,7 @@ async def get_dashboard_alias_provider_embedding_dimension(
         return _alias_error(str(exc))
 
 
-@dashboard_router.get("/provider_sources/models")
+@legacy_router.get("/provider_sources/models")
 async def list_dashboard_alias_provider_source_models(
     source_id: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_provider_scope),
@@ -551,7 +551,7 @@ async def list_dashboard_alias_provider_source_models(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/provider_sources/update")
+@legacy_router.post("/provider_sources/update")
 async def update_dashboard_alias_provider_source(
     request: Request,
     _auth: AuthContext = Depends(require_provider_scope),
@@ -576,7 +576,7 @@ async def update_dashboard_alias_provider_source(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/provider_sources/delete")
+@legacy_router.post("/provider_sources/delete")
 async def delete_dashboard_alias_provider_source(
     request: Request,
     _auth: AuthContext = Depends(require_provider_scope),

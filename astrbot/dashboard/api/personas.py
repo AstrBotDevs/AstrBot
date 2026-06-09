@@ -21,7 +21,7 @@ from astrbot.dashboard.services.persona_service import (
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Personas"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/persona",
     tags=["Dashboard Personas"],
     include_in_schema=False,
@@ -205,7 +205,7 @@ async def delete_persona(
     return await _run(lambda: service.delete_persona({"persona_id": persona_id}))
 
 
-@dashboard_router.get("/list")
+@legacy_router.get("/list")
 async def list_dashboard_personas(
     request: Request,
     folder_id: str | None = Query(default=None),
@@ -217,7 +217,7 @@ async def list_dashboard_personas(
     )
 
 
-@dashboard_router.post("/detail")
+@legacy_router.post("/detail")
 async def get_dashboard_persona_detail(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -227,7 +227,7 @@ async def get_dashboard_persona_detail(
     return await _run(lambda: service.get_persona_detail(body))
 
 
-@dashboard_router.post("/create")
+@legacy_router.post("/create")
 async def create_dashboard_persona(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -237,7 +237,7 @@ async def create_dashboard_persona(
     return await _run(lambda: service.create_persona(body))
 
 
-@dashboard_router.post("/update")
+@legacy_router.post("/update")
 async def update_dashboard_persona(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -247,7 +247,7 @@ async def update_dashboard_persona(
     return await _run(lambda: service.update_persona(body))
 
 
-@dashboard_router.post("/delete")
+@legacy_router.post("/delete")
 async def delete_dashboard_persona(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -257,7 +257,7 @@ async def delete_dashboard_persona(
     return await _run(lambda: service.delete_persona(body))
 
 
-@dashboard_router.post("/move")
+@legacy_router.post("/move")
 async def move_dashboard_persona(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -267,7 +267,7 @@ async def move_dashboard_persona(
     return await _run(lambda: service.move_persona(body))
 
 
-@dashboard_router.post("/reorder")
+@legacy_router.post("/reorder")
 async def reorder_dashboard_personas(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -277,7 +277,7 @@ async def reorder_dashboard_personas(
     return await _run(lambda: service.reorder_items(body))
 
 
-@dashboard_router.get("/folder/list")
+@legacy_router.get("/folder/list")
 async def list_dashboard_persona_folders(
     parent_id: str | None = Query(default=None),
     _username: str = Depends(require_dashboard_user),
@@ -286,7 +286,7 @@ async def list_dashboard_persona_folders(
     return await _run(lambda: service.list_folders(parent_id))
 
 
-@dashboard_router.get("/folder/tree")
+@legacy_router.get("/folder/tree")
 async def get_dashboard_persona_folder_tree(
     _username: str = Depends(require_dashboard_user),
     service: PersonaService = Depends(get_service),
@@ -294,7 +294,7 @@ async def get_dashboard_persona_folder_tree(
     return await _run(service.get_folder_tree)
 
 
-@dashboard_router.post("/folder/detail")
+@legacy_router.post("/folder/detail")
 async def get_dashboard_persona_folder_detail(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -304,7 +304,7 @@ async def get_dashboard_persona_folder_detail(
     return await _run(lambda: service.get_folder_detail(body))
 
 
-@dashboard_router.post("/folder/create")
+@legacy_router.post("/folder/create")
 async def create_dashboard_persona_folder(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -314,7 +314,7 @@ async def create_dashboard_persona_folder(
     return await _run(lambda: service.create_folder(body))
 
 
-@dashboard_router.post("/folder/update")
+@legacy_router.post("/folder/update")
 async def update_dashboard_persona_folder(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -324,7 +324,7 @@ async def update_dashboard_persona_folder(
     return await _run(lambda: service.update_folder(body))
 
 
-@dashboard_router.post("/folder/delete")
+@legacy_router.post("/folder/delete")
 async def delete_dashboard_persona_folder(
     request: Request,
     _username: str = Depends(require_dashboard_user),

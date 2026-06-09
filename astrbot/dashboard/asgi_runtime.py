@@ -4,7 +4,7 @@ import contextvars
 import inspect
 import re
 from collections.abc import Callable, Iterable
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -463,12 +463,14 @@ async def _call_view(view_func: Callable, path_params: dict[str, Any]):
     result = view_func(**path_params)
     if inspect.isawaitable(result):
         result = await result
-    return _coerce_view_result(result)
+    return await _coerce_view_result(result)
 
 
-def _coerce_view_result(result: Any):
+async def _coerce_view_result(result: Any):
     if isinstance(result, Response):
         return result
+    if _is_quart_response(result):
+        return await _quart_response_to_starlette(result)
 
     if isinstance(result, tuple):
         content = result[0] if result else None
@@ -482,6 +484,12 @@ def _coerce_view_result(result: Any):
             if headers:
                 content.headers.update(headers)
             return content
+        if _is_quart_response(content):
+            return await _quart_response_to_starlette(
+                content,
+                status_code=status_code,
+                extra_headers=headers,
+            )
         return _response_from_content(content, status_code=status_code, headers=headers)
 
     if isinstance(result, dict | list):
@@ -508,15 +516,103 @@ def _response_from_content(
     )
 
 
+def _is_quart_response(value: Any) -> bool:
+    return (
+        hasattr(value, "get_data")
+        and inspect.iscoroutinefunction(value.get_data)
+        and hasattr(value, "headers")
+        and hasattr(value, "status_code")
+    )
+
+
+def _response_header_pairs(headers: Any) -> list[tuple[str, str]]:
+    if headers is None:
+        return []
+    if hasattr(headers, "to_wsgi_list"):
+        return [(str(key), str(value)) for key, value in headers.to_wsgi_list()]
+    if hasattr(headers, "items"):
+        return [(str(key), str(value)) for key, value in headers.items()]
+    return [(str(key), str(value)) for key, value in headers]
+
+
+async def _quart_response_to_starlette(
+    quart_response: Any,
+    *,
+    status_code: int | None = None,
+    extra_headers: dict[str, str] | None = None,
+) -> Response:
+    content = await quart_response.get_data()
+    response = Response(
+        content=content,
+        status_code=status_code or int(quart_response.status_code),
+    )
+    pairs = _response_header_pairs(quart_response.headers)
+    if extra_headers:
+        pairs.extend((str(key), str(value)) for key, value in extra_headers.items())
+    response.raw_headers = [
+        (key.lower().encode("latin-1"), value.encode("latin-1")) for key, value in pairs
+    ]
+    return response
+
+
+@asynccontextmanager
+async def bind_quart_request_context(
+    request_: Request,
+    app: FastAPIAppAdapter,
+    *,
+    path: str | None = None,
+    g_obj: DashboardRequestState | None = None,
+):
+    try:
+        from quart import g as quart_g
+    except ImportError:
+        yield
+        return
+
+    quart_app = app.get_quart_compat_app()
+    headers = {
+        key.decode("latin-1"): value.decode("latin-1")
+        for key, value in request_.scope.get("headers", [])
+    }
+    body = await request_.body()
+    request_path = path or str(request_.url.path)
+    if "?" not in request_path and request_.url.query:
+        request_path = f"{request_path}?{request_.url.query}"
+
+    async with quart_app.test_request_context(
+        request_path,
+        method=request_.method,
+        headers=headers,
+        data=body,
+        scheme=request_.url.scheme,
+        root_path=request_.scope.get("root_path", ""),
+        scope_base={
+            "client": request_.scope.get("client"),
+            "server": request_.scope.get("server"),
+        },
+    ):
+        if g_obj is not None:
+            for key, value in getattr(g_obj, "_values", {}).items():
+                setattr(quart_g, key, value)
+        yield
+
+
 async def call_request_view(
     request_: Request,
     app: FastAPIAppAdapter,
     view_func: Callable,
     path_params: dict[str, Any] | None = None,
     g_obj: DashboardRequestState | None = None,
+    quart_compat_path: str | None = None,
 ):
     with bind_request_context(request_, app, g_obj):
-        return await _call_view(view_func, path_params or {})
+        async with bind_quart_request_context(
+            request_,
+            app,
+            path=quart_compat_path,
+            g_obj=g_obj,
+        ):
+            return await _call_view(view_func, path_params or {})
 
 
 async def call_websocket_view(
@@ -542,6 +638,15 @@ class FastAPIAppAdapter:
         self.debug = False
         self.testing = False
         self.name = "dashboard"
+        self._quart_compat_app: Any | None = None
+
+    def get_quart_compat_app(self):
+        if self._quart_compat_app is None:
+            from quart import Quart
+
+            self._quart_compat_app = Quart("astrbot_dashboard_plugin_compat")
+            self._quart_compat_app.json.sort_keys = False
+        return self._quart_compat_app
 
     def add_url_rule(
         self,

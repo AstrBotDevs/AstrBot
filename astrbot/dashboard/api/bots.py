@@ -9,7 +9,7 @@ from astrbot.dashboard.services.config_service import BotConfigService
 from .auth import AuthContext, require_scope
 
 router = APIRouter(tags=["Bots"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/config/platform",
     tags=["Dashboard Bots"],
     include_in_schema=False,
@@ -192,7 +192,7 @@ async def delete_bot(
     return ok(message="删除平台配置成功~")
 
 
-@dashboard_router.get("/list")
+@legacy_router.get("/list")
 async def list_dashboard_alias_platforms(
     _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
@@ -200,7 +200,7 @@ async def list_dashboard_alias_platforms(
     return ok({"platforms": service.list_bots()["bots"]})
 
 
-@dashboard_router.post("/new")
+@legacy_router.post("/new")
 async def create_dashboard_alias_platform(
     payload: BotConfigRequest,
     _auth: AuthContext = Depends(require_bot_scope),
@@ -213,7 +213,7 @@ async def create_dashboard_alias_platform(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/update")
+@legacy_router.post("/update")
 async def update_dashboard_alias_platform(
     request: Request,
     _auth: AuthContext = Depends(require_bot_scope),
@@ -236,7 +236,7 @@ async def update_dashboard_alias_platform(
         return _alias_error(str(exc))
 
 
-@dashboard_router.post("/delete")
+@legacy_router.post("/delete")
 async def delete_dashboard_alias_platform(
     request: Request,
     _auth: AuthContext = Depends(require_bot_scope),

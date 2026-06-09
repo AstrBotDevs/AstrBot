@@ -25,7 +25,7 @@ from astrbot.dashboard.services.auth_service import (
 )
 
 router = APIRouter(tags=["Auth"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/auth",
     tags=["Dashboard Auth"],
     include_in_schema=False,
@@ -357,7 +357,7 @@ async def login(
     return await _login(request, payload, service)
 
 
-@dashboard_router.post("/login")
+@legacy_router.post("/login")
 async def dashboard_login(
     request: Request,
     payload: LoginRequest,
@@ -376,7 +376,7 @@ async def logout(request: Request):
     return response
 
 
-@dashboard_router.post("/logout")
+@legacy_router.post("/logout")
 async def dashboard_logout(request: Request):
     return await logout(request)
 
@@ -388,7 +388,7 @@ async def setup_status(
     return _auth_service_response_from_result(await service.setup_status())
 
 
-@dashboard_router.get("/setup-status")
+@legacy_router.get("/setup-status")
 async def dashboard_setup_status(
     service: AuthService = Depends(get_auth_service),
 ):
@@ -405,7 +405,7 @@ async def setup(
     return await _setup(request, payload, service, auth)
 
 
-@dashboard_router.post("/setup")
+@legacy_router.post("/setup")
 async def dashboard_setup(
     request: Request,
     payload: AuthSetupRequest,
@@ -414,7 +414,7 @@ async def dashboard_setup(
     return await _setup(request, payload, service, None)
 
 
-@dashboard_router.post("/setup-authenticated")
+@legacy_router.post("/setup-authenticated")
 async def dashboard_setup_authenticated(
     request: Request,
     payload: AuthSetupRequest,
@@ -435,7 +435,7 @@ async def totp_setup(
     return await _totp_setup(request, payload, service)
 
 
-@dashboard_router.post("/totp/setup")
+@legacy_router.post("/totp/setup")
 async def dashboard_totp_setup(
     request: Request,
     payload: TotpSetupRequest,
@@ -454,7 +454,7 @@ async def totp_recovery(
     return await _totp_recovery(request, service)
 
 
-@dashboard_router.post("/totp/recovery")
+@legacy_router.post("/totp/recovery")
 async def dashboard_totp_recovery(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -473,7 +473,7 @@ async def update_account(
     return await _update_account(request, payload, service)
 
 
-@dashboard_router.post("/account/edit")
+@legacy_router.post("/account/edit")
 async def dashboard_update_account(
     request: Request,
     payload: AccountUpdateRequest,

@@ -1709,6 +1709,54 @@ async def test_v1_plugin_extension_maps_nested_plugin_path(
 
 
 @pytest.mark.asyncio
+async def test_v1_plugin_extension_supports_quart_request_context(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    from quart import g as quart_g
+    from quart import jsonify as quart_jsonify
+    from quart import request as quart_request
+
+    async def quart_plugin_extension(item_id: str):
+        return quart_jsonify(
+            {
+                "status": "ok",
+                "data": {
+                    "item_id": item_id,
+                    "path": quart_request.path,
+                    "method": quart_request.method,
+                    "source": quart_request.args.get("source"),
+                    "payload": await quart_request.get_json(),
+                    "username": quart_g.username,
+                },
+            }
+        )
+
+    fake_core_lifecycle.star_context.registered_web_apis = [
+        ("/quart/<item_id>", quart_plugin_extension, ["POST"], "quart")
+    ]
+
+    response = await asgi_client.post(
+        "/api/v1/plugins/extensions/quart/demo-item?source=v1",
+        json={"value": "demo"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["data"] == {
+        "item_id": "demo-item",
+        "path": "/api/plug/quart/demo-item",
+        "method": "POST",
+        "source": "v1",
+        "payload": {"value": "demo"},
+        "username": "fastapi-v1-test",
+    }
+
+
+@pytest.mark.asyncio
 async def test_v1_plugin_config_file_routes_reach_service_layer(
     asgi_client: httpx.AsyncClient,
 ):

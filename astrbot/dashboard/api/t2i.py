@@ -11,7 +11,7 @@ from astrbot.dashboard.services.t2i_service import T2iService, T2iServiceError
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Text To Image"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/t2i",
     tags=["Dashboard Text To Image"],
     include_in_schema=False,
@@ -152,7 +152,7 @@ async def delete_t2i_template(
     )
 
 
-@dashboard_router.get("/templates")
+@legacy_router.get("/templates")
 async def list_dashboard_t2i_templates(
     _username: str = Depends(require_dashboard_user),
     service: T2iService = Depends(get_service),
@@ -160,7 +160,7 @@ async def list_dashboard_t2i_templates(
     return await _run(service.list_templates)
 
 
-@dashboard_router.get("/templates/active")
+@legacy_router.get("/templates/active")
 async def get_dashboard_active_t2i_template(
     _username: str = Depends(require_dashboard_user),
     service: T2iService = Depends(get_service),
@@ -168,7 +168,7 @@ async def get_dashboard_active_t2i_template(
     return await _run(service.get_active_template)
 
 
-@dashboard_router.post("/templates/create")
+@legacy_router.post("/templates/create")
 async def create_dashboard_t2i_template(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -182,7 +182,7 @@ async def create_dashboard_t2i_template(
     )
 
 
-@dashboard_router.post("/templates/reset_default")
+@legacy_router.post("/templates/reset_default")
 async def reset_dashboard_default_t2i_template(
     _username: str = Depends(require_dashboard_user),
     service: T2iService = Depends(get_service),
@@ -190,7 +190,7 @@ async def reset_dashboard_default_t2i_template(
     return await _run(service.reset_default_template, result_as_message=True)
 
 
-@dashboard_router.post("/templates/set_active")
+@legacy_router.post("/templates/set_active")
 async def set_dashboard_active_t2i_template(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -203,7 +203,7 @@ async def set_dashboard_active_t2i_template(
     )
 
 
-@dashboard_router.get("/templates/{name:path}")
+@legacy_router.get("/templates/{name:path}")
 async def get_dashboard_t2i_template(
     name: str,
     _username: str = Depends(require_dashboard_user),
@@ -212,7 +212,7 @@ async def get_dashboard_t2i_template(
     return await _run(lambda: service.get_template(name))
 
 
-@dashboard_router.put("/templates/{name:path}")
+@legacy_router.put("/templates/{name:path}")
 async def update_dashboard_t2i_template(
     name: str,
     request: Request,
@@ -223,7 +223,7 @@ async def update_dashboard_t2i_template(
     return await _run(lambda: service.update_template(name, body.get("content")))
 
 
-@dashboard_router.delete("/templates/{name:path}")
+@legacy_router.delete("/templates/{name:path}")
 async def delete_dashboard_t2i_template(
     name: str,
     _username: str = Depends(require_dashboard_user),

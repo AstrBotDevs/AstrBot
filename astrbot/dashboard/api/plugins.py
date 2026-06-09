@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import PlainTextResponse, Response
@@ -47,7 +48,7 @@ from .auth import AuthContext, require_dashboard_user, require_scope
 from .multipart import multipart_parts
 
 router = APIRouter(tags=["Plugins"])
-dashboard_router = APIRouter(tags=["Dashboard Plugins"], include_in_schema=False)
+legacy_router = APIRouter(tags=["Dashboard Plugins"], include_in_schema=False)
 
 
 async def require_plugin_scope(request: Request) -> AuthContext:
@@ -174,6 +175,14 @@ def _match_registered_web_api(registered_web_apis, subpath: str, method: str):
     return None
 
 
+def _plugin_extension_legacy_path(plugin_path: str, request: Request) -> str:
+    encoded_path = quote(plugin_path.lstrip("/"), safe="/:@!$&'()*+,;=-._~")
+    path = f"/api/plug/{encoded_path}"
+    if request.url.query:
+        return f"{path}?{request.url.query}"
+    return path
+
+
 async def _call_plugin_extension(
     plugin_path: str,
     request: Request,
@@ -203,6 +212,7 @@ async def _call_plugin_extension(
         view_handler,
         path_values,
         g_obj=g_obj,
+        quart_compat_path=_plugin_extension_legacy_path(plugin_path, request),
     )
 
 
@@ -1098,7 +1108,7 @@ async def get_plugin_page_asset(
     )
 
 
-@dashboard_router.get("/api/plugin/get")
+@legacy_router.get("/api/plugin/get")
 async def dashboard_list_plugins(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1112,7 +1122,7 @@ async def dashboard_list_plugins(
     )
 
 
-@dashboard_router.get("/api/plugin/detail")
+@legacy_router.get("/api/plugin/detail")
 async def dashboard_get_plugin_detail(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1126,7 +1136,7 @@ async def dashboard_get_plugin_detail(
     )
 
 
-@dashboard_router.post("/api/plugin/check-compat")
+@legacy_router.post("/api/plugin/check-compat")
 async def dashboard_check_plugin_version_support(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1135,7 +1145,7 @@ async def dashboard_check_plugin_version_support(
     return await _check_plugin_version_support_request(request, service)
 
 
-@dashboard_router.get("/api/plugin/page/entry")
+@legacy_router.get("/api/plugin/page/entry")
 async def dashboard_get_plugin_page_entry_config(
     request: Request,
     username: str = Depends(require_dashboard_user),
@@ -1150,7 +1160,7 @@ async def dashboard_get_plugin_page_entry_config(
     )
 
 
-@dashboard_router.post("/api/plugin/install")
+@legacy_router.post("/api/plugin/install")
 async def dashboard_install_plugin(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1163,7 +1173,7 @@ async def dashboard_install_plugin(
     )
 
 
-@dashboard_router.post("/api/plugin/install-upload")
+@legacy_router.post("/api/plugin/install-upload")
 async def dashboard_install_plugin_upload(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1176,7 +1186,7 @@ async def dashboard_install_plugin_upload(
     )
 
 
-@dashboard_router.post("/api/plugin/update")
+@legacy_router.post("/api/plugin/update")
 async def dashboard_update_plugin(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1189,7 +1199,7 @@ async def dashboard_update_plugin(
     )
 
 
-@dashboard_router.post("/api/plugin/update-all")
+@legacy_router.post("/api/plugin/update-all")
 async def dashboard_update_all_plugins(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1202,7 +1212,7 @@ async def dashboard_update_all_plugins(
     )
 
 
-@dashboard_router.post("/api/plugin/uninstall")
+@legacy_router.post("/api/plugin/uninstall")
 async def dashboard_uninstall_plugin(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1215,7 +1225,7 @@ async def dashboard_uninstall_plugin(
     )
 
 
-@dashboard_router.post("/api/plugin/uninstall-failed")
+@legacy_router.post("/api/plugin/uninstall-failed")
 async def dashboard_uninstall_failed_plugin(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1228,7 +1238,7 @@ async def dashboard_uninstall_failed_plugin(
     )
 
 
-@dashboard_router.get("/api/plugin/market_list")
+@legacy_router.get("/api/plugin/market_list")
 async def dashboard_list_plugin_market(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1243,7 +1253,7 @@ async def dashboard_list_plugin_market(
     )
 
 
-@dashboard_router.post("/api/plugin/off")
+@legacy_router.post("/api/plugin/off")
 async def dashboard_disable_plugin(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1256,7 +1266,7 @@ async def dashboard_disable_plugin(
     )
 
 
-@dashboard_router.post("/api/plugin/on")
+@legacy_router.post("/api/plugin/on")
 async def dashboard_enable_plugin(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1269,7 +1279,7 @@ async def dashboard_enable_plugin(
     )
 
 
-@dashboard_router.post("/api/plugin/reload-failed")
+@legacy_router.post("/api/plugin/reload-failed")
 async def dashboard_reload_failed_plugin(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1282,7 +1292,7 @@ async def dashboard_reload_failed_plugin(
     )
 
 
-@dashboard_router.post("/api/plugin/reload")
+@legacy_router.post("/api/plugin/reload")
 async def dashboard_reload_plugin(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1295,7 +1305,7 @@ async def dashboard_reload_plugin(
     )
 
 
-@dashboard_router.get("/api/plugin/readme")
+@legacy_router.get("/api/plugin/readme")
 async def dashboard_get_plugin_readme(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1307,7 +1317,7 @@ async def dashboard_get_plugin_readme(
     )
 
 
-@dashboard_router.get("/api/plugin/changelog")
+@legacy_router.get("/api/plugin/changelog")
 async def dashboard_get_plugin_changelog(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1319,7 +1329,7 @@ async def dashboard_get_plugin_changelog(
     )
 
 
-@dashboard_router.get("/api/plugin/source/get")
+@legacy_router.get("/api/plugin/source/get")
 async def dashboard_get_custom_source(
     _username: str = Depends(require_dashboard_user),
     service: PluginService = Depends(get_service),
@@ -1327,7 +1337,7 @@ async def dashboard_get_custom_source(
     return await _run_service(service.get_custom_sources)
 
 
-@dashboard_router.post("/api/plugin/source/save")
+@legacy_router.post("/api/plugin/source/save")
 async def dashboard_save_custom_source(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1340,7 +1350,7 @@ async def dashboard_save_custom_source(
     )
 
 
-@dashboard_router.get("/api/plugin/source/get-failed-plugins")
+@legacy_router.get("/api/plugin/source/get-failed-plugins")
 async def dashboard_get_failed_plugins(
     _username: str = Depends(require_dashboard_user),
     service: PluginService = Depends(get_service),
@@ -1348,7 +1358,7 @@ async def dashboard_get_failed_plugins(
     return await _run_service(service.get_failed_plugins)
 
 
-@dashboard_router.get("/api/plugin/page/bridge-sdk.js")
+@legacy_router.get("/api/plugin/page/bridge-sdk.js")
 async def dashboard_get_plugin_page_bridge_sdk(
     request: Request,
     _username: str = Depends(require_dashboard_user),
@@ -1360,7 +1370,7 @@ async def dashboard_get_plugin_page_bridge_sdk(
     )
 
 
-@dashboard_router.get("/api/plugin/page/content/{plugin_id}/{page_name}/")
+@legacy_router.get("/api/plugin/page/content/{plugin_id}/{page_name}/")
 async def dashboard_get_plugin_page_entry(
     plugin_id: str,
     page_name: str,
@@ -1378,9 +1388,7 @@ async def dashboard_get_plugin_page_entry(
     )
 
 
-@dashboard_router.get(
-    "/api/plugin/page/content/{plugin_id}/{page_name}/{asset_path:path}"
-)
+@legacy_router.get("/api/plugin/page/content/{plugin_id}/{page_name}/{asset_path:path}")
 async def dashboard_get_plugin_page_asset(
     plugin_id: str,
     page_name: str,
@@ -1399,7 +1407,7 @@ async def dashboard_get_plugin_page_asset(
     )
 
 
-@dashboard_router.api_route("/api/plug/{plugin_path:path}", methods=["GET", "POST"])
+@legacy_router.api_route("/api/plug/{plugin_path:path}", methods=["GET", "POST"])
 async def dashboard_plugin_extension_route(
     plugin_path: str,
     request: Request,

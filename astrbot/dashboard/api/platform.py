@@ -16,7 +16,7 @@ from astrbot.dashboard.services.platform_service import (
 from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Platforms"])
-dashboard_router = APIRouter(
+legacy_router = APIRouter(
     prefix="/api/platform",
     tags=["Dashboard Platforms"],
     include_in_schema=False,
@@ -89,7 +89,7 @@ async def receive_platform_webhook(
     )
 
 
-@dashboard_router.api_route("/webhook/{webhook_uuid}", methods=["GET", "POST"])
+@legacy_router.api_route("/webhook/{webhook_uuid}", methods=["GET", "POST"])
 async def dashboard_platform_webhook(
     webhook_uuid: str,
     request: Request,
@@ -100,7 +100,7 @@ async def dashboard_platform_webhook(
     )
 
 
-@dashboard_router.get("/stats")
+@legacy_router.get("/stats")
 async def get_dashboard_platform_stats(
     _username: str = Depends(require_dashboard_user),
     service: PlatformService = Depends(get_service),
@@ -108,7 +108,7 @@ async def get_dashboard_platform_stats(
     return await _run(service.get_platform_stats)
 
 
-@dashboard_router.post("/registration/{platform_type}")
+@legacy_router.post("/registration/{platform_type}")
 async def handle_dashboard_platform_registration(
     platform_type: str,
     request: Request,
