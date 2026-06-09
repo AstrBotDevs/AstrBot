@@ -1,5 +1,6 @@
 """Tests for astr_main_agent module."""
 
+import datetime
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -132,6 +133,39 @@ def _setup_conversation_for_build(conv_mgr, cid: str = "conv-id") -> MagicMock:
     conversation = _new_mock_conversation(cid=cid)
     conv_mgr.get_conversation = AsyncMock(return_value=conversation)
     return conversation
+
+
+def test_append_system_reminders_includes_weekday(mock_event):
+    """Test datetime reminder includes weekday information."""
+    req = ProviderRequest(prompt="Hello")
+    fixed_now = datetime.datetime(
+        2026,
+        6,
+        8,
+        12,
+        34,
+        tzinfo=datetime.timezone.utc,
+    )
+
+    class FixedDateTime(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz:
+                return fixed_now.astimezone(tz)
+            return fixed_now
+
+    with patch("astrbot.core.astr_main_agent.datetime.datetime", FixedDateTime):
+        ama._append_system_reminders(
+            mock_event,
+            req,
+            {"datetime_system_prompt": True},
+            "UTC",
+        )
+
+    assert [part.text for part in req.extra_user_content_parts] == [
+        "<system_reminder>Current datetime: "
+        "2026-06-08 12:34 (UTC), Weekday: Monday</system_reminder>"
+    ]
 
 
 class TestMainAgentBuildConfig:

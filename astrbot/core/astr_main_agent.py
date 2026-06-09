@@ -115,6 +115,15 @@ from astrbot.core.utils.quoted_message_parser import (
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
+WEEKDAY_NAMES = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
 WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
     {
         "web_search_baidu",
@@ -874,18 +883,17 @@ def _append_system_reminders(
                 system_parts.append(f"Group name: {group_name}")
 
     if cfg.get("datetime_system_prompt"):
-        current_time = None
+        now = None
         if timezone:
             try:
                 now = datetime.datetime.now(zoneinfo.ZoneInfo(timezone))
-                current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
             except Exception as exc:  # noqa: BLE001
                 logger.error("时区设置错误: %s, 使用本地时区", exc)
-        if not current_time:
-            current_time = (
-                datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
-            )
-        system_parts.append(f"Current datetime: {current_time}")
+        if now is None:
+            now = datetime.datetime.now().astimezone()
+        current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
+        weekday = WEEKDAY_NAMES[now.weekday()]
+        system_parts.append(f"Current datetime: {current_time}, Weekday: {weekday}")
 
     if system_parts:
         system_content = (
