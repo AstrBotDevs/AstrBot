@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import re
 import time
 import traceback
@@ -257,7 +258,7 @@ async def run_agent(
                     )
                     astr_event.set_result(
                         MessageEventResult(
-                            chain=list(resp.data["chain"].chain),
+                            chain=copy.deepcopy(resp.data["chain"].chain),
                             result_content_type=content_typ,
                         ),
                     )
@@ -275,7 +276,7 @@ async def run_agent(
                 if merged_chain:
                     astr_event.set_result(
                         MessageEventResult(
-                            chain=list(merged_chain.chain),
+                            chain=copy.deepcopy(merged_chain.chain),
                             result_content_type=ResultContentType.LLM_RESULT,
                         ),
                     )

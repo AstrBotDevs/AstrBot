@@ -471,83 +471,11 @@ class Context:
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
-
-                await self._persist_sent_message_to_history(session, message_chain)
-
                 return True
         logger.warning(
             f"cannot find platform for session {str(session)}, message not sent"
         )
         return False
-
-    async def _persist_sent_message_to_history(
-        self,
-        session: MessageSesion,
-        message_chain: MessageChain,
-    ) -> None:
-        """Persist a sent message to conversation history.
-
-        Args:
-            session: The message session.
-            message_chain: The message chain that was sent.
-        """
-        unified_msg_origin = str(session)
-        cid = None
-        try:
-            import json
-
-            cid = await self.conversation_manager.get_curr_conversation_id(
-                unified_msg_origin
-            )
-            if not cid:
-                return
-
-            conv = await self.conversation_manager.get_conversation(
-                unified_msg_origin, cid
-            )
-            if not conv:
-                return
-
-            plain_text = message_chain.get_plain_text()
-            if not plain_text:
-                return
-
-            history = json.loads(conv.history) if conv.history else []
-            if self._is_last_assistant_message(history, plain_text):
-                return
-
-            history.append({"role": "assistant", "content": plain_text})
-            await self.conversation_manager.update_conversation(
-                unified_msg_origin=unified_msg_origin,
-                conversation_id=cid,
-                history=history,
-            )
-        except json.JSONDecodeError as e:
-            logger.warning(
-                f"Failed to parse conversation history "
-                f"(session={unified_msg_origin}, cid={cid}): {e}"
-            )
-        except Exception as e:
-            logger.warning(
-                f"Failed to persist sent message to history "
-                f"(session={unified_msg_origin}, cid={cid}): {e}"
-            )
-
-    @staticmethod
-    def _is_last_assistant_message(history: list[dict], plain_text: str) -> bool:
-        """Check if the last message in history is an assistant message with the same content.
-
-        Args:
-            history: The conversation history list.
-            plain_text: The plain text content to compare.
-
-        Returns:
-            True if the last message is a matching assistant message.
-        """
-        if not history or not isinstance(history[-1], dict):
-            return False
-        last = history[-1]
-        return last.get("role") == "assistant" and last.get("content") == plain_text
 
     def add_llm_tools(self, *tools: FunctionTool) -> None:
         """添加 LLM 工具。
