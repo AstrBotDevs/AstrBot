@@ -24,6 +24,7 @@ from astrbot.core.utils.network_utils import (
 )
 
 from ..register import register_provider_adapter
+from .request_retry import retry_provider_request, retry_provider_request_context
 
 
 @register_provider_adapter(
@@ -366,8 +367,11 @@ class ProviderAnthropic(Provider):
         self._apply_thinking_config(payloads)
 
         try:
-            completion = await self.client.messages.create(
-                **payloads, stream=False, extra_body=extra_body
+            completion = await retry_provider_request(
+                "Anthropic",
+                lambda: self.client.messages.create(
+                    **payloads, stream=False, extra_body=extra_body
+                ),
             )
         except httpx.RequestError as e:
             proxy = self.provider_config.get("proxy", "")
@@ -459,8 +463,9 @@ class ProviderAnthropic(Provider):
             payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
 
-        async with self.client.messages.stream(
-            **payloads, extra_body=extra_body
+        async with retry_provider_request_context(
+            "Anthropic",
+            lambda: self.client.messages.stream(**payloads, extra_body=extra_body),
         ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
@@ -838,7 +843,10 @@ class ProviderAnthropic(Provider):
 
     async def get_models(self) -> list[str]:
         models_str = []
-        models = await self.client.models.list()
+        models = await retry_provider_request(
+            "Anthropic",
+            lambda: self.client.models.list(),
+        )
         models = sorted(models.data, key=lambda x: x.id)
         for model in models:
             models_str.append(model.id)
