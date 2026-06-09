@@ -1661,7 +1661,30 @@ async def test_v1_plugin_url_install_accepts_download_url_and_missing_body(
         "ignore_version_check": True,
     }
     assert empty_body_response.status_code == 200
-    assert empty_body_response.json()["status"] == "error"
+    empty_body_data = empty_body_response.json()
+    assert empty_body_data["status"] == "error"
+    assert empty_body_data["message"] == "插件操作失败，请查看服务端日志。"
+    assert "missing url" not in str(empty_body_data)
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_update_all_hides_internal_exceptions(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.post(
+        "/api/v1/plugins/update",
+        json={"plugin_ids": ["astrbot_plugin_demo"]},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    result = data["data"]["results"][0]
+    assert result["status"] == "error"
+    assert result["message"] == "更新失败，请查看服务端日志。"
+    assert "AttributeError" not in str(data)
+    assert "update_plugin" not in str(data)
 
 
 @pytest.mark.asyncio

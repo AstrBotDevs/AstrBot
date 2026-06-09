@@ -5,7 +5,6 @@ import hashlib
 import json
 import os
 import ssl
-import traceback
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -32,6 +31,8 @@ from astrbot.core.star.star_manager import (
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 
 PLUGIN_UPDATE_CONCURRENCY = 3
+PLUGIN_OPERATION_FAILED_MESSAGE = "插件操作失败，请查看服务端日志。"
+PLUGIN_UPDATE_FAILED_MESSAGE = "更新失败，请查看服务端日志。"
 PLUGIN_COMPONENT_TYPE_ORDER = {
     "page": 0,
     "skill": 1,
@@ -55,12 +56,26 @@ class RegistrySource:
 
 
 class PluginServiceError(Exception):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        public_message: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.public_message = public_message or message
 
 
 class PluginServiceWarning(Exception):
-    def __init__(self, message: str, data: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        message: str,
+        data: dict[str, Any],
+        *,
+        public_message: str | None = None,
+    ) -> None:
         super().__init__(message)
+        self.public_message = public_message or message
         self.data = data
 
 
@@ -123,7 +138,7 @@ class PluginService:
 
         success, err = await self.plugin_manager.reload_failed_plugin(dir_name)
         if not success:
-            raise PluginServiceError(f"重载失败: {err}")
+            raise PluginServiceError(f"重载失败: {err}", public_message="重载失败")
         await self.sync_skills_after_plugin_change()
         return None, f"插件 {dir_name} 重载成功。"
 
@@ -133,7 +148,10 @@ class PluginService:
         plugin_name = payload.get("name", None)
         success, message = await self.plugin_manager.reload(plugin_name)
         if not success:
-            raise PluginServiceError(message or "插件重载失败")
+            raise PluginServiceError(
+                message or "插件重载失败",
+                public_message="插件重载失败",
+            )
         await self.sync_skills_after_plugin_change()
         return None, "重载成功。"
 
@@ -843,6 +861,7 @@ class PluginService:
                     "warning_type": "astrbot_version_unsupported",
                     "can_ignore": True,
                 },
+                public_message="当前 AstrBot 版本不满足插件要求",
             ) from exc
 
     async def install_plugin_upload(
@@ -873,6 +892,7 @@ class PluginService:
                     "warning_type": "astrbot_version_unsupported",
                     "can_ignore": True,
                 },
+                public_message="当前 AstrBot 版本不满足插件要求",
             ) from exc
 
     async def install_plugin_upload_from_dashboard_form(
@@ -960,11 +980,16 @@ class PluginService:
                         name, proxy, download_url=download_url
                     )
                     return {"name": name, "status": "ok", "message": "更新成功"}
-                except Exception as exc:
+                except Exception:
                     logger.error(
-                        f"/api/plugin/update-all: 更新插件 {name} 失败: {traceback.format_exc()}",
+                        f"/api/plugin/update-all: 更新插件 {name} 失败",
+                        exc_info=True,
                     )
-                    return {"name": name, "status": "error", "message": str(exc)}
+                    return {
+                        "name": name,
+                        "status": "error",
+                        "message": PLUGIN_UPDATE_FAILED_MESSAGE,
+                    }
 
         raw_results = await asyncio.gather(
             *(_update_one(name) for name in plugin_names),
@@ -974,8 +999,15 @@ class PluginService:
             if isinstance(result, asyncio.CancelledError):
                 raise result
             if isinstance(result, BaseException):
+                logger.error(
+                    f"/api/plugin/update-all: 更新插件 {name} 任务失败: {result!r}"
+                )
                 results.append(
-                    {"name": name, "status": "error", "message": str(result)}
+                    {
+                        "name": name,
+                        "status": "error",
+                        "message": PLUGIN_UPDATE_FAILED_MESSAGE,
+                    }
                 )
             else:
                 results.append(result)
@@ -1053,7 +1085,11 @@ class PluginService:
                 "content": readme_path.read_text(encoding="utf-8")
             }, "成功获取README内容"
         except Exception as exc:
-            raise PluginServiceError(f"读取README文件失败: {exc!s}") from exc
+            logger.warning(f"读取插件 {plugin_name} README 文件失败: {exc}")
+            raise PluginServiceError(
+                "读取README文件失败",
+                public_message="读取README文件失败",
+            ) from exc
 
     def get_plugin_readme_from_dashboard_query(
         self,
@@ -1079,7 +1115,11 @@ class PluginService:
                     "成功获取更新日志",
                 )
             except Exception as exc:
-                raise PluginServiceError(f"读取更新日志失败: {exc!s}") from exc
+                logger.warning(f"读取插件 {plugin_name} 更新日志失败: {exc}")
+                raise PluginServiceError(
+                    "读取更新日志失败",
+                    public_message="读取更新日志失败",
+                ) from exc
 
         logger.warning(f"插件 {plugin_name} 没有更新日志文件")
         return {"content": None}, "该插件没有更新日志文件"
@@ -1158,6 +1198,8 @@ class PluginService:
 
 __all__ = [
     "PLUGIN_UPDATE_CONCURRENCY",
+    "PLUGIN_OPERATION_FAILED_MESSAGE",
+    "PLUGIN_UPDATE_FAILED_MESSAGE",
     "PluginService",
     "PluginServiceError",
     "PluginServiceWarning",

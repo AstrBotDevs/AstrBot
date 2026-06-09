@@ -37,6 +37,7 @@ from astrbot.dashboard.services.plugin_page_service import (
     PluginPageServiceError,
 )
 from astrbot.dashboard.services.plugin_service import (
+    PLUGIN_OPERATION_FAILED_MESSAGE,
     PluginService,
     PluginServiceError,
     PluginServiceWarning,
@@ -110,17 +111,17 @@ async def _run_service(operation, *, log_label: str | None = None):
     except PluginServiceWarning as exc:
         return {
             "status": "warning",
-            "message": str(exc),
+            "message": exc.public_message,
             "data": exc.data,
         }
     except PluginServiceError as exc:
-        return {"status": "error", "message": str(exc), "data": {}}
-    except Exception as exc:
+        return {"status": "error", "message": exc.public_message, "data": {}}
+    except Exception:
         if log_label:
-            logger.error("%s: %s", log_label, exc, exc_info=True)
+            logger.error("%s failed", log_label, exc_info=True)
         else:
-            logger.error(str(exc), exc_info=True)
-        return {"status": "error", "message": str(exc), "data": {}}
+            logger.error("Plugin service operation failed", exc_info=True)
+        return {"status": "error", "message": PLUGIN_OPERATION_FAILED_MESSAGE, "data": {}}
 
 
 async def _run_json(
@@ -253,7 +254,7 @@ async def _serve_plugin_page_content(
             theme=_get_request_theme(request),
         )
     except PluginPageServiceError as exc:
-        return _plugin_page_error_response(exc.status_code, str(exc))
+        return _plugin_page_error_response(exc.status_code, exc.public_message)
     return _plugin_page_payload_response(payload)
 
 
@@ -269,7 +270,7 @@ async def _serve_plugin_page_bridge_sdk(
             theme=_get_request_theme(request),
         )
     except PluginPageServiceError as exc:
-        return _plugin_page_error_response(exc.status_code, str(exc))
+        return _plugin_page_error_response(exc.status_code, exc.public_message)
     return _plugin_page_payload_response(payload)
 
 
@@ -291,7 +292,7 @@ async def _get_plugin_page_entry_config(
             )
         )
     except PluginPageServiceError as exc:
-        return {"status": "error", "message": str(exc), "data": {}}
+        return {"status": "error", "message": exc.public_message, "data": {}}
 
 
 async def _list_plugins(
