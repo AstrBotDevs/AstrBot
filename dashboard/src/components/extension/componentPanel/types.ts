@@ -37,6 +37,13 @@ export interface CommandSummary {
   conflicts: number;
 }
 
+/** 工具摘要统计 */
+export interface ToolSummary {
+  total: number;
+  active: number;
+  inactive: number;
+}
+
 /** 过滤器状态 */
 export interface FilterState {
   searchQuery: string;

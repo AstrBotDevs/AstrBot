@@ -71,6 +71,24 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
   if (tool.origin !== 'builtin') return [];
   return (tool.builtin_config_tags || []).filter(tag => tag.enabled);
 };
+
+const getPermissionColor = (permission?: string): string => {
+  switch (permission) {
+    case 'admin':
+      return 'error';
+    default:
+      return 'success';
+  }
+};
+
+const getPermissionLabel = (permission?: string): string => {
+  switch (permission) {
+    case 'admin':
+      return tmTool('functionTools.table.permissionAdmin');
+    default:
+      return tmTool('functionTools.table.permissionEveryone');
+  }
+};
 </script>
 
 <template>
@@ -141,19 +159,46 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
       </template>
 
       <template #item.permission="{ item }">
-        <span v-if="!item.permission" class="text-medium-emphasis text-caption">
-          <v-icon size="14" color="grey">mdi-lock</v-icon>
-        </span>
-        <v-btn
-          v-else
-          size="x-small"
+        <!-- Builtin tools: non-clickable badge -->
+        <v-chip
+          v-if="item.origin === 'builtin'"
+          size="small"
           variant="tonal"
-          :color="item.permission === 'admin' ? 'warning' : 'success'"
-          class="text-caption font-weight-medium"
-          @click="emit('update-permission', item, item.permission === 'admin' ? 'member' : 'admin')"
+          class="font-weight-medium text-medium-emphasis"
         >
-          {{ item.permission === 'admin' ? tmTool('functionTools.table.permissionAdmin') : tmTool('functionTools.table.permissionMember') }}
-        </v-btn>
+          {{ tmTool('functionTools.table.permissionBuiltin') }}
+        </v-chip>
+        <!-- Other tools: clickable dropdown -->
+        <v-menu v-else location="bottom">
+          <template v-slot:activator="{ props: menuProps }">
+            <v-chip
+              v-bind="menuProps"
+              :color="getPermissionColor(item.permission)"
+              size="small"
+              class="font-weight-medium cursor-pointer"
+              link
+            >
+              {{ getPermissionLabel(item.permission) }}
+              <v-icon end size="14">mdi-chevron-down</v-icon>
+            </v-chip>
+          </template>
+          <v-list density="compact">
+            <v-list-item
+              :value="'member'"
+              @click="emit('update-permission', item, 'member')"
+              :active="item.permission !== 'admin'"
+            >
+              <v-list-item-title>{{ tmTool('functionTools.table.permissionEveryone') }}</v-list-item-title>
+            </v-list-item>
+            <v-list-item
+              :value="'admin'"
+              @click="emit('update-permission', item, 'admin')"
+              :active="item.permission === 'admin'"
+            >
+              <v-list-item-title>{{ tmTool('functionTools.table.permissionAdmin') }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
       </template>
 
       <template #item.actions="{ item }">
