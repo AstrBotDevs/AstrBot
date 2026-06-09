@@ -26,6 +26,7 @@ from astrbot.core.utils.media_utils import (
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
 
 from ..register import register_provider_adapter
+from .request_retry import retry_provider_request
 
 
 class SuppressNonTextPartsWarning(logging.Filter):
@@ -604,10 +605,14 @@ class ProviderGoogleGenAI(Provider):
                     modalities,
                     temperature,
                 )
-                result = await self.client.models.generate_content(
-                    model=model,
-                    contents=cast(types.ContentListUnion, conversation),
-                    config=config,
+                result = await retry_provider_request(
+                    "Gemini",
+                    lambda: self.client.models.generate_content(
+                        model=model,
+                        contents=cast(types.ContentListUnion, conversation),
+                        config=config,
+                    ),
+                    retry_rate_limits=False,
                 )
                 logger.debug(f"genai result: {result}")
 
@@ -690,10 +695,14 @@ class ProviderGoogleGenAI(Provider):
                     payloads.get("tool_choice", "auto"),
                     system_instruction,
                 )
-                result = await self.client.models.generate_content_stream(
-                    model=model,
-                    contents=cast(types.ContentListUnion, conversation),
-                    config=config,
+                result = await retry_provider_request(
+                    "Gemini",
+                    lambda: self.client.models.generate_content_stream(
+                        model=model,
+                        contents=cast(types.ContentListUnion, conversation),
+                        config=config,
+                    ),
+                    retry_rate_limits=False,
                 )
                 break
             except APIError as e:
@@ -922,7 +931,10 @@ class ProviderGoogleGenAI(Provider):
 
     async def get_models(self):
         try:
-            models = await self.client.models.list()
+            models = await retry_provider_request(
+                "Gemini",
+                lambda: self.client.models.list(),
+            )
             return [
                 m.name.replace("models/", "")
                 for m in models
