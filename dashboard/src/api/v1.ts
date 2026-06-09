@@ -1,7 +1,8 @@
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 
+import * as openApiV1 from './generated/openapi-v1';
 import {
-  openApiV1,
+  client as openApiV1Client,
   type BackupExportRequest,
   type BackupRenameRequest,
   type BackupUploadInitRequest,
@@ -30,7 +31,7 @@ import {
   type EnabledPatch,
   type GhproxyTestRequest,
   type LoginRequest,
-  type ListConversationsQuery,
+  type ListConversationsData,
   type McpServerConfig,
   type MigrationRequest,
   type ModelScopeSyncRequest,
@@ -51,7 +52,12 @@ import {
   type UpdateAccountRequest,
   type UpdateRequest,
 } from './generated/openapi-v1';
-import { apiV1Client } from './http';
+import { apiV1Client, httpClient } from './http';
+
+openApiV1Client.setConfig({
+  axios: httpClient,
+  throwOnError: true,
+});
 
 export interface ApiEnvelope<T> {
   status: 'ok' | 'error';
@@ -164,11 +170,27 @@ const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
 };
 
 type V1Response<T> = Promise<AxiosResponse<ApiEnvelope<T>>>;
+type ListConversationsQuery = NonNullable<ListConversationsData['query']>;
 
-function typed<T>(
-  response: Promise<AxiosResponse<SuccessEnvelope>>,
-): V1Response<T> {
+function typed<T>(response: Promise<unknown>): V1Response<T> {
   return response as unknown as V1Response<T>;
+}
+
+function generatedOptions(
+  options: Record<string, unknown>,
+  requestConfig?: AxiosRequestConfig,
+) {
+  return { ...options, ...(requestConfig || {}) } as any;
+}
+
+function generatedQuery<T extends object>(
+  params?: T,
+): (T & Record<string, unknown>) | undefined {
+  return params as (T & Record<string, unknown>) | undefined;
+}
+
+function generatedFormData(formData: FormData) {
+  return formData as any;
 }
 
 function botConfig(config: OpenConfig): BotConfigRequest {
@@ -234,10 +256,15 @@ export const configProfileApi = {
     requestConfig?: AxiosRequestConfig,
   ) {
     return typed<OpenConfig>(
-      openApiV1.updateConfigProfileContent({
-        path: { config_id: configId },
-        body: config,
-      }, requestConfig),
+      openApiV1.updateConfigProfileContent(
+        generatedOptions(
+          {
+            path: { config_id: configId },
+            body: config,
+          },
+          requestConfig,
+        ),
+      ),
     );
   },
   rename(configId: string, name: string | null) {
@@ -267,7 +294,9 @@ export const systemConfigApi = {
   },
   update(config: OpenConfig, requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(
-      openApiV1.updateSystemConfig({ body: config }, requestConfig),
+      openApiV1.updateSystemConfig(
+        generatedOptions({ body: config }, requestConfig),
+      ),
     );
   },
 };
@@ -297,7 +326,7 @@ export const botApi = {
   },
   list(params?: BotListParams) {
     return typed<{ bots: OpenConfig[] }>(
-      openApiV1.listBots({ query: params }),
+      openApiV1.listBots({ query: generatedQuery(params) }),
     );
   },
   stats() {
@@ -370,7 +399,7 @@ export const providerApi = {
   },
   list(params?: ProviderListParams) {
     return typed<{ providers: OpenConfig[] }>(
-      openApiV1.listProviders({ query: params }),
+      openApiV1.listProviders({ query: generatedQuery(params) }),
     );
   },
   async listByProviderType(providerType: string): Promise<AxiosResponse<ApiEnvelope<OpenConfig[]>>> {
@@ -552,7 +581,7 @@ export const updatesApi = {
 
 export const backupApi = {
   list(params?: BackupListParams) {
-    return typed<any>(openApiV1.listBackups({ query: params }));
+    return typed<any>(openApiV1.listBackups({ query: generatedQuery(params) }));
   },
   create(payload?: BackupExportRequest) {
     return typed<any>(openApiV1.createBackup({ body: payload }));
@@ -563,13 +592,17 @@ export const backupApi = {
     );
   },
   upload(formData: FormData) {
-    return typed<any>(openApiV1.uploadBackup({ body: formData }));
+    return typed<any>(
+      openApiV1.uploadBackup({ body: generatedFormData(formData) }),
+    );
   },
   initUpload(payload: BackupUploadInitRequest) {
     return typed<any>(openApiV1.initBackupUpload({ body: payload }));
   },
   uploadChunk(formData: FormData) {
-    return typed<any>(openApiV1.uploadBackupChunk({ body: formData }));
+    return typed<any>(
+      openApiV1.uploadBackupChunk({ body: generatedFormData(formData) }),
+    );
   },
   completeUpload(payload: BackupUploadSessionRequest) {
     return typed<any>(openApiV1.completeBackupUpload({ body: payload }));
@@ -621,7 +654,9 @@ export const chatApi = {
     return `${protocol}//${host}/api/v1/unified-chat/ws?token=${encodeURIComponent(token)}`;
   },
   listSessions(params?: ChatSessionListParams) {
-    return typed<any>(openApiV1.listChatSessions({ query: params }));
+    return typed<any>(
+      openApiV1.listChatSessions({ query: generatedQuery(params) }),
+    );
   },
   createSession(platformId?: string) {
     return typed<any>(
@@ -752,13 +787,15 @@ export const chatApi = {
 
 export const fileApi = {
   upload(formData: FormData) {
-    return typed<any>(openApiV1.uploadFile({ body: formData }));
+    return typed<any>(
+      openApiV1.uploadFile({ body: generatedFormData(formData) }),
+    );
   },
   getByName(filename: string) {
-    return openApiV1.getFileByName(
-      { query: { filename } },
-      { responseType: 'blob' },
-    ) as Promise<AxiosResponse<Blob>>;
+    return openApiV1.getFileByName({
+      query: { filename },
+      responseType: 'blob',
+    }) as Promise<AxiosResponse<Blob>>;
   },
   byNameUrl(filename: string) {
     return `/api/v1/files/content?filename=${encodeURIComponent(filename)}`;
@@ -773,13 +810,15 @@ export const fileApi = {
 
 export const sessionApi = {
   list(params?: SessionListParams) {
-    return typed<any>(openApiV1.listSessions({ query: params }));
+    return typed<any>(openApiV1.listSessions({ query: generatedQuery(params) }));
   },
   activeUmos() {
     return typed<any>(openApiV1.listActiveUmos());
   },
   listRules(params?: SessionRuleListParams) {
-    return typed<any>(openApiV1.listSessionRules({ query: params }));
+    return typed<any>(
+      openApiV1.listSessionRules({ query: generatedQuery(params) }),
+    );
   },
   upsertRule(payload: SessionRuleRequest) {
     return typed<any>(openApiV1.upsertSessionRule({ body: payload }));
@@ -820,7 +859,7 @@ export const sessionApi = {
 
 export const cronApi = {
   list(params?: CronJobListParams) {
-    return typed<any>(openApiV1.listCronJobs({ query: params }));
+    return typed<any>(openApiV1.listCronJobs({ query: generatedQuery(params) }));
   },
   create(payload: CronJobRequest) {
     return typed<any>(openApiV1.createCronJob({ body: payload }));
@@ -875,7 +914,7 @@ export const commandApi = {
 
 export const toolApi = {
   list(params?: ToolListParams) {
-    return typed<any[]>(openApiV1.listTools({ query: params }));
+    return typed<any[]>(openApiV1.listTools({ query: generatedQuery(params) }));
   },
   setEnabled(toolId: string, enabled: boolean) {
     return typed<OpenConfig>(
@@ -887,8 +926,9 @@ export const toolApi = {
   },
   setPermission(toolId: string, permission: 'admin' | 'member') {
     return typed<OpenConfig>(
-      apiV1Client.patch(`/tools/${encodeURIComponent(toolId)}/permission`, {
-        permission,
+      openApiV1.setToolPermission({
+        path: { tool_id: toolId },
+        body: { permission },
       }),
     );
   },
@@ -1077,7 +1117,7 @@ export const pluginApi = {
     return typed<any>(
       openApiV1.uploadPluginConfigFilesById({
         query: { plugin_id: pluginId, config_key: configKey },
-        body: formData,
+        body: generatedFormData(formData),
       }),
     );
   },
@@ -1120,7 +1160,9 @@ export const pluginApi = {
   },
   installUpload(formData: FormData) {
     return typed<OpenConfig>(
-      openApiV1.installPluginFromUpload({ body: formData }),
+      openApiV1.installPluginFromUpload({
+        body: generatedFormData(formData),
+      }),
     );
   },
   installGithub(body: OpenConfig) {
@@ -1221,7 +1263,7 @@ export const knowledgeApi = {
     return typed<any>(
       openApiV1.uploadKnowledgeDocument({
         path: { kb_id: kbId },
-        body: formData,
+        body: generatedFormData(formData),
       }),
     );
   },
@@ -1286,7 +1328,9 @@ export const skillApi = {
     return typed<any>(openApiV1.listSkills({ query: params }));
   },
   uploadBatch(formData: FormData) {
-    return typed<any>(openApiV1.uploadSkillsBatch({ body: formData }));
+    return typed<any>(
+      openApiV1.uploadSkillsBatch({ body: generatedFormData(formData) }),
+    );
   },
   setEnabled(skillName: string, enabled: boolean) {
     return typed<OpenConfig>(
@@ -1301,10 +1345,10 @@ export const skillApi = {
     );
   },
   download(skillName: string) {
-    return openApiV1.downloadSkillByName(
-      { query: { skill_name: skillName } },
-      { responseType: 'blob' },
-    );
+    return openApiV1.downloadSkillByName({
+      query: { skill_name: skillName },
+      responseType: 'blob',
+    });
   },
   listFiles(skillName: string, path = '') {
     return typed<any>(
@@ -1447,7 +1491,12 @@ export const personaApi = {
 export const conversationApi = {
   list(params?: ListConversationsQuery, requestConfig?: AxiosRequestConfig) {
     return typed<any>(
-      openApiV1.listConversations({ query: params }, requestConfig),
+      openApiV1.listConversations(
+        generatedOptions(
+          { query: generatedQuery(params) },
+          requestConfig,
+        ),
+      ),
     );
   },
   get(userId: string, cid: string) {
@@ -1492,10 +1541,10 @@ export const conversationApi = {
     return typed<any>(openApiV1.batchDeleteConversations({ body: payload }));
   },
   export(payload: ConversationExportRequest) {
-    return openApiV1.exportConversations(
-      { body: payload },
-      { responseType: 'blob' },
-    ) as Promise<AxiosResponse<Blob>>;
+    return openApiV1.exportConversations({
+      body: payload,
+      responseType: 'blob',
+    }) as Promise<AxiosResponse<Blob>>;
   },
 };
 
