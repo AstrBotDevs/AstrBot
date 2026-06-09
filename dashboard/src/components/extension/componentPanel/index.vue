@@ -12,15 +12,14 @@
  * - components/RenameDialog.vue: 重命名对话框
  * - components/DetailsDialog.vue: 详情对话框
  */
-import { computed, onActivated, onMounted, ref, watch} from 'vue';
-import axios from 'axios';
+import { onActivated, onMounted, ref, watch} from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import { normalizeTextInput } from '@/utils/inputValue';
 
 // Composables
 import { useComponentData } from './composables/useComponentData';
 import { useCommandFilters } from './composables/useCommandFilters';
 import { useCommandActions } from './composables/useCommandActions';
+import { useToolActions } from './composables/useToolActions';
 
 // Components
 import CommandFilters from './components/CommandFilters.vue';
@@ -41,7 +40,6 @@ const { tm } = useModuleI18n('features/command');
 const { tm: tmTool } = useModuleI18n('features/tooluse');
 
 const viewMode = ref<'commands' | 'tools'>('commands');
-const toolSearch = ref('');
 
 // 数据管理
 const { 
@@ -83,14 +81,15 @@ const {
   openDetailsDialog
 } = useCommandActions(toast, () => fetchCommands(tm('messages.loadFailed')));
 
-const filteredTools = computed(() => {
-  const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
-  if (!query) return tools.value;
-  return tools.value.filter(tool => 
-    tool.name?.toLowerCase().includes(query) ||
-    tool.description?.toLowerCase().includes(query)
-  );
-});
+// 工具操作方法
+const {
+  toolSearch,
+  showBuiltinTools,
+  filteredTools,
+  toolSummary,
+  toggleTool,
+  updateToolPermission,
+} = useToolActions(tools, toast);
 
 // 处理切换指令状态
 const handleToggleCommand = async (cmd: CommandItem) => {
@@ -102,27 +101,11 @@ const handleUpdatePermission = async (cmd: CommandItem, permission: 'admin' | 'm
 };
 
 const handleToggleTool = async (tool: ToolItem) => {
-  if (tool.readonly) {
-    toast(tmTool('messages.toggleToolReadonly'), 'info');
-    return;
-  }
-  const previous = tool.active;
-  tool.active = !tool.active;
-  try {
-    const res = await axios.post('/api/tools/toggle-tool', {
-      name: tool.name,
-      activate: tool.active
-    });
-    if (res.data.status === 'ok') {
-      toast(res.data.message || tmTool('messages.toggleToolSuccess'));
-    } else {
-      tool.active = previous;
-      toast(res.data.message || tmTool('messages.toggleToolError', { error: '' }), 'error');
-    }
-  } catch (error: any) {
-    tool.active = previous;
-    toast(error?.response?.data?.message || error?.message || tmTool('messages.toggleToolError', { error: '' }), 'error');
-  }
+  await toggleTool(tool, tmTool('messages.toggleToolReadonly'), tmTool('messages.toggleToolSuccess'), tmTool('messages.toggleToolError', { error: '' }));
+};
+
+const handleUpdateToolPermission = async (tool: ToolItem, permission: 'admin' | 'member') => {
+  await updateToolPermission(tool, permission, tmTool('messages.updateToolPermissionSuccess', { name: tool.name }), tmTool('messages.updateToolPermissionBuiltin'), tmTool('messages.updateToolPermissionFailed'));
 };
 
 // 处理确认重命名
@@ -255,11 +238,10 @@ watch(viewMode, async (mode) => {
           </div>
 
           <div v-else>
-            <div class="d-flex flex-wrap align-center ga-3 mb-4">
+            <div class="d-flex flex-wrap align-center ga-4 mb-4">
               <div style="min-width: 240px; max-width: 380px; flex: 1;">
                 <v-text-field
-                  :model-value="toolSearch"
-                  @update:model-value="toolSearch = normalizeTextInput($event)"
+                  v-model="toolSearch"
                   prepend-inner-icon="mdi-magnify"
                   :label="tmTool('functionTools.search')"
                   variant="outlined"
@@ -268,12 +250,42 @@ watch(viewMode, async (mode) => {
                   clearable
                 />
               </div>
+
+              <div class="d-flex align-center ga-4">
+                <div class="d-flex align-center">
+                  <v-icon size="18" color="primary" class="mr-1">mdi-function-variant</v-icon>
+                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.total') }}:</span>
+                  <span class="text-body-1 font-weight-bold text-primary">{{ toolSummary.total }}</span>
+                </div>
+                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <div class="d-flex align-center">
+                  <v-icon size="18" color="success" class="mr-1">mdi-check-circle-outline</v-icon>
+                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.active') }}:</span>
+                  <span class="text-body-1 font-weight-bold text-success">{{ toolSummary.active }}</span>
+                </div>
+                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <div class="d-flex align-center">
+                  <v-icon size="18" color="error" class="mr-1">mdi-close-circle-outline</v-icon>
+                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.inactive') }}:</span>
+                  <span class="text-body-1 font-weight-bold text-error">{{ toolSummary.inactive }}</span>
+                </div>
+
+                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <v-checkbox
+                  v-model="showBuiltinTools"
+                  :label="tmTool('functionTools.filter.showBuiltin')"
+                  density="compact"
+                  hide-details
+                  class="builtin-tools-checkbox"
+                />
+              </div>
             </div>
 
             <ToolTable
               :items="filteredTools"
               :loading="toolsLoading"
               @toggle-tool="handleToggleTool"
+              @update-permission="handleUpdateToolPermission"
             />
           </div>
         </v-card-text>
@@ -306,3 +318,13 @@ watch(viewMode, async (mode) => {
     {{ snackbar.message }}
   </v-snackbar>
 </template>
+
+<style scoped>
+.builtin-tools-checkbox {
+  flex: none;
+}
+
+.builtin-tools-checkbox :deep(.v-selection-control) {
+  min-height: auto;
+}
+</style>

@@ -2,7 +2,7 @@ import traceback
 
 from quart import request
 
-from astrbot.core import logger
+from astrbot.core import logger, sp
 from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
@@ -55,10 +55,26 @@ class ToolsRoute(Route):
             "/tools/mcp/test": ("POST", self.test_mcp_connection),
             "/tools/list": ("GET", self.get_tool_list),
             "/tools/toggle-tool": ("POST", self.toggle_tool),
+            "/tools/permission": ("POST", self.update_tool_permission),
             "/tools/mcp/sync-provider": ("POST", self.sync_provider),
         }
         self.register_routes()
         self.tool_mgr = self.core_lifecycle.provider_manager.llm_tools
+
+    @staticmethod
+    def _get_tool_permission(tool_name: str) -> tuple[str, bool]:
+        """Return (effective_permission, configured) for a tool.
+
+        ``configured`` is True when the permission was explicitly set via the
+        dashboard rather than being a fallback default.
+        """
+        perms_store = sp.get("tool_permissions", {}, scope="global", scope_id="global")
+        defaults = (
+            perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
+        )
+        if tool_name in defaults:
+            return defaults[tool_name], True
+        return "member", False
 
     def _rollback_mcp_server(self, name: str) -> bool:
         try:
@@ -504,6 +520,10 @@ class ToolsRoute(Route):
                     "builtin_config_statuses": builtin_config_statuses,
                     "builtin_config_tags": builtin_config_tags,
                 }
+                if not readonly:
+                    perm, configured = self._get_tool_permission(tool.name)
+                    tool_info["permission"] = perm
+                    tool_info["permission_configured"] = configured
                 tools_dict.append(tool_info)
             return Response().ok(data=tools_dict).__dict__
         except Exception as e:
@@ -569,3 +589,56 @@ class ToolsRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"Sync failed: {e!s}").__dict__
+
+    async def update_tool_permission(self):
+        """Set or remove the permission level of a registered tool."""
+        try:
+            data = await request.json
+            tool_name = data.get("name")
+            permission = data.get("permission")  # "admin" | "member"
+
+            if not tool_name or permission not in ("admin", "member"):
+                return (
+                    Response()
+                    .error("name and permission (admin or member) are required")
+                    .__dict__
+                )
+
+            if self.tool_mgr.is_builtin_tool(tool_name):
+                return (
+                    Response()
+                    .error(
+                        "Builtin tools do not support per-tool permission configuration."
+                    )
+                    .__dict__
+                )
+
+            # Verify the tool is known
+            if not any(t.name == tool_name for t in self.tool_mgr.func_list):
+                return Response().error(f"Tool '{tool_name}' not found").__dict__
+
+            perms_store = sp.get(
+                "tool_permissions", {}, scope="global", scope_id="global"
+            )
+            if not isinstance(perms_store, dict):
+                perms_store = {}
+            defaults = perms_store.get("_default", {})
+            if not isinstance(defaults, dict):
+                defaults = {}
+            defaults[tool_name] = permission
+            perms_store["_default"] = defaults
+            sp.put(
+                "tool_permissions",
+                perms_store,
+                scope="global",
+                scope_id="global",
+            )
+
+            return (
+                Response()
+                .ok(None, f"Tool '{tool_name}' permission set to {permission}")
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"Failed to update tool permission: {e!s}").__dict__
