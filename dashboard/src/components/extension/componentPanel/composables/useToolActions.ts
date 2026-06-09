@@ -116,33 +116,6 @@ export function useToolActions(
     }
   };
 
-  /**
-   * Get color for a permission level.
-   */
-  const getToolPermissionColor = (permission?: string): string => {
-    switch (permission) {
-      case 'admin':
-        return 'error';
-      default:
-        return 'success';
-    }
-  };
-
-  /**
-   * Get display label for a permission level.
-   */
-  const getToolPermissionLabel = (
-    permission: string | undefined,
-    labels: { admin: string; everyone: string }
-  ): string => {
-    switch (permission) {
-      case 'admin':
-        return labels.admin;
-      default:
-        return labels.everyone;
-    }
-  };
-
   return {
     toolSearch,
     showBuiltinTools,
@@ -150,7 +123,5 @@ export function useToolActions(
     toolSummary,
     toggleTool,
     updateToolPermission,
-    getToolPermissionColor,
-    getToolPermissionLabel,
   };
 }

@@ -227,7 +227,7 @@ class _PermissionGuardedTool(FunctionTool):
     def __init__(
         self,
         tool: FunctionTool,
-        manager: "FunctionToolManager",
+        manager: FunctionToolManager,
     ) -> None:
         # Do NOT pass handler to the parent — keep self.handler = None
         # so the tool executor always routes through our call().
@@ -257,7 +257,9 @@ class _PermissionGuardedTool(FunctionTool):
                 async for item in result:
                     last = item
                 return last
-            return await result
+            if _inspect.isawaitable(result):
+                return await result
+            return result
 
         # Fall back to overridden call() on subclasses (e.g. MCPTool).
         call_override = getattr(type(self._wrapped), "call", None)
@@ -449,13 +451,10 @@ class FunctionToolManager:
         ``tool_permissions`` in SharedPreferences (``_default`` key). When
         no explicit entry exists the tool inherits the fallback
         ``_default_permission``."""
-        import asyncio as _asyncio
-
         try:
-            perms_raw = _asyncio.run_coroutine_threadsafe(
-                sp.global_get("tool_permissions", {}),
-                sp._sync_loop,
-            ).result()
+            perms_raw = sp.get(
+                "tool_permissions", {}, scope="global", scope_id="global"
+            )
         except Exception:
             perms_raw = {}
         defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}

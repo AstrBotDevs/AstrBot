@@ -604,12 +604,6 @@ class ToolsRoute(Route):
                     .__dict__
                 )
 
-            # Verify the tool is known
-            known = {t.name for t in self.tool_mgr.func_list}
-            known |= {t.name for t in self.tool_mgr.iter_builtin_tools()}
-            if tool_name not in known:
-                return Response().error(f"Tool '{tool_name}' not found").__dict__
-
             if self.tool_mgr.is_builtin_tool(tool_name):
                 return (
                     Response()
@@ -618,6 +612,10 @@ class ToolsRoute(Route):
                     )
                     .__dict__
                 )
+
+            # Verify the tool is known
+            if not any(t.name == tool_name for t in self.tool_mgr.func_list):
+                return Response().error(f"Tool '{tool_name}' not found").__dict__
 
             perms_store = sp.get(
                 "tool_permissions", {}, scope="global", scope_id="global"
