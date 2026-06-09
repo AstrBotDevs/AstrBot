@@ -65,6 +65,8 @@ class PreProcessStage(Stage):
                             logger.debug(f"路径映射: {url} -> {component.url}")
                     message_chain[idx] = component
 
+        failed_record_ids: set[int] = set()
+
         # In here, we convert all Record components to wav format and update the file path.
         message_chain = event.get_messages()
         for idx, component in enumerate(message_chain):
@@ -78,6 +80,7 @@ class PreProcessStage(Stage):
                     component.path = record_path
                     message_chain[idx] = component
                 except Exception as e:
+                    failed_record_ids.add(id(component))
                     logger.warning(f"Voice processing failed: {e}")
 
         # Also process Record components inside Reply chains (wav conversion)
@@ -94,6 +97,7 @@ class PreProcessStage(Stage):
                             reply_comp.path = record_path
                             component.chain[idx] = reply_comp
                         except Exception as e:
+                            failed_record_ids.add(id(reply_comp))
                             logger.warning(
                                 f"Voice processing in reply chain failed: {e}"
                             )
@@ -141,7 +145,10 @@ class PreProcessStage(Stage):
 
             message_chain = event.get_messages()
             for idx, component in enumerate(message_chain):
-                if isinstance(component, Record):
+                if (
+                    isinstance(component, Record)
+                    and id(component) not in failed_record_ids
+                ):
                     plain_comp = await _stt_record(component)
                     if plain_comp:
                         message_chain[idx] = plain_comp
@@ -152,7 +159,10 @@ class PreProcessStage(Stage):
             for component in event.get_messages():
                 if isinstance(component, Reply) and component.chain:
                     for idx, reply_comp in enumerate(component.chain):
-                        if isinstance(reply_comp, Record):
+                        if (
+                            isinstance(reply_comp, Record)
+                            and id(reply_comp) not in failed_record_ids
+                        ):
                             plain_comp = await _stt_record(reply_comp, is_reply=True)
                             if plain_comp:
                                 component.chain[idx] = plain_comp
