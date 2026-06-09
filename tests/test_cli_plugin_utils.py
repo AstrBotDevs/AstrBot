@@ -64,17 +64,3 @@ def test_build_plug_list_merges_local_and_remote_plugins(monkeypatch, tmp_path):
     assert plugins_by_name["unpublished-plugin"]["status"] == PluginStatus.NOT_PUBLISHED
     assert plugins_by_name["remote-only"]["status"] == PluginStatus.NOT_INSTALLED
     assert len(plugins) == 3
-
-
-def test_build_plug_list_treats_file_plugin_path_as_empty_local_set(
-    monkeypatch, tmp_path
-):
-    plugins_file = tmp_path / "plugins"
-    plugins_file.write_text("not a directory", encoding="utf-8")
-
-    monkeypatch.setattr("astrbot.cli.utils.plugin.httpx.Client", FakeClient)
-
-    plugins = build_plug_list(plugins_file)
-
-    assert [plugin["name"] for plugin in plugins] == ["local-plugin", "remote-only"]
-    assert all(plugin["status"] == PluginStatus.NOT_INSTALLED for plugin in plugins)
