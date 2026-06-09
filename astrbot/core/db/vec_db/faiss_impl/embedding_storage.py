@@ -7,10 +7,10 @@ class EmbeddingStorage:
     def __init__(self, dimension: int, path: str | None = None) -> None:
         try:
             import faiss
-        except ModuleNotFoundError:
+        except ModuleNotFoundError as e:
             raise ImportError(
                 "faiss 未安装。请使用 'pip install faiss-cpu' 或 'pip install faiss-gpu' 安装。",
-            )
+            ) from e
         self._faiss = faiss
         self.dimension = dimension
         self.path = path
