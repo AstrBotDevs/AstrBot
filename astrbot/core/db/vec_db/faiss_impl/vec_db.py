@@ -9,7 +9,6 @@ from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 
 from ..base import BaseVecDB, Result
 from .document_storage import DocumentStorage
-from .embedding_storage import EmbeddingStorage
 
 
 class FaissVecDB(BaseVecDB):
@@ -22,6 +21,8 @@ class FaissVecDB(BaseVecDB):
         embedding_provider: EmbeddingProvider,
         rerank_provider: RerankProvider | None = None,
     ) -> None:
+        from .embedding_storage import EmbeddingStorage
+
         self.doc_store_path = doc_store_path
         self.index_store_path = index_store_path
         self.embedding_provider = embedding_provider
