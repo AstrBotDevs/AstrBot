@@ -70,9 +70,7 @@ class ToolsRoute(Route):
         """
         perms_store = sp.get("tool_permissions", {}, scope="global", scope_id="global")
         defaults = (
-            perms_store.get("_default", {})
-            if isinstance(perms_store, dict)
-            else {}
+            perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
         )
         if tool_name in defaults:
             return defaults[tool_name], True
