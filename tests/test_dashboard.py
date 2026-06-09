@@ -454,6 +454,46 @@ async def test_auth_rate_limit_separates_different_client_ips(
 
 
 @pytest.mark.asyncio
+async def test_auth_rate_limit_applies_to_v1_login(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """The v1 login endpoint uses the same token-bucket limiter as legacy login."""
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
+    app._dashboard_server._rate_limiter_registry.clear()
+    cfg = core_lifecycle_td.astrbot_config["dashboard"]
+    rl_original = cfg.get("auth_rate_limit", {})
+    tp_original = cfg.get("trust_proxy_headers", False)
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
+    cfg["trust_proxy_headers"] = True
+
+    try:
+        client = app.test_client()
+        headers = {"X-Forwarded-For": "198.51.100.12"}
+        first = await client.post(
+            "/api/v1/auth/login",
+            json={"username": "u", "password": "p"},
+            headers=headers,
+        )
+        assert first.status_code != 429
+
+        second = await client.post(
+            "/api/v1/auth/login",
+            json={"username": "u", "password": "p"},
+            headers=headers,
+        )
+        assert second.status_code == 429, "v1 login should be rate limited"
+    finally:
+        cfg["auth_rate_limit"] = rl_original
+        cfg["trust_proxy_headers"] = tp_original
+
+
+@pytest.mark.asyncio
 async def test_auth_rate_limit_ignores_proxy_headers_by_default(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
