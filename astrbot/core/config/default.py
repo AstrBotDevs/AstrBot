@@ -4,7 +4,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.25.3"
+VERSION = "4.25.5"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -412,7 +412,7 @@ CONFIG_METADATA_2 = {
                         "weixin_oc_bot_type": "3",
                         "weixin_oc_qr_poll_interval": 1,
                         "weixin_oc_long_poll_timeout_ms": 35_000,
-                        "weixin_oc_api_timeout_ms": 15_000,
+                        "weixin_oc_api_timeout_ms": 120_000,
                     },
                     "飞书(Lark)": {
                         "id": "lark",
