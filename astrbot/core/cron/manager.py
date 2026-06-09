@@ -14,9 +14,11 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
+from astrbot.core.pipeline.context_utils import call_event_hook
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.history_saver import persist_agent_history
 
 if TYPE_CHECKING:
@@ -377,14 +379,31 @@ class CronJobManager:
                 self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
             )
 
+        await call_event_hook(cron_event, EventType.OnWaitingLLMRequestEvent)
+
         result = await build_main_agent(
-            event=cron_event, plugin_context=self.ctx, config=config, req=req
+            event=cron_event,
+            plugin_context=self.ctx,
+            config=config,
+            req=req,
+            apply_reset=False,
         )
         if not result:
             logger.error("Failed to build main agent for cron job.")
             return
 
         runner = result.agent_runner
+        req = result.provider_request
+        reset_coro = result.reset_coro
+
+        if await call_event_hook(cron_event, EventType.OnLLMRequestEvent, req):
+            if reset_coro:
+                reset_coro.close()
+            return
+
+        if reset_coro:
+            await reset_coro
+
         async for _ in runner.step_until_done(30):
             # agent will send message to user via using tools
             pass
