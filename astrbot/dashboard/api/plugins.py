@@ -121,7 +121,11 @@ async def _run_service(operation, *, log_label: str | None = None):
             logger.error("%s failed", log_label, exc_info=True)
         else:
             logger.error("Plugin service operation failed", exc_info=True)
-        return {"status": "error", "message": PLUGIN_OPERATION_FAILED_MESSAGE, "data": {}}
+        return {
+            "status": "error",
+            "message": PLUGIN_OPERATION_FAILED_MESSAGE,
+            "data": {},
+        }
 
 
 async def _run_json(
