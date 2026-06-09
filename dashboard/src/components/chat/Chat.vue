@@ -342,22 +342,70 @@
           class="messages-panel"
           @scroll="handleMessagesScroll"
         >
-          <div v-if="loadingMessages" class="center-state">
-            <v-progress-circular indeterminate size="32" width="3" />
-          </div>
+          <!-- 可拖动的 todo summary 浮窗:
+               初始位置: 页面顶部正中;
+               拖动范围: 不得超出 .chat-main 边界,不得进入 .composer-shell 区域;
+               位置持久化: localStorage。-->
+          <button
+            v-if="currentTodoSnapshot"
+            type="button"
+            class="todo-summary-bar"
+            :class="{
+              'todo-summary-bar--active': todoSidebarOpen,
+              'todo-summary-bar--dragging': isDraggingTodoBar,
+              'todo-summary-bar--centered': todoBarPos === null,
+            }"
+            :style="todoBarStyle"
+            :aria-label="tm('todo.summary')"
+            @mousedown="startDragTodoBar"
+            @click="onTodoBarClick"
+          >
+            <v-icon size="16" class="todo-summary-icon">mdi-format-list-checks</v-icon>
+            <v-icon size="14" class="todo-summary-drag-handle">mdi-drag-horizontal-variant</v-icon>
+            <span class="todo-summary-text">
+              {{ currentTodoSnapshot.stats?.done || 0 }}/{{ currentTodoSnapshot.stats?.effective_total || 0 }}
+              <template v-if="currentTodoSnapshot.stats?.in_progress">
+                · <span class="todo-summary-progress">{{ currentTodoSnapshot.stats.in_progress }} in progress</span>
+              </template>
+            </span>
+            <v-progress-circular
+              v-if="currentTodoSnapshot.stats?.progress_pct > 0 && currentTodoSnapshot.stats?.progress_pct < 100"
+              :model-value="currentTodoSnapshot.stats.progress_pct"
+              :size="16"
+              :width="2"
+              class="todo-summary-circular"
+            >
+              {{ currentTodoSnapshot.stats.progress_pct }}%
+            </v-progress-circular>
+            <v-icon
+              v-if="currentTodoSnapshot.attentionItems?.length"
+              size="10"
+              color="warning"
+              class="todo-summary-attention"
+              :title="tm('todo.attentionHint', { count: currentTodoSnapshot.attentionItems.length })"
+            >mdi-circle-medium</v-icon>
+          </button>
 
-          <div v-else-if="sessionProject" class="session-project-breadcrumb">
+          <!-- 项目 breadcrumb (非 sticky,普通文档流定位在顶部) -->
+          <div
+            v-if="sessionProject"
+            class="session-project-breadcrumb"
+          >
             <span>{{ sessionProject.title }}</span>
             <v-icon size="16">mdi-chevron-right</v-icon>
             <span>{{ currentSessionTitle }}</span>
           </div>
 
-          <div v-else-if="!activeMessages.length" class="welcome-state">
-            <div class="welcome-title">{{ tm("welcome.title") }}</div>
+          <!-- 加载中 / 消息流 / 欢迎区 主体内容 -->
+          <div
+            v-if="loadingMessages"
+            class="center-state"
+          >
+            <v-progress-circular indeterminate size="32" width="3" />
           </div>
 
           <div
-            v-if="!loadingMessages && activeMessages.length"
+            v-else-if="activeMessages.length"
             class="messages-list-shell"
           >
             <ChatMessageList
@@ -385,6 +433,14 @@
               @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
             />
+          </div>
+
+          <!-- 空消息时的欢迎区 (非 sticky,自然居中) -->
+          <div
+            v-else-if="!loadingMessages"
+            class="welcome-state"
+          >
+            <div class="welcome-title">{{ tm("welcome.title") }}</div>
           </div>
         </section>
 
@@ -486,7 +542,13 @@
       :parts="activeReasoningParts"
       :is-dark="isDark"
     />
-    <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
+    <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" @update:model-value="onRefsToggle" />
+    <TodoSidebar
+      v-model="todoSidebarOpen"
+      :list="currentTodoSnapshot?.list"
+      :stats="currentTodoSnapshot?.stats"
+      :attention-items="currentTodoSnapshot?.attentionItems || []"
+    />
   </div>
 </template>
 
@@ -516,6 +578,7 @@ import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.
 import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
+import TodoSidebar from "@/components/chat/message_list_comps/TodoSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
   messageBlocks as buildMessageBlocks,
@@ -619,6 +682,165 @@ const activeReasoningTarget = ref<{
 } | null>(null);
 const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
+const todoSidebarOpen = ref(false);
+
+/* ── todo summary bar 拖动 ───────────────────────────
+ * 浮窗可拖动,位置持久化到 localStorage。
+ * 边界:不得超出 .chat-main 矩形,不得进入 .composer-shell 区域(按 max 高度算)。
+ */
+type BarPos = { left: number; top: number };
+const TODO_BAR_POS_KEY = "chatui.todoBarPos.v1";
+const todoBarPos = ref<BarPos | null>(null);
+const isDraggingTodoBar = ref(false);
+let dragState: {
+  mouseStartX: number;
+  mouseStartY: number;
+  barStartLeft: number;
+  barStartTop: number;
+  didMove: boolean;
+} | null = null;
+let suppressNextClick = false;
+
+/** 把 (left, top) 限制在 chat-main 内, 不与 composer-shell 重叠。 */
+function clampBarPos(
+  desiredLeft: number,
+  desiredTop: number,
+  barRect: DOMRect,
+  mainRect: DOMRect,
+): BarPos {
+  // 边界: 不得超出 main 矩形
+  const minLeft = mainRect.left;
+  const maxLeft = Math.max(minLeft, mainRect.right - barRect.width);
+  const minTop = mainRect.top;
+  // 输入框区域: chat-main 内 .composer-shell 的顶部。
+  // composer 在多行内容时会增高, 这里直接以"main 底部减 bar 高度"作为最底,
+  // 避免压到任何状态下的输入框 (单行/多行均不会越界)。
+  const composer = document.querySelector(
+    ".chat-main .composer-shell",
+  ) as HTMLElement | null;
+  let maxTop: number;
+  if (composer) {
+    const composerRect = composer.getBoundingClientRect();
+    // composer 区域可能因为多行内容上下扩张, 取其 top 减 bar 高度
+    maxTop = composerRect.top - barRect.height - 4;
+  } else {
+    maxTop = mainRect.bottom - barRect.height;
+  }
+  maxTop = Math.max(minTop, maxTop);
+
+  return {
+    left: Math.max(minLeft, Math.min(desiredLeft, maxLeft)),
+    top: Math.max(minTop, Math.min(desiredTop, maxTop)),
+  };
+}
+
+/** 根据当前 chat-main 容器 + 元素本身尺寸,初始化居中位置。
+ *  仅在 todoBarPos === null 时调用(首次出现 / 持久化位置超出边界时回退)。
+ */
+function initTodoBarPos() {
+  nextTick(() => {
+    const bar = document.querySelector(".todo-summary-bar") as HTMLElement | null;
+    const main = document.querySelector(".chat-main") as HTMLElement | null;
+    if (!bar || !main) return;
+    const mainRect = main.getBoundingClientRect();
+    const barRect = bar.getBoundingClientRect();
+    const desiredLeft = mainRect.left + Math.max(16, (mainRect.width - barRect.width) / 2);
+    const desiredTop = mainRect.top + 16;
+    todoBarPos.value = clampBarPos(desiredLeft, desiredTop, barRect, mainRect);
+  });
+}
+
+/** 计算最终应用的 inline style: 初始居中 / 拖动后 absolute。 */
+const todoBarStyle = computed(() => {
+  if (todoBarPos.value === null) {
+    return {}; // 由 CSS .todo-summary-bar--centered 居中
+  }
+  return {
+    left: `${todoBarPos.value.left}px`,
+    top: `${todoBarPos.value.top}px`,
+  };
+});
+
+function startDragTodoBar(e: MouseEvent) {
+  if (!todoBarPos.value) {
+    // 第一次出现: 同步初始化位置,然后进入拖动
+    initTodoBarPos();
+    // 等下一帧位置就绪后再开始 drag,否则 mouseStart 基准是错的
+    nextTick(() => {
+      if (todoBarPos.value) actuallyStartDrag(e);
+    });
+    return;
+  }
+  actuallyStartDrag(e);
+}
+
+function actuallyStartDrag(e: MouseEvent) {
+  if (!todoBarPos.value) return;
+  isDraggingTodoBar.value = true;
+  dragState = {
+    mouseStartX: e.clientX,
+    mouseStartY: e.clientY,
+    barStartLeft: todoBarPos.value.left,
+    barStartTop: todoBarPos.value.top,
+    didMove: false,
+  };
+  document.addEventListener("mousemove", onDragTodoBarMove);
+  document.addEventListener("mouseup", endDragTodoBar);
+  // 阻止默认文本选择
+  e.preventDefault();
+}
+
+function onDragTodoBarMove(e: MouseEvent) {
+  if (!dragState || !todoBarPos.value) return;
+  const deltaX = e.clientX - dragState.mouseStartX;
+  const deltaY = e.clientY - dragState.mouseStartY;
+  // 超过阈值才算"拖动",否则视为准备 click
+  if (!dragState.didMove && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
+    dragState.didMove = true;
+    suppressNextClick = true; // 一旦真拖动, 屏蔽紧随其后的 click
+  }
+  if (!dragState.didMove) return;
+
+  const bar = document.querySelector(".todo-summary-bar") as HTMLElement | null;
+  const main = document.querySelector(".chat-main") as HTMLElement | null;
+  if (!bar || !main) return;
+  const mainRect = main.getBoundingClientRect();
+  const barRect = bar.getBoundingClientRect();
+  const desiredLeft = dragState.barStartLeft + deltaX;
+  const desiredTop = dragState.barStartTop + deltaY;
+  todoBarPos.value = clampBarPos(desiredLeft, desiredTop, barRect, mainRect);
+}
+
+function endDragTodoBar() {
+  isDraggingTodoBar.value = false;
+  if (dragState?.didMove && todoBarPos.value) {
+    // 持久化拖动后的位置
+    try {
+      localStorage.setItem(
+        TODO_BAR_POS_KEY,
+        JSON.stringify(todoBarPos.value),
+      );
+    } catch {
+      /* 忽略 localStorage 写入失败 (隐私模式等) */
+    }
+  }
+  dragState = null;
+  document.removeEventListener("mousemove", onDragTodoBarMove);
+  document.removeEventListener("mouseup", endDragTodoBar);
+}
+
+/** 区分 click 和 drag 结束: 仅当未发生实际拖动时触发 toggle。 */
+function onTodoBarClick(e: MouseEvent) {
+  if (suppressNextClick) {
+    e.preventDefault();
+    e.stopPropagation();
+    suppressNextClick = false;
+    return;
+  }
+  toggleTodoSidebar();
+}
+
+// localStorage 恢复已禁用: 每次居中,避免缓存污染。
 const selectedRefs = ref<Record<string, unknown> | null>(null);
 const threadSelection = reactive<{
   visible: boolean;
@@ -685,6 +907,7 @@ const {
   continueEditedMessage,
   regenerateMessage,
   stopSession,
+  latestTodoSnapshotBySession,
 } = useMessages({
   currentSessionId: currSessionId,
   onSessionsChanged: getSessions,
@@ -1264,6 +1487,67 @@ function openReasoningPanel(payload: {
   reasoningPanelOpen.value = true;
 }
 
+// 之前基于 reactive 追踪的 parseTodoToolResult / extractLatestTodoSnapshot
+// 已经被 useMessages 层主动 emit 替代(见 useMessages.ts 的 latestTodoSnapshot)。
+
+/** todo 快照按当前会话隔离。
+ *
+ * useMessages 暴露 `latestTodoSnapshotBySession` 是 ref<Record<sessionId, snapshot>>,
+ * 每次 finishToolCall 时整体替换 `value = {...current, [sid]: snap}`,
+ * ref.set 100% 触发响应 → 本 computed 重算 → ChatUI 实时刷新。
+ *
+ * key 可能是 undefined (新会话还没 todo) → 读出 undefined → 转为 null 给 UI。
+ */
+const currentTodoSnapshot = computed(() => {
+  const sid = currSessionId.value;
+  if (!sid) return null;
+  return latestTodoSnapshotBySession.value[sid] ?? null;
+});
+
+/** summary bar 出现时,如果持久化的位置已超出当前窗口, 则重置居中。 */
+watch(currentTodoSnapshot, (snap) => {
+  if (!snap || todoBarPos.value === null) return;
+  nextTick(() => {
+    const main = document.querySelector(".chat-main") as HTMLElement | null;
+    const bar = document.querySelector(".todo-summary-bar") as HTMLElement | null;
+    if (!main || !bar) return;
+    const mainRect = main.getBoundingClientRect();
+    const barRect = bar.getBoundingClientRect();
+    const clamped = clampBarPos(
+      todoBarPos.value!.left,
+      todoBarPos.value!.top,
+      barRect,
+      mainRect,
+    );
+    if (
+      clamped.left !== todoBarPos.value!.left ||
+      clamped.top !== todoBarPos.value!.top
+    ) {
+      todoBarPos.value = clamped;
+    }
+  });
+}, { immediate: true });
+
+// 与 RefsSidebar 互斥:打开 todo 时收起 refs
+watch(todoSidebarOpen, (open) => {
+  if (open) refsSidebarOpen.value = false;
+});
+watch(refsSidebarOpen, (open) => {
+  if (open) todoSidebarOpen.value = false;
+});
+
+function toggleTodoSidebar() {
+  todoSidebarOpen.value = !todoSidebarOpen.value;
+}
+
+/** RefsSidebar 的 modelValue 变化回调:关闭时由用户主动操作,无需特别处理;
+ *  开启时由于 watch 已自动收起 todo,这里只作为占位以保持事件链可读。
+ */
+function onRefsToggle(open: boolean) {
+  if (!open) return;
+  // 互斥由 watch(refsSidebarOpen) 自动处理 todo 侧
+}
+
 async function deleteThread(thread: ChatThread) {
   if (deletingThread.value) return;
   if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog))) return;
@@ -1585,6 +1869,104 @@ function toggleTheme() {
   padding: 12px;
   color: var(--chat-muted);
   font-size: 13px;
+}
+
+/* Todo summary bar — 浮窗式 (position: fixed)
+   初始位置: 顶部工具栏下方 64px 处的页面正中 (避开 50px v-app-bar + 14px buffer)
+   拖动后: 改用 inline style (left/top px), 通过 clampBarPos 限制在 chat-main 内
+   z-index: 必须大于 v-app-bar (z-index: 100) 否则被工具栏遮挡 */
+.todo-summary-bar {
+  position: fixed;
+  z-index: 9999;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid rgba(var(--v-border-color), 0.18);
+  border-radius: 999px;
+  background: rgba(var(--v-theme-surface), 0.78);
+  color: rgba(var(--v-theme-on-surface), 0.82);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 0.18s ease, border-color 0.18s ease,
+    color 0.18s ease, box-shadow 0.18s ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  max-width: calc(100vw - 24px);
+}
+.todo-summary-bar:hover {
+  background: rgba(var(--v-theme-primary), 0.1);
+  border-color: rgba(var(--v-theme-primary), 0.35);
+  color: rgb(var(--v-theme-on-surface));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+.todo-summary-bar--active {
+  background: rgba(var(--v-theme-primary), 0.14);
+  border-color: rgba(var(--v-theme-primary), 0.5);
+  color: rgb(var(--v-theme-on-surface));
+  box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.15);
+}
+.todo-summary-bar--dragging {
+  cursor: grabbing;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: none; /* 拖动中不要 transition 跟手 */
+}
+/* 初始居中状态: 拖动后会被 inline left/top 覆盖
+   注意: top 必须大于 v-app-bar 的 50px,否则会被顶部工具栏遮挡;
+   z-index 抬高到 1201 略高于 .v-toolbar 的 1200,作为防御。*/
+.todo-summary-bar--centered {
+  left: 50% !important;
+  top: 60px !important;
+  z-index: 1201;
+  transform: translateX(-50%);
+  animation: todo-bar-fade-in 0.2s ease;
+}
+@keyframes todo-bar-fade-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.todo-summary-icon {
+  color: rgba(var(--v-theme-primary), 0.85);
+  flex-shrink: 0;
+}
+.todo-summary-drag-handle {
+  color: rgba(var(--v-theme-on-surface), 0.35);
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+.todo-summary-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.todo-summary-progress {
+  color: #b58400;
+  font-weight: 500;
+}
+.todo-summary-circular {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 600;
+}
+.todo-summary-attention {
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+@media (max-width: 760px) {
+  .todo-summary-text {
+    /* 移动端隐藏冗长文字, 只留进度环 + 图标 */
+    display: none;
+  }
+  .todo-summary-drag-handle {
+    display: none;
+  }
 }
 
 .sidebar-footer {

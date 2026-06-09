@@ -179,6 +179,14 @@
     "title": "References",
     "sources": "Sources"
   },
+  "todo": {
+    "sidebarTitle": "Todo List",
+    "summary": "Task progress",
+    "empty": "No tasks yet. Ask the Agent to plan some for you.",
+    "close": "Close",
+    "updatedAt": "Updated at {time}",
+    "attentionHint": "{count} item(s) need attention"
+  },
   "connection": {
     "title": "Connection Status Notice",
     "message": "The system detected that the chat connection needs to be re-established.",

@@ -120,6 +120,78 @@ export function useMessages(options: UseMessagesOptions) {
     {},
   );
 
+  /**
+   * todo_list 工具的最新快照,**按 session_id 隔离**。
+   *
+   * 为什么用 ref + 整体对象替换(而非 reactive 字典的 SET 单个 key):
+   *   1. 不同会话的 todo 列表互不相关,A 会话的 add 不应影响 B 会话的 sidebar。
+   *   2. Vue 3 的 reactive 字典在 SET 一个新 key 时,set trap 触发了依赖,
+   *      但**首次访问(只读)时建立的依赖关系**对后续 SET 新 key 偶尔不可靠
+   *      (尤其当 Chat.vue 的 computed 首次执行时 key 不存在,后续写入时
+   *      computed 内部读取走的是 `reactive[key]`,会追踪 — 看似 OK 但
+   *      实际生产中多次报告不更新)。
+   *   3. 改用 ref + 整体赋值 `value = {...current, [sid]: snap}`:
+   *      - ref 的 set 100% 触发 ref 依赖
+   *      - 整体对象赋值让 Vue 重新建立深响应关系
+   *      - 性能:todo list 至多几十项,整体赋值开销可忽略
+   */
+  const latestTodoSnapshotBySession = ref<
+    Record<
+      string,
+      { list: any; stats: any; attentionItems: number[] } | null
+    >
+  >({});
+
+  /**
+   * 尝试从 tool result 解析出 todo_list 快照。识别特征:
+   *   1. result 是 dict 且含 list.items 数组 + stats 字段(直出格式)
+   *   2. result 是 dict 且含 ok+data 结构,data 里有 list/stats(spcode 包装格式)
+   *   3. result 是 JSON 字符串,parse 后匹配上面任一模式
+   * 返回 null 表示不是 todo_list 或数据格式不识别。
+   */
+  function _tryParseTodoSnapshot(rawResult: unknown): {
+    list: any;
+    stats: any;
+    attentionItems: number[];
+  } | null {
+    if (rawResult == null) return null;
+    let parsed: any = rawResult;
+    if (typeof parsed === "string") {
+      const trimmed = parsed.trim();
+      if (!trimmed) return null;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        return null;
+      }
+    }
+    if (!parsed || typeof parsed !== "object") return null;
+    // 剥 envelope: {ok:true, data:{...}} → {...}
+    if (
+      parsed.ok === true &&
+      parsed.data &&
+      typeof parsed.data === "object"
+    ) {
+      parsed = parsed.data;
+    }
+    if (
+      !parsed.list ||
+      typeof parsed.list !== "object" ||
+      !Array.isArray(parsed.list.items) ||
+      !parsed.stats ||
+      typeof parsed.stats !== "object"
+    ) {
+      return null;
+    }
+    return {
+      list: parsed.list,
+      stats: parsed.stats,
+      attentionItems: Array.isArray(parsed.attention_items)
+        ? parsed.attention_items
+        : [],
+    };
+  }
+
   const activeMessages = computed(() =>
     options.currentSessionId.value
       ? messagesBySession[options.currentSessionId.value] || []
@@ -429,7 +501,7 @@ export function useMessages(options: UseMessagesOptions) {
         throw new Error(payload?.message || "Regenerate failed.");
       }
       await readSseStream(response.body, (payload) => {
-        processStreamPayload(botRecord, payload);
+        processStreamPayload(botRecord, payload, undefined, sessionId);
         options.onStreamUpdate?.(sessionId);
       });
     } catch (error) {
@@ -531,7 +603,7 @@ export function useMessages(options: UseMessagesOptions) {
           throw new Error(`SSE connection failed: ${response.status}`);
         }
         await readSseStream(response.body, (payload) => {
-          processStreamPayload(botRecord, payload, userRecord);
+          processStreamPayload(botRecord, payload, userRecord, sessionId);
           options.onStreamUpdate?.(sessionId);
         });
       })
@@ -586,7 +658,7 @@ export function useMessages(options: UseMessagesOptions) {
     ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        processStreamPayload(botRecord, payload, userRecord);
+        processStreamPayload(botRecord, payload, userRecord, sessionId);
         options.onStreamUpdate?.(sessionId);
         if (payload.type === "end" || payload.t === "end") {
           ws.close();
@@ -608,6 +680,7 @@ export function useMessages(options: UseMessagesOptions) {
     botRecord: ChatRecord,
     payload: any,
     userRecord?: ChatRecord,
+    sessionId?: string,
   ) {
     const normalized =
       payload?.ct === "chat"
@@ -672,7 +745,46 @@ export function useMessages(options: UseMessagesOptions) {
         return;
       }
       if (chainType === "tool_call_result") {
-        finishToolCall(botRecord, parseJsonSafe(data));
+        const parsedResult = parseJsonSafe(data);
+        // 多层穿透: 后端 SSE event 的 data 字段可能是
+        //   {id, ts, result: <dict | string>}  (A/B)
+        //   {id, ts, data:   <dict | string>}  (C/D)
+        //   或 tool 返回 dict 本身              (E)
+        // 任何一种,都尝试穿透到 list+stats 字段。
+        function unwrapTodoResult(input: unknown): unknown {
+          if (input == null) return input;  // ← 关键:不要返回 null,避免丢数据
+          if (typeof input === "string") {
+            const trimmed = input.trim();
+            if (!trimmed) return input;  // 空字符串:回退 input
+            try { return unwrapTodoResult(JSON.parse(trimmed)); }
+            catch { return input; }
+          }
+          if (Array.isArray(input)) return input;
+          if (typeof input !== "object") return input;
+          const obj = input as Record<string, unknown>;
+          if (obj.list && obj.stats) return obj;  // E: 已经是 tool 返回
+          // 关键:result 是空字符串/null 时不要穿透(避免链断裂丢数据)
+          if (obj.result != null) {
+            if (typeof obj.result === "string" && !obj.result.trim()) {
+              // 空字符串 result → 跳过这个字段,继续尝试 data
+            } else {
+              return unwrapTodoResult(obj.result);  // A/B
+            }
+          }
+          if (obj.data != null) return unwrapTodoResult(obj.data);    // C/D
+          return input;
+        }
+        const toolResult = unwrapTodoResult(parsedResult);
+        if (sessionId && toolResult && typeof toolResult === "object" && !Array.isArray(toolResult)) {
+          const snap = _tryParseTodoSnapshotExternal(toolResult);
+          if (snap) {
+            latestTodoSnapshotBySession.value = {
+              ...latestTodoSnapshotBySession.value,
+              [sessionId]: snap,
+            };
+          }
+        }
+        finishToolCall(botRecord, parsedResult);
         return;
       }
       appendPlain(botRecord, payloadText(data), normalized.streaming !== false);
@@ -718,6 +830,7 @@ export function useMessages(options: UseMessagesOptions) {
     regenerateMessage,
     stopSession,
     cleanupConnections,
+    latestTodoSnapshotBySession,
   };
 }
 
@@ -1012,7 +1125,10 @@ export function upsertToolCall(record: ChatRecord, toolCall: any) {
   record.content.message.push({ type: "tool_call", tool_calls: [{ ...toolCall }] });
 }
 
-export function finishToolCall(record: ChatRecord, result: any) {
+export function finishToolCall(
+  record: ChatRecord,
+  result: any,
+) {
   markMessageStarted(record);
   if (!result || typeof result !== "object") return;
   const targetId = result.id;
@@ -1035,6 +1151,52 @@ export function finishToolCall(record: ChatRecord, result: any) {
       },
     ],
   });
+}
+
+/**
+ * 导出版本的 _tryParseTodoSnapshot,供 finishToolCall (上面) 使用,
+ * 因为该函数定义在 useMessages 闭包内,需要单独 export 一份给外部调用。
+ */
+function _tryParseTodoSnapshotExternal(rawResult: unknown): {
+  list: any;
+  stats: any;
+  attentionItems: number[];
+} | null {
+  if (rawResult == null) return null;
+  let parsed: any = rawResult;
+  if (typeof parsed === "string") {
+    const trimmed = parsed.trim();
+    if (!trimmed) return null;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  if (
+    parsed.ok === true &&
+    parsed.data &&
+    typeof parsed.data === "object"
+  ) {
+    parsed = parsed.data;
+  }
+  if (
+    !parsed.list ||
+    typeof parsed.list !== "object" ||
+    !Array.isArray(parsed.list.items) ||
+    !parsed.stats ||
+    typeof parsed.stats !== "object"
+  ) {
+    return null;
+  }
+  return {
+    list: parsed.list,
+    stats: parsed.stats,
+    attentionItems: Array.isArray(parsed.attention_items)
+      ? parsed.attention_items
+      : [],
+  };
 }
 
 export function markMessageStarted(record: ChatRecord) {

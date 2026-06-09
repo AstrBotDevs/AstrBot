@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 282 icons */
+/* Auto-generated MDI subset – 285 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -216,12 +216,20 @@
   content: "\F0765";
 }
 
+.mdi-circle-medium::before {
+  content: "\F09DE";
+}
+
 .mdi-circle-outline::before {
   content: "\F0766";
 }
 
 .mdi-circle-small::before {
   content: "\F09DF";
+}
+
+.mdi-clipboard-text-outline::before {
+  content: "\F0A38";
 }
 
 .mdi-clock-outline::before {
@@ -378,6 +386,10 @@
 
 .mdi-download-outline::before {
   content: "\F0B8F";
+}
+
+.mdi-drag-horizontal-variant::before {
+  content: "\F12F0";
 }
 
 .mdi-emoticon::before {
