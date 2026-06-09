@@ -102,7 +102,9 @@ class SandboxRoute(Route):
             return jsonify(
                 Response()
                 .ok(
-                    data={"sandboxes": computer_client.sandbox_manager.list_sandboxes()}
+                    data={
+                        "sandboxes": await computer_client.sandbox_manager.list_sandboxes_checked()
+                    }
                 )
                 .__dict__
             )

@@ -181,7 +181,12 @@ class ListSandboxesTool(FunctionTool):
         ):
             return permission_error
         session_id = context.context.event.unified_msg_origin
-        sandboxes = _sandbox_manager().list_sandboxes()
+        manager = _sandbox_manager()
+        list_checked = getattr(manager, "list_sandboxes_checked", None)
+        if callable(list_checked):
+            sandboxes = await list_checked()
+        else:
+            sandboxes = manager.list_sandboxes()
         sandboxes = [
             _redact_sandbox_for_session(record, session_id, admin=_is_admin(context))
             for record in sandboxes

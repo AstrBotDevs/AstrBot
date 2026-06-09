@@ -32,6 +32,11 @@ class BaseDefaultAvailableBooter:
     pass
 
 
+class NoneAvailableBooter:
+    async def available(self):
+        return None
+
+
 class UnavailablePropertyBooter:
     available = False
 
@@ -1674,9 +1679,10 @@ async def test_manager_marks_persistent_reconnect_as_restoring(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_manager_treats_base_available_stub_as_available(tmp_path):
+async def test_manager_treats_unknown_available_state_as_unavailable(tmp_path):
     manager, _provider = _manager(tmp_path)
-    assert await manager.booter_available(BaseDefaultAvailableBooter()) is True
+    assert await manager.booter_available(BaseDefaultAvailableBooter()) is False
+    assert await manager.booter_available(NoneAvailableBooter()) is False
 
 
 @pytest.mark.asyncio
@@ -1705,6 +1711,34 @@ async def test_manager_persistent_health_failure_marks_unknown_for_retry(tmp_pat
 
     assert manager.registry.get_sandbox("generic-1")["status"] == "unknown"
     assert "generic-1" not in manager.session_booter
+
+
+@pytest.mark.asyncio
+async def test_manager_checked_list_marks_stale_persistent_booter_unknown(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    booter = FakeBooter()
+    booter.available_result = False
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+    manager.session_booter["generic-1"] = booter
+    manager.boot_locks["generic-1"] = asyncio.Lock()
+
+    listed = await manager.list_sandboxes_checked()
+
+    assert listed[0]["status"] == "unknown"
+    assert manager.registry.get_sandbox("generic-1")["status"] == "unknown"
+    assert "generic-1" not in manager.session_booter
+    assert "generic-1" not in manager.boot_locks
 
 
 @pytest.mark.asyncio

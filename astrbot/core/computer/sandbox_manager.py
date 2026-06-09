@@ -180,7 +180,7 @@ class SandboxManager:
         for sandbox_id in list(self.session_booter):
             self.clear_runtime_state(sandbox_id)
         for sandbox_id in list(self.idle_state):
-            self.clear_runtime_state(sandbox_id)
+            self.clear_runtime_state_and_drop_lock(sandbox_id)
         for sandbox_id in list(self.expiration_state):
             self.clear_runtime_state(sandbox_id)
         self.boot_locks.clear()
@@ -294,14 +294,14 @@ class SandboxManager:
     async def booter_available(self, booter: ComputerBooter) -> bool:
         available = getattr(booter, "available", None)
         if available is None:
-            return True
+            return False
         if getattr(available, "__isabstractmethod__", False):
-            return True
+            return False
         result = available() if callable(available) else available
         if inspect.isawaitable(result):
             result = await result
         if result is None:
-            return True
+            return False
         return bool(result)
 
     def acquire_lease(
@@ -923,6 +923,38 @@ class SandboxManager:
                 )
             records.append(updated)
         return records
+
+    async def list_sandboxes_checked(self) -> list[dict]:
+        changed = False
+        for record in self.registry.list_sandboxes():
+            sandbox_id = record.get("sandbox_id")
+            if not sandbox_id or not record.get("managed"):
+                continue
+            booter = self.session_booter.get(sandbox_id)
+            if booter is None:
+                continue
+            try:
+                available = await self.booter_available(booter)
+            except Exception as exc:
+                logger.warning(
+                    "[Computer] Sandbox health check failed for %s: %s",
+                    sandbox_id,
+                    exc,
+                )
+                available = False
+            if available:
+                continue
+            self.clear_runtime_state_and_drop_lock(sandbox_id)
+            next_status = (
+                SandboxStatus.UNKNOWN
+                if record.get("retention_policy") == "persistent"
+                else SandboxStatus.ERROR
+            )
+            self.registry.update_sandbox_status(sandbox_id, next_status)
+            changed = True
+        if changed:
+            await self.save_registry_async()
+        return self.list_sandboxes()
 
     def set_default_sandbox(self, sandbox_id: str) -> dict:
         record = self.registry.get_sandbox(sandbox_id)
