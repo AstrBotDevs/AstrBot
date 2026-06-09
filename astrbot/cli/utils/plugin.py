@@ -114,7 +114,7 @@ def build_plug_list(plugins_dir: Path) -> list:
     """
     # Get local plugin info
     result = []
-    if plugins_dir.exists():
+    if plugins_dir.is_dir():
         for plugin_name in [d.name for d in plugins_dir.glob("*") if d.is_dir()]:
             plugin_dir = plugins_dir / plugin_name
 
