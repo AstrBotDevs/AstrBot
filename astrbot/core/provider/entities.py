@@ -96,6 +96,14 @@ class ProviderRequest:
     """提示词"""
     session_id: str | None = ""
     """会话 ID"""
+    external_user_id: str | None = None
+    """External platform sender user ID."""
+    external_user_name: str | None = None
+    """External platform sender display name."""
+    external_platform_id: str | None = None
+    """External platform ID."""
+    external_group_id: str | None = None
+    """External group/session ID when available."""
     image_urls: list[str] = field(default_factory=list)
     """图片 URL 列表"""
     audio_urls: list[str] = field(default_factory=list)

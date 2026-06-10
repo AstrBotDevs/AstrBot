@@ -1461,6 +1461,15 @@ async def build_main_agent(
         )
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
+    sender = getattr(event.message_obj, "sender", None)
+    req.external_user_id = str(
+        getattr(sender, "user_id", "") or event.get_sender_id() or ""
+    )
+    req.external_user_name = str(
+        getattr(sender, "nickname", "") or event.get_sender_name() or ""
+    )
+    req.external_platform_id = str(event.get_platform_id() or "")
+    req.external_group_id = str(event.get_group_id() or "")
 
     if config.file_extract_enabled:
         try:
