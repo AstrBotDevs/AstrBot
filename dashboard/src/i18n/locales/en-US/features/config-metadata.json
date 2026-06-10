@@ -1590,6 +1590,30 @@
         "description": "voice",
         "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
       },
+      "elevenlabs-tts-voice-id": {
+        "description": "Voice ID",
+        "hint": "ElevenLabs voice ID. Browse and copy voice IDs at https://elevenlabs.io/app/voice-library. Default 'JBFqnCBsd6RMkjVDRZzb' (George)."
+      },
+      "elevenlabs-tts-output-format": {
+        "description": "Output format",
+        "hint": "Audio output format, e.g. 'mp3_44100_128', 'mp3_22050_32', 'wav_44100', or 'opus_48000_128'. Raw PCM/u-law/a-law formats are not supported. Default 'mp3_44100_128'."
+      },
+      "elevenlabs-tts-stability": {
+        "description": "Stability",
+        "hint": "Voice stability, range [0, 1]. Higher is more consistent, lower is more expressive. Leave empty to use the server default."
+      },
+      "elevenlabs-tts-similarity-boost": {
+        "description": "Similarity boost",
+        "hint": "How closely the output matches the original voice, range [0, 1]. Leave empty to use the server default."
+      },
+      "elevenlabs-tts-style": {
+        "description": "Style exaggeration",
+        "hint": "Style exaggeration of the voice, range [0, 1]. Higher values increase latency. Leave empty to use the server default."
+      },
+      "elevenlabs-tts-use-speaker-boost": {
+        "description": "Speaker boost",
+        "hint": "Boost similarity to the original speaker. May slightly increase latency."
+      },
       "mimo-tts-voice": {
         "description": "Voice",
         "hint": "MiMo TTS voice name. Supported values include 'mimo_default', 'default_en', and 'default_zh'."

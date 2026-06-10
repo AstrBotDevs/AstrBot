@@ -1587,6 +1587,30 @@
                 "description": "API Base URL",
                 "hint": "Голоса OpenAI TTS: alloy, echo и др."
             },
+            "elevenlabs-tts-voice-id": {
+                "description": "ID голоса",
+                "hint": "ID голоса ElevenLabs. Просмотрите и скопируйте ID на https://elevenlabs.io/app/voice-library. По умолчанию 'JBFqnCBsd6RMkjVDRZzb' (George)."
+            },
+            "elevenlabs-tts-output-format": {
+                "description": "Формат вывода",
+                "hint": "Формат аудио, например 'mp3_44100_128', 'mp3_22050_32', 'wav_44100' или 'opus_48000_128'. Raw PCM/u-law/a-law форматы не поддерживаются. По умолчанию 'mp3_44100_128'."
+            },
+            "elevenlabs-tts-stability": {
+                "description": "Стабильность",
+                "hint": "Стабильность голоса, диапазон [0, 1]. Оставьте пустым для значения по умолчанию."
+            },
+            "elevenlabs-tts-similarity-boost": {
+                "description": "Усиление сходства",
+                "hint": "Насколько вывод соответствует исходному голосу, диапазон [0, 1]. Оставьте пустым для значения по умолчанию."
+            },
+            "elevenlabs-tts-style": {
+                "description": "Выразительность стиля",
+                "hint": "Выразительность стиля голоса, диапазон [0, 1]. Высокие значения увеличивают задержку. Оставьте пустым для значения по умолчанию."
+            },
+            "elevenlabs-tts-use-speaker-boost": {
+                "description": "Усиление диктора",
+                "hint": "Усиливает сходство с исходным диктором. Может немного увеличить задержку."
+            },
             "mimo-tts-voice": {
                 "description": "Голос",
                 "hint": "Имя голоса MiMo TTS. Поддерживаются значения 'mimo_default', 'default_en' и 'default_zh'."

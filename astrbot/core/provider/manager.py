@@ -467,6 +467,10 @@ class ProviderManager:
                 from .sources.gemini_tts_source import (
                     ProviderGeminiTTSAPI as ProviderGeminiTTSAPI,
                 )
+            case "elevenlabs_tts_api":
+                from .sources.elevenlabs_tts_source import (
+                    ProviderElevenLabsTTSAPI as ProviderElevenLabsTTSAPI,
+                )
             case "openai_embedding":
                 from .sources.openai_embedding_source import (
                     OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,

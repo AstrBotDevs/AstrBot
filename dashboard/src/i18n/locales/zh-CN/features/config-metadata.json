@@ -1592,6 +1592,30 @@
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
       },
+      "elevenlabs-tts-voice-id": {
+        "description": "音色 ID",
+        "hint": "ElevenLabs 音色 ID。可在 https://elevenlabs.io/app/voice-library 浏览并复制音色 ID。默认 'JBFqnCBsd6RMkjVDRZzb'（George）。"
+      },
+      "elevenlabs-tts-output-format": {
+        "description": "输出格式",
+        "hint": "音频输出格式，例如 'mp3_44100_128'、'mp3_22050_32'、'wav_44100'、'opus_48000_128'。不支持裸 PCM/u-law/a-law 格式。默认 'mp3_44100_128'。"
+      },
+      "elevenlabs-tts-stability": {
+        "description": "稳定性",
+        "hint": "音色稳定性，范围 [0, 1]。值越高越稳定，越低越富有表现力。留空则使用服务端默认值。"
+      },
+      "elevenlabs-tts-similarity-boost": {
+        "description": "相似度增强",
+        "hint": "输出与原始音色的接近程度，范围 [0, 1]。留空则使用服务端默认值。"
+      },
+      "elevenlabs-tts-style": {
+        "description": "风格夸张度",
+        "hint": "音色风格的夸张程度，范围 [0, 1]。值越高延迟越大。留空则使用服务端默认值。"
+      },
+      "elevenlabs-tts-use-speaker-boost": {
+        "description": "说话人增强",
+        "hint": "增强与原始说话人的相似度，可能略微增加延迟。"
+      },
       "mimo-tts-voice": {
         "description": "音色",
         "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。"
