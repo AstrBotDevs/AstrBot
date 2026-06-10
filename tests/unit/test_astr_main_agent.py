@@ -2315,9 +2315,14 @@ class TestApplySandboxTools:
         assert "access.status=occupied" in req.system_prompt
         assert "fresh or separate environment" in req.system_prompt
         assert "send screenshots to the user to show progress" not in req.system_prompt
-        assert "astrbot_sandbox_operation with action=capture_screenshot" in req.system_prompt
+        assert (
+            "astrbot_sandbox_operation with action=capture_screenshot"
+            in req.system_prompt
+        )
         assert "send_to_user=true" in req.system_prompt
         assert "send_message_to_user separately" in req.system_prompt
+        assert "automatically refreshes this session's lease" in req.system_prompt
+        assert "lease_expires_in_seconds" in req.system_prompt
 
     def test_apply_sandbox_tools_does_not_scan_provider_tool_names(self, mock_context):
         module = ama

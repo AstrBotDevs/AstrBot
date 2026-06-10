@@ -157,6 +157,53 @@ async def test_copy_file_between_sandboxes_handles_windows_target_filename(
 
 
 @pytest.mark.asyncio
+async def test_copy_file_between_sandboxes_includes_lease_metadata(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.tools.computer_tools import sandbox as sandbox_tools
+
+    expires_at = time.time() + 600
+
+    class SourceBooter:
+        async def download_file(self, source_path, local_path):
+            Path(local_path).write_text("payload", encoding="utf-8")
+
+    class TargetBooter:
+        async def upload_file(self, local_path, target_path):
+            return {"ok": True}
+
+    class Manager:
+        registry = SimpleNamespace(
+            get_sandbox=lambda sandbox_id: {
+                "sandbox_id": sandbox_id,
+                "controller_session_id": "session-a",
+                "lease_expires_at": expires_at,
+            }
+        )
+
+        async def get_observer_booter_by_id(self, sandbox_id, *args, **kwargs):
+            return SourceBooter() if sandbox_id == "source-1" else TargetBooter()
+
+    monkeypatch.setattr(sandbox_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(sandbox_tools.computer_client, "sandbox_manager", Manager())
+
+    result = await SandboxOperationTool().call(
+        _sandbox_context(),
+        "copy_file",
+        source_sandbox_id="source-1",
+        source_path="/tmp/source.txt",
+        target_sandbox_id="target-1",
+        target_path="/tmp/target.txt",
+    )
+    payload = json.loads(str(result))
+
+    assert payload["lease"]["sandbox_id"] == "target-1"
+    assert payload["lease"]["lease_expires_at"]
+    assert payload["lease"]["lease_expires_in_seconds"] > 0
+    assert payload["lease"]["auto_renew_interval_seconds"] == 600
+
+
+@pytest.mark.asyncio
 async def test_sandbox_operation_can_return_screenshot_image_to_llm(
     monkeypatch, tmp_path
 ):
@@ -171,6 +218,14 @@ async def test_sandbox_operation_can_return_screenshot_image_to_llm(
         gui = Gui()
 
     class Manager:
+        registry = SimpleNamespace(
+            get_sandbox=lambda sandbox_id: {
+                "sandbox_id": sandbox_id,
+                "controller_session_id": "session-a",
+                "lease_expires_at": time.time() + 600,
+            }
+        )
+
         async def get_observer_booter_by_id(self, sandbox_id, *args, **kwargs):
             return Booter()
 
@@ -191,6 +246,7 @@ async def test_sandbox_operation_can_return_screenshot_image_to_llm(
     assert isinstance(result, mcp.types.CallToolResult)
     assert isinstance(result.content[0], mcp.types.TextContent)
     assert isinstance(result.content[1], mcp.types.ImageContent)
+    assert json.loads(result.content[0].text)["lease"]["sandbox_id"] == "sandbox-1"
     assert result.content[1].data == "aW1hZ2U="
 
 
@@ -765,7 +821,7 @@ async def test_keep_alive_sandbox_tool_renews_current_sandbox(monkeypatch):
             self, session_id, ttl_seconds=None, context=None
         ):
             calls.append((session_id, ttl_seconds, context))
-            return {"sandbox_id": "sandbox-1", "lease_expires_at": 123.0}
+            return {"sandbox_id": "sandbox-1", "lease_expires_at": time.time() + 3600}
 
     monkeypatch.setattr(
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
@@ -776,6 +832,11 @@ async def test_keep_alive_sandbox_tool_renews_current_sandbox(monkeypatch):
 
     assert "sandbox-1" in str(result)
     assert calls == [("session-a", 3600, context.context.context)]
+
+    payload = json.loads(str(result))
+    assert payload["lease"]["sandbox_id"] == "sandbox-1"
+    assert payload["lease"]["lease_expires_in_seconds"] > 0
+    assert payload["lease"]["auto_renew_interval_seconds"] == 600
 
 
 @pytest.mark.asyncio

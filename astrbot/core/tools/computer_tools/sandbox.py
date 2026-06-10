@@ -59,6 +59,59 @@ def _format_sandbox_for_agent(value):
     return formatted
 
 
+def _lease_metadata_for_agent(
+    context: ContextWrapper[AstrAgentContext],
+    sandbox_id: str,
+    record: dict | None = None,
+) -> dict | None:
+    if not sandbox_id:
+        return None
+    manager = _sandbox_manager()
+    if record is None:
+        registry = getattr(manager, "registry", None)
+        get_sandbox = getattr(registry, "get_sandbox", None)
+        record = get_sandbox(sandbox_id) if callable(get_sandbox) else None
+    if not record:
+        return None
+    lease_expires_at = record.get("lease_expires_at")
+    lease_expires_in_seconds = None
+    if isinstance(lease_expires_at, (int, float)) and not isinstance(
+        lease_expires_at, bool
+    ):
+        lease_expires_in_seconds = max(0, int(float(lease_expires_at) - time.time()))
+    return {
+        "sandbox_id": sandbox_id,
+        "lease_expires_at": _format_agent_time(lease_expires_at),
+        "lease_expires_in_seconds": lease_expires_in_seconds,
+        "auto_renew_interval_seconds": _lease_timeout_for_agent(context),
+    }
+
+
+def _lease_timeout_for_agent(context: ContextWrapper[AstrAgentContext]) -> float:
+    manager = _sandbox_manager()
+    lease_timeout = getattr(manager, "_lease_timeout", None)
+    if callable(lease_timeout):
+        return lease_timeout(
+            context.context.context,
+            context.context.event.unified_msg_origin,
+        )
+    return float(_sandbox_config(context).get("sandbox_lease_timeout", 600))
+
+
+def _attach_lease_metadata(
+    payload: dict,
+    context: ContextWrapper[AstrAgentContext],
+    sandbox_id: str | None,
+    record: dict | None = None,
+) -> dict:
+    if not sandbox_id:
+        return payload
+    lease = _lease_metadata_for_agent(context, sandbox_id, record)
+    if lease is not None:
+        payload["lease"] = lease
+    return payload
+
+
 def _sandbox_manager():
     return computer_client.sandbox_manager
 
@@ -202,8 +255,15 @@ async def _query_get_current(
     ):
         return permission_error
     session_id = context.context.event.unified_msg_origin
+    current = _sandbox_manager().get_current_sandbox(session_id)
+    payload = _format_sandbox_for_agent(current)
     return _dump(
-        _format_sandbox_for_agent(_sandbox_manager().get_current_sandbox(session_id))
+        _attach_lease_metadata(
+            payload,
+            context,
+            current.get("current_sandbox_id"),
+            current.get("sandbox"),
+        )
     )
 
 
@@ -246,7 +306,10 @@ async def _lifecycle_create(
         detail = str(e) or type(e).__name__
         return f"Error creating sandbox: {detail}"
 
-    return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
+    payload = {"sandbox": _format_sandbox_for_agent(sandbox)}
+    return _dump(
+        _attach_lease_metadata(payload, context, sandbox.get("sandbox_id"), sandbox)
+    )
 
 
 async def _lifecycle_switch(
@@ -270,7 +333,10 @@ async def _lifecycle_switch(
     except Exception as e:
         detail = str(e) or type(e).__name__
         return f"Error switching sandbox: {detail}"
-    return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
+    payload = {"sandbox": _format_sandbox_for_agent(sandbox)}
+    return _dump(
+        _attach_lease_metadata(payload, context, sandbox.get("sandbox_id"), sandbox)
+    )
 
 
 async def _lifecycle_release(
@@ -288,7 +354,10 @@ async def _lifecycle_release(
     except Exception as e:
         detail = str(e) or type(e).__name__
         return f"Error releasing sandbox: {detail}"
-    return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
+    payload = {"sandbox": _format_sandbox_for_agent(sandbox)}
+    return _dump(
+        _attach_lease_metadata(payload, context, sandbox.get("sandbox_id"), sandbox)
+    )
 
 
 async def _lifecycle_set_retention(
@@ -325,7 +394,10 @@ async def _lifecycle_set_retention(
     except Exception as e:
         detail = str(e) or type(e).__name__
         return f"Error changing sandbox retention policy: {detail}"
-    return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
+    payload = {"sandbox": _format_sandbox_for_agent(sandbox)}
+    return _dump(
+        _attach_lease_metadata(payload, context, sandbox.get("sandbox_id"), sandbox)
+    )
 
 
 async def _lifecycle_renew_lease(
@@ -344,7 +416,10 @@ async def _lifecycle_renew_lease(
     except Exception as e:
         detail = str(e) or type(e).__name__
         return f"Error renewing sandbox lease: {detail}"
-    return _dump({"sandbox": _format_sandbox_for_agent(sandbox)})
+    payload = {"sandbox": _format_sandbox_for_agent(sandbox)}
+    return _dump(
+        _attach_lease_metadata(payload, context, sandbox.get("sandbox_id"), sandbox)
+    )
 
 
 async def _lifecycle_takeover(
@@ -428,6 +503,7 @@ async def _operation_capture_screenshot(
             await context.context.event.send(MessageChain().file_image(path))
             payload["sent_to_user"] = True
         image_data = payload.pop("base64", "")
+        payload = _attach_lease_metadata(payload, context, target_sandbox_id)
         if return_image_to_llm:
             content: list[mcp.types.TextContent | mcp.types.ImageContent] = [
                 mcp.types.TextContent(type="text", text=_dump(payload))
@@ -483,13 +559,17 @@ async def _operation_copy_file(
             except OSError:
                 pass
         return _dump(
-            {
-                "source_sandbox_id": source_sandbox_id,
-                "source_path": source_path,
-                "target_sandbox_id": target_sandbox_id,
-                "target_path": target_path,
-                "upload_result": upload_result,
-            }
+            _attach_lease_metadata(
+                {
+                    "source_sandbox_id": source_sandbox_id,
+                    "source_path": source_path,
+                    "target_sandbox_id": target_sandbox_id,
+                    "target_path": target_path,
+                    "upload_result": upload_result,
+                },
+                context,
+                target_sandbox_id,
+            )
         )
     except Exception as e:
         detail = str(e) or type(e).__name__

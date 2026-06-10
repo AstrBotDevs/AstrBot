@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.config.default import CONFIG_METADATA_3, DEFAULT_CONFIG
 
 ROOT = Path(__file__).resolve().parents[1]
 SHIPYARD_COMPOSE = (ROOT / "compose-with-shipyard.yml").read_text(encoding="utf-8")
@@ -69,6 +69,14 @@ def test_core_sandbox_timeout_defaults_live_in_bot_config():
     assert sandbox["sandbox_ttl"] == 3600
     assert sandbox["sandbox_idle_timeout"] == 1800
     assert sandbox["sandbox_lease_timeout"] == 600
+
+
+def test_dashboard_schema_exposes_sandbox_lease_timeout():
+    schema = CONFIG_METADATA_3["ai_group"]["metadata"]["agent_computer_use"]["items"]
+
+    lease_timeout = schema["provider_settings.sandbox.sandbox_lease_timeout"]
+    assert lease_timeout["type"] == "int"
+    assert "默认 600 秒" in lease_timeout["hint"]
 
 
 def test_cua_schema_defaults_match_documented_hints():
