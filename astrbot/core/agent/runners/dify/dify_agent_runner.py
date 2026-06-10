@@ -175,12 +175,8 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         if external_user_id:
             payload_vars.update(
                 {
-                    "wecom_userid": external_user_id,
-                    "wecom_user_id": external_user_id,
-                    "sender_id": external_user_id,
-                    "from_user_id": external_user_id,
-                    "wecom_name": external_user_name,
-                    "sender_name": external_user_name,
+                    "astrbot_user_id": external_user_id,
+                    "astrbot_user_name": external_user_name,
                     "astrbot_platform_id": external_platform_id,
                     "astrbot_group_id": external_group_id,
                 }
