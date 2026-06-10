@@ -55,6 +55,18 @@
           </v-select>
         </div>
 
+        <v-btn
+          v-if="canDeleteSelectedSource"
+          class="provider-sources-mobile-delete"
+          icon="mdi-delete-outline"
+          variant="text"
+          size="small"
+          color="error"
+          :aria-label="tm('providerSources.delete')"
+          :title="tm('providerSources.delete')"
+          @click.stop="deleteSelectedSource"
+        ></v-btn>
+
         <StyledMenu>
           <template #activator="{ props }">
             <v-btn
@@ -130,6 +142,8 @@
             icon="mdi-delete-outline"
             variant="text"
             size="small"
+            :aria-label="tm('providerSources.delete')"
+            :title="tm('providerSources.delete')"
             @click.stop="emitDeleteSource(source)"
           ></v-btn>
         </div>
@@ -181,6 +195,9 @@ const emit = defineEmits([
 ])
 
 const selectedId = computed(() => props.selectedProviderSource?.id || null)
+const canDeleteSelectedSource = computed(() =>
+  Boolean(props.selectedProviderSource && !props.selectedProviderSource.isPlaceholder)
+)
 
 const isActive = (source) => {
   if (source.isPlaceholder) return false
@@ -210,6 +227,12 @@ const selectedSourceValue = computed(() => {
 const emitAddSource = (type) => emit('add-provider-source', type)
 const emitSelectSource = (source) => emit('select-provider-source', source)
 const emitDeleteSource = (source) => emit('delete-provider-source', source)
+
+const deleteSelectedSource = () => {
+  if (canDeleteSelectedSource.value) {
+    emitDeleteSource(props.selectedProviderSource)
+  }
+}
 
 const selectSourceByValue = (value) => {
   const option = sourceOptions.value.find((item) => item.value === value)
@@ -261,6 +284,11 @@ const selectSourceByValue = (value) => {
   display: none;
   min-width: 0;
   flex: 1;
+}
+
+.provider-sources-mobile-delete {
+  display: none;
+  flex-shrink: 0;
 }
 
 .provider-source-select-value {
@@ -373,6 +401,10 @@ const selectSourceByValue = (value) => {
 
   .provider-sources-mobile-select {
     display: block;
+  }
+
+  .provider-sources-mobile-delete {
+    display: inline-flex;
   }
 
   .provider-sources-controls {
