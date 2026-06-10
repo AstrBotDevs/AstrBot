@@ -24,6 +24,7 @@ from astrbot.core.astr_main_agent_resources import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
+    SANDBOX_GUI_PROMPT,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
@@ -49,27 +50,18 @@ from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.tools.computer_tools import (
-    CopyFileBetweenSandboxesTool,
-    CreateSandboxTool,
-    DestroySandboxTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
     FileReadTool,
     FileUploadTool,
     FileWriteTool,
-    GetCurrentSandboxTool,
     GrepTool,
-    KeepAliveSandboxTool,
-    ListSandboxesTool,
-    ListSandboxProvidersTool,
     LocalPythonTool,
     PythonTool,
-    ReleaseSandboxTool,
-    ScreenshotSandboxTool,
-    SetSandboxRetentionPolicyTool,
-    SwitchSandboxTool,
-    TakeoverSandboxTool,
+    SandboxLifecycleTool,
+    SandboxOperationTool,
+    SandboxQueryTool,
     normalize_umo_for_workspace,
 )
 from astrbot.core.tools.cron_tools import FutureTaskTool
@@ -1112,18 +1104,9 @@ def _apply_sandbox_tools(
         added_tool = True
 
     add_sandbox_tool(ExecuteShellTool)
-    add_sandbox_tool(ListSandboxesTool)
-    add_sandbox_tool(ListSandboxProvidersTool)
-    add_sandbox_tool(GetCurrentSandboxTool)
-    add_sandbox_tool(CreateSandboxTool)
-    add_sandbox_tool(SwitchSandboxTool)
-    add_sandbox_tool(KeepAliveSandboxTool)
-    add_sandbox_tool(ReleaseSandboxTool)
-    add_sandbox_tool(SetSandboxRetentionPolicyTool)
-    add_sandbox_tool(TakeoverSandboxTool)
-    add_sandbox_tool(DestroySandboxTool)
-    add_sandbox_tool(ScreenshotSandboxTool)
-    add_sandbox_tool(CopyFileBetweenSandboxesTool)
+    add_sandbox_tool(SandboxQueryTool)
+    add_sandbox_tool(SandboxLifecycleTool)
+    add_sandbox_tool(SandboxOperationTool)
     add_sandbox_tool(PythonTool)
     add_sandbox_tool(FileUploadTool)
     add_sandbox_tool(FileDownloadTool)
@@ -1132,7 +1115,9 @@ def _apply_sandbox_tools(
     add_sandbox_tool(FileEditTool)
     add_sandbox_tool(GrepTool)
     if added_tool:
-        req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
+        req.system_prompt = (
+            f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}{SANDBOX_GUI_PROMPT}\n"
+        )
 
 
 def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> None:

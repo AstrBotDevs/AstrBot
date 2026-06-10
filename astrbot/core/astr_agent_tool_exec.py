@@ -32,27 +32,18 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
-    CopyFileBetweenSandboxesTool,
-    CreateSandboxTool,
-    DestroySandboxTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
     FileReadTool,
     FileUploadTool,
     FileWriteTool,
-    GetCurrentSandboxTool,
     GrepTool,
-    KeepAliveSandboxTool,
-    ListSandboxesTool,
-    ListSandboxProvidersTool,
     LocalPythonTool,
     PythonTool,
-    ReleaseSandboxTool,
-    ScreenshotSandboxTool,
-    SetSandboxRetentionPolicyTool,
-    SwitchSandboxTool,
-    TakeoverSandboxTool,
+    SandboxLifecycleTool,
+    SandboxOperationTool,
+    SandboxQueryTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.tools.registry import get_builtin_tool_config_rule
@@ -216,24 +207,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return cls._runtime_computer_tools_cache[cache_key]
         if runtime == "sandbox":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
-            list_sandboxes_tool = tool_mgr.get_builtin_tool(ListSandboxesTool)
-            list_sandbox_providers_tool = tool_mgr.get_builtin_tool(
-                ListSandboxProvidersTool
-            )
-            get_current_sandbox_tool = tool_mgr.get_builtin_tool(GetCurrentSandboxTool)
-            create_sandbox_tool = tool_mgr.get_builtin_tool(CreateSandboxTool)
-            switch_sandbox_tool = tool_mgr.get_builtin_tool(SwitchSandboxTool)
-            keep_alive_sandbox_tool = tool_mgr.get_builtin_tool(KeepAliveSandboxTool)
-            release_sandbox_tool = tool_mgr.get_builtin_tool(ReleaseSandboxTool)
-            set_sandbox_retention_policy_tool = tool_mgr.get_builtin_tool(
-                SetSandboxRetentionPolicyTool
-            )
-            takeover_sandbox_tool = tool_mgr.get_builtin_tool(TakeoverSandboxTool)
-            destroy_sandbox_tool = tool_mgr.get_builtin_tool(DestroySandboxTool)
-            screenshot_sandbox_tool = tool_mgr.get_builtin_tool(ScreenshotSandboxTool)
-            copy_between_sandboxes_tool = tool_mgr.get_builtin_tool(
-                CopyFileBetweenSandboxesTool
-            )
+            sandbox_query_tool = tool_mgr.get_builtin_tool(SandboxQueryTool)
+            sandbox_lifecycle_tool = tool_mgr.get_builtin_tool(SandboxLifecycleTool)
+            sandbox_operation_tool = tool_mgr.get_builtin_tool(SandboxOperationTool)
             python_tool = tool_mgr.get_builtin_tool(PythonTool)
             upload_tool = tool_mgr.get_builtin_tool(FileUploadTool)
             download_tool = tool_mgr.get_builtin_tool(FileDownloadTool)
@@ -243,18 +219,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             grep_tool = tool_mgr.get_builtin_tool(GrepTool)
             tools = {
                 shell_tool.name: shell_tool,
-                list_sandboxes_tool.name: list_sandboxes_tool,
-                list_sandbox_providers_tool.name: list_sandbox_providers_tool,
-                get_current_sandbox_tool.name: get_current_sandbox_tool,
-                create_sandbox_tool.name: create_sandbox_tool,
-                switch_sandbox_tool.name: switch_sandbox_tool,
-                keep_alive_sandbox_tool.name: keep_alive_sandbox_tool,
-                release_sandbox_tool.name: release_sandbox_tool,
-                set_sandbox_retention_policy_tool.name: set_sandbox_retention_policy_tool,
-                takeover_sandbox_tool.name: takeover_sandbox_tool,
-                destroy_sandbox_tool.name: destroy_sandbox_tool,
-                screenshot_sandbox_tool.name: screenshot_sandbox_tool,
-                copy_between_sandboxes_tool.name: copy_between_sandboxes_tool,
+                sandbox_query_tool.name: sandbox_query_tool,
+                sandbox_lifecycle_tool.name: sandbox_lifecycle_tool,
+                sandbox_operation_tool.name: sandbox_operation_tool,
                 python_tool.name: python_tool,
                 upload_tool.name: upload_tool,
                 download_tool.name: download_tool,

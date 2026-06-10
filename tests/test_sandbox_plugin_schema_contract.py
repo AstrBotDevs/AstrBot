@@ -188,26 +188,61 @@ def test_existing_plugin_config_keeps_saved_values_when_schema_defaults_change(
     assert config["ttl"] == 0
 
 
-def test_cua_screenshot_tool_does_not_send_to_user_by_default():
+def test_cua_adapter_uses_core_screenshot_operation():
     _require_plugin_files("data/plugins/astrbot_sandbox_cua/tools/cua.py")
-    from data.plugins.astrbot_sandbox_cua.tools.cua import CuaScreenshotTool
+    from data.plugins.astrbot_sandbox_cua.provider import CuaSandboxProvider
+    from data.plugins.astrbot_sandbox_cua.tools import cua as cua_tools
 
-    tool = CuaScreenshotTool()
+    provider = CuaSandboxProvider()
 
-    send_to_user = tool.parameters["properties"]["send_to_user"]["default"]
-    return_image_to_llm = tool.parameters["properties"]["return_image_to_llm"][
-        "default"
-    ]
-
-    assert send_to_user is True
-    assert return_image_to_llm is True
+    assert "screenshot" in provider.capabilities
+    assert "astrbot_cua_screenshot" not in provider.tool_names
+    assert not hasattr(cua_tools, "CuaScreenshotTool")
 
 
-def test_cua_screenshot_tool_can_send_result_to_user_when_requested():
-    _require_plugin_files("data/plugins/astrbot_sandbox_cua/tools/cua.py")
-    from data.plugins.astrbot_sandbox_cua.tools.cua import CuaScreenshotTool
+def test_core_sandbox_screenshot_operation_can_return_image_to_llm():
+    from astrbot.core.tools.computer_tools.sandbox import SandboxOperationTool
 
-    tool = CuaScreenshotTool()
+    tool = SandboxOperationTool()
+    properties = tool.parameters["properties"]
 
-    assert tool.parameters["properties"]["send_to_user"]["description"]
-    assert tool.parameters["properties"]["return_image_to_llm"]["default"] is True
+    assert "capture_screenshot" in properties["action"]["enum"]
+    assert properties["send_to_user"]["description"]
+    assert properties["return_image_to_llm"]["default"] is False
+
+
+@pytest.mark.asyncio
+async def test_shipyard_neo_execution_history_ignores_empty_optional_filters(
+    monkeypatch,
+):
+    _require_plugin_files(
+        "data/plugins/astrbot_sandbox_shipyard_neo/tools/shipyard_neo/neo_skills.py"
+    )
+    from data.plugins.astrbot_sandbox_shipyard_neo.tools.shipyard_neo import (
+        neo_skills,
+    )
+
+    captured = {}
+
+    class Sandbox:
+        async def get_execution_history(self, **kwargs):
+            captured.update(kwargs)
+            return []
+
+    async def fake_get_neo_context(context):
+        return object(), Sandbox()
+
+    monkeypatch.setattr(neo_skills, "_get_neo_context", fake_get_neo_context)
+    monkeypatch.setattr(neo_skills, "check_admin_permission", lambda *args: None)
+
+    result = await neo_skills.GetExecutionHistoryTool().call(
+        object(),
+        exec_type="",
+        tags="",
+        limit=5,
+        offset=0,
+    )
+
+    assert result == "[]"
+    assert captured["exec_type"] is None
+    assert captured["tags"] is None

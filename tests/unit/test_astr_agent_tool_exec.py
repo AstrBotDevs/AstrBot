@@ -288,7 +288,7 @@ async def test_build_handoff_toolset_uses_registered_provider_tools_only(
     try:
         toolset = FunctionToolExecutor._build_handoff_toolset(run_context, None)
         assert toolset is not None
-        assert "astrbot_list_sandbox_providers" in toolset.names()
+        assert "astrbot_sandbox_query" in toolset.names()
         assert "provider_a_screenshot" in toolset.names()
         assert "provider_b_tool" not in toolset.names()
     finally:

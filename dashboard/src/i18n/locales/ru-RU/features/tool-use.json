@@ -55,6 +55,11 @@
             "permissionMember": "Все",
             "permissionEveryone": "Все",
             "permissionBuiltin": "Встроенный",
+            "originBuiltin": "Встроенный",
+            "originMcp": "MCP",
+            "originPlugin": "Плагин",
+            "originSandbox": "Песочница",
+            "originUnknown": "Неизвестно",
             "actions": "Действия"
         },
         "configTags": {

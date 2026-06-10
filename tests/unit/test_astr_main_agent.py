@@ -1250,7 +1250,7 @@ class TestPluginToolFix:
         )
         provider_tool.sandbox_provider_id = "cua"
         generic_tool = FunctionTool(
-            name="astrbot_list_sandboxes",
+            name="astrbot_sandbox_query",
             description="generic",
             parameters={"type": "object", "properties": {}},
             handler_module_path=None,
@@ -1277,7 +1277,7 @@ class TestPluginToolFix:
                 {"computer_use_runtime": "sandbox"},
             )
 
-        assert "astrbot_list_sandboxes" in req.func_tool.names()
+        assert "astrbot_sandbox_query" in req.func_tool.names()
         assert "astrbot_cua_screenshot" in req.func_tool.names()
 
     def test_plugin_tool_fix_hides_provider_specific_tools_outside_sandbox_runtime(
@@ -2241,18 +2241,9 @@ class TestApplySandboxTools:
         assert "astrbot_execute_ipython" in tool_names
         assert "astrbot_upload_file" in tool_names
         assert "astrbot_download_file" in tool_names
-        assert "astrbot_create_sandbox" in tool_names
-        assert "astrbot_list_sandbox_providers" in tool_names
-        assert "astrbot_list_sandboxes" in tool_names
-        assert "astrbot_get_current_sandbox" in tool_names
-        assert "astrbot_switch_sandbox" in tool_names
-        assert "astrbot_keep_sandbox_alive" in tool_names
-        assert "astrbot_release_sandbox" in tool_names
-        assert "astrbot_set_sandbox_retention_policy" in tool_names
-        assert "astrbot_takeover_sandbox" in tool_names
-        assert "astrbot_destroy_sandbox" in tool_names
-        assert "astrbot_screenshot_sandbox" in tool_names
-        assert "astrbot_copy_file_between_sandboxes" in tool_names
+        assert "astrbot_sandbox_query" in tool_names
+        assert "astrbot_sandbox_lifecycle" in tool_names
+        assert "astrbot_sandbox_operation" in tool_names
 
     def test_apply_sandbox_tools_adds_sandbox_prompt(self, mock_context):
         """Test that sandbox mode prompt is added to system_prompt."""
@@ -2324,6 +2315,9 @@ class TestApplySandboxTools:
         assert "access.status=occupied" in req.system_prompt
         assert "fresh or separate environment" in req.system_prompt
         assert "send screenshots to the user to show progress" not in req.system_prompt
+        assert "astrbot_sandbox_operation with action=capture_screenshot" in req.system_prompt
+        assert "send_to_user=true" in req.system_prompt
+        assert "send_message_to_user separately" in req.system_prompt
 
     def test_apply_sandbox_tools_does_not_scan_provider_tool_names(self, mock_context):
         module = ama
@@ -2378,7 +2372,7 @@ class TestApplySandboxTools:
         module = ama
         toolset = ToolSet()
         toolset.add_tool(module.LocalPythonTool())
-        toolset.add_tool(module.CreateSandboxTool())
+        toolset.add_tool(module.SandboxLifecycleTool())
 
         sandbox_filtered = module._filter_tools_for_current_config(
             toolset, {"computer_use_runtime": "sandbox"}, "session-a"
@@ -2388,9 +2382,9 @@ class TestApplySandboxTools:
         )
 
         assert "astrbot_execute_python" not in sandbox_filtered.names()
-        assert "astrbot_create_sandbox" in sandbox_filtered.names()
+        assert "astrbot_sandbox_lifecycle" in sandbox_filtered.names()
         assert "astrbot_execute_python" not in none_filtered.names()
-        assert "astrbot_create_sandbox" not in none_filtered.names()
+        assert "astrbot_sandbox_lifecycle" not in none_filtered.names()
 
     def test_handoff_runtime_computer_tools_include_sandbox_lifecycle_tools(self):
         tool_mgr = MagicMock()
@@ -2415,18 +2409,9 @@ class TestApplySandboxTools:
                 "sandbox", tool_mgr, "provider_a"
             )
 
-        assert "astrbot_create_sandbox" in tools
-        assert "astrbot_list_sandbox_providers" in tools
-        assert "astrbot_list_sandboxes" in tools
-        assert "astrbot_get_current_sandbox" in tools
-        assert "astrbot_switch_sandbox" in tools
-        assert "astrbot_release_sandbox" in tools
-        assert "astrbot_keep_sandbox_alive" in tools
-        assert "astrbot_set_sandbox_retention_policy" in tools
-        assert "astrbot_takeover_sandbox" in tools
-        assert "astrbot_destroy_sandbox" in tools
-        assert "astrbot_screenshot_sandbox" in tools
-        assert "astrbot_copy_file_between_sandboxes" in tools
+        assert "astrbot_sandbox_query" in tools
+        assert "astrbot_sandbox_lifecycle" in tools
+        assert "astrbot_sandbox_operation" in tools
 
     def test_runtime_computer_tools_are_cached_per_runtime_and_booter(self):
         tool_mgr = MagicMock()

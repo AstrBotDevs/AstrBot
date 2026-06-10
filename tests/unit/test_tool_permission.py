@@ -354,6 +354,206 @@ class TestGetToolListPermission:
         assert "permission_configured" not in target
         assert target["readonly"] is True
 
+    @pytest.mark.asyncio
+    async def test_list_labels_sandbox_provider_builtin_tools_by_provider(self):
+        from astrbot.core.computer.sandbox_tool_binding import (
+            mark_tool_as_sandbox_provider_tool,
+        )
+        from astrbot.core.tools.computer_tools import SandboxQueryTool
+        from astrbot.dashboard.routes.tools import ToolsRoute
+
+        route = ToolsRoute.__new__(ToolsRoute)
+        route.core_lifecycle = MagicMock()
+        route.core_lifecycle.astrbot_config_mgr = MagicMock()
+        route.core_lifecycle.astrbot_config_mgr.get_conf_list.return_value = []
+        route.core_lifecycle.astrbot_config_mgr.confs = {}
+        route.tool_mgr = FunctionToolManager()
+
+        tool = route.tool_mgr.get_builtin_tool(SandboxQueryTool)
+        original_description = tool.description
+        try:
+            mark_tool_as_sandbox_provider_tool(tool, "shipyard_neo")
+
+            resp = await route.get_tool_list()
+            data = json.loads(json.dumps(resp))
+            target = next(t for t in data["data"] if t["name"] == tool.name)
+
+            assert target["origin"] == "sandbox"
+            assert target["origin_name"] == "shipyard_neo"
+            assert target["readonly"] is True
+            assert "permission" not in target
+            assert (
+                "builtin_config_tags" not in target
+                or target["builtin_config_tags"] == []
+            )
+        finally:
+            if hasattr(tool, "sandbox_provider_id"):
+                delattr(tool, "sandbox_provider_id")
+            tool.description = original_description
+
+    @pytest.mark.asyncio
+    async def test_list_labels_sandbox_provider_plugin_tools_by_provider(self):
+        from astrbot.core.computer.sandbox_tool_binding import (
+            mark_tool_as_sandbox_provider_tool,
+        )
+        from astrbot.dashboard.routes.tools import ToolsRoute
+
+        route = ToolsRoute.__new__(ToolsRoute)
+        route.core_lifecycle = MagicMock()
+        route.core_lifecycle.astrbot_config_mgr = MagicMock()
+        route.core_lifecycle.astrbot_config_mgr.get_conf_list.return_value = []
+        route.core_lifecycle.astrbot_config_mgr.confs = {}
+        route.tool_mgr = FunctionToolManager()
+
+        route.tool_mgr.func_list.append(
+            mark_tool_as_sandbox_provider_tool(
+                _dummy_tool("astrbot_cua_mouse_click"), "cua"
+            )
+        )
+
+        resp = await route.get_tool_list()
+        data = json.loads(json.dumps(resp))
+        target = next(t for t in data["data"] if t["name"] == "astrbot_cua_mouse_click")
+
+        assert target["origin"] == "sandbox"
+        assert target["origin_name"] == "cua"
+        assert target["readonly"] is True
+        assert "permission" not in target
+
+    @pytest.mark.asyncio
+    async def test_toggle_rejects_sandbox_provider_tools(self):
+        from astrbot.core.computer.sandbox_tool_binding import (
+            mark_tool_as_sandbox_provider_tool,
+        )
+        from astrbot.dashboard.routes.tools import ToolsRoute
+
+        route = ToolsRoute.__new__(ToolsRoute)
+        route.tool_mgr = FunctionToolManager()
+        route.tool_mgr.func_list.append(
+            mark_tool_as_sandbox_provider_tool(
+                _dummy_tool("astrbot_cua_mouse_click"), "cua"
+            )
+        )
+
+        mock_req = MagicMock()
+        mock_req.json = _make_coro(
+            {"name": "astrbot_cua_mouse_click", "activate": False}
+        )
+        with patch("astrbot.dashboard.routes.tools.request", mock_req):
+            resp = await route.toggle_tool()
+
+        data = json.loads(json.dumps(resp))
+        assert "Sandbox provider tools are read-only" in data["message"]
+
+    @pytest.mark.asyncio
+    async def test_update_permission_rejects_sandbox_provider_tools(self):
+        from astrbot.core.computer.sandbox_tool_binding import (
+            mark_tool_as_sandbox_provider_tool,
+        )
+        from astrbot.dashboard.routes.tools import ToolsRoute
+
+        route = ToolsRoute.__new__(ToolsRoute)
+        route.tool_mgr = FunctionToolManager()
+        route.tool_mgr.func_list.append(
+            mark_tool_as_sandbox_provider_tool(
+                _dummy_tool("astrbot_cua_mouse_click"), "cua"
+            )
+        )
+
+        mock_req = MagicMock()
+        mock_req.json = _make_coro(
+            {"name": "astrbot_cua_mouse_click", "permission": "admin"}
+        )
+        with patch("astrbot.dashboard.routes.tools.request", mock_req):
+            resp = await route.update_tool_permission()
+
+        data = json.loads(json.dumps(resp))
+        assert "do not support per-tool permission configuration" in data["message"]
+
+    @pytest.mark.asyncio
+    async def test_list_labels_regular_plugin_tools_by_plugin_name(self):
+        from types import SimpleNamespace
+
+        from astrbot.dashboard.routes import tools as tools_route_module
+        from astrbot.dashboard.routes.tools import ToolsRoute
+
+        route = ToolsRoute.__new__(ToolsRoute)
+        route.core_lifecycle = MagicMock()
+        route.core_lifecycle.astrbot_config_mgr = MagicMock()
+        route.core_lifecycle.astrbot_config_mgr.get_conf_list.return_value = []
+        route.core_lifecycle.astrbot_config_mgr.confs = {}
+        route.tool_mgr = FunctionToolManager()
+
+        plugin_tool = _dummy_tool("regular_plugin_tool")
+        plugin_tool.handler_module_path = "plugins.weather"
+        route.tool_mgr.func_list.append(plugin_tool)
+
+        old_star = tools_route_module.star_map.get("plugins.weather")
+        tools_route_module.star_map["plugins.weather"] = SimpleNamespace(
+            name="Weather Plugin"
+        )
+        try:
+            resp = await route.get_tool_list()
+            data = json.loads(json.dumps(resp))
+            target = next(t for t in data["data"] if t["name"] == "regular_plugin_tool")
+
+            assert target["origin"] == "plugin"
+            assert target["origin_name"] == "Weather Plugin"
+            assert target["readonly"] is False
+            assert target["permission"] == "member"
+        finally:
+            if old_star is None:
+                tools_route_module.star_map.pop("plugins.weather", None)
+            else:
+                tools_route_module.star_map["plugins.weather"] = old_star
+
+    @pytest.mark.asyncio
+    async def test_list_includes_config_tags_for_sandbox_provider_tools(self):
+        from dataclasses import dataclass, field
+
+        from astrbot.core.computer.sandbox_tool_binding import sandbox_provider_tool
+        from astrbot.dashboard.routes.tools import ToolsRoute
+
+        @sandbox_provider_tool(
+            "shipyard_neo",
+            config={
+                "provider_settings.computer_use_runtime": "sandbox",
+                "provider_settings.sandbox.booter": "shipyard_neo",
+            },
+        )
+        @dataclass
+        class FakeNeoTool(FunctionTool):
+            name: str = "fake_neo_tool"
+            description: str = "Fake Neo tool"
+            parameters: dict = field(
+                default_factory=lambda: {"type": "object", "properties": {}}
+            )
+
+        route = ToolsRoute.__new__(ToolsRoute)
+        route.core_lifecycle = MagicMock()
+        route.core_lifecycle.astrbot_config_mgr = MagicMock()
+        route.core_lifecycle.astrbot_config_mgr.get_conf_list.return_value = [
+            {"id": "conf-a", "name": "Config A"}
+        ]
+        route.core_lifecycle.astrbot_config_mgr.confs = {
+            "conf-a": {
+                "provider_settings": {
+                    "computer_use_runtime": "sandbox",
+                    "sandbox": {"booter": "shipyard_neo"},
+                }
+            }
+        }
+        route.tool_mgr = FunctionToolManager()
+        route.tool_mgr.func_list.append(FakeNeoTool())
+
+        resp = await route.get_tool_list()
+        data = json.loads(json.dumps(resp))
+        target = next(t for t in data["data"] if t["name"] == "fake_neo_tool")
+
+        assert target["origin"] == "sandbox"
+        assert target["origin_name"] == "shipyard_neo"
+        assert target["builtin_config_tags"][0]["conf_name"] == "Config A"
+
 
 # ── API: update_tool_permission ──────────────────────────────────────
 

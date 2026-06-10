@@ -1,4 +1,11 @@
-from astrbot.core.computer.sandbox_tool_binding import tool_available_in_runtime
+from dataclasses import dataclass, field
+
+from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.computer.sandbox_tool_binding import (
+    get_sandbox_provider_tool_config_statuses,
+    sandbox_provider_tool,
+    tool_available_in_runtime,
+)
 
 
 class FakeTool:
@@ -22,3 +29,33 @@ def test_unscoped_tool_is_available_to_every_runtime():
 
     assert tool_available_in_runtime(tool, "sandbox")
     assert tool_available_in_runtime(tool, "local")
+
+
+def test_sandbox_provider_tool_marks_class_and_registers_config_rule():
+    @sandbox_provider_tool(
+        "Example",
+        config={"provider_settings.sandbox.booter": "example"},
+    )
+    @dataclass
+    class ExampleTool(FunctionTool):
+        name: str = "example_sandbox_tool"
+        description: str = "Example"
+        parameters: dict = field(
+            default_factory=lambda: {"type": "object", "properties": {}}
+        )
+
+    tool = ExampleTool()
+
+    assert tool.sandbox_provider_id == "example"
+
+    statuses = get_sandbox_provider_tool_config_statuses(
+        "example_sandbox_tool",
+        [
+            {
+                "conf_id": "conf-a",
+                "conf_name": "Config A",
+                "config": {"provider_settings": {"sandbox": {"booter": "example"}}},
+            }
+        ],
+    )
+    assert statuses[0]["enabled"] is True
