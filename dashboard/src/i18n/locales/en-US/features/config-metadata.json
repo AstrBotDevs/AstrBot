@@ -1193,7 +1193,7 @@
       },
       "vertex_ai_auth_type": {
         "description": "Key format",
-        "hint": "Use either a Vertex AI API key or a service account JSON. Service account JSON supports model discovery; API key is generation-only."
+        "hint": "Use either a Vertex AI API key or a service account JSON. Service account JSON supports model discovery; API key is generation-only and always uses the global endpoint (the location setting is ignored)."
       },
       "vertex_ai_api_key": {
         "description": "API Key",
@@ -1205,7 +1205,7 @@
       },
       "vertex_ai_location": {
         "description": "Vertex AI location",
-        "hint": "Model location, for example global, us-central1. Default: global."
+        "hint": "Model location, for example global, us-central1. Default: global. Ignored when using an API key."
       },
       "vertex_ai_credentials_path": {
         "description": "Service account JSON path",

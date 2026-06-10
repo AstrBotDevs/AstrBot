@@ -1197,6 +1197,7 @@ CONFIG_METADATA_2 = {
                         "gm_thinking_config": {"budget": 0, "level": "HIGH"},
                         "proxy": "",
                         "vertex_ai_auth_type": "json",
+                        "vertex_ai_api_key": [],
                         "vertex_ai_project_id": "",
                         "vertex_ai_location": "global",
                         "vertex_ai_credentials_path": "",

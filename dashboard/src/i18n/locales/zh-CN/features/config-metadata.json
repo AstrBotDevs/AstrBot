@@ -1195,11 +1195,11 @@
       },
       "vertex_ai_auth_type": {
         "description": "密钥格式",
-        "hint": "在 Vertex AI API Key、服务账号 JSON 选择其一使用即可。"
+        "hint": "在 Vertex AI API Key、服务账号 JSON 选择其一使用即可。服务账号 JSON 支持获取模型列表；API Key 仅用于对话生成，且仅支持 global 端点（地区设置将被忽略）。"
       },
       "vertex_ai_api_key": {
         "description": "API Key",
-        "hint": "在 Vertex AI API Key、服务账号 JSON 选择其一使用即可。"
+        "hint": "Vertex AI API Key。密钥格式选择 API Key 时填写；使用服务账号 JSON 时留空。"
       },
       "vertex_ai_project_id": {
         "description": "Vertex AI 项目 ID",
@@ -1207,7 +1207,7 @@
       },
       "vertex_ai_location": {
         "description": "Vertex AI 地区",
-        "hint": "模型所在地区，例如 global、us-central1。默认：global。"
+        "hint": "模型所在地区，例如 global、us-central1。默认：global。使用 API Key 时此设置将被忽略。"
       },
       "vertex_ai_credentials_path": {
         "description": "服务账号 JSON 路径",

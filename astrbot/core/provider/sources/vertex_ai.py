@@ -45,6 +45,10 @@ def normalize_vertex_ai_provider_config(
     still use the common ``key`` list for key rotation, so API-key configs are
     mirrored into ``key`` at runtime. Legacy configs that stored either an API
     key or a pasted service-account JSON in ``key`` remain readable.
+
+    Keep in sync with ``normalizeProviderSource`` in
+    ``dashboard/src/composables/useProviderSources.ts``, which applies the same
+    defaults on the dashboard side.
     """
 
     if provider_config.get("provider") != "google-vertex-ai":
@@ -170,13 +174,13 @@ def _normalize_base_url(base_url: str) -> str:
     return base_url.strip().rstrip("/")
 
 
-def _default_vertex_ai_api_base(location: str) -> str:
+def default_vertex_ai_api_base(location: str) -> str:
     if location == VERTEX_AI_DEFAULT_LOCATION:
         return VERTEX_AI_DEFAULT_API_BASE
     return f"https://{location}-aiplatform.googleapis.com"
 
 
-def _is_default_vertex_ai_api_base(base_url: str) -> bool:
+def is_default_vertex_ai_api_base(base_url: str) -> bool:
     parsed = urlparse(base_url)
     return (
         parsed.scheme.lower() == "https"
@@ -222,8 +226,8 @@ def build_vertex_ai_publisher_models_url(provider_config: dict[str, Any]) -> str
     configured_base_url = _normalize_base_url(
         str(provider_config.get("api_base") or "")
     )
-    if not configured_base_url or _is_default_vertex_ai_api_base(configured_base_url):
-        base_url = _default_vertex_ai_api_base(location)
+    if not configured_base_url or is_default_vertex_ai_api_base(configured_base_url):
+        base_url = default_vertex_ai_api_base(location)
     else:
         base_url = configured_base_url
 
@@ -281,6 +285,11 @@ async def fetch_vertex_ai_publisher_models(
 
 
 def _is_vertex_ai_chat_model_id(model_id: str) -> bool:
+    # Only Google-published Gemini chat models are discovered. Partner models
+    # (e.g. Claude under publishers/anthropic) require per-model enablement and
+    # dedicated quota in Model Garden, so they are deliberately not listed;
+    # gemma and other non-chat models are excluded as well. Such models can
+    # still be added manually in the dashboard.
     if not model_id.startswith("gemini-"):
         return False
     return not any(part in model_id for part in VERTEX_AI_NON_CHAT_MODEL_ID_PARTS)

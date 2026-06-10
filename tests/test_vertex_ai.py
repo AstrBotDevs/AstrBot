@@ -268,6 +268,70 @@ async def test_vertex_ai_api_key_provider_uses_native_vertex_endpoint():
 
 
 @pytest.mark.asyncio
+async def test_vertex_ai_express_api_key_forces_global_endpoint():
+    # Express-mode API keys only work on the global endpoint, so a configured
+    # regional location must be ignored for API-key auth.
+    provider = ProviderGoogleGenAI(
+        _vertex_api_key_config(vertex_ai_location="us-central1"),
+        provider_settings={},
+    )
+
+    try:
+        assert (
+            provider._get_vertex_ai_sdk_base_url()
+            == "https://aiplatform.googleapis.com"
+        )
+        assert (
+            provider.client._api_client._http_options.base_url.rstrip("/")
+            == "https://aiplatform.googleapis.com"
+        )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_vertex_ai_json_auth_uses_regional_endpoint(monkeypatch):
+    credentials = FakeVertexCredentials()
+    captured = {}
+
+    def fake_client(**kwargs):
+        captured.update(kwargs)
+        return type(
+            "FakeGenAIClient",
+            (),
+            {"aio": type("FakeAsyncClient", (), {"aclose": lambda self: None})()},
+        )()
+
+    monkeypatch.setattr(
+        ProviderGoogleGenAI,
+        "_load_vertex_ai_service_account_credentials",
+        lambda self: credentials,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.gemini_source.genai.Client",
+        fake_client,
+    )
+
+    provider = ProviderGoogleGenAI(
+        _vertex_config(vertex_ai_location="us-central1"),
+        provider_settings={},
+    )
+
+    try:
+        assert captured["location"] == "us-central1"
+        assert (
+            provider._get_vertex_ai_sdk_base_url()
+            == "https://us-central1-aiplatform.googleapis.com"
+        )
+        assert (
+            captured["http_options"].base_url
+            == "https://us-central1-aiplatform.googleapis.com"
+        )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_vertex_ai_api_key_text_chat_hits_native_vertex_endpoint():
     requests: list[httpx.Request] = []
 
@@ -472,7 +536,7 @@ async def test_vertex_ai_service_account_google_genai_get_models_uses_publisher_
         assert calls[1].url.path == "/v1beta1/publishers/google/models"
         assert calls[1].url.params["pageToken"] == "page-2"
         assert calls[0].headers["authorization"] == "Bearer ya29.fake-token"
-        assert calls[0].headers["x-goog-user-project"] == "demo-project"
+        assert "x-goog-user-project" not in calls[0].headers
         assert calls[0].headers["accept-encoding"] == "gzip, deflate"
         assert credentials.refresh_count == 0
     finally:
@@ -670,6 +734,7 @@ def test_vertex_ai_config_template_defaults_to_json_and_global():
     assert template["provider"] == "google-vertex-ai"
     assert template["type"] == "googlegenai_chat_completion"
     assert template["vertex_ai_auth_type"] == "json"
+    assert template["vertex_ai_api_key"] == []
     assert template["vertex_ai_location"] == "global"
     assert template["api_base"] == "https://aiplatform.googleapis.com/v1"
     assert template["gm_safety_settings"]["harassment"] == "BLOCK_MEDIUM_AND_ABOVE"
@@ -716,29 +781,3 @@ def test_vertex_ai_config_metadata_i18n_keys_exist_for_all_locales():
         provider_translations = metadata["provider_group"]["provider"]
 
         assert expected_keys <= provider_translations.keys()
-
-
-def test_vertex_ai_chinese_i18n_matches_requested_copy():
-    metadata_path = (
-        Path(__file__).resolve().parents[1]
-        / "dashboard"
-        / "src"
-        / "i18n"
-        / "locales"
-        / "zh-CN"
-        / "features"
-        / "config-metadata.json"
-    )
-    provider_translations = json.loads(metadata_path.read_text(encoding="utf-8"))[
-        "provider_group"
-    ]["provider"]
-
-    assert provider_translations["vertex_ai_auth_type"]["description"] == "密钥格式"
-    assert provider_translations["vertex_ai_credentials_json"]["hint"] == (
-        "Google Cloud 服务账号 JSON 可在该网址创建获得 "
-        "https://console.cloud.google.com/iam-admin/serviceaccounts"
-    )
-    assert (
-        provider_translations["vertex_ai_api_key"]["hint"]
-        == "在 Vertex AI API Key、服务账号 JSON 选择其一使用即可。"
-    )

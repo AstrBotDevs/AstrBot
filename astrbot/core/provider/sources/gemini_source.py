@@ -34,11 +34,14 @@ from .vertex_ai import (
     VERTEX_AI_API_KEY_AUTH,
     VERTEX_AI_API_VERSION,
     VERTEX_AI_DEFAULT_API_BASE,
+    VERTEX_AI_DEFAULT_LOCATION,
     VERTEX_AI_JSON_AUTH,
     VERTEX_AI_MODEL_NAME_SEPARATOR,
     build_vertex_ai_publisher_models_url,
+    default_vertex_ai_api_base,
     extract_vertex_ai_credentials_json,
     fetch_vertex_ai_publisher_models,
+    is_default_vertex_ai_api_base,
     make_vertex_ai_refresh_request,
     normalize_vertex_ai_auth_type,
     normalize_vertex_ai_location,
@@ -150,20 +153,33 @@ class ProviderGoogleGenAI(Provider):
             self.provider_config.get("vertex_ai_auth_type")
         )
 
-    def _get_vertex_ai_sdk_base_url(self) -> str:
-        configured_base_url = str(self.api_base or "").strip().rstrip("/")
-        location = normalize_vertex_ai_location(
-            self.provider_config.get("vertex_ai_location")
+    def _uses_vertex_ai_express_api_key(self) -> bool:
+        """Whether requests authenticate with an express-mode Vertex AI API key.
+
+        API-key auth is used only when no service-account JSON is provided. A
+        pasted service-account JSON always takes precedence (it enables OAuth
+        and Model Garden discovery), even if the auth type is set to api_key.
+        """
+        return (
+            self._get_vertex_ai_auth_type() == VERTEX_AI_API_KEY_AUTH
+            and not self._has_vertex_ai_key_json()
         )
 
-        if configured_base_url in {
-            "",
-            VERTEX_AI_DEFAULT_API_BASE,
-            f"{VERTEX_AI_DEFAULT_API_BASE}/{VERTEX_AI_API_VERSION}",
-        }:
-            if location == "global":
-                return VERTEX_AI_DEFAULT_API_BASE
-            return f"https://{location}-aiplatform.googleapis.com"
+    def _get_vertex_ai_sdk_base_url(self) -> str:
+        configured_base_url = str(self.api_base or "").strip().rstrip("/")
+        # Express-mode API keys are only supported on the global endpoint, so
+        # the configured location is ignored for API-key auth.
+        if self._uses_vertex_ai_express_api_key():
+            location = VERTEX_AI_DEFAULT_LOCATION
+        else:
+            location = normalize_vertex_ai_location(
+                self.provider_config.get("vertex_ai_location")
+            )
+
+        if not configured_base_url or is_default_vertex_ai_api_base(
+            configured_base_url
+        ):
+            return default_vertex_ai_api_base(location)
 
         version_suffix = f"/{VERTEX_AI_API_VERSION}"
         if configured_base_url.endswith(version_suffix):
@@ -181,10 +197,7 @@ class ProviderGoogleGenAI(Provider):
             }
 
         auth_type = self._get_vertex_ai_auth_type()
-        # API-key auth is used only when no service-account JSON is provided. A
-        # pasted service-account JSON always takes precedence (it enables OAuth
-        # and Model Garden discovery), even if the auth type is set to api_key.
-        if auth_type == VERTEX_AI_API_KEY_AUTH and not self._has_vertex_ai_key_json():
+        if self._uses_vertex_ai_express_api_key():
             client_kwargs = {
                 "vertexai": True,
                 "http_options": http_options,
@@ -252,8 +265,7 @@ class ProviderGoogleGenAI(Provider):
     def _ensure_vertex_ai_api_key_for_generation(self) -> None:
         if (
             self._is_vertex_ai_config()
-            and self._get_vertex_ai_auth_type() == VERTEX_AI_API_KEY_AUTH
-            and not self._has_vertex_ai_key_json()
+            and self._uses_vertex_ai_express_api_key()
             and not self.chosen_api_key
         ):
             raise ValueError("Vertex AI API key is required for chat generation.")
@@ -1111,8 +1123,7 @@ class ProviderGoogleGenAI(Provider):
             raise Exception(f"获取模型列表失败: {e.message}")
 
     async def _get_vertex_ai_models(self) -> list[str]:
-        auth_type = self._get_vertex_ai_auth_type()
-        if auth_type == VERTEX_AI_API_KEY_AUTH and not self._has_vertex_ai_key_json():
+        if self._uses_vertex_ai_express_api_key():
             raise ValueError(
                 "Vertex AI API Key 无法获取模型列表。请将密钥格式切换为 json "
                 "并填写 Google Cloud 服务账号 JSON 后获取模型列表，或手动添加模型。"
@@ -1134,13 +1145,16 @@ class ProviderGoogleGenAI(Provider):
             raise RuntimeError("Failed to refresh Vertex AI access token.")
 
         url = build_vertex_ai_publisher_models_url(self.provider_config)
-        project_id = self._resolve_vertex_ai_project_id_required()
+        # No x-goog-user-project header: quota/billing follows the service
+        # account's own project. Sending the header would additionally require
+        # the serviceusage.serviceUsageConsumer role and can fail with
+        # USER_PROJECT_DENIED on otherwise valid credentials.
         headers = {
             "Authorization": f"Bearer {token}",
             "Accept-Encoding": "gzip, deflate",
-            "x-goog-user-project": project_id,
         }
-        assert self._http_client is not None
+        if self._http_client is None:
+            raise RuntimeError("Vertex AI HTTP client is not initialized.")
         return await fetch_vertex_ai_publisher_models(self._http_client, url, headers)
 
     def _normalize_model_name(self, name: str) -> str:

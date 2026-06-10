@@ -1194,7 +1194,7 @@
             },
             "vertex_ai_auth_type": {
                 "description": "Формат ключа",
-                "hint": "Используйте либо Vertex AI API key, либо JSON сервисного аккаунта. JSON поддерживает получение списка моделей; API key только для генерации."
+                "hint": "Используйте либо Vertex AI API key, либо JSON сервисного аккаунта. JSON поддерживает получение списка моделей; API key только для генерации и всегда использует глобальный endpoint (настройка location игнорируется)."
             },
             "vertex_ai_api_key": {
                 "description": "API Key",
@@ -1206,7 +1206,7 @@
             },
             "vertex_ai_location": {
                 "description": "Vertex AI location",
-                "hint": "Location модели, например global, us-central1. По умолчанию: global."
+                "hint": "Location модели, например global, us-central1. По умолчанию: global. Игнорируется при использовании API key."
             },
             "vertex_ai_credentials_path": {
                 "description": "Путь к JSON сервисного аккаунта",

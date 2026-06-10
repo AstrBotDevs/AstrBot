@@ -406,6 +406,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       source.ollama_disable_thinking = false
     }
 
+    // Keep in sync with normalize_vertex_ai_provider_config in
+    // astrbot/core/provider/sources/vertex_ai.py, which applies the same
+    // defaults on the backend side.
     if (source.provider === 'google-vertex-ai') {
       if (!source.vertex_ai_auth_type || source.vertex_ai_auth_type === 'service_account') {
         source.vertex_ai_auth_type = 'json'
