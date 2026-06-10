@@ -64,6 +64,12 @@
     "editMode": "Edit",
     "noRouteRules": "No route rules for this platform. The default config file will be used.",
     "sessionIdPlaceholder": "Session ID or *",
+    "routeSource": {
+      "selectPlaceholder": "Select session source",
+      "noData": "No unified message source for this bot is available yet. It will appear here after this bot receives at least one message from the corresponding messaging platform.",
+      "switchToKnown": "Switch to existing source selection",
+      "switchToManual": "Switch to manual input"
+    },
     "allSessions": "All sessions",
     "configMissing": "Config file not found",
     "routeHint": "When delivering messages, the first matching config file from top to bottom is used based on session source. Use * to match all. Use /sid to get the session ID. If none match, the default config file is used.",
@@ -130,6 +136,55 @@
     "waiting": "Waiting for QR",
     "close": "Close"
   },
+  "registrationAction": {
+    "lark": {
+      "title": "One-click QR Setup",
+      "show": "One-click QR Setup",
+      "scanTitle": "Scan with Feishu on your phone",
+      "feishu": "Feishu China",
+      "lark": "Lark Global"
+    },
+    "weixinOc": {
+      "title": "Personal WeChat QR Login",
+      "scanTitle": "Scan with WeChat on your phone",
+      "created": "Login Complete",
+      "status": {
+        "idle": "Not Started",
+        "starting": "Getting QR Code",
+        "pending": "Waiting for Scan",
+        "created": "Login Complete - remember to click the save button!",
+        "denied": "Canceled",
+        "expired": "Expired",
+        "error": "Login Failed"
+      }
+    },
+    "dingtalk": {
+      "title": "DingTalk QR Setup",
+      "scanTitle": "Scan with DingTalk on your phone",
+      "created": "Setup Complete"
+    },
+    "start": "Start Setup",
+    "created": "Setup Complete",
+    "startFailed": "Failed to start QR setup",
+    "pollFailed": "Failed to poll QR setup status",
+    "mode": {
+      "title": "Choose setup method",
+      "scan": "One-click QR setup",
+      "manual": "Manual setup",
+      "larkManual": "Manual setup (supports self-hosted Feishu)"
+    },
+    "scanTitle": "Scan with Feishu on your phone",
+    "status": {
+      "idle": "Not Started",
+      "starting": "Starting",
+      "pending": "Waiting for Scan",
+      "slow_down": "Polling Slowed",
+      "created": "Setup Complete - remember to click the save button!",
+      "denied": "Canceled",
+      "expired": "Expired",
+      "error": "Setup Failed"
+    }
+  },
   "errorDialog": {
     "title": "Error Details",
     "platformId": "Platform ID",
@@ -139,4 +194,4 @@
     "traceback": "Traceback",
     "close": "Close"
   }
-} 
+}

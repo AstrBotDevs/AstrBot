@@ -367,6 +367,12 @@ class ProviderManager:
                 from .sources.minimax_token_plan_source import (
                     ProviderMiniMaxTokenPlan as ProviderMiniMaxTokenPlan,
                 )
+            case "xiaomi_chat_completion":
+                from .sources.xiaomi_source import ProviderXiaomi as ProviderXiaomi
+            case "xiaomi_token_plan":
+                from .sources.xiaomi_token_plan_source import (
+                    ProviderXiaomiTokenPlan as ProviderXiaomiTokenPlan,
+                )
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
             case "groq_chat_completion":
@@ -468,6 +474,14 @@ class ProviderManager:
             case "gemini_embedding":
                 from .sources.gemini_embedding_source import (
                     GeminiEmbeddingProvider as GeminiEmbeddingProvider,
+                )
+            case "nvidia_embedding":
+                from .sources.nvidia_embedding_source import (
+                    NvidiaEmbeddingProvider as NvidiaEmbeddingProvider,
+                )
+            case "ollama_embedding":
+                from .sources.ollama_embedding_source import (
+                    OllamaEmbeddingProvider as OllamaEmbeddingProvider,
                 )
             case "vllm_rerank":
                 from .sources.vllm_rerank_source import (

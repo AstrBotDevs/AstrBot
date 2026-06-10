@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import AuthLogin from '../authForms/AuthLogin.vue';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
+import axios from 'axios';
 
 const cardVisible = ref(false);
 const router = useRouter();
@@ -14,6 +15,14 @@ const authStore = useAuthStore();
 const customizer = useCustomizerStore();
 const { tm: t } = useModuleI18n('features/auth');
 const theme = useTheme();
+const authLoginRef = ref<InstanceType<typeof AuthLogin> | null>(null);
+
+const logoTitle = computed(() => {
+  if (authLoginRef.value?.stage === 'totp' || authLoginRef.value?.stage === 'recovery') {
+    return t('logo.totpTitle');
+  }
+  return t('logo.title');
+});
 
 // 主题切换函数
 function toggleTheme() {
@@ -32,6 +41,19 @@ onMounted(async () => {
       router.push('/welcome');
     }
     return;
+  }
+
+  try {
+    const setupStatus = await axios.get('/api/auth/setup-status');
+    if (
+      setupStatus.data?.data?.setup_required &&
+      setupStatus.data?.data?.skip_default_password_auth
+    ) {
+      router.push('/auth/setup');
+      return;
+    }
+  } catch {
+    // Keep the normal login flow if setup status is unavailable.
   }
 
   // 添加一个小延迟以获得更好的动画效果
@@ -61,11 +83,11 @@ onMounted(async () => {
             </v-btn>
           </div>
         </div>
-        <div class="ml-2" style="font-size: 26px;">{{ t('logo.title') }}</div>
-        <div class="mt-2 ml-2" style="font-size: 14px; color: grey;">{{ t('logo.subtitle') }}</div>
+        <div class="ml-2" style="font-size: 26px;">{{ logoTitle }}</div>
+        <div v-if="authLoginRef?.stage !== 'totp' && authLoginRef?.stage !== 'recovery'" class="mt-2 ml-2" style="font-size: 14px; color: grey;">{{ t('logo.subtitle') }}</div>
       </v-card-title>
       <v-card-text>
-        <AuthLogin />
+        <AuthLogin ref="authLoginRef" />
       </v-card-text>
     </v-card>
   </div>

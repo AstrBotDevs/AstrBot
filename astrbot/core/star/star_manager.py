@@ -654,11 +654,22 @@ class PluginManager:
 
         """
         prefix = "astrbot.builtin_stars." if is_reserved else "data.plugins."
+        module_prefix = f"{prefix}{plugin_root_dir}"
         return [
             key
             for key in list(sys.modules.keys())
-            if key.startswith(f"{prefix}{plugin_root_dir}")
+            if PluginManager._is_plugin_module_path(key, module_prefix)
         ]
+
+    @staticmethod
+    def _is_plugin_module_path(module_path: str | None, module_prefix: str) -> bool:
+        return bool(
+            module_path
+            and (
+                module_path == module_prefix
+                or module_path.startswith(f"{module_prefix}.")
+            )
+        )
 
     def _purge_modules(
         self,
@@ -694,32 +705,48 @@ class PluginManager:
                 except KeyError:
                     logger.warning(f"模块 {module_name} 未载入")
 
-    def _cleanup_plugin_state(self, dir_name: str) -> None:
-        plugin_root_name = "data.plugins."
+    def _cleanup_plugin_state(self, dir_name: str, is_reserved: bool = False) -> None:
+        plugin_root_name = "astrbot.builtin_stars." if is_reserved else "data.plugins."
+        module_prefix = f"{plugin_root_name}{dir_name}"
 
         # 清理 sys.modules
         for key in list(sys.modules.keys()):
-            if key.startswith(f"{plugin_root_name}{dir_name}"):
+            if self._is_plugin_module_path(key, module_prefix):
                 logger.info(f"清除了插件{dir_name}中的{key}模块")
                 del sys.modules[key]
 
-        possible_paths = [
-            f"{plugin_root_name}{dir_name}.main",
-            f"{plugin_root_name}{dir_name}.{dir_name}",
-        ]
+        # Clean plugin metadata registered before a failed load completes.
+        for module_path, metadata in list(star_map.items()):
+            if self._is_plugin_module_path(module_path, module_prefix) or (
+                metadata.root_dir_name == dir_name and metadata.reserved == is_reserved
+            ):
+                star_map.pop(module_path, None)
+                if metadata in star_registry:
+                    star_registry.remove(metadata)
+                logger.info(f"清理插件元数据: {module_path}")
+
+        for metadata in list(star_registry):
+            if self._is_plugin_module_path(metadata.module_path, module_prefix) or (
+                metadata.root_dir_name == dir_name and metadata.reserved == is_reserved
+            ):
+                star_registry.remove(metadata)
+                logger.info(f"清理插件注册项: {metadata.name or dir_name}")
 
         # 清理 handlers
-        for path in possible_paths:
-            handlers = star_handlers_registry.get_handlers_by_module_name(path)
-            for handler in handlers:
+        for handler in list(star_handlers_registry):
+            if self._is_plugin_module_path(handler.handler_module_path, module_prefix):
                 star_handlers_registry.remove(handler)
                 logger.info(f"清理处理器: {handler.handler_name}")
 
         # 清理工具
         for tool in list(llm_tools.func_list):
-            if tool.handler_module_path in possible_paths:
+            handler_module_path = getattr(tool, "handler_module_path", None)
+            if self._is_plugin_module_path(handler_module_path, module_prefix):
                 llm_tools.func_list.remove(tool)
                 logger.info(f"清理工具: {tool.name}")
+
+        for adapter_name in unregister_platform_adapters_by_module(module_prefix):
+            logger.info(f"清理平台适配器: {adapter_name}")
 
     def _build_failed_plugin_record(
         self,
@@ -836,7 +863,7 @@ class PluginManager:
             # 终止插件
             if not specified_module_path:
                 # 重载所有插件
-                for smd in star_registry:
+                for smd in list(star_registry):
                     try:
                         await self._terminate_plugin(smd)
                     except Exception as e:
@@ -948,11 +975,7 @@ class PluginManager:
                             error_trace=error_trace,
                         )
                     )
-                    if path in star_map:
-                        logger.info("失败插件依旧在插件列表中，正在清理...")
-                        metadata = star_map.pop(path)
-                        if metadata in star_registry:
-                            star_registry.remove(metadata)
+                    self._cleanup_plugin_state(root_dir_name, reserved)
                     continue
 
                 # 检查 _conf_schema.json
@@ -1097,21 +1120,29 @@ class PluginManager:
                         f"插件 {path} 未通过装饰器注册。尝试通过旧版本方式载入。",
                     )
                     classes = self._get_classes(module)
+                    if not classes:
+                        raise Exception(
+                            f"插件 {root_dir_name} 未通过 Star 注册，也没有找到旧版插件类。"
+                            "请确认插件主类继承 astrbot.api.star.Star，或类名以 Plugin 结尾 / 命名为 Main。",
+                        )
+
+                    plugin_cls = getattr(module, classes[0])
+                    obj = None
 
                     if path not in inactivated_plugins:
                         # 只有没有禁用插件时才实例化插件类
                         if plugin_config:
                             try:
-                                obj = getattr(module, classes[0])(
+                                obj = plugin_cls(
                                     context=self.context,
                                     config=plugin_config,
                                 )  # 实例化插件类
                             except TypeError as _:
-                                obj = getattr(module, classes[0])(
+                                obj = plugin_cls(
                                     context=self.context,
                                 )  # 实例化插件类
                         else:
-                            obj = getattr(module, classes[0])(
+                            obj = plugin_cls(
                                 context=self.context,
                             )  # 实例化插件类
 
@@ -1139,7 +1170,7 @@ class PluginManager:
                     metadata.module = module
                     metadata.root_dir_name = root_dir_name
                     metadata.reserved = reserved
-                    metadata.star_cls_type = obj.__class__
+                    metadata.star_cls_type = plugin_cls
                     metadata.module_path = path
                     star_map[path] = metadata
                     star_registry.append(metadata)
@@ -1226,12 +1257,7 @@ class PluginManager:
                         error_trace=errors,
                     )
                 )
-                # 记录注册失败的插件名称，以便后续重载插件
-                if path in star_map:
-                    logger.info("失败插件依旧在插件列表中，正在清理...")
-                    metadata = star_map.pop(path)
-                    if metadata in star_registry:
-                        star_registry.remove(metadata)
+                self._cleanup_plugin_state(root_dir_name, reserved)
 
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:
@@ -1798,6 +1824,7 @@ class PluginManager:
             dir=self.plugin_store_path, prefix="plugin_upload_"
         )
         temp_desti_dir = desti_dir
+        skip_failed_tracking = False
 
         try:
             self.updator.unzip_file(zip_file_path, desti_dir)
@@ -1807,6 +1834,7 @@ class PluginManager:
                 metadata_dir_name,
             )
             if target_plugin_path != desti_dir and os.path.exists(target_plugin_path):
+                skip_failed_tracking = True
                 raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
             if target_plugin_path != desti_dir:
                 os.rename(desti_dir, target_plugin_path)
@@ -1870,17 +1898,20 @@ class PluginManager:
 
             return plugin_info
         except Exception as e:
-            self._track_failed_install_dir(
-                dir_name=dir_name,
-                plugin_path=desti_dir,
-                error=e,
-            )
+            if not skip_failed_tracking:
+                self._track_failed_install_dir(
+                    dir_name=dir_name,
+                    plugin_path=desti_dir,
+                    error=e,
+                )
             logger.warning(
                 f"安装插件 {dir_name} 失败，插件安装目录：{desti_dir}",
             )
             raise
         finally:
-            if temp_desti_dir != desti_dir and os.path.isdir(temp_desti_dir):
+            if (skip_failed_tracking or temp_desti_dir != desti_dir) and os.path.isdir(
+                temp_desti_dir
+            ):
                 try:
                     remove_dir(temp_desti_dir)
                 except Exception as e:

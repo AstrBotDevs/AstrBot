@@ -11,4 +11,6 @@ As of now, AstrBot has **no commercial services of any kind**, and the official 
 
 If anyone asks you to pay while using AstrBot, **you are likely being scammed**. Please request a refund immediately and report it to us by email.
 
+📊 Please read the [End User License Agreement](https://github.com/AstrBotDevs/AstrBot/blob/master/EULA.md) carefully before using this project. By installing, you agree to all its contents.
+
 📮 Official email: [community@astrbot.app](mailto:community@astrbot.app)

@@ -59,6 +59,7 @@
                         :refs="messageRefs(msg)"
                         :is-dark="isDark"
                         :custom-html-tags="customMarkdownTags"
+                        :is-streaming="isMessageStreaming(msg, msgIndex)"
                       />
 
                       <button
@@ -317,6 +318,7 @@ async function sendCurrentMessage() {
   draft.value = "";
   clearStaged({ revokeUrls: false });
   scrollToBottom();
+  await focusChatInput();
 
   sendMessageStream({
     sessionId,
@@ -390,6 +392,13 @@ function scrollToBottom() {
     if (!container) return;
     container.scrollTop = container.scrollHeight;
     shouldStickToBottom.value = true;
+  });
+}
+
+async function focusChatInput() {
+  await nextTick();
+  window.requestAnimationFrame(() => {
+    inputRef.value?.focusInput();
   });
 }
 

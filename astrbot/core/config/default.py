@@ -5,7 +5,7 @@ import os
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.24.2"
+VERSION = "4.25.5"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -120,18 +120,20 @@ DEFAULT_CONFIG = {
         "default_personality": "default",
         "persona_pool": ["*"],
         "prompt_prefix": "{{prompt}}",
-        "context_limit_reached_strategy": "truncate_by_turns",  # or llm_compress
+        "context_limit_reached_strategy": "llm_compress",  # or truncate_by_turns
         "llm_compress_instruction": (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
+            "The primary goal of this summary is to enable seamless continuation of the work that follows.\n"
             "1. Systematically cover all core topics discussed and the final conclusion/outcome for each; clearly highlight the latest primary focus.\n"
             "2. If any tools were used, summarize tool usage (total call count) and extract the most valuable insights from tool outputs.\n"
-            "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
-            "4. Write the summary in the user's language.\n"
+            "3. If any materials (files, documents, code, references) were read during the conversation that may be helpful for subsequent work, list each one with its scope and path.\n"
+            "4. If there was an initial user goal, state it first and describe the current progress/status.\n"
+            "5. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent": 6,
+        "llm_compress_keep_recent_ratio": 0.15,
         "llm_compress_provider_id": "",
-        "max_context_length": -1,
-        "dequeue_context_length": 1,
+        "max_context_length": 50,
+        "dequeue_context_length": 10,
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
@@ -244,11 +246,25 @@ DEFAULT_CONFIG = {
     "dashboard": {
         "enable": True,
         "username": "astrbot",
-        "password": "77b90590a8945a7d36c963981a307dc9",
+        "password": "",
+        "pbkdf2_password": "",
+        "password_storage_upgraded": False,
+        "password_change_required": False,
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
         "disable_access_log": True,
+        "trust_proxy_headers": False,
+        "auth_rate_limit": {
+            "enable": True,
+            "average_interval": 1.0,
+            "max_burst": 3,
+        },
+        "totp": {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        },
         "ssl": {
             "enable": False,
             "cert_file": "",
@@ -315,7 +331,7 @@ CONFIG_METADATA_2 = {
                     "QQ 官方机器人(WebSocket)": {
                         "id": "default",
                         "type": "qq_official",
-                        "enable": False,
+                        "enable": True,
                         "appid": "",
                         "secret": "",
                         "enable_group_c2c": True,
@@ -324,7 +340,7 @@ CONFIG_METADATA_2 = {
                     "QQ 官方机器人(Webhook)": {
                         "id": "default",
                         "type": "qq_official_webhook",
-                        "enable": False,
+                        "enable": True,
                         "appid": "",
                         "secret": "",
                         "is_sandbox": False,
@@ -336,7 +352,7 @@ CONFIG_METADATA_2 = {
                     "OneBot v11": {
                         "id": "default",
                         "type": "aiocqhttp",
-                        "enable": False,
+                        "enable": True,
                         "ws_reverse_host": "0.0.0.0",
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
@@ -344,7 +360,7 @@ CONFIG_METADATA_2 = {
                     "微信公众平台": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
-                        "enable": False,
+                        "enable": True,
                         "appid": "",
                         "secret": "",
                         "token": "",
@@ -359,7 +375,7 @@ CONFIG_METADATA_2 = {
                     "企业微信(含微信客服)": {
                         "id": "wecom",
                         "type": "wecom",
-                        "enable": False,
+                        "enable": True,
                         "corpid": "",
                         "secret": "",
                         "token": "",
@@ -396,18 +412,17 @@ CONFIG_METADATA_2 = {
                     "个人微信": {
                         "id": "weixin_personal",
                         "type": "weixin_oc",
-                        "enable": False,
+                        "enable": True,
                         "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
                         "weixin_oc_bot_type": "3",
                         "weixin_oc_qr_poll_interval": 1,
                         "weixin_oc_long_poll_timeout_ms": 35_000,
-                        "weixin_oc_api_timeout_ms": 15_000,
+                        "weixin_oc_api_timeout_ms": 120_000,
                     },
                     "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
-                        "enable": False,
-                        "lark_bot_name": "",
+                        "enable": True,
                         "app_id": "",
                         "app_secret": "",
                         "domain": "https://open.feishu.cn",
@@ -419,7 +434,7 @@ CONFIG_METADATA_2 = {
                     "钉钉(DingTalk)": {
                         "id": "dingtalk",
                         "type": "dingtalk",
-                        "enable": False,
+                        "enable": True,
                         "client_id": "",
                         "client_secret": "",
                         "card_template_id": "",
@@ -427,7 +442,7 @@ CONFIG_METADATA_2 = {
                     "Telegram": {
                         "id": "telegram",
                         "type": "telegram",
-                        "enable": False,
+                        "enable": True,
                         "telegram_token": "your_bot_token",
                         "start_message": "Hello, I'm AstrBot!",
                         "telegram_api_base_url": "https://api.telegram.org/bot",
@@ -440,7 +455,7 @@ CONFIG_METADATA_2 = {
                     "Discord": {
                         "id": "discord",
                         "type": "discord",
-                        "enable": False,
+                        "enable": True,
                         "discord_token": "",
                         "discord_proxy": "",
                         "discord_command_register": True,
@@ -450,7 +465,7 @@ CONFIG_METADATA_2 = {
                     "Misskey": {
                         "id": "misskey",
                         "type": "misskey",
-                        "enable": False,
+                        "enable": True,
                         "misskey_instance_url": "https://misskey.example",
                         "misskey_token": "",
                         "misskey_default_visibility": "public",
@@ -468,7 +483,7 @@ CONFIG_METADATA_2 = {
                     "Slack": {
                         "id": "slack",
                         "type": "slack",
-                        "enable": False,
+                        "enable": True,
                         "bot_token": "",
                         "app_token": "",
                         "signing_secret": "",
@@ -482,7 +497,7 @@ CONFIG_METADATA_2 = {
                     "Line": {
                         "id": "line",
                         "type": "line",
-                        "enable": False,
+                        "enable": True,
                         "channel_access_token": "",
                         "channel_secret": "",
                         "unified_webhook_mode": True,
@@ -491,7 +506,7 @@ CONFIG_METADATA_2 = {
                     "Satori": {
                         "id": "satori",
                         "type": "satori",
-                        "enable": False,
+                        "enable": True,
                         "satori_api_base_url": "http://localhost:5140/satori/v1",
                         "satori_endpoint": "ws://localhost:5140/satori/v1/events",
                         "satori_token": "",
@@ -502,7 +517,7 @@ CONFIG_METADATA_2 = {
                     "KOOK": {
                         "id": "kook",
                         "type": "kook",
-                        "enable": False,
+                        "enable": True,
                         "kook_bot_token": "",
                         "kook_reconnect_delay": 1,
                         "kook_max_reconnect_delay": 60,
@@ -515,7 +530,7 @@ CONFIG_METADATA_2 = {
                     "Mattermost": {
                         "id": "mattermost",
                         "type": "mattermost",
-                        "enable": False,
+                        "enable": True,
                         "mattermost_url": "https://chat.example.com",
                         "mattermost_bot_token": "",
                         "mattermost_reconnect_delay": 5.0,
@@ -886,11 +901,6 @@ CONFIG_METADATA_2 = {
                             "wecom_ai_bot_connection_mode": "long_connection",
                         },
                     },
-                    "lark_bot_name": {
-                        "description": "飞书机器人的名字",
-                        "type": "string",
-                        "hint": "请务必填写正确，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
-                    },
                     "discord_token": {
                         "description": "Discord Bot Token",
                         "type": "string",
@@ -1071,7 +1081,7 @@ CONFIG_METADATA_2 = {
                     "id_whitelist": {
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可使用 /wl 添加白名单",
+                        "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的平台设置中管理白名单",
                     },
                     "id_whitelist_log": {
                         "type": "bool",
@@ -1235,6 +1245,31 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": [],
                         "api_base": "https://api.minimaxi.com/anthropic",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
+                    },
+                    "Xiaomi": {
+                        "id": "xiaomi",
+                        "provider": "xiaomi",
+                        "type": "xiaomi_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.xiaomimimo.com/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
+                    "Xiaomi Token Plan": {
+                        "id": "xiaomi-token-plan",
+                        "provider": "xiaomi-token-plan",
+                        "type": "xiaomi_token_plan",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://token-plan-cn.xiaomimimo.com/anthropic",
                         "timeout": 120,
                         "proxy": "",
                         "custom_headers": {"User-Agent": "claude-code/0.1.0"},
@@ -1802,6 +1837,34 @@ CONFIG_METADATA_2 = {
                         "timeout": 20,
                         "proxy": "",
                     },
+                    "NVIDIA Embedding": {
+                        "id": "nvidia_embedding",
+                        "type": "nvidia_embedding",
+                        "provider": "nvidia",
+                        "provider_type": "embedding",
+                        "hint": "provider_group.provider.nvidia_embedding.hint",
+                        "enable": True,
+                        "embedding_api_key": "",
+                        "embedding_api_base": "https://integrate.api.nvidia.com/v1",
+                        "embedding_model": "nvidia/llama-nemotron-embed-1b-v2",
+                        "input_type": "passage",
+                        "embedding_dimensions": 1024,
+                        "timeout": 20,
+                        "proxy": "",
+                    },
+                    "Ollama Embedding": {
+                        "id": "ollama_embedding",
+                        "type": "ollama_embedding",
+                        "provider": "ollama",
+                        "provider_type": "embedding",
+                        "hint": "provider_group.provider.ollama_embedding.hint",
+                        "enable": True,
+                        "embedding_api_base": "http://localhost:11434",
+                        "embedding_model": "nomic-embed-text",
+                        "embedding_dimensions": 768,
+                        "timeout": 60,
+                        "proxy": "",
+                    },
                     "vLLM Rerank": {
                         "id": "vllm_rerank",
                         "type": "vllm_rerank",
@@ -1992,8 +2055,8 @@ CONFIG_METADATA_2 = {
                             },
                             "max_tokens": {
                                 "name": "Max Tokens",
-                                "description": "最大令牌数",
-                                "hint": "生成的最大令牌数。",
+                                "description": "最大词元（Tokens）数",
+                                "hint": "生成的最大词元（Tokens）数。",
                                 "type": "int",
                                 "default": 8192,
                             },
@@ -2947,6 +3010,10 @@ CONFIG_METADATA_2 = {
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             },
             "dashboard.ssl.enable": {"type": "bool"},
+            "dashboard.trust_proxy_headers": {"type": "bool"},
+            "dashboard.auth_rate_limit.enable": {"type": "bool"},
+            "dashboard.auth_rate_limit.average_interval": {"type": "float"},
+            "dashboard.auth_rate_limit.max_burst": {"type": "int"},
             "dashboard.ssl.cert_file": {
                 "type": "string",
                 "condition": {"dashboard.ssl.enable": True},
@@ -3324,7 +3391,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.shipyard_neo_profile": {
                         "description": "Shipyard Neo Profile",
                         "type": "string",
-                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。",
+                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。留空时自动选择能力更完整的 profile。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "shipyard_neo",
@@ -3492,30 +3559,30 @@ CONFIG_METADATA_3 = {
                 "type": "object",
                 "items": {
                     "provider_settings.max_context_length": {
-                        "description": "最多携带对话轮数",
+                        "description": "压缩前最多保留对话轮数",
                         "type": "int",
-                        "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条，-1 为不限制",
+                        "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.dequeue_context_length": {
-                        "description": "丢弃对话轮数",
+                        "description": "轮次超限时一次丢弃轮数",
                         "type": "int",
-                        "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数",
+                        "hint": "当超过“压缩前最多保留对话轮数”且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.context_limit_reached_strategy": {
-                        "description": "超出模型上下文窗口时的处理方式",
+                        "description": "历史超限或上下文接近上限时的处理方式",
                         "type": "string",
                         "options": ["truncate_by_turns", "llm_compress"],
                         "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
-                        "hint": "",
+                        "hint": "普通会话历史仅在超过“压缩前最多保留对话轮数”后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。",
                     },
                     "provider_settings.llm_compress_instruction": {
                         "description": "上下文压缩提示词",
@@ -3526,10 +3593,11 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.llm_compress_keep_recent": {
-                        "description": "压缩时保留最近对话轮数",
-                        "type": "int",
-                        "hint": "始终保留的最近 N 轮对话。",
+                    "provider_settings.llm_compress_keep_recent_ratio": {
+                        "description": "压缩时保留最近上下文比例",
+                        "type": "float",
+                        "slider": {"min": 0, "max": 0.3, "step": 0.01},
+                        "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
                             "provider_settings.agent_runner_type": "local",
@@ -3539,7 +3607,7 @@ CONFIG_METADATA_3 = {
                         "description": "用于上下文压缩的模型提供商 ID",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "留空时将降级为“按对话轮数截断”的策略。",
+                        "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为“按对话轮数截断”的策略。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
                             "provider_settings.agent_runner_type": "local",
@@ -3819,7 +3887,7 @@ CONFIG_METADATA_3 = {
                     "disable_builtin_commands": {
                         "description": "禁用自带指令",
                         "type": "bool",
-                        "hint": "禁用所有 AstrBot 的自带指令，如 help, provider, model 等。",
+                        "hint": "禁用所有 AstrBot 的自带指令，如 help, sid, new 等。",
                     },
                 },
             },
@@ -4188,6 +4256,34 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "启用 WebUI HTTPS",
                         "type": "bool",
                         "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。",
+                    },
+                    "dashboard.trust_proxy_headers": {
+                        "description": "信任代理请求头获取客户端 IP",
+                        "type": "bool",
+                        "hint": "关闭时忽略 X-Forwarded-For/X-Real-IP，仅使用连接地址。",
+                    },
+                    "dashboard.auth_rate_limit.enable": {
+                        "description": "启用登录验证速率限制",
+                        "type": "bool",
+                        "hint": "关闭后将不对登录、TOTP 等身份验证接口进行速率限制。",
+                    },
+                    "dashboard.auth_rate_limit.average_interval": {
+                        "description": "验证端点速率限制平均间隔(秒)",
+                        "type": "float",
+                        "hint": "两次身份验证请求之间的最小平均间隔时间。例如设置为 1.0 表示每秒最多处理 1 个请求。",
+                        "condition": {"dashboard.auth_rate_limit.enable": True},
+                    },
+                    "dashboard.auth_rate_limit.max_burst": {
+                        "description": "验证端点速率限制最大突发数",
+                        "type": "int",
+                        "hint": "允许的瞬时最大突发请求数。例如设置为 3 表示在短时间内最多连续处理 3 个请求。",
+                        "condition": {"dashboard.auth_rate_limit.enable": True},
+                    },
+                    "dashboard.totp.enable": {
+                        "description": "启用 WebUI TOTP 双因素认证",
+                        "type": "bool",
+                        "hint": "启用后，登录 WebUI 需要额外输入验证码。",
+                        "_special": "dashboard_totp_manager",
                     },
                     "dashboard.ssl.cert_file": {
                         "description": "SSL 证书文件路径",

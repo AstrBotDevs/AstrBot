@@ -210,6 +210,65 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         return False, f"{e!s}"
 
 
+class _PermissionGuardedTool(FunctionTool):
+    """Transparent proxy that checks per-tool permissions before delegating.
+
+    Only wraps non-builtin tools. Builtin tools are added to the tool set
+    without wrapping, so their existing hardcoded permission logic
+    (``check_admin_permission`` / ``_is_restricted_env``) is unaffected.
+
+    The ``handler`` field is intentionally kept ``None`` so that
+    ``FunctionToolExecutor._execute_local`` falls through to the
+    ``is_override_call`` branch and invokes our ``call()`` instead of
+    calling the raw handler directly.  This ensures the permission
+    check runs for *every* invocation path.
+    """
+
+    def __init__(
+        self,
+        tool: FunctionTool,
+        manager: FunctionToolManager,
+    ) -> None:
+        # Do NOT pass handler to the parent — keep self.handler = None
+        # so the tool executor always routes through our call().
+        super().__init__(
+            name=tool.name,
+            description=tool.description,
+            parameters=getattr(tool, "parameters", {}),
+        )
+        self._wrapped = tool
+        self._mgr = manager
+        # Mirror mutable state from the underlying tool
+        self.active = getattr(tool, "active", True)
+        self.handler_module_path = getattr(tool, "handler_module_path", None)
+
+    async def call(self, context: Any, **kwargs: Any) -> Any:
+        import inspect as _inspect
+
+        error = self._mgr._check_tool_permission(self.name, context)
+        if error is not None:
+            return error
+
+        # Delegate to handler first (plugin tools).
+        if self._wrapped.handler is not None:
+            result = self._wrapped.handler(context, **kwargs)
+            if _inspect.isasyncgen(result):
+                last: Any = None
+                async for item in result:
+                    last = item
+                return last
+            if _inspect.isawaitable(result):
+                return await result
+            return result
+
+        # Fall back to overridden call() on subclasses (e.g. MCPTool).
+        call_override = getattr(type(self._wrapped), "call", None)
+        if call_override is not None and call_override is not FunctionTool.call:
+            return await self._wrapped.call(context, **kwargs)
+
+        return "error: tool has no callable handler"
+
+
 class FunctionToolManager:
     def __init__(self) -> None:
         self.func_list: list[FuncTool] = []
@@ -374,6 +433,51 @@ class FunctionToolManager:
         ensure_builtin_tools_loaded()
         return get_builtin_tool_class(name) is not None
 
+    def _default_permission(self, tool_name: str) -> str:
+        """Compute the fallback permission for a non-builtin tool.
+
+        All non-builtin tools default to ``"member"`` (no restriction).
+        Builtin tools are never routed through this method."""
+        return "member"
+
+    def _check_tool_permission(
+        self,
+        tool_name: str,
+        context: Any,
+    ) -> str | None:
+        """Return an error string if the caller lacks permission, or None.
+
+        Only non-builtin tools are guarded. Permission is resolved from
+        ``tool_permissions`` in SharedPreferences (``_default`` key). When
+        no explicit entry exists the tool inherits the fallback
+        ``_default_permission``."""
+        try:
+            perms_raw = sp.get(
+                "tool_permissions", {}, scope="global", scope_id="global"
+            )
+        except Exception:
+            perms_raw = {}
+        defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}
+        effective = defaults.get(tool_name)
+        if effective is None:
+            effective = self._default_permission(tool_name)
+
+        if effective != "admin":
+            return None  # member or unknown → pass
+
+        try:
+            event = context.context.event
+        except AttributeError:
+            event = None
+        if event is None or not event.is_admin():
+            sender_id = getattr(event, "get_sender_id", lambda: "unknown")()
+            return (
+                f"error: Permission denied. The tool '{tool_name}' requires admin "
+                f"privileges. Your ID: {sender_id}. "
+                "Ask admin to configure in WebUI → Extension → Components."
+            )
+        return None
+
     def get_full_tool_set(self) -> ToolSet:
         """获取完整工具集
 
@@ -383,10 +487,14 @@ class FunctionToolManager:
 
         因此，后加载的 inactive 工具不会覆盖已激活的工具；
         同时，MCP 工具在需要时仍可覆盖被禁用的内置工具。
+
+        Non-builtin tools are wrapped with ``_PermissionGuardedTool`` so that
+        every invocation checks the per-tool permission configured via the
+        dashboard.
         """
         tool_set = ToolSet()
         for tool in self.func_list:
-            tool_set.add_tool(tool)
+            tool_set.add_tool(_PermissionGuardedTool(tool, self))
         return tool_set
 
     @staticmethod

@@ -80,6 +80,7 @@
                       :refs="resolvedMessageRefs(msg)"
                       :is-dark="isDark"
                       :custom-html-tags="customMarkdownTags"
+                      :is-streaming="isMessageStreaming(msgIndex)"
                     />
 
                     <button

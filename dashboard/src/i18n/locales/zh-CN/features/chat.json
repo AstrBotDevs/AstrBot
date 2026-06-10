@@ -114,6 +114,9 @@
   },
   "reasoning": {
     "thinking": "思考过程",
+    "summarySeparator": "，",
+    "thinkSummary": "思考了 {count} 次",
+    "toolSummary": "使用了 {count} 次工具",
     "think": "思考",
     "toolUsed": "使用工具"
   },
@@ -161,6 +164,11 @@
       "reconnected": "聊天连接已重新建立",
       "failed": "连接失败，请刷新页面重试"
     }
+  },
+  "commandSuggestion": {
+    "navigate": "选择",
+    "select": "确认",
+    "close": "关闭"
   },
   "errors": {
     "sendMessageFailed": "发送消息失败，请重试",
