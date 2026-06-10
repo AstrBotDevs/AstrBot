@@ -86,7 +86,7 @@ class GroupChatContext:
         provider_id = image_caption_provider_id
         if not image_caption_provider_id:
             provider = self.context.get_using_provider()
-            provider_id = provider.meta().id if hasattr(provider, 'meta') else ""
+            provider_id = provider.meta().id if hasattr(provider, "meta") else ""
         else:
             provider = self.context.get_provider_by_id(image_caption_provider_id)
             if not provider:
@@ -106,9 +106,7 @@ class GroupChatContext:
         # 记录图片转述模型的调用统计
         if event is not None:
             try:
-                provider_model = (
-                    provider.get_model() if provider.get_model() else None
-                )
+                provider_model = provider.get_model() if provider.get_model() else None
                 usage_dict: dict = {}
                 if response.usage:
                     usage_dict = {
@@ -122,9 +120,7 @@ class GroupChatContext:
                     provider_id=provider_id,
                     provider_model=provider_model,
                     conversation_id=None,
-                    status="completed"
-                    if response.role != "err"
-                    else "error",
+                    status="completed" if response.role != "err" else "error",
                     stats={
                         "token_usage": usage_dict,
                         "start_time": start_time,
